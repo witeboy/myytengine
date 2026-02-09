@@ -72,68 +72,79 @@ export default function topic_selection() {
       <div className="max-w-7xl mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-8">Select Topic</h1>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredTopics.map((topic) => (
-            <Card key={topic.id} className="hover:shadow-lg transition-shadow flex flex-col">
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <CardTitle className="text-lg line-clamp-2">{topic.title}</CardTitle>
-                  <span className="text-xs font-bold bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                    #{topic.rank}
-                  </span>
-                </div>
-              </CardHeader>
-              <CardContent className="flex-1 flex flex-col space-y-4">
-                <p className="text-sm text-gray-600 line-clamp-2">{topic.description}</p>
+        <div className="space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredTopics.map((topic) => (
+              <Card key={topic.id} className="hover:shadow-lg transition-shadow flex flex-col">
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <CardTitle className="text-lg line-clamp-2">{topic.title}</CardTitle>
+                    <span className="text-xs font-bold bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                      #{topic.rank}
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent className="flex-1 flex flex-col space-y-4">
+                  <p className="text-sm text-gray-600 line-clamp-2">{topic.description}</p>
 
-                <div className="space-y-3">
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-xs font-medium flex items-center gap-1">
-                        <TrendingUp className="w-3 h-3" /> Viral
-                      </span>
-                      <span className="text-xs text-gray-600">{topic.viral_score}/10</span>
+                  <div className="space-y-3">
+                    <div>
+                      <div className="flex justify-between mb-1">
+                        <span className="text-xs font-medium flex items-center gap-1">
+                          <TrendingUp className="w-3 h-3" /> Viral
+                        </span>
+                        <span className="text-xs text-gray-600">{topic.viral_score}/10</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div className="bg-red-500 h-2 rounded-full" style={{ width: `${topic.viral_score * 10}%` }} />
+                      </div>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-red-500 h-2 rounded-full" style={{ width: `${topic.viral_score * 10}%` }} />
+
+                    <div>
+                      <div className="flex justify-between mb-1">
+                        <span className="text-xs font-medium flex items-center gap-1">
+                          <Zap className="w-3 h-3" /> Story
+                        </span>
+                        <span className="text-xs text-gray-600">{topic.storytelling_score}/10</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div className="bg-orange-500 h-2 rounded-full" style={{ width: `${topic.storytelling_score * 10}%` }} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="flex justify-between mb-1">
+                        <span className="text-xs font-medium flex items-center gap-1">
+                          <Heart className="w-3 h-3" /> Emotion
+                        </span>
+                        <span className="text-xs text-gray-600">{topic.emotional_score}/10</span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div className="bg-pink-500 h-2 rounded-full" style={{ width: `${topic.emotional_score * 10}%` }} />
+                      </div>
                     </div>
                   </div>
 
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-xs font-medium flex items-center gap-1">
-                        <Zap className="w-3 h-3" /> Story
-                      </span>
-                      <span className="text-xs text-gray-600">{topic.storytelling_score}/10</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-orange-500 h-2 rounded-full" style={{ width: `${topic.storytelling_score * 10}%` }} />
-                    </div>
-                  </div>
+                  <Button
+                    onClick={() => handleSelectTopic(topic.id, topic)}
+                    disabled={isLoading}
+                    className="bg-blue-600 hover:bg-blue-700 mt-auto"
+                  >
+                    {isLoading ? 'Loading...' : 'Select Topic'}
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
 
-                  <div>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-xs font-medium flex items-center gap-1">
-                        <Heart className="w-3 h-3" /> Emotion
-                      </span>
-                      <span className="text-xs text-gray-600">{topic.emotional_score}/10</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-pink-500 h-2 rounded-full" style={{ width: `${topic.emotional_score * 10}%` }} />
-                    </div>
-                  </div>
-                </div>
-
-                <Button
-                  onClick={() => handleSelectTopic(topic.id, topic)}
-                  disabled={isLoading}
-                  className="bg-blue-600 hover:bg-blue-700 mt-auto"
-                >
-                  {isLoading ? 'Loading...' : 'Select Topic'}
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+          <Button
+            onClick={handleGenerateMore}
+            disabled={isGeneratingMore}
+            variant="outline"
+            className="w-full py-6"
+          >
+            {isGeneratingMore ? 'Generating More Topics...' : '+ Generate More Topics'}
+          </Button>
         </div>
       </div>
     </div>
