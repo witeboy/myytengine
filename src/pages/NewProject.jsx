@@ -18,34 +18,34 @@ import { createPageUrl } from '@/utils';
 export default function NewProject() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    niche: '',
-    tone: 'cinematic',
-    category: '',
-    posts_per_week: 2,
-  });
+  const [niche, setNiche] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      const project = await base44.entities.Projects.create(formData);
+      const project = await base44.entities.Projects.create({
+        name: niche,
+        niche: niche,
+        tone: 'cinematic',
+        category: 'Documentary',
+        posts_per_week: 2,
+      });
 
       await base44.functions.invoke('generateTopics', {
         project_id: project.id,
-        niche: formData.niche,
+        niche: niche,
       });
 
       await base44.functions.invoke('generateBrandIdentity', {
         project_id: project.id,
-        niche: formData.niche,
+        niche: niche,
       });
 
       navigate(createPageUrl(`topic_selection?project_id=${project.id}`));
     } catch (error) {
-      alert('Error creating project: ' + error.message);
+      alert('Error: ' + error.message);
     } finally {
       setIsLoading(false);
     }
@@ -57,70 +57,23 @@ export default function NewProject() {
       <div className="max-w-2xl mx-auto px-4 py-12">
         <Card>
           <CardHeader>
-            <CardTitle className="text-2xl">Create New Project</CardTitle>
-            <p className="text-sm text-gray-600 mt-2">Set up your YouTube channel configuration</p>
+            <CardTitle className="text-2xl">Start New YouTube Channel</CardTitle>
+            <p className="text-sm text-gray-600 mt-2">What niche will your channel focus on?</p>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
-                <Label htmlFor="name">Project Name</Label>
-                <Input
-                  id="name"
-                  placeholder="e.g., True Crime Mysteries"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="niche">Content Niche</Label>
+                <Label htmlFor="niche">Content Niche *</Label>
                 <Input
                   id="niche"
-                  placeholder="e.g., true crime, technology, history"
-                  value={formData.niche}
-                  onChange={(e) => setFormData({ ...formData, niche: e.target.value })}
+                  placeholder="e.g., true crime, unsolved mysteries, technology, history, paranormal..."
+                  value={niche}
+                  onChange={(e) => setNiche(e.target.value)}
                   required
+                  autoFocus
+                  className="text-lg"
                 />
-              </div>
-
-              <div>
-                <Label htmlFor="tone">Tone</Label>
-                <Select value={formData.tone} onValueChange={(v) => setFormData({ ...formData, tone: v })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="cinematic">Cinematic</SelectItem>
-                    <SelectItem value="investigative">Investigative</SelectItem>
-                    <SelectItem value="inspirational">Inspirational</SelectItem>
-                    <SelectItem value="sarcastic">Sarcastic</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label htmlFor="category">Category</Label>
-                <Input
-                  id="category"
-                  placeholder="e.g., Documentary"
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="posts_per_week">Posts per Week</Label>
-                <Input
-                  id="posts_per_week"
-                  type="number"
-                  min="1"
-                  max="7"
-                  value={formData.posts_per_week}
-                  onChange={(e) => setFormData({ ...formData, posts_per_week: parseInt(e.target.value) })}
-                  required
-                />
+                <p className="text-xs text-gray-500 mt-2">We'll generate 100+ trending topics for your niche</p>
               </div>
 
               <div className="flex gap-4 pt-4">
@@ -135,9 +88,9 @@ export default function NewProject() {
                 <Button
                   type="submit"
                   className="bg-blue-600 hover:bg-blue-700 flex-1"
-                  disabled={isLoading}
+                  disabled={isLoading || !niche.trim()}
                 >
-                  {isLoading ? 'Creating...' : 'Create Project'}
+                  {isLoading ? 'Generating Topics...' : 'Generate Topics'}
                 </Button>
               </div>
             </form>
