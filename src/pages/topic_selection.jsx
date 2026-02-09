@@ -13,14 +13,36 @@ export default function topic_selection() {
   const location = useLocation();
   const projectId = new URLSearchParams(location.search).get('project_id');
   const [isLoading, setIsLoading] = useState(false);
+  const [isGeneratingMore, setIsGeneratingMore] = useState(false);
 
-  const { data: topics = [] } = useQuery({
+  const { data: project } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => base44.entities.Projects.get(projectId),
+    enabled: !!projectId,
+  });
+
+  const { data: topics = [], refetch } = useQuery({
     queryKey: ['topics', projectId],
     queryFn: () => base44.entities.Topics.list(),
     enabled: !!projectId,
   });
 
   const filteredTopics = topics.filter(t => t.project_id === projectId).sort((a, b) => a.rank - b.rank);
+
+  const handleGenerateMore = async () => {
+    setIsGeneratingMore(true);
+    try {
+      await base44.functions.invoke('generateTopics', {
+        project_id: projectId,
+        niche: project?.niche,
+      });
+      refetch();
+    } catch (error) {
+      alert('Error: ' + error.message);
+    } finally {
+      setIsGeneratingMore(false);
+    }
+  };
 
   const handleSelectTopic = async (topicId, topic) => {
     setIsLoading(true);
