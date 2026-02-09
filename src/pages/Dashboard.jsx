@@ -36,7 +36,7 @@ export default function Dashboard() {
             <p className="text-gray-600 mt-2">Manage your YouTube content pipeline</p>
           </div>
           <Button
-            onClick={() => navigate(createPageUrl('new_project'))}
+            onClick={() => navigate(createPageUrl('NewProject'))}
             className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2"
           >
             <Plus className="w-5 h-5" />
@@ -96,7 +96,7 @@ export default function Dashboard() {
           <Card className="text-center py-12">
             <p className="text-gray-600 mb-4">No projects yet. Create your first one!</p>
             <Button
-              onClick={() => navigate(createPageUrl('new_project'))}
+              onClick={() => navigate(createPageUrl('NewProject'))}
               className="bg-blue-600 hover:bg-blue-700"
             >
               <Plus className="w-4 h-4 mr-2" />
