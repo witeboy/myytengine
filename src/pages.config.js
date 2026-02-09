@@ -58,6 +58,7 @@ import Home from './pages/Home';
 import topicSelection from './pages/topic_selection';
 import hookSelection from './pages/hook_selection';
 import scriptWorkshop from './pages/script_workshop';
+import productionStudio from './pages/production_studio';
 
 
 export const PAGES = {
@@ -72,6 +73,7 @@ export const PAGES = {
     "topic_selection": topicSelection,
     "hook_selection": hookSelection,
     "script_workshop": scriptWorkshop,
+    "production_studio": productionStudio,
 }
 
 export const pagesConfig = {
