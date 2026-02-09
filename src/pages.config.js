@@ -54,6 +54,7 @@ import HookSelection from './pages/HookSelection';
 import ScriptWorkshop from './pages/ScriptWorkshop';
 import ProductionStudio from './pages/ProductionStudio';
 import PublishCenter from './pages/PublishCenter';
+import Home from './pages/Home';
 
 
 export const PAGES = {
@@ -64,6 +65,7 @@ export const PAGES = {
     "ScriptWorkshop": ScriptWorkshop,
     "ProductionStudio": ProductionStudio,
     "PublishCenter": PublishCenter,
+    "Home": Home,
 }
 
 export const pagesConfig = {
