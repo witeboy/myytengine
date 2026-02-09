@@ -47,8 +47,26 @@
  *
  * The mainPage value must match a key in the PAGES object exactly.
  */
+import Dashboard from './pages/Dashboard';
+import NewProject from './pages/NewProject';
+import TopicSelection from './pages/TopicSelection';
+import HookSelection from './pages/HookSelection';
+import ScriptWorkshop from './pages/ScriptWorkshop';
+import ProductionStudio from './pages/ProductionStudio';
+import PublishCenter from './pages/PublishCenter';
 
-export const pagesConfig = {
-	Pages: {}
+
+export const PAGES = {
+    "Dashboard": Dashboard,
+    "NewProject": NewProject,
+    "TopicSelection": TopicSelection,
+    "HookSelection": HookSelection,
+    "ScriptWorkshop": ScriptWorkshop,
+    "ProductionStudio": ProductionStudio,
+    "PublishCenter": PublishCenter,
 }
 
+export const pagesConfig = {
+    mainPage: "Dashboard",
+    Pages: PAGES,
+};
