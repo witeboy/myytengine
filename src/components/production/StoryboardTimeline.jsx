@@ -124,11 +124,9 @@ export default function StoryboardTimeline({
                     {/* Block Header */}
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
-                        {block.block_type === 'video' ? (
-                          <Video className="w-4 h-4 text-red-600" />
-                        ) : (
-                          <Image className="w-4 h-4 text-yellow-600" />
-                        )}
+                        <span className="text-lg">
+                          {block.block_type === 'video' ? '🎬' : '🖼️'}
+                        </span>
                         <span className="text-xs font-bold text-gray-700 capitalize">
                           {block.block_type}
                         </span>
