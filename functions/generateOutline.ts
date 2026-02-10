@@ -100,29 +100,37 @@ Deno.serve(async (req) => {
       "target_words": ${wordsPerBatch}
     }`).join(',');
 
-    const prompt = `You are a YouTube documentary expert. Create an outline for a ${duration_minutes}-minute video about "${topic_title}" in the ${niche} niche.
+    const prompt = `You are a YouTube documentary expert. Create a detailed outline for a ${duration_minutes}-minute video about "${topic_title}" in the ${niche} niche.
 
-STORYTELLING FORMATS (by tier):
-S-Tier: ${storytellingFormats.S.join(', ')}
-A-Tier: ${storytellingFormats.A.join(', ')}
-B-Tier: ${storytellingFormats.B.join(', ')}
-C-Tier: ${storytellingFormats.C.join(', ')}
-D-Tier: ${storytellingFormats.D.join(', ')}
+    STORYTELLING FORMATS (by tier):
+    S-Tier: ${storytellingFormats.S.join(', ')}
+    A-Tier: ${storytellingFormats.A.join(', ')}
+    B-Tier: ${storytellingFormats.B.join(', ')}
+    C-Tier: ${storytellingFormats.C.join(', ')}
+    D-Tier: ${storytellingFormats.D.join(', ')}
 
-Instructions:
-1. Select the BEST storytelling format from the list above that fits this topic
-2. Create ${numBatches} batches, each ~${wordsPerBatch} words (150 words = 1 minute of video)
-3. Total script: ${totalWords} words for a ${duration_minutes}-minute video
-4. Follow the universal story structure: Hook → Deep Dive → Complication → Climax → Resolution
+    Instructions:
+    1. Select the BEST storytelling format from the list above that fits this topic
+    2. Create ${numBatches} batches, each ~${wordsPerBatch} words (150 words = 1 minute of video)
+    3. Total script: ${totalWords} words for a ${duration_minutes}-minute video
+    4. Follow the universal story structure: Hook → Deep Dive → Complication → Climax → Resolution
+    5. For EACH batch, include a detailed synopsis covering: key plot points, character/subject details, emotional arc, pacing style, tone, scene settings, and what connective elements link to previous/next batches
 
-Return ONLY valid JSON in this exact format:
+    Return ONLY valid JSON in this exact format:
 
-{
-  "storytelling_format": "Selected Format Name",
-  "total_target_words": ${totalWords},
-  "batches": [${batchJson}
-  ]
-}`;
+    {
+    "storytelling_format": "Selected Format Name",
+    "total_target_words": ${totalWords},
+    "batches": [
+    {
+      "batch_number": 1,
+      "story_segment": "Batch Title",
+      "focus_area": "What this batch focuses on",
+      "target_words": ${wordsPerBatch},
+      "synopsis": "Detailed 2-3 sentence synopsis covering plot points, character arc, emotional tone, pacing style, and scene descriptions needed for consistent script generation"
+    }
+    ]
+    }`;
 
     const result = await safeGeminiCall(prompt, 0.7);
 
