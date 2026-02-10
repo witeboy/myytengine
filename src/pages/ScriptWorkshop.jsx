@@ -299,9 +299,10 @@ export default function ScriptWorkshop() {
                   try {
                     await Promise.all([
                       base44.functions.invoke('generateBrandIdentity', { project_id: projectId }),
-                      base44.functions.invoke('generateHooks', { project_id: projectId })
+                      base44.functions.invoke('generateHooks', { project_id: projectId }),
+                      base44.entities.Projects.update(projectId, { current_step: 5 })
                     ]);
-                    navigate(createPageUrl(`hook_selection?project_id=${projectId}`));
+                    navigate(createPageUrl(`HookSelection?project_id=${projectId}`));
                   } catch (error) {
                     alert('Error: ' + error.message);
                   } finally {

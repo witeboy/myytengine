@@ -36,11 +36,16 @@ export default function VideoDurationSetup() {
   });
 
   const handleGenerateOutline = async () => {
+    if (!projectId) {
+      alert('Error: Project ID is missing');
+      return;
+    }
     setIsGenerating(true);
     try {
-      // Update project with duration
+      // Update project with duration and advance step
       await base44.entities.Projects.update(projectId, {
         video_duration_minutes: duration,
+        current_step: 3,
       });
 
       // Generate outline

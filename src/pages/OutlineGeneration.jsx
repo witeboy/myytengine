@@ -36,7 +36,9 @@ export default function OutlineGeneration() {
   const outline = project?.outline ? JSON.parse(project.outline) : null;
   const isOutlineReady = project?.status === 'outline_ready';
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
+    // Update current step before navigating
+    await base44.entities.Projects.update(projectId, { current_step: 4 });
     navigate(createPageUrl(`ScriptWorkshop?project_id=${projectId}`));
   };
 

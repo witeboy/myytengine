@@ -30,7 +30,9 @@ export default function TopicSelection() {
         topic_id: topicId,
       });
 
-      navigate(createPageUrl(`VideoDurationSetup?project_id=${projectId}`));
+      // Update current step before navigating
+    await base44.entities.Projects.update(projectId, { current_step: 2 });
+    navigate(createPageUrl(`VideoDurationSetup?project_id=${projectId}`));
     } catch (error) {
       alert('Error: ' + error.message);
     } finally {
