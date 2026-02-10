@@ -281,17 +281,35 @@ export default function ScriptWorkshop() {
           <div className="flex justify-between pt-4">
             <Button 
               variant="outline" 
-              onClick={() => navigate(createPageUrl(showBatchGeneration ? `video_duration_setup?project_id=${projectId}` : `hook_selection?project_id=${projectId}`))}
+              onClick={() => navigate(createPageUrl(`video_duration_setup?project_id=${projectId}`))}
               disabled={showBatchGeneration && !allBatchesCompleted}
             >
               Back
             </Button>
             <Button 
-              onClick={handleNext} 
-              disabled={showBatchGeneration && !allBatchesCompleted}
+              onClick={async () => {
+                if (showBatchGeneration && allBatchesCompleted) {
+                  setIsLoading(true);
+                  try {
+                    await Promise.all([
+                      base44.functions.invoke('generateBrandIdentity', { project_id: projectId }),
+                      base44.functions.invoke('generateHooks', { project_id: projectId })
+                    ]);
+                    navigate(createPageUrl(`hook_selection?project_id=${projectId}`));
+                  } catch (error) {
+                    alert('Error: ' + error.message);
+                  } finally {
+                    setIsLoading(false);
+                  }
+                } else {
+                  handleNext();
+                }
+              }} 
+              disabled={(showBatchGeneration && !allBatchesCompleted) || isLoading}
               className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2"
             >
-              Next <ArrowRight className="w-4 h-4" />
+              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {showBatchGeneration ? 'Continue to Hooks' : 'Next'} <ArrowRight className="w-4 h-4" />
             </Button>
           </div>
         </div>

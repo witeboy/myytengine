@@ -38,6 +38,12 @@ export default function VideoDurationSetup() {
   const handleGenerateOutline = async () => {
     setIsGenerating(true);
     try {
+      // Update project with duration
+      await base44.entities.Projects.update(projectId, {
+        video_duration_minutes: duration,
+      });
+
+      // Generate outline
       await base44.functions.invoke('generateOutline', {
         project_id: projectId,
         topic_id: topic.id,
