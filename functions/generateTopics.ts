@@ -57,17 +57,17 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { project_id, niche } = body;
 
-    const prompt = `I want to build a faceless YouTube channel creating short documentaries in ${niche}. Find 100+ trending topics that:
+    const prompt = `I want to build a faceless YouTube channel creating short documentaries in ${niche}. Find 30 trending topics that:
 
-→ Have underexploited keyword potential
-→ Have 100K–2M monthly searches
-→ Are emotional, shocking, or curiosity-driven
-→ Can be told in under 10 minutes
-→ Have strong comment section engagement
+- Have underexploited keyword potential
+- Have 100K-2M monthly searches
+- Are emotional, shocking, or curiosity-driven
+- Can be told in under 10 minutes
+- Have strong comment section engagement
 
 Rank them by viral potential, storytelling strength, and emotional payoff.
 
-RESPOND IN THIS EXACT JSON FORMAT:
+Return ONLY valid JSON in this exact format (no extra text before or after):
 
 {
   "topics": [
