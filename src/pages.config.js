@@ -63,6 +63,7 @@ import publishCenter from './pages/publish_center';
 import scriptWorkshop from './pages/script_workshop';
 import topicSelection from './pages/topic_selection';
 import VoiceGeneration from './pages/VoiceGeneration';
+import OutlineGeneration from './pages/OutlineGeneration';
 
 
 export const PAGES = {
@@ -82,6 +83,7 @@ export const PAGES = {
     "script_workshop": scriptWorkshop,
     "topic_selection": topicSelection,
     "VoiceGeneration": VoiceGeneration,
+    "OutlineGeneration": OutlineGeneration,
 }
 
 export const pagesConfig = {
