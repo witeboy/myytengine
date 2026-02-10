@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
         status: "generating"
       });
 
-      const prompt = `You are writing batch ${batch.batch_number} of 5 for a ${project.video_duration_minutes}-minute YouTube documentary.
+      const prompt = `You are writing batch ${batch.batch_number} of ${batches.length} for a ${project.video_duration_minutes}-minute YouTube documentary.
 
 **Topic**: ${topic.title}
 **Topic Description**: ${topic.description}
@@ -91,7 +91,7 @@ Deno.serve(async (req) => {
 
 **This Batch**: ${batch.story_segment}
 **Focus**: ${batch.focus_area}
-**Target**: ~1500 words
+**Target**: ~${batch.target_words || 1500} words
 
 ${previousContent ? `**Previous Content Summary**: ${previousContent.substring(0, 500)}...` : ''}
 

@@ -113,7 +113,7 @@ export default function VideoDurationSetup() {
                 </div>
                 <div>
                   <span className="text-gray-600">Script Batches:</span>
-                  <span className="ml-2 font-semibold text-gray-900">5 segments</span>
+                  <span className="ml-2 font-semibold text-gray-900">{Math.max(2, Math.round(estimatedWords / 1500))} segments</span>
                 </div>
               </div>
               <p className="text-xs text-gray-600 mt-2">

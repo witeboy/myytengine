@@ -8,7 +8,7 @@ import StepProgress from '@/components/StepProgress';
 import { createPageUrl } from '@/utils';
 import { TrendingUp, Zap, Heart } from 'lucide-react';
 
-export default function topic_selection() {
+export default function TopicSelection() {
   const navigate = useNavigate();
   const location = useLocation();
   const projectId = new URLSearchParams(location.search).get('project_id');
