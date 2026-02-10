@@ -48,34 +48,38 @@
  * The mainPage value must match a key in the PAGES object exactly.
  */
 import Dashboard from './pages/Dashboard';
-import NewProject from './pages/NewProject';
-import TopicSelection from './pages/TopicSelection';
+import Home from './pages/Home';
 import HookSelection from './pages/HookSelection';
-import ScriptWorkshop from './pages/ScriptWorkshop';
+import NewProject from './pages/NewProject';
 import ProductionStudio from './pages/ProductionStudio';
 import PublishCenter from './pages/PublishCenter';
-import Home from './pages/Home';
-import topicSelection from './pages/topic_selection';
+import ScriptWorkshop from './pages/ScriptWorkshop';
+import TopicSelection from './pages/TopicSelection';
 import hookSelection from './pages/hook_selection';
-import scriptWorkshop from './pages/script_workshop';
 import productionStudio from './pages/production_studio';
 import publishCenter from './pages/publish_center';
+import scriptWorkshop from './pages/script_workshop';
+import topicSelection from './pages/topic_selection';
+import VideoDurationSetup from './pages/VideoDurationSetup';
+import ScriptBatching from './pages/ScriptBatching';
 
 
 export const PAGES = {
     "Dashboard": Dashboard,
-    "NewProject": NewProject,
-    "TopicSelection": TopicSelection,
+    "Home": Home,
     "HookSelection": HookSelection,
-    "ScriptWorkshop": ScriptWorkshop,
+    "NewProject": NewProject,
     "ProductionStudio": ProductionStudio,
     "PublishCenter": PublishCenter,
-    "Home": Home,
-    "topic_selection": topicSelection,
+    "ScriptWorkshop": ScriptWorkshop,
+    "TopicSelection": TopicSelection,
     "hook_selection": hookSelection,
-    "script_workshop": scriptWorkshop,
     "production_studio": productionStudio,
     "publish_center": publishCenter,
+    "script_workshop": scriptWorkshop,
+    "topic_selection": topicSelection,
+    "VideoDurationSetup": VideoDurationSetup,
+    "ScriptBatching": ScriptBatching,
 }
 
 export const pagesConfig = {
