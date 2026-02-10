@@ -91,19 +91,23 @@ export default function OutlineGeneration() {
                   <span className="font-semibold">Outline Complete</span>
                 </div>
                 
-                <div className="space-y-3">
-                  {outline.map((batch, idx) => (
-                    <div key={idx} className="border-l-4 border-blue-600 pl-4 py-2">
-                      <h3 className="font-semibold text-gray-900">
-                        Batch {batch.batch_number}: {batch.story_segment}
-                      </h3>
-                      <p className="text-sm text-gray-600 mt-1">{batch.focus_area}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Target: ~{batch.target_words} words
-                      </p>
-                    </div>
-                  ))}
-                </div>
+                <div className="space-y-4">
+                   {outline.map((batch, idx) => (
+                     <div key={idx} className="border-l-4 border-blue-600 pl-4 py-3 bg-white p-4 rounded">
+                       <h3 className="font-semibold text-gray-900 text-lg mb-2">
+                         Batch {batch.batch_number}: {batch.story_segment}
+                       </h3>
+                       {batch.synopsis ? (
+                         <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap mb-3">{batch.synopsis}</p>
+                       ) : (
+                         <p className="text-sm text-gray-600 italic mb-3">{batch.focus_area}</p>
+                       )}
+                       <p className="text-xs text-gray-500">
+                         Target: ~{batch.target_words} words
+                       </p>
+                     </div>
+                   ))}
+                 </div>
 
                 <div className="bg-blue-50 p-4 rounded-lg mt-6">
                   <p className="text-sm text-blue-900">
