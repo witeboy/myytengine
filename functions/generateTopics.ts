@@ -11,7 +11,11 @@ async function safeGeminiCall(prompt, temperature = 0.8) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature, maxOutputTokens: 8192 }
+          generationConfig: { 
+            temperature, 
+            maxOutputTokens: 8192,
+            responseMimeType: "application/json"
+          }
         })
       }
     );
@@ -28,15 +32,7 @@ async function safeGeminiCall(prompt, temperature = 0.8) {
     }
 
     const text = data.candidates[0].content.parts[0].text;
-
-    let jsonStr = text;
-    if (text.includes("```json")) {
-      jsonStr = text.split("```json")[1].split("```")[0].trim();
-    } else if (text.includes("```")) {
-      jsonStr = text.split("```")[1].split("```")[0].trim();
-    }
-
-    const parsed = JSON.parse(jsonStr);
+    const parsed = JSON.parse(text);
 
     return { success: true, data: parsed, raw: text };
   } catch (error) {
