@@ -23,26 +23,37 @@ Deno.serve(async (req) => {
     let asset_url = '';
 
     if (block_type === 'image') {
-      // Generate image using Gemini Vision or similar
+      // Generate static image
       const aiResult = await base44.asServiceRole.integrations.Core.GenerateImage({
-        prompt: `Style: ${asset_style}. ${prompt}`,
+        prompt: `${asset_style} style: ${prompt}`,
       });
-
       asset_url = aiResult.url;
     } else if (block_type === 'video') {
-      // For videos, we would call Sora 2.0 or similar
-      // This is a placeholder - you'll need to implement actual video generation
-      // For now, we'll create a simple placeholder
-      
-      const videoPrompt = `Style: ${asset_style}. ${prompt}. Create a short video clip in ${asset_style} style.`;
-      
-      // Call Sora 2.0 API or similar - this is a placeholder
-      // In reality, you'd need proper video generation API integration
-      const aiResult = await base44.asServiceRole.integrations.Core.GenerateImage({
-        prompt: videoPrompt,
+      // Try searching B-roll first (more efficient)
+      const brollResult = await base44.asServiceRole.functions.invoke('searchBrollVideos', {
+        prompt,
+        duration: 10,
+        quality: '1080p',
       });
 
-      asset_url = aiResult.url;
+      if (brollResult.data?.videos?.length > 0) {
+        // Use first matching B-roll video
+        const video = brollResult.data.videos[0];
+        asset_url = video.preview || video.url;
+        
+        // Update block with B-roll info
+        await base44.asServiceRole.entities.TimelineBlocks.update(block_id, {
+          broll_source: 'freepik',
+          broll_id: video.id,
+          broll_url: asset_url,
+        });
+      } else {
+        // Fallback to generate image (user can use Runway generator for full video)
+        const aiResult = await base44.asServiceRole.integrations.Core.GenerateImage({
+          prompt: `${asset_style} style: ${prompt}`,
+        });
+        asset_url = aiResult.url;
+      }
     }
 
     // Update block with generated asset
