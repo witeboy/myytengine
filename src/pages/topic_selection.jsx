@@ -17,7 +17,10 @@ export default function topic_selection() {
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
-    queryFn: () => base44.entities.Projects.get(projectId),
+    queryFn: async () => {
+      const projects = await base44.entities.Projects.list();
+      return projects.find(p => p.id === projectId);
+    },
     enabled: !!projectId,
   });
 
