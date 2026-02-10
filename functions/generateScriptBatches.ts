@@ -62,14 +62,22 @@ Deno.serve(async (req) => {
     const topics = await base44.asServiceRole.entities.Topics.list();
     const topic = topics.find(t => t.id === project.selected_topic_id);
 
-    // Get batches
+    // Get batches created by generateOutline
     const allBatches = await base44.asServiceRole.entities.ScriptBatches.list();
-    const batches = allBatches
+    let batches = allBatches
       .filter(b => b.project_id === project_id)
       .sort((a, b) => a.batch_number - b.batch_number);
 
+    // If no batches exist from generateOutline, initialize them
     if (batches.length === 0) {
-      return Response.json({ error: 'No batches found' }, { status: 404 });
+      const initResult = await base44.asServiceRole.functions.invoke('initializeScriptBatches', {
+        project_id: project_id,
+      });
+      batches = initResult.data?.batches || [];
+      
+      if (batches.length === 0) {
+        return Response.json({ error: 'No batches found' }, { status: 404 });
+      }
     }
 
     // Generate each batch
