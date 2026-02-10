@@ -62,20 +62,7 @@ export default function ScriptBatching() {
   const completedCount = batches.filter(b => b.status === 'completed').length;
 
   const handleContinue = async () => {
-    try {
-      const topics = await base44.entities.Topics.list();
-      const selectedTopic = topics.find(t => t.id === project.selected_topic_id);
-
-      await base44.functions.invoke('generateHooks', {
-        project_id: projectId,
-        topic_id: project.selected_topic_id,
-        topic_title: selectedTopic?.title || 'Topic',
-      });
-
-      navigate(createPageUrl(`hook_selection?project_id=${projectId}`));
-    } catch (error) {
-      alert('Error: ' + error.message);
-    }
+    navigate(createPageUrl(`ScriptWorkshop?project_id=${projectId}`));
   };
 
   return (
@@ -148,7 +135,7 @@ export default function ScriptBatching() {
               onClick={handleContinue}
               className="bg-blue-600 hover:bg-blue-700"
             >
-              Continue to Hook Selection
+              Continue to Script Workshop
             </Button>
           </div>
         )}
