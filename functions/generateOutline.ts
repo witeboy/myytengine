@@ -61,6 +61,9 @@ Deno.serve(async (req) => {
       "D": ["Discovery", "Broke to Rich"]
     };
 
+    const totalWords = duration_minutes * 150;
+    const wordsPerBatch = Math.floor(totalWords / 5);
+
     const prompt = `You are a YouTube documentary expert. Create an outline for a ${duration_minutes}-minute video about "${topic_title}" in the ${niche} niche.
 
 STORYTELLING FORMATS (by tier):
@@ -72,44 +75,44 @@ D-Tier: ${storytellingFormats.D.join(', ')}
 
 Instructions:
 1. Select the BEST storytelling format from the list above that fits this topic
-2. Create 5 batches, each ~1500 words (150 words = 1 minute)
+2. Create 5 batches, each ~${wordsPerBatch} words (150 words = 1 minute)
 3. Structure: Hook & Inciting Incident → Deep Dive → Complication → Climax → Resolution & Outro
 
 Return ONLY valid JSON in this exact format:
 
 {
   "storytelling_format": "Selected Format Name",
-  "total_target_words": ${duration_minutes * 150},
+  "total_target_words": ${totalWords},
   "batches": [
     {
       "batch_number": 1,
       "story_segment": "The Hook & Inciting Incident",
       "focus_area": "Establish atmosphere, introduce victim/protagonist, end on the Big Discovery",
-      "target_words": 1500
+      "target_words": ${wordsPerBatch}
     },
     {
       "batch_number": 2,
       "story_segment": "The Deep Dive",
       "focus_area": "Backstory, early investigation, introduce suspects or obstacles",
-      "target_words": 1500
+      "target_words": ${wordsPerBatch}
     },
     {
       "batch_number": 3,
       "story_segment": "The Complication",
       "focus_area": "Midpoint Twist - information that changes everything or major setback",
-      "target_words": 1500
+      "target_words": ${wordsPerBatch}
     },
     {
       "batch_number": 4,
       "story_segment": "The Climax",
       "focus_area": "Final confrontation, the aha moment, or high-intensity chase",
-      "target_words": 1500
+      "target_words": ${wordsPerBatch}
     },
     {
       "batch_number": 5,
       "story_segment": "The Resolution & Outro",
       "focus_area": "Aftermath, legal results, lessons learned, and Call to Action",
-      "target_words": 1500
+      "target_words": ${wordsPerBatch}
     }
   ]
 }`;
