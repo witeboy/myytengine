@@ -7,12 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import StepProgress from '@/components/StepProgress';
 import { createPageUrl } from '@/utils';
 import { Loader2, FileText, CheckCircle2 } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
+
 
 export default function OutlineGeneration() {
   const navigate = useNavigate();
    const location = useLocation();
-   const queryClient = useQueryClient();
    const projectId = new URLSearchParams(location.search).get('project_id');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingHooks, setIsGeneratingHooks] = useState(false);
@@ -59,10 +58,9 @@ export default function OutlineGeneration() {
         topic_id: project.selected_topic_id,
         topic_title: topic?.title || '',
       });
-      setHooksGenerated(true);
+      setTimeout(() => setHooksGenerated(true), 1000);
     } catch (error) {
       alert('Error generating hooks: ' + error.message);
-    } finally {
       setIsGeneratingHooks(false);
     }
   };
@@ -74,9 +72,11 @@ export default function OutlineGeneration() {
 
   const handleGenerateScriptBatches = async () => {
     try {
+      const selectedHook = hooks.find(h => h.id === selectedHookId);
       await base44.functions.invoke('generateScriptBatches', {
         project_id: projectId,
         selected_hook_id: selectedHookId,
+        hook_text: selectedHook?.hook_text || '',
       });
       await base44.entities.Projects.update(projectId, { current_step: 4 });
       navigate(createPageUrl(`ScriptBatching?project_id=${projectId}`));
