@@ -38,7 +38,6 @@ export default function ProductionStudio() {
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const [selectedBlockForBroll, setSelectedBlockForBroll] = useState(null);
   const [selectedBlockForRunway, setSelectedBlockForRunway] = useState(null);
-  const [selectedBlockForBroll, setSelectedBlockForBroll] = useState(null);
 
   // Fetch project
   const { data: project } = useQuery({
