@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Trash2, Video, Image } from 'lucide-react';
+import { Loader2, Trash2, Video } from 'lucide-react';
 
 export default function StoryboardTimeline({
   blocks = [],
