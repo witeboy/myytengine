@@ -48,19 +48,26 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { project_id } = body;
+     const { project_id, selected_hook_id } = body;
 
-    // Get project details
-    const projects = await base44.asServiceRole.entities.Projects.list();
-    const project = projects.find(p => p.id === project_id);
+     // Get project details
+     const projects = await base44.asServiceRole.entities.Projects.list();
+     const project = projects.find(p => p.id === project_id);
 
-    if (!project) {
-      return Response.json({ error: 'Project not found' }, { status: 404 });
-    }
+     if (!project) {
+       return Response.json({ error: 'Project not found' }, { status: 404 });
+     }
 
-    // Get topic
-    const topics = await base44.asServiceRole.entities.Topics.list();
-    const topic = topics.find(t => t.id === project.selected_topic_id);
+     // Get topic
+     const topics = await base44.asServiceRole.entities.Topics.list();
+     const topic = topics.find(t => t.id === project.selected_topic_id);
+
+     // Get selected hook if provided
+     let selectedHook = null;
+     if (selected_hook_id) {
+       const hooks = await base44.asServiceRole.entities.Hooks.list();
+       selectedHook = hooks.find(h => h.id === selected_hook_id);
+     }
 
     // Get batches created by generateOutline
     const allBatches = await base44.asServiceRole.entities.ScriptBatches.list();
