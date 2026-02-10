@@ -58,7 +58,7 @@ export default function HookSelection() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      <StepProgress currentStep={3} />
+      <StepProgress currentStep={4} />
       <div className="max-w-7xl mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-8">Select Hook</h1>
 

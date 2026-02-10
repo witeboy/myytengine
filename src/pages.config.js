@@ -53,15 +53,15 @@ import HookSelection from './pages/HookSelection';
 import NewProject from './pages/NewProject';
 import ProductionStudio from './pages/ProductionStudio';
 import PublishCenter from './pages/PublishCenter';
+import ScriptBatching from './pages/ScriptBatching';
 import ScriptWorkshop from './pages/ScriptWorkshop';
 import TopicSelection from './pages/TopicSelection';
+import VideoDurationSetup from './pages/VideoDurationSetup';
 import hookSelection from './pages/hook_selection';
 import productionStudio from './pages/production_studio';
 import publishCenter from './pages/publish_center';
 import scriptWorkshop from './pages/script_workshop';
 import topicSelection from './pages/topic_selection';
-import VideoDurationSetup from './pages/VideoDurationSetup';
-import ScriptBatching from './pages/ScriptBatching';
 
 
 export const PAGES = {
@@ -71,15 +71,15 @@ export const PAGES = {
     "NewProject": NewProject,
     "ProductionStudio": ProductionStudio,
     "PublishCenter": PublishCenter,
+    "ScriptBatching": ScriptBatching,
     "ScriptWorkshop": ScriptWorkshop,
     "TopicSelection": TopicSelection,
+    "VideoDurationSetup": VideoDurationSetup,
     "hook_selection": hookSelection,
     "production_studio": productionStudio,
     "publish_center": publishCenter,
     "script_workshop": scriptWorkshop,
     "topic_selection": topicSelection,
-    "VideoDurationSetup": VideoDurationSetup,
-    "ScriptBatching": ScriptBatching,
 }
 
 export const pagesConfig = {

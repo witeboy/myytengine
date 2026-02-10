@@ -4,9 +4,9 @@ import { CheckCircle2, Circle } from 'lucide-react';
 export default function StepProgress({ currentStep }) {
   const steps = [
     { num: 1, label: 'Topics' },
-    { num: 2, label: 'Brand' },
-    { num: 3, label: 'Hooks' },
-    { num: 4, label: 'Script' },
+    { num: 2, label: 'Duration' },
+    { num: 3, label: 'Script' },
+    { num: 4, label: 'Hooks' },
     { num: 5, label: 'Edit' },
     { num: 6, label: 'Retention' },
     { num: 7, label: 'Outro' },

@@ -164,7 +164,7 @@ export default function ScriptWorkshop() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      <StepProgress currentStep={project?.current_step || 4} />
+      <StepProgress currentStep={3} />
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Script Workshop</h1>
