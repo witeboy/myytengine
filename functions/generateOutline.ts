@@ -140,13 +140,14 @@ Deno.serve(async (req) => {
 
     const outline = result.data;
 
-    // Create batch records
+    // Create batch records with synopses
     for (const batch of outline.batches) {
       await base44.asServiceRole.entities.ScriptBatches.create({
         project_id: project_id,
         batch_number: batch.batch_number,
         story_segment: batch.story_segment,
         focus_area: batch.focus_area,
+        synopsis: batch.synopsis || batch.focus_area,
         status: "pending"
       });
     }
