@@ -26,6 +26,25 @@ export default function Dashboard() {
     },
   });
 
+  const getProjectRoute = (project) => {
+    const step = project.current_step || 1;
+    const status = project.status;
+
+    if (step === 1 || status === 'created' || status === 'topics_ready') {
+      return `topic_selection?project_id=${project.id}`;
+    } else if (step === 2 || status === 'topic_selected') {
+      return `video_duration_setup?project_id=${project.id}`;
+    } else if (step === 3 || status === 'outline_ready') {
+      return `outline_generation?project_id=${project.id}`;
+    } else if (step === 4 || status === 'scripting') {
+      return `script_workshop?project_id=${project.id}`;
+    } else if (step === 5 || status === 'hooks_ready') {
+      return `hook_selection?project_id=${project.id}`;
+    } else {
+      return `topic_selection?project_id=${project.id}`;
+    }
+  };
+
   const statusColors = {
     created: 'bg-gray-100 text-gray-800',
     topics_ready: 'bg-blue-100 text-blue-800',
@@ -71,7 +90,7 @@ export default function Dashboard() {
                   <div className="flex justify-between items-start">
                     <div 
                       className="flex-1 cursor-pointer"
-                      onClick={() => navigate(createPageUrl(`topic_selection?project_id=${project.id}`))}
+                      onClick={() => navigate(createPageUrl(getProjectRoute(project)))}
                     >
                       <CardTitle className="text-lg">{project.name}</CardTitle>
                       <p className="text-sm text-gray-600 mt-1">{project.niche}</p>
@@ -99,7 +118,7 @@ export default function Dashboard() {
                 <CardContent className="space-y-4">
                   <div
                     className="cursor-pointer"
-                    onClick={() => navigate(createPageUrl(`topic_selection?project_id=${project.id}`))}
+                    onClick={() => navigate(createPageUrl(getProjectRoute(project)))}
                   >
                     <div className="flex justify-between mb-2">
                       <span className="text-sm font-medium">Progress</span>
