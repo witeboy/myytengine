@@ -7,13 +7,17 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import StepProgress from '@/components/StepProgress';
 import { createPageUrl } from '@/utils';
 import { Loader2, FileText, CheckCircle2 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 
 export default function OutlineGeneration() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const projectId = new URLSearchParams(location.search).get('project_id');
+   const location = useLocation();
+   const queryClient = useQueryClient();
+   const projectId = new URLSearchParams(location.search).get('project_id');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [isGeneratingHooks, setIsGeneratingHooks] = useState(false);
+  const [hooksGenerated, setHooksGenerated] = useState(false);
+  const [selectedHookId, setSelectedHookId] = useState(null);
 
   const { data: project, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
@@ -28,6 +32,16 @@ export default function OutlineGeneration() {
     enabled: !!project?.selected_topic_id,
   });
 
+  const { data: hooks = [] } = useQuery({
+    queryKey: ['hooks', projectId],
+    queryFn: async () => {
+      const allHooks = await base44.entities.Hooks.list();
+      return allHooks.filter(h => h.project_id === projectId).sort((a, b) => a.rank - b.rank);
+    },
+    enabled: !!projectId,
+    refetchInterval: isGeneratingHooks ? 3000 : false,
+  });
+
   useEffect(() => {
     if (project?.status === 'outline_ready' && isGenerating) {
       setIsGenerating(false);
@@ -37,28 +51,37 @@ export default function OutlineGeneration() {
   const outline = project?.outline ? JSON.parse(project.outline) : null;
   const isOutlineReady = project?.status === 'outline_ready';
 
-  const handleContinue = async () => {
-    setIsProcessing(true);
+  const handleGenerateHooks = async () => {
+    setIsGeneratingHooks(true);
     try {
-      // Generate hooks first (before script batches) so they can be used in script
       await base44.functions.invoke('generateHooks', {
         project_id: projectId,
         topic_id: project.selected_topic_id,
         topic_title: topic?.title || '',
       });
+      setHooksGenerated(true);
+    } catch (error) {
+      alert('Error generating hooks: ' + error.message);
+    } finally {
+      setIsGeneratingHooks(false);
+    }
+  };
 
-      // Then generate script batches
+  const handleSelectHook = async (hookId) => {
+    setSelectedHookId(hookId);
+    await base44.entities.Projects.update(projectId, { selected_hook_id: hookId });
+  };
+
+  const handleGenerateScriptBatches = async () => {
+    try {
       await base44.functions.invoke('generateScriptBatches', {
         project_id: projectId,
+        selected_hook_id: selectedHookId,
       });
-
-      // Update current step
       await base44.entities.Projects.update(projectId, { current_step: 4 });
-      navigate(createPageUrl(`ScriptWorkshop?project_id=${projectId}`));
+      navigate(createPageUrl(`ScriptBatching?project_id=${projectId}`));
     } catch (error) {
       alert('Error: ' + error.message);
-    } finally {
-      setIsProcessing(false);
     }
   };
 
@@ -126,21 +149,78 @@ export default function OutlineGeneration() {
           </CardContent>
         </Card>
 
-        <div className="flex justify-between">
-          <Button
-            variant="outline"
-            onClick={() => navigate(createPageUrl(`VideoDurationSetup?project_id=${projectId}`))}
-          >
-            Back
-          </Button>
-          <Button
-            onClick={handleContinue}
-            disabled={!isOutlineReady || isProcessing}
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            {isProcessing ? 'Generating Hooks & Scripts...' : 'Generate Hooks & Script Batches'}
-          </Button>
-        </div>
+        {!hooksGenerated ? (
+           <div className="flex justify-between mt-8">
+             <Button
+               variant="outline"
+               onClick={() => navigate(createPageUrl(`VideoDurationSetup?project_id=${projectId}`))}
+             >
+               Back
+             </Button>
+             <Button
+               onClick={handleGenerateHooks}
+               disabled={!isOutlineReady || isGeneratingHooks}
+               className="bg-blue-600 hover:bg-blue-700"
+             >
+               {isGeneratingHooks ? 'Generating Hooks...' : 'Generate Hooks'}
+             </Button>
+           </div>
+         ) : (
+           <>
+             <Card className="mb-6">
+               <CardHeader>
+                 <CardTitle>Select Opening Hook</CardTitle>
+               </CardHeader>
+               <CardContent>
+                 <div className="space-y-3">
+                   {hooks.length > 0 ? (
+                     hooks.map((hook) => (
+                       <div
+                         key={hook.id}
+                         onClick={() => handleSelectHook(hook.id)}
+                         className={`p-4 rounded-lg border-2 cursor-pointer transition ${
+                           selectedHookId === hook.id
+                             ? 'border-blue-600 bg-blue-50'
+                             : 'border-gray-200 hover:border-blue-400'
+                         }`}
+                       >
+                         <div className="flex justify-between items-start">
+                           <div className="flex-1">
+                             <p className="font-semibold text-gray-900">{hook.hook_text}</p>
+                             <p className="text-xs text-gray-500 mt-1">
+                               Type: {hook.hook_type} | Intensity: {hook.intensity_score}/10
+                             </p>
+                           </div>
+                           {selectedHookId === hook.id && (
+                             <CheckCircle2 className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                           )}
+                         </div>
+                       </div>
+                     ))
+                   ) : (
+                     <p className="text-gray-500 text-center py-4">No hooks generated yet</p>
+                   )}
+                 </div>
+               </CardContent>
+             </Card>
+
+             <div className="flex justify-between">
+               <Button
+                 variant="outline"
+                 onClick={() => setHooksGenerated(false)}
+               >
+                 Back
+               </Button>
+               <Button
+                 onClick={handleGenerateScriptBatches}
+                 disabled={!selectedHookId}
+                 className="bg-blue-600 hover:bg-blue-700"
+               >
+                 Generate Script Batches
+               </Button>
+             </div>
+           </>
+         )}
       </div>
     </div>
   );

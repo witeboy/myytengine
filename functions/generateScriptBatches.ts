@@ -92,12 +92,18 @@ Deno.serve(async (req) => {
 
       const synopsis = batch.synopsis || batch.focus_area;
       const previousSynopsis = batches[batches.findIndex(b => b.id === batch.id) - 1]?.synopsis || '';
+      
+      let hookInstruction = '';
+      if (batch.batch_number === 1 && selectedHook) {
+        hookInstruction = `\n**OPENING HOOK (MUST INCLUDE)**: "${selectedHook.hook_text}"\nEnsure this hook appears naturally at the very beginning of batch 1 to grab viewer attention immediately.`;
+      }
 
       const prompt = `You are writing batch ${batch.batch_number} of ${batches.length} for a ${project.video_duration_minutes}-minute YouTube documentary in "${project.storytelling_format}" format.
 
 **Topic**: ${topic.title}
 **Topic Description**: ${topic.description}
 **Niche**: ${project.niche}
+${hookInstruction}
 
 **BATCH SYNOPSIS & CONTEXT**:
 ${synopsis}
