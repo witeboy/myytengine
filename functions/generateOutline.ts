@@ -92,13 +92,7 @@ Deno.serve(async (req) => {
 
     const batchesList = batchStructures[numBatches] || batchStructures[5];
 
-    const batchJson = batchesList.map((batch, i) => `
-    {
-      "batch_number": ${i + 1},
-      "story_segment": "${batch.segment}",
-      "focus_area": "${batch.focus}",
-      "target_words": ${wordsPerBatch}
-    }`).join(',');
+    const batchJson = batchesList.map((batch, i) => `{"batch_number": ${i + 1}, "story_segment": "${batch.segment}", "focus_area": "${batch.focus}", "target_words": ${wordsPerBatch}}`).join(',');
 
     const prompt = `You are a YouTube documentary expert. Create a detailed outline for a ${duration_minutes}-minute video about "${topic_title}" in the ${niche} niche.
 
@@ -119,21 +113,8 @@ Deno.serve(async (req) => {
        - Paragraph 2: Pacing style, tone, narrative voice, transitions, and how this batch connects to surrounding batches
     6. Batch 1 MUST be titled with the hook/opening line that grabs attention
 
-    Return ONLY valid JSON in this exact format:
-
-    {
-      "storytelling_format": "Selected Format Name",
-      "total_target_words": ${totalWords},
-      "batches": [
-        {
-          "batch_number": 1,
-          "story_segment": "[THE HOOK] Opening Line That Grabs Attention",
-          "focus_area": "What this batch focuses on",
-          "target_words": ${wordsPerBatch},
-          "synopsis": "PARAGRAPH 1: [Plot, characters, key info, emotional arc, scenes]. PARAGRAPH 2: [Pacing style, tone, narrative voice, transitions, connections]."
-        }
-      ]
-    }`;
+    Return ONLY valid JSON (no line breaks in strings):
+    {"storytelling_format": "Selected Format Name", "total_target_words": ${totalWords}, "batches": [{"batch_number": 1, "story_segment": "[THE HOOK] Opening Line", "focus_area": "What this batch focuses on", "target_words": ${wordsPerBatch}, "synopsis": "PARAGRAPH 1: ... PARAGRAPH 2: ..."}]}`;
 
     const result = await safeGeminiCall(prompt, 0.7);
 
