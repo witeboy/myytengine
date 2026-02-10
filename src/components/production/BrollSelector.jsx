@@ -121,16 +121,19 @@ export default function BrollSelector({
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1">
-                          <p className="text-sm font-medium truncate">{video.name}</p>
-                          <p className="text-xs text-gray-600">
-                            {video.quality} • {video.duration}
-                          </p>
-                        </div>
-                        {selectedVideoId === video.id && (
-                          <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                        )}
-                      </div>
+                         <div className="flex-1">
+                           <p className="text-sm font-medium truncate">{video.name}</p>
+                           <p className="text-xs text-gray-600">
+                             {video.quality} • {video.duration}s
+                           </p>
+                           {video.author && (
+                             <p className="text-xs text-gray-500 mt-0.5">by {video.author}</p>
+                           )}
+                         </div>
+                         {selectedVideo?.id === video.id && (
+                           <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                         )}
+                       </div>
                       {video.premium && (
                         <span className="inline-block mt-1 px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded">
                           Premium
