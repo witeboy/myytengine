@@ -37,6 +37,11 @@ export default function ScriptBatching() {
   useEffect(() => {
     const startBatchGeneration = async () => {
       try {
+        // First create empty batch records
+        await base44.functions.invoke('initializeScriptBatches', {
+          project_id: projectId,
+        });
+        // Then generate the content for each batch
         await base44.functions.invoke('generateScriptBatches', {
           project_id: projectId,
         });
