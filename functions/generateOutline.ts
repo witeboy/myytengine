@@ -114,22 +114,25 @@ Deno.serve(async (req) => {
     2. Create ${numBatches} batches, each ~${wordsPerBatch} words (150 words = 1 minute of video)
     3. Total script: ${totalWords} words for a ${duration_minutes}-minute video
     4. Follow the universal story structure: Hook → Deep Dive → Complication → Climax → Resolution
-    5. For EACH batch, include a detailed synopsis covering: key plot points, character/subject details, emotional arc, pacing style, tone, scene settings, and what connective elements link to previous/next batches
+    5. For EACH batch, write a detailed 2-paragraph synopsis covering:
+       - Paragraph 1: Plot points, key information, characters/subjects, emotional arc, and specific scenes
+       - Paragraph 2: Pacing style, tone, narrative voice, transitions, and how this batch connects to surrounding batches
+    6. Batch 1 MUST be titled with the hook/opening line that grabs attention
 
     Return ONLY valid JSON in this exact format:
 
     {
-    "storytelling_format": "Selected Format Name",
-    "total_target_words": ${totalWords},
-    "batches": [
-    {
-      "batch_number": 1,
-      "story_segment": "Batch Title",
-      "focus_area": "What this batch focuses on",
-      "target_words": ${wordsPerBatch},
-      "synopsis": "Detailed 2-3 sentence synopsis covering plot points, character arc, emotional tone, pacing style, and scene descriptions needed for consistent script generation"
-    }
-    ]
+      "storytelling_format": "Selected Format Name",
+      "total_target_words": ${totalWords},
+      "batches": [
+        {
+          "batch_number": 1,
+          "story_segment": "[THE HOOK] Opening Line That Grabs Attention",
+          "focus_area": "What this batch focuses on",
+          "target_words": ${wordsPerBatch},
+          "synopsis": "PARAGRAPH 1: [Plot, characters, key info, emotional arc, scenes]. PARAGRAPH 2: [Pacing style, tone, narrative voice, transitions, connections]."
+        }
+      ]
     }`;
 
     const result = await safeGeminiCall(prompt, 0.7);

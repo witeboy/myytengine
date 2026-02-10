@@ -135,7 +135,7 @@ export default function VideoDurationSetup() {
                 disabled={isGenerating || !duration || duration < 5 || !projectId}
                 className="bg-blue-600 hover:bg-blue-700 flex-1"
               >
-                {isGenerating ? 'Generating Outline...' : 'Generate Outline & Script'}
+                {isGenerating ? 'Generating Outline...' : 'Generate Outline'}
               </Button>
             </div>
           </CardContent>

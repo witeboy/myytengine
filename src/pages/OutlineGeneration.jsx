@@ -13,6 +13,7 @@ export default function OutlineGeneration() {
   const location = useLocation();
   const projectId = new URLSearchParams(location.search).get('project_id');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const { data: project, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
@@ -37,9 +38,28 @@ export default function OutlineGeneration() {
   const isOutlineReady = project?.status === 'outline_ready';
 
   const handleContinue = async () => {
-    // Update current step before navigating
-    await base44.entities.Projects.update(projectId, { current_step: 4 });
-    navigate(createPageUrl(`ScriptWorkshop?project_id=${projectId}`));
+    setIsProcessing(true);
+    try {
+      // Generate hooks first (before script batches) so they can be used in script
+      await base44.functions.invoke('generateHooks', {
+        project_id: projectId,
+        topic_id: project.selected_topic_id,
+        topic_title: topic?.title || '',
+      });
+
+      // Then generate script batches
+      await base44.functions.invoke('generateScriptBatches', {
+        project_id: projectId,
+      });
+
+      // Update current step
+      await base44.entities.Projects.update(projectId, { current_step: 4 });
+      navigate(createPageUrl(`ScriptWorkshop?project_id=${projectId}`));
+    } catch (error) {
+      alert('Error: ' + error.message);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -111,10 +131,10 @@ export default function OutlineGeneration() {
           </Button>
           <Button
             onClick={handleContinue}
-            disabled={!isOutlineReady}
+            disabled={!isOutlineReady || isProcessing}
             className="bg-blue-600 hover:bg-blue-700"
           >
-            Continue to Script Generation
+            {isProcessing ? 'Generating Hooks & Scripts...' : 'Generate Hooks & Script Batches'}
           </Button>
         </div>
       </div>
