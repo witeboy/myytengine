@@ -13,6 +13,7 @@ import Timeline from '@/components/production/Timeline';
 import AudioMixer from '@/components/production/AudioMixer';
 import KeyframeEditor from '@/components/production/KeyframeEditor';
 import TimelinePreview from '@/components/production/TimelinePreview';
+import BrollSelector from '@/components/production/BrollSelector';
 
 const VOICES = [
   { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel', accent: 'American' },
@@ -34,6 +35,7 @@ export default function ProductionStudio() {
   const [isCheckingVoice, setIsCheckingVoice] = useState(false);
   const [selectedBlockForKeyframes, setSelectedBlockForKeyframes] = useState(null);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
+  const [selectedBlockForBroll, setSelectedBlockForBroll] = useState(null);
 
   // Fetch project
   const { data: project } = useQuery({
@@ -253,6 +255,22 @@ export default function ProductionStudio() {
     }
   };
 
+  // Apply B-roll to block
+  const handleSelectBroll = async (video) => {
+    if (!selectedBlockForBroll) return;
+    
+    await base44.entities.TimelineBlocks.update(selectedBlockForBroll.id, {
+      status: 'completed',
+      broll_source: 'freepik',
+      broll_id: video.id,
+      broll_url: video.preview,
+      generated_asset_url: video.preview,
+    });
+    
+    refetchBlocks();
+    setSelectedBlockForBroll(null);
+  };
+
   if (!projectId) {
     return <div className="p-8 text-center">Loading...</div>;
   }
@@ -392,6 +410,26 @@ export default function ProductionStudio() {
                   onBlockDelete={handleBlockDelete}
                   generatingBlockId={generatingBlockId}
                 />
+
+                {/* B-Roll Selector */}
+                {selectedBlockForBroll && (
+                  <BrollSelector
+                    blockPrompt={selectedBlockForBroll.prompt}
+                    blockDuration={selectedBlockForBroll.duration_seconds}
+                    onSelectVideo={handleSelectBroll}
+                    selectedVideoId={selectedBlockForBroll.broll_id}
+                  />
+                )}
+
+                {!selectedBlockForBroll && blocks.length > 0 && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setSelectedBlockForBroll(blocks.find(b => !b.broll_url) || blocks[0])}
+                    className="w-full mb-4"
+                  >
+                    Find B-Roll Videos
+                  </Button>
+                )}
 
                 {/* Keyframe Editor */}
                 {selectedBlockForKeyframes && (
