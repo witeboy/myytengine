@@ -82,15 +82,21 @@ export default function TimelineBlock({
         {block.prompt}
       </div>
 
-      {block.status === 'completed' && block.generated_asset_url ? (
+      {block.status === 'completed' && (block.generated_asset_url || block.broll_url) ? (
         <div className="mb-2">
           {block.block_type === 'video' ? (
-            <video src={block.generated_asset_url} className="w-full h-12 rounded object-cover" />
+            <video src={block.broll_url || block.generated_asset_url} className="w-full h-12 rounded object-cover" />
           ) : (
             <img src={block.generated_asset_url} alt="asset" className="w-full h-12 rounded object-cover" />
           )}
         </div>
       ) : null}
+
+      {block.broll_source && (
+        <div className="text-xs mb-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">
+          B-Roll: {block.broll_source}
+        </div>
+      )}
 
       <div className="flex gap-1 mb-1">
         <Button
