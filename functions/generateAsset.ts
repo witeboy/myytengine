@@ -55,11 +55,8 @@ Deno.serve(async (req) => {
           broll_url: asset_url,
         });
       } else {
-        // Fallback: generate static image
-        const aiResult = await base44.asServiceRole.integrations.Core.GenerateImage({
-          prompt: enhancedPrompt,
-        });
-        asset_url = aiResult.url;
+       // Fallback: use placeholder since B-roll search had no results
+       asset_url = `https://via.placeholder.com/1920x1080?text=${encodeURIComponent('Video: ' + enhancedPrompt.substring(0, 50))}`;
       }
     }
 
