@@ -16,12 +16,12 @@ export default function BrollSelector({
   blockPrompt, 
   blockDuration,
   onSelectVideo,
-  selectedVideoId,
-  isLoading
+  selectedVideoId
 }) {
   const [videos, setVideos] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [quality, setQuality] = useState('1080p');
+  const [selectedVideo, setSelectedVideo] = useState(null);
 
   const handleSearch = async () => {
     if (!blockPrompt) return;
@@ -42,6 +42,11 @@ export default function BrollSelector({
     } finally {
       setIsSearching(false);
     }
+  };
+
+  const handleSelectVideo = (video) => {
+    setSelectedVideo(video);
+    onSelectVideo(video);
   };
 
   return (
