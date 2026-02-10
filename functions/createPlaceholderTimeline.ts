@@ -27,39 +27,46 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Missing script or settings' }, { status: 400 });
     }
 
-    // Get timing entries to know exact positions
+    // Get timing entries and visual prompts
     const allTimings = await base44.entities.TimingEntries.list();
     const timings = allTimings.filter(t => t.project_id === project_id).sort((a, b) => a.entry_order - b.entry_order);
 
-    // Delete existing blocks to start fresh
+    const allVisualPrompts = await base44.entities.VisualPrompts.list();
+    const visualPrompts = allVisualPrompts.filter(v => v.project_id === project_id).sort((a, b) => a.scene_number - b.scene_number);
+
+    // Delete existing blocks
     const existingBlocks = await base44.entities.TimelineBlocks.list();
     const projectBlocks = existingBlocks.filter(b => b.project_id === project_id);
     for (const block of projectBlocks) {
       await base44.entities.TimelineBlocks.delete(block.id);
     }
 
-    // Create placeholder blocks from timing entries
     const totalDuration = settings.total_duration_seconds || 60;
     const createdBlocks = [];
 
+    // Create blocks from timing entries (primary source of truth for timing)
     for (let i = 0; i < timings.length; i++) {
       const timing = timings[i];
       
-      // Parse start time (e.g., "0:00" to seconds)
+      // Parse start time (e.g., "0:00" -> seconds)
       const startParts = timing.timestamp_start.split(':');
       const startSeconds = parseInt(startParts[0]) * 60 + parseInt(startParts[1]);
-      
       const duration = timing.duration_seconds || 5;
 
-      // Alternate between video and image
-      const blockType = i % 2 === 0 ? 'video' : 'image';
+      // Match with visual prompt if available, otherwise use timing data
+      const visualPrompt = visualPrompts[i];
+      const prompt = visualPrompt?.sora_prompt || timing.scene_concept || timing.spoken_text || `Scene ${i + 1}`;
+
+      // Determine block type: alternate with slight preference for videos
+      const blockType = i % 3 === 0 ? 'image' : 'video';
 
       const block = await base44.entities.TimelineBlocks.create({
-        project_id: project_id,
+        project_id,
         block_type: blockType,
-        prompt: timing.scene_concept || timing.spoken_text || `Scene ${i + 1}`,
+        prompt,
         start_time_seconds: startSeconds,
-        duration_seconds: duration,
+        duration_seconds: Math.min(duration, 30), // Cap at 30s per block
+        asset_style: settings.selected_asset_style || 'photorealistic',
         status: 'pending',
         order_index: i,
       });
