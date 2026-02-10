@@ -10,6 +10,9 @@ import { Loader2, Plus } from 'lucide-react';
 import AssetStyleSelector from '@/components/production/AssetStyleSelector';
 import VoiceSelector from '@/components/production/VoiceSelector';
 import Timeline from '@/components/production/Timeline';
+import AudioMixer from '@/components/production/AudioMixer';
+import KeyframeEditor from '@/components/production/KeyframeEditor';
+import TimelinePreview from '@/components/production/TimelinePreview';
 
 const VOICES = [
   { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel', accent: 'American' },
@@ -29,6 +32,8 @@ export default function ProductionStudio() {
   const [selectedVoice, setSelectedVoice] = useState(null);
   const [generatingBlockId, setGeneratingBlockId] = useState(null);
   const [isCheckingVoice, setIsCheckingVoice] = useState(false);
+  const [selectedBlockForKeyframes, setSelectedBlockForKeyframes] = useState(null);
+  const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
 
   // Fetch project
   const { data: project } = useQuery({
@@ -215,6 +220,39 @@ export default function ProductionStudio() {
     refetchBlocks();
   };
 
+  // Update voiceover volume
+  const handleVoiceoverVolumeChange = async (volume) => {
+    if (settings) {
+      await base44.entities.ProductionSettings.update(settings.id, {
+        voiceover_volume: volume,
+      });
+      refetchSettings();
+    }
+  };
+
+  // Update block keyframes
+  const handleBlockKeyframesChange = async (blockId, keyframes) => {
+    await base44.entities.TimelineBlocks.update(blockId, {
+      keyframes: keyframes,
+    });
+    refetchBlocks();
+  };
+
+  // Generate preview
+  const handleGeneratePreview = async () => {
+    setIsGeneratingPreview(true);
+    try {
+      const result = await base44.functions.invoke('generateTimelinePreview', {
+        project_id: projectId,
+      });
+      return result;
+    } catch (error) {
+      console.error('Preview generation error:', error);
+    } finally {
+      setIsGeneratingPreview(false);
+    }
+  };
+
   if (!projectId) {
     return <div className="p-8 text-center">Loading...</div>;
   }
@@ -337,6 +375,14 @@ export default function ProductionStudio() {
               </Card>
             ) : (
               <>
+                {/* Audio Mixing */}
+                <AudioMixer
+                  voiceoverUrl={settings.voiceover_url}
+                  voiceoverVolume={settings.voiceover_volume || 1}
+                  onVoiceoverVolumeChange={handleVoiceoverVolumeChange}
+                />
+
+                {/* Timeline */}
                 <Timeline
                   blocks={blocks}
                   totalDuration={settings?.total_duration_seconds || 60}
@@ -345,6 +391,38 @@ export default function ProductionStudio() {
                   onBlockGenerate={(blockId) => generateAssetMutation.mutate(blockId)}
                   onBlockDelete={handleBlockDelete}
                   generatingBlockId={generatingBlockId}
+                />
+
+                {/* Keyframe Editor */}
+                {selectedBlockForKeyframes && (
+                  <KeyframeEditor
+                    blockId={selectedBlockForKeyframes.id}
+                    keyframes={selectedBlockForKeyframes.keyframes}
+                    blockDuration={selectedBlockForKeyframes.duration_seconds}
+                    onKeyframesChange={(keyframes) => {
+                      handleBlockKeyframesChange(selectedBlockForKeyframes.id, keyframes);
+                      setSelectedBlockForKeyframes(null);
+                    }}
+                  />
+                )}
+
+                {!selectedBlockForKeyframes && blocks.length > 0 && (
+                  <Button
+                    variant="outline"
+                    onClick={() => setSelectedBlockForKeyframes(blocks[0])}
+                    className="w-full"
+                  >
+                    Edit Keyframe Animations
+                  </Button>
+                )}
+
+                {/* Timeline Preview */}
+                <TimelinePreview
+                  blocks={blocks}
+                  totalDuration={settings?.total_duration_seconds || 60}
+                  voiceoverUrl={settings.voiceover_url}
+                  onGeneratePreview={handleGeneratePreview}
+                  isGenerating={isGeneratingPreview}
                 />
 
                 <div className="flex gap-4">
