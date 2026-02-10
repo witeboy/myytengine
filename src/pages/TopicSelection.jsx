@@ -30,13 +30,7 @@ export default function TopicSelection() {
         topic_id: topicId,
       });
 
-      await base44.functions.invoke('generateHooks', {
-        project_id: projectId,
-        topic_id: topicId,
-        topic_title: topic.title,
-      });
-
-      navigate(createPageUrl(`hook_selection?project_id=${projectId}`));
+      navigate(createPageUrl(`video_duration_setup?project_id=${projectId}`));
     } catch (error) {
       alert('Error: ' + error.message);
     } finally {
