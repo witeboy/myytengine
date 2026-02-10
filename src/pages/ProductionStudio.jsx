@@ -71,6 +71,16 @@ export default function ProductionStudio() {
     enabled: !!projectId,
   });
 
+  // Fetch visual prompts
+  const { data: visualPrompts = [] } = useQuery({
+    queryKey: ['visual-prompts', projectId],
+    queryFn: async () => {
+      const allPrompts = await base44.entities.VisualPrompts.list();
+      return allPrompts.filter(p => p.project_id === projectId).sort((a, b) => a.scene_number - b.scene_number);
+    },
+    enabled: !!projectId,
+  });
+
   // Initialize settings
   useEffect(() => {
     if (settings) {
@@ -129,21 +139,29 @@ export default function ProductionStudio() {
     checkVoiceStatusMutation.mutate();
   };
 
-  // Create timeline blocks from script segments
+  // Create timeline blocks from visual prompts
   const handleCreateTimelineBlocks = async () => {
-    if (!project || !settings) return;
+    if (!project || !settings || visualPrompts.length === 0) return;
 
-    const segments = script?.full_script?.split('\n\n') || ['Default segment'];
-    const timePerSegment = (settings.total_duration_seconds || 60) / segments.length;
+    const totalDuration = settings.total_duration_seconds || 60;
 
-    for (let i = 0; i < Math.min(segments.length, 5); i++) {
+    for (let i = 0; i < visualPrompts.length; i++) {
+      const prompt = visualPrompts[i];
+      const timeStart = prompt.duration_seconds ? 
+        (visualPrompts.slice(0, i).reduce((sum, p) => sum + (p.duration_seconds || 0), 0)) : 
+        (i * (totalDuration / visualPrompts.length));
+      const duration = prompt.duration_seconds || (totalDuration / visualPrompts.length);
+
+      // Alternate between video and image based on visual style
+      const blockType = i % 2 === 0 ? 'video' : 'image';
+
       await base44.entities.TimelineBlocks.create({
         project_id: projectId,
-        block_type: i % 2 === 0 ? 'video' : 'image',
-        prompt: segments[i]?.substring(0, 100) || `Segment ${i + 1}`,
-        start_time_seconds: i * timePerSegment,
-        duration_seconds: timePerSegment * 0.8,
-        asset_style: selectedStyle,
+        block_type: blockType,
+        prompt: prompt.sora_prompt || prompt.narration_text || `Scene ${i + 1}`,
+        start_time_seconds: timeStart,
+        duration_seconds: duration,
+        asset_style: selectedStyle || 'photorealistic',
         status: 'pending',
         order_index: i,
       });
