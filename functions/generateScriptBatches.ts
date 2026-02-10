@@ -80,10 +80,15 @@ Deno.serve(async (req) => {
       const initResult = await base44.asServiceRole.functions.invoke('initializeScriptBatches', {
         project_id: project_id,
       });
-      batches = initResult.data?.batches || [];
-      
+
+      // Re-fetch batches after initialization
+      const updatedBatches = await base44.asServiceRole.entities.ScriptBatches.list();
+      batches = updatedBatches
+        .filter(b => b.project_id === project_id)
+        .sort((a, b) => a.batch_number - b.batch_number);
+
       if (batches.length === 0) {
-        return Response.json({ error: 'No batches found' }, { status: 404 });
+        return Response.json({ error: 'No batches found after initialization' }, { status: 404 });
       }
     }
 
