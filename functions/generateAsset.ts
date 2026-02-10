@@ -20,16 +20,23 @@ Deno.serve(async (req) => {
       status: 'generating',
     });
 
+    // Enhance prompt with style descriptors
+    const enhanceResult = await base44.asServiceRole.functions.invoke('enhancePrompt', {
+      prompt,
+      asset_style,
+    });
+
+    const enhancedPrompt = enhanceResult.data?.enhanced_prompt || prompt;
     let asset_url = '';
 
     if (block_type === 'image') {
-      // Generate static image
+      // Generate image with enhanced prompt
       const aiResult = await base44.asServiceRole.integrations.Core.GenerateImage({
-        prompt: `${asset_style} style: ${prompt}`,
+        prompt: enhancedPrompt,
       });
       asset_url = aiResult.url;
     } else if (block_type === 'video') {
-      // Try searching B-roll first (more efficient)
+      // Try B-roll search first
       const brollResult = await base44.asServiceRole.functions.invoke('searchBrollVideos', {
         prompt,
         duration: 10,
@@ -37,26 +44,24 @@ Deno.serve(async (req) => {
       });
 
       if (brollResult.data?.videos?.length > 0) {
-        // Use first matching B-roll video
         const video = brollResult.data.videos[0];
         asset_url = video.preview || video.url;
         
-        // Update block with B-roll info
         await base44.asServiceRole.entities.TimelineBlocks.update(block_id, {
           broll_source: 'freepik',
           broll_id: video.id,
           broll_url: asset_url,
         });
       } else {
-        // Fallback to generate image (user can use Runway generator for full video)
+        // Fallback: generate static image
         const aiResult = await base44.asServiceRole.integrations.Core.GenerateImage({
-          prompt: `${asset_style} style: ${prompt}`,
+          prompt: enhancedPrompt,
         });
         asset_url = aiResult.url;
       }
     }
 
-    // Update block with generated asset
+    // Update block with asset
     await base44.asServiceRole.entities.TimelineBlocks.update(block_id, {
       status: 'completed',
       generated_asset_url: asset_url,
