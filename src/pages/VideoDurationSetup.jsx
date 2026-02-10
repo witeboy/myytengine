@@ -17,6 +17,14 @@ export default function VideoDurationSetup() {
   const [duration, setDuration] = useState(10);
   const [isGenerating, setIsGenerating] = useState(false);
 
+  // Redirect to dashboard if no project ID
+  React.useEffect(() => {
+    if (!projectId) {
+      alert('No project selected. Redirecting to dashboard...');
+      navigate(createPageUrl('Dashboard'));
+    }
+  }, [projectId, navigate]);
+
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
     queryFn: async () => {
