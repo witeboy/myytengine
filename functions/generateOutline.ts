@@ -62,7 +62,43 @@ Deno.serve(async (req) => {
     };
 
     const totalWords = duration_minutes * 150;
-    const wordsPerBatch = Math.floor(totalWords / 5);
+    const numBatches = Math.max(2, Math.round(totalWords / 1500));
+    const wordsPerBatch = Math.floor(totalWords / numBatches);
+
+    const batchStructures = {
+      2: [
+        { segment: "The Hook & Deep Dive", focus: "Establish atmosphere, introduce topic, key facts and backstory" },
+        { segment: "The Climax & Resolution", focus: "Peak revelation, aftermath, and Call to Action" }
+      ],
+      3: [
+        { segment: "The Hook & Inciting Incident", focus: "Establish atmosphere, introduce topic, end on major discovery" },
+        { segment: "The Deep Dive & Complication", focus: "Backstory, investigation, midpoint twist" },
+        { segment: "The Climax & Resolution", focus: "Peak moment, aftermath, and Call to Action" }
+      ],
+      4: [
+        { segment: "The Hook & Inciting Incident", focus: "Establish atmosphere, introduce topic, end on major discovery" },
+        { segment: "The Deep Dive", focus: "Backstory, investigation, introduce obstacles" },
+        { segment: "The Complication & Climax", focus: "Midpoint twist and final confrontation" },
+        { segment: "The Resolution & Outro", focus: "Aftermath, lessons learned, and Call to Action" }
+      ],
+      5: [
+        { segment: "The Hook & Inciting Incident", focus: "Establish atmosphere, introduce victim/protagonist, end on Big Discovery" },
+        { segment: "The Deep Dive", focus: "Backstory, early investigation, introduce suspects or obstacles" },
+        { segment: "The Complication", focus: "Midpoint Twist - information that changes everything" },
+        { segment: "The Climax", focus: "Final confrontation, aha moment, or high-intensity peak" },
+        { segment: "The Resolution & Outro", focus: "Aftermath, legal results, lessons learned, and Call to Action" }
+      ]
+    };
+
+    const batchesList = batchStructures[numBatches] || batchStructures[5];
+
+    const batchJson = batchesList.map((batch, i) => `
+    {
+      "batch_number": ${i + 1},
+      "story_segment": "${batch.segment}",
+      "focus_area": "${batch.focus}",
+      "target_words": ${wordsPerBatch}
+    }`).join(',');
 
     const prompt = `You are a YouTube documentary expert. Create an outline for a ${duration_minutes}-minute video about "${topic_title}" in the ${niche} niche.
 
@@ -75,45 +111,16 @@ D-Tier: ${storytellingFormats.D.join(', ')}
 
 Instructions:
 1. Select the BEST storytelling format from the list above that fits this topic
-2. Create 5 batches, each ~${wordsPerBatch} words (150 words = 1 minute)
-3. Structure: Hook & Inciting Incident → Deep Dive → Complication → Climax → Resolution & Outro
+2. Create ${numBatches} batches, each ~${wordsPerBatch} words (150 words = 1 minute of video)
+3. Total script: ${totalWords} words for a ${duration_minutes}-minute video
+4. Follow the universal story structure: Hook → Deep Dive → Complication → Climax → Resolution
 
 Return ONLY valid JSON in this exact format:
 
 {
   "storytelling_format": "Selected Format Name",
   "total_target_words": ${totalWords},
-  "batches": [
-    {
-      "batch_number": 1,
-      "story_segment": "The Hook & Inciting Incident",
-      "focus_area": "Establish atmosphere, introduce victim/protagonist, end on the Big Discovery",
-      "target_words": ${wordsPerBatch}
-    },
-    {
-      "batch_number": 2,
-      "story_segment": "The Deep Dive",
-      "focus_area": "Backstory, early investigation, introduce suspects or obstacles",
-      "target_words": ${wordsPerBatch}
-    },
-    {
-      "batch_number": 3,
-      "story_segment": "The Complication",
-      "focus_area": "Midpoint Twist - information that changes everything or major setback",
-      "target_words": ${wordsPerBatch}
-    },
-    {
-      "batch_number": 4,
-      "story_segment": "The Climax",
-      "focus_area": "Final confrontation, the aha moment, or high-intensity chase",
-      "target_words": ${wordsPerBatch}
-    },
-    {
-      "batch_number": 5,
-      "story_segment": "The Resolution & Outro",
-      "focus_area": "Aftermath, legal results, lessons learned, and Call to Action",
-      "target_words": ${wordsPerBatch}
-    }
+  "batches": [${batchJson}
   ]
 }`;
 
