@@ -79,7 +79,7 @@ export default function OutlineGeneration() {
                       </h3>
                       <p className="text-sm text-gray-600 mt-1">{batch.focus_area}</p>
                       <p className="text-xs text-gray-500 mt-1">
-                        Target: ~{batch.target_word_count} words
+                        Target: ~{batch.target_words} words
                       </p>
                     </div>
                   ))}

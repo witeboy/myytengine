@@ -287,7 +287,7 @@ export default function ScriptWorkshop() {
           <div className="flex justify-between pt-4">
             <Button 
               variant="outline" 
-              onClick={() => navigate(createPageUrl(`video_duration_setup?project_id=${projectId}`))}
+              onClick={() => navigate(createPageUrl(`VideoDurationSetup?project_id=${projectId}`))}
               disabled={showBatchGeneration && !allBatchesCompleted}
             >
               Back
