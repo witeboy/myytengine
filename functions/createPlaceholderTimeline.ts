@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
     const script = allScripts.find(s => s.project_id === project_id && s.version === 'final');
 
     const allSettings = await base44.entities.ProductionSettings.list();
-    const settings = allSettings.find(s => s.project_id === projectId);
+    const settings = allSettings.find(s => s.project_id === project_id);
 
     if (!script || !settings) {
       return Response.json({ error: 'Missing script or settings' }, { status: 400 });
