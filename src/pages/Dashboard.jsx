@@ -1,8 +1,8 @@
 import React from 'react';
 import { base44 } from '@/api/base44Client';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Plus, MoreVertical } from 'lucide-react';
+import { Plus, Archive } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,10 +10,20 @@ import { createPageUrl } from '@/utils';
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  const { data: projects = [], isLoading } = useQuery({
+  const { data: allProjects = [], isLoading } = useQuery({
     queryKey: ['projects'],
     queryFn: () => base44.entities.Projects.list(),
+  });
+
+  const projects = allProjects.filter(p => !p.archived);
+
+  const archiveMutation = useMutation({
+    mutationFn: (projectId) => base44.entities.Projects.update(projectId, { archived: true }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
   });
 
   const statusColors = {
@@ -55,30 +65,50 @@ export default function Dashboard() {
             {projects.map((project) => (
               <Card
                 key={project.id}
-                className="cursor-pointer hover:shadow-lg transition-shadow"
-                onClick={() => navigate(createPageUrl(`topic_selection?project_id=${project.id}`))}
+                className="hover:shadow-lg transition-shadow"
               >
                 <CardHeader>
                   <div className="flex justify-between items-start">
-                    <div className="flex-1">
+                    <div 
+                      className="flex-1 cursor-pointer"
+                      onClick={() => navigate(createPageUrl(`topic_selection?project_id=${project.id}`))}
+                    >
                       <CardTitle className="text-lg">{project.name}</CardTitle>
                       <p className="text-sm text-gray-600 mt-1">{project.niche}</p>
                     </div>
-                    <Badge className={statusColors[project.status] || statusColors.created}>
-                      {project.status?.replace(/_/g, ' ')}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge className={statusColors[project.status] || statusColors.created}>
+                        {project.status?.replace(/_/g, ' ')}
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm('Archive this project?')) {
+                            archiveMutation.mutate(project.id);
+                          }
+                        }}
+                        className="h-8 w-8 text-gray-500 hover:text-gray-700"
+                      >
+                        <Archive className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div>
+                  <div
+                    className="cursor-pointer"
+                    onClick={() => navigate(createPageUrl(`topic_selection?project_id=${project.id}`))}
+                  >
                     <div className="flex justify-between mb-2">
                       <span className="text-sm font-medium">Progress</span>
-                      <span className="text-sm text-gray-600">{project.current_step}/14</span>
+                      <span className="text-sm text-gray-600">{project.current_step}/15</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
                         className="bg-blue-600 h-2 rounded-full transition-all"
-                        style={{ width: `${(project.current_step / 14) * 100}%` }}
+                        style={{ width: `${(project.current_step / 15) * 100}%` }}
                       />
                     </div>
                   </div>
