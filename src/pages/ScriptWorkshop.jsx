@@ -19,13 +19,19 @@ export default function ScriptWorkshop() {
 
   const { data: project, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
-    queryFn: () => base44.entities.Projects.get(projectId),
+    queryFn: async () => {
+      const projects = await base44.entities.Projects.list();
+      return projects.find(p => p.id === projectId);
+    },
     enabled: !!projectId,
   });
 
   const { data: scripts = [] } = useQuery({
     queryKey: ['scripts', projectId],
-    queryFn: () => base44.entities.Scripts.list(),
+    queryFn: async () => {
+      const allScripts = await base44.entities.Scripts.list();
+      return Array.isArray(allScripts) ? allScripts : [];
+    },
     enabled: !!projectId,
   });
 
