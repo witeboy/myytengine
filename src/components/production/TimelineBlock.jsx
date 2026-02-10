@@ -60,13 +60,20 @@ export default function TimelineBlock({
   }, [isDragging, isResizing, block, pixelsPerSecond, onStartTimeChange, onDurationChange]);
 
   const blockColor = block.block_type === 'video' ? 'bg-red-200' : 'bg-yellow-200';
+  const statusColor = {
+    pending: 'border-gray-400',
+    generating: 'border-blue-500 border-2 animate-pulse',
+    completed: 'border-green-500 border-2',
+    failed: 'border-red-500 border-2'
+  }[block.status] || 'border-gray-400';
+
   const left = block.start_time_seconds * pixelsPerSecond;
   const width = block.duration_seconds * pixelsPerSecond;
 
   return (
     <div
       ref={blockRef}
-      className={`absolute ${blockColor} border-2 border-gray-400 rounded p-2 cursor-move select-none hover:shadow-lg transition-shadow`}
+      className={`absolute ${blockColor} ${statusColor} rounded p-2 cursor-move select-none hover:shadow-lg transition-all`}
       style={{
         left: `${left}px`,
         width: `${width}px`,
@@ -74,8 +81,11 @@ export default function TimelineBlock({
       }}
       onMouseDown={handleMouseDown}
     >
-      <div className="text-xs font-semibold mb-1">
-        {block.block_type === 'video' ? '🎬 Video' : '🖼️ Image'}
+      <div className="text-xs font-semibold mb-1 flex items-center justify-between">
+        <span>{block.block_type === 'video' ? '🎬 Video' : '🖼️ Image'}</span>
+        {block.status === 'generating' && <Loader2 className="w-3 h-3 animate-spin" />}
+        {block.status === 'completed' && <span className="text-green-600">✓</span>}
+        {block.status === 'failed' && <span className="text-red-600">✕</span>}
       </div>
 
       <div className="text-xs line-clamp-2 mb-2 text-gray-700">
@@ -89,6 +99,10 @@ export default function TimelineBlock({
           ) : (
             <img src={block.generated_asset_url} alt="asset" className="w-full h-12 rounded object-cover" />
           )}
+        </div>
+      ) : block.status === 'generating' ? (
+        <div className="mb-2 w-full h-12 rounded bg-gradient-to-r from-blue-100 to-blue-50 flex items-center justify-center">
+          <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
         </div>
       ) : null}
 
@@ -104,9 +118,9 @@ export default function TimelineBlock({
           variant="outline"
           className="h-6 text-xs"
           onClick={() => onGenerate(block.id)}
-          disabled={isGenerating || block.status === 'completed'}
+          disabled={isGenerating || block.status === 'completed' || block.status === 'generating'}
         >
-          {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : block.status === 'completed' ? '✓' : 'Generate'}
+          {block.status === 'generating' ? 'Generating...' : block.status === 'completed' ? '✓ Done' : 'Generate'}
         </Button>
         <Button
           size="sm"
