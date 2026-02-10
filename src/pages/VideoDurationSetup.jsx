@@ -17,14 +17,6 @@ export default function VideoDurationSetup() {
   const [duration, setDuration] = useState(10);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Redirect to dashboard if no project ID
-  React.useEffect(() => {
-    if (!projectId) {
-      alert('No project selected. Redirecting to dashboard...');
-      navigate(createPageUrl('Dashboard'));
-    }
-  }, [projectId, navigate]);
-
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
     queryFn: async () => {
@@ -140,7 +132,7 @@ export default function VideoDurationSetup() {
               </Button>
               <Button
                 onClick={handleGenerateOutline}
-                disabled={isGenerating || !duration || duration < 5}
+                disabled={isGenerating || !duration || duration < 5 || !projectId}
                 className="bg-blue-600 hover:bg-blue-700 flex-1"
               >
                 {isGenerating ? 'Generating Outline...' : 'Generate Outline & Script'}
