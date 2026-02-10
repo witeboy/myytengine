@@ -58,10 +58,13 @@ export default function ScriptBatching() {
 
   const handleContinue = async () => {
     try {
+      const topics = await base44.entities.Topics.list();
+      const selectedTopic = topics.find(t => t.id === project.selected_topic_id);
+
       await base44.functions.invoke('generateHooks', {
         project_id: projectId,
         topic_id: project.selected_topic_id,
-        topic_title: batches[0]?.story_segment || 'Topic',
+        topic_title: selectedTopic?.title || 'Topic',
       });
 
       navigate(createPageUrl(`hook_selection?project_id=${projectId}`));
