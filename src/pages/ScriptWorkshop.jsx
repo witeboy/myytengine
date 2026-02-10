@@ -39,11 +39,11 @@ export default function ScriptWorkshop() {
     queryKey: ['batches', projectId],
     queryFn: async () => {
       const allBatches = await base44.entities.ScriptBatches.list();
-      return allBatches.filter(b => b.project_id === projectId).sort((a, b) => a.batch_number - b.batch_number);
+      return Array.isArray(allBatches) ? allBatches.filter(b => b.project_id === projectId).sort((a, b) => a.batch_number - b.batch_number) : [];
     },
     enabled: !!projectId,
     refetchInterval: (data) => {
-      const hasGeneratingBatches = data?.some(b => b.status === 'generating' || b.status === 'pending');
+      const hasGeneratingBatches = Array.isArray(data) && data.some(b => b.status === 'generating' || b.status === 'pending');
       return hasGeneratingBatches ? 3000 : false;
     },
   });
