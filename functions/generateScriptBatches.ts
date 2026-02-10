@@ -90,29 +90,34 @@ Deno.serve(async (req) => {
         status: "generating"
       });
 
-      const prompt = `You are writing batch ${batch.batch_number} of ${batches.length} for a ${project.video_duration_minutes}-minute YouTube documentary.
+      const synopsis = batch.synopsis || batch.focus_area;
+      const previousSynopsis = batches[batches.findIndex(b => b.id === batch.id) - 1]?.synopsis || '';
+
+      const prompt = `You are writing batch ${batch.batch_number} of ${batches.length} for a ${project.video_duration_minutes}-minute YouTube documentary in "${project.storytelling_format}" format.
 
 **Topic**: ${topic.title}
 **Topic Description**: ${topic.description}
 **Niche**: ${project.niche}
-**Storytelling Format**: ${project.storytelling_format}
+
+**BATCH SYNOPSIS & CONTEXT**:
+${synopsis}
+
+${previousSynopsis ? `**Previous Batch Context**: ${previousSynopsis}` : ''}
 
 **This Batch**: ${batch.story_segment}
-**Focus**: ${batch.focus_area}
-**Target**: ~${batch.target_words || 1500} words
+**Focus Areas**: ${batch.focus_area}
+**Target Word Count**: ~${batch.target_words || 1500} words (${Math.round((batch.target_words || 1500) / 150)} minutes)
 
-${previousContent ? `**Previous Content Summary**: ${previousContent.substring(0, 500)}...` : ''}
+**Narrative Requirements**:
+- Match the established tone, cadence, and character perspective from earlier batches
+- Maintain consistent pacing: 140-150 words per minute
+- Develop emotional arc: build curiosity, tension, then payoff
+- Each paragraph = one visual scene [SCENE: description]
+- Use dramatic pauses and strategic emphasis on key terms
+- End with hook to next segment (except final batch)
+- Keep character/subject voice consistent throughout
 
-Write compelling documentary narration with [SCENE: direction] markers for visual guidance.
-
-Rules:
-- 140-150 words per minute pacing
-- Emotional arc: build curiosity, conflict, then payoff
-- Each paragraph = new visual scene
-- Use dramatic pauses and emphasis
-- End with a hook to next segment (except final batch)
-
-Write ONLY the narration for this batch. Do not include JSON or labels.`;
+Write ONLY the narration for this batch. Do not include JSON, labels, or metadata.`;
 
       const result = await safeGeminiCall(prompt, 0.8);
 
