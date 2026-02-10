@@ -37,7 +37,7 @@ export default function OutlineGeneration() {
   const isOutlineReady = project?.status === 'outline_ready';
 
   const handleContinue = () => {
-    navigate(createPageUrl(`script_workshop?project_id=${projectId}`));
+    navigate(createPageUrl(`ScriptWorkshop?project_id=${projectId}`));
   };
 
   return (
@@ -103,7 +103,7 @@ export default function OutlineGeneration() {
         <div className="flex justify-between">
           <Button
             variant="outline"
-            onClick={() => navigate(createPageUrl(`video_duration_setup?project_id=${projectId}`))}
+            onClick={() => navigate(createPageUrl(`VideoDurationSetup?project_id=${projectId}`))}
           >
             Back
           </Button>

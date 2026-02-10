@@ -52,7 +52,7 @@ export default function VideoDurationSetup() {
         duration_minutes: duration,
       });
 
-      navigate(createPageUrl(`outline_generation?project_id=${projectId}`));
+      navigate(createPageUrl(`OutlineGeneration?project_id=${projectId}`));
     } catch (error) {
       alert('Error: ' + error.message);
     } finally {

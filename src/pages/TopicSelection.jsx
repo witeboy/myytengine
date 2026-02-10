@@ -30,7 +30,7 @@ export default function TopicSelection() {
         topic_id: topicId,
       });
 
-      navigate(createPageUrl(`video_duration_setup?project_id=${projectId}`));
+      navigate(createPageUrl(`VideoDurationSetup?project_id=${projectId}`));
     } catch (error) {
       alert('Error: ' + error.message);
     } finally {

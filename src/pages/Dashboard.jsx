@@ -27,21 +27,23 @@ export default function Dashboard() {
   });
 
   const getProjectRoute = (project) => {
-    const step = project.current_step || 1;
     const status = project.status;
 
-    if (step === 1 || status === 'created' || status === 'topics_ready') {
-      return `topic_selection?project_id=${project.id}`;
-    } else if (step === 2 || status === 'topic_selected') {
-      return `video_duration_setup?project_id=${project.id}`;
-    } else if (step === 3 || status === 'outline_ready') {
-      return `outline_generation?project_id=${project.id}`;
-    } else if (step === 4 || status === 'scripting') {
-      return `script_workshop?project_id=${project.id}`;
-    } else if (step === 5 || status === 'hooks_ready') {
-      return `hook_selection?project_id=${project.id}`;
+    // Route based on status for most accurate navigation
+    if (status === 'topics_ready' || status === 'created') {
+      return `TopicSelection?project_id=${project.id}`;
+    } else if (status === 'topic_selected' && !project.video_duration_minutes) {
+      return `VideoDurationSetup?project_id=${project.id}`;
+    } else if (status === 'topic_selected' && project.video_duration_minutes && !project.outline) {
+      return `OutlineGeneration?project_id=${project.id}`;
+    } else if (status === 'outline_ready' || (project.outline && status === 'topic_selected')) {
+      return `ScriptWorkshop?project_id=${project.id}`;
+    } else if (status === 'hooks_ready') {
+      return `HookSelection?project_id=${project.id}`;
+    } else if (status === 'scripting') {
+      return `ScriptWorkshop?project_id=${project.id}`;
     } else {
-      return `topic_selection?project_id=${project.id}`;
+      return `TopicSelection?project_id=${project.id}`;
     }
   };
 
