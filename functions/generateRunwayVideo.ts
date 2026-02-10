@@ -27,8 +27,8 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Freepik API key not configured' }, { status: 500 });
     }
 
-    // Create text-to-video task
-    const createTaskResponse = await fetch('https://api.freepik.com/v1/ai/text-to-video/runway-4-5', {
+    // Create text-to-video task via Freepik
+    const createTaskResponse = await fetch('https://api.freepik.com/v1/text-to-video', {
       method: 'POST',
       headers: {
         'x-freepik-api-key': apiKey,
@@ -37,25 +37,29 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         prompt,
         ratio,
-        duration
+        duration,
+        model: 'runway-4-5'
       })
     });
 
     if (!createTaskResponse.ok) {
-      const error = await createTaskResponse.json();
-      console.error('Freepik T2V error:', error);
+      const errText = await createTaskResponse.text();
+      console.error('Freepik API error:', createTaskResponse.status, errText);
       return Response.json({ error: 'Failed to create video generation task' }, { status: 500 });
     }
 
     const taskData = await createTaskResponse.json();
-    const taskId = taskData.data.task_id;
-    const status = taskData.data.status;
+    const taskId = taskData.data?.id || taskData.data?.task_id;
+
+    if (!taskId) {
+      console.error('No task ID in response:', taskData);
+      return Response.json({ error: 'Invalid response from video service' }, { status: 500 });
+    }
 
     // Update TimelineBlock with task info
-    await base44.entities.TimelineBlocks.update(block_id, {
-      status: status === 'CREATED' ? 'generating' : 'generating',
-      generation_task_id: taskId,
-      asset_style: 'runway'
+    await base44.asServiceRole.entities.TimelineBlocks.update(block_id, {
+      status: 'generating',
+      generation_task_id: taskId
     });
 
     return Response.json({
