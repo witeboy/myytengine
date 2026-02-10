@@ -1,7 +1,11 @@
 import React from 'react';
-import { CheckCircle2, Circle } from 'lucide-react';
+import { CheckCircle2, Circle, Home } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
+import { Button } from '@/components/ui/button';
 
 export default function StepProgress({ currentStep }) {
+  const navigate = useNavigate();
   const steps = [
     { num: 1, label: 'Topics' },
     { num: 2, label: 'Duration' },
@@ -23,7 +27,16 @@ export default function StepProgress({ currentStep }) {
   return (
     <div className="bg-white border-b">
       <div className="max-w-7xl mx-auto px-4 py-4">
-        <div className="flex items-center justify-between gap-1 overflow-x-auto pb-2">
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate(createPageUrl('Dashboard'))}
+            className="flex-shrink-0"
+          >
+            <Home className="w-5 h-5" />
+          </Button>
+          <div className="flex items-center justify-between gap-1 overflow-x-auto pb-2 flex-1">
           {steps.map((step, idx) => (
             <div key={step.num} className="flex items-center gap-1 flex-shrink-0">
               <div className="text-center">
@@ -45,6 +58,7 @@ export default function StepProgress({ currentStep }) {
               )}
             </div>
           ))}
+          </div>
         </div>
       </div>
     </div>
