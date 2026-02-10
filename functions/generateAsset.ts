@@ -59,12 +59,17 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error('Error generating asset:', error);
     
-    // Update block status to failed
+    // Update block status to failed if it exists
     try {
-      const { block_id } = await req.json();
-      await base44.asServiceRole.entities.TimelineBlocks.update(block_id, {
-        status: 'failed',
-      });
+      if (block_id) {
+        const allBlocks = await base44.asServiceRole.entities.TimelineBlocks.list();
+        const block = allBlocks.find(b => b.id === block_id);
+        if (block) {
+          await base44.asServiceRole.entities.TimelineBlocks.update(block_id, {
+            status: 'failed',
+          });
+        }
+      }
     } catch (e) {
       // Ignore error updating status
     }
