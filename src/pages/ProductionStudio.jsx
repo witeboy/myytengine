@@ -15,6 +15,7 @@ import KeyframeEditor from '@/components/production/KeyframeEditor';
 import TimelinePreview from '@/components/production/TimelinePreview';
 import BrollSelector from '@/components/production/BrollSelector';
 import RunwayVideoGenerator from '@/components/production/RunwayVideoGenerator';
+import AIEnhancements from '@/components/production/AIEnhancements';
 
 const VOICES = [
   { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel', accent: 'American' },
@@ -475,6 +476,13 @@ export default function ProductionStudio() {
                     Edit Keyframe Animations
                   </Button>
                 )}
+
+                {/* AI Enhancements */}
+                <AIEnhancements
+                  projectId={projectId}
+                  blocks={blocks}
+                  onUpdate={() => refetchBlocks()}
+                />
 
                 {/* Timeline Preview */}
                 <TimelinePreview
