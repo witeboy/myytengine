@@ -38,26 +38,13 @@ Deno.serve(async (req) => {
       // Use a placeholder or fallback since we're using LLM
       asset_url = `https://via.placeholder.com/1920x1080?text=${encodeURIComponent('Image: ' + enhancedPrompt.substring(0, 50))}`;
     } else if (block_type === 'video') {
-      // Try B-roll search first
-      const brollResult = await base44.asServiceRole.functions.invoke('searchBrollVideos', {
-        prompt,
-        duration: 10,
-        quality: '1080p',
-      });
+      // Use B-roll placeholder for video blocks
+      asset_url = `https://via.placeholder.com/1920x1080?text=${encodeURIComponent('Video: ' + enhancedPrompt.substring(0, 50))}`;
 
-      if (brollResult.data?.videos?.length > 0) {
-        const video = brollResult.data.videos[0];
-        asset_url = video.preview || video.url;
-        
-        await base44.asServiceRole.entities.TimelineBlocks.update(block_id, {
-          broll_source: 'freepik',
-          broll_id: video.id,
-          broll_url: asset_url,
-        });
-      } else {
-       // Fallback: use placeholder since B-roll search had no results
-       asset_url = `https://via.placeholder.com/1920x1080?text=${encodeURIComponent('Video: ' + enhancedPrompt.substring(0, 50))}`;
-      }
+      await base44.asServiceRole.entities.TimelineBlocks.update(block_id, {
+        broll_source: 'placeholder',
+        broll_id: 'placeholder',
+      });
     }
 
     // Update block with asset
