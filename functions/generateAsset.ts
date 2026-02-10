@@ -21,12 +21,17 @@ Deno.serve(async (req) => {
     });
 
     // Enhance prompt with style descriptors
-    const enhanceResult = await base44.asServiceRole.functions.invoke('enhancePrompt', {
-      prompt,
-      asset_style,
-    });
-
-    const enhancedPrompt = enhanceResult.data?.enhanced_prompt || prompt;
+    let enhancedPrompt = prompt;
+    try {
+      const enhanceResult = await base44.asServiceRole.functions.invoke('enhancePrompt', {
+        prompt,
+        asset_style,
+      });
+      enhancedPrompt = enhanceResult.data?.enhanced_prompt || prompt;
+    } catch (enhanceError) {
+      console.error('Enhance prompt error (non-fatal):', enhanceError.message);
+      // Continue with original prompt if enhancement fails
+    }
     let asset_url = '';
 
     if (block_type === 'image') {
