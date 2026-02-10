@@ -105,11 +105,11 @@ export default function BrollSelector({
                 <div
                   key={video.id}
                   className={`p-3 rounded-lg border-2 cursor-pointer transition ${
-                    selectedVideoId === video.id
+                    selectedVideo?.id === video.id
                       ? 'border-blue-600 bg-blue-100'
                       : 'border-gray-200 bg-white hover:border-gray-300'
                   }`}
-                  onClick={() => onSelectVideo(video)}
+                  onClick={() => handleSelectVideo(video)}
                 >
                   <div className="flex items-start gap-3">
                     {video.thumbnail && (
