@@ -55,13 +55,11 @@ export default function topic_selection() {
         topic_id: topicId,
       });
 
-      await base44.functions.invoke('generateHooks', {
-        project_id: projectId,
-        topic_id: topicId,
-        topic_title: topic.title,
+      await base44.entities.Projects.update(projectId, {
+        current_step: 2,
       });
 
-      navigate(createPageUrl(`hook_selection?project_id=${projectId}`));
+      navigate(createPageUrl(`VideoDurationSetup?project_id=${projectId}`));
     } catch (error) {
       alert('Error: ' + error.message);
     } finally {
