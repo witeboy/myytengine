@@ -31,8 +31,10 @@ export default function HookSelection() {
         hook_id: hookId,
       });
 
-      const project = await base44.entities.Projects.get(projectId);
-      const topic = await base44.entities.Topics.get(project.selected_topic_id);
+      const projects = await base44.entities.Projects.list();
+      const project = projects.find(p => p.id === projectId);
+      const topics = await base44.entities.Topics.list();
+      const topic = topics.find(t => t.id === project.selected_topic_id);
 
       await base44.functions.invoke('generateScript', {
         project_id: projectId,
@@ -42,7 +44,9 @@ export default function HookSelection() {
         selected_hook: hookText,
       });
 
-      navigate(createPageUrl(`script_workshop?project_id=${projectId}`));
+      // Update current step before navigating
+      await base44.entities.Projects.update(projectId, { current_step: 6 });
+      navigate(createPageUrl(`ScriptWorkshop?project_id=${projectId}`));
     } catch (error) {
       alert('Error: ' + error.message);
     } finally {
