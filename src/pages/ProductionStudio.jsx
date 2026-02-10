@@ -14,6 +14,7 @@ import AudioMixer from '@/components/production/AudioMixer';
 import KeyframeEditor from '@/components/production/KeyframeEditor';
 import TimelinePreview from '@/components/production/TimelinePreview';
 import BrollSelector from '@/components/production/BrollSelector';
+import RunwayVideoGenerator from '@/components/production/RunwayVideoGenerator';
 
 const VOICES = [
   { id: '21m00Tcm4TlvDq8ikWAM', name: 'Rachel', accent: 'American' },
@@ -36,6 +37,7 @@ export default function ProductionStudio() {
   const [selectedBlockForKeyframes, setSelectedBlockForKeyframes] = useState(null);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const [selectedBlockForBroll, setSelectedBlockForBroll] = useState(null);
+  const [selectedBlockForRunway, setSelectedBlockForRunway] = useState(null);
 
   // Fetch project
   const { data: project } = useQuery({
@@ -411,8 +413,19 @@ export default function ProductionStudio() {
                   generatingBlockId={generatingBlockId}
                 />
 
+                {/* Runway Video Generator */}
+                {selectedBlockForRunway && selectedBlockForRunway.block_type === 'video' && (
+                  <RunwayVideoGenerator
+                    blockId={selectedBlockForRunway.id}
+                    blockPrompt={selectedBlockForRunway.prompt}
+                    blockDuration={selectedBlockForRunway.duration_seconds}
+                    onGenerationStart={() => refetchBlocks()}
+                    onGenerationComplete={() => refetchBlocks()}
+                  />
+                )}
+
                 {/* B-Roll Selector */}
-                {selectedBlockForBroll && (
+                {selectedBlockForBroll && !selectedBlockForRunway && (
                   <BrollSelector
                     blockPrompt={selectedBlockForBroll.prompt}
                     blockDuration={selectedBlockForBroll.duration_seconds}
@@ -421,14 +434,23 @@ export default function ProductionStudio() {
                   />
                 )}
 
-                {!selectedBlockForBroll && blocks.length > 0 && (
-                  <Button
-                    variant="outline"
-                    onClick={() => setSelectedBlockForBroll(blocks.find(b => !b.broll_url) || blocks[0])}
-                    className="w-full mb-4"
-                  >
-                    Find B-Roll Videos
-                  </Button>
+                {!selectedBlockForBroll && !selectedBlockForRunway && blocks.length > 0 && (
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setSelectedBlockForRunway(blocks.find(b => b.block_type === 'video' && !b.generated_asset_url) || blocks[0])}
+                      className="flex-1"
+                    >
+                      Generate with Runway
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => setSelectedBlockForBroll(blocks.find(b => !b.broll_url) || blocks[0])}
+                      className="flex-1"
+                    >
+                      Find B-Roll
+                    </Button>
+                  </div>
                 )}
 
                 {/* Keyframe Editor */}
