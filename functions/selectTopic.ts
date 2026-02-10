@@ -23,7 +23,11 @@ Deno.serve(async (req) => {
 
     await base44.entities.Topics.update(topic_id, { is_selected: true });
 
-    await base44.entities.Projects.update(project_id, { selected_topic_id: topic_id });
+    await base44.entities.Projects.update(project_id, { 
+      selected_topic_id: topic_id,
+      status: 'topic_selected',
+      current_step: 1
+    });
 
     return Response.json({ success: true });
   } catch (error) {
