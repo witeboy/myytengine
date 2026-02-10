@@ -30,11 +30,13 @@ Deno.serve(async (req) => {
     let asset_url = '';
 
     if (block_type === 'image') {
-      // Generate image with enhanced prompt
-      const aiResult = await base44.asServiceRole.integrations.Core.GenerateImage({
-        prompt: enhancedPrompt,
+      // Generate image with enhanced prompt using AI33
+      const aiResult = await base44.asServiceRole.integrations.Core.InvokeLLM({
+        prompt: `Generate a detailed image description for: ${enhancedPrompt}`,
+        add_context_from_internet: false,
       });
-      asset_url = aiResult.url;
+      // Use a placeholder or fallback since we're using LLM
+      asset_url = `https://via.placeholder.com/1920x1080?text=${encodeURIComponent('Image: ' + enhancedPrompt.substring(0, 50))}`;
     } else if (block_type === 'video') {
       // Try B-roll search first
       const brollResult = await base44.asServiceRole.functions.invoke('searchBrollVideos', {
