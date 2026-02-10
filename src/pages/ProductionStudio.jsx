@@ -28,6 +28,7 @@ export default function ProductionStudio() {
   const [selectedStyle, setSelectedStyle] = useState(null);
   const [selectedVoice, setSelectedVoice] = useState(null);
   const [generatingBlockId, setGeneratingBlockId] = useState(null);
+  const [isCheckingVoice, setIsCheckingVoice] = useState(false);
 
   // Fetch project
   const { data: project } = useQuery({
@@ -95,10 +96,38 @@ export default function ProductionStudio() {
       return result;
     },
     onSuccess: () => {
-      refetchSettings();
-      setStep('timeline');
+      // Start polling for voice status
+      pollVoiceStatus();
     },
   });
+
+  // Poll voice status mutation
+  const checkVoiceStatusMutation = useMutation({
+    mutationFn: async () => {
+      const result = await base44.functions.invoke('checkVoiceStatus', {
+        project_id: projectId,
+      });
+      return result;
+    },
+    onSuccess: (result) => {
+      if (result.status === 'completed') {
+        refetchSettings();
+        setStep('timeline');
+        setIsCheckingVoice(false);
+      } else if (result.status === 'generating') {
+        // Continue polling after 2 seconds
+        setTimeout(() => pollVoiceStatus(), 2000);
+      }
+    },
+    onError: () => {
+      setIsCheckingVoice(false);
+    },
+  });
+
+  const pollVoiceStatus = async () => {
+    setIsCheckingVoice(true);
+    checkVoiceStatusMutation.mutate();
+  };
 
   // Create timeline blocks from script segments
   const handleCreateTimelineBlocks = async () => {
@@ -223,34 +252,51 @@ export default function ProductionStudio() {
               onVoiceSelect={setSelectedVoice}
               onGenerateAudio={() => generateAudioMutation.mutate()}
               isGenerating={generateAudioMutation.isPending}
+              isChecking={isCheckingVoice}
             />
 
-            {settings?.voiceover_url && (
+            {settings?.voiceover_status === 'generating' && (
               <Card>
-                <CardHeader>
-                  <CardTitle>Voiceover Generated</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <audio controls className="w-full">
-                    <source src={settings.voiceover_url} type="audio/mpeg" />
-                  </audio>
-                  <p className="text-sm text-gray-600 mt-2">
-                    Duration: {settings.total_duration_seconds}s
-                  </p>
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span className="text-sm">Generating voiceover... this may take a minute</span>
+                  </div>
                 </CardContent>
               </Card>
             )}
 
-            {generateAudioMutation.isSuccess && (
-              <Button
-                onClick={() => {
-                  handleCreateTimelineBlocks();
-                  setStep('timeline');
-                }}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                Create Timeline with Placeholders
-              </Button>
+            {settings?.voiceover_url && settings?.voiceover_status === 'completed' && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Voiceover Generated ✓</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <audio controls className="w-full">
+                    <source src={settings.voiceover_url} type="audio/mpeg" />
+                  </audio>
+                  <p className="text-sm text-gray-600">
+                    Duration: {settings.total_duration_seconds}s
+                  </p>
+                  <Button
+                    onClick={() => {
+                      handleCreateTimelineBlocks();
+                      setStep('timeline');
+                    }}
+                    className="w-full bg-green-600 hover:bg-green-700"
+                  >
+                    Continue to Timeline
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {settings?.voiceover_status === 'failed' && (
+              <Card className="border-red-200 bg-red-50">
+                <CardContent className="p-6">
+                  <p className="text-sm text-red-600">Failed to generate voiceover. Please try again.</p>
+                </CardContent>
+              </Card>
             )}
           </div>
         )}
