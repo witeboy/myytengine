@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
 
     // Check task status
     const statusResponse = await fetch(
-      `https://api.freepik.com/v1/ai/text-to-video/runway-4-5/${task_id}`,
+      `https://api.freepik.com/v1/text-to-video/${task_id}`,
       {
         method: 'GET',
         headers: {
@@ -33,23 +33,30 @@ Deno.serve(async (req) => {
     );
 
     if (!statusResponse.ok) {
+      console.error('Status check failed:', statusResponse.status);
       return Response.json({ error: 'Failed to check video status' }, { status: 500 });
     }
 
     const statusData = await statusResponse.json();
-    const taskStatus = statusData.data.status;
-    const videoUrl = statusData.data.generated?.[0];
+    const taskStatus = statusData.data?.status;
+    const videoUrl = statusData.data?.results?.[0]?.url || statusData.data?.generated?.[0];
 
     // Update TimelineBlock based on status
     if (taskStatus === 'COMPLETED' && videoUrl) {
-      await base44.entities.TimelineBlocks.update(block_id, {
+      await base44.asServiceRole.entities.TimelineBlocks.update(block_id, {
         status: 'completed',
         generated_asset_url: videoUrl,
         generation_task_id: task_id
       });
-    } else if (taskStatus === 'FAILED') {
-      await base44.entities.TimelineBlocks.update(block_id, {
+    } else if (taskStatus === 'FAILED' || taskStatus === 'ERROR') {
+      await base44.asServiceRole.entities.TimelineBlocks.update(block_id, {
         status: 'failed',
+        generation_task_id: task_id
+      });
+    } else if (taskStatus === 'PENDING' || taskStatus === 'PROCESSING') {
+      // Keep in generating state
+      await base44.asServiceRole.entities.TimelineBlocks.update(block_id, {
+        status: 'generating',
         generation_task_id: task_id
       });
     }
