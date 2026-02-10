@@ -1,12 +1,10 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
 
-export default function VoiceSelector({ voices, selectedVoice, onVoiceSelect, onGenerateAudio, isGenerating }) {
-  const [showVoices, setShowVoices] = useState(false);
-
+export default function VoiceSelector({ voices, selectedVoice, onVoiceSelect, onGenerateAudio, isGenerating, isChecking }) {
   return (
     <Card>
       <CardHeader>
@@ -31,13 +29,13 @@ export default function VoiceSelector({ voices, selectedVoice, onVoiceSelect, on
 
         <Button
           onClick={onGenerateAudio}
-          disabled={!selectedVoice || isGenerating}
+          disabled={!selectedVoice || isGenerating || isChecking}
           className="w-full bg-blue-600 hover:bg-blue-700"
         >
-          {isGenerating ? (
+          {isGenerating || isChecking ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Generating Audio...
+              {isGenerating ? 'Generating Audio...' : 'Checking status...'}
             </>
           ) : (
             'Generate Voiceover Audio'
