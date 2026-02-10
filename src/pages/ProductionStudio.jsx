@@ -9,8 +9,7 @@ import { createPageUrl } from '@/utils';
 import { Loader2, Plus } from 'lucide-react';
 import AssetStyleSelector from '@/components/production/AssetStyleSelector';
 import VoiceSelector from '@/components/production/VoiceSelector';
-import Timeline from '@/components/production/Timeline';
-import AudioMixer from '@/components/production/AudioMixer';
+import StoryboardTimeline from '@/components/production/StoryboardTimeline';
 import KeyframeEditor from '@/components/production/KeyframeEditor';
 import TimelinePreview from '@/components/production/TimelinePreview';
 import BrollSelector from '@/components/production/BrollSelector';
@@ -39,6 +38,7 @@ export default function ProductionStudio() {
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
   const [selectedBlockForBroll, setSelectedBlockForBroll] = useState(null);
   const [selectedBlockForRunway, setSelectedBlockForRunway] = useState(null);
+  const [selectedBlockForBroll, setSelectedBlockForBroll] = useState(null);
 
   // Fetch project
   const { data: project } = useQuery({
@@ -149,35 +149,16 @@ export default function ProductionStudio() {
     checkVoiceStatusMutation.mutate();
   };
 
-  // Create timeline blocks from visual prompts
+  // Create timeline blocks from timing entries
   const handleCreateTimelineBlocks = async () => {
-    if (!project || !settings || visualPrompts.length === 0) return;
-
-    const totalDuration = settings.total_duration_seconds || 60;
-
-    for (let i = 0; i < visualPrompts.length; i++) {
-      const prompt = visualPrompts[i];
-      const timeStart = prompt.duration_seconds ? 
-        (visualPrompts.slice(0, i).reduce((sum, p) => sum + (p.duration_seconds || 0), 0)) : 
-        (i * (totalDuration / visualPrompts.length));
-      const duration = prompt.duration_seconds || (totalDuration / visualPrompts.length);
-
-      // Alternate between video and image based on visual style
-      const blockType = i % 2 === 0 ? 'video' : 'image';
-
-      await base44.entities.TimelineBlocks.create({
+    try {
+      await base44.functions.invoke('createPlaceholderTimeline', {
         project_id: projectId,
-        block_type: blockType,
-        prompt: prompt.sora_prompt || prompt.narration_text || `Scene ${i + 1}`,
-        start_time_seconds: timeStart,
-        duration_seconds: duration,
-        asset_style: selectedStyle || 'photorealistic',
-        status: 'pending',
-        order_index: i,
       });
+      refetchBlocks();
+    } catch (error) {
+      console.error('Error creating timeline blocks:', error);
     }
-
-    refetchBlocks();
   };
 
   // Generate asset mutation
@@ -225,15 +206,7 @@ export default function ProductionStudio() {
     refetchBlocks();
   };
 
-  // Update voiceover volume
-  const handleVoiceoverVolumeChange = async (volume) => {
-    if (settings) {
-      await base44.entities.ProductionSettings.update(settings.id, {
-        voiceover_volume: volume,
-      });
-      refetchSettings();
-    }
-  };
+
 
   // Update block keyframes
   const handleBlockKeyframesChange = async (blockId, keyframes) => {
@@ -261,7 +234,7 @@ export default function ProductionStudio() {
   // Apply B-roll to block
   const handleSelectBroll = async (video) => {
     if (!selectedBlockForBroll) return;
-    
+
     await base44.entities.TimelineBlocks.update(selectedBlockForBroll.id, {
       status: 'completed',
       broll_source: 'freepik',
@@ -269,7 +242,7 @@ export default function ProductionStudio() {
       broll_url: video.preview,
       generated_asset_url: video.preview,
     });
-    
+
     refetchBlocks();
     setSelectedBlockForBroll(null);
   };
@@ -396,17 +369,11 @@ export default function ProductionStudio() {
               </Card>
             ) : (
               <>
-                {/* Audio Mixing */}
-                <AudioMixer
-                  voiceoverUrl={settings.voiceover_url}
-                  voiceoverVolume={settings.voiceover_volume || 1}
-                  onVoiceoverVolumeChange={handleVoiceoverVolumeChange}
-                />
-
-                {/* Timeline */}
-                <Timeline
+                {/* Storyboard Timeline with Placeholders */}
+                <StoryboardTimeline
                   blocks={blocks}
                   totalDuration={settings?.total_duration_seconds || 60}
+                  voiceoverUrl={settings.voiceover_url}
                   onBlockDurationChange={handleBlockDurationChange}
                   onBlockStartTimeChange={handleBlockStartTimeChange}
                   onBlockGenerate={(blockId) => generateAssetMutation.mutate(blockId)}
@@ -414,67 +381,50 @@ export default function ProductionStudio() {
                   generatingBlockId={generatingBlockId}
                 />
 
-                {/* Runway Video Generator */}
-                {selectedBlockForRunway && selectedBlockForRunway.block_type === 'video' && (
-                  <RunwayVideoGenerator
-                    blockId={selectedBlockForRunway.id}
-                    blockPrompt={selectedBlockForRunway.prompt}
-                    blockDuration={selectedBlockForRunway.duration_seconds}
-                    onGenerationStart={() => refetchBlocks()}
-                    onGenerationComplete={() => refetchBlocks()}
-                  />
-                )}
+                {/* Asset Generation Options */}
+                {blocks.some(b => b.status === 'pending') && (
+                  <Card className="bg-blue-50 border-blue-200 p-4">
+                    <h3 className="font-semibold text-sm text-blue-900 mb-3">Generate Assets</h3>
+                    <div className="flex gap-2 flex-wrap">
+                      {selectedBlockForRunway && selectedBlockForRunway.block_type === 'video' && (
+                        <RunwayVideoGenerator
+                          blockId={selectedBlockForRunway.id}
+                          blockPrompt={selectedBlockForRunway.prompt}
+                          blockDuration={selectedBlockForRunway.duration_seconds}
+                          onGenerationStart={() => refetchBlocks()}
+                          onGenerationComplete={() => refetchBlocks()}
+                        />
+                      )}
 
-                {/* B-Roll Selector */}
-                {selectedBlockForBroll && !selectedBlockForRunway && (
-                  <BrollSelector
-                    blockPrompt={selectedBlockForBroll.prompt}
-                    blockDuration={selectedBlockForBroll.duration_seconds}
-                    onSelectVideo={handleSelectBroll}
-                    selectedVideoId={selectedBlockForBroll.broll_id}
-                  />
-                )}
+                      {selectedBlockForBroll && !selectedBlockForRunway && selectedBlockForBroll.block_type === 'video' && (
+                        <BrollSelector
+                          blockPrompt={selectedBlockForBroll.prompt}
+                          blockDuration={selectedBlockForBroll.duration_seconds}
+                          onSelectVideo={handleSelectBroll}
+                          selectedVideoId={selectedBlockForBroll.broll_id}
+                        />
+                      )}
 
-                {!selectedBlockForBroll && !selectedBlockForRunway && blocks.length > 0 && (
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => setSelectedBlockForRunway(blocks.find(b => b.block_type === 'video' && !b.generated_asset_url) || blocks[0])}
-                      className="flex-1"
-                    >
-                      Generate with Runway
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => setSelectedBlockForBroll(blocks.find(b => !b.broll_url) || blocks[0])}
-                      className="flex-1"
-                    >
-                      Find B-Roll
-                    </Button>
-                  </div>
-                )}
-
-                {/* Keyframe Editor */}
-                {selectedBlockForKeyframes && (
-                  <KeyframeEditor
-                    blockId={selectedBlockForKeyframes.id}
-                    keyframes={selectedBlockForKeyframes.keyframes}
-                    blockDuration={selectedBlockForKeyframes.duration_seconds}
-                    onKeyframesChange={(keyframes) => {
-                      handleBlockKeyframesChange(selectedBlockForKeyframes.id, keyframes);
-                      setSelectedBlockForKeyframes(null);
-                    }}
-                  />
-                )}
-
-                {!selectedBlockForKeyframes && blocks.length > 0 && (
-                  <Button
-                    variant="outline"
-                    onClick={() => setSelectedBlockForKeyframes(blocks[0])}
-                    className="w-full"
-                  >
-                    Edit Keyframe Animations
-                  </Button>
+                      {!selectedBlockForRunway && !selectedBlockForBroll && (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() => setSelectedBlockForRunway(blocks.find(b => b.block_type === 'video' && b.status === 'pending'))}
+                            className="bg-purple-600 hover:bg-purple-700"
+                          >
+                            Generate Video
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => setSelectedBlockForBroll(blocks.find(b => b.block_type === 'video' && b.status === 'pending'))}
+                            className="bg-cyan-600 hover:bg-cyan-700"
+                          >
+                            Find B-Roll
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </Card>
                 )}
 
                 {/* AI Enhancements */}
