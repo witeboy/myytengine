@@ -46,7 +46,7 @@ export default function VideoDurationSetup() {
         duration_minutes: duration,
       });
 
-      navigate(createPageUrl(`script_batching?project_id=${projectId}`));
+      navigate(createPageUrl(`script_workshop?project_id=${projectId}`));
     } catch (error) {
       alert('Error: ' + error.message);
     } finally {
