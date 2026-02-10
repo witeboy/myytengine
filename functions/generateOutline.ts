@@ -124,7 +124,7 @@ Return ONLY valid JSON in this exact format:
 
     // Create batch records
     for (const batch of outline.batches) {
-      await base44.entities.ScriptBatches.create({
+      await base44.asServiceRole.entities.ScriptBatches.create({
         project_id: project_id,
         batch_number: batch.batch_number,
         story_segment: batch.story_segment,
@@ -134,7 +134,7 @@ Return ONLY valid JSON in this exact format:
     }
 
     // Update project
-    await base44.entities.Projects.update(project_id, {
+    await base44.asServiceRole.entities.Projects.update(project_id, {
       video_duration_minutes: duration_minutes,
       storytelling_format: outline.storytelling_format,
       outline: JSON.stringify(outline.batches),
