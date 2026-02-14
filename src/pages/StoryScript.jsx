@@ -125,85 +125,52 @@ export default function StoryScript() {
           {generating ? 'AI is writing your script batch by batch...' : allCompleted ? 'Script generation complete.' : 'Preparing script...'}
         </p>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Main column */}
-          <div className="lg:col-span-2 space-y-4">
-            {/* Progress */}
-            {batches.length > 0 && (
-              <div className="bg-white p-4 rounded-lg shadow-sm border">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium text-sm flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-blue-600" />
-                    {completedCount}/{batches.length} batches
-                  </span>
-                  {!allCompleted && <Loader2 className="w-4 h-4 animate-spin text-blue-600" />}
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-blue-600 h-2 rounded-full transition-all duration-500"
-                    style={{ width: `${(completedCount / batches.length) * 100}%` }}
-                  />
-                </div>
+        <div className="space-y-6">
+          {/* Progress */}
+          {batches.length > 0 && !allCompleted && (
+            <div className="bg-white p-4 rounded-lg shadow-sm border">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-medium text-sm flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-blue-600" />
+                  {completedCount}/{batches.length} batches
+                </span>
+                <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
               </div>
-            )}
-
-            {/* Batch Cards */}
-            {batches.map(batch => (
-              <div key={batch.id} className="relative">
-                <BatchCard
-                  batch={batch}
-                  onUpdate={() => { refetchBatches(); refetchScripts(); }}
-                  onGenerateImage={handleGenerateImage}
+              <div className="w-full bg-gray-200 rounded-full h-2">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                  style={{ width: `${(completedCount / batches.length) * 100}%` }}
                 />
-                {generatingImageFor === batch.id && (
-                  <div className="absolute inset-0 bg-white/70 rounded-xl flex items-center justify-center">
-                    <div className="flex items-center gap-2 text-sm font-medium text-blue-700">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <Image className="w-4 h-4" /> Generating scene image...
-                    </div>
-                  </div>
-                )}
               </div>
-            ))}
+            </div>
+          )}
 
-            {/* Combine Button */}
-            {allCompleted && !latestScript && (
-              <div className="flex justify-center py-4">
-                <Button onClick={handleMergeScript} disabled={merging} className="bg-green-600 hover:bg-green-700" size="lg">
-                  {merging ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-5 h-5 mr-2" />}
-                  {merging ? 'Combining Batches...' : 'Combine Batches into Full Script'}
-                </Button>
-              </div>
-            )}
-
-            {/* Full Script Editor */}
-            {activeScript && (
-              <ScriptEditor
-                script={activeScript}
-                onSaved={() => refetchScripts()}
-              />
-            )}
-
-            {/* Continue */}
-            {allCompleted && latestScript && (
-              <div className="flex justify-end pt-4">
-                <Button onClick={handleContinue} className="bg-blue-600 hover:bg-blue-700" size="lg">
-                  Continue to Content Generation
-                  <ArrowRight className="w-5 h-5 ml-2" />
-                </Button>
-              </div>
-            )}
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-4">
-            <VersionHistory
-              scripts={scripts}
-              currentScriptId={activeScript?.id}
-              onSelect={(s) => setViewingScriptId(s.id)}
+          {/* Batch Cards (only show while generating) */}
+          {!allCompleted && batches.map(batch => (
+            <BatchCard
+              key={batch.id}
+              batch={batch}
+              onUpdate={() => { refetchBatches(); refetchScripts(); }}
             />
+          ))}
 
-          </div>
+          {/* Full Script Editor — show only the final merged script */}
+          {latestScript && (
+            <ScriptEditor
+              script={latestScript}
+              onSaved={() => refetchScripts()}
+            />
+          )}
+
+          {/* Continue */}
+          {allCompleted && latestScript && (
+            <div className="flex justify-end pt-4">
+              <Button onClick={handleContinue} className="bg-blue-600 hover:bg-blue-700" size="lg">
+                Continue to Content Generation
+                <ArrowRight className="w-5 h-5 ml-2" />
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </div>
