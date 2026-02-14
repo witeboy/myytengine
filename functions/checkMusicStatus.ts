@@ -30,12 +30,14 @@ Deno.serve(async (req) => {
     console.log('Task status response:', JSON.stringify(data));
 
     const taskStatus = data.status; // "pending", "processing", "done", "failed"
+    const isDone = taskStatus === 'done' || taskStatus === 'completed' || taskStatus === 'succeeded';
+    const isFailed = taskStatus === 'failed' || taskStatus === 'error';
 
     // Audio URL can be at top-level or inside metadata
-    const audioUrl = data.audio_url || data.result_url || data.url || 
-                     data.output_url || data.metadata?.audio_url;
+    const audioUrl = data.metadata?.audio_url || data.audio_url || data.result_url || 
+                     data.url || data.output_url;
 
-    if (taskStatus === 'done' && audioUrl && track_id) {
+    if (isDone && audioUrl && track_id) {
       // Download and upload to our storage
       const audioResp = await fetch(audioUrl);
       const audioBlob = await audioResp.blob();
