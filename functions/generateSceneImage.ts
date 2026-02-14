@@ -16,24 +16,42 @@ Deno.serve(async (req) => {
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: scene.project_id });
     const project = projects[0];
 
-    // Build the full prompt with enforced character consistency
-    let fullPrompt = scene.image_prompt;
+    // Sanitize the image prompt to avoid content policy violations
+    // Replace direct depictions of suffering/violence with tasteful artistic alternatives
+    let basePrompt = scene.image_prompt || "";
     
-    // If project has character descriptions, check if they're already in the image prompt.
-    // If not (or only partially), prepend them as a strong directive.
+    // Remove problematic content patterns and replace with safer alternatives
+    const sanitizations = [
+      [/child('s)?\s+(face|eyes|body).*?(hunger|sick|starv|suffer|dying|dead|gaunt|tattered)/gi, "a solemn historical scene with dignified figures in period clothing"],
+      [/bodies?\s+(lying|in the street|dead|piled)/gi, "a somber empty street scene"],
+      [/begging\s+for\s+food/gi, "people waiting in line"],
+      [/squalor|deprivation|overcrowded/gi, "crowded historical urban setting"],
+      [/crying\s+and\s+suffering/gi, "quiet somber atmosphere"],
+    ];
+    
+    for (const [pattern, replacement] of sanitizations) {
+      basePrompt = basePrompt.replace(pattern, replacement);
+    }
+    
+    // Add safety wrapper
+    let fullPrompt = `Artistic, dignified, historically respectful illustration. No graphic violence or suffering. ${basePrompt}`;
+    
+    // If project has character descriptions, prepend them
     if (project?.character_descriptions) {
       try {
         const chars = JSON.parse(project.character_descriptions);
         if (chars.length > 0) {
-          // Build a strong character consistency block
           const charBlock = chars.map(c => 
             `[CHARACTER: ${c.name} — ${c.description}]`
           ).join(" ");
-          
-          // Prepend it to ensure the image generator sees it first
-          fullPrompt = `IMPORTANT — Maintain EXACT character appearance as described. ${charBlock}. ${fullPrompt}`;
+          fullPrompt = `IMPORTANT — Maintain EXACT character appearance. ${charBlock}. ${fullPrompt}`;
         }
       } catch (_) {}
+    }
+    
+    // Truncate if too long (image gen APIs have limits)
+    if (fullPrompt.length > 2000) {
+      fullPrompt = fullPrompt.substring(0, 2000);
     }
 
     // Check if we have a reference image from scene 1 to use as style reference
