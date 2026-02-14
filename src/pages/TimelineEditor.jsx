@@ -49,6 +49,23 @@ export default function TimelineEditor() {
     enabled: !!projectId,
   });
 
+  // Fetch voiceover and music
+  const { data: prodSettings = [] } = useQuery({
+    queryKey: ['prod-settings', projectId],
+    queryFn: () => base44.entities.ProductionSettings.filter({ project_id: projectId }),
+    enabled: !!projectId,
+  });
+  const voiceoverUrl = prodSettings[0]?.voiceover_url;
+
+  const { data: musicTracks = [] } = useQuery({
+    queryKey: ['music-timeline', projectId],
+    queryFn: () => base44.entities.MusicTracks.filter({ project_id: projectId }),
+    enabled: !!projectId,
+  });
+  const selectedMusic = musicTracks.find(t => t.is_selected);
+  const musicUrl = selectedMusic?.audio_url;
+  const musicVolume = selectedMusic?.volume ?? 0.3;
+
   // Calculate cumulative start times
   const scenesWithTiming = scenes.reduce((acc, scene, idx) => {
     const prevEnd = idx > 0 ? acc[idx - 1].start_time + acc[idx - 1].duration_seconds : 0;
