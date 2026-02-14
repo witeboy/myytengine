@@ -65,6 +65,10 @@ import publishCenter from './pages/publish_center';
 import scriptWorkshop from './pages/script_workshop';
 import topicSelection from './pages/topic_selection';
 import StoryTopics from './pages/StoryTopics';
+import StoryDuration from './pages/StoryDuration';
+import StoryHooks from './pages/StoryHooks';
+import StoryScript from './pages/StoryScript';
+import ContentGeneration from './pages/ContentGeneration';
 
 
 export const PAGES = {
@@ -86,6 +90,10 @@ export const PAGES = {
     "script_workshop": scriptWorkshop,
     "topic_selection": topicSelection,
     "StoryTopics": StoryTopics,
+    "StoryDuration": StoryDuration,
+    "StoryHooks": StoryHooks,
+    "StoryScript": StoryScript,
+    "ContentGeneration": ContentGeneration,
 }
 
 export const pagesConfig = {
