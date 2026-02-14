@@ -37,22 +37,25 @@ Deno.serve(async (req) => {
     const audioUrl = data.metadata?.audio_url || data.audio_url || data.result_url || 
                      data.url || data.output_url;
 
-    if (isDone && audioUrl && track_id) {
-      // Download and upload to our storage
-      const audioResp = await fetch(audioUrl);
-      const audioBlob = await audioResp.blob();
-      const file = new File([audioBlob], `music_${track_id}.mp3`, { type: 'audio/mpeg' });
-      const uploaded = await base44.asServiceRole.integrations.Core.UploadFile({ file });
+    if (isDone && audioUrl) {
+      if (track_id) {
+        // Download and upload to our storage
+        const audioResp = await fetch(audioUrl);
+        const audioBlob = await audioResp.blob();
+        const file = new File([audioBlob], `music_${track_id}.mp3`, { type: 'audio/mpeg' });
+        const uploaded = await base44.asServiceRole.integrations.Core.UploadFile({ file });
 
-      const duration = data.metadata?.duration_seconds || data.duration_seconds || 30;
+        const duration = data.metadata?.duration_seconds || data.duration_seconds || 30;
 
-      await base44.asServiceRole.entities.MusicTracks.update(track_id, {
-        audio_url: uploaded.file_url,
-        status: 'completed',
-        duration_seconds: duration,
-      });
+        await base44.asServiceRole.entities.MusicTracks.update(track_id, {
+          audio_url: uploaded.file_url,
+          status: 'completed',
+          duration_seconds: duration,
+        });
 
-      return Response.json({ status: 'COMPLETED', audio_url: uploaded.file_url });
+        return Response.json({ status: 'COMPLETED', audio_url: uploaded.file_url });
+      }
+      return Response.json({ status: 'COMPLETED', audio_url: audioUrl });
     }
 
     if (isDone && !audioUrl) {
