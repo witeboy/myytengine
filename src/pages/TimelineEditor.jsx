@@ -1,16 +1,17 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { createPageUrl } from '@/utils';
 import StageProgress from '@/components/StageProgress';
 import TimelineTrack from '@/components/timeline/TimelineTrack';
 import TimelineRuler from '@/components/timeline/TimelineRuler';
 import ScenePreview from '@/components/timeline/ScenePreview';
-import { Loader2, Import, Download, Play, Film } from 'lucide-react';
+import PlaybackControls from '@/components/timeline/PlaybackControls';
+import TranscriptBar from '@/components/timeline/TranscriptBar';
+import { Loader2, Import, Download, Film, Play } from 'lucide-react';
 
 export default function TimelineEditor() {
   const navigate = useNavigate();
@@ -20,6 +21,12 @@ export default function TimelineEditor() {
   const [pixelsPerSecond, setPixelsPerSecond] = useState(10);
   const [compiling, setCompiling] = useState(false);
   const timelineRef = useRef(null);
+
+  // Playback state
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [volume, setVolume] = useState(0.8);
+  const playIntervalRef = useRef(null);
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -52,9 +59,64 @@ export default function TimelineEditor() {
 
   const totalDuration = scenesWithTiming.reduce((sum, s) => sum + s.duration_seconds, 0);
 
+  // Find current scene based on playback time
+  const getCurrentScene = useCallback((time) => {
+    for (let i = scenesWithTiming.length - 1; i >= 0; i--) {
+      if (time >= scenesWithTiming[i].start_time) return scenesWithTiming[i];
+    }
+    return scenesWithTiming[0] || null;
+  }, [scenesWithTiming]);
+
+  const currentScene = getCurrentScene(currentTime);
+  const currentSceneIndex = currentScene ? scenesWithTiming.findIndex(s => s.id === currentScene.id) : 0;
+
+  // Playback engine
+  useEffect(() => {
+    if (isPlaying) {
+      playIntervalRef.current = setInterval(() => {
+        setCurrentTime(prev => {
+          const next = prev + 0.1;
+          if (next >= totalDuration) {
+            setIsPlaying(false);
+            return 0;
+          }
+          return next;
+        });
+      }, 100);
+    } else {
+      clearInterval(playIntervalRef.current);
+    }
+    return () => clearInterval(playIntervalRef.current);
+  }, [isPlaying, totalDuration]);
+
+  // Auto-scroll timeline to follow playhead
+  useEffect(() => {
+    if (isPlaying && timelineRef.current) {
+      const playheadX = currentTime * pixelsPerSecond + 96; // 96 = label width
+      const container = timelineRef.current;
+      const scrollLeft = container.scrollLeft;
+      const containerWidth = container.clientWidth;
+      if (playheadX > scrollLeft + containerWidth - 100 || playheadX < scrollLeft + 100) {
+        container.scrollLeft = playheadX - containerWidth / 2;
+      }
+    }
+  }, [currentTime, isPlaying, pixelsPerSecond]);
+
+  const handlePlayPause = () => setIsPlaying(prev => !prev);
+  const handleSeek = (time) => setCurrentTime(Math.max(0, Math.min(totalDuration, time)));
+
+  const handlePrevScene = () => {
+    const idx = Math.max(0, currentSceneIndex - 1);
+    setCurrentTime(scenesWithTiming[idx]?.start_time || 0);
+  };
+
+  const handleNextScene = () => {
+    const idx = Math.min(scenesWithTiming.length - 1, currentSceneIndex + 1);
+    setCurrentTime(scenesWithTiming[idx]?.start_time || 0);
+  };
+
   const handleImport = async () => {
     setImporting(true);
-    // Scenes already exist from content generation, just update project status
     await base44.entities.Projects.update(projectId, {
       status: 'timeline_editing',
       current_step: 7,
@@ -69,7 +131,6 @@ export default function TimelineEditor() {
 
   const handleCompile = async () => {
     setCompiling(true);
-    // Build compilation manifest
     const manifest = scenesWithTiming.map(s => ({
       scene_number: s.scene_number,
       image_url: s.image_url,
@@ -91,7 +152,6 @@ export default function TimelineEditor() {
       status: 'compiled',
       current_step: 8,
     });
-
     setCompiling(false);
   };
 
@@ -133,7 +193,27 @@ export default function TimelineEditor() {
             scene={scenesWithTiming.find(s => s.id === selectedScene)}
             onClose={() => setSelectedScene(null)}
             onUpdateDuration={(dur) => handleUpdateDuration(selectedScene, dur)}
+            onRefetch={refetchScenes}
           />
+        )}
+
+        {/* Playback Controls */}
+        {scenes.length > 0 && (
+          <div className="mb-3">
+            <PlaybackControls
+              isPlaying={isPlaying}
+              onPlayPause={handlePlayPause}
+              onPrevScene={handlePrevScene}
+              onNextScene={handleNextScene}
+              onSeek={handleSeek}
+              currentTime={currentTime}
+              totalDuration={totalDuration}
+              volume={volume}
+              onVolumeChange={setVolume}
+              currentSceneNumber={currentSceneIndex + 1}
+              totalScenes={scenes.length}
+            />
+          </div>
         )}
 
         {/* Timeline */}
@@ -142,10 +222,21 @@ export default function TimelineEditor() {
             <div className="overflow-x-auto" ref={timelineRef}>
               <div style={{ minWidth: Math.max(totalDuration * pixelsPerSecond + 100, 800) }}>
                 {/* Ruler */}
-                <TimelineRuler totalDuration={totalDuration} pixelsPerSecond={pixelsPerSecond} />
+                <div className="relative">
+                  <TimelineRuler totalDuration={totalDuration} pixelsPerSecond={pixelsPerSecond} />
+                  {/* Playhead on ruler */}
+                  {scenes.length > 0 && (
+                    <div
+                      className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none"
+                      style={{ left: currentTime * pixelsPerSecond + 96 }}
+                    >
+                      <div className="w-3 h-3 bg-red-500 rounded-full -ml-[5px] -mt-0.5" />
+                    </div>
+                  )}
+                </div>
 
                 {/* Video Track */}
-                <div className="border-t">
+                <div className="border-t relative">
                   <div className="flex items-center">
                     <div className="w-24 flex-shrink-0 px-3 py-2 bg-gray-50 border-r text-xs font-medium text-gray-600 flex items-center gap-1">
                       <Film className="w-3 h-3" /> Video
@@ -158,10 +249,17 @@ export default function TimelineEditor() {
                       onUpdateDuration={handleUpdateDuration}
                     />
                   </div>
+                  {/* Playhead line on video track */}
+                  {scenes.length > 0 && (
+                    <div
+                      className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none"
+                      style={{ left: currentTime * pixelsPerSecond + 96 }}
+                    />
+                  )}
                 </div>
 
-                {/* Audio Track (placeholder) */}
-                <div className="border-t">
+                {/* Audio Track */}
+                <div className="border-t relative">
                   <div className="flex items-center">
                     <div className="w-24 flex-shrink-0 px-3 py-2 bg-gray-50 border-r text-xs font-medium text-gray-600 flex items-center gap-1">
                       <Play className="w-3 h-3" /> Audio
@@ -177,11 +275,52 @@ export default function TimelineEditor() {
                       )}
                     </div>
                   </div>
+                  {/* Playhead line on audio track */}
+                  {scenes.length > 0 && (
+                    <div
+                      className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none"
+                      style={{ left: currentTime * pixelsPerSecond + 96 }}
+                    />
+                  )}
+                </div>
+
+                {/* SFX Track */}
+                <div className="border-t relative">
+                  <div className="flex items-center">
+                    <div className="w-24 flex-shrink-0 px-3 py-2 bg-gray-50 border-r text-xs font-medium text-gray-600 flex items-center gap-1">
+                      🔊 SFX
+                    </div>
+                    <div className="flex-1 h-12 bg-gradient-to-r from-amber-50 to-amber-100/30 relative">
+                      {scenesWithTiming.filter(s => s.sound_effect_url).map(scene => (
+                        <div
+                          key={scene.id}
+                          className="absolute top-1 bottom-1 bg-amber-200 border border-amber-400 rounded text-[9px] text-amber-800 px-1 flex items-center truncate"
+                          style={{
+                            left: scene.start_time * pixelsPerSecond,
+                            width: Math.max(scene.duration_seconds * pixelsPerSecond, 20),
+                          }}
+                        >
+                          S{scene.scene_number} SFX
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {scenes.length > 0 && (
+                    <div
+                      className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none"
+                      style={{ left: currentTime * pixelsPerSecond + 96 }}
+                    />
+                  )}
                 </div>
               </div>
             </div>
           </CardContent>
         </Card>
+
+        {/* Transcript Bar */}
+        {scenes.length > 0 && (
+          <TranscriptBar currentScene={currentScene} currentTime={currentTime} />
+        )}
       </div>
     </div>
   );
