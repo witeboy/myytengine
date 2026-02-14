@@ -55,7 +55,7 @@ Deno.serve(async (req) => {
       return Response.json({ status: 'COMPLETED', audio_url: uploaded.file_url });
     }
 
-    if (taskStatus === 'done' && !audioUrl) {
+    if (isDone && !audioUrl) {
       console.error('Task done but no audio URL found in:', JSON.stringify(data));
       if (track_id) {
         await base44.asServiceRole.entities.MusicTracks.update(track_id, { status: 'failed' });
