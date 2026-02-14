@@ -202,10 +202,10 @@ Write ONLY the narration for this batch. Do not include JSON, labels, or metadat
       });
     }
 
-    // Update project
+    // Update project — mark as script_complete so the UI knows we're done
     await base44.asServiceRole.entities.Projects.update(project_id, {
       script_id: script.id,
-      status: "scripting",
+      status: "script_complete",
       current_step: 4
     });
 

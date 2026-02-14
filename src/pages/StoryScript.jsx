@@ -7,8 +7,6 @@ import { createPageUrl } from '@/utils';
 import StageProgress from '@/components/StageProgress';
 import BatchCard from '@/components/script/BatchCard';
 import ScriptEditor from '@/components/script/ScriptEditor';
-import VersionHistory from '@/components/script/VersionHistory';
-
 import { Loader2, RefreshCw, Download, ArrowRight, FileText, Image } from 'lucide-react';
 
 export default function StoryScript() {
@@ -17,8 +15,6 @@ export default function StoryScript() {
   const projectId = new URLSearchParams(window.location.search).get('project_id');
   const [generating, setGenerating] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
-  const [merging, setMerging] = useState(false);
-  const [generatingImageFor, setGeneratingImageFor] = useState(null);
 
   const { data: project, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
@@ -45,19 +41,17 @@ export default function StoryScript() {
     enabled: !!projectId,
   });
 
-  const [viewingScriptId, setViewingScriptId] = useState(null);
-  const sortedScripts = [...scripts].sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
-  const latestScript = sortedScripts[0];
-  const activeScript = viewingScriptId
-    ? scripts.find(s => s.id === viewingScriptId) || latestScript
-    : latestScript;
+  // Only show the latest script (the final merged one)
+  const latestScript = [...scripts].sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0];
 
-  // Auto-generate batches if hooks_ready but no batch content yet
+  // Auto-generate batches when arriving with pending batches
   const [autoGenTriggered, setAutoGenTriggered] = useState(false);
   useEffect(() => {
     if (autoGenTriggered || generating) return;
     const hasContent = batches.some(b => b.status === 'completed' && b.content);
-    if (project?.status === 'hooks_ready' && !hasContent && batches.length > 0) {
+    const needsGeneration = !hasContent && batches.length > 0 && 
+      ['hooks_ready', 'scripting'].includes(project?.status);
+    if (needsGeneration) {
       setAutoGenTriggered(true);
       setGenerating(true);
       base44.functions.invoke('generateScriptBatches', {
@@ -87,28 +81,9 @@ export default function StoryScript() {
     setGenerating(false);
   };
 
-  const handleMergeScript = async () => {
-    setMerging(true);
-    await base44.functions.invoke('generateFullScript', { project_id: projectId });
-    await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
-    setMerging(false);
-  };
-
-  const handleGenerateImage = async (batch) => {
-    setGeneratingImageFor(batch.id);
-    const firstLine = (batch.content || '').split('\n').find(l => l.trim()) || batch.focus_area;
-    const prompt = `Cinematic YouTube documentary scene: ${batch.story_segment}. ${firstLine.slice(0, 200)}. Dramatic lighting, high quality, 16:9 aspect ratio.`;
-    const res = await base44.integrations.Core.GenerateImage({ prompt });
-    if (res?.url) {
-      await base44.entities.ScriptBatches.update(batch.id, { scene_image_url: res.url });
-      refetchBatches();
-    }
-    setGeneratingImageFor(null);
-  };
-
   const handleExport = () => {
-    if (!activeScript?.full_script) return;
-    const blob = new Blob([activeScript.full_script], { type: 'text/plain' });
+    if (!latestScript?.full_script) return;
+    const blob = new Blob([latestScript.full_script], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
