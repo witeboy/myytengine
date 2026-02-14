@@ -13,9 +13,39 @@ const statusColors = {
   failed: 'bg-red-100 text-red-800',
 };
 
-export default function SceneCard({ scene, onRegenerateImage, onAnimateScene }) {
+export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, onSceneUpdated }) {
   const [loadingImage, setLoadingImage] = useState(false);
   const [loadingVideo, setLoadingVideo] = useState(false);
+  const [polling, setPolling] = useState(false);
+  const pollRef = useRef(null);
+
+  // Check if scene has a pending freepik task
+  const freepikTaskId = scene.video_url?.startsWith('freepik_task:')
+    ? scene.video_url.replace('freepik_task:', '')
+    : null;
+
+  useEffect(() => {
+    if (freepikTaskId && !polling) {
+      setPolling(true);
+      setLoadingVideo(true);
+      pollRef.current = setInterval(async () => {
+        const res = await base44.functions.invoke('checkSceneVideoStatus', {
+          task_id: freepikTaskId,
+          scene_id: scene.id,
+        });
+        const status = res.data?.status;
+        if (status === 'COMPLETED' || status === 'FAILED') {
+          clearInterval(pollRef.current);
+          setPolling(false);
+          setLoadingVideo(false);
+          onSceneUpdated?.();
+        }
+      }, 8000);
+    }
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, [freepikTaskId]);
 
   const handleImage = async () => {
     setLoadingImage(true);
@@ -26,7 +56,7 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene }) 
   const handleVideo = async () => {
     setLoadingVideo(true);
     await onAnimateScene();
-    setLoadingVideo(false);
+    // After invoke, scene will have freepik_task:xxx, polling will start via useEffect on re-render
   };
 
   return (
