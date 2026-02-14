@@ -31,15 +31,15 @@ Deno.serve(async (req) => {
       defaultVoices = voicesData.voices || voicesData || [];
     }
 
-    // Fetch shared/public voice library — paginate to get many voices
+    // Fetch shared/public voice library — paginate through all pages
     let libraryVoices = [];
     try {
       let hasMore = true;
       let pageToken = null;
-      let fetched = 0;
-      const maxVoices = 500;
+      let pages = 0;
+      const maxPages = 10; // Up to ~1000 voices
 
-      while (hasMore && fetched < maxVoices) {
+      while (hasMore && pages < maxPages) {
         let url = 'https://api.ai33.pro/v1/shared-voices?page_size=100&sort=usage_character_count_7d&sort_direction=desc';
         if (pageToken) url += `&next_page_token=${encodeURIComponent(pageToken)}`;
 
@@ -67,10 +67,23 @@ Deno.serve(async (req) => {
           });
         }
 
-        fetched += voices.length;
-        pageToken = libData.next_page_token;
-        hasMore = !!pageToken && voices.length > 0;
+        pages++;
+        // Check for next page token - AI33/ElevenLabs uses different pagination
+        if (libData.next_page_token) {
+          pageToken = libData.next_page_token;
+        } else if (libData.has_more) {
+          // Some APIs use last_sort_id for cursor pagination
+          const lastVoice = voices[voices.length - 1];
+          if (lastVoice) {
+            pageToken = libData.last_sort_id || null;
+          }
+          if (!pageToken) hasMore = false;
+        } else {
+          hasMore = false;
+        }
       }
+      
+      console.log(`Fetched ${libraryVoices.length} library voices across ${pages} pages`);
     } catch (e) {
       console.log('Library fetch failed, using defaults only:', e.message);
     }
