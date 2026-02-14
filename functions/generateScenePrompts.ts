@@ -9,7 +9,7 @@ async function callGemini(prompt, temperature = 0.7) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: 8192, responseMimeType: "application/json" }
+        generationConfig: { temperature, maxOutputTokens: 16384, responseMimeType: "application/json" }
       })
     }
   );
@@ -21,7 +21,34 @@ async function callGemini(prompt, temperature = 0.7) {
 
   const data = await response.json();
   if (!data.candidates?.length) throw new Error("No candidates from Gemini");
-  return JSON.parse(data.candidates[0].content.parts[0].text);
+  const rawText = data.candidates[0].content.parts[0].text;
+  
+  try {
+    return JSON.parse(rawText);
+  } catch (e) {
+    // Try to recover truncated JSON by finding the last complete scene object
+    console.log("JSON parse failed, attempting recovery...");
+    const lastBrace = rawText.lastIndexOf('}');
+    if (lastBrace === -1) throw new Error("Cannot recover JSON from Gemini response");
+    // Find the matching array close and root close
+    const trimmed = rawText.substring(0, lastBrace + 1);
+    // Try closing the array and root object
+    const attempts = [
+      trimmed + ']}',
+      trimmed + '}]}',
+      trimmed,
+    ];
+    for (const attempt of attempts) {
+      try {
+        const parsed = JSON.parse(attempt);
+        if (parsed.scenes && Array.isArray(parsed.scenes)) {
+          console.log(`Recovered ${parsed.scenes.length} scenes from truncated JSON`);
+          return parsed;
+        }
+      } catch (_) { /* try next */ }
+    }
+    throw new Error("Failed to parse Gemini JSON response after recovery attempts");
+  }
 }
 
 Deno.serve(async (req) => {
