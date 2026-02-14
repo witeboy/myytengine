@@ -174,19 +174,33 @@ Write ONLY the narration for this batch. Do not include JSON, labels, or metadat
       fullScript += content + "\n\n";
     }
 
-    // Create final script
+    // Create or update draft script (avoid duplicates)
     const totalWords = fullScript.split(/\s+/).length;
     const estimatedDuration = Math.round((totalWords / 150) * 60);
 
-    const script = await base44.asServiceRole.entities.Scripts.create({
-      project_id: project_id,
-      topic_id: project.selected_topic_id,
-      version: "draft",
-      title: topic.title,
-      full_script: fullScript,
-      word_count: totalWords,
-      estimated_duration_sec: estimatedDuration
-    });
+    const existingScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id: project_id });
+    const existingDraft = existingScripts.find(s => s.version === 'draft');
+
+    let script;
+    if (existingDraft) {
+      await base44.asServiceRole.entities.Scripts.update(existingDraft.id, {
+        full_script: fullScript,
+        word_count: totalWords,
+        estimated_duration_sec: estimatedDuration,
+        title: topic.title,
+      });
+      script = existingDraft;
+    } else {
+      script = await base44.asServiceRole.entities.Scripts.create({
+        project_id: project_id,
+        topic_id: project.selected_topic_id,
+        version: "draft",
+        title: topic.title,
+        full_script: fullScript,
+        word_count: totalWords,
+        estimated_duration_sec: estimatedDuration
+      });
+    }
 
     // Update project
     await base44.asServiceRole.entities.Projects.update(project_id, {
