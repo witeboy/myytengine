@@ -3,9 +3,9 @@ import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, CheckCircle2, Pencil, Save, X, Image, ChevronDown, ChevronUp } from 'lucide-react';
+import { Loader2, CheckCircle2, Pencil, Save, X, ChevronDown, ChevronUp } from 'lucide-react';
 
-export default function BatchCard({ batch, onUpdate, onGenerateImage }) {
+export default function BatchCard({ batch, onUpdate }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
@@ -93,24 +93,7 @@ export default function BatchCard({ batch, onUpdate, onGenerateImage }) {
             </div>
           )}
 
-          {/* Scene image */}
-          {batch.status === 'completed' && !editing && (
-            <div className="pt-2 border-t">
-              {batch.scene_image_url ? (
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-gray-500">Scene Image</p>
-                  <img src={batch.scene_image_url} alt={`Scene ${batch.batch_number}`} className="rounded-lg max-h-48 object-cover" />
-                  <Button variant="outline" size="sm" onClick={() => onGenerateImage?.(batch)}>
-                    <Image className="w-3.5 h-3.5 mr-1" /> Regenerate Image
-                  </Button>
-                </div>
-              ) : (
-                <Button variant="outline" size="sm" onClick={() => onGenerateImage?.(batch)}>
-                  <Image className="w-3.5 h-3.5 mr-1" /> Generate Scene Image
-                </Button>
-              )}
-            </div>
-          )}
+
         </CardContent>
       )}
     </Card>
