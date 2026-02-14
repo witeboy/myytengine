@@ -132,15 +132,17 @@ export default function ContentGeneration() {
         {/* Action Bar */}
         <div className="bg-white p-4 rounded-lg shadow-sm border mb-6 flex flex-wrap items-center gap-3">
           {scenes.length === 0 ? (
-            <Button onClick={handleImport} disabled={importing || !project?.visual_style} className="bg-blue-600 hover:bg-blue-700">
-                  {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Import className="w-4 h-4 mr-2" />}
-                  {importing ? 'Breaking Script into Scenes...' : 'Import Script & Generate Scenes'}
-                </Button>
-                {!project?.visual_style && (
-                  <p className="text-sm text-amber-600 flex items-center gap-1">
-                    <Palette className="w-4 h-4" /> Please select a visual style above first
-                  </p>
-                )}
+            <>
+              <Button onClick={handleImport} disabled={importing || !project?.visual_style} className="bg-blue-600 hover:bg-blue-700">
+                {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Import className="w-4 h-4 mr-2" />}
+                {importing ? 'Breaking Script into Scenes...' : 'Import Script & Generate Scenes'}
+              </Button>
+              {!project?.visual_style && (
+                <p className="text-sm text-amber-600 flex items-center gap-1">
+                  <Palette className="w-4 h-4" /> Please select a visual style above first
+                </p>
+              )}
+            </>
           ) : (
             <>
               {project?.visual_style && (
