@@ -9,7 +9,7 @@ async function callGemini(prompt, temperature = 0.8) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: 8192 }
+        generationConfig: { temperature, maxOutputTokens: 16384 }
       })
     }
   );
@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
       hook = hooks[0];
     }
 
-    // Fetch batches
+    // Fetch batches for this project
     const allBatches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
     const batches = allBatches.sort((a, b) => a.batch_number - b.batch_number);
 
@@ -60,38 +60,60 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'No outline batches found. Generate outline first.' }, { status: 400 });
     }
 
-    // Generate content for each batch
+    // Delete any old scripts for this project
+    const oldScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
+    for (const s of oldScripts) {
+      await base44.asServiceRole.entities.Scripts.delete(s.id);
+    }
+
+    // Generate content for each batch sequentially
     let fullScript = "";
+    let previousBatchSummary = "";
 
     for (const batch of batches) {
+      // Mark as generating
       await base44.asServiceRole.entities.ScriptBatches.update(batch.id, { status: "generating" });
 
-      const hookLine = (batch.batch_number === 1 && hook)
-        ? `\n\n**OPENING HOOK (weave this into the opening naturally)**: "${hook.hook_text}"`
-        : '';
+      const synopsis = batch.synopsis || batch.focus_area;
 
-      const prompt = `Write batch ${batch.batch_number} of ${batches.length} for a ${project.video_duration_minutes}-minute YouTube documentary.
+      let hookInstruction = '';
+      if (batch.batch_number === 1 && hook) {
+        hookInstruction = `\n**OPENING HOOK (weave into the opening naturally)**: "${hook.hook_text}"`;
+      }
+
+      let continuityInstruction = '';
+      if (previousBatchSummary) {
+        continuityInstruction = `\n**Previous batch ended with**: ${previousBatchSummary}\nContinue seamlessly from where the previous batch left off.`;
+      }
+
+      const prompt = `You are writing batch ${batch.batch_number} of ${batches.length} for a ${project.video_duration_minutes}-minute YouTube documentary.
 
 **Topic**: ${topic?.title || project.name}
+**Topic Description**: ${topic?.description || ''}
 **Niche**: ${project.niche}
 **Tone**: ${project.tone || 'dramatic'}
-**Storytelling Format**: ${project.storytelling_format || 'narrative'}${hookLine}
+**Storytelling Format**: ${project.storytelling_format || 'narrative'}${hookInstruction}${continuityInstruction}
 
-**This Batch**: ${batch.story_segment}
+**This Batch**: "${batch.story_segment}"
 **Focus**: ${batch.focus_area}
-${batch.synopsis ? `**Synopsis**: ${batch.synopsis}` : ''}
-**Target Word Count**: ~${batch.target_words || 1500} words
+**Synopsis**: ${synopsis}
+**Target Word Count**: EXACTLY ~${batch.target_words || 1500} words (this is critical — you MUST write approximately ${batch.target_words || 1500} words for this batch)
 
-Requirements:
-- Write engaging narration only (no metadata, no labels)
-- Include [SCENE: visual description] markers for each visual scene change
+**CRITICAL REQUIREMENTS**:
+- You MUST write approximately ${batch.target_words || 1500} words. Do NOT write less. Count carefully.
+- Write engaging narration with [SCENE: visual description] markers for scene changes
 - Pacing: 140-150 words per minute of video
 - Build emotional arc within this batch
-${batch.batch_number < batches.length ? '- End with a hook/cliffhanger to the next segment' : '- End with a strong call to action and closing'}
+- Write ONLY the narration text. No JSON, no labels, no metadata, no word counts.
+${batch.batch_number < batches.length ? '- End with a hook/cliffhanger leading into the next segment' : '- End with a strong call to action and closing'}
 ${batch.batch_number === 1 ? '- Open strong to hook viewers in the first 10 seconds' : '- Continue naturally from the previous batch'}`;
 
       const content = await callGemini(prompt, 0.8);
       const wordCount = content.split(/\s+/).length;
+
+      // Save a summary of the last ~50 words for continuity
+      const words = content.split(/\s+/);
+      previousBatchSummary = words.slice(Math.max(0, words.length - 50)).join(' ');
 
       await base44.asServiceRole.entities.ScriptBatches.update(batch.id, {
         content,
@@ -102,8 +124,8 @@ ${batch.batch_number === 1 ? '- Open strong to hook viewers in the first 10 seco
       fullScript += content + "\n\n";
     }
 
-    // Create script record
-    const totalWords = fullScript.split(/\s+/).length;
+    // Create script record from the COMBINED batch content
+    const totalWords = fullScript.split(/\s+/).filter(w => w.length > 0).length;
     const script = await base44.asServiceRole.entities.Scripts.create({
       project_id,
       topic_id: project.selected_topic_id,
