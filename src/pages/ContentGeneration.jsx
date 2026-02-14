@@ -10,6 +10,8 @@ import StageProgress from '@/components/StageProgress';
 import SceneGrid from '@/components/content/SceneGrid';
 import VoiceoverPanel from '@/components/script/VoiceoverPanel';
 import VisualStyleSelector from '@/components/content/VisualStyleSelector';
+import MusicPanel from '@/components/content/MusicPanel';
+import AudioMixerPanel from '@/components/content/AudioMixerPanel';
 import { Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film, Palette } from 'lucide-react';
 
 export default function ContentGeneration() {
@@ -19,6 +21,7 @@ export default function ContentGeneration() {
   const [importing, setImporting] = useState(false);
   const [generatingImages, setGeneratingImages] = useState(false);
   const [generatingVideos, setGeneratingVideos] = useState(false);
+  const [audioLevels, setAudioLevels] = useState({ narration: 1, music: 0.3, sfx: 0.5 });
 
   const { data: project, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
@@ -116,8 +119,8 @@ export default function ContentGeneration() {
         </div>
         <p className="text-gray-600 mb-8">Import your script, generate scene images and animations</p>
 
-        {/* Visual Style Selector - show before scenes are generated */}
-        {scenes.length === 0 && project && (
+        {/* Visual Style Selector - always show when project exists */}
+        {project && (
           <div className="bg-white p-5 rounded-lg shadow-sm border mb-6">
             <VisualStyleSelector
               selectedStyle={project.visual_style}
@@ -191,13 +194,22 @@ export default function ContentGeneration() {
           </div>
         )}
 
-        {/* Voiceover Panel */}
-        {latestScript && project && (
-          <div className="mb-8 max-w-md">
-            <VoiceoverPanel
-              project={project}
-              script={latestScript}
-              onUpdate={() => refetchProject()}
+        {/* Audio Section: Voiceover, Music, Mixer */}
+        {project && (
+          <div className="mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {latestScript && (
+              <VoiceoverPanel
+                project={project}
+                script={latestScript}
+                onUpdate={() => refetchProject()}
+              />
+            )}
+            <MusicPanel project={project} />
+            <AudioMixerPanel
+              narrationVolume={audioLevels.narration}
+              musicVolume={audioLevels.music}
+              sfxVolume={audioLevels.sfx}
+              onChange={(update) => setAudioLevels(prev => ({ ...prev, ...update }))}
             />
           </div>
         )}
