@@ -12,10 +12,46 @@ Deno.serve(async (req) => {
     const scene = scenes[0];
     if (!scene) return Response.json({ error: 'Scene not found' }, { status: 404 });
 
-    // Use Core GenerateImage integration to create the scene image
-    const result = await base44.asServiceRole.integrations.Core.GenerateImage({
-      prompt: scene.image_prompt,
-    });
+    // Get project for reference image
+    const projects = await base44.asServiceRole.entities.Projects.filter({ id: scene.project_id });
+    const project = projects[0];
+
+    // Build reference context for the prompt
+    let referenceContext = "";
+    
+    // If project has character descriptions, prepend them
+    if (project?.character_descriptions) {
+      try {
+        const chars = JSON.parse(project.character_descriptions);
+        if (chars.length > 0) {
+          referenceContext = "CHARACTER REFERENCE (maintain exact appearance): " + 
+            chars.map(c => `${c.name}: ${c.description}`).join(". ") + ". ";
+        }
+      } catch (_) {}
+    }
+
+    const fullPrompt = referenceContext + scene.image_prompt;
+
+    // Check if we have a reference image from scene 1 to use as style reference
+    const referenceImages = [];
+    if (project?.reference_image_url) {
+      referenceImages.push(project.reference_image_url);
+    }
+
+    // Generate with reference image if available
+    const generateParams = { prompt: fullPrompt };
+    if (referenceImages.length > 0) {
+      generateParams.existing_image_urls = referenceImages;
+    }
+
+    const result = await base44.asServiceRole.integrations.Core.GenerateImage(generateParams);
+
+    // If this is scene 1 and project has no reference image yet, save it
+    if (scene.scene_number === 1 && !project?.reference_image_url) {
+      await base44.asServiceRole.entities.Projects.update(scene.project_id, {
+        reference_image_url: result.url
+      });
+    }
 
     await base44.asServiceRole.entities.Scenes.update(scene_id, {
       image_url: result.url,
