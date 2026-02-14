@@ -16,41 +16,47 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Scene image must be generated first' }, { status: 400 });
     }
 
-    // Use Runway API to animate the image
-    const apiKey = Deno.env.get("AI33_API_KEY");
-    
-    const response = await fetch("https://api.dev.runwayml.com/v1/image_to_video", {
+    const apiKey = Deno.env.get("FREEPIK_API_KEY");
+    if (!apiKey) return Response.json({ error: 'FREEPIK_API_KEY not configured' }, { status: 500 });
+
+    // Use Freepik Kling v2 image-to-video API
+    const duration = scene.duration_seconds && scene.duration_seconds >= 10 ? "10" : "5";
+
+    const response = await fetch("https://api.freepik.com/v1/ai/image-to-video/kling-v2", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${apiKey}`,
-        "X-Runway-Version": "2024-11-06"
+        "x-freepik-api-key": apiKey
       },
       body: JSON.stringify({
-        model: "gen4_turbo",
-        promptImage: scene.image_url,
-        promptText: scene.animation_prompt,
-        duration: Math.min(scene.duration_seconds || 10, 10),
-        ratio: "1280:720"
+        image: scene.image_url,
+        duration: duration,
+        prompt: scene.animation_prompt || "Subtle cinematic motion, slow camera movement",
       })
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`Runway API error: ${errorData.error || response.status}`);
+      const errorText = await response.text();
+      console.error("Freepik API error:", response.status, errorText);
+      throw new Error(`Freepik API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
+    const taskId = data?.data?.task_id;
 
+    if (!taskId) {
+      throw new Error('No task_id returned from Freepik');
+    }
+
+    // Store the task ID on the scene for polling
     await base44.asServiceRole.entities.Scenes.update(scene_id, {
-      video_url: data.id ? `runway_task:${data.id}` : '',
-      status: data.id ? "video_generated" : "image_generated"
+      video_url: `freepik_task:${taskId}`,
+      status: "pending"
     });
 
-    return Response.json({ success: true, task_id: data.id });
+    return Response.json({ success: true, task_id: taskId, status: data?.data?.status });
   } catch (error) {
     console.error("generateSceneVideo error:", error.message);
-    // Don't fail the scene, just keep it at image_generated
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
