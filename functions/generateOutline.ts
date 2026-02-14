@@ -132,6 +132,7 @@ Deno.serve(async (req) => {
         story_segment: batch.story_segment,
         focus_area: batch.focus_area,
         synopsis: batch.synopsis || batch.focus_area,
+        target_words: batch.target_words || wordsPerBatch,
         status: "pending"
       });
     }

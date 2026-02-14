@@ -2,11 +2,35 @@ import React from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Archive } from 'lucide-react';
+import { Plus, Archive, BookOpen, Image, Film } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { createPageUrl } from '@/utils';
+
+const STAGE_INFO = [
+  { num: 1, label: 'Story', Icon: BookOpen, barClass: 'bg-blue-500', badgeClass: 'bg-blue-100 text-blue-800' },
+  { num: 2, label: 'Content', Icon: Image, barClass: 'bg-purple-500', badgeClass: 'bg-purple-100 text-purple-800' },
+  { num: 3, label: 'Timeline', Icon: Film, barClass: 'bg-green-500', badgeClass: 'bg-green-100 text-green-800' },
+];
+
+function getStage(status) {
+  if (['created', 'topics_ready', 'topic_selected', 'outline_ready', 'hooks_ready', 'scripting', 'script_complete'].includes(status)) return 1;
+  if (['content_generation', 'scenes_ready'].includes(status)) return 2;
+  if (['timeline_editing', 'compiled'].includes(status)) return 3;
+  return 1;
+}
+
+function getRoute(project) {
+  const s = project.status;
+  if (s === 'created' || s === 'topics_ready') return `StoryTopics?project_id=${project.id}`;
+  if (s === 'topic_selected') return `StoryDuration?project_id=${project.id}`;
+  if (s === 'outline_ready') return `StoryHooks?project_id=${project.id}`;
+  if (s === 'hooks_ready' || s === 'scripting' || s === 'script_complete') return `StoryScript?project_id=${project.id}`;
+  if (s === 'content_generation' || s === 'scenes_ready') return `ContentGeneration?project_id=${project.id}`;
+  if (s === 'timeline_editing' || s === 'compiled') return `TimelineEditor?project_id=${project.id}`;
+  return `StoryTopics?project_id=${project.id}`;
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -14,146 +38,101 @@ export default function Dashboard() {
 
   const { data: allProjects = [], isLoading } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => base44.entities.Projects.list(),
+    queryFn: () => base44.entities.Projects.list('-created_date'),
   });
 
   const projects = allProjects.filter(p => !p.archived);
 
   const archiveMutation = useMutation({
-    mutationFn: (projectId) => base44.entities.Projects.update(projectId, { archived: true }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
-    },
+    mutationFn: (id) => base44.entities.Projects.update(id, { archived: true }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['projects'] }),
   });
-
-  const getProjectRoute = (project) => {
-    const status = project.status;
-
-    // Route based on status for most accurate navigation
-    if (status === 'topics_ready' || status === 'created') {
-      return `TopicSelection?project_id=${project.id}`;
-    } else if (status === 'topic_selected' && !project.video_duration_minutes) {
-      return `VideoDurationSetup?project_id=${project.id}`;
-    } else if (status === 'topic_selected' && project.video_duration_minutes && !project.outline) {
-      return `OutlineGeneration?project_id=${project.id}`;
-    } else if (status === 'outline_ready' || (project.outline && status === 'topic_selected')) {
-      return `ScriptWorkshop?project_id=${project.id}`;
-    } else if (status === 'hooks_ready') {
-      return `HookSelection?project_id=${project.id}`;
-    } else if (status === 'scripting') {
-      return `ScriptWorkshop?project_id=${project.id}`;
-    } else {
-      return `TopicSelection?project_id=${project.id}`;
-    }
-  };
-
-  const statusColors = {
-    created: 'bg-gray-100 text-gray-800',
-    topics_ready: 'bg-blue-100 text-blue-800',
-    topic_selected: 'bg-purple-100 text-purple-800',
-    hooks_ready: 'bg-indigo-100 text-indigo-800',
-    scripting: 'bg-orange-100 text-orange-800',
-    production: 'bg-yellow-100 text-yellow-800',
-    publish_ready: 'bg-green-100 text-green-800',
-    published: 'bg-emerald-100 text-emerald-800',
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-gray-900">Projects</h1>
-            <p className="text-gray-600 mt-2">Manage your YouTube content pipeline</p>
+            <h1 className="text-4xl font-bold text-gray-900">AI Video Engine</h1>
+            <p className="text-gray-500 mt-1">Faceless YouTube content pipeline</p>
           </div>
-          <Button
-            onClick={() => navigate(createPageUrl('NewProject'))}
-            className="bg-blue-600 hover:bg-blue-700 flex items-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            New Project
+          <Button onClick={() => navigate(createPageUrl('NewProject'))} className="bg-blue-600 hover:bg-blue-700">
+            <Plus className="w-5 h-5 mr-2" /> New Project
           </Button>
+        </div>
+
+        {/* Stage Legend */}
+        <div className="flex gap-6 mb-6 text-sm text-gray-500">
+          {STAGE_INFO.map(s => (
+            <div key={s.num} className="flex items-center gap-2">
+              <s.Icon className="w-4 h-4" />
+              Stage {s.num}: {s.label}
+            </div>
+          ))}
         </div>
 
         {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="bg-white rounded-lg h-64 animate-pulse" />
-            ))}
+            {[1, 2, 3].map(i => <div key={i} className="bg-white rounded-xl h-48 animate-pulse" />)}
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projects.map((project) => (
-              <Card
-                key={project.id}
-                className="hover:shadow-lg transition-shadow"
-              >
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <div 
-                      className="flex-1 cursor-pointer"
-                      onClick={() => navigate(createPageUrl(getProjectRoute(project)))}
-                    >
-                      <CardTitle className="text-lg">{project.name}</CardTitle>
-                      <p className="text-sm text-gray-600 mt-1">{project.niche}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge className={statusColors[project.status] || statusColors.created}>
-                        {project.status?.replace(/_/g, ' ')}
-                      </Badge>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm('Archive this project?')) {
-                            archiveMutation.mutate(project.id);
-                          }
-                        }}
-                        className="h-8 w-8 text-gray-500 hover:text-gray-700"
-                      >
-                        <Archive className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div
-                    className="cursor-pointer"
-                    onClick={() => navigate(createPageUrl(getProjectRoute(project)))}
-                  >
-                    <div className="flex justify-between mb-2">
-                      <span className="text-sm font-medium">Progress</span>
-                      <span className="text-sm text-gray-600">{project.current_step}/15</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full transition-all"
-                        style={{ width: `${(project.current_step / 15) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-between text-xs text-gray-500 pt-2">
-                    <span>{project.posts_per_week} posts/week</span>
-                    <span>{new Date(project.updated_date).toLocaleDateString()}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-
-        {!isLoading && projects.length === 0 && (
-          <Card className="text-center py-12">
-            <p className="text-gray-600 mb-4">No projects yet. Create your first one!</p>
-            <Button
-              onClick={() => navigate(createPageUrl('NewProject'))}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Create Project
+        ) : projects.length === 0 ? (
+          <Card className="text-center py-16">
+            <p className="text-gray-500 mb-4">No projects yet</p>
+            <Button onClick={() => navigate(createPageUrl('NewProject'))} className="bg-blue-600 hover:bg-blue-700">
+              <Plus className="w-4 h-4 mr-2" /> Create Your First Project
             </Button>
           </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {projects.map(project => {
+              const stage = getStage(project.status);
+              const info = STAGE_INFO[stage - 1];
+              return (
+                <Card
+                  key={project.id}
+                  className="hover:shadow-lg transition-shadow cursor-pointer group"
+                  onClick={() => navigate(createPageUrl(getRoute(project)))}
+                >
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle className="text-lg group-hover:text-blue-600 transition-colors">{project.name}</CardTitle>
+                        <p className="text-sm text-gray-500">{project.niche}</p>
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm('Archive this project?')) archiveMutation.mutate(project.id);
+                      }}>
+                        <Archive className="w-4 h-4 text-gray-400" />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    {/* Stage progress bars */}
+                    <div className="flex items-center gap-1 mb-3">
+                      {STAGE_INFO.map(s => (
+                        <div
+                          key={s.num}
+                          className={`flex-1 h-2 rounded-full ${stage >= s.num ? s.barClass : 'bg-gray-200'}`}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Badge className={info.badgeClass}>
+                        Stage {stage}: {info.label}
+                      </Badge>
+                      <span className="text-xs text-gray-400">
+                        {project.status?.replace(/_/g, ' ')}
+                      </span>
+                    </div>
+                    {project.video_duration_minutes && (
+                      <p className="text-xs text-gray-400 mt-2">{project.video_duration_minutes} min video</p>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>

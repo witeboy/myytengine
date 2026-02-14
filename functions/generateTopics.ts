@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { project_id, niche } = body;
 
-    const prompt = `I want to build a faceless YouTube channel creating short documentaries in ${niche}. Find 30 trending topics that:
+    const prompt = `I want to build a faceless YouTube channel creating short documentaries in ${niche}. Find 10 trending topics that:
 
 - Have underexploited keyword potential
 - Have 100K-2M monthly searches
