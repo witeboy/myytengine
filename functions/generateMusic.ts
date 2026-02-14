@@ -60,24 +60,27 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Otherwise it returned JSON (possibly a task_id for async)
+    // Otherwise it returned JSON
     const data = await response.json();
     console.log('AI33 JSON response:', JSON.stringify(data));
 
-    // Check if there's a direct URL in the response
-    if (data.audio_url || data.result_url || data.url) {
-      const audioSrcUrl = data.audio_url || data.result_url || data.url;
-      // Download and upload to our storage
+    // Check if audio URL is available (directly or in metadata)
+    const audioSrcUrl = data.metadata?.audio_url || data.audio_url || data.result_url || data.url;
+
+    if (audioSrcUrl) {
+      // Audio ready — download and upload to our storage
       const audioResp = await fetch(audioSrcUrl);
       const audioBlob = await audioResp.blob();
       const file = new File([audioBlob], `music_${track_id || 'track'}.mp3`, { type: 'audio/mpeg' });
       const uploaded = await base44.asServiceRole.integrations.Core.UploadFile({ file });
 
+      const dur = data.metadata?.duration_seconds || data.duration_seconds || duration_seconds || 30;
+
       if (track_id) {
         await base44.asServiceRole.entities.MusicTracks.update(track_id, {
           audio_url: uploaded.file_url,
           status: 'completed',
-          duration_seconds: data.duration_seconds || duration_seconds || 30,
+          duration_seconds: dur,
         });
       }
 
@@ -88,12 +91,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Async task mode - return task_id for polling
-    if (data.task_id) {
+    // Async task mode - return task_id for polling (API uses "id" or "task_id")
+    const taskId = data.task_id || data.id;
+    if (taskId) {
       if (track_id) {
         await base44.asServiceRole.entities.MusicTracks.update(track_id, { status: 'generating' });
       }
-      return Response.json({ success: true, status: 'pending', task_id: data.task_id });
+      return Response.json({ success: true, status: 'pending', task_id: taskId });
     }
 
     // Unknown response
