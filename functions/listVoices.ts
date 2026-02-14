@@ -68,7 +68,7 @@ Deno.serve(async (req) => {
         hasMore = libData.has_more === true && voices.length > 0;
       }
       
-      console.log(`Fetched ${libraryVoices.length} library voices across ${page} pages`);
+      console.log(`VOICE_COUNT: library=${libraryVoices.length} pages=${page}`);
     } catch (e) {
       console.log('Library fetch failed, using defaults only:', e.message);
     }
@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
       ...libraryVoices.filter(v => !defaultIds.has(v.voice_id)),
     ];
 
-    console.log(`Total combined voices: ${combined.length} (defaults: ${taggedDefaults.length}, library: ${libraryVoices.length})`);
+    console.log(`VOICE_TOTAL: combined=${combined.length} defaults=${taggedDefaults.length} lib=${libraryVoices.length}`);
 
     return Response.json({
       success: true,
