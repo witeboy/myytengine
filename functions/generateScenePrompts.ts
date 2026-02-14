@@ -127,7 +127,7 @@ Return JSON:
 **Other Rules:**
 - Split the narration into logical visual segments. Each scene = 5-15 seconds of narration.
 - The narration_text must be the EXACT words from the script (do not modify, summarize, or paraphrase).
-- Animation prompts describe camera movement (slow zoom, pan, dolly, tracking shot), subject motion, atmospheric effects.
+- Animation prompts must be HIGHLY DETAILED and CINEMATIC. Describe: specific camera movement (direction, speed, arc), atmospheric motion (particles, fog, dust, rain, light rays), subject micro-motion (breathing, hair sway, fabric movement, eye shifts), depth-of-field changes (rack focus, bokeh), and lighting transitions (shadows shifting, flickering). Match the emotional arc of the narration — tension = slow creeping zoom with tight framing, revelation = dramatic pull-back with wide angle, calm = gentle floating dolly with soft bokeh. Each animation prompt should read like a cinematographer's shot notes.
 - Aim for approximately ${Math.round(project.video_duration_minutes * 60 / 8)} scenes total.
 - Ensure visual continuity — scenes should feel like a cohesive visual story.
 - Match the emotional tone of each narration segment with appropriate visual mood.`;
