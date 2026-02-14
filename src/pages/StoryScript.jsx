@@ -53,21 +53,20 @@ export default function StoryScript() {
     : latestScript;
 
   // Auto-generate batches if hooks_ready but no batch content yet
+  const [autoGenTriggered, setAutoGenTriggered] = useState(false);
   useEffect(() => {
-    const autoGenerate = async () => {
-      const hasContent = batches.some(b => b.status === 'completed' && b.content);
-      if (project?.status === 'hooks_ready' && !hasContent && !generating) {
-        setGenerating(true);
-        await base44.functions.invoke('generateScriptBatches', {
-          project_id: projectId,
-          selected_hook_id: project.selected_hook_id,
-        });
-        await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
-        setGenerating(false);
-      }
-    };
-    autoGenerate();
-  }, [project?.status, batches]);
+    if (autoGenTriggered || generating) return;
+    const hasContent = batches.some(b => b.status === 'completed' && b.content);
+    if (project?.status === 'hooks_ready' && !hasContent && batches.length > 0) {
+      setAutoGenTriggered(true);
+      setGenerating(true);
+      base44.functions.invoke('generateScriptBatches', {
+        project_id: projectId,
+        selected_hook_id: project.selected_hook_id,
+      }).then(() => Promise.all([refetchProject(), refetchBatches(), refetchScripts()]))
+        .finally(() => setGenerating(false));
+    }
+  }, [project?.status, batches.length, autoGenTriggered, generating]);
 
   const handleRegenerate = async () => {
     setRegenerating(true);

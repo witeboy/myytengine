@@ -29,10 +29,16 @@ export default function ScriptEditor({ script, onSaved }) {
     const plainText = temp.innerText || temp.textContent;
     const wordCount = plainText.split(/\s+/).filter(w => w.length > 0).length;
 
-    await base44.entities.Scripts.update(script.id, {
+    // Create a new "edited" version so we have history, then update in place
+    await base44.entities.Scripts.create({
+      project_id: script.project_id,
+      topic_id: script.topic_id,
+      version: "edited",
+      title: script.title,
       full_script: plainText,
       word_count: wordCount,
       estimated_duration_sec: Math.round((wordCount / 150) * 60),
+      editor_notes: `Edited from version ${script.version}`,
     });
     setEditing(false);
     setSaving(false);
