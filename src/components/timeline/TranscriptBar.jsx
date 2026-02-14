@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { FileText, Hash } from 'lucide-react';
 
-export default function TranscriptBar({ currentScene, currentTime }) {
+export default function TranscriptBar({ currentScene, currentTime, allScenes }) {
+  const scrollRef = useRef(null);
+  const activeWordRef = useRef(null);
+
   if (!currentScene) {
     return (
       <div className="bg-gray-800 text-gray-500 px-4 py-3 rounded-b-lg text-sm flex items-center gap-2">
@@ -14,20 +17,29 @@ export default function TranscriptBar({ currentScene, currentTime }) {
   const words = narration.split(/\s+/).filter(Boolean);
   const wordCount = words.length;
 
-  // Estimate which word we're at based on time within this scene
   const timeInScene = currentTime - (currentScene.start_time || 0);
   const sceneDuration = currentScene.duration_seconds || 8;
   const progress = Math.min(1, Math.max(0, timeInScene / sceneDuration));
   const currentWordIndex = Math.floor(progress * wordCount);
 
-  // Show a window of words around the current word
-  const windowSize = 12;
-  const start = Math.max(0, currentWordIndex - Math.floor(windowSize / 2));
-  const end = Math.min(words.length, start + windowSize);
+  // Auto-scroll to keep the current word visible
+  useEffect(() => {
+    if (activeWordRef.current && scrollRef.current) {
+      const container = scrollRef.current;
+      const el = activeWordRef.current;
+      const elLeft = el.offsetLeft;
+      const elWidth = el.offsetWidth;
+      const cLeft = container.scrollLeft;
+      const cWidth = container.clientWidth;
+      if (elLeft < cLeft || elLeft + elWidth > cLeft + cWidth) {
+        container.scrollLeft = elLeft - cWidth / 2;
+      }
+    }
+  }, [currentWordIndex]);
 
   return (
     <div className="bg-gray-800 px-4 py-3 rounded-b-lg">
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-3">
           <span className="text-[10px] uppercase text-gray-500 font-medium flex items-center gap-1">
             <FileText className="w-3 h-3" /> Scene {currentScene.scene_number} Transcript
@@ -40,28 +52,28 @@ export default function TranscriptBar({ currentScene, currentTime }) {
           ~word {Math.min(currentWordIndex + 1, wordCount)}/{wordCount}
         </span>
       </div>
-      <p className="text-sm text-gray-300 leading-relaxed">
-        {start > 0 && <span className="text-gray-600">... </span>}
-        {words.slice(start, end).map((word, i) => {
-          const absIdx = start + i;
-          const isCurrent = absIdx === currentWordIndex;
-          return (
-            <span
-              key={absIdx}
-              className={
-                isCurrent
-                  ? 'text-white font-semibold bg-blue-600/30 px-0.5 rounded'
-                  : absIdx < currentWordIndex
-                  ? 'text-gray-400'
-                  : 'text-gray-300'
-              }
-            >
-              {word}{' '}
-            </span>
-          );
-        })}
-        {end < words.length && <span className="text-gray-600">...</span>}
-      </p>
+      <div ref={scrollRef} className="overflow-x-auto whitespace-nowrap pb-1 scrollbar-thin">
+        <p className="text-sm leading-relaxed inline">
+          {words.map((word, i) => {
+            const isCurrent = i === currentWordIndex;
+            return (
+              <span
+                key={i}
+                ref={isCurrent ? activeWordRef : null}
+                className={
+                  isCurrent
+                    ? 'text-white font-semibold bg-blue-600/40 px-0.5 rounded'
+                    : i < currentWordIndex
+                    ? 'text-gray-500'
+                    : 'text-gray-300'
+                }
+              >
+                {word}{' '}
+              </span>
+            );
+          })}
+        </p>
+      </div>
     </div>
   );
 }
