@@ -109,6 +109,82 @@ export default function TimelineEditor() {
     return () => clearInterval(playIntervalRef.current);
   }, [isPlaying, totalDuration]);
 
+  // Audio: voiceover
+  useEffect(() => {
+    if (voiceoverUrl && !voiceoverRef.current) {
+      voiceoverRef.current = new Audio(voiceoverUrl);
+    }
+    if (voiceoverRef.current && voiceoverUrl !== voiceoverRef.current._src) {
+      voiceoverRef.current = new Audio(voiceoverUrl);
+      voiceoverRef.current._src = voiceoverUrl;
+    }
+  }, [voiceoverUrl]);
+
+  // Audio: background music
+  useEffect(() => {
+    if (musicUrl && !musicRef.current) {
+      musicRef.current = new Audio(musicUrl);
+      musicRef.current.loop = true;
+    }
+    if (musicRef.current && musicUrl !== musicRef.current._src) {
+      musicRef.current = new Audio(musicUrl);
+      musicRef.current.loop = true;
+      musicRef.current._src = musicUrl;
+    }
+  }, [musicUrl]);
+
+  // Sync audio play/pause with playback state
+  useEffect(() => {
+    if (isPlaying) {
+      if (voiceoverRef.current) {
+        voiceoverRef.current.currentTime = currentTime;
+        voiceoverRef.current.volume = volume;
+        voiceoverRef.current.play().catch(() => {});
+      }
+      if (musicRef.current) {
+        musicRef.current.volume = musicVolume * volume;
+        musicRef.current.play().catch(() => {});
+      }
+    } else {
+      voiceoverRef.current?.pause();
+      musicRef.current?.pause();
+      // Pause all sfx
+      Object.values(sfxRefs.current).forEach(a => a?.pause());
+    }
+  }, [isPlaying]);
+
+  // Sync volume changes live
+  useEffect(() => {
+    if (voiceoverRef.current) voiceoverRef.current.volume = volume;
+    if (musicRef.current) musicRef.current.volume = musicVolume * volume;
+  }, [volume, musicVolume]);
+
+  // SFX: play scene sound effects at correct times
+  useEffect(() => {
+    if (!isPlaying) return;
+    const scene = getCurrentScene(currentTime);
+    if (!scene?.sound_effect_url) return;
+    const timeInScene = currentTime - scene.start_time;
+    // Play SFX at start of scene (within first 0.3s)
+    if (timeInScene >= 0 && timeInScene < 0.3) {
+      if (!sfxRefs.current[scene.id] || sfxRefs.current[scene.id].paused) {
+        const sfx = new Audio(scene.sound_effect_url);
+        sfx.volume = (scene.sfx_volume ?? 0.5) * volume;
+        sfx.play().catch(() => {});
+        sfxRefs.current[scene.id] = sfx;
+      }
+    }
+  }, [currentTime, isPlaying]);
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      voiceoverRef.current?.pause();
+      musicRef.current?.pause();
+      Object.values(sfxRefs.current).forEach(a => a?.pause());
+    };
+  }, []);
+
   // Auto-scroll timeline to follow playhead
   useEffect(() => {
     if (isPlaying && timelineRef.current) {
