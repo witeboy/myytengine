@@ -17,6 +17,11 @@ Deno.serve(async (req) => {
 
     if (!response.ok) {
       const errText = await response.text();
+      // If task not found (404), mark as failed instead of crashing
+      if (response.status === 404 && track_id) {
+        await base44.asServiceRole.entities.MusicTracks.update(track_id, { status: 'failed' });
+        return Response.json({ status: 'FAILED', error: 'Task not found' });
+      }
       return Response.json({ error: `AI33 status error: ${errText}` }, { status: 500 });
     }
 
