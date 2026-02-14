@@ -92,22 +92,32 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Generate each batch
-    let previousContent = "";
+    // Generate each batch sequentially with continuity context
+    let previousBatchEnding = "";
     let fullScript = "";
 
     for (const batch of batches) {
-      // Update status to generating
       await base44.asServiceRole.entities.ScriptBatches.update(batch.id, {
         status: "generating"
       });
 
       const synopsis = batch.synopsis || batch.focus_area;
-      const previousSynopsis = batches[batches.findIndex(b => b.id === batch.id) - 1]?.synopsis || '';
+      const prevBatch = batches[batches.findIndex(b => b.id === batch.id) - 1];
+      const nextBatch = batches[batches.findIndex(b => b.id === batch.id) + 1];
       
       let hookInstruction = '';
       if (batch.batch_number === 1 && selectedHook) {
         hookInstruction = `\n**OPENING HOOK (MUST INCLUDE)**: "${selectedHook.hook_text}"\nEnsure this hook appears naturally at the very beginning of batch 1 to grab viewer attention immediately.`;
+      }
+
+      let continuityInstruction = '';
+      if (previousBatchEnding) {
+        continuityInstruction = `\n**CONTINUITY — the previous batch ended with these exact words**:\n"...${previousBatchEnding}"\nYou MUST continue seamlessly from this point. Do NOT repeat or paraphrase the ending above. Pick up the narrative naturally as if it's the same script flowing forward.\n`;
+      }
+
+      let nextBatchHint = '';
+      if (nextBatch) {
+        nextBatchHint = `\n**NEXT BATCH PREVIEW**: The next segment is "${nextBatch.story_segment}" focusing on "${nextBatch.focus_area}". End this batch with a natural bridge or hook leading into that topic.`;
       }
 
       const prompt = `You are writing batch ${batch.batch_number} of ${batches.length} for a ${project.video_duration_minutes}-minute YouTube documentary in "${project.storytelling_format}" format.
@@ -115,12 +125,13 @@ Deno.serve(async (req) => {
 **Topic**: ${topic.title}
 **Topic Description**: ${topic.description}
 **Niche**: ${project.niche}
-${hookInstruction}
+${hookInstruction}${continuityInstruction}
 
 **BATCH SYNOPSIS & CONTEXT**:
 ${synopsis}
 
-${previousSynopsis ? `**Previous Batch Context**: ${previousSynopsis}` : ''}
+${prevBatch ? `**Previous Batch was about**: ${prevBatch.story_segment} — ${prevBatch.focus_area}` : ''}
+${nextBatchHint}
 
 **This Batch**: ${batch.story_segment}
 **Focus Areas**: ${batch.focus_area}
@@ -132,7 +143,8 @@ ${previousSynopsis ? `**Previous Batch Context**: ${previousSynopsis}` : ''}
 - Develop emotional arc: build curiosity, tension, then payoff
 - Each paragraph = one visual scene [SCENE: description]
 - Use dramatic pauses and strategic emphasis on key terms
-- End with hook to next segment (except final batch)
+${batch.batch_number < batches.length ? '- End with a hook/cliffhanger leading into the next segment' : '- End with a strong call to action and closing'}
+${batch.batch_number === 1 ? '- Open strong to hook viewers in the first 10 seconds' : '- Continue naturally and seamlessly from where the previous batch left off'}
 - Keep character/subject voice consistent throughout
 
 Write ONLY the narration for this batch. Do not include JSON, labels, or metadata.`;
@@ -149,7 +161,10 @@ Write ONLY the narration for this batch. Do not include JSON, labels, or metadat
       const content = result.text;
       const wordCount = content.split(/\s+/).length;
 
-      // Update batch with content
+      // Save the last ~80 words for continuity into the next batch
+      const words = content.split(/\s+/);
+      previousBatchEnding = words.slice(Math.max(0, words.length - 80)).join(' ');
+
       await base44.asServiceRole.entities.ScriptBatches.update(batch.id, {
         content: content,
         word_count: wordCount,
@@ -157,7 +172,6 @@ Write ONLY the narration for this batch. Do not include JSON, labels, or metadat
       });
 
       fullScript += content + "\n\n";
-      previousContent = content;
     }
 
     // Create final script
