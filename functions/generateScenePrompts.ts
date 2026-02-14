@@ -132,6 +132,13 @@ Return JSON:
 
     const result = await callGemini(prompt, 0.6);
 
+    // Save character descriptions to project for future reference
+    if (result.characters && result.characters.length > 0) {
+      await base44.asServiceRole.entities.Projects.update(project_id, {
+        character_descriptions: JSON.stringify(result.characters),
+      });
+    }
+
     const createdScenes = [];
     for (const scene of result.scenes) {
       const record = await base44.asServiceRole.entities.Scenes.create({
