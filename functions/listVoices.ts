@@ -86,6 +86,8 @@ Deno.serve(async (req) => {
       ...libraryVoices.filter(v => !defaultIds.has(v.voice_id)),
     ];
 
+    console.log(`Total combined voices: ${combined.length} (defaults: ${taggedDefaults.length}, library: ${libraryVoices.length})`);
+
     return Response.json({
       success: true,
       voices: combined,
