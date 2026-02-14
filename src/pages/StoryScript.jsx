@@ -47,14 +47,17 @@ export default function StoryScript() {
 
   const latestScript = scripts.sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0];
 
-  // Auto-generate if hooks_ready but no script yet
+  const [merging, setMerging] = useState(false);
+
+  // Auto-generate batches if hooks_ready but no batch content yet
   useEffect(() => {
     const autoGenerate = async () => {
-      if (project?.status === 'hooks_ready' && !latestScript && !generating) {
+      const hasContent = batches.some(b => b.status === 'completed' && b.content);
+      if (project?.status === 'hooks_ready' && !hasContent && !generating) {
         setGenerating(true);
-        await base44.functions.invoke('generateFullScript', {
+        await base44.functions.invoke('generateScriptBatches', {
           project_id: projectId,
-          hook_id: project.selected_hook_id,
+          selected_hook_id: project.selected_hook_id,
         });
         await Promise.all([refetchProject(), refetchBatches()]);
         queryClient.invalidateQueries({ queryKey: ['scripts', projectId] });
@@ -62,7 +65,7 @@ export default function StoryScript() {
       }
     };
     autoGenerate();
-  }, [project?.status, latestScript]);
+  }, [project?.status, batches]);
 
   const handleRegenerate = async () => {
     setRegenerating(true);
@@ -79,14 +82,23 @@ export default function StoryScript() {
     setGenerating(true);
     setRegenerating(false);
 
-    await base44.functions.invoke('generateFullScript', {
+    await base44.functions.invoke('generateScriptBatches', {
       project_id: projectId,
-      hook_id: project.selected_hook_id,
+      selected_hook_id: project.selected_hook_id,
     });
 
     await Promise.all([refetchProject(), refetchBatches()]);
     queryClient.invalidateQueries({ queryKey: ['scripts', projectId] });
     setGenerating(false);
+  };
+
+  // Merge completed batches into a full script (no Gemini call, no tokens used)
+  const handleMergeScript = async () => {
+    setMerging(true);
+    await base44.functions.invoke('generateFullScript', { project_id: projectId });
+    await Promise.all([refetchProject(), refetchBatches()]);
+    queryClient.invalidateQueries({ queryKey: ['scripts', projectId] });
+    setMerging(false);
   };
 
   const handleExport = () => {
@@ -184,6 +196,16 @@ export default function StoryScript() {
             </Card>
           ))}
         </div>
+
+        {/* Combine Button */}
+        {allCompleted && !latestScript && (
+          <div className="flex justify-center mb-8">
+            <Button onClick={handleMergeScript} disabled={merging} className="bg-green-600 hover:bg-green-700" size="lg">
+              {merging ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-5 h-5 mr-2" />}
+              {merging ? 'Combining Batches...' : 'Combine Batches into Full Script'}
+            </Button>
+          </div>
+        )}
 
         {/* Full Script Preview */}
         {latestScript && (
