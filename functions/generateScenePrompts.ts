@@ -110,17 +110,19 @@ ${script.full_script.substring(0, 12000)}
 Return JSON:
 {
   "characters": [
-    {"name": "Character Name", "description": "Detailed physical description: age, gender, ethnicity, hair color/style, facial features, body build, clothing, distinguishing features. Be VERY specific so the character looks identical in every scene."}
+    {"name": "Character Name", "description": "Extremely detailed physical description: exact age (e.g. 45-year-old), gender, ethnicity, hair color AND style AND length (e.g. dark brown short wavy hair), specific facial hair (e.g. full thick dark beard and mustache OR clean-shaven — be exact), facial features (eye color, nose shape, jaw), body build, exact clothing (e.g. dark charcoal wool three-piece suit with white collar shirt and dark tie), distinguishing features (scars, glasses, etc.). Be MAXIMALLY specific so the character is unmistakably identical in every single scene."}
   ],
-  "scenes": [{"scene_number": 1, "narration_text": "The exact narration text for this scene segment...", "image_prompt": "[STYLE INSTRUCTION]. [Detailed visual description]. [Character descriptions repeated inline when characters appear].", "animation_prompt": "Slow zoom in on subject, slight camera pan left to right, atmospheric particles floating...", "duration_seconds": 8}]
+  "scenes": [{"scene_number": 1, "narration_text": "The exact narration text for this scene segment...", "image_prompt": "[STYLE INSTRUCTION]. [FULL VISUAL DESCRIPTION]. [FULL CHARACTER APPEARANCE BLOCK — copy-paste the entire character description word-for-word when that character appears].", "animation_prompt": "Slow zoom in on subject, slight camera pan left to right, atmospheric particles floating...", "duration_seconds": 8}]
 }
 
-**CRITICAL RULES FOR VISUAL CONSISTENCY:**
+**CRITICAL RULES FOR VISUAL CONSISTENCY — FOLLOW EXACTLY:**
 - EVERY image prompt MUST start with the style instruction: "${styleDirective}"
-- When ANY character appears in a scene, you MUST include their FULL physical description inline in the image prompt (hair color, clothing, facial features, build, etc.). NEVER just use their name — always re-describe them fully.
-- Characters must wear the SAME clothing and have the SAME appearance across ALL scenes unless the story explicitly says otherwise.
+- When ANY character appears in a scene, you MUST COPY-PASTE their COMPLETE character description from the "characters" array into the image prompt. Do NOT abbreviate, summarize, or paraphrase. Include EVERY detail: age, hair, facial hair, clothing, build, features. This is the #1 most important rule.
+- FACIAL HAIR IS CRITICAL: If a character has a beard, EVERY scene must say "full thick beard" (or whatever the exact description is). If clean-shaven, EVERY scene must say "clean-shaven". Never omit facial hair details.
+- Characters must wear the EXACT SAME clothing and have the EXACT SAME appearance across ALL scenes unless the story explicitly says otherwise.
 - Maintain consistent environment details (time of day, weather, location aesthetics) across related scenes.
 - Use the same color grading language across all prompts (e.g., "warm golden tones", "cool blue palette").
+- NEVER use generic descriptions like "a man" or "a gentleman" — always use the full character description block.
 
 **Other Rules:**
 - Split the narration into logical visual segments. Each scene = 5-15 seconds of narration.

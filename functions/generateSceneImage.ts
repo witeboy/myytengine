@@ -16,21 +16,25 @@ Deno.serve(async (req) => {
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: scene.project_id });
     const project = projects[0];
 
-    // Build reference context for the prompt
-    let referenceContext = "";
+    // Build the full prompt with enforced character consistency
+    let fullPrompt = scene.image_prompt;
     
-    // If project has character descriptions, prepend them
+    // If project has character descriptions, check if they're already in the image prompt.
+    // If not (or only partially), prepend them as a strong directive.
     if (project?.character_descriptions) {
       try {
         const chars = JSON.parse(project.character_descriptions);
         if (chars.length > 0) {
-          referenceContext = "CHARACTER REFERENCE (maintain exact appearance): " + 
-            chars.map(c => `${c.name}: ${c.description}`).join(". ") + ". ";
+          // Build a strong character consistency block
+          const charBlock = chars.map(c => 
+            `[CHARACTER: ${c.name} — ${c.description}]`
+          ).join(" ");
+          
+          // Prepend it to ensure the image generator sees it first
+          fullPrompt = `IMPORTANT — Maintain EXACT character appearance as described. ${charBlock}. ${fullPrompt}`;
         }
       } catch (_) {}
     }
-
-    const fullPrompt = referenceContext + scene.image_prompt;
 
     // Check if we have a reference image from scene 1 to use as style reference
     const referenceImages = [];
