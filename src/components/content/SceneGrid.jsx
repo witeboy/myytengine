@@ -64,7 +64,10 @@ export default function SceneGrid({ scenes, onRefetch }) {
       onRefetch();
     },
     onAnimateScene: async () => {
-      await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
+      const res = await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
+      if (res.data?.error) {
+        throw new Error(res.data.error);
+      }
       onRefetch();
     },
     onSceneUpdated: () => onRefetch(),
