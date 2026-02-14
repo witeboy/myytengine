@@ -143,10 +143,16 @@ export default function ContentGeneration() {
                 )}
           ) : (
             <>
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Layers className="w-4 h-4 text-blue-600" />
-                {scenes.length} scenes
-              </div>
+              {project?.visual_style && (
+                      <Badge className="bg-purple-100 text-purple-800 text-xs">
+                        <Palette className="w-3 h-3 mr-1" />
+                        {project.visual_style.replace(/_/g, ' ')}
+                      </Badge>
+                    )}
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Layers className="w-4 h-4 text-blue-600" />
+                      {scenes.length} scenes
+                    </div>
               <div className="flex items-center gap-2 text-sm">
                 <ImageIcon className="w-4 h-4 text-green-600" />
                 {imageCount}/{scenes.length} images
