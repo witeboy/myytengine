@@ -38,13 +38,25 @@ Deno.serve(async (req) => {
       referenceImages.push(project.reference_image_url);
     }
 
-    // Generate with reference image if available
-    const generateParams = { prompt: fullPrompt };
-    if (referenceImages.length > 0) {
-      generateParams.existing_image_urls = referenceImages;
+    // Try generating with full context first, then fallback to simpler prompt
+    let result;
+    try {
+      const generateParams = { prompt: fullPrompt };
+      if (referenceImages.length > 0) {
+        generateParams.existing_image_urls = referenceImages;
+      }
+      result = await base44.asServiceRole.integrations.Core.GenerateImage(generateParams);
+    } catch (firstErr) {
+      console.log("First attempt failed, retrying with simpler prompt:", firstErr.message);
+      try {
+        // Retry without reference images
+        result = await base44.asServiceRole.integrations.Core.GenerateImage({ prompt: fullPrompt });
+      } catch (secondErr) {
+        console.log("Second attempt failed, retrying with base prompt only:", secondErr.message);
+        // Final retry with just the scene image prompt
+        result = await base44.asServiceRole.integrations.Core.GenerateImage({ prompt: scene.image_prompt });
+      }
     }
-
-    const result = await base44.asServiceRole.integrations.Core.GenerateImage(generateParams);
 
     // If this is scene 1 and project has no reference image yet, save it
     if (scene.scene_number === 1 && !project?.reference_image_url) {
