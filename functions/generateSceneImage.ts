@@ -1,13 +1,15 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 Deno.serve(async (req) => {
+  let base44;
+  let scene_id;
   try {
-    const base44 = createClientFromRequest(req);
+    base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
-    const scene_id = body.scene_id;
+    scene_id = body.scene_id;
 
     const scenes = await base44.asServiceRole.entities.Scenes.filter({ id: scene_id });
     const scene = scenes[0];
