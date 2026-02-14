@@ -47,25 +47,30 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.Scenes.delete(s.id);
     }
 
-    const prompt = `You are a video production expert. Break this script into individual visual scenes. For each scene:
-1. Extract the narration text
-2. Write an AI image generation prompt (photorealistic, cinematic, detailed)
-3. Write an animation direction prompt describing camera movement and action
+    const prompt = `You are a world-class video production director. You are given a pure narration script (voiceover text only, no visual directions). Your job is to:
 
-Script:
+1. Break the narration into individual scenes (each scene = a segment of narration that corresponds to one visual)
+2. For each scene, write a detailed AI image generation prompt describing what the viewer should SEE while this narration plays
+3. For each scene, write an animation/action prompt describing how the generated image should be animated (camera movement, motion, effects)
+
+**Narration Script:**
 """
 ${script.full_script.substring(0, 12000)}
 """
 
-Return JSON:
-{"scenes": [{"scene_number": 1, "narration_text": "...", "image_prompt": "Cinematic photograph of...", "animation_prompt": "Slow zoom in, camera pans left...", "duration_seconds": 8}]}
+**Topic context**: "${project.name}" in the "${project.niche}" niche
 
-Rules:
-- Each scene should be 5-15 seconds
-- Image prompts must be detailed, cinematic, photorealistic descriptions
-- Animation prompts describe camera movement (pan, zoom, dolly) and any motion
-- Keep narration text as-is from the script
-- Aim for ${Math.round(project.video_duration_minutes * 60 / 8)} scenes total`;
+Return JSON:
+{"scenes": [{"scene_number": 1, "narration_text": "The exact narration text for this scene segment...", "image_prompt": "Cinematic, photorealistic photograph of [detailed visual description matching the narration content]. Dramatic lighting, high detail, 8K quality, cinematic composition.", "animation_prompt": "Slow zoom in on subject, slight camera pan left to right, atmospheric particles floating...", "duration_seconds": 8}]}
+
+**Rules:**
+- Split the narration into logical visual segments. Each scene = 5-15 seconds of narration.
+- The narration_text must be the EXACT words from the script (do not modify, summarize, or paraphrase).
+- Image prompts must be highly detailed, cinematic, photorealistic descriptions that visually represent what the narration is describing. Include mood, lighting, setting, subjects, composition.
+- Animation prompts describe camera movement (slow zoom, pan, dolly, tracking shot), subject motion, atmospheric effects (particles, fog, light rays), and transitions.
+- Aim for approximately ${Math.round(project.video_duration_minutes * 60 / 8)} scenes total.
+- Ensure visual continuity — scenes should feel like a cohesive visual story.
+- Match the emotional tone of each narration segment with appropriate visual mood.`;
 
     const result = await callGemini(prompt, 0.6);
 

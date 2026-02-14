@@ -137,17 +137,23 @@ ${nextBatchHint}
 **Focus Areas**: ${batch.focus_area}
 **Target Word Count**: ~${batch.target_words || 1500} words (${Math.round((batch.target_words || 1500) / 150)} minutes)
 
+**CRITICAL OUTPUT FORMAT**:
+- Write ONLY the spoken narration text — the exact words the voiceover artist will read aloud.
+- Do NOT include any scene directions, visual descriptions, stage directions, or camera cues.
+- Do NOT include [SCENE: ...], [CUT TO: ...], [MUSIC: ...], [SOUND: ...] or any bracketed tags.
+- Do NOT include labels like "Narrator:", "VO:", "Act 1", or any speaker/section labels.
+- Do NOT include any metadata, JSON, or formatting instructions.
+- The output should be PURE narration text, paragraph by paragraph, ready to be converted directly to speech.
+
 **Narrative Requirements**:
 - Match the established tone, cadence, and character perspective from earlier batches
 - Maintain consistent pacing: 140-150 words per minute
 - Develop emotional arc: build curiosity, tension, then payoff
-- Each paragraph = one visual scene [SCENE: description]
 - Use dramatic pauses and strategic emphasis on key terms
+- Write vivid, evocative language that paints pictures with words (since visuals will be added separately)
 ${batch.batch_number < batches.length ? '- End with a hook/cliffhanger leading into the next segment' : '- End with a strong call to action and closing'}
 ${batch.batch_number === 1 ? '- Open strong to hook viewers in the first 10 seconds' : '- Continue naturally and seamlessly from where the previous batch left off'}
-- Keep character/subject voice consistent throughout
-
-Write ONLY the narration for this batch. Do not include JSON, labels, or metadata.`;
+- Keep character/subject voice consistent throughout`;
 
       const result = await safeGeminiCall(prompt, 0.8);
 
