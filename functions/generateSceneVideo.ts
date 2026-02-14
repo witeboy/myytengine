@@ -55,7 +55,8 @@ Deno.serve(async (req) => {
 
         // Log Runway error but fall through to Freepik
         const errText = await runwayRes.text();
-        console.log("Runway API error (falling back to Freepik):", runwayRes.status, errText);
+        console.error("Runway API error (status " + runwayRes.status + "):", errText);
+        console.log("Falling back to Freepik...");
       } catch (runwayErr) {
         console.error("Runway request failed:", runwayErr.message);
       }
