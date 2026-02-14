@@ -48,10 +48,9 @@ export default function StoryScript() {
   const [autoGenTriggered, setAutoGenTriggered] = useState(false);
   useEffect(() => {
     if (autoGenTriggered || generating) return;
-    const hasContent = batches.some(b => b.status === 'completed' && b.content);
-    const needsGeneration = !hasContent && batches.length > 0 && 
-      ['hooks_ready', 'scripting'].includes(project?.status);
-    if (needsGeneration) {
+    const hasPendingBatches = batches.length > 0 && batches.some(b => b.status === 'pending');
+    const hasNoContent = !batches.some(b => b.status === 'completed' && b.content);
+    if (hasPendingBatches && hasNoContent && project?.id) {
       setAutoGenTriggered(true);
       setGenerating(true);
       base44.functions.invoke('generateScriptBatches', {
@@ -60,7 +59,7 @@ export default function StoryScript() {
       }).then(() => Promise.all([refetchProject(), refetchBatches(), refetchScripts()]))
         .finally(() => setGenerating(false));
     }
-  }, [project?.status, batches.length, autoGenTriggered, generating]);
+  }, [project?.id, batches, autoGenTriggered, generating]);
 
   const handleRegenerate = async () => {
     setRegenerating(true);
