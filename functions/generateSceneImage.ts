@@ -95,6 +95,14 @@ Deno.serve(async (req) => {
     return Response.json({ success: true, image_url: result.url });
   } catch (error) {
     console.error("generateSceneImage error:", error.message);
+    // Mark scene as failed so user can rephrase the prompt
+    try {
+      const base44Fallback = createClientFromRequest(req);
+      const { scene_id: sid } = await req.clone().json().catch(() => ({}));
+      if (sid) {
+        await base44Fallback.asServiceRole.entities.Scenes.update(sid, { status: "failed" });
+      }
+    } catch (_) {}
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
