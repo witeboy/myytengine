@@ -100,19 +100,30 @@ Return JSON:
     });
     const taskId = res.data?.task_id;
     if (taskId) {
-      // Start polling for completion
+      let failCount = 0;
       const poll = setInterval(async () => {
-        const statusRes = await base44.functions.invoke('checkMusicStatus', {
-          task_id: taskId,
-          track_id: track.id,
-        });
-        const st = statusRes.data?.status;
-        if (st === 'COMPLETED' || st === 'completed' || st === 'FAILED' || st === 'failed') {
-          clearInterval(poll);
-          setGeneratingTrackId(null);
-          refetch();
+        try {
+          const statusRes = await base44.functions.invoke('checkMusicStatus', {
+            task_id: taskId,
+            track_id: track.id,
+          });
+          const st = statusRes.data?.status;
+          failCount = 0;
+          if (st === 'COMPLETED' || st === 'completed' || st === 'FAILED' || st === 'failed') {
+            clearInterval(poll);
+            setGeneratingTrackId(null);
+            refetch();
+          }
+        } catch (err) {
+          failCount++;
+          console.warn('Music status check failed:', err.message);
+          if (failCount >= 3) {
+            clearInterval(poll);
+            setGeneratingTrackId(null);
+            refetch();
+          }
         }
-      }, 5000);
+      }, 6000);
     }
   };
 
