@@ -23,7 +23,16 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Script not found' }, { status: 404 });
     }
 
-    const textToSpeak = script.full_script || script.act_1 + '\n\n' + script.act_2 + '\n\n' + script.act_3;
+    const rawText = script.full_script || [script.cold_open, script.act_1, script.act_2, script.act_3, script.outro].filter(Boolean).join('\n\n');
+
+    // Strip scene directions [SCENE: ...] and "Narrator:" tags to get pure narration
+    const textToSpeak = rawText
+      .replace(/\[SCENE:[^\]]*\]/gi, '')   // Remove [SCENE: ...] blocks
+      .replace(/\[.*?\]/g, '')              // Remove any other bracketed directions
+      .replace(/Narrator:\s*/gi, '')        // Remove "Narrator:" labels
+      .replace(/Sound:\s*[^\.\n]*/gi, '')   // Remove "Sound:" descriptions
+      .replace(/\n{3,}/g, '\n\n')           // Collapse excessive newlines
+      .trim();
 
     // Call ai33.pro text-to-speech API
     const ttsResponse = await fetch(`https://api.ai33.pro/v1/text-to-speech/${voice_id}?output_format=mp3_44100_128`, {
