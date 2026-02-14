@@ -27,6 +27,9 @@ export default function TimelineEditor() {
   const [currentTime, setCurrentTime] = useState(0);
   const [volume, setVolume] = useState(0.8);
   const playIntervalRef = useRef(null);
+  const voiceoverRef = useRef(null);
+  const musicRef = useRef(null);
+  const sfxRefs = useRef({});
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
