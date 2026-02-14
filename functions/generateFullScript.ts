@@ -33,8 +33,15 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'No completed batches found to merge.' }, { status: 400 });
     }
 
-    // Merge all batch content
-    const fullScript = batches.map(b => b.content).join("\n\n");
+    // Merge all batch content and strip any leftover scene/direction tags
+    let fullScript = batches.map(b => b.content).join("\n\n");
+    // Remove any [SCENE: ...], [CUT TO: ...], [MUSIC: ...], [SOUND: ...] tags
+    fullScript = fullScript.replace(/\[SCENE:[^\]]*\]/gi, '');
+    fullScript = fullScript.replace(/\[(CUT TO|MUSIC|SOUND|SFX|FADE|TRANSITION):[^\]]*\]/gi, '');
+    // Remove "Narrator:" or "VO:" labels
+    fullScript = fullScript.replace(/^(Narrator|VO|Voiceover)\s*:\s*/gim, '');
+    // Clean up extra blank lines
+    fullScript = fullScript.replace(/\n{3,}/g, '\n\n').trim();
     const totalWords = fullScript.split(/\s+/).filter(w => w.length > 0).length;
     const estimatedDuration = Math.round((totalWords / 150) * 60);
 

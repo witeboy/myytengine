@@ -164,7 +164,12 @@ ${batch.batch_number === 1 ? '- Open strong to hook viewers in the first 10 seco
         return Response.json({ error: result.error }, { status: 500 });
       }
 
-      const content = result.text;
+      // Clean any residual tags the LLM might have included despite instructions
+      let content = result.text;
+      content = content.replace(/\[SCENE:[^\]]*\]/gi, '');
+      content = content.replace(/\[(CUT TO|MUSIC|SOUND|SFX|FADE|TRANSITION):[^\]]*\]/gi, '');
+      content = content.replace(/^(Narrator|VO|Voiceover)\s*:\s*/gim, '');
+      content = content.replace(/\n{3,}/g, '\n\n').trim();
       const wordCount = content.split(/\s+/).length;
 
       // Save the last ~80 words for continuity into the next batch
