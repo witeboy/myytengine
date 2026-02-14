@@ -12,7 +12,7 @@ import VoiceoverPanel from '@/components/script/VoiceoverPanel';
 import VisualStyleSelector from '@/components/content/VisualStyleSelector';
 import MusicPanel from '@/components/content/MusicPanel';
 import AudioMixerPanel from '@/components/content/AudioMixerPanel';
-import { Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film, Palette } from 'lucide-react';
+import { Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film, Palette, Sparkles } from 'lucide-react';
 
 export default function ContentGeneration() {
   const navigate = useNavigate();
@@ -22,6 +22,7 @@ export default function ContentGeneration() {
   const [generatingImages, setGeneratingImages] = useState(false);
   const [generatingVideos, setGeneratingVideos] = useState(false);
   const [audioLevels, setAudioLevels] = useState({ narration: 1, music: 0.3, sfx: 0.5 });
+  const [enhancingAll, setEnhancingAll] = useState(false);
 
   const { data: project, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
@@ -79,6 +80,23 @@ export default function ContentGeneration() {
       await refetchScenes();
     }
     setGeneratingVideos(false);
+  };
+
+  // Enhance all scene prompts with AI
+  const handleEnhanceAll = async () => {
+    setEnhancingAll(true);
+    for (const scene of scenes) {
+      try {
+        await base44.functions.invoke('enhanceScenePrompts', {
+          scene_id: scene.id,
+          enhance_type: 'both',
+        });
+      } catch (err) {
+        console.warn(`Scene ${scene.scene_number} enhance failed:`, err.message);
+      }
+      await refetchScenes();
+    }
+    setEnhancingAll(false);
   };
 
   const handleExport = () => {
@@ -176,6 +194,15 @@ export default function ContentGeneration() {
                 {videoCount}/{scenes.length} videos
               </div>
               <div className="flex-1" />
+              <Button
+                onClick={handleEnhanceAll}
+                disabled={enhancingAll}
+                variant="outline"
+                className="border-purple-200 text-purple-700 hover:bg-purple-50"
+              >
+                {enhancingAll ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Sparkles className="w-4 h-4 mr-1" />}
+                {enhancingAll ? 'Enhancing...' : 'AI Enhance All'}
+              </Button>
               <Button
                 onClick={handleGenerateImages}
                 disabled={generatingImages}
