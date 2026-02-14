@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2, ImageIcon, Film, Settings2, RefreshCw } from 'lucide-react';
 import AnimationEditor from './AnimationEditor';
 import SceneSfxEditor from './SceneSfxEditor';
+import PromptEnhancer from './PromptEnhancer';
 
 const statusColors = {
   pending: 'bg-gray-100 text-gray-600',
@@ -113,6 +114,9 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
             <div>
               <p className="font-medium text-gray-500">Animation Prompt:</p>
               <p className="text-gray-600">{scene.animation_prompt}</p>
+            </div>
+            <div className="pt-2 border-t border-dashed">
+              <PromptEnhancer scene={scene} onEnhanced={onSceneUpdated} />
             </div>
           </div>
         </details>
