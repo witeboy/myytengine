@@ -38,22 +38,30 @@ Deno.serve(async (req) => {
     const totalWords = fullScript.split(/\s+/).filter(w => w.length > 0).length;
     const estimatedDuration = Math.round((totalWords / 150) * 60);
 
-    // Delete old scripts for this project
+    // Check if a draft script already exists — update it instead of creating duplicates
     const oldScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
-    for (const s of oldScripts) {
-      await base44.asServiceRole.entities.Scripts.delete(s.id);
-    }
+    const existingDraft = oldScripts.find(s => s.version === 'draft');
 
-    // Create merged script record
-    const script = await base44.asServiceRole.entities.Scripts.create({
-      project_id,
-      topic_id: project.selected_topic_id,
-      version: "draft",
-      title: topic?.title || project.name,
-      full_script: fullScript.trim(),
-      word_count: totalWords,
-      estimated_duration_sec: estimatedDuration
-    });
+    let script;
+    if (existingDraft) {
+      await base44.asServiceRole.entities.Scripts.update(existingDraft.id, {
+        full_script: fullScript.trim(),
+        word_count: totalWords,
+        estimated_duration_sec: estimatedDuration,
+        title: topic?.title || project.name,
+      });
+      script = { ...existingDraft, id: existingDraft.id };
+    } else {
+      script = await base44.asServiceRole.entities.Scripts.create({
+        project_id,
+        topic_id: project.selected_topic_id,
+        version: "draft",
+        title: topic?.title || project.name,
+        full_script: fullScript.trim(),
+        word_count: totalWords,
+        estimated_duration_sec: estimatedDuration
+      });
+    }
 
     // Update project
     await base44.asServiceRole.entities.Projects.update(project_id, {
