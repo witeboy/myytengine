@@ -55,9 +55,14 @@ export default function ContentGeneration() {
     setGeneratingImages(true);
     const pending = scenes.filter(s => s.status === 'prompts_ready' || !s.image_url);
     for (const scene of pending) {
-      await base44.functions.invoke('generateSceneImage', { scene_id: scene.id });
+      try {
+        await base44.functions.invoke('generateSceneImage', { scene_id: scene.id });
+      } catch (err) {
+        console.warn(`Scene ${scene.scene_number} image failed, skipping:`, err.message);
+      }
+      // Refresh after each scene so user sees progress
+      await refetchScenes();
     }
-    await refetchScenes();
     setGeneratingImages(false);
   };
 
@@ -66,9 +71,13 @@ export default function ContentGeneration() {
     setGeneratingVideos(true);
     const ready = scenes.filter(s => s.image_url && s.status === 'image_generated');
     for (const scene of ready) {
-      await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
+      try {
+        await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
+      } catch (err) {
+        console.warn(`Scene ${scene.scene_number} video failed, skipping:`, err.message);
+      }
+      await refetchScenes();
     }
-    await refetchScenes();
     setGeneratingVideos(false);
   };
 
