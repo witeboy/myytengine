@@ -157,24 +157,10 @@ export default function ContentGeneration() {
           )}
         </div>
 
-        {/* Scene Grid */}
+        {/* Scene Grid with Drag & Drop, Acts, and Notes */}
         {scenes.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-            {scenes.map(scene => (
-              <SceneCard
-                key={scene.id}
-                scene={scene}
-                onRegenerateImage={async () => {
-                  await base44.functions.invoke('generateSceneImage', { scene_id: scene.id });
-                  refetchScenes();
-                }}
-                onAnimateScene={async () => {
-                  await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
-                  refetchScenes();
-                }}
-                onSceneUpdated={() => refetchScenes()}
-              />
-            ))}
+          <div className="mb-8">
+            <SceneGrid scenes={scenes} onRefetch={refetchScenes} />
           </div>
         )}
 
