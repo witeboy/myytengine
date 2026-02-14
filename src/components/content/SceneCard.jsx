@@ -19,19 +19,26 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
   const [polling, setPolling] = useState(false);
   const pollRef = useRef(null);
 
-  // Check if scene has a pending freepik task
-  const freepikTaskId = scene.video_url?.startsWith('freepik_task:')
-    ? scene.video_url.replace('freepik_task:', '')
-    : null;
+  // Check if scene has a pending video task (runway or freepik)
+  const pendingTask = (() => {
+    if (scene.video_url?.startsWith('runway_task:')) {
+      return { taskId: scene.video_url.replace('runway_task:', ''), provider: 'runway' };
+    }
+    if (scene.video_url?.startsWith('freepik_task:')) {
+      return { taskId: scene.video_url.replace('freepik_task:', ''), provider: 'freepik' };
+    }
+    return null;
+  })();
 
   useEffect(() => {
-    if (freepikTaskId && !polling) {
+    if (pendingTask && !polling) {
       setPolling(true);
       setLoadingVideo(true);
       pollRef.current = setInterval(async () => {
         const res = await base44.functions.invoke('checkSceneVideoStatus', {
-          task_id: freepikTaskId,
+          task_id: pendingTask.taskId,
           scene_id: scene.id,
+          provider: pendingTask.provider,
         });
         const status = res.data?.status;
         if (status === 'COMPLETED' || status === 'FAILED') {
@@ -45,7 +52,7 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [freepikTaskId]);
+  }, [pendingTask?.taskId]);
 
   const handleImage = async () => {
     setLoadingImage(true);
@@ -63,7 +70,7 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
     <Card className="overflow-hidden">
       {/* Image/Video Preview */}
       <div className="aspect-video bg-gray-100 relative">
-        {scene.video_url && !scene.video_url.startsWith('freepik_task:') ? (
+        {scene.video_url && !scene.video_url.startsWith('freepik_task:') && !scene.video_url.startsWith('runway_task:') ? (
           <video src={scene.video_url} controls className="w-full h-full object-cover" />
         ) : scene.image_url ? (
           <img src={scene.image_url} alt={`Scene ${scene.scene_number}`} className="w-full h-full object-cover" />
