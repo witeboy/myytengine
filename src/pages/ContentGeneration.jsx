@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { createPageUrl } from '@/utils';
 import StageProgress from '@/components/StageProgress';
-import SceneCard from '@/components/content/SceneCard';
+import SceneGrid from '@/components/content/SceneGrid';
 import VoiceoverPanel from '@/components/script/VoiceoverPanel';
 import { Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film } from 'lucide-react';
 
