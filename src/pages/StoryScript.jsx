@@ -1,17 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { createPageUrl } from '@/utils';
 import StageProgress from '@/components/StageProgress';
 import BatchCard from '@/components/script/BatchCard';
 import ScriptEditor from '@/components/script/ScriptEditor';
-import { Loader2, RefreshCw, Download, ArrowRight, FileText, Image } from 'lucide-react';
+import { Loader2, RefreshCw, Download, ArrowRight, FileText } from 'lucide-react';
 
 export default function StoryScript() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const projectId = new URLSearchParams(window.location.search).get('project_id');
   const [generating, setGenerating] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
