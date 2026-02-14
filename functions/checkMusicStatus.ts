@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
       return Response.json({ status: 'FAILED', error: 'No audio URL in response' });
     }
 
-    if (taskStatus === 'failed') {
+    if (isFailed) {
       if (track_id) {
         await base44.asServiceRole.entities.MusicTracks.update(track_id, { status: 'failed' });
       }
