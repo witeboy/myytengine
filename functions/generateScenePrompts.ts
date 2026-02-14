@@ -74,11 +74,29 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.Scenes.delete(s.id);
     }
 
+    // Visual style mapping
+    const styleMap = {
+      cinematic_realistic: "Cinematic realistic film still, dramatic lighting, shallow depth of field, Hollywood production quality, moody atmosphere",
+      photorealistic_4k: "Ultra-photorealistic 4K photography, sharp detail, natural lighting, DSLR quality, editorial photo",
+      cinematic_anime: "Cinematic anime style, dramatic lighting and composition, detailed anime illustration with film-like framing, Makoto Shinkai inspired",
+      anime: "Anime illustration style, vibrant colors, clean linework, expressive characters, manga-influenced, detailed anime art",
+      cartoon_2d: "2D cartoon style, flat colors, bold outlines, playful and colorful, animated series quality, clean vector-like illustration",
+      picstory_cocomelon: "3D rendered children's animation style like Cocomelon/PicStory, bright colors, soft rounded characters, cheerful and cute, Pixar-like rendering for kids",
+      cinematic_picstory: "Cinematic 3D animation style like Pixar/DreamWorks, high-quality 3D rendering, dramatic lighting, expressive 3D characters, movie-quality CGI",
+      oil_painting: "Classical oil painting style, rich textures, visible brushstrokes, Renaissance-inspired composition, warm color palette, museum-quality artwork",
+      watercolor: "Soft watercolor illustration, gentle color washes, delicate details, dreamy and ethereal atmosphere, artistic illustration",
+      comic_book: "Bold comic book style, strong ink outlines, halftone dot shading, dynamic panel composition, vibrant saturated colors, graphic novel quality",
+    };
+
+    const visualStyle = project.visual_style || 'cinematic_realistic';
+    const styleDirective = styleMap[visualStyle] || styleMap.cinematic_realistic;
+
     const prompt = `You are a world-class video production director. You are given a pure narration script (voiceover text only, no visual directions). Your job is to:
 
 1. Break the narration into individual scenes (each scene = a segment of narration that corresponds to one visual)
 2. For each scene, write a detailed AI image generation prompt describing what the viewer should SEE while this narration plays
 3. For each scene, write an animation/action prompt describing how the generated image should be animated (camera movement, motion, effects)
+4. FIRST, identify all KEY CHARACTERS in the story and write detailed character descriptions (appearance, clothing, features, age, build, etc.)
 
 **Narration Script:**
 """
@@ -87,14 +105,27 @@ ${script.full_script.substring(0, 12000)}
 
 **Topic context**: "${project.name}" in the "${project.niche}" niche
 
-Return JSON:
-{"scenes": [{"scene_number": 1, "narration_text": "The exact narration text for this scene segment...", "image_prompt": "Cinematic, photorealistic photograph of [detailed visual description matching the narration content]. Dramatic lighting, high detail, 8K quality, cinematic composition.", "animation_prompt": "Slow zoom in on subject, slight camera pan left to right, atmospheric particles floating...", "duration_seconds": 8}]}
+**MANDATORY VISUAL STYLE**: ${styleDirective}
 
-**Rules:**
+Return JSON:
+{
+  "characters": [
+    {"name": "Character Name", "description": "Detailed physical description: age, gender, ethnicity, hair color/style, facial features, body build, clothing, distinguishing features. Be VERY specific so the character looks identical in every scene."}
+  ],
+  "scenes": [{"scene_number": 1, "narration_text": "The exact narration text for this scene segment...", "image_prompt": "[STYLE INSTRUCTION]. [Detailed visual description]. [Character descriptions repeated inline when characters appear].", "animation_prompt": "Slow zoom in on subject, slight camera pan left to right, atmospheric particles floating...", "duration_seconds": 8}]
+}
+
+**CRITICAL RULES FOR VISUAL CONSISTENCY:**
+- EVERY image prompt MUST start with the style instruction: "${styleDirective}"
+- When ANY character appears in a scene, you MUST include their FULL physical description inline in the image prompt (hair color, clothing, facial features, build, etc.). NEVER just use their name — always re-describe them fully.
+- Characters must wear the SAME clothing and have the SAME appearance across ALL scenes unless the story explicitly says otherwise.
+- Maintain consistent environment details (time of day, weather, location aesthetics) across related scenes.
+- Use the same color grading language across all prompts (e.g., "warm golden tones", "cool blue palette").
+
+**Other Rules:**
 - Split the narration into logical visual segments. Each scene = 5-15 seconds of narration.
 - The narration_text must be the EXACT words from the script (do not modify, summarize, or paraphrase).
-- Image prompts must be highly detailed, cinematic, photorealistic descriptions that visually represent what the narration is describing. Include mood, lighting, setting, subjects, composition.
-- Animation prompts describe camera movement (slow zoom, pan, dolly, tracking shot), subject motion, atmospheric effects (particles, fog, light rays), and transitions.
+- Animation prompts describe camera movement (slow zoom, pan, dolly, tracking shot), subject motion, atmospheric effects.
 - Aim for approximately ${Math.round(project.video_duration_minutes * 60 / 8)} scenes total.
 - Ensure visual continuity — scenes should feel like a cohesive visual story.
 - Match the emotional tone of each narration segment with appropriate visual mood.`;
