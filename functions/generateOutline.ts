@@ -34,13 +34,22 @@ async function callGemini(prompt, temperature = 0.7) {
     text = text.split("```")[1].split("```")[0].trim();
   }
 
-  // Remove control characters that break JSON.parse
-  text = text.replace(/[\x00-\x1F\x7F]/g, (ch) => {
-    if (ch === '\n' || ch === '\r' || ch === '\t') return ' ';
-    return '';
-  });
+  // Replace literal newlines/tabs/carriage returns inside JSON strings with spaces
+  // First pass: collapse all control chars to spaces
+  text = text.replace(/[\x00-\x1F\x7F]/g, ' ');
+  // Collapse multiple spaces
+  text = text.replace(/  +/g, ' ');
 
-  return JSON.parse(text);
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    // Last resort: try to extract JSON object from the text
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) {
+      return JSON.parse(match[0]);
+    }
+    throw new Error("Failed to parse Gemini JSON: " + e.message);
+  }
 }
 
 Deno.serve(async (req) => {
