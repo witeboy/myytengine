@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Mic, Play, Pause, Download, Volume2 } from 'lucide-react';
+import { Loader2, Mic, Play, Pause, Download, Volume2, Square } from 'lucide-react';
 
 export default function VoiceoverPanel({ project, script, onUpdate }) {
   const [voices, setVoices] = useState([]);
@@ -14,6 +14,8 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
   const [playing, setPlaying] = useState(false);
   const [error, setError] = useState('');
   const audioRef = useRef(null);
+  const previewAudioRef = useRef(null);
+  const [previewingVoice, setPreviewingVoice] = useState(null);
 
   // Fetch production settings for existing voiceover
   const [settings, setSettings] = useState(null);
@@ -85,6 +87,40 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
     }, 300000);
   };
 
+  const handlePreviewVoice = (voice) => {
+    const previewUrl = voice.preview_url;
+    if (!previewUrl) return;
+
+    // If already previewing this voice, stop it
+    if (previewingVoice === voice.voice_id && previewAudioRef.current) {
+      previewAudioRef.current.pause();
+      previewAudioRef.current.currentTime = 0;
+      setPreviewingVoice(null);
+      return;
+    }
+
+    // Stop any current preview
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause();
+    }
+
+    const audio = new Audio(previewUrl);
+    previewAudioRef.current = audio;
+    setPreviewingVoice(voice.voice_id);
+    audio.play();
+    audio.onended = () => setPreviewingVoice(null);
+    audio.onerror = () => setPreviewingVoice(null);
+  };
+
+  // Cleanup preview audio on unmount
+  useEffect(() => {
+    return () => {
+      if (previewAudioRef.current) {
+        previewAudioRef.current.pause();
+      }
+    };
+  }, []);
+
   const togglePlay = () => {
     if (!audioRef.current) return;
     if (playing) {
@@ -129,11 +165,51 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
               <SelectContent>
                 {voices.map(v => (
                   <SelectItem key={v.voice_id} value={v.voice_id}>
-                    {v.name} {v.labels?.accent ? `(${v.labels.accent})` : ''}
+                    {v.name} {v.labels?.accent ? `(${v.labels.accent})` : ''} {v.labels?.gender ? `· ${v.labels.gender}` : ''}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+
+            {/* Voice Preview Cards */}
+            {voices.length > 0 && (
+              <div className="mt-3 max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                {voices
+                  .filter(v => v.preview_url)
+                  .slice(0, 20)
+                  .map(v => {
+                    const isSelected = selectedVoice === v.voice_id;
+                    const isPreviewing = previewingVoice === v.voice_id;
+                    return (
+                      <div
+                        key={v.voice_id}
+                        className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all text-sm ${
+                          isSelected ? 'bg-purple-50 border-purple-300' : 'bg-white hover:bg-gray-50 border-gray-200'
+                        }`}
+                        onClick={() => setSelectedVoice(v.voice_id)}
+                      >
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handlePreviewVoice(v); }}
+                          className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                            isPreviewing ? 'bg-purple-600 text-white' : 'bg-gray-100 hover:bg-purple-100 text-gray-600 hover:text-purple-700'
+                          }`}
+                        >
+                          {isPreviewing ? <Square className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{v.name}</p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {[v.labels?.accent, v.labels?.gender, v.labels?.age, v.labels?.use_case].filter(Boolean).join(' · ')}
+                          </p>
+                        </div>
+                        {isSelected && (
+                          <Badge className="bg-purple-100 text-purple-700 text-[10px] flex-shrink-0">Selected</Badge>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
           )}
         </div>
 
