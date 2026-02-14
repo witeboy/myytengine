@@ -17,7 +17,35 @@ Deno.serve(async (req) => {
     }
 
     const duration = scene.duration_seconds && scene.duration_seconds >= 10 ? 10 : 5;
-    const prompt = scene.animation_prompt || "Subtle cinematic motion, slow camera movement";
+
+    // Build animation prompt from scene settings
+    let prompt = scene.animation_prompt || "Subtle cinematic motion, slow camera movement";
+    const cameraMap = {
+      static: "Static camera, no movement",
+      slow_pan: "Slow horizontal pan",
+      slow_zoom_in: "Slow push-in zoom",
+      slow_zoom_out: "Slow pull-out zoom",
+      dolly_zoom: "Dolly zoom vertigo effect",
+      crane_shot: "Rising crane shot",
+      tracking_shot: "Tracking shot following subject",
+      orbital: "Orbital rotation around subject",
+      tilt_up: "Slow upward tilt",
+      tilt_down: "Slow downward tilt"
+    };
+    const speedMap = { very_slow: "very slow pace", slow: "slow pace", normal: "moderate pace", fast: "fast dynamic pace" };
+
+    if (scene.camera_movement && cameraMap[scene.camera_movement]) {
+      prompt = cameraMap[scene.camera_movement] + ". " + prompt;
+    }
+    if (scene.animation_speed && speedMap[scene.animation_speed]) {
+      prompt += ". " + speedMap[scene.animation_speed];
+    }
+    if (scene.visual_effects) {
+      try {
+        const fx = JSON.parse(scene.visual_effects);
+        if (fx.length > 0) prompt += ". Visual effects: " + fx.join(", ");
+      } catch (_) {}
+    }
 
     // Try Runway first
     const runwayKey = Deno.env.get("RUNWAY_API_KEY");
