@@ -33,13 +33,20 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'No completed batches found to merge.' }, { status: 400 });
     }
 
-    // Merge all batch content and strip any leftover scene/direction tags
+    // Merge all batch content and aggressively strip any non-narration content
     let fullScript = batches.map(b => b.content).join("\n\n");
-    // Remove any [SCENE: ...], [CUT TO: ...], [MUSIC: ...], [SOUND: ...] tags
-    fullScript = fullScript.replace(/\[SCENE:[^\]]*\]/gi, '');
-    fullScript = fullScript.replace(/\[(CUT TO|MUSIC|SOUND|SFX|FADE|TRANSITION):[^\]]*\]/gi, '');
-    // Remove "Narrator:" or "VO:" labels
+    // Remove all bracketed tags
+    fullScript = fullScript.replace(/\[[^\]]*\]/gi, '');
+    // Remove **VISUAL:** / **AUDIO:** / **MUSIC:** etc. lines
+    fullScript = fullScript.replace(/\*\*(VISUAL|AUDIO|MUSIC|SOUND|SFX|TRANSITION|CUT TO|FADE|NOTE|DIRECTION|CAMERA|IMAGE)[:\s]?\*\*[^\n]*/gi, '');
+    // Remove standalone direction lines without bold markers
+    fullScript = fullScript.replace(/^(VISUAL|AUDIO|MUSIC|SOUND|SFX|TRANSITION|CUT TO|FADE|CAMERA)\s*:.*$/gim, '');
+    // Remove timestamp patterns like (0:00-2:00)
+    fullScript = fullScript.replace(/\(?\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\)?/g, '');
+    // Remove "Narrator:", "VO:" labels
     fullScript = fullScript.replace(/^(Narrator|VO|Voiceover)\s*:\s*/gim, '');
+    // Remove bold markdown headers like **Act 1:** or **Opening:**
+    fullScript = fullScript.replace(/^\*\*[^*]+\*\*:?\s*$/gim, '');
     // Clean up extra blank lines
     fullScript = fullScript.replace(/\n{3,}/g, '\n\n').trim();
     const totalWords = fullScript.split(/\s+/).filter(w => w.length > 0).length;

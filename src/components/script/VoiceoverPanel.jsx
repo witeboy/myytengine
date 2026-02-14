@@ -197,10 +197,9 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
 
               {/* Voice Preview Cards */}
               {voices.length > 0 && (
-                <div className="mt-3 max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                <div className="mt-3 max-h-72 overflow-y-auto space-y-1.5 pr-1">
                   {voices
                     .filter(v => v.preview_url)
-                    .slice(0, 20)
                     .map(v => {
                       const isSelected = selectedVoice === v.voice_id;
                       const isPreviewing = previewingVoice === v.voice_id;

@@ -143,6 +143,9 @@ ${nextBatchHint}
 - Do NOT include [SCENE: ...], [CUT TO: ...], [MUSIC: ...], [SOUND: ...] or any bracketed tags.
 - Do NOT include labels like "Narrator:", "VO:", "Act 1", or any speaker/section labels.
 - Do NOT include any metadata, JSON, or formatting instructions.
+- Do NOT include timestamps like (0:00-2:00) or any time markers.
+- Do NOT include **VISUAL:** descriptions, **AUDIO:** cues, or any production directions.
+- Do NOT use markdown bold headers like **Act 1:** or **Opening:** — just write flowing narration.
 - The output should be PURE narration text, paragraph by paragraph, ready to be converted directly to speech.
 
 **Narrative Requirements**:
@@ -164,11 +167,21 @@ ${batch.batch_number === 1 ? '- Open strong to hook viewers in the first 10 seco
         return Response.json({ error: result.error }, { status: 500 });
       }
 
-      // Clean any residual tags the LLM might have included despite instructions
+      // Aggressively clean any residual non-narration content
       let content = result.text;
-      content = content.replace(/\[SCENE:[^\]]*\]/gi, '');
-      content = content.replace(/\[(CUT TO|MUSIC|SOUND|SFX|FADE|TRANSITION):[^\]]*\]/gi, '');
+      // Remove bracketed tags: [SCENE: ...], [CUT TO: ...], [MUSIC: ...], etc.
+      content = content.replace(/\[[^\]]*\]/gi, '');
+      // Remove **VISUAL:** or **AUDIO:** or **MUSIC:** lines (with everything until next paragraph)
+      content = content.replace(/\*\*(VISUAL|AUDIO|MUSIC|SOUND|SFX|TRANSITION|CUT TO|FADE|NOTE|DIRECTION|CAMERA|IMAGE)[:\s]?\*\*[^\n]*/gi, '');
+      // Remove standalone visual/audio direction lines without bold markers
+      content = content.replace(/^(VISUAL|AUDIO|MUSIC|SOUND|SFX|TRANSITION|CUT TO|FADE|CAMERA)\s*:.*$/gim, '');
+      // Remove timestamp patterns like (0:00-2:00) or (0:00 - 2:00) or 0:00-2:00
+      content = content.replace(/\(?\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\)?/g, '');
+      // Remove "Narrator:", "VO:", etc. labels
       content = content.replace(/^(Narrator|VO|Voiceover)\s*:\s*/gim, '');
+      // Remove bold markdown headers like **Act 1:** or **Opening:**
+      content = content.replace(/^\*\*[^*]+\*\*:?\s*$/gim, '');
+      // Clean up extra blank lines
       content = content.replace(/\n{3,}/g, '\n\n').trim();
       const wordCount = content.split(/\s+/).length;
 
