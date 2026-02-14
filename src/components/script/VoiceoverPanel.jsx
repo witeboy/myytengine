@@ -54,27 +54,47 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       return;
     }
 
+    const taskId = res.data?.task_id;
+
     // Save voice selection to production settings
     if (settings) {
       await base44.entities.ProductionSettings.update(settings.id, {
         selected_voice_id: selectedVoice,
         voiceover_status: 'generating',
-        generation_task_id: res.data?.task_id,
+        generation_task_id: taskId,
       });
     } else {
-      await base44.entities.ProductionSettings.create({
+      const created = await base44.entities.ProductionSettings.create({
         project_id: project.id,
         selected_voice_id: selectedVoice,
         voiceover_status: 'generating',
-        generation_task_id: res.data?.task_id,
+        generation_task_id: taskId,
       });
+      setSettings(created);
     }
 
-    // Poll for completion
+    // Poll using checkVoiceoverStatus which checks the task and updates Projects entity
     const pollInterval = setInterval(async () => {
-      const updated = await base44.entities.ProductionSettings.filter({ project_id: project.id });
-      if (updated[0]?.voiceover_status === 'completed') {
-        setSettings(updated[0]);
+      const statusRes = await base44.functions.invoke('checkVoiceoverStatus', {
+        task_id: taskId,
+        project_id: project.id,
+      });
+      const status = statusRes.data?.status;
+      if (status === 'done') {
+        // Update production settings with the audio URL
+        const settingsRes = await base44.entities.ProductionSettings.filter({ project_id: project.id });
+        if (settingsRes[0]) {
+          await base44.entities.ProductionSettings.update(settingsRes[0].id, {
+            voiceover_status: 'completed',
+            voiceover_url: statusRes.data?.audio_url,
+          });
+          setSettings({ ...settingsRes[0], voiceover_status: 'completed', voiceover_url: statusRes.data?.audio_url });
+        }
+        setGenerating(false);
+        clearInterval(pollInterval);
+        onUpdate?.();
+      } else if (status === 'failed') {
+        setError(statusRes.data?.error_message || 'Voiceover generation failed');
         setGenerating(false);
         clearInterval(pollInterval);
       }
@@ -83,7 +103,10 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
     // Stop polling after 5 min
     setTimeout(() => {
       clearInterval(pollInterval);
-      setGenerating(false);
+      if (generating) {
+        setError('Voiceover generation timed out. Check back later.');
+        setGenerating(false);
+      }
     }, 300000);
   };
 
