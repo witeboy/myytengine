@@ -31,30 +31,45 @@ Deno.serve(async (req) => {
       defaultVoices = voicesData.voices || voicesData || [];
     }
 
-    // Fetch shared/public voice library (sorted by most used, up to 100)
+    // Fetch shared/public voice library — paginate to get many voices
     let libraryVoices = [];
     try {
-      const libResponse = await fetch(
-        'https://api.ai33.pro/v1/shared-voices?page_size=100&sort=usage_character_count_7d&sort_direction=desc',
-        { method: 'GET', headers }
-      );
-      if (libResponse.ok) {
+      let hasMore = true;
+      let pageToken = null;
+      let fetched = 0;
+      const maxVoices = 500;
+
+      while (hasMore && fetched < maxVoices) {
+        let url = 'https://api.ai33.pro/v1/shared-voices?page_size=100&sort=usage_character_count_7d&sort_direction=desc';
+        if (pageToken) url += `&next_page_token=${encodeURIComponent(pageToken)}`;
+
+        const libResponse = await fetch(url, { method: 'GET', headers });
+        if (!libResponse.ok) break;
+
         const libData = await libResponse.json();
-        libraryVoices = (libData.voices || []).map(v => ({
-          voice_id: v.voice_id,
-          name: v.name,
-          preview_url: v.preview_url,
-          labels: {
-            accent: v.accent,
-            gender: v.gender,
-            age: v.age,
-            use_case: v.use_case,
-            descriptive: v.descriptive,
-          },
-          description: v.description,
-          category: 'library',
-          usage_count: v.usage_character_count_7d || 0,
-        }));
+        const voices = libData.voices || [];
+        
+        for (const v of voices) {
+          libraryVoices.push({
+            voice_id: v.voice_id,
+            name: v.name,
+            preview_url: v.preview_url,
+            labels: {
+              accent: v.accent,
+              gender: v.gender,
+              age: v.age,
+              use_case: v.use_case,
+              descriptive: v.descriptive,
+            },
+            description: v.description,
+            category: 'library',
+            usage_count: v.usage_character_count_7d || 0,
+          });
+        }
+
+        fetched += voices.length;
+        pageToken = libData.next_page_token;
+        hasMore = !!pageToken && voices.length > 0;
       }
     } catch (e) {
       console.log('Library fetch failed, using defaults only:', e.message);
