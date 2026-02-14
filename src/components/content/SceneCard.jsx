@@ -3,7 +3,9 @@ import { base44 } from '@/api/base44Client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, ImageIcon, Film, RefreshCw } from 'lucide-react';
+import { Loader2, ImageIcon, Film, Settings2 } from 'lucide-react';
+import AnimationEditor from './AnimationEditor';
+import SceneSfxEditor from './SceneSfxEditor';
 
 const statusColors = {
   pending: 'bg-gray-100 text-gray-600',
@@ -17,16 +19,14 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
   const [loadingImage, setLoadingImage] = useState(false);
   const [loadingVideo, setLoadingVideo] = useState(false);
   const [polling, setPolling] = useState(false);
+  const [showAnimEditor, setShowAnimEditor] = useState(false);
   const pollRef = useRef(null);
 
-  // Check if scene has a pending video task (runway or freepik)
   const pendingTask = (() => {
-    if (scene.video_url?.startsWith('runway_task:')) {
+    if (scene.video_url?.startsWith('runway_task:'))
       return { taskId: scene.video_url.replace('runway_task:', ''), provider: 'runway' };
-    }
-    if (scene.video_url?.startsWith('freepik_task:')) {
+    if (scene.video_url?.startsWith('freepik_task:'))
       return { taskId: scene.video_url.replace('freepik_task:', ''), provider: 'freepik' };
-    }
     return null;
   })();
 
@@ -49,9 +49,7 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
         }
       }, 8000);
     }
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [pendingTask?.taskId]);
 
   const handleImage = async () => {
@@ -63,12 +61,11 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
   const handleVideo = async () => {
     setLoadingVideo(true);
     await onAnimateScene();
-    // After invoke, scene will have freepik_task:xxx, polling will start via useEffect on re-render
   };
 
   return (
     <Card className="overflow-hidden">
-      {/* Image/Video Preview */}
+      {/* Preview */}
       <div className="aspect-video bg-gray-100 relative">
         {scene.video_url && !scene.video_url.startsWith('freepik_task:') && !scene.video_url.startsWith('runway_task:') ? (
           <video src={scene.video_url} controls className="w-full h-full object-cover" />
@@ -91,7 +88,6 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
       </div>
 
       <CardContent className="pt-3 space-y-3">
-        {/* Narration */}
         <p className="text-sm text-gray-700 line-clamp-3">{scene.narration_text}</p>
 
         {/* Prompts collapsible */}
@@ -109,22 +105,44 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
           </div>
         </details>
 
+        {/* Animation settings badges */}
+        {(scene.camera_movement || scene.animation_speed) && (
+          <div className="flex flex-wrap gap-1">
+            {scene.camera_movement && (
+              <Badge variant="outline" className="text-[10px]">{scene.camera_movement.replace(/_/g, ' ')}</Badge>
+            )}
+            {scene.animation_speed && scene.animation_speed !== 'normal' && (
+              <Badge variant="outline" className="text-[10px]">{scene.animation_speed}</Badge>
+            )}
+          </div>
+        )}
+
         {/* Actions */}
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={handleImage} disabled={loadingImage} className="flex-1">
             {loadingImage ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <ImageIcon className="w-3 h-3 mr-1" />}
             {scene.image_url ? 'Regen' : 'Generate'}
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleVideo}
-            disabled={loadingVideo || !scene.image_url}
-            className="flex-1"
-          >
+          <Button size="sm" variant="outline" onClick={handleVideo} disabled={loadingVideo || !scene.image_url} className="flex-1">
             {loadingVideo ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Film className="w-3 h-3 mr-1" />}
             Animate
           </Button>
+          <Button size="sm" variant="ghost" onClick={() => setShowAnimEditor(!showAnimEditor)} className="px-2">
+            <Settings2 className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+
+        {/* Animation Editor Panel */}
+        {showAnimEditor && (
+          <div className="border-t pt-3">
+            <AnimationEditor scene={scene} onSave={() => { setShowAnimEditor(false); onSceneUpdated?.(); }} />
+          </div>
+        )}
+
+        {/* Sound Effect Editor */}
+        <div className="border-t pt-2">
+          <p className="text-[10px] font-medium text-gray-500 mb-1">Sound Effect</p>
+          <SceneSfxEditor scene={scene} onUpdate={onSceneUpdated} />
         </div>
       </CardContent>
     </Card>
