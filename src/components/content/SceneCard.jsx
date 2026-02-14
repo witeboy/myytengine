@@ -61,9 +61,11 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
 
   return (
     <Card className="overflow-hidden">
-      {/* Image Preview */}
+      {/* Image/Video Preview */}
       <div className="aspect-video bg-gray-100 relative">
-        {scene.image_url ? (
+        {scene.video_url && !scene.video_url.startsWith('freepik_task:') ? (
+          <video src={scene.video_url} controls className="w-full h-full object-cover" />
+        ) : scene.image_url ? (
           <img src={scene.image_url} alt={`Scene ${scene.scene_number}`} className="w-full h-full object-cover" />
         ) : (
           <div className="flex items-center justify-center h-full text-gray-400">
