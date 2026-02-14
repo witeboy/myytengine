@@ -31,7 +31,16 @@ async function safeGeminiCall(prompt, temperature = 0.8) {
       throw new Error("Gemini returned no candidates. Possibly content filtered.");
     }
 
-    const text = data.candidates[0].content.parts[0].text;
+    let text = data.candidates[0].content.parts[0].text;
+    
+    // Sanitize control characters inside JSON string values
+    text = text.replace(/[\x00-\x1F\x7F]/g, (ch) => {
+      if (ch === '\n') return '\\n';
+      if (ch === '\r') return '\\r';
+      if (ch === '\t') return '\\t';
+      return '';
+    });
+
     const parsed = JSON.parse(text);
 
     return { success: true, data: parsed, raw: text };
