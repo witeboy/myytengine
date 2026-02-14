@@ -9,7 +9,8 @@ import { createPageUrl } from '@/utils';
 import StageProgress from '@/components/StageProgress';
 import SceneGrid from '@/components/content/SceneGrid';
 import VoiceoverPanel from '@/components/script/VoiceoverPanel';
-import { Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film } from 'lucide-react';
+import VisualStyleSelector from '@/components/content/VisualStyleSelector';
+import { Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film, Palette } from 'lucide-react';
 
 export default function ContentGeneration() {
   const navigate = useNavigate();
@@ -115,13 +116,31 @@ export default function ContentGeneration() {
         </div>
         <p className="text-gray-600 mb-8">Import your script, generate scene images and animations</p>
 
+        {/* Visual Style Selector - show before scenes are generated */}
+        {scenes.length === 0 && project && (
+          <div className="bg-white p-5 rounded-lg shadow-sm border mb-6">
+            <VisualStyleSelector
+              selectedStyle={project.visual_style}
+              onSelect={async (style) => {
+                await base44.entities.Projects.update(projectId, { visual_style: style });
+                refetchProject();
+              }}
+            />
+          </div>
+        )}
+
         {/* Action Bar */}
         <div className="bg-white p-4 rounded-lg shadow-sm border mb-6 flex flex-wrap items-center gap-3">
           {scenes.length === 0 ? (
-            <Button onClick={handleImport} disabled={importing} className="bg-blue-600 hover:bg-blue-700">
-              {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Import className="w-4 h-4 mr-2" />}
-              {importing ? 'Breaking Script into Scenes...' : 'Import Script & Generate Scenes'}
-            </Button>
+            <Button onClick={handleImport} disabled={importing || !project?.visual_style} className="bg-blue-600 hover:bg-blue-700">
+                  {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Import className="w-4 h-4 mr-2" />}
+                  {importing ? 'Breaking Script into Scenes...' : 'Import Script & Generate Scenes'}
+                </Button>
+                {!project?.visual_style && (
+                  <p className="text-sm text-amber-600 flex items-center gap-1">
+                    <Palette className="w-4 h-4" /> Please select a visual style above first
+                  </p>
+                )}
           ) : (
             <>
               <div className="flex items-center gap-2 text-sm font-medium">
