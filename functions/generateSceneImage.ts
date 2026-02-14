@@ -6,7 +6,8 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { scene_id } = await req.json();
+    const body = await req.json();
+    const scene_id = body.scene_id;
 
     const scenes = await base44.asServiceRole.entities.Scenes.filter({ id: scene_id });
     const scene = scenes[0];
@@ -97,10 +98,8 @@ Deno.serve(async (req) => {
     console.error("generateSceneImage error:", error.message);
     // Mark scene as failed so user can rephrase the prompt
     try {
-      const base44Fallback = createClientFromRequest(req);
-      const { scene_id: sid } = await req.clone().json().catch(() => ({}));
-      if (sid) {
-        await base44Fallback.asServiceRole.entities.Scenes.update(sid, { status: "failed" });
+      if (scene_id) {
+        await base44.asServiceRole.entities.Scenes.update(scene_id, { status: "failed" });
       }
     } catch (_) {}
     return Response.json({ error: error.message }, { status: 500 });
