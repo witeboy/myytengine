@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { createPageUrl } from '@/utils';
 import StageProgress from '@/components/StageProgress';
 import SceneCard from '@/components/content/SceneCard';
+import VoiceoverPanel from '@/components/script/VoiceoverPanel';
 import { Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film } from 'lucide-react';
 
 export default function ContentGeneration() {
@@ -88,6 +89,13 @@ export default function ContentGeneration() {
     navigate(createPageUrl(`TimelineEditor?project_id=${projectId}`));
   };
 
+  const { data: scripts = [] } = useQuery({
+    queryKey: ['scripts', projectId],
+    queryFn: () => base44.entities.Scripts.filter({ project_id: projectId }),
+    enabled: !!projectId,
+  });
+  const latestScript = [...scripts].sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0];
+
   const imageCount = scenes.filter(s => s.image_url).length;
   const videoCount = scenes.filter(s => s.video_url).length;
 
@@ -166,6 +174,17 @@ export default function ContentGeneration() {
                 }}
               />
             ))}
+          </div>
+        )}
+
+        {/* Voiceover Panel */}
+        {latestScript && project && (
+          <div className="mb-8 max-w-md">
+            <VoiceoverPanel
+              project={project}
+              script={latestScript}
+              onUpdate={() => refetchProject()}
+            />
           </div>
         )}
 

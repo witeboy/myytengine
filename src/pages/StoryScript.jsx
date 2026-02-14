@@ -8,7 +8,7 @@ import StageProgress from '@/components/StageProgress';
 import BatchCard from '@/components/script/BatchCard';
 import ScriptEditor from '@/components/script/ScriptEditor';
 import VersionHistory from '@/components/script/VersionHistory';
-import VoiceoverPanel from '@/components/script/VoiceoverPanel';
+
 import { Loader2, RefreshCw, Download, ArrowRight, FileText, Image } from 'lucide-react';
 
 export default function StoryScript() {
@@ -227,13 +227,7 @@ export default function StoryScript() {
               currentScriptId={activeScript?.id}
               onSelect={(s) => setViewingScriptId(s.id)}
             />
-            {latestScript && project && (
-              <VoiceoverPanel
-                project={project}
-                script={latestScript}
-                onUpdate={() => refetchProject()}
-              />
-            )}
+
           </div>
         </div>
       </div>

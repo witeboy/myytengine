@@ -53,9 +53,9 @@ import Home from './pages/Home';
 import NewProject from './pages/NewProject';
 import StoryDuration from './pages/StoryDuration';
 import StoryHooks from './pages/StoryHooks';
+import StoryScript from './pages/StoryScript';
 import StoryTopics from './pages/StoryTopics';
 import TimelineEditor from './pages/TimelineEditor';
-import StoryScript from './pages/StoryScript';
 
 
 export const PAGES = {
@@ -65,9 +65,9 @@ export const PAGES = {
     "NewProject": NewProject,
     "StoryDuration": StoryDuration,
     "StoryHooks": StoryHooks,
+    "StoryScript": StoryScript,
     "StoryTopics": StoryTopics,
     "TimelineEditor": TimelineEditor,
-    "StoryScript": StoryScript,
 }
 
 export const pagesConfig = {
