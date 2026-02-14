@@ -172,6 +172,7 @@ export default function ContentGeneration() {
                   await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
                   refetchScenes();
                 }}
+                onSceneUpdated={() => refetchScenes()}
               />
             ))}
           </div>
