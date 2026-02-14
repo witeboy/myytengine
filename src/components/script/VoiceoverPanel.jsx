@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Mic, Play, Pause, Download, Volume2, Square } from 'lucide-react';
+import { Loader2, Mic, Play, Pause, Download, Volume2, Square, Search, X } from 'lucide-react';
 
 export default function VoiceoverPanel({ project, script, onUpdate }) {
   const [voices, setVoices] = useState([]);
@@ -16,9 +17,12 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
   const audioRef = useRef(null);
   const previewAudioRef = useRef(null);
   const [previewingVoice, setPreviewingVoice] = useState(null);
-
-  // Fetch production settings for existing voiceover
   const [settings, setSettings] = useState(null);
+
+  // Filters
+  const [searchQuery, setSearchQuery] = useState('');
+  const [genderFilter, setGenderFilter] = useState('all');
+  const [ageFilter, setAgeFilter] = useState('all');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -36,6 +40,28 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
     };
     if (project?.id) fetchData();
   }, [project?.id]);
+
+  const filteredVoices = useMemo(() => {
+    return voices.filter(v => {
+      if (!v.preview_url) return false;
+      const q = searchQuery.toLowerCase();
+      if (q) {
+        const name = (v.name || '').toLowerCase();
+        const desc = (v.description || '').toLowerCase();
+        const accent = (v.labels?.accent || '').toLowerCase();
+        if (!name.includes(q) && !desc.includes(q) && !accent.includes(q)) return false;
+      }
+      if (genderFilter !== 'all') {
+        const g = (v.labels?.gender || '').toLowerCase();
+        if (g !== genderFilter) return false;
+      }
+      if (ageFilter !== 'all') {
+        const a = (v.labels?.age || '').toLowerCase().replace(/\s+/g, '_');
+        if (a !== ageFilter) return false;
+      }
+      return true;
+    });
+  }, [voices, searchQuery, genderFilter, ageFilter]);
 
   const handleGenerate = async () => {
     if (!script?.id || !selectedVoice) return;
@@ -56,7 +82,6 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
 
     const taskId = res.data?.task_id;
 
-    // Save voice selection to production settings
     if (settings) {
       await base44.entities.ProductionSettings.update(settings.id, {
         selected_voice_id: selectedVoice,
@@ -73,7 +98,6 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       setSettings(created);
     }
 
-    // Poll using checkVoiceoverStatus which checks the task and updates Projects entity
     const pollInterval = setInterval(async () => {
       const statusRes = await base44.functions.invoke('checkVoiceoverStatus', {
         task_id: taskId,
@@ -81,7 +105,6 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       });
       const status = statusRes.data?.status;
       if (status === 'done') {
-        // Update production settings with the audio URL
         const settingsRes = await base44.entities.ProductionSettings.filter({ project_id: project.id });
         if (settingsRes[0]) {
           await base44.entities.ProductionSettings.update(settingsRes[0].id, {
@@ -100,7 +123,6 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       }
     }, 5000);
 
-    // Stop polling after 5 min
     setTimeout(() => {
       clearInterval(pollInterval);
       if (generating) {
@@ -114,7 +136,6 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
     const previewUrl = voice.preview_url;
     if (!previewUrl) return;
 
-    // If already previewing this voice, stop it
     if (previewingVoice === voice.voice_id && previewAudioRef.current) {
       previewAudioRef.current.pause();
       previewAudioRef.current.currentTime = 0;
@@ -122,7 +143,6 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       return;
     }
 
-    // Stop any current preview
     if (previewAudioRef.current) {
       previewAudioRef.current.pause();
     }
@@ -135,12 +155,9 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
     audio.onerror = () => setPreviewingVoice(null);
   };
 
-  // Cleanup preview audio on unmount
   useEffect(() => {
     return () => {
-      if (previewAudioRef.current) {
-        previewAudioRef.current.pause();
-      }
+      if (previewAudioRef.current) previewAudioRef.current.pause();
     };
   }, []);
 
@@ -162,6 +179,8 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
     a.click();
   };
 
+  const selectedVoiceData = voices.find(v => v.voice_id === selectedVoice);
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -182,57 +201,111 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
             </div>
           ) : (
             <>
-              <Select value={selectedVoice} onValueChange={setSelectedVoice}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a voice..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {voices.map(v => (
-                    <SelectItem key={v.voice_id} value={v.voice_id}>
-                      {v.name} {v.labels?.accent ? `(${v.labels.accent})` : ''} {v.labels?.gender ? `· ${v.labels.gender}` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Voice Preview Cards */}
-              {voices.length > 0 && (
-                <div className="mt-3 max-h-72 overflow-y-auto space-y-1.5 pr-1">
-                  {voices
-                    .filter(v => v.preview_url)
-                    .map(v => {
-                      const isSelected = selectedVoice === v.voice_id;
-                      const isPreviewing = previewingVoice === v.voice_id;
-                      return (
-                        <div
-                          key={v.voice_id}
-                          className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all text-sm ${
-                            isSelected ? 'bg-purple-50 border-purple-300' : 'bg-white hover:bg-gray-50 border-gray-200'
-                          }`}
-                          onClick={() => setSelectedVoice(v.voice_id)}
-                        >
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handlePreviewVoice(v); }}
-                            className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
-                              isPreviewing ? 'bg-purple-600 text-white' : 'bg-gray-100 hover:bg-purple-100 text-gray-600 hover:text-purple-700'
-                            }`}
-                          >
-                            {isPreviewing ? <Square className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
-                          </button>
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate">{v.name}</p>
-                            <p className="text-xs text-gray-500 truncate">
-                              {[v.labels?.accent, v.labels?.gender, v.labels?.age, v.labels?.use_case].filter(Boolean).join(' · ')}
-                            </p>
-                          </div>
-                          {isSelected && (
-                            <Badge className="bg-purple-100 text-purple-700 text-[10px] flex-shrink-0">Selected</Badge>
-                          )}
-                        </div>
-                      );
-                    })}
+              {/* Selected voice display */}
+              {selectedVoiceData && (
+                <div className="flex items-center gap-2 p-2.5 rounded-lg border border-purple-300 bg-purple-50 mb-3">
+                  <button
+                    onClick={() => handlePreviewVoice(selectedVoiceData)}
+                    className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                      previewingVoice === selectedVoiceData.voice_id ? 'bg-purple-600 text-white' : 'bg-purple-200 hover:bg-purple-300 text-purple-700'
+                    }`}
+                  >
+                    {previewingVoice === selectedVoiceData.voice_id ? <Square className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
+                  </button>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{selectedVoiceData.name}</p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {[selectedVoiceData.labels?.accent, selectedVoiceData.labels?.gender, selectedVoiceData.labels?.age, selectedVoiceData.labels?.use_case].filter(Boolean).join(' · ')}
+                    </p>
+                  </div>
+                  <Badge className="bg-purple-100 text-purple-700 text-[10px] flex-shrink-0">Selected</Badge>
                 </div>
               )}
+
+              {/* Search & Filters */}
+              <div className="space-y-2 mb-2">
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    placeholder="Search voices by name, accent..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-8 h-9 text-sm"
+                  />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Select value={genderFilter} onValueChange={setGenderFilter}>
+                    <SelectTrigger className="h-8 text-xs flex-1">
+                      <SelectValue placeholder="Gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Genders</SelectItem>
+                      <SelectItem value="male">Male</SelectItem>
+                      <SelectItem value="female">Female</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={ageFilter} onValueChange={setAgeFilter}>
+                    <SelectTrigger className="h-8 text-xs flex-1">
+                      <SelectValue placeholder="Age" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Ages</SelectItem>
+                      <SelectItem value="young">Young</SelectItem>
+                      <SelectItem value="middle_aged">Middle Aged</SelectItem>
+                      <SelectItem value="old">Old</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Voice count */}
+              <p className="text-xs text-gray-400 mb-1">{filteredVoices.length} voices available</p>
+
+              {/* Voice list */}
+              <div className="max-h-80 overflow-y-auto space-y-1.5 pr-1">
+                {filteredVoices.map(v => {
+                  const isSelected = selectedVoice === v.voice_id;
+                  const isPreviewing = previewingVoice === v.voice_id;
+                  return (
+                    <div
+                      key={v.voice_id}
+                      className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all text-sm ${
+                        isSelected ? 'bg-purple-50 border-purple-300' : 'bg-white hover:bg-gray-50 border-gray-200'
+                      }`}
+                      onClick={() => setSelectedVoice(v.voice_id)}
+                    >
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handlePreviewVoice(v); }}
+                        className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                          isPreviewing ? 'bg-purple-600 text-white' : 'bg-gray-100 hover:bg-purple-100 text-gray-600 hover:text-purple-700'
+                        }`}
+                      >
+                        {isPreviewing ? <Square className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium truncate">{v.name}</p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {[v.labels?.accent, v.labels?.gender, v.labels?.age, v.labels?.use_case].filter(Boolean).join(' · ')}
+                        </p>
+                        {v.description && (
+                          <p className="text-[11px] text-gray-400 truncate mt-0.5">{v.description}</p>
+                        )}
+                      </div>
+                      {isSelected && (
+                        <Badge className="bg-purple-100 text-purple-700 text-[10px] flex-shrink-0">Selected</Badge>
+                      )}
+                    </div>
+                  );
+                })}
+                {filteredVoices.length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-4">No voices match your filters</p>
+                )}
+              </div>
             </>
           )}
         </div>

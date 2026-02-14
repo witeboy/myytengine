@@ -14,25 +14,69 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'AI33_API_KEY not configured' }, { status: 500 });
     }
 
-    // Get available voices
+    const headers = {
+      'Content-Type': 'application/json',
+      'xi-api-key': API_KEY,
+    };
+
+    // Fetch default voices
     const voicesResponse = await fetch('https://api.ai33.pro/v2/voices', {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'xi-api-key': API_KEY,
-      },
+      headers,
     });
 
-    if (!voicesResponse.ok) {
-      const error = await voicesResponse.text();
-      return Response.json({ error: `Voices API error: ${error}` }, { status: 500 });
+    let defaultVoices = [];
+    if (voicesResponse.ok) {
+      const voicesData = await voicesResponse.json();
+      defaultVoices = voicesData.voices || voicesData || [];
     }
 
-    const voicesData = await voicesResponse.json();
+    // Fetch shared/public voice library (sorted by most used, up to 100)
+    let libraryVoices = [];
+    try {
+      const libResponse = await fetch(
+        'https://api.ai33.pro/v1/shared-voices?page_size=100&sort=usage_character_count_7d&sort_direction=desc',
+        { method: 'GET', headers }
+      );
+      if (libResponse.ok) {
+        const libData = await libResponse.json();
+        libraryVoices = (libData.voices || []).map(v => ({
+          voice_id: v.voice_id,
+          name: v.name,
+          preview_url: v.preview_url,
+          labels: {
+            accent: v.accent,
+            gender: v.gender,
+            age: v.age,
+            use_case: v.use_case,
+            descriptive: v.descriptive,
+          },
+          description: v.description,
+          category: 'library',
+          usage_count: v.usage_character_count_7d || 0,
+        }));
+      }
+    } catch (e) {
+      console.log('Library fetch failed, using defaults only:', e.message);
+    }
+
+    // Mark default voices
+    const taggedDefaults = defaultVoices.map(v => ({
+      ...v,
+      category: v.category || 'default',
+    }));
+
+    // Merge: defaults first, then library voices that aren't duplicates
+    const defaultIds = new Set(taggedDefaults.map(v => v.voice_id));
+    const combined = [
+      ...taggedDefaults,
+      ...libraryVoices.filter(v => !defaultIds.has(v.voice_id)),
+    ];
 
     return Response.json({
       success: true,
-      voices: voicesData.voices || voicesData,
+      voices: combined,
+      total: combined.length,
     });
   } catch (error) {
     return Response.json({ error: error.message }, { status: 500 });
