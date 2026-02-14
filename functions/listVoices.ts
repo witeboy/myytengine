@@ -31,18 +31,15 @@ Deno.serve(async (req) => {
       defaultVoices = voicesData.voices || voicesData || [];
     }
 
-    // Fetch shared/public voice library — paginate through all pages
+    // Fetch shared/public voice library — paginate through pages using page= param
     let libraryVoices = [];
     try {
       let hasMore = true;
-      let pageToken = null;
-      let pages = 0;
-      const maxPages = 10; // Up to ~1000 voices
+      let page = 0;
+      const maxPages = 5; // Up to ~500 voices
 
-      while (hasMore && pages < maxPages) {
-        let url = 'https://api.ai33.pro/v1/shared-voices?page_size=100&sort=usage_character_count_7d&sort_direction=desc';
-        if (pageToken) url += `&next_page_token=${encodeURIComponent(pageToken)}`;
-
+      while (hasMore && page < maxPages) {
+        const url = `https://api.ai33.pro/v1/shared-voices?page_size=100&sort=usage_character_count_7d&page=${page}`;
         const libResponse = await fetch(url, { method: 'GET', headers });
         if (!libResponse.ok) break;
 
@@ -67,23 +64,11 @@ Deno.serve(async (req) => {
           });
         }
 
-        pages++;
-        // Check for next page token - AI33/ElevenLabs uses different pagination
-        if (libData.next_page_token) {
-          pageToken = libData.next_page_token;
-        } else if (libData.has_more) {
-          // Some APIs use last_sort_id for cursor pagination
-          const lastVoice = voices[voices.length - 1];
-          if (lastVoice) {
-            pageToken = libData.last_sort_id || null;
-          }
-          if (!pageToken) hasMore = false;
-        } else {
-          hasMore = false;
-        }
+        page++;
+        hasMore = libData.has_more === true && voices.length > 0;
       }
       
-      console.log(`Fetched ${libraryVoices.length} library voices across ${pages} pages`);
+      console.log(`Fetched ${libraryVoices.length} library voices across ${page} pages`);
     } catch (e) {
       console.log('Library fetch failed, using defaults only:', e.message);
     }
