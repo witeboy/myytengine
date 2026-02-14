@@ -11,26 +11,69 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get('AI33_API_KEY');
     if (!apiKey) return Response.json({ error: 'AI33_API_KEY not configured' }, { status: 500 });
 
-    const response = await fetch(`https://api.ai33.pro/v1/task/${task_id}/status`, {
-      headers: { 'xi-api-key': apiKey },
-    });
+    // Try multiple possible status endpoint patterns
+    const urlsToTry = [
+      `https://api.ai33.pro/v1/task/${task_id}`,
+      `https://api.ai33.pro/v1/task/${task_id}/status`,
+      `https://api.ai33.pro/v1/task/sound-effect/${task_id}`,
+    ];
 
-    if (!response.ok) {
-      const errText = await response.text();
-      // If task not found (404), mark as failed instead of crashing
-      if (response.status === 404 && track_id) {
-        await base44.asServiceRole.entities.MusicTracks.update(track_id, { status: 'failed' });
-        return Response.json({ status: 'FAILED', error: 'Task not found' });
+    let data = null;
+    let lastError = '';
+
+    for (const url of urlsToTry) {
+      console.log('Trying status URL:', url);
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'xi-api-key': apiKey },
+      });
+
+      console.log(`Response from ${url}: ${response.status} ${response.statusText}`);
+      
+      if (response.ok) {
+        const contentType = response.headers.get('content-type') || '';
+        console.log('Content-Type:', contentType);
+
+        if (contentType.includes('audio') || contentType.includes('octet-stream')) {
+          // The endpoint returned audio directly
+          const audioBlob = await response.blob();
+          const file = new File([audioBlob], `music_${track_id || 'track'}.mp3`, { type: 'audio/mpeg' });
+          const uploaded = await base44.asServiceRole.integrations.Core.UploadFile({ file });
+
+          if (track_id) {
+            await base44.asServiceRole.entities.MusicTracks.update(track_id, {
+              audio_url: uploaded.file_url,
+              status: 'completed',
+              duration_seconds: 30,
+            });
+          }
+          return Response.json({ status: 'COMPLETED', audio_url: uploaded.file_url });
+        }
+
+        data = await response.json();
+        console.log('Status JSON:', JSON.stringify(data));
+        break;
+      } else {
+        lastError = await response.text();
+        console.log(`Failed: ${lastError}`);
       }
-      return Response.json({ error: `AI33 status error: ${errText}` }, { status: 500 });
     }
 
-    const data = await response.json();
-    const status = data.status; // e.g. "pending", "processing", "completed", "failed"
+    if (!data) {
+      console.error('All status endpoints failed. Last error:', lastError);
+      if (track_id) {
+        await base44.asServiceRole.entities.MusicTracks.update(track_id, { status: 'failed' });
+      }
+      return Response.json({ status: 'FAILED', error: 'Could not check task status' });
+    }
 
-    if (status === 'completed' && data.result_url && track_id) {
-      // Upload the audio to our storage for permanence
-      const audioResp = await fetch(data.result_url);
+    const status = data.status;
+
+    // Check for direct audio URL in response
+    const audioUrl = data.result_url || data.audio_url || data.url || data.output_url;
+
+    if ((status === 'completed' || status === 'COMPLETED' || status === 'succeeded') && audioUrl && track_id) {
+      const audioResp = await fetch(audioUrl);
       const audioBlob = await audioResp.blob();
       const file = new File([audioBlob], `music_${track_id}.mp3`, { type: 'audio/mpeg' });
       const uploaded = await base44.asServiceRole.integrations.Core.UploadFile({ file });
@@ -41,14 +84,18 @@ Deno.serve(async (req) => {
         duration_seconds: data.duration_seconds || 30,
       });
 
-      return Response.json({ status: 'completed', audio_url: uploaded.file_url });
+      return Response.json({ status: 'COMPLETED', audio_url: uploaded.file_url });
     }
 
-    if (status === 'failed' && track_id) {
+    if ((status === 'failed' || status === 'FAILED') && track_id) {
       await base44.asServiceRole.entities.MusicTracks.update(track_id, { status: 'failed' });
+      return Response.json({ status: 'FAILED' });
     }
 
-    return Response.json({ status: status === 'completed' ? 'COMPLETED' : status === 'failed' ? 'FAILED' : 'PROCESSING' });
+    return Response.json({
+      status: status === 'completed' || status === 'succeeded' ? 'COMPLETED' :
+             status === 'failed' ? 'FAILED' : 'PROCESSING'
+    });
   } catch (error) {
     console.error('checkMusicStatus error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
