@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { createPageUrl } from '@/utils';
 import StageProgress from '@/components/StageProgress';
-import { Loader2, CheckCircle2, RefreshCw, Download, ArrowRight, FileText, Eye, EyeOff } from 'lucide-react';
+import BatchCard from '@/components/script/BatchCard';
+import ScriptEditor from '@/components/script/ScriptEditor';
+import VersionHistory from '@/components/script/VersionHistory';
+import VoiceoverPanel from '@/components/script/VoiceoverPanel';
+import { Loader2, RefreshCw, Download, ArrowRight, FileText, Image } from 'lucide-react';
 
 export default function StoryScript() {
   const navigate = useNavigate();
@@ -15,8 +17,8 @@ export default function StoryScript() {
   const projectId = new URLSearchParams(window.location.search).get('project_id');
   const [generating, setGenerating] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
-  const [expandedBatch, setExpandedBatch] = useState(null);
-  const [showFullScript, setShowFullScript] = useState(false);
+  const [merging, setMerging] = useState(false);
+  const [generatingImageFor, setGeneratingImageFor] = useState(null);
 
   const { data: project, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
@@ -37,17 +39,18 @@ export default function StoryScript() {
     refetchInterval: generating ? 3000 : false,
   });
 
-  const { data: scripts = [] } = useQuery({
+  const { data: scripts = [], refetch: refetchScripts } = useQuery({
     queryKey: ['scripts', projectId],
-    queryFn: async () => {
-      return await base44.entities.Scripts.filter({ project_id: projectId });
-    },
+    queryFn: () => base44.entities.Scripts.filter({ project_id: projectId }),
     enabled: !!projectId,
   });
 
-  const latestScript = scripts.sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0];
-
-  const [merging, setMerging] = useState(false);
+  const [viewingScriptId, setViewingScriptId] = useState(null);
+  const sortedScripts = [...scripts].sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+  const latestScript = sortedScripts[0];
+  const activeScript = viewingScriptId
+    ? scripts.find(s => s.id === viewingScriptId) || latestScript
+    : latestScript;
 
   // Auto-generate batches if hooks_ready but no batch content yet
   useEffect(() => {
@@ -59,8 +62,7 @@ export default function StoryScript() {
           project_id: projectId,
           selected_hook_id: project.selected_hook_id,
         });
-        await Promise.all([refetchProject(), refetchBatches()]);
-        queryClient.invalidateQueries({ queryKey: ['scripts', projectId] });
+        await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
         setGenerating(false);
       }
     };
@@ -69,41 +71,45 @@ export default function StoryScript() {
 
   const handleRegenerate = async () => {
     setRegenerating(true);
-    // Clear old batches
     for (const b of batches) {
-      await base44.entities.ScriptBatches.update(b.id, { content: '', word_count: 0, status: 'pending' });
+      await base44.entities.ScriptBatches.update(b.id, { content: '', word_count: 0, status: 'pending', scene_image_url: '' });
     }
-    // Delete old scripts
     for (const s of scripts) {
       await base44.entities.Scripts.delete(s.id);
     }
-
     await base44.entities.Projects.update(projectId, { status: 'hooks_ready', script_id: '' });
     setGenerating(true);
     setRegenerating(false);
-
     await base44.functions.invoke('generateScriptBatches', {
       project_id: projectId,
       selected_hook_id: project.selected_hook_id,
     });
-
-    await Promise.all([refetchProject(), refetchBatches()]);
-    queryClient.invalidateQueries({ queryKey: ['scripts', projectId] });
+    await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
     setGenerating(false);
   };
 
-  // Merge completed batches into a full script (no Gemini call, no tokens used)
   const handleMergeScript = async () => {
     setMerging(true);
     await base44.functions.invoke('generateFullScript', { project_id: projectId });
-    await Promise.all([refetchProject(), refetchBatches()]);
-    queryClient.invalidateQueries({ queryKey: ['scripts', projectId] });
+    await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
     setMerging(false);
   };
 
+  const handleGenerateImage = async (batch) => {
+    setGeneratingImageFor(batch.id);
+    const firstLine = (batch.content || '').split('\n').find(l => l.trim()) || batch.focus_area;
+    const prompt = `Cinematic YouTube documentary scene: ${batch.story_segment}. ${firstLine.slice(0, 200)}. Dramatic lighting, high quality, 16:9 aspect ratio.`;
+    const res = await base44.integrations.Core.GenerateImage({ prompt });
+    if (res?.url) {
+      await base44.entities.ScriptBatches.update(batch.id, { scene_image_url: res.url });
+      refetchBatches();
+    }
+    setGeneratingImageFor(null);
+  };
+
   const handleExport = () => {
-    if (!latestScript?.full_script) return;
-    const blob = new Blob([latestScript.full_script], { type: 'text/plain' });
+    if (!activeScript?.full_script) return;
+    const blob = new Blob([activeScript.full_script], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -122,7 +128,8 @@ export default function StoryScript() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <StageProgress currentStage={1} />
-      <div className="max-w-5xl mx-auto px-4 py-8">
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        {/* Header */}
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-3xl font-bold">Script Generation</h1>
           <div className="flex gap-2">
@@ -134,7 +141,7 @@ export default function StoryScript() {
                 </Button>
                 <Button variant="outline" onClick={handleExport}>
                   <Download className="w-4 h-4 mr-1" />
-                  Export Script
+                  Export
                 </Button>
               </>
             )}
@@ -144,103 +151,95 @@ export default function StoryScript() {
           {generating ? 'AI is writing your script batch by batch...' : allCompleted ? 'Script generation complete.' : 'Preparing script...'}
         </p>
 
-        {/* Progress */}
-        {batches.length > 0 && (
-          <div className="bg-white p-4 rounded-lg shadow-sm border mb-6">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-medium text-sm flex items-center gap-2">
-                <FileText className="w-4 h-4 text-blue-600" />
-                {completedCount}/{batches.length} batches
-              </span>
-              {!allCompleted && <Loader2 className="w-4 h-4 animate-spin text-blue-600" />}
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-blue-600 h-2 rounded-full transition-all duration-500"
-                style={{ width: `${(completedCount / batches.length) * 100}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Batch Cards */}
-        <div className="space-y-4 mb-8">
-          {batches.map(batch => (
-            <Card key={batch.id} className={batch.status === 'completed' ? 'border-green-200' : ''}>
-              <CardHeader className="pb-2 cursor-pointer" onClick={() => setExpandedBatch(expandedBatch === batch.id ? null : batch.id)}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Badge variant="outline" className="font-mono">Batch {batch.batch_number}</Badge>
-                    <CardTitle className="text-base">{batch.story_segment}</CardTitle>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {batch.word_count > 0 && (
-                      <Badge className="bg-blue-100 text-blue-800">{batch.word_count} words</Badge>
-                    )}
-                    {batch.status === 'completed' ? (
-                      <CheckCircle2 className="w-5 h-5 text-green-600" />
-                    ) : batch.status === 'generating' ? (
-                      <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-                    ) : null}
-                  </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main column */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Progress */}
+            {batches.length > 0 && (
+              <div className="bg-white p-4 rounded-lg shadow-sm border">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-medium text-sm flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-blue-600" />
+                    {completedCount}/{batches.length} batches
+                  </span>
+                  {!allCompleted && <Loader2 className="w-4 h-4 animate-spin text-blue-600" />}
                 </div>
-                <p className="text-sm text-gray-500">{batch.focus_area}</p>
-              </CardHeader>
-              {expandedBatch === batch.id && batch.content && (
-                <CardContent>
-                  <div className="bg-gray-50 p-4 rounded-lg text-sm text-gray-700 whitespace-pre-wrap max-h-96 overflow-y-auto">
-                    {batch.content}
-                  </div>
-                </CardContent>
-              )}
-            </Card>
-          ))}
-        </div>
-
-        {/* Combine Button */}
-        {allCompleted && !latestScript && (
-          <div className="flex justify-center mb-8">
-            <Button onClick={handleMergeScript} disabled={merging} className="bg-green-600 hover:bg-green-700" size="lg">
-              {merging ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-5 h-5 mr-2" />}
-              {merging ? 'Combining Batches...' : 'Combine Batches into Full Script'}
-            </Button>
-          </div>
-        )}
-
-        {/* Full Script Preview */}
-        {latestScript && (
-          <Card className="mb-8">
-            <CardHeader className="cursor-pointer" onClick={() => setShowFullScript(!showFullScript)}>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  {showFullScript ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  Full Script Preview
-                </CardTitle>
-                <div className="flex items-center gap-3 text-sm text-gray-500">
-                  <span>{latestScript.word_count?.toLocaleString()} words</span>
-                  <span>~{Math.round(latestScript.estimated_duration_sec / 60)} min</span>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${(completedCount / batches.length) * 100}%` }}
+                  />
                 </div>
               </div>
-            </CardHeader>
-            {showFullScript && (
-              <CardContent>
-                <div className="bg-gray-50 p-6 rounded-lg text-sm text-gray-700 whitespace-pre-wrap max-h-[600px] overflow-y-auto leading-relaxed">
-                  {latestScript.full_script}
-                </div>
-              </CardContent>
             )}
-          </Card>
-        )}
 
-        {/* Continue to Stage 2 */}
-        {allCompleted && latestScript && (
-          <div className="flex justify-end">
-            <Button onClick={handleContinue} className="bg-blue-600 hover:bg-blue-700" size="lg">
-              Continue to Content Generation
-              <ArrowRight className="w-5 h-5 ml-2" />
-            </Button>
+            {/* Batch Cards */}
+            {batches.map(batch => (
+              <div key={batch.id} className="relative">
+                <BatchCard
+                  batch={batch}
+                  onUpdate={() => { refetchBatches(); refetchScripts(); }}
+                  onGenerateImage={handleGenerateImage}
+                />
+                {generatingImageFor === batch.id && (
+                  <div className="absolute inset-0 bg-white/70 rounded-xl flex items-center justify-center">
+                    <div className="flex items-center gap-2 text-sm font-medium text-blue-700">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Image className="w-4 h-4" /> Generating scene image...
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Combine Button */}
+            {allCompleted && !latestScript && (
+              <div className="flex justify-center py-4">
+                <Button onClick={handleMergeScript} disabled={merging} className="bg-green-600 hover:bg-green-700" size="lg">
+                  {merging ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <FileText className="w-5 h-5 mr-2" />}
+                  {merging ? 'Combining Batches...' : 'Combine Batches into Full Script'}
+                </Button>
+              </div>
+            )}
+
+            {/* Full Script Editor */}
+            {activeScript && (
+              <ScriptEditor
+                script={activeScript}
+                onSaved={() => refetchScripts()}
+              />
+            )}
+
+            {/* Continue */}
+            {allCompleted && latestScript && (
+              <div className="flex justify-end pt-4">
+                <Button onClick={handleContinue} className="bg-blue-600 hover:bg-blue-700" size="lg">
+                  Continue to Content Generation
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </Button>
+              </div>
+            )}
           </div>
-        )}
+
+          {/* Sidebar */}
+          <div className="space-y-4">
+            {/* Version History */}
+            <VersionHistory
+              scripts={scripts}
+              currentScriptId={activeScript?.id}
+              onSelect={(s) => setViewingScriptId(s.id)}
+            />
+
+            {/* Voiceover */}
+            {latestScript && project && (
+              <VoiceoverPanel
+                project={project}
+                script={latestScript}
+                onUpdate={() => refetchProject()}
+              />
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

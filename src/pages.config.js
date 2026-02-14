@@ -47,26 +47,26 @@
  *
  * The mainPage value must match a key in the PAGES object exactly.
  */
+import ContentGeneration from './pages/ContentGeneration';
 import Dashboard from './pages/Dashboard';
 import Home from './pages/Home';
 import NewProject from './pages/NewProject';
-import StoryTopics from './pages/StoryTopics';
 import StoryDuration from './pages/StoryDuration';
 import StoryHooks from './pages/StoryHooks';
 import StoryScript from './pages/StoryScript';
-import ContentGeneration from './pages/ContentGeneration';
+import StoryTopics from './pages/StoryTopics';
 import TimelineEditor from './pages/TimelineEditor';
 
 
 export const PAGES = {
+    "ContentGeneration": ContentGeneration,
     "Dashboard": Dashboard,
     "Home": Home,
     "NewProject": NewProject,
-    "StoryTopics": StoryTopics,
     "StoryDuration": StoryDuration,
     "StoryHooks": StoryHooks,
     "StoryScript": StoryScript,
-    "ContentGeneration": ContentGeneration,
+    "StoryTopics": StoryTopics,
     "TimelineEditor": TimelineEditor,
 }
 
