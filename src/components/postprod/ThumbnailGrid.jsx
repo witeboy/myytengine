@@ -82,7 +82,7 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
               <p className="text-xs text-gray-500">Metaphor: {thumb.visual_metaphor}</p>
             )}
 
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {thumb.image_url && (
                 <Button
                   size="sm"
@@ -107,6 +107,15 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
                   <Sparkles className="w-3 h-3" />
                 )}
                 {thumb.image_url ? 'Regenerate' : 'Generate'}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1 text-purple-700 border-purple-200 hover:bg-purple-50"
+                onClick={() => setRefineThumb(thumb)}
+              >
+                <Wand2 className="w-3 h-3" />
+                Enhance
               </Button>
               <Button
                 size="sm"
