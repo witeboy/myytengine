@@ -61,23 +61,21 @@ Deno.serve(async (req) => {
     const brand_identities = brand_list.filter(b => b.project_id === project_id);
     const thumb_tone = brand_identities.length > 0 ? brand_identities[0].thumbnail_tone : "cinematic documentary";
 
-    const prompt = `You are the world's #1 YouTube thumbnail architect. Design using a Z-DEPTH LAYER SYSTEM on a 1920x1080 canvas.
+    const prompt = `You are the world's #1 YouTube thumbnail designer.
 
 VIDEO TITLE: "${video_title}"
 Brand thumbnail tone: ${thumb_tone}
 
-=== Z-DEPTH LAYER SYSTEM ===
-Every thumbnail MUST be described as 4 layers:
-LAYER 1 — BACKGROUND (Depth 0): Blurred setting, atmosphere, colors, vignette
-LAYER 2 — ANCHORS (Depth 1): Center mid-ground subjects at 50% canvas height
-LAYER 3 — CONTENDERS (Depth 2): Foreground subjects on extreme left/right, 110% height, rim-lit, face-off 30° angles
-LAYER 4 — UI OVERLAY (Depth 3): Title text, banners, logos with EXACT positioning
-
-=== STYLING RULES ===
-- Rim Light: bright edge light on outer face of foreground subjects
-- Saturation: boosted +20% hyper-realistic
-- Contrast: high — deep blacks, bright highlights
-- Text: Impact/Bebas Neue, white fill + thick black stroke + drop shadow
+=== CRITICAL PROMPT RULES ===
+- Think in VISUAL CONCEPTS, not code/measurements
+- NEVER use percentages, pixels, hex codes, opacity values
+- Use SPATIAL RELATIONSHIPS: "anchored at the top", "filling the left third", "spanning the bottom"
+- Use PHOTOGRAPHY LANGUAGE: "extreme close-up", "rim lighting on profile", "heavy bokeh"
+- Use ARCHETYPE descriptions: "bald man with intense stare" not "person"
+- Use COLOR NAMES: "crimson red", "electric blue" — never #FF0000
+- Describe text+container as ONE unit: "red badge containing white text 'LIVE'"
+- MAX 2-3 text elements in the image prompt
+- Say "graphic design composition" to force flat 2D text overlays
 
 Generate 10 viral thumbnail concepts. Rank top 3 by CTR potential.
 
@@ -86,21 +84,14 @@ RESPOND IN THIS EXACT JSON:
   "thumbnails": [
     {
       "rank": 1,
-      "concept_description": "Detailed concept decomposed by layer",
-      "facial_expression": "Expression details or null",
+      "concept_description": "Detailed concept in natural language",
+      "facial_expression": "Archetype expression description or null",
       "visual_metaphor": "Central metaphor",
-      "color_scheme": "Color approach — saturation, contrast, temperature",
+      "color_scheme": "Color approach using color names, saturation, contrast",
       "text_overlay": "Under 4 words",
       "style_reference": "cinema/minimal/documentary",
       "ctr_score": 9,
-      "layers": {
-        "background": "Layer 1: Blurred [setting], [colors #hex], blur 25%, vignette",
-        "midground": "Layer 2: [center subjects], 50% height, [details]",
-        "foreground_left": "Layer 3 Left: [subject] at 0-30%, facing 30° right, [expression], rim light left edge",
-        "foreground_right": "Layer 3 Right: [subject] at 70-100%, facing 30° left, [expression], rim light right edge",
-        "ui_overlay": "Layer 4: '[TEXT]' top center, white Impact, 3px black outline. [banner details]"
-      },
-      "image_prompt": "LAYERED BLUEPRINT: 'A 1920x1080 YouTube thumbnail. Layer 1 (Background): [blurred setting, colors, atmosphere]. Layer 2 (Mid-ground): [center subjects, position, scale]. Layer 3 (Foreground): [left subject 0-30% facing right, rim light] and [right subject 70-100% facing left, rim light], 110% height. Layer 4 (UI): [text, font, color, outline, position] and [banners, logos]. Styling: hyper-saturated, high contrast, rim lighting. 4K, sharp.'"
+      "image_prompt": "A COMPLETE 150+ word natural-language prompt: 'A high-contrast 4K YouTube thumbnail graphic design composition. FOREGROUND: [subjects with archetype descriptions, expressions, clothing colors, crop, rim lighting]. MID-GROUND: [center subjects smaller in frame for depth]. BACKGROUND: [blurred setting with mood]. TEXT: [title as single design unit]. STYLE: [render keywords].' NO percentages. NO hex codes."
     }
   ]
 }`;
