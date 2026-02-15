@@ -161,6 +161,14 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Refine Concept Dialog */}
+      <RefineConceptDialog
+        thumb={refineThumb}
+        open={!!refineThumb}
+        onOpenChange={(open) => { if (!open) setRefineThumb(null); }}
+        onRefined={() => { onRefetch(); setRefineThumb(null); }}
+      />
     </div>
   );
 }
