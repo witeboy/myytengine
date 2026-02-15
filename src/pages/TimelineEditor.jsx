@@ -111,26 +111,21 @@ export default function TimelineEditor() {
 
   // Audio: voiceover
   useEffect(() => {
-    if (voiceoverUrl && !voiceoverRef.current) {
-      voiceoverRef.current = new Audio(voiceoverUrl);
-    }
-    if (voiceoverRef.current && voiceoverUrl !== voiceoverRef.current._src) {
-      voiceoverRef.current = new Audio(voiceoverUrl);
-      voiceoverRef.current._src = voiceoverUrl;
-    }
+    if (!voiceoverUrl) return;
+    if (voiceoverRef.current) voiceoverRef.current.pause();
+    const a = new Audio(voiceoverUrl);
+    a.volume = volume;
+    voiceoverRef.current = a;
   }, [voiceoverUrl]);
 
   // Audio: background music
   useEffect(() => {
-    if (musicUrl && !musicRef.current) {
-      musicRef.current = new Audio(musicUrl);
-      musicRef.current.loop = true;
-    }
-    if (musicRef.current && musicUrl !== musicRef.current._src) {
-      musicRef.current = new Audio(musicUrl);
-      musicRef.current.loop = true;
-      musicRef.current._src = musicUrl;
-    }
+    if (!musicUrl) return;
+    if (musicRef.current) musicRef.current.pause();
+    const a = new Audio(musicUrl);
+    a.loop = true;
+    a.volume = musicVolume * volume;
+    musicRef.current = a;
   }, [musicUrl]);
 
   // Sync audio play/pause with playback state
