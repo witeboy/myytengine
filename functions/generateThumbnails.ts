@@ -93,7 +93,7 @@ RESPOND IN THIS EXACT JSON:
       "text_overlay": "Under 4 words",
       "style_reference": "cinema/minimal/documentary",
       "ctr_score": 9,
-      "image_prompt": "A COMPLETE 150+ word natural-language prompt: 'A high-contrast 4K YouTube thumbnail graphic design composition. FOREGROUND: [subjects with archetype descriptions, expressions, clothing colors, crop, rim lighting]. MID-GROUND: [center subjects smaller in frame for depth]. BACKGROUND: [blurred setting with mood]. TEXT: [title as single design unit]. STYLE: [render keywords].' NO percentages. NO hex codes."
+      "image_prompt": "A COMPLETE 150+ word natural-language prompt: 'A high-contrast 4K YouTube thumbnail in 16:9 aspect ratio (1280x720), widescreen landscape format, graphic design composition. FOREGROUND: [subjects with archetype descriptions, expressions, clothing colors, crop, rim lighting]. MID-GROUND: [center subjects smaller in frame for depth]. BACKGROUND: [blurred setting with mood]. TEXT: [title as single design unit]. STYLE: [render keywords].' NO percentages. NO hex codes. MUST specify 16:9 aspect ratio."
     }
   ]
 }`;
