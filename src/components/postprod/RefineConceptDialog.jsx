@@ -127,7 +127,7 @@ export default function RefineConceptDialog({ thumb, open, onOpenChange, onRefin
           <div className="flex gap-2">
             <Button
               onClick={handleRefine}
-              disabled={refining || !feedback.trim()}
+              disabled={refining || generating || !feedback.trim()}
               className="flex-1 gap-2 bg-purple-600 hover:bg-purple-700"
             >
               {refining ? (
