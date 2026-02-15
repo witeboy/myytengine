@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { createPageUrl } from '@/utils';
 import StageProgress from '@/components/StageProgress';
-import { Loader2, Clock, FileText, Layers } from 'lucide-react';
+import { Loader2, Clock, FileText, Layers, ArrowRight } from 'lucide-react';
 
 export default function StoryDuration() {
   const navigate = useNavigate();
