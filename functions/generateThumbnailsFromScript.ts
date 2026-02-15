@@ -34,7 +34,24 @@ async function safeGeminiCall(prompt, temperature = 0.8, maxTokens = 16384, retr
     let jsonStr = text;
     if (text.includes("```json")) jsonStr = text.split("```json")[1].split("```")[0].trim();
     else if (text.includes("```")) jsonStr = text.split("```")[1].split("```")[0].trim();
-    return JSON.parse(jsonStr);
+    
+    // Clean common JSON issues from LLM output
+    jsonStr = jsonStr
+      .replace(/[\x00-\x1F\x7F]/g, (ch) => ch === '\n' || ch === '\r' || ch === '\t' ? ch : ' ')  // remove control chars
+      .replace(/,\s*([}\]])/g, '$1')  // remove trailing commas
+      .replace(/(["\w\d])\s*\n\s*"/g, '$1, "');  // fix missing commas between properties
+    
+    try {
+      return JSON.parse(jsonStr);
+    } catch (e) {
+      console.error("JSON parse failed, attempting repair. Error:", e.message);
+      // Try to extract just the array/object structure
+      const objMatch = jsonStr.match(/\{[\s\S]*\}/);
+      if (objMatch) {
+        return JSON.parse(objMatch[0]);
+      }
+      throw new Error("Failed to parse Gemini response as JSON: " + e.message);
+    }
   }
   
   throw new Error("Gemini API rate limit exceeded after retries. Please try again in a minute.");
