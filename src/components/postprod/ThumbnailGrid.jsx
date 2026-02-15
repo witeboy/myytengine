@@ -81,6 +81,17 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
             )}
 
             <div className="flex gap-2">
+              {thumb.image_url && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1"
+                  onClick={() => setPreviewThumb(thumb)}
+                >
+                  <Eye className="w-3 h-3" />
+                  Preview
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant={thumb.image_url ? 'outline' : 'default'}
