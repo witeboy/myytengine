@@ -4,14 +4,21 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Loader2, Sparkles, CheckCircle2, Image as ImageIcon, Star, Eye, X, Wand2 } from 'lucide-react';
+import {
+  Loader2, Sparkles, CheckCircle2, Image as ImageIcon, Star, Eye, X, Wand2,
+  BarChart3, ArrowUpDown, TrendingUp
+} from 'lucide-react';
 import RefineConceptDialog from './RefineConceptDialog';
+import ThumbnailCtrBreakdown from './ThumbnailCtrBreakdown';
 
 export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
   const [generatingImage, setGeneratingImage] = useState(null);
   const [selecting, setSelecting] = useState(null);
   const [previewThumb, setPreviewThumb] = useState(null);
   const [refineThumb, setRefineThumb] = useState(null);
+  const [sortBy, setSortBy] = useState('rank'); // 'rank' or 'ctr'
+  const [analyzingCtr, setAnalyzingCtr] = useState(false);
+  const [ctrResults, setCtrResults] = useState(null);
 
   const handleGenerateImage = async (thumb) => {
     setGeneratingImage(thumb.id);
@@ -25,7 +32,6 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
 
   const handleSelect = async (thumb) => {
     setSelecting(thumb.id);
-    // Deselect all others
     for (const t of thumbnails) {
       if (t.is_selected && t.id !== thumb.id) {
         await base44.entities.ThumbnailConcepts.update(t.id, { is_selected: false });
@@ -36,116 +42,191 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
     setSelecting(null);
   };
 
-  const sorted = [...thumbnails].sort((a, b) => a.rank - b.rank);
+  const handleAnalyzeCtr = async () => {
+    setAnalyzingCtr(true);
+    setCtrResults(null);
+    const res = await base44.functions.invoke('analyzeThumbnailCtr', { project_id: projectId });
+    setCtrResults(res.data.results || []);
+    onRefetch();
+    setAnalyzingCtr(false);
+  };
+
+  const sorted = [...thumbnails].sort((a, b) => {
+    if (sortBy === 'ctr') return (b.ctr_score || 0) - (a.ctr_score || 0);
+    return a.rank - b.rank;
+  });
+
+  const getCtrResult = (thumbId) => ctrResults?.find(r => r.thumbnail_id === thumbId);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {sorted.map(thumb => (
-        <Card
-          key={thumb.id}
-          className={`overflow-hidden transition-all ${thumb.is_selected ? 'ring-2 ring-green-500 shadow-lg' : 'hover:shadow-md'}`}
+    <div className="space-y-4">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant={sortBy === 'rank' ? 'default' : 'outline'}
+            onClick={() => setSortBy('rank')}
+            className="gap-1"
+          >
+            <ArrowUpDown className="w-3 h-3" /> By Rank
+          </Button>
+          <Button
+            size="sm"
+            variant={sortBy === 'ctr' ? 'default' : 'outline'}
+            onClick={() => setSortBy('ctr')}
+            className="gap-1"
+          >
+            <TrendingUp className="w-3 h-3" /> By CTR Score
+          </Button>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleAnalyzeCtr}
+          disabled={analyzingCtr || thumbnails.filter(t => t.image_url).length === 0}
+          className="gap-1.5 text-blue-700 border-blue-200 hover:bg-blue-50"
         >
-          {/* Image area */}
-          <div className="aspect-video bg-gray-100 relative">
-            {thumb.image_url ? (
-              <img src={thumb.image_url} alt={thumb.concept_description} className="w-full h-full object-cover" />
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 gap-2">
-                <ImageIcon className="w-8 h-8" />
-                <span className="text-xs">No image yet</span>
-              </div>
-            )}
-            {thumb.is_selected && (
-              <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1">
-                <CheckCircle2 className="w-4 h-4" />
-              </div>
-            )}
-            <Badge className="absolute top-2 left-2 bg-black/70 text-white text-xs">
-              #{thumb.rank}
-            </Badge>
-          </div>
+          {analyzingCtr ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BarChart3 className="w-3.5 h-3.5" />}
+          {analyzingCtr ? 'Analyzing...' : 'Analyze CTR (AI Vision)'}
+        </Button>
+      </div>
 
-          <CardContent className="p-4 space-y-3">
-            <p className="text-sm font-medium line-clamp-2">{thumb.concept_description}</p>
-
-            <div className="flex flex-wrap gap-1.5">
-              <Badge variant="outline" className="text-xs">{thumb.style_reference}</Badge>
-              {thumb.text_overlay && (
-                <Badge variant="secondary" className="text-xs">"{thumb.text_overlay}"</Badge>
-              )}
-              <Badge className="bg-amber-100 text-amber-800 text-xs gap-1">
-                <Star className="w-3 h-3" /> CTR {thumb.ctr_score}/10
-              </Badge>
-            </div>
-
-            {thumb.visual_metaphor && (
-              <p className="text-xs text-gray-500">Metaphor: {thumb.visual_metaphor}</p>
-            )}
-
-            <div className="flex flex-wrap gap-2">
-              {thumb.image_url && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1"
-                  onClick={() => setPreviewThumb(thumb)}
-                >
-                  <Eye className="w-3 h-3" />
-                  Preview
-                </Button>
-              )}
-              <Button
-                size="sm"
-                variant={thumb.image_url ? 'outline' : 'default'}
-                className="flex-1 gap-1"
-                onClick={() => handleGenerateImage(thumb)}
-                disabled={generatingImage === thumb.id}
-              >
-                {generatingImage === thumb.id ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <Sparkles className="w-3 h-3" />
-                )}
-                {thumb.image_url ? 'Regenerate' : 'Generate'}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1 text-purple-700 border-purple-200 hover:bg-purple-50"
-                onClick={() => setRefineThumb(thumb)}
-              >
-                <Wand2 className="w-3 h-3" />
-                Enhance
-              </Button>
-              <Button
-                size="sm"
-                variant={thumb.is_selected ? 'default' : 'outline'}
-                className={`flex-1 gap-1 ${thumb.is_selected ? 'bg-green-600 hover:bg-green-700' : ''}`}
-                onClick={() => handleSelect(thumb)}
-                disabled={selecting === thumb.id || !thumb.image_url}
-              >
-                {selecting === thumb.id ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="w-3 h-3" />
-                )}
-                {thumb.is_selected ? 'Selected' : 'Select'}
-              </Button>
-            </div>
+      {analyzingCtr && (
+        <Card>
+          <CardContent className="py-8 text-center">
+            <Loader2 className="w-6 h-6 animate-spin text-blue-600 mx-auto mb-2" />
+            <p className="text-sm text-gray-500">AI is analyzing each thumbnail for visual appeal, text clarity, emotional impact...</p>
           </CardContent>
         </Card>
-      ))}
-      {/* Fullscreen Preview Dialog */}
+      )}
+
+      {/* Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {sorted.map(thumb => {
+          const ctr = getCtrResult(thumb.id);
+          return (
+            <Card
+              key={thumb.id}
+              className={`overflow-hidden transition-all ${thumb.is_selected ? 'ring-2 ring-green-500 shadow-lg' : 'hover:shadow-md'}`}
+            >
+              {/* Image area - forced 16:9 */}
+              <div className="aspect-video bg-gray-100 relative overflow-hidden">
+                {thumb.image_url ? (
+                  <img src={thumb.image_url} alt={thumb.concept_description} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex flex-col items-center justify-center text-gray-400 gap-2">
+                    <ImageIcon className="w-8 h-8" />
+                    <span className="text-xs">No image yet</span>
+                  </div>
+                )}
+                {thumb.is_selected && (
+                  <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1">
+                    <CheckCircle2 className="w-4 h-4" />
+                  </div>
+                )}
+                <Badge className="absolute top-2 left-2 bg-black/70 text-white text-xs">
+                  #{thumb.rank}
+                </Badge>
+              </div>
+
+              <CardContent className="p-4 space-y-3">
+                <p className="text-sm font-medium line-clamp-2">{thumb.concept_description}</p>
+
+                <div className="flex flex-wrap gap-1.5">
+                  <Badge variant="outline" className="text-xs">{thumb.style_reference}</Badge>
+                  {thumb.text_overlay && (
+                    <Badge variant="secondary" className="text-xs">"{thumb.text_overlay}"</Badge>
+                  )}
+                  <Badge className="bg-amber-100 text-amber-800 text-xs gap-1">
+                    <Star className="w-3 h-3" /> CTR {thumb.ctr_score}/10
+                  </Badge>
+                </div>
+
+                {/* CTR Breakdown (if analyzed) */}
+                {ctr && <ThumbnailCtrBreakdown ctr={ctr} />}
+
+                {thumb.visual_metaphor && !ctr && (
+                  <p className="text-xs text-gray-500">Metaphor: {thumb.visual_metaphor}</p>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  {thumb.image_url && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1"
+                      onClick={() => setPreviewThumb(thumb)}
+                    >
+                      <Eye className="w-3 h-3" />
+                      Preview
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant={thumb.image_url ? 'outline' : 'default'}
+                    className="flex-1 gap-1"
+                    onClick={() => handleGenerateImage(thumb)}
+                    disabled={generatingImage === thumb.id}
+                  >
+                    {generatingImage === thumb.id ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3 h-3" />
+                    )}
+                    {thumb.image_url ? 'Regenerate' : 'Generate'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1 text-purple-700 border-purple-200 hover:bg-purple-50"
+                    onClick={() => setRefineThumb(thumb)}
+                  >
+                    <Wand2 className="w-3 h-3" />
+                    Enhance
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={thumb.is_selected ? 'default' : 'outline'}
+                    className={`flex-1 gap-1 ${thumb.is_selected ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                    onClick={() => handleSelect(thumb)}
+                    disabled={selecting === thumb.id || !thumb.image_url}
+                  >
+                    {selecting === thumb.id ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="w-3 h-3" />
+                    )}
+                    {thumb.is_selected ? 'Selected' : 'Select'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* Fullscreen 16:9 Preview Dialog */}
       <Dialog open={!!previewThumb} onOpenChange={() => setPreviewThumb(null)}>
-        <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black border-none">
+        <DialogContent className="max-w-5xl p-0 overflow-hidden bg-black border-none [&>button]:hidden">
           {previewThumb && (
             <div className="relative">
-              <img
-                src={previewThumb.image_url}
-                alt={previewThumb.concept_description}
-                className="w-full h-auto"
-              />
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+              {/* Close button */}
+              <button
+                onClick={() => setPreviewThumb(null)}
+                className="absolute top-3 right-3 z-10 bg-black/60 hover:bg-black/80 text-white rounded-full p-2 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              {/* 16:9 container */}
+              <div className="aspect-video w-full relative overflow-hidden">
+                <img
+                  src={previewThumb.image_url}
+                  alt={previewThumb.concept_description}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="bg-black px-4 py-3">
                 <div className="flex items-center gap-2 mb-1">
                   <Badge className="bg-white/20 text-white text-xs">#{previewThumb.rank}</Badge>
                   <Badge className="bg-amber-500/80 text-white text-xs gap-1">
@@ -154,6 +235,7 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
                   {previewThumb.text_overlay && (
                     <Badge className="bg-white/20 text-white text-xs">"{previewThumb.text_overlay}"</Badge>
                   )}
+                  <span className="text-white/40 text-xs ml-auto">16:9 • 1280×720</span>
                 </div>
                 <p className="text-white text-sm line-clamp-2">{previewThumb.concept_description}</p>
               </div>
