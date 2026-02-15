@@ -3,7 +3,8 @@ import { base44 } from '@/api/base44Client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Sparkles, CheckCircle2, Image as ImageIcon, Star } from 'lucide-react';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Loader2, Sparkles, CheckCircle2, Image as ImageIcon, Star, Eye, X } from 'lucide-react';
 
 export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
   const [generatingImage, setGeneratingImage] = useState(null);
