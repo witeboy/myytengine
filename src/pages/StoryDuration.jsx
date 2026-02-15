@@ -57,10 +57,27 @@ export default function StoryDuration() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <StageProgress currentStage={1} />
       <div className="max-w-2xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-2">Set Video Duration</h1>
-        <p className="text-gray-600 mb-8">
-          Topic: <span className="font-semibold">{topic?.title || 'Loading...'}</span>
-        </p>
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h1 className="text-3xl font-bold mb-2">Set Video Duration</h1>
+            <p className="text-gray-600">
+              Topic: <span className="font-semibold">{topic?.title || 'Loading...'}</span>
+            </p>
+          </div>
+          <Button
+            onClick={handleGenerate}
+            disabled={loading}
+            className="bg-blue-600 hover:bg-blue-700 gap-2"
+            size="lg"
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <ArrowRight className="w-4 h-4" />
+            )}
+            {loading ? 'Generating...' : 'Generate & Continue'}
+          </Button>
+        </div>
 
         <Card>
           <CardHeader>
