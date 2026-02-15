@@ -1,31 +1,43 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-async function safeGeminiCall(prompt, temperature = 0.8, maxTokens = 16384) {
+async function safeGeminiCall(prompt, temperature = 0.8, maxTokens = 16384, retries = 3) {
   const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
-  const response = await fetch(
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + geminiApiKey,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: maxTokens }
-      })
+  
+  for (let attempt = 0; attempt < retries; attempt++) {
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + geminiApiKey,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature, maxOutputTokens: maxTokens }
+        })
+      }
+    );
+
+    if (response.status === 429) {
+      const waitMs = Math.pow(2, attempt + 1) * 5000; // 10s, 20s, 40s
+      console.log(`Rate limited, waiting ${waitMs/1000}s before retry ${attempt + 1}/${retries}...`);
+      await new Promise(r => setTimeout(r, waitMs));
+      continue;
     }
-  );
 
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(`Gemini API Error ${response.status}: ${err.error?.message || "Unknown"}`);
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(`Gemini API Error ${response.status}: ${err.error?.message || "Unknown"}`);
+    }
+
+    const data = await response.json();
+    if (!data.candidates || data.candidates.length === 0) throw new Error("No candidates from Gemini");
+    const text = data.candidates[0].content.parts[0].text;
+    let jsonStr = text;
+    if (text.includes("```json")) jsonStr = text.split("```json")[1].split("```")[0].trim();
+    else if (text.includes("```")) jsonStr = text.split("```")[1].split("```")[0].trim();
+    return JSON.parse(jsonStr);
   }
-
-  const data = await response.json();
-  if (!data.candidates || data.candidates.length === 0) throw new Error("No candidates from Gemini");
-  const text = data.candidates[0].content.parts[0].text;
-  let jsonStr = text;
-  if (text.includes("```json")) jsonStr = text.split("```json")[1].split("```")[0].trim();
-  else if (text.includes("```")) jsonStr = text.split("```")[1].split("```")[0].trim();
-  return JSON.parse(jsonStr);
+  
+  throw new Error("Gemini API rate limit exceeded after retries. Please try again in a minute.");
 }
 
 Deno.serve(async (req) => {
