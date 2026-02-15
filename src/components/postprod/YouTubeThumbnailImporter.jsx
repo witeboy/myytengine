@@ -143,9 +143,71 @@ export default function YouTubeThumbnailImporter({ projectId, onConceptCreated }
               {showDetails ? 'Hide Details' : 'Show Full Analysis'}
             </Button>
             {showDetails && (
-              <div className="text-xs text-gray-600 space-y-2 bg-gray-50 p-3 rounded-lg">
+              <div className="text-xs text-gray-600 space-y-3 bg-gray-50 p-3 rounded-lg max-h-[400px] overflow-y-auto">
                 <p><strong>Layout:</strong> {analysis.layout_breakdown}</p>
                 <p><strong>Description:</strong> {analysis.detailed_description}</p>
+                
+                {/* Layer breakdown */}
+                {analysis.layers && (
+                  <div className="space-y-2 border-t pt-2">
+                    <p className="font-semibold text-gray-700">🎬 Z-Depth Layers:</p>
+                    {analysis.layers.background && (
+                      <div className="bg-gray-100 p-2 rounded">
+                        <p className="font-medium text-gray-700">Layer 1 — Background</p>
+                        <p>{analysis.layers.background.content || JSON.stringify(analysis.layers.background)}</p>
+                      </div>
+                    )}
+                    {analysis.layers.midground?.subjects && (
+                      <div className="bg-blue-50 p-2 rounded">
+                        <p className="font-medium text-blue-700">Layer 2 — Mid-ground Anchors</p>
+                        {analysis.layers.midground.subjects.map((s, i) => (
+                          <p key={i}>{s.description} — {s.expression} ({s.position})</p>
+                        ))}
+                      </div>
+                    )}
+                    {analysis.layers.foreground && (
+                      <div className="bg-red-50 p-2 rounded">
+                        <p className="font-medium text-red-700">Layer 3 — Foreground Contenders</p>
+                        {analysis.layers.foreground.left_subject && (
+                          <p><strong>Left:</strong> {analysis.layers.foreground.left_subject.expression} — {analysis.layers.foreground.left_subject.clothing} ({analysis.layers.foreground.left_subject.face_angle})</p>
+                        )}
+                        {analysis.layers.foreground.right_subject && (
+                          <p><strong>Right:</strong> {analysis.layers.foreground.right_subject.expression} — {analysis.layers.foreground.right_subject.clothing} ({analysis.layers.foreground.right_subject.face_angle})</p>
+                        )}
+                      </div>
+                    )}
+                    {analysis.layers.ui_overlay && (
+                      <div className="bg-yellow-50 p-2 rounded">
+                        <p className="font-medium text-yellow-700">Layer 4 — UI Overlay</p>
+                        {analysis.layers.ui_overlay.text_elements?.map((t, i) => (
+                          <p key={i}><strong>"{t.text}"</strong> — {t.font}, {t.color}, {t.position}</p>
+                        ))}
+                        {analysis.layers.ui_overlay.graphic_elements?.map((g, i) => (
+                          <p key={i}>• {g.type}: {g.details} ({g.position})</p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Styling rules */}
+                {analysis.styling_rules && (
+                  <div className="border-t pt-2">
+                    <p className="font-semibold text-gray-700">🎨 Styling Rules:</p>
+                    <p>Rim Light: {analysis.styling_rules.rim_light}</p>
+                    <p>Saturation: {analysis.styling_rules.saturation}</p>
+                    <p>Contrast: {analysis.styling_rules.contrast}</p>
+                    <p>Text: {analysis.styling_rules.text_style}</p>
+                  </div>
+                )}
+
+                {/* Generic template */}
+                {analysis.generic_template && (
+                  <div className="border-t pt-2">
+                    <p className="font-semibold text-gray-700">📋 Reusable Template:</p>
+                    <p className="whitespace-pre-wrap bg-white p-2 rounded border text-[11px]">{analysis.generic_template}</p>
+                  </div>
+                )}
               </div>
             )}
 
