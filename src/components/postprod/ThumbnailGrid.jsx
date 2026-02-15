@@ -78,8 +78,7 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
     setGenerateError(null);
     await base44.entities.ThumbnailConcepts.update(thumb.id, { image_prompt: editingPrompt.trim() });
     try {
-      const editPromptPrefix = '16:9 aspect ratio, 1280x720 resolution, widescreen landscape format YouTube thumbnail. ';
-      const editFinalPrompt = editingPrompt.trim().toLowerCase().includes('16:9') ? editingPrompt.trim() : editPromptPrefix + editingPrompt.trim();
+      const editFinalPrompt = buildFinalPrompt(editingPrompt.trim(), thumb.text_overlay);
       const { url } = await base44.integrations.Core.GenerateImage({
         prompt: editFinalPrompt,
       });
