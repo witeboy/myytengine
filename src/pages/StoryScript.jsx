@@ -160,15 +160,7 @@ export default function StoryScript() {
             />
           )}
 
-          {/* Continue */}
-          {allCompleted && latestScript && (
-            <div className="flex justify-end pt-4">
-              <Button onClick={handleContinue} className="bg-blue-600 hover:bg-blue-700" size="lg">
-                Continue to Content Generation
-                <ArrowRight className="w-5 h-5 ml-2" />
-              </Button>
-            </div>
-          )}
+          {/* Continue button moved to header */}
         </div>
       </div>
     </div>
