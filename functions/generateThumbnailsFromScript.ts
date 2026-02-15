@@ -44,10 +44,10 @@ Deno.serve(async (req) => {
     const truncatedScript = scriptContent.substring(0, 3000);
 
     const styleInstruction = reference_style 
-      ? `\n\nIMPORTANT — REFERENCE STYLE BLUEPRINT:\nYou MUST replicate this EXACT layout/layer structure for the new topic:\n${reference_style}\nAdapt the subjects and text to the video's content but keep the IDENTICAL layer composition, positioning, rim lighting, text styling, and banner structure.`
+      ? `\n\nIMPORTANT — REFERENCE STYLE:\nYou MUST replicate this EXACT visual style, layout, and composition for the new topic:\n${reference_style}\nAdapt the subjects and text to the video's content but keep the IDENTICAL composition, rim lighting, depth relationships, text treatment, and overall aesthetic.`
       : '';
 
-    const prompt = `You are the world's #1 YouTube thumbnail architect. You design thumbnails using a Z-DEPTH LAYER SYSTEM on a 1920x1080 canvas.
+    const prompt = `You are the world's #1 YouTube thumbnail designer. Your thumbnails get BILLIONS of views.
 
 VIDEO TOPIC: "${topic.title}"
 VIDEO TITLE: "${script.title}"
@@ -57,22 +57,30 @@ SCRIPT EXCERPT (find the most shocking/emotional/curiosity-inducing moments):
 ${truncatedScript}
 ${styleInstruction}
 
-=== Z-DEPTH LAYER SYSTEM ===
-Every thumbnail MUST be described as 4 layers:
+=== CRITICAL PROMPT RULES ===
+Your "image_prompt" output must follow these rules strictly:
+- Think in VISUAL CONCEPTS and DESCRIPTIVE LANGUAGE, not CSS/code/measurements
+- NEVER use percentages, pixel coordinates, opacity values, or hex color codes
+- Use SPATIAL RELATIONSHIPS: "anchored at the top center", "filling the left third", "spanning the bottom edge"
+- Use PHOTOGRAPHY LANGUAGE: "extreme close-up", "rim lighting on profile", "shallow depth of field"
+- Use ARCHETYPE descriptions: "bald man with intense expression and dark goatee" NOT "person in red"
+- Use COLOR NAMES: "crimson red", "electric blue", "pure white" — never #FF0000
+- Describe text+container as ONE unit: "a red pill-shaped badge containing white text 'LIVE'"
+- MAX 2-3 text elements. AI creates glitchy text with more.
+- Say "graphic design composition" to force flat 2D text overlays
+- Use depth cues: "smaller in the frame to show depth" instead of "50% height"
+- Use "extreme close-up, cropped mid-chest up" instead of "110% height"
 
-LAYER 1 — BACKGROUND (Depth 0): Blurred setting, atmosphere, colors, vignette
-LAYER 2 — ANCHORS (Depth 1): Center mid-ground subjects (2-3 figures at 50% height)
-LAYER 3 — CONTENDERS (Depth 2): Foreground face-off subjects on extreme left/right (110% height, rim-lit, 30° face angles)
-LAYER 4 — UI OVERLAY (Depth 3): Title text, banners, logos, badges with EXACT positioning
+=== COMPOSITION TYPES TO MIX ===
+- "Face-Off" split-screen with rim-lit subjects on opposing sides
+- "The Reveal" — something being uncovered/exposed
+- "The Contrast" — before/after, good vs evil
+- "The Reaction" — extreme human emotion center-frame
+- "The Bold Statement" — massive text dominating the frame
+- "The Mystery" — blurred/redacted element creating curiosity gap
+- "The Warning" — danger/urgency visual
 
-=== STYLING RULES ===
-- Rim Light: bright edge light on outer face of foreground subjects
-- Saturation: boosted +20% hyper-realistic
-- Contrast: high — deep blacks, bright highlights  
-- Text: Impact/Bebas Neue, white fill + thick black stroke + drop shadow
-- 3-SECOND RULE: concept must be understood instantly at thumbnail size
-
-Create 10 KILLER thumbnail concepts using this layer system.
+Create 10 KILLER thumbnail concepts.
 
 RESPOND IN THIS EXACT JSON:
 {
@@ -80,28 +88,21 @@ RESPOND IN THIS EXACT JSON:
     {
       "rank": 1,
       "template_type": "Face-Off / The Reveal / The Contrast / etc",
-      "concept_description": "Detailed visual concept decomposed by layers",
+      "concept_description": "Detailed visual concept described in natural language",
       "emotional_hook": "What emotion this triggers and WHY it's impossible to scroll past",
       "text_overlay": "3-4 word text (HUGE, readable at thumbnail size)",
-      "layers": {
-        "background": "Layer 1: Blurred [setting] with [atmosphere], [colors #hex], gaussian blur 25%, dark vignette edges",
-        "midground": "Layer 2: [center subjects] at center, 50% canvas height, [clothing], [expressions]",
-        "foreground_left": "Layer 3 Left: [Subject] at left 0-30%, facing 30° right, [expression], [clothing color], rim light on left edge, cropped mid-chest up, 110% canvas height",
-        "foreground_right": "Layer 3 Right: [Subject] at right 70-100%, facing 30° left, [expression], [clothing color], rim light on right edge, cropped mid-chest up, 110% canvas height",
-        "ui_overlay": "Layer 4: '[TITLE]' top center 3% from top, white Impact bold, 3px black outline, drop shadow. Bottom banner spanning full width [color #hex] with '[LEFT TEXT] vs [RIGHT TEXT]' and logos on corners"
-      },
-      "font_style": "extra-bold Impact/Bebas sans-serif",
-      "font_color": "#FFFFFF",
-      "font_effects": "3px black outline #000000, drop shadow 4px down-right, 60% opacity",
-      "background_description": "Detailed background with blur level, colors, atmosphere",
-      "subject_description": "Main visual subjects with positions, expressions, clothing",
-      "accent_color": "#hex of the color that pops most",
-      "color_scheme": "Overall color approach — warm/cold, saturation +20%, high contrast",
-      "visual_effects": "rim lighting, vignette, bokeh, split composition, etc",
+      "font_style": "heavy Impact / bold condensed sans-serif / etc",
+      "font_color": "white with thick black outline",
+      "font_effects": "thick black outline, heavy drop shadow — described in words",
+      "background_description": "Natural language: blurred dark stadium at night with floodlight lens flare",
+      "subject_description": "Archetype descriptions: bald man with goatee in red hoodie, blonde woman with shocked expression",
+      "accent_color": "the eye-catching color name (crimson red, electric blue, etc)",
+      "color_scheme": "Overall approach: warm saturated, cold moody, high contrast vivid",
+      "visual_effects": "rim lighting on profiles, heavy bokeh background, lens flare, vignette",
       "style_reference": "cinema / minimal / documentary / sports / gaming",
       "ctr_score": 9,
       "scroll_stop_reason": "1 sentence why NO ONE can scroll past this",
-      "image_prompt": "LAYERED BLUEPRINT PROMPT: 'A 1920x1080 YouTube thumbnail. Layer 1 (Background): [blurred setting, colors, atmosphere]. Layer 2 (Mid-ground): [center subjects, position, scale, details]. Layer 3 (Foreground): [left subject at 0-30% facing right, expression, clothing, rim light] and [right subject at 70-100% facing left, expression, clothing, rim light], both 110% canvas height, cropped mid-chest up. Layer 4 (UI): [exact text, font, color, outline, shadow, position] and [banners, logos, badges with positions and colors]. Styling: hyper-saturated +20%, high contrast, rim lighting on foreground subjects. 4K resolution, sharp focus.'"
+      "image_prompt": "A COMPLETE 200+ word natural-language AI image prompt. Structure: 'A high-contrast 4K YouTube thumbnail graphic design composition featuring [COMPOSITION TYPE]. FOREGROUND: [describe each subject with archetype, expression, clothing color names, crop, facing direction, rim lighting]. MID-GROUND: [center subjects, smaller in frame for depth, archetypes, clothing, expressions]. BACKGROUND: [blurred setting with mood lighting, atmospheric effects]. TEXT & GRAPHICS: [main title as single design unit with font and shadow]. [Bottom banner as single unit]. STYLE: [HDR photography, hyper-realistic, render quality keywords].' NO percentages. NO hex codes. NO pixel values."
     }
   ]
 }`;
