@@ -1,6 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-async function callGeminiWithImage(prompt, imageUrl, temperature = 0.7) {
+async function callGeminiWithImage(prompt, imageUrl, temperature = 0.7, maxTokens = 8192) {
   const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
 
   // Fetch image and convert to base64 safely
@@ -31,7 +31,7 @@ async function callGeminiWithImage(prompt, imageUrl, temperature = 0.7) {
             { inlineData: { mimeType, data: base64 } }
           ]
         }],
-        generationConfig: { temperature, maxOutputTokens: 8192 }
+        generationConfig: { temperature, maxOutputTokens: maxTokens }
       })
     }
   );
