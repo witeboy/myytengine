@@ -73,6 +73,14 @@ export default function VideoExporter({
       const url = URL.createObjectURL(blob);
       setDownloadUrl(url);
       setFileSize((blob.size / (1024 * 1024)).toFixed(1));
+
+      // Auto-download immediately
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${projectName || 'video'}-${quality}-export.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     }
   };
 
