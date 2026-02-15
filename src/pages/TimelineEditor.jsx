@@ -279,6 +279,17 @@ export default function TimelineEditor() {
           </div>
         </div>
 
+        {/* Live Preview Monitor */}
+        {scenes.length > 0 && (
+          <PreviewMonitor
+            currentScene={currentScene}
+            currentTime={currentTime}
+            isPlaying={isPlaying}
+            totalScenes={scenes.length}
+            totalDuration={totalDuration}
+          />
+        )}
+
         {/* Selected Scene Preview */}
         {selectedScene && (
           <ScenePreview
