@@ -276,7 +276,7 @@ RESPOND IN THIS EXACT JSON:
     "edge_quality": "crisp cutout / soft blended / natural"
   },
   "color_palette": ["color name 1", "color name 2", "color name 3", "color name 4", "color name 5"],
-  "layout_breakdown": "Spatial description of what fills each zone of the frame",
+  "layout_breakdown": "PRECISE spatial description: state EXACT number of people visible, which side each person is on, and what fills each zone of the frame. Be specific — e.g. '2 men on the left, 1 man on the right' not '3 men clustered together' if they are split",
   "typography": {
     "text_shown": "ALL text verbatim",
     "font_style": "detailed font description",
