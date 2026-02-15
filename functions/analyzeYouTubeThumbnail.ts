@@ -90,134 +90,161 @@ Deno.serve(async (req) => {
       finalThumbUrl = fallbackUrl;
     }
 
-    // Analyze the thumbnail with Gemini Vision — pixel-perfect verbatim recreation prompt
-    const analysis = await callGeminiWithImage(`You are a FORENSIC thumbnail analyst. Your job is to describe this YouTube thumbnail with such SURGICAL PRECISION that an AI image generator can reproduce it VERBATIM — pixel-for-pixel, element-for-element, position-for-position.
+    // Analyze the thumbnail with Gemini Vision — Z-Depth layered blueprint system
+    const analysis = await callGeminiWithImage(`You are a FORENSIC thumbnail architect. Your job is to reverse-engineer this YouTube thumbnail into a LAYERED BLUEPRINT so precise that an AI image generator can reproduce it VERBATIM.
 
-Treat the thumbnail as a 1280x720 canvas. Describe EVERY element using EXACT coordinates and percentages.
+=== Z-DEPTH LAYER SYSTEM ===
+Analyze this thumbnail by decomposing it into 4 distinct Z-Depth layers on a 1920x1080 canvas:
 
-=== MANDATORY ANALYSIS CHECKLIST ===
+LAYER 1 — BACKGROUND (Depth 0):
+- What is the background? (stadium, kitchen, studio, map, gradient, etc.)
+- Gaussian blur level (0-100%)
+- Lighting: darker than foreground? Vignette on edges?
+- Colors (#hex), gradients, bokeh, light rays, particles
+- Overall atmosphere (dark/moody, bright/energetic, warm, cold)
 
-1. CANVAS & GRID:
-   - Divide the image into a 3x3 grid. What is in each cell?
-   - What percentage of the canvas does each major element occupy?
+LAYER 2 — ANCHORS / MID-GROUND (Depth 1):
+- Who/what is in the CENTER of the frame?
+- Scale relative to canvas height (e.g. "50% height")
+- How many figures? What are they doing?
+- Are they the "bridge" between two opposing sides?
+- Clothing, expressions, poses, lighting
 
-2. PEOPLE (for EACH person visible):
-   - Exact position (e.g. "left 10%-35% of canvas width, top 5%-95% of canvas height")
-   - Face angle (straight-on, 3/4 left, 3/4 right, profile)
-   - Expression (mouth open/closed, eyebrows raised/furrowed, eyes wide/squinting)
-   - What they're wearing (colors, style)
-   - Lighting direction on their face (left, right, top, rim light)
-   - Cutoff point (head only, shoulders, waist, full body)
-   - Size relative to canvas height (e.g. "face occupies ~30% of canvas height")
+LAYER 3 — CONTENDERS / FOREGROUND (Depth 2):
+- Who/what is on the EXTREME LEFT and EXTREME RIGHT?
+- Scale: do they fill 100%+ of frame height? (heads touch top, chests touch bottom?)
+- FACE-OFF POSE: Left subject angle (e.g. 30° right), Right subject angle (e.g. 30° left)
+- Crop point: mid-chest up? Shoulders up?
+- For EACH person: expression (mouth open/closed, eyebrows, eyes), clothing (exact colors), hair, skin tone
+- RIM LIGHTING: bright edge light on the outer side of each face? Color of rim light?
 
-3. TEXT OVERLAYS (for EACH text element):
-   - EXACT text shown (verbatim, case-sensitive)
-   - Position: top/center/bottom, left/center/right + percentage from edges
-   - Font size relative to canvas (e.g. "text height is ~8% of canvas height")
-   - Font weight: thin/regular/bold/extra-bold/black
-   - Font family: sans-serif (Impact/Bebas/Montserrat-like), serif, handwritten, etc.
-   - EXACT font color (#hex)
-   - Text effects: outline (color + thickness), drop shadow (direction + color + blur), glow (color + spread), 3D extrude, gradient fill
-   - Letter spacing: tight/normal/wide
-   - Text transform: uppercase/lowercase/mixed
-   - Background behind text: none, solid rectangle (color + opacity), gradient bar, banner shape
-   - If text is inside a shape/banner: describe shape, color (#hex), border radius, padding
+LAYER 4 — UI OVERLAY (Depth 3, topmost):
+For EACH text/graphic element:
+- EXACT text verbatim (case-sensitive)
+- Position: percentage from edges (e.g. "top center, 3% from top")
+- Font: weight (bold/black/extra-bold), family (Impact/Bebas/Montserrat), size relative to canvas
+- Color (#hex), outline (color + thickness), drop shadow (direction + color + blur), glow
+- Background shape: rectangle (color, border-radius, padding), banner, pill, none
+- Letter spacing, text transform (uppercase/lowercase)
 
-4. BACKGROUND:
-   - What is the background? (solid color, gradient, photo, blurred scene, pattern)
-   - Exact colors (#hex) and gradient direction if applicable
-   - Blur level (sharp, slight blur, heavy blur, bokeh)
-   - Any overlays on background (dark vignette, color tint, light rays, particles)
+For EACH graphic element (logos, icons, banners, dividers, badges):
+- Type, position, size, colors, shape details
 
-5. GRAPHIC ELEMENTS:
-   - Arrows (position, color, size, style — solid/outlined/hand-drawn)
-   - Circles/highlights (position, color, thickness, dashed/solid)
-   - Emojis (which emoji, position, size)
-   - Logos/icons (position, size, what they depict)
-   - Borders/frames (color, thickness, position)
-   - Split lines/dividers (vertical/horizontal/diagonal, color, position)
-   - Banners/ribbons/badges (shape, color, position, text inside)
+=== STYLING RULES (The "Vibe") ===
+Identify these constants:
+- Rim Light Rule: do foreground subjects have bright edge lighting? Which side? Color?
+- Saturation: normal, boosted +20% (hyper-real), desaturated?
+- Contrast: low/medium/high/extreme? Deep blacks? Blown highlights?
+- Text Rule: font family, fill color, stroke color + thickness, drop shadow specs
+- Color Temperature: warm/cool/neutral?
 
-6. COLOR ANALYSIS:
-   - Dominant color (#hex) and % of canvas it covers
-   - Secondary color (#hex) and % coverage
-   - Accent/pop color (#hex) — the color that draws the eye
-   - Overall temperature: warm/cool/neutral
-   - Contrast level: low/medium/high/extreme
-   - Saturation: desaturated/normal/vivid/hyper-saturated
+=== RECREATION TEMPLATE ===
+Now produce TWO things:
 
-7. LIGHTING & MOOD:
-   - Primary light source direction
-   - Light color temperature (warm yellow, cool blue, neutral white)
-   - Dramatic shadows? Where?
-   - Overall mood: dark/moody, bright/energetic, warm/cozy, cold/clinical
+1. A "recreate_prompt" — a VERBATIM architectural blueprint (300+ words) that describes:
+   - LAYER 1: Exact background with blur, colors, lighting
+   - LAYER 2: Center subjects with position, scale, clothing, expressions
+   - LAYER 3: Left/Right foreground subjects with face-off poses, expressions, rim lighting, clothing, crop
+   - LAYER 4: Every text element with exact words, font, color, effects, position. Every graphic element.
+   - Styling: saturation, contrast, rim lighting rules
+   Use spatial language: "left 0-30% of canvas", "bottom 12% of canvas", "centered at 50%"
 
-NOW — generate a "recreate_prompt" that is an EXACT blueprint. This prompt must:
-- Describe the EXACT composition using spatial language ("left third", "bottom 15%", "centered at 50% width")
-- Specify EVERY text element with exact words, font style, color, size, effects, and position
-- Describe EVERY person's position, expression, clothing, and lighting
-- Include ALL graphic elements (arrows, circles, banners, overlays) with positions and colors
-- Specify the EXACT background treatment
-- Include color hex codes for every color mentioned
-- Be so detailed that someone who has NEVER seen the original could recreate it identically
+2. A "generic_template" — a fill-in-the-blank version that can recreate this EXACT layout for ANY topic:
+   Replace specific people/text with [SUBJECT A], [SUBJECT B], [CENTER GROUP], [TITLE], [SETTING], [COLOR A], [COLOR B], etc.
+   Keep ALL positioning, styling, and layer rules intact.
 
-RESPOND IN THIS EXACT JSON FORMAT:
+RESPOND IN THIS EXACT JSON:
 {
-  "detailed_description": "500+ word forensic description of every visual element with positions, sizes, colors",
-  "layout_breakdown": "Grid-based spatial breakdown — what's in each third of the canvas",
-  "people": [
-    {
-      "position": "left 5%-30%, full height",
-      "description": "detailed description of person",
-      "expression": "mouth open, shocked eyes, raised eyebrows",
-      "clothing": "what they wear",
-      "lighting": "rim light from right, warm key light from left"
+  "detailed_description": "500+ word forensic description of every visual element decomposed by layer",
+  "layers": {
+    "background": {
+      "content": "what the background shows",
+      "blur_percent": 25,
+      "colors": ["#hex1", "#hex2"],
+      "lighting": "dark vignette edges, floodlights at top, etc",
+      "atmosphere": "dark/moody, bright/energetic, etc"
+    },
+    "midground": {
+      "subjects": [
+        {
+          "position": "center, 50% height",
+          "description": "who/what",
+          "expression": "expression details",
+          "clothing": "clothing details",
+          "scale": "50% of canvas height"
+        }
+      ]
+    },
+    "foreground": {
+      "left_subject": {
+        "position": "left 0-30%, full height",
+        "face_angle": "30° right",
+        "expression": "serious, mouth closed, focused eyes",
+        "clothing": "red jersey, white trim",
+        "rim_light": "bright white edge on left shoulder/face",
+        "crop": "mid-chest up",
+        "scale": "110% canvas height"
+      },
+      "right_subject": {
+        "position": "right 70-100%, full height",
+        "face_angle": "30° left",
+        "expression": "intense, mouth open, wide eyes",
+        "clothing": "blue jersey",
+        "rim_light": "bright white edge on right shoulder/face",
+        "crop": "mid-chest up",
+        "scale": "110% canvas height"
+      }
+    },
+    "ui_overlay": {
+      "text_elements": [
+        {
+          "text": "EXACT TEXT",
+          "position": "top center, 3% from top",
+          "size": "8% canvas height",
+          "font": "extra-bold Impact/Bebas sans-serif",
+          "color": "#FFFFFF",
+          "outline": "3px #000000",
+          "shadow": "4px down-right #000000 60% opacity",
+          "background_shape": "none / red rectangle #FF0000 border-radius 4px / etc",
+          "transform": "uppercase"
+        }
+      ],
+      "graphic_elements": [
+        {
+          "type": "logo/banner/divider/badge/icon",
+          "position": "where on canvas %",
+          "colors": ["#hex"],
+          "size": "% of canvas",
+          "details": "shape, content, etc"
+        }
+      ]
     }
-  ],
-  "text_elements": [
-    {
-      "text": "EXACT TEXT",
-      "position": "top center, 5% from top edge",
-      "size": "8% of canvas height",
-      "font": "extra-bold condensed sans-serif (Impact/Bebas style)",
-      "color": "#FFFFFF",
-      "effects": "2px black outline, drop shadow 3px down-right #000000 50% opacity",
-      "background": "none / red rectangle #FF0000 with 4px border radius / etc",
-      "letter_spacing": "tight",
-      "transform": "uppercase"
-    }
-  ],
-  "graphic_elements": [
-    {
-      "type": "arrow/circle/emoji/logo/banner/divider",
-      "position": "where on canvas",
-      "color": "#hex",
-      "size": "relative to canvas",
-      "details": "any additional details"
-    }
-  ],
-  "background": {
-    "type": "solid/gradient/photo/blurred",
-    "colors": ["#hex1", "#hex2"],
-    "blur_level": "none/slight/heavy",
-    "overlays": "dark vignette, color tint, etc"
+  },
+  "styling_rules": {
+    "rim_light": "bright white edge light on outer face edge of foreground subjects",
+    "saturation": "boosted +20%, hyper-realistic",
+    "contrast": "high — deep blacks, bright highlights",
+    "text_style": "Impact/Bebas, white fill, thick black stroke, drop shadow",
+    "color_temperature": "warm/cool/neutral"
   },
   "color_palette": ["#hex1", "#hex2", "#hex3", "#hex4", "#hex5"],
+  "layout_breakdown": "Grid description: left third, center third, right third, top/bottom zones",
   "typography": {
-    "text_shown": "ALL text verbatim, separated by newlines",
+    "text_shown": "ALL text verbatim",
     "font_style": "exact font description",
-    "font_color": "#hex primary text color",
-    "font_effects": "all effects described"
+    "font_color": "#hex",
+    "font_effects": "outline + shadow + glow details"
   },
-  "emotional_hook": "What emotion this triggers and why — the psychology behind it",
-  "style_category": "cinema / minimal / documentary / reaction / tutorial / sports / gaming",
-  "ctr_analysis": "Why this SPECIFIC layout + color + text combo makes it impossible to scroll past",
-  "recreate_prompt": "ULTRA-DETAILED 300+ word AI image generation prompt that specifies EXACT positions (use percentages), EXACT colors (#hex), EXACT text with styling, EXACT expressions, EXACT lighting, EXACT background — everything needed to recreate this thumbnail VERBATIM. Include spatial coordinates for every element. Describe text overlays with exact words, font size, weight, color, outline, shadow, and position. This must read like architectural blueprints for the thumbnail.",
+  "emotional_hook": "What emotion this triggers and the psychology behind it",
+  "style_category": "cinema / minimal / documentary / reaction / sports / gaming",
+  "ctr_analysis": "Why this specific layer composition + colors + text makes it impossible to scroll past",
+  "recreate_prompt": "ULTRA-DETAILED 400+ word layered blueprint: Layer 1 background (blur, colors, atmosphere), Layer 2 center subjects (position, scale, details), Layer 3 foreground face-off subjects (left/right positions, angles, expressions, rim lighting, clothing, crop), Layer 4 all text elements (exact words, font, color, outline, shadow, position) and all graphics (logos, banners, dividers with positions and colors). Include styling rules (saturation, contrast, rim light). Use percentages for ALL positions. This must be so detailed that someone who has NEVER seen the original can recreate it identically.",
+  "generic_template": "Fill-in-the-blank version: 'A YouTube thumbnail for [INSERT TOPIC] featuring [LAYOUT TYPE]. Layer 1: Blurred [SETTING] background... Layer 2: [CENTER GROUP] at center 50% scale... Layer 3: [SUBJECT A] on far left facing right in [COLOR A], [SUBJECT B] on far right facing left in [COLOR B], both with rim lighting... Layer 4: [TITLE] text top center in white Impact with black stroke, [BOTTOM BANNER] spanning full width...' Keep ALL positioning and styling rules.",
   "editable_elements": {
     "background_description": "Detailed background for editing",
-    "subject_description": "Main subject with full detail",
+    "subject_description": "Main subjects with full detail",
     "text_overlay": "All text shown",
-    "accent_color": "#hex of the eye-catching pop color",
+    "accent_color": "#hex pop color",
     "mood": "Overall mood/vibe"
   }
 }`, finalThumbUrl, 0.3);
