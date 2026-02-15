@@ -3,10 +3,20 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 async function callGeminiWithImage(prompt, imageUrl, temperature = 0.7) {
   const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
 
-  // Fetch image and convert to base64
+  // Fetch image and convert to base64 safely
   const imgResp = await fetch(imageUrl);
+  if (!imgResp.ok) throw new Error(`Failed to fetch image: ${imgResp.status}`);
   const imgBuf = await imgResp.arrayBuffer();
-  const base64 = btoa(String.fromCharCode(...new Uint8Array(imgBuf)));
+  const bytes = new Uint8Array(imgBuf);
+  
+  // Convert to base64 in chunks to avoid stack overflow on large images
+  let base64 = '';
+  const chunkSize = 32768;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    base64 += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  base64 = btoa(base64);
+  
   const mimeType = imgResp.headers.get('content-type') || 'image/jpeg';
 
   const response = await fetch(
