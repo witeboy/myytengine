@@ -88,130 +88,208 @@ Deno.serve(async (req) => {
       finalThumbUrl = fallbackUrl;
     }
 
-    // Analyze thumbnail using Natural Language Blueprint approach
-    const analysis = await callGeminiWithImage(`You are a world-class thumbnail reverse-engineer. Describe this YouTube thumbnail so precisely that an AI IMAGE GENERATOR can reproduce it.
+    // PHASE 1: Exhaustive forensic pixel-by-pixel description
+    const forensicDescription = await callGeminiWithImage(`You are a FORENSIC IMAGE ANALYST. Your job is to describe this YouTube thumbnail with ABSOLUTE EXHAUSTIVE DETAIL — as if you are documenting every single pixel for someone who is completely blind and must recreate it perfectly.
 
-=== CRITICAL RULES ===
-- Think in VISUAL CONCEPTS and DESCRIPTIVE LANGUAGE, not code or measurements
-- NEVER use percentages, pixel coordinates, opacity values, hex codes, or border-radius — AI generators ignore all of these
-- Use SPATIAL RELATIONSHIPS: "anchored at the top center", "filling the left third", "spanning the bottom edge", "smaller in the frame to show depth"
-- Use PHOTOGRAPHY LANGUAGE: "extreme close-up", "rim lighting on left profile", "shallow depth of field", "heavy bokeh"
-- Use ARCHETYPE descriptions for people: "bald man with intense expression and dark goatee" NOT "person in red"
-- Use COLOR NAMES not hex codes: "crimson red", "electric blue", "pure white", "deep black"
-- Describe text+container as ONE design unit: "a red pill-shaped badge containing white text 'LIVE'" — never describe box and text separately
-- Limit text to 2-3 elements MAX (main title + one banner). AI creates glitchy text with too many elements.
-- Tell the AI this is a "graphic design composition" to ensure text renders as flat 2D overlays, not 3D objects
+=== YOUR MISSION ===
+Write a MINIMUM 800-word description covering EVERY visible detail. Leave NOTHING out. Describe it as if you're scanning the image from top-left to bottom-right, pixel row by pixel row.
 
-=== ANALYZE BY VISUAL LAYERS ===
+=== DESCRIBE ALL OF THE FOLLOWING ===
+
+OVERALL COMPOSITION:
+- Exact layout structure (split screen, centered, rule of thirds, diagonal, etc.)
+- What occupies each zone: top-left, top-center, top-right, center-left, dead-center, center-right, bottom-left, bottom-center, bottom-right
+- The visual hierarchy: what is BIGGEST, what is SMALLEST, what overlaps what
+- Any geometric shapes formed by the composition (triangles, diagonals, V-shapes)
+
+EVERY PERSON (for each person visible, describe):
+- Exact position in the frame (which third, which edge, how much space they occupy)
+- Face: skin tone (exact shade — light olive, deep brown, pale peach, etc.), facial structure (round, angular, square jaw), forehead shape, cheekbone prominence
+- Eyes: color if visible, shape (almond, round, hooded), direction of gaze, intensity, eyelids (half-closed, wide open), eyebrows (thick, thin, arched, furrowed, raised)
+- Nose: size, shape (button, aquiline, broad, narrow bridge)
+- Mouth: open/closed, teeth visible (how many, white/yellow), lip thickness, lip color, any snarl or smirk or neutral
+- Facial hair: beard (length, style, color, density, patchy/full), mustache, stubble, clean-shaven
+- Hair: style (fade, buzz cut, long flowing, braids, bald, receding), color (jet black, dark brown, dirty blonde, silver grey), texture (curly, straight, wavy, coily), length, any hair accessories
+- Ears: visible or hidden, any earrings or accessories
+- Neck: visible, thickness, any jewelry (chains, chokers), Adam's apple visible
+- Expression decoded: which muscles are engaged — is the corrugator supercilii (brow furrower) active? Is the zygomaticus major (smile muscle) engaged? Orbicularis oculi (eye squint)? Describe the EMOTION conveyed.
+- Clothing: exact garment type, exact colors (not just "red" but "bright cherry red with thin white horizontal pinstripes"), collar style, any logos/crests/numbers/text on clothing, sleeve visibility, fabric texture (shiny polyester, matte cotton, leather, silk)
+- Body: angle to camera (facing straight, quarter turn, three-quarter turn, profile), shoulder position, lean direction, how much of the body is visible (head only, head and shoulders, down to chest, down to waist)
+- Lighting ON this person: where is the key light coming from (left, right, above, behind), fill light, rim/edge light (which side, color, intensity), any colored light cast on their face (red glow, blue tint), shadow patterns on face (under nose, under chin, cheekbone shadow)
 
 BACKGROUND:
-What is behind everything? Describe the setting using evocative language. What is the blur level (sharp / soft focus / heavy bokeh)? What is the mood and lighting (dark stadium at night with floodlights / bright kitchen / moody forest)? What color temperature dominates? Any atmospheric effects (lens flare, light rays, particles)?
+- What is the actual setting/location (stadium, room, abstract, gradient, outdoor scene, etc.)
+- Blur level (pin-sharp, slight defocus, moderate bokeh, completely blown-out bokeh)
+- Every color visible in the background and where it appears
+- Light sources in the background (lamps, spotlights, windows, neon, sun, stadium floodlights)
+- Atmospheric effects (haze, fog, smoke, dust particles, rain, light rays, God rays, lens flare locations)
+- Any objects, structures, or patterns visible even through blur (goalposts, crowd shapes, buildings, trees)
+- Gradient directions (does it go dark at edges and light in center? Dark at bottom, light at top?)
+- Vignette: is there darkening at the corners/edges? How strong? Which corners?
 
-MID-GROUND:
-Who or what occupies the CENTER of the frame? Describe their size relative to the foreground subjects using depth language ("smaller in the frame to create depth", "standing further back"). For each person give their ARCHETYPE: age, build, hair style/color, skin tone, facial hair, distinguishing features. Describe clothing using color names. Describe expressions and poses.
+EVERY TEXT ELEMENT (for each piece of text):
+- The EXACT text verbatim, preserving capitalization
+- Position: where exactly is it anchored in the frame
+- Size: relative to the frame (does it span the full width? Half? A quarter?)
+- Font characteristics: weight (thin, regular, bold, black, ultra-heavy), width (condensed, normal, extended), serif vs sans-serif, style family (looks like Impact, looks like Bebas Neue, looks like Futura, custom)
+- Color of the text fill
+- Outline/stroke: is there one? Color, thickness (thin hairline, medium, thick chunky)
+- Shadow: direction, color, blur amount, offset distance
+- Glow: any outer glow effect? Color?
+- Background behind text: is the text floating on the image, or does it sit on a colored bar/banner/shape?
+- Letter spacing: tight/normal/wide
+- Any distortion, perspective, rotation, curve, or warp on the text
 
-FOREGROUND:
-Who dominates the LEFT and RIGHT edges? For EACH person describe:
-- ARCHETYPE: "mixed-race man with short dark fade haircut and stubble" / "blonde woman with sharp cheekbones"
-- EXPRESSION: "mouth open shouting aggressively" / "jaw clenched with a serious focused stare" / "wide-eyed shock"
-- CLOTHING: color names and style ("red and white striped Arsenal jersey", "navy blue suit with gold tie")
-- CROP: use "extreme close-up" language — "cropped from mid-chest up, head nearly touching the top edge"
-- FACING: "looking intensely to the right" / "turned slightly left with eyes locked on camera"
-- RIM LIGHTING: "strong cool-white rim lighting on his left profile, cutting him out from the background" / "warm orange edge glow on her right shoulder"
+EVERY GRAPHIC ELEMENT (logos, icons, dividers, shapes, borders, banners):
+- What it is (team logo, channel logo, VS divider, colored bar, decorative line, badge, arrow, emoji)
+- Exact position and size relative to frame
+- Colors, gradients, borders
+- Any text inside it
+- Opacity (solid, semi-transparent, ghosted)
 
-TEXT & GRAPHICS (maximum 2-3 text elements):
-For each, describe as a SINGLE DESIGN UNIT:
-- "Massive heavy white Impact font reading 'MATCHDAY' anchored prominently at the top center with a thick black drop shadow"
-- "A full-width graphic lower-third banner anchored to the bottom edge — left zone is crimson red containing 'ARSENAL' in bold white, right zone is royal blue containing 'WIGAN' in bold white, separated by a center divider square reading 'VS'"
-- "A small red pill-shaped badge containing 'LIVE' in white, tucked directly beneath the main title"
+COLOR & LIGHT ANALYSIS:
+- The dominant color (the color that takes up the most area)
+- The accent/pop color (the color that grabs attention)
+- Secondary colors
+- Color temperature overall (warm golden, cool blue, neutral, mixed — left side warm / right side cool)
+- Contrast level (low/medium/high/extreme — are the darks truly black? Are the highlights blown out white?)
+- Saturation level (muted/natural/saturated/hyper-saturated/selectively saturated)
+- Any color grading or filters applied (teal-and-orange grade, vintage warm, cold clinical, etc.)
 
-STYLE & RENDER:
-Describe the overall aesthetic: "HDR photography", "sports broadcast aesthetic", "YouTube clickbait with high contrast", "hyper-realistic skin textures", "Unreal Engine 5 render", "cinematic documentary", etc.
+EDGES & DETAILS:
+- Are subject edges crisp and sharp or soft and blended into the background?
+- Any visible compositing artifacts (hard cutout edges, halo around hair, etc.)
+- Skin texture: smooth airbrushed or detailed with visible pores
+- Fabric detail level
+- Any watermarks, channel logos, or small branding elements
 
-=== NOW PRODUCE ===
+Return as plain JSON:
+{
+  "forensic_description": "Your 800+ word exhaustive description here. Every person, every text, every color, every shadow, every strand of hair, every graphic element. Miss NOTHING."
+}`, finalThumbUrl, 0.2);
 
-1. "recreate_prompt": A COMPLETE 300+ word flowing AI image generation prompt. NO percentages. NO pixels. NO hex codes. Use color names, spatial relationships, archetype descriptions, photography terms. Structure it as: style declaration → composition type → foreground subjects with expressions/clothing/rim lighting → mid-ground with depth cues → background with blur and mood → text as unified design units → render quality keywords.
+    // PHASE 2: Use the forensic description to generate structured analysis + AI image prompt
+    const analysis = await callGeminiWithImage(`You are given a FORENSIC PIXEL-BY-PIXEL DESCRIPTION of a YouTube thumbnail (below), AND you can also see the actual thumbnail image. Your job is to produce a structured analysis AND an AI image generation prompt.
 
-2. "generic_template": A fill-in-the-blank version replacing specific subjects/text with [SUBJECT A], [SUBJECT B], [CENTER GROUP], [TITLE], [BOTTOM BANNER], [SETTING], [COLOR A], [COLOR B]. Keep ALL spatial relationships and styling descriptors.
+=== FORENSIC DESCRIPTION (from Phase 1) ===
+${forensicDescription.forensic_description}
+
+=== RULES FOR THE "recreate_prompt" ===
+The recreate_prompt is what an AI IMAGE GENERATOR will use. It must follow these rules:
+- Think in VISUAL CONCEPTS and DESCRIPTIVE LANGUAGE
+- NEVER use percentages, pixel coordinates, opacity values, hex codes, or border-radius
+- Use SPATIAL RELATIONSHIPS: "anchored at the top center", "filling the left third", "spanning the bottom edge"
+- Use PHOTOGRAPHY LANGUAGE: "extreme close-up", "rim lighting on left profile", "shallow depth of field"
+- Use ARCHETYPE descriptions: "bald man with intense expression and dark goatee" NOT "person in red"
+- Use COLOR NAMES: "crimson red", "electric blue" — never hex codes
+- Describe text+container as ONE design unit: "a red pill-shaped badge containing white text 'LIVE'"
+- MAX 2-3 text elements in the prompt. Consolidate where possible.
+- Include "graphic design composition" to force flat 2D text overlays
+
+The recreate_prompt should be 400+ words and incorporate ALL the forensic details — every person's archetype, expression muscles, hair, clothing details, rim lighting, background atmosphere, text design, color grading. It must read like a hyper-detailed creative brief.
 
 RESPOND IN THIS EXACT JSON:
 {
-  "detailed_description": "400+ word natural-language description of every visual element using archetype descriptions and spatial relationships — no measurements",
+  "detailed_description": "The full forensic description reformatted into a readable narrative — 600+ words covering every visual element",
   "layout_type": "split-screen face-off / centered hero / reaction / before-after / etc",
   "layers": {
     "background": {
-      "setting": "what the location is in plain language",
+      "setting": "what the location is",
       "blur": "sharp / soft focus / heavy bokeh",
-      "mood": "dark and moody / bright and energetic / warm and inviting",
-      "lighting": "floodlights with lens flare / soft diffused / dramatic side shadows",
-      "description": "Full natural-language description"
+      "mood": "dark and moody / bright and energetic",
+      "lighting": "description of all light sources and their effects",
+      "atmosphere": "haze, particles, lens flare, vignette details",
+      "colors": "every color visible in the background by name",
+      "description": "Full exhaustive background description"
     },
     "midground": {
       "subjects": [
         {
-          "archetype": "older bald Black man / young woman with curly red hair / etc",
-          "expression": "serious stare / wide smile / shocked open mouth",
-          "clothing": "red hoodie / navy suit / white lab coat",
-          "pose": "standing shoulder-to-shoulder / pointing at camera / arms crossed",
-          "depth_cue": "smaller in the frame to create depth behind the foreground"
+          "archetype": "full physical archetype: age, ethnicity, build, skin tone, face shape",
+          "hair": "style, color, texture, length",
+          "expression": "exact expression with facial muscle details",
+          "clothing": "garment type, exact color names, patterns, logos, fabric",
+          "pose": "body angle, shoulder position, lean direction",
+          "lighting_on_subject": "key light direction, rim light, colored light cast",
+          "depth_cue": "how depth is conveyed (smaller, further back, slightly defocused)"
         }
       ],
-      "description": "Full natural-language mid-ground description"
+      "description": "Full mid-ground description"
     },
     "foreground": {
       "left_subject": {
-        "archetype": "specific physical archetype description",
-        "expression": "detailed expression using descriptive words",
-        "clothing": "color name and style",
-        "crop": "extreme close-up, mid-chest up, head nearly touching top edge",
-        "facing": "looking intensely to the right",
-        "rim_light": "strong cool-white rim lighting on left profile, separating from background",
-        "description": "Full flowing description"
+        "archetype": "full physical description: age, ethnicity, build, skin tone, face shape, jaw, cheekbones",
+        "hair": "style, color, texture, length, hairline",
+        "facial_hair": "beard style, length, color, density / clean-shaven",
+        "eyes": "color, shape, gaze direction, intensity, eyelid position, eyebrow position",
+        "mouth": "open/closed, teeth visible, lip details, expression",
+        "expression_decoded": "which facial muscles are active and what emotion it conveys",
+        "clothing": "exact garment with detailed color names, patterns, logos, collar, fabric texture",
+        "crop": "how much is visible and how they fill the frame",
+        "facing": "exact angle and direction",
+        "rim_light": "which side, color, intensity, separation effect",
+        "skin_detail": "texture quality, any shadows, color cast on skin",
+        "description": "Full flowing description of this person"
       },
       "right_subject": {
-        "archetype": "specific physical archetype description",
-        "expression": "detailed expression",
-        "clothing": "color name and style",
-        "crop": "extreme close-up, mid-chest up",
-        "facing": "looking aggressively to the left",
-        "rim_light": "strong warm rim lighting on right profile",
+        "archetype": "full physical description",
+        "hair": "style, color, texture",
+        "facial_hair": "details",
+        "eyes": "details",
+        "mouth": "details",
+        "expression_decoded": "facial muscle analysis and emotion",
+        "clothing": "full details",
+        "crop": "framing details",
+        "facing": "angle and direction",
+        "rim_light": "details",
+        "skin_detail": "texture and lighting",
         "description": "Full flowing description"
       }
     },
     "text_and_graphics": {
       "elements": [
         {
-          "description": "Complete single-unit description: 'Massive heavy white Impact font reading TITLE anchored at the top center with thick black drop shadow'",
-          "text": "EXACT TEXT",
-          "type": "title / badge / banner"
+          "text": "EXACT TEXT verbatim with capitalization",
+          "type": "title / badge / banner / label",
+          "position": "where in the frame using spatial language",
+          "font": "weight, width, style family",
+          "color": "fill color name",
+          "outline": "stroke details if any",
+          "shadow": "shadow details if any",
+          "glow": "glow details if any",
+          "background_shape": "what sits behind the text (colored bar, pill shape, banner, nothing)",
+          "description": "Complete single-unit description combining text + container + effects"
         }
       ]
     }
   },
   "styling": {
-    "render_quality": "HDR photography, 4K, hyper-realistic skin textures",
-    "aesthetic": "sports broadcast / YouTube clickbait / cinematic documentary",
-    "contrast": "high contrast with deep blacks and blown highlights",
-    "saturation": "vivid and saturated / desaturated moody / natural",
-    "rim_lighting": "strong edge lighting on foreground subjects separating them from background",
-    "color_temperature": "warm / cool / mixed"
+    "render_quality": "HDR photography, 4K, skin texture level, etc",
+    "aesthetic": "overall visual style name",
+    "contrast": "level and character of contrast",
+    "saturation": "level and any selective saturation",
+    "color_grading": "any overall color grade or filter applied",
+    "rim_lighting": "global rim lighting approach",
+    "color_temperature": "warm / cool / mixed / split",
+    "skin_texture": "smooth airbrushed / detailed pores / hyper-real",
+    "edge_quality": "crisp cutout / soft blended / natural"
   },
   "color_palette": ["color name 1", "color name 2", "color name 3", "color name 4", "color name 5"],
-  "layout_breakdown": "Left third: [what fills it], Center: [what fills it], Right third: [what fills it], Top zone: [text], Bottom zone: [banner]",
+  "layout_breakdown": "Spatial description of what fills each zone of the frame",
   "typography": {
     "text_shown": "ALL text verbatim",
-    "font_style": "heavy Impact / bold Bebas Neue / condensed sans-serif",
-    "font_color": "white with thick black outline and heavy drop shadow",
-    "font_effects": "described in words: thick outline, heavy shadow, subtle glow"
+    "font_style": "detailed font description",
+    "font_color": "color with effects",
+    "font_effects": "all effects in descriptive words"
   },
   "emotional_hook": "What emotion this triggers and the psychology behind it",
   "style_category": "sports / gaming / cinema / reaction / tutorial / documentary",
   "ctr_analysis": "Why this composition makes it impossible to scroll past",
-  "recreate_prompt": "A COMPLETE 300+ word natural-language prompt. NO percentages, NO pixels, NO hex. Use color names, spatial relationships, archetype descriptions, photography terms. Must read like a creative brief for a photographer, not a CSS stylesheet.",
-  "generic_template": "Fill-in-the-blank: 'A [STYLE] YouTube thumbnail for [TOPIC]. A dramatic [LAYOUT] composition. FOREGROUND: An extreme close-up of [SUBJECT A] in [COLOR A] [CLOTHING], looking [DIRECTION] with [EXPRESSION], lit with [RIM LIGHT]. On the opposite side, [SUBJECT B] in [COLOR B]... MID-GROUND: [CENTER GROUP] smaller in frame... BACKGROUND: A blurred [SETTING] with [MOOD]... TEXT: Massive [FONT] reading [TITLE] anchored at top. [BANNER] spanning the bottom. STYLE: [RENDER KEYWORDS].'",
+  "recreate_prompt": "A COMPLETE 400+ word natural-language AI image generation prompt that incorporates ALL forensic details. Start with 'A high-detail 4K YouTube thumbnail graphic design composition.' Then describe composition type → every foreground person (archetype, hair, facial hair, skin, expression muscles, clothing details, crop, rim lighting) → mid-ground subjects with depth → background with blur, atmosphere, light sources, colors → text as unified design units (max 2-3) → overall color grading, contrast, saturation, render quality. Use color names, spatial relationships, photography terms. NO percentages, NO hex, NO pixels.",
+  "generic_template": "Fill-in-the-blank version preserving all spatial, lighting, and style descriptors. Replace subjects with [SUBJECT A], [SUBJECT B], etc.",
   "editable_elements": {
     "background_description": "Natural language background",
-    "subject_description": "Main subject archetypes",
+    "subject_description": "Main subject archetypes with all physical details",
     "text_overlay": "All text shown verbatim",
     "accent_color": "the eye-catching color name",
     "mood": "Overall mood/vibe"
