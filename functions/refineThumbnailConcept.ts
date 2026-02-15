@@ -65,6 +65,7 @@ ${thumb.image_prompt || ''}
 Apply the user's feedback to improve the concept. Modify ONLY what the user asks for — keep everything else intact. Then regenerate a complete, improved image prompt.
 
 === CRITICAL PROMPT RULES (for image_prompt) ===
+- MANDATORY: The image_prompt MUST explicitly state "16:9 aspect ratio, 1280x720 resolution, widescreen landscape format" at the very beginning
 - Think in VISUAL CONCEPTS and DESCRIPTIVE LANGUAGE, not code/measurements
 - NEVER use percentages, pixel coordinates, opacity values, or hex color codes
 - Use SPATIAL RELATIONSHIPS: "anchored at the top center", "filling the left third"
