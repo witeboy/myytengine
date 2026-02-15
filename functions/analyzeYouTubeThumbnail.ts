@@ -89,91 +89,120 @@ Deno.serve(async (req) => {
     }
 
     // PHASE 1: Exhaustive forensic pixel-by-pixel description
-    const forensicDescription = await callGeminiWithImage(`You are a FORENSIC IMAGE ANALYST. Your job is to describe this YouTube thumbnail with ABSOLUTE EXHAUSTIVE DETAIL — as if you are documenting every single pixel for someone who is completely blind and must recreate it perfectly.
+    const forensicDescription = await callGeminiWithImage(`You are a FORENSIC IMAGE ANALYST with expertise in portrait photography, fashion, and facial anatomy. Your job is to describe this YouTube thumbnail with ABSOLUTE EXHAUSTIVE DETAIL — as if you are documenting every single pixel for someone who is completely blind and must recreate it perfectly.
 
 === YOUR MISSION ===
 Write a MINIMUM 800-word description covering EVERY visible detail. Leave NOTHING out. Describe it as if you're scanning the image from top-left to bottom-right, pixel row by pixel row.
 
-=== DESCRIBE ALL OF THE FOLLOWING ===
+=== STEP 1: PERSON COUNT (DO THIS FIRST) ===
+Before ANYTHING else, count EVERY person/face visible in the image. State the EXACT number.
+Then for EACH person, assign a label (Person 1, Person 2, etc.) going LEFT to RIGHT across the frame.
+State PRECISELY which side/zone each person occupies. If 2+ people share the same side, say so explicitly.
+Do NOT assume a split-screen = one person per side. COUNT CAREFULLY.
 
-OVERALL COMPOSITION:
-- FIRST: State the EXACT TOTAL NUMBER of people/faces visible in the image. Count VERY carefully — look at every part of the image.
-- For EACH person, state which SIDE of the frame they are on (left third, center third, right third). If 2+ people are on the same side, say so explicitly.
-- Exact layout structure (split screen, centered, rule of thirds, diagonal, etc.)
+=== STEP 2: OVERALL COMPOSITION ===
+- FIRST: "There are exactly [N] people in this image."
+- For each person: "Person [X] is positioned in the [left third / center / right third] of the frame."
+- Layout structure (split screen, centered, rule of thirds, diagonal, asymmetric, etc.)
 - What occupies each zone: top-left, top-center, top-right, center-left, dead-center, center-right, bottom-left, bottom-center, bottom-right
-- The visual hierarchy: what is BIGGEST, what is SMALLEST, what overlaps what
-- Any geometric shapes formed by the composition (triangles, diagonals, V-shapes)
+- Visual hierarchy: what is BIGGEST, what is SMALLEST, what overlaps what
+- Geometric shapes formed by the composition (triangles, diagonals, V-shapes)
 
-CRITICAL — PERSON COUNT & POSITIONS:
-Before describing each person, FIRST state the EXACT TOTAL NUMBER of people visible in the image. Then for EACH person, assign a label (Person 1, Person 2, etc.) going from LEFT to RIGHT. State PRECISELY which side of the frame each person is on (left third, center, right third). If multiple people are grouped on one side, say so explicitly (e.g. "Person 1 and Person 2 are BOTH on the left side"). Do NOT assume a split-screen means one person per side — COUNT CAREFULLY.
+=== STEP 3: EVERY PERSON (for each person, describe ALL of the following) ===
 
-EVERY PERSON (for each person visible, describe):
-- Label (Person 1, Person 2, etc. left-to-right)
-- EXACT side of the frame they are on (left third / center / right third)
+IDENTITY & POSITION:
+- Label (Person 1, Person 2, etc.)
+- EXACT zone in the frame (left third / center / right third, upper / middle / lower)
 - Whether they share a side with another person
-- Exact position in the frame (which third, which edge, how much space they occupy)
-- Face: skin tone (exact shade — light olive, deep brown, pale peach, etc.), facial structure (round, angular, square jaw), forehead shape, cheekbone prominence
-- Eyes: color if visible, shape (almond, round, hooded), direction of gaze, intensity, eyelids (half-closed, wide open), eyebrows (thick, thin, arched, furrowed, raised)
-- Nose: size, shape (button, aquiline, broad, narrow bridge)
-- Mouth: open/closed, teeth visible (how many, white/yellow), lip thickness, lip color, any snarl or smirk or neutral
-- Facial hair: beard (length, style, color, density, patchy/full), mustache, stubble, clean-shaven
-- Hair: style (fade, buzz cut, long flowing, braids, bald, receding), color (jet black, dark brown, dirty blonde, silver grey), texture (curly, straight, wavy, coily), length, any hair accessories
-- Ears: visible or hidden, any earrings or accessories
-- Neck: visible, thickness, any jewelry (chains, chokers), Adam's apple visible
-- Expression decoded: which muscles are engaged — is the corrugator supercilii (brow furrower) active? Is the zygomaticus major (smile muscle) engaged? Orbicularis oculi (eye squint)? Describe the EMOTION conveyed.
-- Clothing: exact garment type, exact colors (not just "red" but "bright cherry red with thin white horizontal pinstripes"), collar style, any logos/crests/numbers/text on clothing, sleeve visibility, fabric texture (shiny polyester, matte cotton, leather, silk)
-- Body: angle to camera (facing straight, quarter turn, three-quarter turn, profile), shoulder position, lean direction, how much of the body is visible (head only, head and shoulders, down to chest, down to waist)
-- Lighting ON this person: where is the key light coming from (left, right, above, behind), fill light, rim/edge light (which side, color, intensity), any colored light cast on their face (red glow, blue tint), shadow patterns on face (under nose, under chin, cheekbone shadow)
+- How much of the frame they occupy (percentage estimate)
+- Scale relative to others (largest, smallest, similar size)
 
-BACKGROUND:
-- What is the actual setting/location (stadium, room, abstract, gradient, outdoor scene, etc.)
-- Blur level (pin-sharp, slight defocus, moderate bokeh, completely blown-out bokeh)
-- Every color visible in the background and where it appears
-- Light sources in the background (lamps, spotlights, windows, neon, sun, stadium floodlights)
-- Atmospheric effects (haze, fog, smoke, dust particles, rain, light rays, God rays, lens flare locations)
-- Any objects, structures, or patterns visible even through blur (goalposts, crowd shapes, buildings, trees)
-- Gradient directions (does it go dark at edges and light in center? Dark at bottom, light at top?)
-- Vignette: is there darkening at the corners/edges? How strong? Which corners?
+FACE & FEATURES:
+- Skin tone: exact shade (light olive, deep brown, pale peach, caramel, mahogany, etc.)
+- Facial structure: round, angular, square jaw, heart-shaped, oval — cheekbone prominence, forehead width
+- Eyes: color if visible, shape (almond, round, hooded, deep-set), gaze direction, intensity, eyelids position, eyebrow shape/thickness/arch/position
+- Nose: size, shape (button, aquiline, broad, narrow bridge, flat, pointed)
+- Mouth: open/closed, teeth visible (how many, whiteness), lip thickness upper vs lower, lip color, expression (smirk, grin, neutral, grimace)
+- Facial hair: beard (full, goatee, stubble, patchy, none), mustache, exact color, length, density, style
+- Skin details: scars, moles, wrinkles, dimples, acne, shine/sweat, makeup if any
 
-EVERY TEXT ELEMENT (for each piece of text):
-- The EXACT text verbatim, preserving capitalization
-- Position: where exactly is it anchored in the frame
-- Size: relative to the frame (does it span the full width? Half? A quarter?)
-- Font characteristics: weight (thin, regular, bold, black, ultra-heavy), width (condensed, normal, extended), serif vs sans-serif, style family (looks like Impact, looks like Bebas Neue, looks like Futura, custom)
-- Color of the text fill
-- Outline/stroke: is there one? Color, thickness (thin hairline, medium, thick chunky)
-- Shadow: direction, color, blur amount, offset distance
-- Glow: any outer glow effect? Color?
-- Background behind text: is the text floating on the image, or does it sit on a colored bar/banner/shape?
-- Letter spacing: tight/normal/wide
-- Any distortion, perspective, rotation, curve, or warp on the text
+HAIR:
+- Style (fade, buzz cut, afro, braids, locs, bald, receding, combover, slicked back, natural curls, etc.)
+- Color (jet black, dark brown, dirty blonde, silver grey, dyed — what color?)
+- Texture (coily, curly, wavy, straight, kinky)
+- Length, volume, part direction
+- Any head coverings: caps, hats, beanies, durags, turbans, headbands — exact color and style
 
-EVERY GRAPHIC ELEMENT (logos, icons, dividers, shapes, borders, banners):
-- What it is (team logo, channel logo, VS divider, colored bar, decorative line, badge, arrow, emoji)
-- Exact position and size relative to frame
-- Colors, gradients, borders
-- Any text inside it
-- Opacity (solid, semi-transparent, ghosted)
+ACCESSORIES ON FACE/HEAD:
+- Glasses/sunglasses: frame shape (aviator, round, rectangular, wayfarer), frame color, lens color/tint, reflections visible in lenses
+- Earrings: type (stud, hoop, dangly), color, which ear(s)
+- Piercings: location, type
+- Any other face/head accessories
 
-COLOR & LIGHT ANALYSIS:
-- The dominant color (the color that takes up the most area)
-- The accent/pop color (the color that grabs attention)
-- Secondary colors
-- Color temperature overall (warm golden, cool blue, neutral, mixed — left side warm / right side cool)
-- Contrast level (low/medium/high/extreme — are the darks truly black? Are the highlights blown out white?)
-- Saturation level (muted/natural/saturated/hyper-saturated/selectively saturated)
-- Any color grading or filters applied (teal-and-orange grade, vintage warm, cold clinical, etc.)
+EXPRESSION DECODED:
+- Which facial muscles are engaged (corrugator supercilii, zygomaticus major, orbicularis oculi, etc.)
+- The specific EMOTION conveyed (joy, intensity, confidence, shock, smugness, defiance, etc.)
+- Eye squint level, brow position, mouth corners
 
-EDGES & DETAILS:
-- Are subject edges crisp and sharp or soft and blended into the background?
-- Any visible compositing artifacts (hard cutout edges, halo around hair, etc.)
-- Skin texture: smooth airbrushed or detailed with visible pores
-- Fabric detail level
-- Any watermarks, channel logos, or small branding elements
+CLOTHING (be EXTREMELY specific):
+- Exact garment type (t-shirt, polo, blazer, hoodie, jersey, suit jacket, agbada, dashiki, etc.)
+- EXACT colors with detail (not just "red" but "bright cherry red with thin white horizontal pinstripes")
+- Collar style (crew neck, V-neck, button-down, mandarin, etc.)
+- ALL visible logos, crests, insignias, brand names, numbers, text on the clothing — describe exact position and appearance
+- Pattern details (solid, striped, checkered, floral, geometric, camo, tie-dye)
+- Fabric texture (shiny polyester, matte cotton, leather, silk, denim, velvet, linen)
+- Sleeve visibility, fit (tight, loose, oversized)
+- Any layering (jacket over shirt, chain over clothing, etc.)
+
+BODY & POSE:
+- Angle to camera (facing straight, quarter turn, three-quarter, profile)
+- Shoulder position, lean direction
+- How much of the body is visible (head only, head and shoulders, down to chest, waist, full body)
+- Hand positions if visible, gestures
+
+LIGHTING ON THIS PERSON:
+- Key light direction (left, right, above, behind)
+- Rim/edge light (which side, color, intensity, separation effect)
+- Any colored light cast on their face (warm orange glow, cool blue tint, red cast)
+- Shadow patterns on face (under nose, under chin, cheekbone shadow)
+
+=== STEP 4: BACKGROUND ===
+- Setting/location (studio, room, outdoor, abstract, gradient, etc.)
+- Blur level (sharp, slight defocus, moderate bokeh, completely blown-out)
+- Every color visible and where it appears
+- Light sources (lamps, spotlights, windows, neon, natural light)
+- Atmospheric effects (haze, fog, smoke, particles, lens flare, God rays)
+- Objects/structures visible even through blur
+- Gradient directions, vignette (which edges, strength)
+
+=== STEP 5: EVERY TEXT ELEMENT ===
+- EXACT text verbatim with capitalization
+- Position in frame, size relative to frame
+- Font: weight, width, serif/sans-serif, style family
+- Color, outline/stroke, shadow, glow
+- Background behind text (banner, bar, floating, shape)
+- Letter spacing, any distortion/rotation/perspective
+
+=== STEP 6: EVERY GRAPHIC ELEMENT ===
+- Logos, icons, dividers, shapes, borders, banners, emojis
+- Position, size, colors, gradients, opacity
+- Any text inside graphic elements
+
+=== STEP 7: COLOR & LIGHT ANALYSIS ===
+- Dominant, accent, and secondary colors
+- Color temperature (warm/cool/mixed/split)
+- Contrast level, saturation level
+- Color grading or filters applied
+
+=== STEP 8: EDGES & DETAILS ===
+- Subject edge quality (crisp cutout, soft blend, natural)
+- Compositing artifacts visible
+- Skin texture quality, fabric detail level
+- Watermarks, channel logos, small branding
 
 Return as plain JSON:
 {
-  "forensic_description": "Your 800+ word exhaustive description here. Every person, every text, every color, every shadow, every strand of hair, every graphic element. Miss NOTHING."
+  "forensic_description": "Your 800+ word exhaustive description here. Start with 'There are exactly [N] people in this image.' Then label and describe each person left-to-right. Cover every accessory, every insignia, every color, every shadow. Miss NOTHING."
 }`, finalThumbUrl, 0.2, 16384);
 
     // PHASE 2: Use the forensic description to generate structured analysis + AI image prompt
