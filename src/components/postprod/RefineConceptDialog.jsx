@@ -20,6 +20,7 @@ const QUICK_SUGGESTIONS = [
 export default function RefineConceptDialog({ thumb, open, onOpenChange, onRefined }) {
   const [feedback, setFeedback] = useState('');
   const [refining, setRefining] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState(null);
 
   const handleRefine = async () => {
@@ -32,7 +33,14 @@ export default function RefineConceptDialog({ thumb, open, onOpenChange, onRefin
     });
     setResult(res.data);
     setRefining(false);
-    if (res.data.success) {
+    if (res.data.success && res.data.updated_prompt) {
+      // Auto-generate the new image immediately
+      setGenerating(true);
+      const { url } = await base44.integrations.Core.GenerateImage({
+        prompt: `16:9 aspect ratio, 1280x720, widescreen landscape YouTube thumbnail. ${res.data.updated_prompt}`,
+      });
+      await base44.entities.ThumbnailConcepts.update(thumb.id, { image_url: url });
+      setGenerating(false);
       onRefined();
     }
   };
