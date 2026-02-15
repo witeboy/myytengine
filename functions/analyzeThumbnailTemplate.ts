@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { image_url, source_url, niche_tags, library_category } = await req.json();
+    const { image_url, source_url, niche_tags, library_category, niche_id } = await req.json();
     
     if (!image_url) return Response.json({ error: 'image_url is required' }, { status: 400 });
 
@@ -127,9 +127,9 @@ RESPOND IN THIS EXACT JSON:
 
     // Save as template
     const template = await base44.entities.ThumbnailTemplates.create({
+      niche_id: niche_id || '',
       source_url: source_url || '',
       thumbnail_image_url: image_url,
-      library_category: library_category || 'other',
       niche_tags: niche_tags || '',
       template_type: analysis.template_type || 'other',
       emotional_tone: analysis.emotional_tone || '',

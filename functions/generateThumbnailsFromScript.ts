@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, reference_style, template_blueprint } = await req.json();
+    const { project_id, reference_style, template_blueprint, niche_dna, niche_name } = await req.json();
 
     const project = await base44.entities.Projects.get(project_id);
     const script = await base44.entities.Scripts.get(project.script_id);
@@ -129,6 +129,15 @@ ${template_blueprint.recreate_prompt || ''}
 CRITICAL: The above blueprint is from a PROVEN viral thumbnail. Your concepts MUST follow its composition, color, depth, text, and action rules EXACTLY while adapting the SUBJECTS to match THIS video's script content.`
       : '';
 
+    const nicheDnaInstruction = niche_dna
+      ? `\n\n=== MANDATORY NICHE STYLE DNA (learned from ${niche_name || 'uploaded'} niche thumbnails) ===
+This Style DNA was synthesized from analyzing multiple world-class thumbnails in the "${niche_name || 'selected'}" niche. You MUST follow ALL of these patterns, rules, and best practices. Your thumbnails must FEEL like they belong in this niche.
+
+${niche_dna}
+
+CRITICAL: Every thumbnail concept MUST follow the composition patterns, color DNA, text rules, character action patterns, and emotional triggers described above. The result must look like it was made by the TOP creator in the "${niche_name || 'selected'}" niche.`
+      : '';
+
     const rawStyle = project.visual_style || 'cinematic_realistic';
     // Never use children's styles for thumbnails - override to cinematic
     const childStyles = ['picstory_cocomelon', 'cartoon_2d'];
@@ -148,6 +157,7 @@ ${brandContext}
 ${sceneContext}
 ${styleInstruction}
 ${templateInstruction}
+${nicheDnaInstruction}
 
 FULL SCRIPT (find the most shocking, emotional, curiosity-inducing, visually compelling moments):
 ${truncatedScript}

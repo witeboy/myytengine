@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import StageProgress from '@/components/StageProgress';
 import ThumbnailGrid from '@/components/postprod/ThumbnailGrid';
 import YouTubeThumbnailImporter from '@/components/postprod/YouTubeThumbnailImporter';
-import TemplateLibrary from '@/components/postprod/TemplateLibrary';
+import NicheManager from '@/components/postprod/NicheManager';
 import SeoTitlesPanel from '@/components/postprod/SeoTitlesPanel';
 import SeoDescriptionsPanel from '@/components/postprod/SeoDescriptionsPanel';
 import {
@@ -34,8 +34,8 @@ export default function PostProduction() {
 
   // Reference style from imported thumbnail
   const [referenceStyle, setReferenceStyle] = useState('');
-  // Selected template from library
-  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  // Selected niche from library
+  const [selectedNiche, setSelectedNiche] = useState(null);
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -70,21 +70,14 @@ export default function PostProduction() {
 
   const metadata = metadataList[0] || null;
 
-  // Generate thumbnails from script (with optional reference style + template)
+  // Generate thumbnails from script (with optional reference style + niche DNA)
   const handleGenerateFromScript = async () => {
     setGeneratingThumbs(true);
     await base44.functions.invoke('generateThumbnailsFromScript', {
       project_id: projectId,
       reference_style: referenceStyle || undefined,
-      template_blueprint: selectedTemplate ? {
-        composition_blueprint: selectedTemplate.composition_blueprint,
-        color_strategy: selectedTemplate.color_strategy,
-        text_strategy: selectedTemplate.text_strategy,
-        character_action_notes: selectedTemplate.character_action_notes,
-        recreate_prompt: selectedTemplate.recreate_prompt,
-        template_type: selectedTemplate.template_type,
-        emotional_tone: selectedTemplate.emotional_tone,
-      } : undefined,
+      niche_dna: selectedNiche?.synthesized_dna || undefined,
+      niche_name: selectedNiche?.name || undefined,
     });
     refetchThumbs();
     setGeneratingThumbs(false);
@@ -157,8 +150,8 @@ export default function PostProduction() {
 
           {/* ======================== THUMBNAILS TAB ======================== */}
           <TabsContent value="thumbnails" className="space-y-6">
-            {/* 0. Template Library */}
-            <TemplateLibrary onSelectTemplate={setSelectedTemplate} />
+            {/* 0. Niche Template Library */}
+            <NicheManager onSelectNiche={setSelectedNiche} selectedNicheId={selectedNiche?.id} />
 
             {/* 1. Import from YouTube */}
             <YouTubeThumbnailImporter
@@ -179,7 +172,7 @@ export default function PostProduction() {
                       <p className="text-xs text-gray-500">
                         AI analyzes your script to find the most click-worthy moments
                         {referenceStyle && <span className="text-purple-600"> + using imported style</span>}
-                        {selectedTemplate && <span className="text-amber-600"> + using template: {selectedTemplate.template_type?.replace(/_/g, ' ')}</span>}
+                        {selectedNiche && <span className="text-amber-600"> + using niche style: {selectedNiche.icon} {selectedNiche.name}</span>}
                       </p>
                     </div>
                   </div>
