@@ -97,6 +97,8 @@ Write a MINIMUM 800-word description covering EVERY visible detail. Leave NOTHIN
 === DESCRIBE ALL OF THE FOLLOWING ===
 
 OVERALL COMPOSITION:
+- FIRST: State the EXACT TOTAL NUMBER of people/faces visible in the image. Count VERY carefully — look at every part of the image.
+- For EACH person, state which SIDE of the frame they are on (left third, center third, right third). If 2+ people are on the same side, say so explicitly.
 - Exact layout structure (split screen, centered, rule of thirds, diagonal, etc.)
 - What occupies each zone: top-left, top-center, top-right, center-left, dead-center, center-right, bottom-left, bottom-center, bottom-right
 - The visual hierarchy: what is BIGGEST, what is SMALLEST, what overlaps what
