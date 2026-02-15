@@ -176,26 +176,31 @@ export default function useVideoExport() {
     setPhase('loading');
     const sceneMedia = [];
     for (let i = 0; i < scenes.length; i++) {
-      if (cancelledRef.current) { setExporting(false); return; }
+      if (cancelledRef.current) { setExporting(false); return null; }
       setProgress(Math.round((i / scenes.length) * 20));
       const scene = scenes[i];
       let media = null;
       let mediaType = 'image';
-      const hasVid = scene.video_url && !scene.video_url.startsWith('{');
-      const hasImg = scene.image_url;
+      const vidUrl = scene.video_url || '';
+      const imgUrl = scene.image_url || '';
+      const hasVid = vidUrl && !vidUrl.startsWith('{') && !vidUrl.startsWith('freepik_task:') && !vidUrl.startsWith('runway_task:') && vidUrl.startsWith('http');
+      const hasImg = imgUrl && imgUrl.startsWith('http');
 
       if (hasVid) {
         try {
-          media = await loadVideo(scene.video_url);
+          media = await loadVideo(vidUrl);
           mediaType = 'video';
-        } catch {
+        } catch (e) {
+          console.warn(`Failed to load video for scene ${scene.scene_number}:`, e);
           if (hasImg) {
-            try { media = await loadImage(scene.image_url); } catch { /* no media */ }
+            try { media = await loadImage(imgUrl); } catch { /* no media */ }
           }
           mediaType = 'image';
         }
       } else if (hasImg) {
-        try { media = await loadImage(scene.image_url); } catch { /* no media */ }
+        try { media = await loadImage(imgUrl); } catch (e) {
+          console.warn(`Failed to load image for scene ${scene.scene_number}:`, e);
+        }
       }
       sceneMedia.push({ media, mediaType });
     }
