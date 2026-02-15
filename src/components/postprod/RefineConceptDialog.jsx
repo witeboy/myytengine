@@ -102,11 +102,18 @@ export default function RefineConceptDialog({ thumb, open, onOpenChange, onRefin
           </div>
 
           {/* Result */}
-          {result && result.success && (
+          {generating && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+              <p className="text-sm text-blue-700">Generating new thumbnail image...</p>
+            </div>
+          )}
+
+          {result && result.success && !generating && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-3">
               <p className="text-xs font-medium text-green-700 mb-1">Changes applied:</p>
               <p className="text-sm text-green-800">{result.changes_made}</p>
-              <p className="text-xs text-green-600 mt-1">Image cleared — click "Generate" to see the updated thumbnail.</p>
+              <p className="text-xs text-green-600 mt-1">New thumbnail image generated successfully!</p>
             </div>
           )}
 
