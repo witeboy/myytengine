@@ -9,7 +9,7 @@ import {
   Loader2, Link2, Eye, Palette, Type, Zap, Sparkles, X, ChevronDown, ChevronUp
 } from 'lucide-react';
 
-export default function YouTubeThumbnailImporter({ projectId, onConceptCreated }) {
+export default function YouTubeThumbnailImporter({ projectId, onConceptCreated, onStyleExtracted }) {
   const [url, setUrl] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState(null);
