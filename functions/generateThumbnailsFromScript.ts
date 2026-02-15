@@ -131,10 +131,15 @@ TEXT & GRAPHICS:
 - Any badges, banners, VS dividers, warning graphics
 - Position as spatial relationship
 
-OVERALL STYLING:
-- Must match the project's visual style "${visualStyle}" — if anime, the thumbnail should feel anime; if photorealistic, it should be hyper-real photography
-- Color grading, contrast level, saturation approach
-- Render quality keywords
+ASPECT RATIO (MANDATORY):
+      - ALL thumbnails MUST be 16:9 landscape aspect ratio (1280x720)
+      - The forensic description MUST note this is a widescreen landscape composition
+      - Every visual element should be described in terms of a 16:9 wide frame
+
+      OVERALL STYLING:
+      - Must match the project's visual style "${visualStyle}" — if anime, the thumbnail should feel anime; if photorealistic, it should be hyper-real photography
+      - Color grading, contrast level, saturation approach
+      - Render quality keywords
 
 RESPOND IN THIS EXACT JSON:
 {
