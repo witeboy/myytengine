@@ -12,7 +12,8 @@ import ScenePreview from '@/components/timeline/ScenePreview';
 import PlaybackControls from '@/components/timeline/PlaybackControls';
 import TranscriptBar from '@/components/timeline/TranscriptBar';
 import PreviewMonitor from '@/components/timeline/PreviewMonitor';
-import { Loader2, Import, Download, Film, Play } from 'lucide-react';
+import ExportPanel from '@/components/timeline/ExportPanel';
+import { Loader2, Import, Download, Film, Play, Package } from 'lucide-react';
 
 export default function TimelineEditor() {
   const navigate = useNavigate();
@@ -20,7 +21,7 @@ export default function TimelineEditor() {
   const [importing, setImporting] = useState(false);
   const [selectedScene, setSelectedScene] = useState(null);
   const [pixelsPerSecond, setPixelsPerSecond] = useState(10);
-  const [compiling, setCompiling] = useState(false);
+  const [showExport, setShowExport] = useState(false);
   const timelineRef = useRef(null);
 
   // Playback state
@@ -32,7 +33,7 @@ export default function TimelineEditor() {
   const musicRef = useRef(null);
   const sfxRefs = useRef({});
 
-  const { data: project } = useQuery({
+  const { data: project, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
     queryFn: async () => {
       const list = await base44.entities.Projects.filter({ id: projectId });
@@ -264,31 +265,7 @@ export default function TimelineEditor() {
     refetchScenes();
   };
 
-  const handleCompile = async () => {
-    setCompiling(true);
-    const manifest = scenesWithTiming.map(s => ({
-      scene_number: s.scene_number,
-      image_url: s.image_url,
-      video_url: s.video_url,
-      duration: s.duration_seconds,
-      start_time: s.start_time,
-      narration: s.narration_text,
-    }));
-
-    const blob = new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${project?.name || 'video'}-timeline-manifest.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-
-    await base44.entities.Projects.update(projectId, {
-      status: 'compiled',
-      current_step: 8,
-    });
-    setCompiling(false);
-  };
+  // Old compile replaced by ExportPanel
 
   const zoomIn = () => setPixelsPerSecond(prev => Math.min(prev + 5, 50));
   const zoomOut = () => setPixelsPerSecond(prev => Math.max(prev - 5, 3));
@@ -314,13 +291,27 @@ export default function TimelineEditor() {
             <Button variant="outline" onClick={zoomOut}>−</Button>
             <Button variant="outline" onClick={zoomIn}>+</Button>
             {scenes.length > 0 && (
-              <Button onClick={handleCompile} disabled={compiling} className="bg-green-600 hover:bg-green-700">
-                {compiling ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
-                Compile & Export
+              <Button onClick={() => setShowExport(prev => !prev)} className="bg-green-600 hover:bg-green-700">
+                <Package className="w-4 h-4 mr-2" />
+                {showExport ? 'Hide Export' : 'Compile & Export'}
               </Button>
             )}
           </div>
         </div>
+
+        {/* Export Panel */}
+        {showExport && scenes.length > 0 && (
+          <ExportPanel
+            project={project}
+            scenesWithTiming={scenesWithTiming}
+            voiceoverUrl={voiceoverUrl}
+            musicUrl={musicUrl}
+            musicVolume={musicVolume}
+            totalDuration={totalDuration}
+            onClose={() => setShowExport(false)}
+            onStatusUpdate={refetchProject}
+          />
+        )}
 
         {/* Live Preview Monitor */}
         {scenes.length > 0 && (
