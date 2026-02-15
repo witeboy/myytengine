@@ -102,7 +102,13 @@ OVERALL COMPOSITION:
 - The visual hierarchy: what is BIGGEST, what is SMALLEST, what overlaps what
 - Any geometric shapes formed by the composition (triangles, diagonals, V-shapes)
 
+CRITICAL — PERSON COUNT & POSITIONS:
+Before describing each person, FIRST state the EXACT TOTAL NUMBER of people visible in the image. Then for EACH person, assign a label (Person 1, Person 2, etc.) going from LEFT to RIGHT. State PRECISELY which side of the frame each person is on (left third, center, right third). If multiple people are grouped on one side, say so explicitly (e.g. "Person 1 and Person 2 are BOTH on the left side"). Do NOT assume a split-screen means one person per side — COUNT CAREFULLY.
+
 EVERY PERSON (for each person visible, describe):
+- Label (Person 1, Person 2, etc. left-to-right)
+- EXACT side of the frame they are on (left third / center / right third)
+- Whether they share a side with another person
 - Exact position in the frame (which third, which edge, how much space they occupy)
 - Face: skin tone (exact shade — light olive, deep brown, pale peach, etc.), facial structure (round, angular, square jaw), forehead shape, cheekbone prominence
 - Eyes: color if visible, shape (almond, round, hooded), direction of gaze, intensity, eyelids (half-closed, wide open), eyebrows (thick, thin, arched, furrowed, raised)
