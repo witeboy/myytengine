@@ -191,9 +191,11 @@ Your "image_prompt" output must follow these rules STRICTLY:
   ${visualStyle === 'watercolor' ? '- Use watercolor keywords: soft wet edges, translucent washes, paper texture, bleeding colors, delicate light' : ''}
   ${visualStyle === 'comic_book' ? '- Use comic keywords: halftone dots, bold ink outlines, dynamic action poses, speech bubbles, pop art colors' : ''}
 
-Each prompt MUST be 250+ words incorporating EVERY detail from the forensic description.
+MANDATORY ASPECT RATIO: ALL image prompts MUST explicitly state "16:9 aspect ratio, 1280x720 resolution, widescreen landscape format" at the very beginning. Every thumbnail is a WIDE landscape composition, never square or portrait.
 
-RESPOND IN THIS EXACT JSON:
+      Each prompt MUST be 250+ words incorporating EVERY detail from the forensic description.
+
+      RESPOND IN THIS EXACT JSON:
 {
   "thumbnails": [
     {
