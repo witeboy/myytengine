@@ -104,6 +104,21 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
         </Button>
       </div>
 
+      {generateError && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="py-3 px-4 flex items-start gap-2">
+            <X className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm text-red-700">{generateError}</p>
+              <p className="text-xs text-red-500 mt-1">Tip: Edit the image prompt to remove real names/faces, then try Regenerate.</p>
+            </div>
+            <Button size="sm" variant="ghost" className="text-red-400" onClick={() => setGenerateError(null)}>
+              <X className="w-3 h-3" />
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {analyzingCtr && (
         <Card>
           <CardContent className="py-8 text-center">
