@@ -23,20 +23,44 @@ async function safeGeminiCall(prompt, temperature = 0.7, maxTokens = 16384) {
   const data = await response.json();
   if (!data.candidates || data.candidates.length === 0) throw new Error("No candidates from Gemini");
   const text = data.candidates[0].content.parts[0].text;
+  
+  // For this function, the response is a single "style_dna" string field.
+  // Instead of trying to parse complex JSON with control chars, extract the style_dna text directly.
   let jsonStr = text;
   if (text.includes("```json")) jsonStr = text.split("```json")[1].split("```")[0].trim();
   else if (text.includes("```")) jsonStr = text.split("```")[1].split("```")[0].trim();
   
+  // Try to extract the style_dna value directly using regex to avoid JSON control char issues
+  const dnaMatch = jsonStr.match(/"style_dna"\s*:\s*"([\s\S]*)"\s*\}?\s*$/);
+  if (dnaMatch) {
+    // Unescape the string content
+    const rawDna = dnaMatch[1]
+      .replace(/\\n/g, '\n')
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\');
+    return { style_dna: rawDna };
+  }
+  
+  // Fallback: sanitize and parse as JSON
   jsonStr = jsonStr
-    .replace(/[\x00-\x1F\x7F]/g, (ch) => ch === '\n' || ch === '\r' || ch === '\t' ? ch : ' ')
-    .replace(/,\s*([}\]])/g, '$1')
-    .replace(/(["\w\d])\s*\n\s*"/g, '$1, "');
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ')
+    .replace(/,\s*([}\]])/g, '$1');
   
   try {
     return JSON.parse(jsonStr);
   } catch (e) {
-    const objMatch = jsonStr.match(/\{[\s\S]*\}/);
-    if (objMatch) return JSON.parse(objMatch[0]);
+    // Last resort: extract everything between the first { and last } and treat the whole body as style_dna
+    const contentStart = text.indexOf('"style_dna"');
+    if (contentStart !== -1) {
+      // Just grab all the text after the JSON wrapper and use it as the DNA
+      const cleanText = text
+        .replace(/```json/g, '').replace(/```/g, '')
+        .replace(/\{\s*"style_dna"\s*:\s*"/i, '')
+        .replace(/"\s*\}\s*$/, '')
+        .replace(/\\n/g, '\n')
+        .replace(/\\"/g, '"');
+      return { style_dna: cleanText };
+    }
     throw new Error("Failed to parse JSON: " + e.message);
   }
 }
