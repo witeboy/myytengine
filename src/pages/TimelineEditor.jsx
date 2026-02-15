@@ -404,8 +404,9 @@ export default function TimelineEditor() {
                   {/* Playhead line on video track */}
                   {scenes.length > 0 && (
                     <div
-                      className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none"
+                      className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 cursor-col-resize"
                       style={{ left: currentTime * pixelsPerSecond + 96 }}
+                      onMouseDown={handlePlayheadMouseDown}
                     />
                   )}
                 </div>
