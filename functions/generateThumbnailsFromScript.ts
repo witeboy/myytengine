@@ -130,7 +130,15 @@ CRITICAL: The above blueprint is from a PROVEN viral thumbnail. Your concepts MU
       : '';
 
     const selectedTitleInstruction = selected_title
-      ? `\n\nMANDATORY TITLE OVERLAY: The user has selected this SEO title for the video: "${selected_title}"\nYou MUST derive the 2-4 word thumbnail text overlay from this title. Extract the most curiosity-inducing, scroll-stopping fragment from this title. The text_overlay for ALL 3 concepts MUST be based on this title — pick the most powerful 2-4 words that create a curiosity gap.\nCRITICAL: The text_overlay MUST appear as LARGE BOLD TEXT rendered directly on the thumbnail image. It is NOT optional — it must be the most prominent visual element. Include it explicitly in the forensic description and in the final image prompt.`
+      ? `\n\nMANDATORY TITLE OVERLAY — THIS IS THE HIGHEST PRIORITY INSTRUCTION:
+The user has selected this SEO title for the video: "${selected_title}"
+RULES:
+1. You MUST derive the "text_overlay" (2-4 words) from this EXACT title — pick the most curiosity-inducing, scroll-stopping fragment.
+2. ALL 3 concepts MUST have a text_overlay derived from this title.
+3. The text_overlay words MUST appear as MASSIVE BOLD WHITE IMPACT-STYLE TEXT rendered directly onto the thumbnail image as the MOST PROMINENT visual element.
+4. In the "forensic_description", you MUST explicitly describe the text overlay words, their exact position, size, color, outline, and shadow.
+5. If any concept's forensic_description does NOT mention the text overlay text by exact words, that concept is INVALID.
+6. The text_overlay creates a CURIOSITY GAP — it must NOT reveal the story, but make viewers desperate to click.`
       : '';
 
     const nicheDnaInstruction = niche_dna
