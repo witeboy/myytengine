@@ -8,11 +8,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import StageProgress from '@/components/StageProgress';
 import ThumbnailGrid from '@/components/postprod/ThumbnailGrid';
 import YouTubeThumbnailImporter from '@/components/postprod/YouTubeThumbnailImporter';
+import TemplateLibrary from '@/components/postprod/TemplateLibrary';
 import SeoTitlesPanel from '@/components/postprod/SeoTitlesPanel';
 import SeoDescriptionsPanel from '@/components/postprod/SeoDescriptionsPanel';
 import {
   Loader2, Sparkles, Image as ImageIcon, FileText, CheckCircle2, ArrowLeft,
-  Type, BookOpen
+  Type, BookOpen, Library
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -33,6 +34,8 @@ export default function PostProduction() {
 
   // Reference style from imported thumbnail
   const [referenceStyle, setReferenceStyle] = useState('');
+  // Selected template from library
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -67,12 +70,21 @@ export default function PostProduction() {
 
   const metadata = metadataList[0] || null;
 
-  // Generate thumbnails from script (with optional reference style)
+  // Generate thumbnails from script (with optional reference style + template)
   const handleGenerateFromScript = async () => {
     setGeneratingThumbs(true);
     await base44.functions.invoke('generateThumbnailsFromScript', {
       project_id: projectId,
       reference_style: referenceStyle || undefined,
+      template_blueprint: selectedTemplate ? {
+        composition_blueprint: selectedTemplate.composition_blueprint,
+        color_strategy: selectedTemplate.color_strategy,
+        text_strategy: selectedTemplate.text_strategy,
+        character_action_notes: selectedTemplate.character_action_notes,
+        recreate_prompt: selectedTemplate.recreate_prompt,
+        template_type: selectedTemplate.template_type,
+        emotional_tone: selectedTemplate.emotional_tone,
+      } : undefined,
     });
     refetchThumbs();
     setGeneratingThumbs(false);
@@ -145,6 +157,9 @@ export default function PostProduction() {
 
           {/* ======================== THUMBNAILS TAB ======================== */}
           <TabsContent value="thumbnails" className="space-y-6">
+            {/* 0. Template Library */}
+            <TemplateLibrary onSelectTemplate={setSelectedTemplate} />
+
             {/* 1. Import from YouTube */}
             <YouTubeThumbnailImporter
               projectId={projectId}
@@ -164,6 +179,7 @@ export default function PostProduction() {
                       <p className="text-xs text-gray-500">
                         AI analyzes your script to find the most click-worthy moments
                         {referenceStyle && <span className="text-purple-600"> + using imported style</span>}
+                        {selectedTemplate && <span className="text-amber-600"> + using template: {selectedTemplate.template_type?.replace(/_/g, ' ')}</span>}
                       </p>
                     </div>
                   </div>
