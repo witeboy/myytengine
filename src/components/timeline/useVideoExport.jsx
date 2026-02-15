@@ -113,7 +113,7 @@ export default function useVideoExport() {
     return audioBuffer;
   };
 
-  const exportVideo = useCallback(async (scenes, { quality = '720p', orientation = 'landscape', fps = 30, voiceoverUrl, musicUrl, musicVolume = 0.3 }) => {
+  const exportVideo = useCallback(async (scenes, { quality = '720p', orientation = 'landscape', fps = 30, voiceoverUrl, musicUrl, musicVolume = 0.3, codec: overrideCodec }) => {
     cancelledRef.current = false;
     setExporting(true);
     setProgress(0);
@@ -155,6 +155,7 @@ export default function useVideoExport() {
     const muxer = new Muxer(muxerConfig);
 
     // Video encoder
+    const videoCodec = overrideCodec || 'avc1.42001e';
     const videoEncoder = new VideoEncoder({
       output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
       error: (e) => { setError(`Video encoding error: ${e.message}`); },
@@ -162,7 +163,7 @@ export default function useVideoExport() {
     videoEncoderRef.current = videoEncoder;
 
     videoEncoder.configure({
-      codec: 'avc1.42001e',
+      codec: videoCodec,
       width: WIDTH,
       height: HEIGHT,
       bitrate: BITRATE,
