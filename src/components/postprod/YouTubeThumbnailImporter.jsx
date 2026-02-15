@@ -43,8 +43,11 @@ export default function YouTubeThumbnailImporter({ projectId, onConceptCreated }
     if (!analysis) return;
     setGenerating(true);
 
+    // Enforce 16:9 prefix if not already present in the prompt
+    const promptPrefix = '16:9 aspect ratio, 1280x720 resolution, widescreen landscape format YouTube thumbnail. ';
+    const finalPrompt = editablePrompt.toLowerCase().includes('16:9') ? editablePrompt : promptPrefix + editablePrompt;
     const { url: imageUrl } = await base44.integrations.Core.GenerateImage({
-      prompt: `16:9 aspect ratio, 1280x720, widescreen landscape YouTube thumbnail. ${editablePrompt}`,
+      prompt: finalPrompt,
     });
 
     await base44.entities.ThumbnailConcepts.create({
@@ -243,12 +246,12 @@ export default function YouTubeThumbnailImporter({ projectId, onConceptCreated }
               </div>
               <div className="md:col-span-2">
                 <p className="text-xs font-medium text-gray-500 mb-1">
-                  ✏️ AI Image Prompt — edit before generating
+                  ✏️ AI Image Prompt — edit before generating (must include "16:9 aspect ratio")
                 </p>
                 <Textarea
                   value={editablePrompt}
                   onChange={e => setEditablePrompt(e.target.value)}
-                  className="text-sm min-h-[200px]"
+                  className="text-xs min-h-[280px] font-mono"
                 />
               </div>
             </div>

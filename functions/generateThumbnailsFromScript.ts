@@ -131,6 +131,36 @@ You must deeply analyze this script and produce 3 THUMBNAIL CONCEPT BLUEPRINTS �
 
 For EACH concept, write a MINIMUM 300-word "forensic_description" covering:
 
+=== WORLD-CLASS THUMBNAIL CHECKLIST (USE THIS AS YOUR YARDSTICK) ===
+Every concept MUST pass ALL of these criteria. If it doesn't, redesign until it does:
+
+1. CHARACTERS = ACTION, NOT PORTRAITS
+   - Characters must be DOING something — holding, shielding, pointing, reacting — NOT just standing/floating
+   - The hero should show a SPECIFIC emotion through body language: defiant stance, protective embrace, heartbroken gaze
+   - Add micro-details that tell the story: a tear, a clenched fist, a protective hand on someone's shoulder
+   - Villains/antagonists must feel THREATENING: looming, shadowy, faceless, pointing, larger than the hero
+   - Characters must INTERACT with each other (eye contact, confrontation, turning away) — never both staring at camera ignoring each other
+
+2. TEXT OVERLAY = CURIOSITY GAP, NOT FACT
+   - Text must create a QUESTION the viewer needs answered, NOT state a fact or reveal the ending
+   - Good: "HE DIDN'T LEAVE", "THEY LET HIM GO...", "THE LAST MARCH" — implies mystery
+   - Bad: "CHOSE HIS CHILDREN" — gives away the story, no reason to click
+   - Text MUST NOT cover faces or key subjects — place in negative space (bottom center, top edge)
+   - Text must be the LARGEST, most readable element — visible at phone thumbnail size
+
+3. COMPOSITION = "HEAVEN vs HELL" EXTREME CONTRAST
+   - Use EXTREME color contrast between opposing sides (warm golden vs cold steel blue)
+   - The "safe" side: warm golden glow, orange rim light, life/hope
+   - The "danger" side: desaturated, cold blue/grey, ash, embers, destruction
+   - Split line should feel VIOLENT — diagonal jagged rip, not a clean vertical line
+   - Heavy vignette to force eye to center
+   - HEAVY depth of field — backgrounds and secondary elements blurred, main subjects razor-sharp
+
+4. SCROLL-STOP ELEMENTS
+   - One dominant emotion must hit in 0.3 seconds
+   - Visual "vectors" that force eye movement (a pointing finger, a gaze direction, a weapon)
+   - The thumbnail must look NOTHING like an educational/textbook illustration — it must feel CINEMATIC and EMOTIONAL
+
 NARRATIVE HOOK:
 - What specific moment/reveal/conflict from the script does this thumbnail capture?
 - What is the curiosity gap — what question does the viewer NEED answered?
@@ -146,22 +176,26 @@ EVERY SUBJECT/PERSON/CHARACTER (based on the script's characters):
 - Full archetype: age range, build, skin tone shade, face shape, jawline
 - Hair: style, color shade, texture, length
 - Expression: which facial muscles are engaged (furrowed brow, wide eyes, clenched jaw, open mouth shock)
+- BODY ACTION: what are they DOING? (holding a child, shielding someone, pointing, running, clutching something) — never just standing
 - Clothing: exact garment types, specific color names (not "red" but "deep crimson" or "blood red"), patterns, fabric texture
 - Body angle, crop (extreme close-up head only, head-and-shoulders, chest up), facing direction
 - Lighting ON them: key light direction, rim/edge light color and side, any colored light cast
+- INTERACTION: how do they relate to other characters? Eye contact? Confrontation? Protection?
 
 BACKGROUND:
 - Setting derived from script's key locations
-- Blur level, atmospheric effects (smoke, haze, particles, lens flare, God rays)
-- Color palette of the background, light sources, mood lighting
-- Vignette, gradient directions
+- Blur level: HEAVY Gaussian blur on backgrounds, razor-sharp foreground subjects
+- Atmospheric effects (smoke, haze, particles, floating ash/embers, lens flare, God rays)
+- Color palette: EXTREME warm vs cold contrast if split composition
+- Vignette: heavy dark edges forcing eye to center
 
 TEXT & GRAPHICS:
-- The exact 2-4 word text overlay that creates maximum curiosity/shock
-- Font weight, style family concept
-- Color of text, outline treatment, shadow, glow
+- The exact 2-4 word text overlay that creates a CURIOSITY GAP (question, not answer)
+- Font: bold Impact or heavy condensed sans-serif, MASSIVE size
+- Color: pure white with THICK black outline for maximum readability on any background
+- Heavy drop shadow for depth
+- Position: bottom center or top edge — NEVER covering faces/key subjects
 - Any badges, banners, VS dividers, warning graphics
-- Position as spatial relationship
 
 ASPECT RATIO (MANDATORY):
       - ALL thumbnails MUST be 16:9 landscape aspect ratio (1280x720)
@@ -169,8 +203,9 @@ ASPECT RATIO (MANDATORY):
       - Every visual element should be described in terms of a 16:9 wide frame
 
       OVERALL STYLING:
+      - NEVER use children's illustration styles (cocomelon, cartoon) for thumbnails — always cinematic/dramatic
       - Must match the project's visual style "${visualStyle}" — if anime, the thumbnail should feel anime; if photorealistic, it should be hyper-real photography
-      - Color grading, contrast level, saturation approach
+      - Color grading: EXTREME contrast, high saturation on key elements, desaturated on opposing elements
       - Render quality keywords
 
 RESPOND IN THIS EXACT JSON:
@@ -207,35 +242,50 @@ ${JSON.stringify(phase1Result.concepts, null, 2)}
 
 === CRITICAL PROMPT RULES ===
 Your "image_prompt" output must follow these rules STRICTLY:
+
+GENERAL LANGUAGE:
 - Think in VISUAL CONCEPTS and DESCRIPTIVE LANGUAGE, not CSS/code/measurements
 - NEVER use percentages, pixel coordinates, opacity values, or hex color codes
 - Use SPATIAL RELATIONSHIPS: "anchored at the top center", "filling the left third", "spanning the bottom edge"
 - Use PHOTOGRAPHY LANGUAGE: "extreme close-up", "rim lighting on left profile", "shallow depth of field with heavy bokeh"
 - Use ARCHETYPE descriptions: "bald man with intense expression and dark goatee" NOT "person"
 - Use COLOR NAMES: "crimson red", "electric blue", "pure white" — never #FF0000
-- Describe text+container as ONE design unit: "a red pill-shaped badge containing white bold text 'LIVE'"
-- MAX 2-3 text elements. AI generates garbled text with more.
+
+CHARACTERS MUST BE IN ACTION (CRITICAL):
+- NEVER describe characters as just "standing" or "facing forward" — this creates static, boring, textbook thumbnails
+- Every character MUST be performing an ACTION: holding, shielding, pointing, embracing, confronting, reacting
+- Add emotional micro-details: "a single tear rolling down his weathered cheek", "his arm wrapped protectively around a small child"
+- Villains/antagonists: make them LOOMING, SHADOWY, MENACING — larger than the hero, pointing, threatening
+- Characters MUST interact: eye contact, confrontation, turning away — never both staring blankly at camera
+
+TEXT OVERLAY (MOST IMPORTANT VISUAL ELEMENT):
+- The text_overlay MUST be the SINGLE MOST PROMINENT graphic element in the thumbnail
+- Describe text as a MASSIVE DESIGN UNIT: "enormous bold white Impact-style text reading 'EXACT WORDS' with very thick black outline and heavy drop shadow, positioned at bottom center of the frame"
+- Text MUST create a CURIOSITY GAP — a question, NOT an answer. Never give away the story.
+- Text must NEVER overlap faces or key subjects — always in negative space
+- Text must be READABLE at phone thumbnail size — this means HUGE, high-contrast, minimal words (2-4 max)
 - Include "graphic design composition" to force flat 2D text overlays
-- Include depth cues: "smaller in frame showing distance" not percentages
-- Include "extreme close-up cropped mid-chest up" not "110% height"
+
+COLOR & CONTRAST (THE "HEAVEN VS HELL" APPROACH):
+- Use EXTREME warm vs cold color contrast for split compositions
+- "Safe" side: warm golden lighting, orange rim light, hope
+- "Danger" side: cold desaturated steel blue, dark grey, ash and embers
+- Split lines should feel VIOLENT: "a jagged diagonal rip dividing the frame" not a clean line
+- HEAVY vignette (dark edges) to force eye to center
+- HEAVY depth of field: backgrounds blurred to creamy bokeh, foreground subjects RAZOR sharp
+
+STYLE:
+- Thumbnails should ALWAYS look cinematic and dramatic, NEVER educational or textbook-like
 - Match the project visual style "${visualStyle}":
-  ${visualStyle === 'anime' || visualStyle === 'cinematic_anime' ? '- Use anime/manga art style keywords: cel-shaded, vibrant anime coloring, bold linework, Studio Ghibli/MAPPA quality, anime character design' : ''}
-  ${visualStyle === 'photorealistic_4k' || visualStyle === 'cinematic_realistic' ? '- Use hyper-real photography keywords: 4K HDR, visible skin pores, DSLR quality, natural light physics, photojournalistic realism' : ''}
-  ${visualStyle === 'cartoon_2d' || visualStyle === 'picstory_cocomelon' ? '- Use cartoon illustration keywords: bold outlines, flat shading, bright saturated colors, children-friendly illustration style' : ''}
+  ${visualStyle === 'anime' || visualStyle === 'cinematic_anime' ? '- Use dramatic anime style: cel-shaded, vibrant anime coloring, bold linework, dynamic emotional poses, dramatic lighting' : ''}
+  ${visualStyle === 'photorealistic_4k' || visualStyle === 'cinematic_realistic' ? '- Use hyper-real cinematic photography: 4K HDR, visible skin detail, DSLR shallow depth, dramatic movie-poster lighting' : ''}
   ${visualStyle === 'oil_painting' ? '- Use painterly keywords: visible brushstrokes, oil painting texture, chiaroscuro lighting, fine art quality, museum-worthy realism' : ''}
   ${visualStyle === 'watercolor' ? '- Use watercolor keywords: soft wet edges, translucent washes, paper texture, bleeding colors, delicate light' : ''}
-  ${visualStyle === 'comic_book' ? '- Use comic keywords: halftone dots, bold ink outlines, dynamic action poses, speech bubbles, pop art colors' : ''}
+  ${visualStyle === 'comic_book' ? '- Use comic keywords: halftone dots, bold ink outlines, dynamic action poses, pop art colors' : ''}
 
 MANDATORY ASPECT RATIO: ALL image prompts MUST explicitly state "16:9 aspect ratio, 1280x720 resolution, widescreen landscape format" at the very beginning. Every thumbnail is a WIDE landscape composition, never square or portrait.
 
-TEXT OVERLAY IS CRITICAL:
-- The text_overlay MUST appear prominently in the final image as a bold, high-contrast graphic element
-- Describe text as a DESIGN UNIT: "bold white Impact-style text reading 'EXACT WORDS' with thick black outline and heavy drop shadow, positioned center-bottom spanning 40% of frame width"
-- Text must be LARGE, READABLE at thumbnail size, and create MAXIMUM contrast against the background
-- Use no more than 2-4 words for the overlay text
-- The text element should be one of the MOST prominent visual features of the thumbnail
-
-      Each prompt MUST be 250+ words incorporating EVERY detail from the forensic description.
+      Each prompt MUST be 300+ words incorporating EVERY detail from the forensic description.
 
       RESPOND IN THIS EXACT JSON:
 {

@@ -30,8 +30,10 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
     setGeneratingImage(thumb.id);
     setGenerateError(null);
     try {
+      const promptPrefix = '16:9 aspect ratio, 1280x720 resolution, widescreen landscape format YouTube thumbnail. ';
+      const finalPrompt = (thumb.image_prompt || '').toLowerCase().includes('16:9') ? thumb.image_prompt : promptPrefix + thumb.image_prompt;
       const { url } = await base44.integrations.Core.GenerateImage({
-        prompt: `16:9 aspect ratio, 1280x720, widescreen landscape YouTube thumbnail. ${thumb.image_prompt}`,
+        prompt: finalPrompt,
       });
       await base44.entities.ThumbnailConcepts.update(thumb.id, { image_url: url });
       onRefetch();
@@ -61,8 +63,10 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
     setGenerateError(null);
     await base44.entities.ThumbnailConcepts.update(thumb.id, { image_prompt: editingPrompt.trim() });
     try {
+      const editPromptPrefix = '16:9 aspect ratio, 1280x720 resolution, widescreen landscape format YouTube thumbnail. ';
+      const editFinalPrompt = editingPrompt.trim().toLowerCase().includes('16:9') ? editingPrompt.trim() : editPromptPrefix + editingPrompt.trim();
       const { url } = await base44.integrations.Core.GenerateImage({
-        prompt: `16:9 aspect ratio, 1280x720, widescreen landscape YouTube thumbnail. ${editingPrompt.trim()}`,
+        prompt: editFinalPrompt,
       });
       await base44.entities.ThumbnailConcepts.update(thumb.id, { image_url: url });
       onRefetch();
