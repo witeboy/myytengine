@@ -309,10 +309,9 @@ export default function TimelineEditor() {
                     await base44.entities.Projects.update(projectId, { status: 'post_production', current_step: 11 });
                     navigate(createPageUrl(`PostProduction?project_id=${projectId}`));
                   }}
-                  className="bg-orange-600 hover:bg-orange-700"
+                  className="bg-blue-600 hover:bg-blue-700 gap-2"
                 >
-                  <ArrowRight className="w-4 h-4 mr-2" />
-                  Post Production
+                  Next: Post Production <ArrowRight className="w-4 h-4" />
                 </Button>
               </>
             )}
