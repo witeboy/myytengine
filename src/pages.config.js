@@ -50,28 +50,30 @@
 import ContentGeneration from './pages/ContentGeneration';
 import Dashboard from './pages/Dashboard';
 import Home from './pages/Home';
+import MediaLibrary from './pages/MediaLibrary';
 import NewProject from './pages/NewProject';
 import StoryDuration from './pages/StoryDuration';
 import StoryHooks from './pages/StoryHooks';
 import StoryScript from './pages/StoryScript';
 import StoryTopics from './pages/StoryTopics';
 import TimelineEditor from './pages/TimelineEditor';
-import MediaLibrary from './pages/MediaLibrary';
 import VersionHistory from './pages/VersionHistory';
+import PostProduction from './pages/PostProduction';
 
 
 export const PAGES = {
     "ContentGeneration": ContentGeneration,
     "Dashboard": Dashboard,
     "Home": Home,
+    "MediaLibrary": MediaLibrary,
     "NewProject": NewProject,
     "StoryDuration": StoryDuration,
     "StoryHooks": StoryHooks,
     "StoryScript": StoryScript,
     "StoryTopics": StoryTopics,
     "TimelineEditor": TimelineEditor,
-    "MediaLibrary": MediaLibrary,
     "VersionHistory": VersionHistory,
+    "PostProduction": PostProduction,
 }
 
 export const pagesConfig = {
