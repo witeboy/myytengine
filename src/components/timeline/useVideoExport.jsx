@@ -19,6 +19,8 @@ export default function useVideoExport() {
   const [phase, setPhase] = useState(''); // 'checking', 'loading', 'encoding', 'audio', 'finalizing'
   const [error, setError] = useState(null);
   const cancelledRef = useRef(false);
+  const videoEncoderRef = useRef(null);
+  const audioEncoderRef = useRef(null);
 
   const checkSupport = useCallback(async (quality, orientation) => {
     if (!('VideoEncoder' in window)) {
@@ -144,6 +146,7 @@ export default function useVideoExport() {
       output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
       error: (e) => { setError(`Video encoding error: ${e.message}`); },
     });
+    videoEncoderRef.current = videoEncoder;
 
     videoEncoder.configure({
       codec: 'avc1.42001e',
@@ -160,6 +163,7 @@ export default function useVideoExport() {
         output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
         error: (e) => { console.error('Audio encoding error:', e); },
       });
+      audioEncoderRef.current = audioEncoder;
       audioEncoder.configure({
         codec: 'mp4a.40.2',
         sampleRate: 48000,
@@ -253,10 +257,14 @@ export default function useVideoExport() {
     }
 
     if (cancelledRef.current) {
-      videoEncoder.close();
-      audioEncoder?.close();
+      try { videoEncoder.close(); } catch {}
+      try { audioEncoder?.close(); } catch {}
+      videoEncoderRef.current = null;
+      audioEncoderRef.current = null;
       setExporting(false);
-      return;
+      setPhase('');
+      setProgress(0);
+      return null;
     }
 
     // Encode audio
@@ -354,6 +362,8 @@ export default function useVideoExport() {
 
     videoEncoder.close();
     audioEncoder?.close();
+    videoEncoderRef.current = null;
+    audioEncoderRef.current = null;
 
     const { buffer } = muxer.target;
     const blob = new Blob([buffer], { type: 'video/mp4' });
@@ -367,6 +377,14 @@ export default function useVideoExport() {
 
   const cancel = useCallback(() => {
     cancelledRef.current = true;
+    try { videoEncoderRef.current?.close(); } catch {}
+    try { audioEncoderRef.current?.close(); } catch {}
+    videoEncoderRef.current = null;
+    audioEncoderRef.current = null;
+    setExporting(false);
+    setPhase('');
+    setProgress(0);
+    setError(null);
   }, []);
 
   return {
