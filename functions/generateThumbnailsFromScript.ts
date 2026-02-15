@@ -215,7 +215,7 @@ MANDATORY ASPECT RATIO: ALL image prompts MUST explicitly state "16:9 aspect rat
       "visual_effects": "rim lighting on profiles, heavy bokeh background, lens flare, vignette",
       "style_reference": "cinema / minimal / documentary",
       "ctr_score": 9,
-      "image_prompt": "A COMPLETE 250+ word natural-language AI image prompt. Structure: 'A high-detail 4K YouTube thumbnail graphic design composition featuring [COMPOSITION TYPE]. [STYLE matching ${visualStyle}]. FOREGROUND: [every subject with archetype, expression muscles, hair details, clothing color names, crop, facing, rim lighting]. MID-GROUND: [depth subjects]. BACKGROUND: [blurred setting with mood, atmosphere, light sources, colors]. TEXT & GRAPHICS: [main text as single design unit with font and effects]. [Any badges/banners as single units]. STYLE: [render quality keywords matching ${visualStyle}].' NO percentages. NO hex codes. NO pixel values."
+      "image_prompt": "A COMPLETE 250+ word natural-language AI image prompt. MUST START WITH: 'A high-detail 4K YouTube thumbnail in 16:9 aspect ratio (1280x720), widescreen landscape format, graphic design composition featuring [COMPOSITION TYPE]. [STYLE matching ${visualStyle}]. FOREGROUND: [every subject with archetype, expression muscles, hair details, clothing color names, crop, facing, rim lighting]. MID-GROUND: [depth subjects]. BACKGROUND: [blurred setting with mood, atmosphere, light sources, colors]. TEXT & GRAPHICS: [main text as single design unit with font and effects]. [Any badges/banners as single units]. STYLE: [render quality keywords matching ${visualStyle}].' NO percentages. NO hex codes. NO pixel values. MUST specify 16:9 widescreen."
     }
   ]
 }`;
