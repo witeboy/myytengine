@@ -33,6 +33,8 @@ export default function PostProduction() {
   const [pinnedComment, setPinnedComment] = useState('');
   const [selectedTitles, setSelectedTitles] = useState([]);
 
+  const [activeTab, setActiveTab] = useState('titles');
+
   // Reference style from imported thumbnail
   const [referenceStyle, setReferenceStyle] = useState('');
   // Selected niche from library
@@ -131,7 +133,7 @@ export default function PostProduction() {
           )}
         </div>
 
-        <Tabs defaultValue="titles" className="space-y-6">
+        <Tabs defaultValue="titles" value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full max-w-2xl grid-cols-3">
             <TabsTrigger value="titles" className="gap-2">
               <Type className="w-4 h-4" />
@@ -275,6 +277,11 @@ export default function PostProduction() {
                       <button className="text-blue-600 underline text-xs mt-1" onClick={() => setSelectedTitles([])}>Clear all</button>
                     </div>
                   </div>
+                )}
+                {selectedTitles.length > 0 && (
+                  <Button onClick={() => setActiveTab('thumbnails')} className="w-full gap-2 bg-purple-600 hover:bg-purple-700 h-11 text-base">
+                    <ImageIcon className="w-4 h-4" /> Next: Generate Thumbnails →
+                  </Button>
                 )}
               </div>
             )}
