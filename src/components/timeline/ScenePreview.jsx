@@ -50,9 +50,9 @@ export default function ScenePreview({ scene, onClose, onUpdateDuration, onRefet
           {/* Visual */}
           <div>
             <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden mb-2">
-              {scene.video_url ? (
+              {scene.video_url && scene.video_url.startsWith('http') ? (
                 <video src={scene.video_url} className="w-full h-full object-cover" controls />
-              ) : scene.image_url ? (
+              ) : scene.image_url && scene.image_url.startsWith('http') ? (
                 <img src={scene.image_url} className="w-full h-full object-cover" alt={`Scene ${scene.scene_number}`} />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-gray-400">No image</div>

@@ -34,8 +34,8 @@ export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, 
         const width = scene.duration_seconds * pixelsPerSecond;
         const left = scene.start_time * pixelsPerSecond;
         const isSelected = selectedScene === scene.id;
-        const hasImage = !!scene.image_url;
-        const hasVideo = !!scene.video_url;
+        const hasImage = scene.image_url && scene.image_url.startsWith('http');
+        const hasVideo = scene.video_url && scene.video_url.startsWith('http');
 
         let bgClass = 'bg-gray-200 border-gray-300';
         if (hasVideo) bgClass = 'bg-purple-200 border-purple-400';
@@ -49,7 +49,7 @@ export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, 
             onClick={() => onSelectScene(scene.id)}
           >
             {/* Thumbnail */}
-            {scene.image_url && (
+            {hasImage && (
               <img src={scene.image_url} className="h-full w-12 object-cover flex-shrink-0" alt="" />
             )}
             <div className="flex-1 min-w-0 px-1">

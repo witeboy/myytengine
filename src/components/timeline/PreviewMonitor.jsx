@@ -9,8 +9,9 @@ export default function PreviewMonitor({ currentScene, currentTime, isPlaying, t
   const sceneDuration = currentScene?.duration_seconds || 8;
   const progress = Math.min(1, Math.max(0, timeInScene / sceneDuration));
 
-  const hasVideo = currentScene?.video_url && !currentScene.video_url.startsWith('{');
-  const hasImage = currentScene?.image_url;
+  const rawVideoUrl = currentScene?.video_url || '';
+  const hasVideo = rawVideoUrl && rawVideoUrl.startsWith('http');
+  const hasImage = currentScene?.image_url && currentScene.image_url.startsWith('http');
 
   // Sync video playback
   useEffect(() => {
