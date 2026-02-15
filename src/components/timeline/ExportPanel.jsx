@@ -47,8 +47,8 @@ export default function ExportPanel({
   const orientation = project?.orientation || 'landscape';
   const resolution = orientation === 'portrait' ? { w: 1080, h: 1920 } : { w: 1920, h: 1080 };
 
-  const videoScenes = scenesWithTiming.filter(s => s.video_url && !s.video_url.startsWith('freepik_task:') && !s.video_url.startsWith('runway_task:'));
-  const imageScenes = scenesWithTiming.filter(s => s.image_url);
+  const videoScenes = scenesWithTiming.filter(s => s.video_url && s.video_url.startsWith('http'));
+  const imageScenes = scenesWithTiming.filter(s => s.image_url && s.image_url.startsWith('http'));
   const hasVoiceover = !!voiceoverUrl;
   const hasMusic = !!musicUrl;
 
@@ -68,7 +68,7 @@ export default function ExportPanel({
       duration: s.duration_seconds,
       narration: s.narration_text || '',
       image_url: s.image_url || null,
-      video_url: (s.video_url && !s.video_url.startsWith('freepik_task:') && !s.video_url.startsWith('runway_task:')) ? s.video_url : null,
+      video_url: (s.video_url && s.video_url.startsWith('http')) ? s.video_url : null,
       sound_effect_url: s.sound_effect_url || null,
       sfx_volume: s.sfx_volume ?? 0.5,
       camera_movement: s.camera_movement || 'slow_pan',
