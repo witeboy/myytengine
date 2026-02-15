@@ -56,6 +56,8 @@ import StoryHooks from './pages/StoryHooks';
 import StoryScript from './pages/StoryScript';
 import StoryTopics from './pages/StoryTopics';
 import TimelineEditor from './pages/TimelineEditor';
+import MediaLibrary from './pages/MediaLibrary';
+import VersionHistory from './pages/VersionHistory';
 
 
 export const PAGES = {
@@ -68,6 +70,8 @@ export const PAGES = {
     "StoryScript": StoryScript,
     "StoryTopics": StoryTopics,
     "TimelineEditor": TimelineEditor,
+    "MediaLibrary": MediaLibrary,
+    "VersionHistory": VersionHistory,
 }
 
 export const pagesConfig = {
