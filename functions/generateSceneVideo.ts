@@ -16,6 +16,12 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Scene image must be generated first' }, { status: 400 });
     }
 
+    // Get project for orientation
+    const projects = await base44.asServiceRole.entities.Projects.filter({ id: scene.project_id });
+    const project = projects[0];
+    const orientation = project?.orientation || 'landscape';
+    const runwayRatio = orientation === 'portrait' ? '720:1280' : '1280:720';
+
     const duration = scene.duration_seconds && scene.duration_seconds >= 10 ? 10 : 5;
 
     // Build animation prompt from scene settings
@@ -63,7 +69,7 @@ Deno.serve(async (req) => {
             promptImage: scene.image_url,
             promptText: prompt,
             duration: duration,
-            ratio: "1280:720"
+            ratio: runwayRatio
           })
         });
 
@@ -98,6 +104,7 @@ Deno.serve(async (req) => {
     }
 
     const freepikDuration = duration >= 10 ? "10" : "5";
+    const freepikAspectRatio = orientation === 'portrait' ? '9:16' : '16:9';
     const freepikRes = await fetch("https://api.freepik.com/v1/ai/image-to-video/kling-v2", {
       method: "POST",
       headers: {
@@ -108,6 +115,7 @@ Deno.serve(async (req) => {
         image: scene.image_url,
         duration: freepikDuration,
         prompt: prompt,
+        aspect_ratio: freepikAspectRatio,
       })
     });
 

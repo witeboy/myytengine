@@ -19,6 +19,12 @@ Deno.serve(async (req) => {
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: scene.project_id });
     const project = projects[0];
 
+    // Determine orientation and enforce aspect ratio in prompt
+    const orientation = project?.orientation || 'landscape';
+    const aspectRatioInstruction = orientation === 'portrait'
+      ? 'IMPORTANT: Generate this image in PORTRAIT orientation (9:16 aspect ratio, vertical format, 720x1280).'
+      : 'IMPORTANT: Generate this image in LANDSCAPE orientation (16:9 aspect ratio, horizontal format, 1280x720).';
+
     // Sanitize the image prompt to avoid content policy violations
     // Replace direct depictions of suffering/violence with tasteful artistic alternatives
     let basePrompt = scene.image_prompt || "";
@@ -36,8 +42,8 @@ Deno.serve(async (req) => {
       basePrompt = basePrompt.replace(pattern, replacement);
     }
     
-    // Add safety wrapper
-    let fullPrompt = `Artistic, dignified, historically respectful illustration. No graphic violence or suffering. ${basePrompt}`;
+    // Add safety wrapper + orientation
+    let fullPrompt = `${aspectRatioInstruction} Artistic, dignified, historically respectful illustration. No graphic violence or suffering. ${basePrompt}`;
     
     // If project has character descriptions, prepend them
     if (project?.character_descriptions) {
