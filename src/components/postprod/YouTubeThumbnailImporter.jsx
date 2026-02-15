@@ -99,16 +99,18 @@ export default function YouTubeThumbnailImporter({ projectId, onConceptCreated }
           </div>
         )}
 
-        {analysis && (
+        {/* STEP 1: Review Analysis */}
+        {analysis && step === 'review' && (
           <div className="space-y-4 bg-white rounded-xl p-4 border">
-            {/* Thumbnail preview + analysis side by side */}
+            <div className="flex items-center gap-2 mb-1">
+              <Badge className="bg-blue-100 text-blue-800">Step 1 of 2</Badge>
+              <span className="text-sm font-medium text-gray-700">Review Analysis</span>
+            </div>
+
+            {/* Thumbnail preview + summary */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <img
-                  src={thumbnailUrl}
-                  alt="YouTube thumbnail"
-                  className="w-full rounded-lg shadow-md"
-                />
+                <img src={thumbnailUrl} alt="YouTube thumbnail" className="w-full rounded-lg shadow-md" />
               </div>
               <div className="space-y-3">
                 <div>
@@ -122,9 +124,7 @@ export default function YouTubeThumbnailImporter({ projectId, onConceptCreated }
                 {analysis.typography && (
                   <div className="flex items-center gap-2">
                     <Type className="w-3 h-3 text-gray-400" />
-                    <span className="text-xs">
-                      "{analysis.typography.text_shown}" — {analysis.typography.font_style}
-                    </span>
+                    <span className="text-xs">"{analysis.typography.text_shown}" — {analysis.typography.font_style}</span>
                   </div>
                 )}
                 {analysis.color_palette && (
@@ -138,95 +138,119 @@ export default function YouTubeThumbnailImporter({ projectId, onConceptCreated }
               </div>
             </div>
 
-            {/* Expandable details */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full text-gray-500"
-              onClick={() => setShowDetails(!showDetails)}
-            >
-              {showDetails ? <ChevronUp className="w-4 h-4 mr-1" /> : <ChevronDown className="w-4 h-4 mr-1" />}
-              {showDetails ? 'Hide Details' : 'Show Full Analysis'}
-            </Button>
-            {showDetails && (
-              <div className="text-xs text-gray-600 space-y-3 bg-gray-50 p-3 rounded-lg max-h-[400px] overflow-y-auto">
-                <p><strong>Layout:</strong> {analysis.layout_breakdown}</p>
-                <p><strong>Description:</strong> {analysis.detailed_description}</p>
-                
-                {/* Layer breakdown */}
-                {analysis.layers && (
-                  <div className="space-y-2 border-t pt-2">
-                    <p className="font-semibold text-gray-700">🎬 Visual Layers:</p>
-                    {analysis.layers.background && (
-                      <div className="bg-gray-100 p-2 rounded">
-                        <p className="font-medium text-gray-700">Background</p>
-                        <p>{analysis.layers.background.description || analysis.layers.background.setting}</p>
-                        {analysis.layers.background.mood && <p className="text-gray-500">Mood: {analysis.layers.background.mood}</p>}
-                      </div>
-                    )}
-                    {analysis.layers.midground && (
-                      <div className="bg-blue-50 p-2 rounded">
-                        <p className="font-medium text-blue-700">Mid-ground</p>
-                        <p>{analysis.layers.midground.description}</p>
-                        {analysis.layers.midground.subjects?.map((s, i) => (
-                          <p key={i} className="ml-2">• <strong>{s.archetype}</strong> — {s.expression}, {s.clothing}</p>
-                        ))}
-                      </div>
-                    )}
-                    {analysis.layers.foreground && (
-                      <div className="bg-red-50 p-2 rounded">
-                        <p className="font-medium text-red-700">Foreground</p>
-                        {analysis.layers.foreground.left_subject && (
-                          <p><strong>Left:</strong> {analysis.layers.foreground.left_subject.description || `${analysis.layers.foreground.left_subject.archetype} — ${analysis.layers.foreground.left_subject.expression}`}</p>
-                        )}
-                        {analysis.layers.foreground.right_subject && (
-                          <p><strong>Right:</strong> {analysis.layers.foreground.right_subject.description || `${analysis.layers.foreground.right_subject.archetype} — ${analysis.layers.foreground.right_subject.expression}`}</p>
-                        )}
-                      </div>
-                    )}
-                    {analysis.layers.text_and_graphics?.elements && (
-                      <div className="bg-yellow-50 p-2 rounded">
-                        <p className="font-medium text-yellow-700">Text & Graphics</p>
-                        {analysis.layers.text_and_graphics.elements.map((el, i) => (
-                          <p key={i}>• <strong>{el.type}:</strong> {el.description}</p>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+            {/* Full analysis always visible */}
+            <div className="text-xs text-gray-600 space-y-3 bg-gray-50 p-3 rounded-lg max-h-[500px] overflow-y-auto">
+              <p><strong>Layout:</strong> {analysis.layout_breakdown}</p>
+              <p><strong>Description:</strong> {analysis.detailed_description}</p>
+              
+              {analysis.layers && (
+                <div className="space-y-2 border-t pt-2">
+                  <p className="font-semibold text-gray-700">🎬 Visual Layers:</p>
+                  {analysis.layers.background && (
+                    <div className="bg-gray-100 p-2 rounded">
+                      <p className="font-medium text-gray-700">Background</p>
+                      <p>{analysis.layers.background.description || analysis.layers.background.setting}</p>
+                      {analysis.layers.background.mood && <p className="text-gray-500">Mood: {analysis.layers.background.mood}</p>}
+                    </div>
+                  )}
+                  {analysis.layers.midground && (
+                    <div className="bg-blue-50 p-2 rounded">
+                      <p className="font-medium text-blue-700">Mid-ground</p>
+                      <p>{analysis.layers.midground.description}</p>
+                      {analysis.layers.midground.subjects?.map((s, i) => (
+                        <p key={i} className="ml-2">• <strong>{s.archetype}</strong> — {s.expression}, {s.clothing}</p>
+                      ))}
+                    </div>
+                  )}
+                  {analysis.layers.foreground && (
+                    <div className="bg-red-50 p-2 rounded">
+                      <p className="font-medium text-red-700">Foreground ({analysis.layers.foreground.subject_count || 'N/A'} subjects)</p>
+                      <p className="text-xs text-red-600 mb-1"><strong>Arrangement:</strong> {analysis.layers.foreground.spatial_arrangement}</p>
+                      {analysis.layers.foreground.description && (
+                        <p>{analysis.layers.foreground.description}</p>
+                      )}
+                      {analysis.layers.foreground.subjects?.map((s, i) => (
+                        <div key={i} className="ml-2 mt-1 p-1.5 bg-white rounded border-l-2 border-red-300">
+                          <p className="font-medium text-xs">Person {i + 1} — <span className="text-red-600">{s.position_in_frame}</span></p>
+                          <p><strong>Type:</strong> {s.archetype}</p>
+                          <p><strong>Hair:</strong> {s.hair}</p>
+                          <p><strong>Expression:</strong> {s.expression_decoded}</p>
+                          <p><strong>Clothing:</strong> {s.clothing}</p>
+                          {s.scale_relative && <p><strong>Scale:</strong> {s.scale_relative}</p>}
+                          <p className="mt-1 text-gray-500">{s.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {analysis.layers.text_and_graphics?.elements && (
+                    <div className="bg-yellow-50 p-2 rounded">
+                      <p className="font-medium text-yellow-700">Text & Graphics</p>
+                      {analysis.layers.text_and_graphics.elements.map((el, i) => (
+                        <p key={i}>• <strong>{el.type}:</strong> {el.description}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
-                {/* Styling */}
-                {analysis.styling && (
-                  <div className="border-t pt-2">
-                    <p className="font-semibold text-gray-700">🎨 Styling:</p>
-                    <p>Aesthetic: {analysis.styling.aesthetic}</p>
-                    <p>Contrast: {analysis.styling.contrast}</p>
-                    <p>Saturation: {analysis.styling.saturation}</p>
-                    <p>Rim Lighting: {analysis.styling.rim_lighting}</p>
-                    <p>Render: {analysis.styling.render_quality}</p>
-                  </div>
-                )}
+              {analysis.styling && (
+                <div className="border-t pt-2">
+                  <p className="font-semibold text-gray-700">🎨 Styling:</p>
+                  <p>Aesthetic: {analysis.styling.aesthetic} | Contrast: {analysis.styling.contrast}</p>
+                  <p>Saturation: {analysis.styling.saturation} | Rim Lighting: {analysis.styling.rim_lighting}</p>
+                  <p>Render: {analysis.styling.render_quality} | Skin: {analysis.styling.skin_texture}</p>
+                </div>
+              )}
 
-                {/* Generic template */}
-                {analysis.generic_template && (
-                  <div className="border-t pt-2">
-                    <p className="font-semibold text-gray-700">📋 Reusable Template:</p>
-                    <p className="whitespace-pre-wrap bg-white p-2 rounded border text-[11px]">{analysis.generic_template}</p>
-                  </div>
-                )}
+              {analysis.generic_template && (
+                <div className="border-t pt-2">
+                  <p className="font-semibold text-gray-700">📋 Reusable Template:</p>
+                  <p className="whitespace-pre-wrap bg-white p-2 rounded border text-[11px]">{analysis.generic_template}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={handleProceedToPrompt}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 gap-2"
+              >
+                <Zap className="w-4 h-4" />
+                Looks Good — Proceed to Prompt
+              </Button>
+              <Button variant="outline" onClick={() => { setAnalysis(null); setUrl(''); setStep('input'); }}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 2: Edit Prompt & Generate */}
+        {analysis && step === 'prompt' && (
+          <div className="space-y-4 bg-white rounded-xl p-4 border">
+            <div className="flex items-center gap-2 mb-1">
+              <Badge className="bg-green-100 text-green-800">Step 2 of 2</Badge>
+              <span className="text-sm font-medium text-gray-700">Edit Prompt & Generate</span>
+              <Button variant="ghost" size="sm" className="ml-auto text-xs text-blue-600" onClick={() => setStep('review')}>
+                ← Back to Analysis
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <img src={thumbnailUrl} alt="Reference" className="w-full rounded-lg shadow-sm" />
+                <p className="text-[10px] text-gray-400 text-center mt-1">Original Reference</p>
               </div>
-            )}
-
-            {/* Editable prompt */}
-            <div>
-              <p className="text-xs font-medium text-gray-500 mb-1">
-                ✏️ AI Image Prompt (edit to customize)
-              </p>
-              <Textarea
-                value={editablePrompt}
-                onChange={e => setEditablePrompt(e.target.value)}
-                className="text-sm min-h-[100px]"
-              />
+              <div className="md:col-span-2">
+                <p className="text-xs font-medium text-gray-500 mb-1">
+                  ✏️ AI Image Prompt — edit before generating
+                </p>
+                <Textarea
+                  value={editablePrompt}
+                  onChange={e => setEditablePrompt(e.target.value)}
+                  className="text-sm min-h-[200px]"
+                />
+              </div>
             </div>
 
             <div className="flex gap-2">
@@ -236,9 +260,9 @@ export default function YouTubeThumbnailImporter({ projectId, onConceptCreated }
                 className="flex-1 bg-green-600 hover:bg-green-700 gap-2"
               >
                 {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                Generate & Save as Concept
+                Generate Thumbnail Image
               </Button>
-              <Button variant="outline" onClick={() => { setAnalysis(null); setUrl(''); }}>
+              <Button variant="outline" onClick={() => { setAnalysis(null); setUrl(''); setStep('input'); }}>
                 <X className="w-4 h-4" />
               </Button>
             </div>
