@@ -40,15 +40,24 @@ export default function VideoExporter({
   const totalDuration = scenes.reduce((sum, s) => sum + (s.duration_seconds || 8), 0);
   const totalFrames = Math.ceil(totalDuration * fps);
 
-  const handleExport = async () => {
+  const handleExport = async (forceExport = false) => {
     setDownloadUrl(null);
     setFileSize(null);
-    setUnsupported(null);
 
-    const support = await checkSupport(quality, orientation);
-    if (!support.supported) {
-      setUnsupported(support.reason);
-      return;
+    if (!forceExport) {
+      setUnsupported(null);
+      const support = await checkSupport(quality, orientation);
+      if (!support.supported) {
+        setUnsupported(support.reason);
+        return;
+      }
+      if (support.warning) {
+        setUnsupported(support.reason);
+        // Don't return — show warning but let user proceed via "Try Anyway" button
+        return;
+      }
+    } else {
+      setUnsupported(null);
     }
 
     const blob = await exportVideo(scenes, {
@@ -161,10 +170,20 @@ export default function VideoExporter({
           )}
 
           {/* Unsupported warning */}
-          {unsupported && (
-            <div className="flex items-start gap-2 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
-              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-              <span>{unsupported}</span>
+          {unsupported && !exporting && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 space-y-2">
+              <div className="flex items-start gap-2 text-sm text-yellow-800">
+                <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>{unsupported}</span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full border-yellow-300 text-yellow-800 hover:bg-yellow-100"
+                onClick={() => handleExport(true)}
+              >
+                Try Anyway
+              </Button>
             </div>
           )}
 

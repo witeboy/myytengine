@@ -24,21 +24,34 @@ export default function useVideoExport() {
 
   const checkSupport = useCallback(async (quality, orientation) => {
     if (!('VideoEncoder' in window)) {
-      return { supported: false, reason: 'Your browser does not support WebCodecs. Please use Chrome 94+ or Edge 94+.' };
+      return { supported: false, warning: false, reason: 'Your browser does not support WebCodecs. Please use Chrome 94+ or Edge 94+.' };
     }
     const presets = orientation === 'portrait' ? PORTRAIT_PRESETS : QUALITY_PRESETS;
     const preset = presets[quality];
-    const config = {
-      codec: 'avc1.42001e',
-      width: preset.width,
-      height: preset.height,
-      bitrate: preset.bitrate,
-    };
-    const support = await VideoEncoder.isConfigSupported(config);
-    if (!support.supported) {
-      return { supported: false, reason: `Your browser/hardware doesn't support ${quality} H.264 encoding.` };
+
+    // Try multiple AVC profiles from most to least common
+    const profiles = ['avc1.42001e', 'avc1.4d001e', 'avc1.640028', 'avc1.42001f'];
+    let bestCodec = null;
+    for (const codec of profiles) {
+      try {
+        const support = await VideoEncoder.isConfigSupported({
+          codec,
+          width: preset.width,
+          height: preset.height,
+          bitrate: preset.bitrate,
+        });
+        if (support.supported) {
+          bestCodec = codec;
+          break;
+        }
+      } catch {}
     }
-    return { supported: true };
+
+    if (!bestCodec) {
+      // Return warning but still allow proceeding
+      return { supported: true, warning: true, reason: `${quality} H.264 encoding may not be fully supported by your browser/hardware. Export might fail — try a lower quality if it does.`, codec: profiles[0] };
+    }
+    return { supported: true, warning: false, codec: bestCodec };
   }, []);
 
   const loadImage = (url) => {
