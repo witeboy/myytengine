@@ -238,10 +238,11 @@ TEXT & GRAPHICS:
 - Position: bottom center or top edge — NEVER covering faces/key subjects
 - Any badges, banners, VS dividers, warning graphics
 
-ASPECT RATIO (MANDATORY):
-      - ALL thumbnails MUST be 16:9 landscape aspect ratio (1280x720)
-      - The forensic description MUST note this is a widescreen landscape composition
-      - Every visual element should be described in terms of a 16:9 wide frame
+ASPECT RATIO (MANDATORY — MOST CRITICAL RULE):
+      - ALL thumbnails MUST be WIDE 16:9 LANDSCAPE aspect ratio (1280x720)
+      - Width MUST be 1.78x the height — like a movie screen, NOT square, NOT portrait
+      - The forensic description MUST explicitly state "wide 16:9 landscape format" and describe all elements in terms of a WIDE horizontal frame
+      - Every element placement must reference LEFT/RIGHT/CENTER in a WIDE frame — if your description sounds like a square image, you have FAILED
 
       OVERALL STYLING:
       - NEVER use children's illustration styles (cocomelon, cartoon) for thumbnails — always cinematic/dramatic
