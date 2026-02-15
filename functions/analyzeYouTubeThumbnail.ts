@@ -219,34 +219,27 @@ RESPOND IN THIS EXACT JSON:
       "description": "Full mid-ground description"
     },
     "foreground": {
-      "left_subject": {
-        "archetype": "full physical description: age, ethnicity, build, skin tone, face shape, jaw, cheekbones",
-        "hair": "style, color, texture, length, hairline",
-        "facial_hair": "beard style, length, color, density / clean-shaven",
-        "eyes": "color, shape, gaze direction, intensity, eyelid position, eyebrow position",
-        "mouth": "open/closed, teeth visible, lip details, expression",
-        "expression_decoded": "which facial muscles are active and what emotion it conveys",
-        "clothing": "exact garment with detailed color names, patterns, logos, collar, fabric texture",
-        "crop": "how much is visible and how they fill the frame",
-        "facing": "exact angle and direction",
-        "rim_light": "which side, color, intensity, separation effect",
-        "skin_detail": "texture quality, any shadows, color cast on skin",
-        "description": "Full flowing description of this person"
-      },
-      "right_subject": {
-        "archetype": "full physical description",
-        "hair": "style, color, texture",
-        "facial_hair": "details",
-        "eyes": "details",
-        "mouth": "details",
-        "expression_decoded": "facial muscle analysis and emotion",
-        "clothing": "full details",
-        "crop": "framing details",
-        "facing": "angle and direction",
-        "rim_light": "details",
-        "skin_detail": "texture and lighting",
-        "description": "Full flowing description"
-      }
+      "subjects": [
+        {
+          "position_in_frame": "EXACT position: left edge, left-center, dead-center, right-center, right edge — and which zone (top/middle/bottom)",
+          "archetype": "full physical description: age, ethnicity, build, skin tone, face shape, jaw, cheekbones",
+          "hair": "style, color, texture, length, hairline",
+          "facial_hair": "beard style, length, color, density / clean-shaven",
+          "eyes": "color, shape, gaze direction, intensity, eyelid position, eyebrow position",
+          "mouth": "open/closed, teeth visible, lip details, expression",
+          "expression_decoded": "which facial muscles are active and what emotion it conveys",
+          "clothing": "exact garment with detailed color names, patterns, logos, collar, fabric texture",
+          "crop": "how much is visible and how they fill the frame",
+          "facing": "exact angle and direction",
+          "rim_light": "which side, color, intensity, separation effect",
+          "skin_detail": "texture quality, any shadows, color cast on skin",
+          "scale_relative": "largest in frame / medium / smallest — and overlap with other subjects",
+          "description": "Full flowing description of this person"
+        }
+      ],
+      "subject_count": "EXACT number of people in the foreground",
+      "spatial_arrangement": "How subjects are arranged: e.g. '2 clustered on the left, 1 isolated on the right' or '3 in a row' or '1 centered large' — be PRECISE about grouping and spacing",
+      "description": "Full foreground description including spatial relationships between all subjects"
     },
     "text_and_graphics": {
       "elements": [
