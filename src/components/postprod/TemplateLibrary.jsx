@@ -18,6 +18,20 @@ export default function TemplateLibrary({ onSelectTemplate }) {
   const [detailTemplate, setDetailTemplate] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [filterType, setFilterType] = useState('all');
+  const [filterCategory, setFilterCategory] = useState('all');
+
+  const categoryLabels = {
+    sports: '🏆 Sports',
+    storytelling: '📖 Storytelling',
+    finance: '💰 Finance',
+    health_fitness: '💪 Health & Fitness',
+    motivation: '🔥 Motivation',
+    true_crime: '🔍 True Crime',
+    tech: '💻 Tech',
+    education: '📚 Education',
+    entertainment: '🎬 Entertainment',
+    other: '📌 Other',
+  };
 
   const { data: templates = [], refetch, isLoading } = useQuery({
     queryKey: ['thumbnail-templates'],
@@ -57,11 +71,12 @@ export default function TemplateLibrary({ onSelectTemplate }) {
     other: 'bg-gray-100 text-gray-700',
   };
 
-  const filtered = filterType === 'all'
-    ? templates
-    : filterType === 'favorites'
-      ? templates.filter(t => t.is_favorite)
-      : templates.filter(t => t.template_type === filterType);
+  const filtered = templates.filter(t => {
+    if (filterType === 'favorites' && !t.is_favorite) return false;
+    if (filterType !== 'all' && filterType !== 'favorites' && t.template_type !== filterType) return false;
+    if (filterCategory !== 'all' && t.library_category !== filterCategory) return false;
+    return true;
+  });
 
   return (
     <Card className="border-dashed border-2 border-amber-200 bg-amber-50/30">
@@ -96,19 +111,35 @@ export default function TemplateLibrary({ onSelectTemplate }) {
 
         {templates.length > 0 && (
           <>
-            {/* Filter bar */}
-            <div className="flex gap-1.5 flex-wrap">
-              <Button size="sm" variant={filterType === 'all' ? 'default' : 'outline'} className="text-xs h-7" onClick={() => setFilterType('all')}>
-                All ({templates.length})
-              </Button>
-              <Button size="sm" variant={filterType === 'favorites' ? 'default' : 'outline'} className="text-xs h-7 gap-1" onClick={() => setFilterType('favorites')}>
-                <Star className="w-3 h-3" /> Favorites
-              </Button>
-              {[...new Set(templates.map(t => t.template_type))].filter(Boolean).map(type => (
-                <Button key={type} size="sm" variant={filterType === type ? 'default' : 'outline'} className="text-xs h-7" onClick={() => setFilterType(type)}>
-                  {type.replace(/_/g, ' ')}
+            {/* Category filter bar */}
+            <div className="space-y-2">
+              <div className="flex gap-1.5 flex-wrap">
+                <span className="text-[10px] font-semibold text-gray-400 uppercase self-center mr-1">Niche:</span>
+                <Button size="sm" variant={filterCategory === 'all' ? 'default' : 'outline'} className="text-xs h-7" onClick={() => setFilterCategory('all')}>
+                  All Niches
                 </Button>
-              ))}
+                {[...new Set(templates.map(t => t.library_category).filter(Boolean))].map(cat => (
+                  <Button key={cat} size="sm" variant={filterCategory === cat ? 'default' : 'outline'} className="text-xs h-7" onClick={() => setFilterCategory(cat)}>
+                    {categoryLabels[cat] || cat}
+                    <Badge variant="secondary" className="text-[9px] ml-1 px-1">{templates.filter(t => t.library_category === cat).length}</Badge>
+                  </Button>
+                ))}
+              </div>
+              {/* Composition type filter */}
+              <div className="flex gap-1.5 flex-wrap">
+                <span className="text-[10px] font-semibold text-gray-400 uppercase self-center mr-1">Type:</span>
+                <Button size="sm" variant={filterType === 'all' ? 'default' : 'outline'} className="text-xs h-7" onClick={() => setFilterType('all')}>
+                  All
+                </Button>
+                <Button size="sm" variant={filterType === 'favorites' ? 'default' : 'outline'} className="text-xs h-7 gap-1" onClick={() => setFilterType('favorites')}>
+                  <Star className="w-3 h-3" /> Favorites
+                </Button>
+                {[...new Set(templates.map(t => t.template_type))].filter(Boolean).map(type => (
+                  <Button key={type} size="sm" variant={filterType === type ? 'default' : 'outline'} className="text-xs h-7" onClick={() => setFilterType(type)}>
+                    {type.replace(/_/g, ' ')}
+                  </Button>
+                ))}
+              </div>
             </div>
 
             {/* Template grid */}
@@ -153,10 +184,17 @@ export default function TemplateLibrary({ onSelectTemplate }) {
                     </div>
                   )}
 
-                  {/* Type badge */}
-                  <Badge className={`absolute top-1 left-1 text-[9px] px-1 py-0 ${typeColors[t.template_type] || typeColors.other}`}>
-                    {(t.template_type || 'other').replace(/_/g, ' ')}
-                  </Badge>
+                  {/* Category + Type badges */}
+                  <div className="absolute top-1 left-1 flex flex-col gap-0.5">
+                    {t.library_category && t.library_category !== 'other' && (
+                      <Badge className="text-[8px] px-1 py-0 bg-white/90 text-gray-700 border border-gray-200">
+                        {categoryLabels[t.library_category] || t.library_category}
+                      </Badge>
+                    )}
+                    <Badge className={`text-[9px] px-1 py-0 ${typeColors[t.template_type] || typeColors.other}`}>
+                      {(t.template_type || 'other').replace(/_/g, ' ')}
+                    </Badge>
+                  </div>
 
                   {t.is_favorite && (
                     <Star className="absolute top-1 right-1 w-3.5 h-3.5 fill-amber-400 text-amber-400" />

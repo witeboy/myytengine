@@ -4,12 +4,27 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Link2, Upload, Plus, X, CheckCircle2, Image as ImageIcon } from 'lucide-react';
+
+const NICHE_CATEGORIES = [
+  { value: 'sports', label: '🏆 Sports' },
+  { value: 'storytelling', label: '📖 Storytelling' },
+  { value: 'finance', label: '💰 Finance' },
+  { value: 'health_fitness', label: '💪 Health & Fitness' },
+  { value: 'motivation', label: '🔥 Motivation' },
+  { value: 'true_crime', label: '🔍 True Crime' },
+  { value: 'tech', label: '💻 Tech' },
+  { value: 'education', label: '📚 Education' },
+  { value: 'entertainment', label: '🎬 Entertainment' },
+  { value: 'other', label: '📌 Other' },
+];
 
 export default function TemplateFeedDialog({ open, onOpenChange, onComplete }) {
   const [mode, setMode] = useState('youtube'); // 'youtube' | 'upload'
   const [urls, setUrls] = useState(['']);
   const [niche, setNiche] = useState('');
+  const [category, setCategory] = useState('storytelling');
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, results: [] });
 
@@ -54,6 +69,7 @@ export default function TemplateFeedDialog({ open, onOpenChange, onComplete }) {
           image_url: imageUrl,
           source_url: validUrls[i].trim(),
           niche_tags: niche,
+          library_category: category,
         });
         
         results.push({ url: validUrls[i], success: true, template: res.data.template });
@@ -90,15 +106,30 @@ export default function TemplateFeedDialog({ open, onOpenChange, onComplete }) {
             </p>
           </div>
 
-          {/* Niche tags */}
-          <div>
-            <label className="text-xs font-medium text-gray-500 mb-1 block">Niche tags (optional)</label>
-            <Input
-              placeholder="e.g. true crime, history, drama"
-              value={niche}
-              onChange={e => setNiche(e.target.value)}
-              className="text-sm"
-            />
+          {/* Category + Niche tags */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">Niche Category *</label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger className="text-sm">
+                  <SelectValue placeholder="Select niche..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {NICHE_CATEGORIES.map(c => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-500 mb-1 block">Extra tags (optional)</label>
+              <Input
+                placeholder="e.g. history, drama, viral"
+                value={niche}
+                onChange={e => setNiche(e.target.value)}
+                className="text-sm"
+              />
+            </div>
           </div>
 
           {/* URL inputs */}
