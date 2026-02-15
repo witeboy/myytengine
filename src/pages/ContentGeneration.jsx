@@ -270,15 +270,7 @@ export default function ContentGeneration() {
           </div>
         )}
 
-        {/* Continue */}
-        {scenes.length > 0 && imageCount > 0 && (
-          <div className="flex justify-end">
-            <Button onClick={handleContinueToTimeline} className="bg-blue-600 hover:bg-blue-700" size="lg">
-              Continue to Timeline
-              <ArrowRight className="w-5 h-5 ml-2" />
-            </Button>
-          </div>
-        )}
+{/* Continue button moved to header */}
       </div>
     </div>
   );
