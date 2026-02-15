@@ -31,6 +31,7 @@ export default function PostProduction() {
   const [tagsBreakdown, setTagsBreakdown] = useState(null);
   const [hashtags, setHashtags] = useState(null);
   const [pinnedComment, setPinnedComment] = useState('');
+  const [selectedTitle, setSelectedTitle] = useState(null);
 
   // Reference style from imported thumbnail
   const [referenceStyle, setReferenceStyle] = useState('');
@@ -78,6 +79,7 @@ export default function PostProduction() {
       reference_style: referenceStyle || undefined,
       niche_dna: selectedNiche?.synthesized_dna || undefined,
       niche_name: selectedNiche?.name || undefined,
+      selected_title: selectedTitle?.title || undefined,
     });
     refetchThumbs();
     setGeneratingThumbs(false);
@@ -129,21 +131,21 @@ export default function PostProduction() {
           )}
         </div>
 
-        <Tabs defaultValue="thumbnails" className="space-y-6">
+        <Tabs defaultValue="titles" className="space-y-6">
           <TabsList className="grid w-full max-w-2xl grid-cols-3">
-            <TabsTrigger value="thumbnails" className="gap-2">
-              <ImageIcon className="w-4 h-4" />
-              Thumbnails
-              {thumbnails.length > 0 && <Badge variant="secondary" className="text-xs ml-1">{thumbnails.length}</Badge>}
-            </TabsTrigger>
             <TabsTrigger value="titles" className="gap-2">
               <Type className="w-4 h-4" />
-              SEO Titles
+              1. SEO Titles
               {seoTitles && <CheckCircle2 className="w-3.5 h-3.5 text-green-500 ml-1" />}
+            </TabsTrigger>
+            <TabsTrigger value="thumbnails" className="gap-2">
+              <ImageIcon className="w-4 h-4" />
+              2. Thumbnails
+              {thumbnails.length > 0 && <Badge variant="secondary" className="text-xs ml-1">{thumbnails.length}</Badge>}
             </TabsTrigger>
             <TabsTrigger value="descriptions" className="gap-2">
               <FileText className="w-4 h-4" />
-              Description & Tags
+              3. Description & Tags
               {metadata && <CheckCircle2 className="w-3.5 h-3.5 text-green-500 ml-1" />}
             </TabsTrigger>
           </TabsList>
@@ -171,8 +173,9 @@ export default function PostProduction() {
                       <p className="font-semibold text-sm">Generate from Your Script</p>
                       <p className="text-xs text-gray-500">
                         AI analyzes your script to find the most click-worthy moments
+                        {selectedTitle && <span className="text-blue-600"> + overlay: "{selectedTitle.title}"</span>}
                         {referenceStyle && <span className="text-purple-600"> + using imported style</span>}
-                        {selectedNiche && <span className="text-amber-600"> + using niche style: {selectedNiche.icon} {selectedNiche.name}</span>}
+                        {selectedNiche && <span className="text-amber-600"> + niche: {selectedNiche.icon} {selectedNiche.name}</span>}
                       </p>
                     </div>
                   </div>
@@ -248,7 +251,18 @@ export default function PostProduction() {
             )}
 
             {seoTitles && !generatingSeo && (
-              <SeoTitlesPanel titles={seoTitles} seoAnalysis={seoAnalysis} />
+              <div className="space-y-4">
+                <SeoTitlesPanel titles={seoTitles} seoAnalysis={seoAnalysis} onSelectTitle={setSelectedTitle} />
+                {selectedTitle && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
+                    <p className="text-sm text-blue-800">
+                      Selected: <strong>"{selectedTitle.title}"</strong> — this will be used as the text overlay in generated thumbnails.
+                      <button className="text-blue-600 underline ml-2 text-xs" onClick={() => setSelectedTitle(null)}>Clear</button>
+                    </p>
+                  </div>
+                )}
+              </div>
             )}
           </TabsContent>
 

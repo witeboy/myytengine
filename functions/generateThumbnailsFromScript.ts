@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, reference_style, template_blueprint, niche_dna, niche_name } = await req.json();
+    const { project_id, reference_style, template_blueprint, niche_dna, niche_name, selected_title } = await req.json();
 
     const project = await base44.entities.Projects.get(project_id);
     const script = await base44.entities.Scripts.get(project.script_id);
@@ -129,6 +129,10 @@ ${template_blueprint.recreate_prompt || ''}
 CRITICAL: The above blueprint is from a PROVEN viral thumbnail. Your concepts MUST follow its composition, color, depth, text, and action rules EXACTLY while adapting the SUBJECTS to match THIS video's script content.`
       : '';
 
+    const selectedTitleInstruction = selected_title
+      ? `\n\nMANDATORY TITLE OVERLAY: The user has selected this SEO title for the video: "${selected_title}"\nYou MUST derive the 2-4 word thumbnail text overlay from this title. Extract the most curiosity-inducing, scroll-stopping fragment from this title. The text_overlay for ALL 3 concepts MUST be based on this title — pick the most powerful 2-4 words that create a curiosity gap.`
+      : '';
+
     const nicheDnaInstruction = niche_dna
       ? `\n\n=== MANDATORY NICHE STYLE DNA (learned from ${niche_name || 'uploaded'} niche thumbnails) ===
 This Style DNA was synthesized from analyzing multiple world-class thumbnails in the "${niche_name || 'selected'}" niche. You MUST follow ALL of these patterns, rules, and best practices. Your thumbnails must FEEL like they belong in this niche.
@@ -158,6 +162,7 @@ ${sceneContext}
 ${styleInstruction}
 ${templateInstruction}
 ${nicheDnaInstruction}
+${selectedTitleInstruction}
 
 FULL SCRIPT (find the most shocking, emotional, curiosity-inducing, visually compelling moments):
 ${truncatedScript}
