@@ -7,7 +7,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import {
   Loader2, Sparkles, CheckCircle2, Image as ImageIcon, Star, Eye, X, Wand2,
-  BarChart3, ArrowUpDown, TrendingUp, RefreshCw, Code2, ChevronDown, ChevronUp
+  BarChart3, ArrowUpDown, TrendingUp, RefreshCw, Code2, ChevronDown, ChevronUp, Download
 } from 'lucide-react';
 import RefineConceptDialog from './RefineConceptDialog';
 import ThumbnailCtrBreakdown from './ThumbnailCtrBreakdown';
@@ -235,7 +235,7 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
                       <Textarea
                         value={editingPrompt}
                         onChange={e => setEditingPrompt(e.target.value)}
-                        className="text-[11px] min-h-[100px] font-mono bg-slate-50"
+                        className="text-[11px] min-h-[200px] font-mono bg-slate-50"
                       />
                       <Button
                         size="sm"
@@ -266,15 +266,33 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
 
                 <div className="flex flex-wrap gap-2">
                   {thumb.image_url && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1"
-                      onClick={() => setPreviewThumb(thumb)}
-                    >
-                      <Eye className="w-3 h-3" />
-                      Preview
-                    </Button>
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1"
+                        onClick={() => setPreviewThumb(thumb)}
+                      >
+                        <Eye className="w-3 h-3" />
+                        Preview
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1"
+                        onClick={() => {
+                          const a = document.createElement('a');
+                          a.href = thumb.image_url;
+                          a.download = `thumbnail-${thumb.rank}.png`;
+                          a.target = '_blank';
+                          document.body.appendChild(a);
+                          a.click();
+                          a.remove();
+                        }}
+                      >
+                        <Download className="w-3 h-3" />
+                      </Button>
+                    </>
                   )}
                   <Button
                     size="sm"

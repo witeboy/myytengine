@@ -104,7 +104,10 @@ Deno.serve(async (req) => {
       ? `\n\nIMPORTANT — REFERENCE STYLE FROM IMPORTED THUMBNAIL:\nYou MUST replicate this EXACT visual style, layout, and composition:\n${reference_style}\nAdapt subjects and text to THIS video's content but keep IDENTICAL composition, rim lighting, depth, text treatment, aesthetic.`
       : '';
 
-    const visualStyle = project.visual_style || 'cinematic_realistic';
+    const rawStyle = project.visual_style || 'cinematic_realistic';
+    // Never use children's styles for thumbnails - override to cinematic
+    const childStyles = ['picstory_cocomelon', 'cartoon_2d'];
+    const visualStyle = childStyles.includes(rawStyle) ? 'cinematic_realistic' : rawStyle;
 
     // ============================================================
     // PHASE 1: Deep forensic-level description of the IDEAL thumbnail
@@ -224,6 +227,13 @@ Your "image_prompt" output must follow these rules STRICTLY:
   ${visualStyle === 'comic_book' ? '- Use comic keywords: halftone dots, bold ink outlines, dynamic action poses, speech bubbles, pop art colors' : ''}
 
 MANDATORY ASPECT RATIO: ALL image prompts MUST explicitly state "16:9 aspect ratio, 1280x720 resolution, widescreen landscape format" at the very beginning. Every thumbnail is a WIDE landscape composition, never square or portrait.
+
+TEXT OVERLAY IS CRITICAL:
+- The text_overlay MUST appear prominently in the final image as a bold, high-contrast graphic element
+- Describe text as a DESIGN UNIT: "bold white Impact-style text reading 'EXACT WORDS' with thick black outline and heavy drop shadow, positioned center-bottom spanning 40% of frame width"
+- Text must be LARGE, READABLE at thumbnail size, and create MAXIMUM contrast against the background
+- Use no more than 2-4 words for the overlay text
+- The text element should be one of the MOST prominent visual features of the thumbnail
 
       Each prompt MUST be 250+ words incorporating EVERY detail from the forensic description.
 
