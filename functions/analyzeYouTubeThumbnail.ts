@@ -223,9 +223,18 @@ The recreate_prompt is what an AI IMAGE GENERATOR will use. It must follow these
 - MAX 2-3 text elements in the prompt. Consolidate where possible.
 - Include "graphic design composition" to force flat 2D text overlays
 
-MANDATORY: The recreate_prompt MUST explicitly state "16:9 aspect ratio, 1280x720 resolution, widescreen landscape format" at the very beginning. All YouTube thumbnails are 16:9 wide format.
+MANDATORY: The recreate_prompt MUST explicitly start with "A high-detail 4K YouTube thumbnail in 16:9 aspect ratio (1280x720), widescreen landscape format, graphic design composition". All YouTube thumbnails are 16:9 wide format. NEVER generate square or portrait format prompts.
 
-The recreate_prompt should be 400+ words and incorporate ALL the forensic details — every person's archetype, expression muscles, hair, clothing details, rim lighting, background atmosphere, text design, color grading. It must read like a hyper-detailed creative brief.
+=== WORLD-CLASS THUMBNAIL QUALITY CHECKLIST ===
+Apply these principles to make the recreate_prompt produce a VIRAL, not educational, thumbnail:
+1. CHARACTERS IN ACTION: Describe subjects DOING something (holding, protecting, confronting), not just standing
+2. TEXT AS CURIOSITY GAP: If recreating text, ensure it creates a question, not a statement
+3. EXTREME COLOR CONTRAST: Warm vs cold sides, heavy vignette, dramatic lighting
+4. INTERACTION: Characters must relate to each other (eye contact, confrontation), not stare at camera
+5. DEPTH: Heavy bokeh on backgrounds, razor-sharp foreground subjects
+6. TEXT PLACEMENT: Text in negative space (bottom center), NEVER covering faces
+
+The recreate_prompt should be 400+ words and incorporate ALL the forensic details — every person's archetype, expression muscles, hair, clothing details, rim lighting, background atmosphere, text design, color grading. It must read like a hyper-detailed creative brief for a CINEMATIC, EMOTIONAL thumbnail that drives clicks.
 
 RESPOND IN THIS EXACT JSON:
 {
