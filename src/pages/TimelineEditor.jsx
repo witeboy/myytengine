@@ -11,6 +11,7 @@ import TimelineRuler from '@/components/timeline/TimelineRuler';
 import ScenePreview from '@/components/timeline/ScenePreview';
 import PlaybackControls from '@/components/timeline/PlaybackControls';
 import TranscriptBar from '@/components/timeline/TranscriptBar';
+import PreviewMonitor from '@/components/timeline/PreviewMonitor';
 import { Loader2, Import, Download, Film, Play } from 'lucide-react';
 
 export default function TimelineEditor() {
