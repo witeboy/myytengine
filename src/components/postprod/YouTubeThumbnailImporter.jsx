@@ -31,6 +31,14 @@ export default function YouTubeThumbnailImporter({ projectId, onConceptCreated, 
     setAnalysis(res.data.analysis);
     setThumbnailUrl(res.data.thumbnail_url);
     setEditablePrompt(res.data.analysis.recreate_prompt || '');
+    // Extract style DNA from the analysis for the pipeline
+    const styleDna = [
+      res.data.analysis.style_category,
+      res.data.analysis.layout_breakdown,
+      res.data.analysis.styling ? `Aesthetic: ${res.data.analysis.styling.aesthetic}, Contrast: ${res.data.analysis.styling.contrast}` : '',
+      res.data.analysis.generic_template,
+    ].filter(Boolean).join(' | ');
+    onStyleExtracted?.(styleDna);
     setAnalyzing(false);
     setStep('review'); // Go to review step first
   };
