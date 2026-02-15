@@ -365,18 +365,24 @@ export default function TimelineEditor() {
         {/* Timeline */}
         <Card className="overflow-hidden">
           <CardContent className="p-0">
-            <div className="overflow-x-auto" ref={timelineRef}>
+            <div className="overflow-x-auto" ref={timelineRef} onClick={handleTimelineClick}>
               <div style={{ minWidth: Math.max(totalDuration * pixelsPerSecond + 100, 800) }}>
                 {/* Ruler */}
                 <div className="relative">
                   <TimelineRuler totalDuration={totalDuration} pixelsPerSecond={pixelsPerSecond} />
-                  {/* Playhead on ruler */}
+                  {/* Playhead on ruler - draggable */}
                   {scenes.length > 0 && (
                     <div
-                      className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none"
-                      style={{ left: currentTime * pixelsPerSecond + 96 }}
+                      className="absolute top-0 bottom-0 z-30"
+                      style={{ left: currentTime * pixelsPerSecond + 96 - 6 }}
                     >
-                      <div className="w-3 h-3 bg-red-500 rounded-full -ml-[5px] -mt-0.5" />
+                      <div
+                        className="w-3 h-full flex flex-col items-center cursor-col-resize"
+                        onMouseDown={handlePlayheadMouseDown}
+                      >
+                        <div className="w-3 h-3 bg-red-500 rounded-full mt-0.5 shadow-md hover:scale-125 transition-transform" />
+                        <div className="w-0.5 flex-1 bg-red-500" />
+                      </div>
                     </div>
                   )}
                 </div>
