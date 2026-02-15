@@ -124,6 +124,32 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
           </CardContent>
         </Card>
       ))}
+      {/* Fullscreen Preview Dialog */}
+      <Dialog open={!!previewThumb} onOpenChange={() => setPreviewThumb(null)}>
+        <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black border-none">
+          {previewThumb && (
+            <div className="relative">
+              <img
+                src={previewThumb.image_url}
+                alt={previewThumb.concept_description}
+                className="w-full h-auto"
+              />
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <Badge className="bg-white/20 text-white text-xs">#{previewThumb.rank}</Badge>
+                  <Badge className="bg-amber-500/80 text-white text-xs gap-1">
+                    <Star className="w-3 h-3" /> CTR {previewThumb.ctr_score}/10
+                  </Badge>
+                  {previewThumb.text_overlay && (
+                    <Badge className="bg-white/20 text-white text-xs">"{previewThumb.text_overlay}"</Badge>
+                  )}
+                </div>
+                <p className="text-white text-sm line-clamp-2">{previewThumb.concept_description}</p>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
