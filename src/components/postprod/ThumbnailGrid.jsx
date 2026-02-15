@@ -16,7 +16,7 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
   const handleGenerateImage = async (thumb) => {
     setGeneratingImage(thumb.id);
     const { url } = await base44.integrations.Core.GenerateImage({
-      prompt: thumb.image_prompt,
+      prompt: `16:9 aspect ratio, 1280x720, widescreen landscape YouTube thumbnail. ${thumb.image_prompt}`,
     });
     await base44.entities.ThumbnailConcepts.update(thumb.id, { image_url: url });
     onRefetch();
