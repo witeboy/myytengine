@@ -13,7 +13,7 @@ import SeoTitlesPanel from '@/components/postprod/SeoTitlesPanel';
 import SeoDescriptionsPanel from '@/components/postprod/SeoDescriptionsPanel';
 import {
   Loader2, Sparkles, Image as ImageIcon, FileText, CheckCircle2, ArrowLeft,
-  Type, BookOpen, Library
+  Type, BookOpen, Library, ArrowRight, ClipboardCheck
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -73,7 +73,16 @@ export default function PostProduction() {
 
   const metadata = metadataList[0] || null;
 
-  // Generate thumbnails from script (with optional reference style + niche DNA)
+  // Handle "Next" from Titles → Thumbnails: copy titles to clipboard and switch tab
+  const handleTitlesToThumbnails = () => {
+    if (selectedTitles.length > 0) {
+      const text = selectedTitles.map(t => t.title).join('\n');
+      navigator.clipboard.writeText(text);
+    }
+    setActiveTab('thumbnails');
+  };
+
+  // Generate thumbnails from script (with selected titles + niche DNA baked in)
   const handleGenerateFromScript = async () => {
     setGeneratingThumbs(true);
     await base44.functions.invoke('generateThumbnailsFromScript', {
@@ -110,6 +119,10 @@ export default function PostProduction() {
   };
 
   const selectedThumb = thumbnails.find(t => t.is_selected);
+
+  // Readiness indicators
+  const titlesReady = seoTitles && selectedTitles.length > 0;
+  const styleReady = !!selectedNiche || !!referenceStyle;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -152,70 +165,6 @@ export default function PostProduction() {
             </TabsTrigger>
           </TabsList>
 
-          {/* ======================== THUMBNAILS TAB ======================== */}
-          <TabsContent value="thumbnails" className="space-y-6">
-            {/* 0. Niche Template Library */}
-            <NicheManager onSelectNiche={setSelectedNiche} selectedNicheId={selectedNiche?.id} />
-
-            {/* 1. Import from YouTube */}
-            <YouTubeThumbnailImporter
-              projectId={projectId}
-              onConceptCreated={() => refetchThumbs()}
-            />
-
-            {/* 2. Generate from Script */}
-            <Card>
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-                      <BookOpen className="w-5 h-5 text-purple-600" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-sm">Generate from Your Script</p>
-                      <p className="text-xs text-gray-500">
-                        AI analyzes your script to find the most click-worthy moments
-                        {selectedTitles.length > 0 && <span className="text-blue-600"> + {selectedTitles.length} title{selectedTitles.length > 1 ? 's' : ''} selected</span>}
-                        {referenceStyle && <span className="text-purple-600"> + using imported style</span>}
-                        {selectedNiche && <span className="text-amber-600"> + niche: {selectedNiche.icon} {selectedNiche.name}</span>}
-                      </p>
-                    </div>
-                  </div>
-                  <Button onClick={handleGenerateFromScript} disabled={generatingThumbs} className="gap-2 bg-purple-600 hover:bg-purple-700">
-                    {generatingThumbs ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                    {thumbnails.length > 0 ? 'Regenerate' : 'Generate 3 Concepts'}
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Loading state */}
-            {generatingThumbs && (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-purple-600 mx-auto mb-3" />
-                  <p className="text-gray-500">Creating scroll-stopping thumbnail concepts from your script...</p>
-                  <p className="text-xs text-gray-400 mt-1">Analyzing key moments, emotional hooks & visual metaphors</p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Thumbnail Grid */}
-            {thumbnails.length > 0 && !generatingThumbs && (
-              <ThumbnailGrid thumbnails={thumbnails} projectId={projectId} onRefetch={refetchThumbs} />
-            )}
-
-            {thumbnails.length === 0 && !generatingThumbs && (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <ImageIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500 mb-1">No thumbnail concepts yet</p>
-                  <p className="text-xs text-gray-400">Import from YouTube or generate from your script above</p>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-
           {/* ======================== TITLES TAB ======================== */}
           <TabsContent value="titles" className="space-y-4">
             <div className="flex items-center justify-between">
@@ -223,10 +172,17 @@ export default function PostProduction() {
                 <h2 className="text-lg font-semibold">SEO Video Titles</h2>
                 <p className="text-sm text-gray-500">10 scroll-stopping, algorithm-optimized titles extracted from your script</p>
               </div>
-              <Button onClick={handleGenerateSeo} disabled={generatingSeo} className="gap-2">
-                {generatingSeo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                {seoTitles ? 'Regenerate All SEO' : 'Generate SEO Package'}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button onClick={handleGenerateSeo} disabled={generatingSeo} variant={seoTitles ? 'outline' : 'default'} className="gap-2">
+                  {generatingSeo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  {seoTitles ? 'Regenerate All SEO' : 'Generate SEO Package'}
+                </Button>
+                {titlesReady && (
+                  <Button onClick={handleTitlesToThumbnails} className="gap-2 bg-purple-600 hover:bg-purple-700">
+                    Next: Thumbnails <ArrowRight className="w-4 h-4" />
+                  </Button>
+                )}
+              </div>
             </div>
 
             {generatingSeo && (
@@ -263,9 +219,9 @@ export default function PostProduction() {
                 }} />
                 {selectedTitles.length > 0 && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                    <ClipboardCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                     <div className="flex-1 text-sm text-blue-800">
-                      <p className="font-medium mb-1">{selectedTitles.length} title{selectedTitles.length > 1 ? 's' : ''} selected for thumbnail overlays:</p>
+                      <p className="font-medium mb-1">{selectedTitles.length} title{selectedTitles.length > 1 ? 's' : ''} selected — will be copied to clipboard & used as thumbnail text overlays:</p>
                       <ul className="space-y-0.5">
                         {selectedTitles.map(t => (
                           <li key={t.rank} className="flex items-center gap-1">
@@ -278,12 +234,109 @@ export default function PostProduction() {
                     </div>
                   </div>
                 )}
-                {selectedTitles.length > 0 && (
-                  <Button onClick={() => setActiveTab('thumbnails')} className="w-full gap-2 bg-purple-600 hover:bg-purple-700 h-11 text-base">
-                    <ImageIcon className="w-4 h-4" /> Next: Generate Thumbnails →
-                  </Button>
-                )}
               </div>
+            )}
+          </TabsContent>
+
+          {/* ======================== THUMBNAILS TAB ======================== */}
+          <TabsContent value="thumbnails" className="space-y-6">
+            {/* Pipeline status bar */}
+            <PipelineStatus
+              selectedTitles={selectedTitles}
+              selectedNiche={selectedNiche}
+              referenceStyle={referenceStyle}
+              onGoToTitles={() => setActiveTab('titles')}
+            />
+
+            {/* Step A: Choose style source — niche or YouTube import */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <NicheManager onSelectNiche={setSelectedNiche} selectedNicheId={selectedNiche?.id} />
+              <YouTubeThumbnailImporter
+                projectId={projectId}
+                onConceptCreated={() => refetchThumbs()}
+                onStyleExtracted={(style) => setReferenceStyle(style)}
+              />
+            </div>
+
+            {/* Step B: Generate from Script */}
+            <Card className={`transition-all ${(titlesReady || styleReady) ? 'border-purple-300 bg-purple-50/30' : ''}`}>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+                      <BookOpen className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm">Generate from Your Script</p>
+                      <p className="text-xs text-gray-500">
+                        AI weaves your script, selected titles & style DNA into scroll-stopping thumbnail concepts
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 mt-1.5">
+                        {selectedTitles.length > 0 && (
+                          <Badge className="bg-blue-100 text-blue-700 text-[10px] gap-0.5">
+                            <Type className="w-2.5 h-2.5" /> {selectedTitles.length} title{selectedTitles.length > 1 ? 's' : ''}
+                          </Badge>
+                        )}
+                        {selectedNiche && (
+                          <Badge className="bg-amber-100 text-amber-700 text-[10px]">
+                            {selectedNiche.icon} {selectedNiche.name} DNA
+                          </Badge>
+                        )}
+                        {referenceStyle && (
+                          <Badge className="bg-purple-100 text-purple-700 text-[10px]">
+                            🎨 YouTube style ref
+                          </Badge>
+                        )}
+                        {!selectedTitles.length && !selectedNiche && !referenceStyle && (
+                          <Badge variant="outline" className="text-[10px] text-gray-400">
+                            Select titles & style above for best results
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <Button onClick={handleGenerateFromScript} disabled={generatingThumbs} className="gap-2 bg-purple-600 hover:bg-purple-700">
+                    {generatingThumbs ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    {thumbnails.length > 0 ? 'Regenerate' : 'Generate 3 Concepts'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Loading state */}
+            {generatingThumbs && (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-purple-600 mx-auto mb-3" />
+                  <p className="text-gray-500">Creating scroll-stopping thumbnail concepts from your script...</p>
+                  <p className="text-xs text-gray-400 mt-1">Weaving selected titles + style DNA + script analysis</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Thumbnail Grid */}
+            {thumbnails.length > 0 && !generatingThumbs && (
+              <>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Generated Concepts</h3>
+                  {selectedThumb && (
+                    <Button onClick={() => setActiveTab('descriptions')} className="gap-2">
+                      Next: Description & Tags <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  )}
+                </div>
+                <ThumbnailGrid thumbnails={thumbnails} projectId={projectId} onRefetch={refetchThumbs} />
+              </>
+            )}
+
+            {thumbnails.length === 0 && !generatingThumbs && (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <ImageIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 mb-1">No thumbnail concepts yet</p>
+                  <p className="text-xs text-gray-400">Select titles, pick a style, then click "Generate from Your Script" above</p>
+                </CardContent>
+              </Card>
             )}
           </TabsContent>
 
@@ -294,12 +347,19 @@ export default function PostProduction() {
                 <h2 className="text-lg font-semibold">Description, Tags & Hashtags</h2>
                 <p className="text-sm text-gray-500">Algorithm-optimized descriptions with keyword-rich content</p>
               </div>
-              {!seoDescriptions && (
-                <Button onClick={handleGenerateSeo} disabled={generatingSeo} className="gap-2">
-                  {generatingSeo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                  Generate SEO Package
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {!seoDescriptions && (
+                  <Button onClick={handleGenerateSeo} disabled={generatingSeo} className="gap-2">
+                    {generatingSeo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    Generate SEO Package
+                  </Button>
+                )}
+                {selectedThumb && metadata && (
+                  <Button onClick={handlePublish} className="bg-green-600 hover:bg-green-700 gap-2">
+                    <CheckCircle2 className="w-4 h-4" /> Publish
+                  </Button>
+                )}
+              </div>
             </div>
 
             {generatingSeo && (
@@ -338,5 +398,46 @@ export default function PostProduction() {
         </Tabs>
       </div>
     </div>
+  );
+}
+
+// Pipeline readiness status bar for the Thumbnails tab
+function PipelineStatus({ selectedTitles, selectedNiche, referenceStyle, onGoToTitles }) {
+  const hasTitles = selectedTitles.length > 0;
+  const hasStyle = !!selectedNiche || !!referenceStyle;
+
+  return (
+    <Card className="bg-gradient-to-r from-slate-50 to-slate-100 border-slate-200">
+      <CardContent className="py-3 px-4">
+        <div className="flex items-center gap-4 flex-wrap">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Pipeline</span>
+
+          {/* Title status */}
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${hasTitles ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+            {hasTitles ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Type className="w-3.5 h-3.5" />}
+            {hasTitles ? `${selectedTitles.length} title${selectedTitles.length > 1 ? 's' : ''} locked` : 'No titles selected'}
+            {!hasTitles && (
+              <button className="underline ml-1" onClick={onGoToTitles}>Select →</button>
+            )}
+          </div>
+
+          <ArrowRight className="w-3 h-3 text-gray-300" />
+
+          {/* Style status */}
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${hasStyle ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
+            {hasStyle ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Library className="w-3.5 h-3.5" />}
+            {selectedNiche ? `${selectedNiche.icon} ${selectedNiche.name}` : referenceStyle ? '🎨 YouTube style' : 'Choose style below'}
+          </div>
+
+          <ArrowRight className="w-3 h-3 text-gray-300" />
+
+          {/* Generate status */}
+          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${(hasTitles && hasStyle) ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-400'}`}>
+            <Sparkles className="w-3.5 h-3.5" />
+            Generate
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
