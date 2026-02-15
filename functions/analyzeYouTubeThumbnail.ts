@@ -166,7 +166,7 @@ EDGES & DETAILS:
 Return as plain JSON:
 {
   "forensic_description": "Your 800+ word exhaustive description here. Every person, every text, every color, every shadow, every strand of hair, every graphic element. Miss NOTHING."
-}`, finalThumbUrl, 0.2);
+}`, finalThumbUrl, 0.2, 16384);
 
     // PHASE 2: Use the forensic description to generate structured analysis + AI image prompt
     const analysis = await callGeminiWithImage(`You are given a FORENSIC PIXEL-BY-PIXEL DESCRIPTION of a YouTube thumbnail (below), AND you can also see the actual thumbnail image. Your job is to produce a structured analysis AND an AI image generation prompt.
@@ -294,7 +294,7 @@ RESPOND IN THIS EXACT JSON:
     "accent_color": "the eye-catching color name",
     "mood": "Overall mood/vibe"
   }
-}`, finalThumbUrl, 0.3);
+}`, finalThumbUrl, 0.3, 16384);
 
     return Response.json({
       success: true,
