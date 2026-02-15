@@ -7,9 +7,12 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import StageProgress from '@/components/StageProgress';
 import ThumbnailGrid from '@/components/postprod/ThumbnailGrid';
-import UploadMetadataPanel from '@/components/postprod/UploadMetadataPanel';
+import YouTubeThumbnailImporter from '@/components/postprod/YouTubeThumbnailImporter';
+import SeoTitlesPanel from '@/components/postprod/SeoTitlesPanel';
+import SeoDescriptionsPanel from '@/components/postprod/SeoDescriptionsPanel';
 import {
-  Loader2, Sparkles, Image as ImageIcon, FileText, CheckCircle2, ArrowLeft
+  Loader2, Sparkles, Image as ImageIcon, FileText, CheckCircle2, ArrowLeft,
+  Type, BookOpen
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -18,7 +21,18 @@ export default function PostProduction() {
   const navigate = useNavigate();
   const projectId = new URLSearchParams(window.location.search).get('project_id');
   const [generatingThumbs, setGeneratingThumbs] = useState(false);
-  const [generatingMeta, setGeneratingMeta] = useState(false);
+  const [generatingSeo, setGeneratingSeo] = useState(false);
+
+  // Extended SEO data (from the new function)
+  const [seoTitles, setSeoTitles] = useState(null);
+  const [seoDescriptions, setSeoDescriptions] = useState(null);
+  const [seoAnalysis, setSeoAnalysis] = useState(null);
+  const [tagsBreakdown, setTagsBreakdown] = useState(null);
+  const [hashtags, setHashtags] = useState(null);
+  const [pinnedComment, setPinnedComment] = useState('');
+
+  // Reference style from imported thumbnail
+  const [referenceStyle, setReferenceStyle] = useState('');
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -53,30 +67,36 @@ export default function PostProduction() {
 
   const metadata = metadataList[0] || null;
 
-  const handleGenerateThumbnails = async () => {
+  // Generate thumbnails from script (with optional reference style)
+  const handleGenerateFromScript = async () => {
     setGeneratingThumbs(true);
-    await base44.functions.invoke('generateThumbnails', {
+    await base44.functions.invoke('generateThumbnailsFromScript', {
       project_id: projectId,
-      video_title: script?.title || project?.name || 'Untitled Video',
+      reference_style: referenceStyle || undefined,
     });
     refetchThumbs();
     setGeneratingThumbs(false);
   };
 
-  const handleGenerateMetadata = async () => {
-    setGeneratingMeta(true);
-    await base44.functions.invoke('generateUploadMetadata', {
+  // Generate full SEO package
+  const handleGenerateSeo = async () => {
+    setGeneratingSeo(true);
+    const res = await base44.functions.invoke('generateSeoTitlesDescriptions', {
       project_id: projectId,
     });
+    const d = res.data;
+    setSeoTitles(d.titles || []);
+    setSeoDescriptions(d.descriptions || []);
+    setSeoAnalysis(d.seo_analysis || null);
+    setTagsBreakdown(d.tags_breakdown || null);
+    setHashtags(d.metadata?.hashtags?.split(' ').filter(Boolean) || []);
+    setPinnedComment(d.metadata?.pinned_comment || '');
     refetchMeta();
-    setGeneratingMeta(false);
+    setGeneratingSeo(false);
   };
 
   const handlePublish = async () => {
-    await base44.entities.Projects.update(projectId, {
-      status: 'published',
-      current_step: 14,
-    });
+    await base44.entities.Projects.update(projectId, { status: 'published', current_step: 14 });
     navigate(createPageUrl('Dashboard'));
   };
 
@@ -90,134 +110,185 @@ export default function PostProduction() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => navigate(createPageUrl(`TimelineEditor?project_id=${projectId}`))}
-              >
+              <Button variant="ghost" size="icon" onClick={() => navigate(createPageUrl(`TimelineEditor?project_id=${projectId}`))}>
                 <ArrowLeft className="w-4 h-4" />
               </Button>
               <h1 className="text-3xl font-bold">Post Production</h1>
             </div>
-            <p className="text-gray-600 ml-12">
-              {project?.name} — Thumbnail, title, description & tags
-            </p>
+            <p className="text-gray-600 ml-12">{project?.name} — Thumbnails, SEO titles, descriptions & tags</p>
           </div>
-          <div className="flex gap-2">
-            {selectedThumb && metadata && (
-              <Button onClick={handlePublish} className="bg-green-600 hover:bg-green-700 gap-2">
-                <CheckCircle2 className="w-4 h-4" />
-                Mark as Published
-              </Button>
-            )}
-          </div>
+          {selectedThumb && metadata && (
+            <Button onClick={handlePublish} className="bg-green-600 hover:bg-green-700 gap-2">
+              <CheckCircle2 className="w-4 h-4" /> Mark as Published
+            </Button>
+          )}
         </div>
 
         <Tabs defaultValue="thumbnails" className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsList className="grid w-full max-w-2xl grid-cols-3">
             <TabsTrigger value="thumbnails" className="gap-2">
               <ImageIcon className="w-4 h-4" />
               Thumbnails
-              {thumbnails.length > 0 && (
-                <Badge variant="secondary" className="text-xs ml-1">{thumbnails.length}</Badge>
-              )}
+              {thumbnails.length > 0 && <Badge variant="secondary" className="text-xs ml-1">{thumbnails.length}</Badge>}
             </TabsTrigger>
-            <TabsTrigger value="metadata" className="gap-2">
+            <TabsTrigger value="titles" className="gap-2">
+              <Type className="w-4 h-4" />
+              SEO Titles
+              {seoTitles && <CheckCircle2 className="w-3.5 h-3.5 text-green-500 ml-1" />}
+            </TabsTrigger>
+            <TabsTrigger value="descriptions" className="gap-2">
               <FileText className="w-4 h-4" />
-              Title & Description
+              Description & Tags
               {metadata && <CheckCircle2 className="w-3.5 h-3.5 text-green-500 ml-1" />}
             </TabsTrigger>
           </TabsList>
 
-          {/* THUMBNAILS TAB */}
-          <TabsContent value="thumbnails" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold">Thumbnail Concepts</h2>
-                <p className="text-sm text-gray-500">
-                  AI-generated thumbnail ideas ranked by CTR potential
-                </p>
-              </div>
-              <Button
-                onClick={handleGenerateThumbnails}
-                disabled={generatingThumbs}
-                className="gap-2"
-              >
-                {generatingThumbs ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Sparkles className="w-4 h-4" />
-                )}
-                {thumbnails.length > 0 ? 'Regenerate Concepts' : 'Generate Concepts'}
-              </Button>
-            </div>
+          {/* ======================== THUMBNAILS TAB ======================== */}
+          <TabsContent value="thumbnails" className="space-y-6">
+            {/* 1. Import from YouTube */}
+            <YouTubeThumbnailImporter
+              projectId={projectId}
+              onConceptCreated={() => refetchThumbs()}
+            />
 
-            {thumbnails.length === 0 && !generatingThumbs ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <ImageIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500 mb-4">No thumbnail concepts yet</p>
-                  <Button onClick={handleGenerateThumbnails} disabled={generatingThumbs} className="gap-2">
-                    <Sparkles className="w-4 h-4" />
-                    Generate 10 Thumbnail Concepts
+            {/* 2. Generate from Script */}
+            <Card>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+                      <BookOpen className="w-5 h-5 text-purple-600" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm">Generate from Your Script</p>
+                      <p className="text-xs text-gray-500">
+                        AI analyzes your script to find the most click-worthy moments
+                        {referenceStyle && <span className="text-purple-600"> + using imported style</span>}
+                      </p>
+                    </div>
+                  </div>
+                  <Button onClick={handleGenerateFromScript} disabled={generatingThumbs} className="gap-2 bg-purple-600 hover:bg-purple-700">
+                    {generatingThumbs ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                    {thumbnails.length > 0 ? 'Regenerate' : 'Generate 10 Concepts'}
                   </Button>
-                </CardContent>
-              </Card>
-            ) : generatingThumbs ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-3" />
-                  <p className="text-gray-500">Generating thumbnail concepts...</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <ThumbnailGrid thumbnails={thumbnails} projectId={projectId} onRefetch={refetchThumbs} />
-            )}
-          </TabsContent>
+                </div>
+              </CardContent>
+            </Card>
 
-          {/* METADATA TAB */}
-          <TabsContent value="metadata" className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold">Upload Metadata</h2>
-                <p className="text-sm text-gray-500">
-                  SEO-optimized titles, descriptions, tags & hashtags
-                </p>
-              </div>
-              <Button
-                onClick={handleGenerateMetadata}
-                disabled={generatingMeta}
-                className="gap-2"
-              >
-                {generatingMeta ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Sparkles className="w-4 h-4" />
-                )}
-                {metadata ? 'Regenerate Metadata' : 'Generate Metadata'}
-              </Button>
-            </div>
-
-            {!metadata && !generatingMeta ? (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500 mb-4">No upload metadata yet</p>
-                  <Button onClick={handleGenerateMetadata} disabled={generatingMeta} className="gap-2">
-                    <Sparkles className="w-4 h-4" />
-                    Generate Title, Description & Tags
-                  </Button>
-                </CardContent>
-              </Card>
-            ) : generatingMeta ? (
+            {/* Loading state */}
+            {generatingThumbs && (
               <Card>
                 <CardContent className="py-12 text-center">
                   <Loader2 className="w-8 h-8 animate-spin text-purple-600 mx-auto mb-3" />
-                  <p className="text-gray-500">Generating upload metadata...</p>
+                  <p className="text-gray-500">Creating scroll-stopping thumbnail concepts from your script...</p>
+                  <p className="text-xs text-gray-400 mt-1">Analyzing key moments, emotional hooks & visual metaphors</p>
                 </CardContent>
               </Card>
-            ) : (
-              <UploadMetadataPanel metadata={metadata} onRefetch={refetchMeta} />
+            )}
+
+            {/* Thumbnail Grid */}
+            {thumbnails.length > 0 && !generatingThumbs && (
+              <ThumbnailGrid thumbnails={thumbnails} projectId={projectId} onRefetch={refetchThumbs} />
+            )}
+
+            {thumbnails.length === 0 && !generatingThumbs && (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <ImageIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 mb-1">No thumbnail concepts yet</p>
+                  <p className="text-xs text-gray-400">Import from YouTube or generate from your script above</p>
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+
+          {/* ======================== TITLES TAB ======================== */}
+          <TabsContent value="titles" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">SEO Video Titles</h2>
+                <p className="text-sm text-gray-500">10 scroll-stopping, algorithm-optimized titles extracted from your script</p>
+              </div>
+              <Button onClick={handleGenerateSeo} disabled={generatingSeo} className="gap-2">
+                {generatingSeo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                {seoTitles ? 'Regenerate All SEO' : 'Generate SEO Package'}
+              </Button>
+            </div>
+
+            {generatingSeo && (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-3" />
+                  <p className="text-gray-500">Analyzing script for maximum SEO impact...</p>
+                  <p className="text-xs text-gray-400 mt-1">Generating titles, descriptions, 30 tags, hashtags & pinned comment</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {!seoTitles && !generatingSeo && (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <Type className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 mb-4">Generate your full SEO package from the script</p>
+                  <Button onClick={handleGenerateSeo} disabled={generatingSeo} className="gap-2">
+                    <Sparkles className="w-4 h-4" />
+                    Generate SEO Titles, Descriptions & Tags
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {seoTitles && !generatingSeo && (
+              <SeoTitlesPanel titles={seoTitles} seoAnalysis={seoAnalysis} />
+            )}
+          </TabsContent>
+
+          {/* ======================== DESCRIPTIONS TAB ======================== */}
+          <TabsContent value="descriptions" className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">Description, Tags & Hashtags</h2>
+                <p className="text-sm text-gray-500">Algorithm-optimized descriptions with keyword-rich content</p>
+              </div>
+              {!seoDescriptions && (
+                <Button onClick={handleGenerateSeo} disabled={generatingSeo} className="gap-2">
+                  {generatingSeo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  Generate SEO Package
+                </Button>
+              )}
+            </div>
+
+            {generatingSeo && (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-purple-600 mx-auto mb-3" />
+                  <p className="text-gray-500">Building algorithm-loving descriptions...</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {!seoDescriptions && !generatingSeo && (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 mb-4">Generate SEO descriptions from the Titles tab first</p>
+                  <Button onClick={handleGenerateSeo} disabled={generatingSeo} className="gap-2">
+                    <Sparkles className="w-4 h-4" />
+                    Generate Full SEO Package
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {seoDescriptions && !generatingSeo && (
+              <SeoDescriptionsPanel
+                descriptions={seoDescriptions}
+                tagsBreakdown={tagsBreakdown}
+                hashtags={hashtags}
+                pinnedComment={pinnedComment}
+                metadata={metadata}
+                onRefetch={refetchMeta}
+              />
             )}
           </TabsContent>
         </Tabs>
