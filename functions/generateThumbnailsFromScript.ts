@@ -107,7 +107,7 @@ FULL SCRIPT (find the most shocking, emotional, curiosity-inducing, visually com
 ${truncatedScript}
 
 === YOUR MISSION ===
-You must deeply analyze this script and produce 10 THUMBNAIL CONCEPT BLUEPRINTS — exhaustive forensic-level visual descriptions of what each thumbnail should look like. These are NOT prompts yet — they are HYPER-DETAILED creative briefs.
+You must deeply analyze this script and produce 3 THUMBNAIL CONCEPT BLUEPRINTS — exhaustive forensic-level visual descriptions of what each thumbnail should look like. These are NOT prompts yet — they are HYPER-DETAILED creative briefs.
 
 For EACH concept, write a MINIMUM 300-word "forensic_description" covering:
 
@@ -180,7 +180,7 @@ RESPOND IN THIS EXACT JSON:
     // ============================================================
     const phase2Prompt = `You are the world's #1 AI image prompt engineer specializing in YouTube thumbnails.
 
-Below are 10 FORENSIC VISUAL DESCRIPTIONS of thumbnail concepts. Your job is to transform EACH one into a PERFECT AI image generation prompt.
+Below are 3 FORENSIC VISUAL DESCRIPTIONS of thumbnail concepts. Your job is to transform EACH one into a PERFECT AI image generation prompt.
 
 === FORENSIC CONCEPT BLUEPRINTS ===
 ${JSON.stringify(phase1Result.concepts, null, 2)}

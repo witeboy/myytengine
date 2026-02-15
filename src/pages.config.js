@@ -52,13 +52,13 @@ import Dashboard from './pages/Dashboard';
 import Home from './pages/Home';
 import MediaLibrary from './pages/MediaLibrary';
 import NewProject from './pages/NewProject';
+import PostProduction from './pages/PostProduction';
 import StoryDuration from './pages/StoryDuration';
 import StoryHooks from './pages/StoryHooks';
 import StoryScript from './pages/StoryScript';
 import StoryTopics from './pages/StoryTopics';
 import TimelineEditor from './pages/TimelineEditor';
 import VersionHistory from './pages/VersionHistory';
-import PostProduction from './pages/PostProduction';
 
 
 export const PAGES = {
@@ -67,13 +67,13 @@ export const PAGES = {
     "Home": Home,
     "MediaLibrary": MediaLibrary,
     "NewProject": NewProject,
+    "PostProduction": PostProduction,
     "StoryDuration": StoryDuration,
     "StoryHooks": StoryHooks,
     "StoryScript": StoryScript,
     "StoryTopics": StoryTopics,
     "TimelineEditor": TimelineEditor,
     "VersionHistory": VersionHistory,
-    "PostProduction": PostProduction,
 }
 
 export const pagesConfig = {

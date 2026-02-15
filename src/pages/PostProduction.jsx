@@ -169,7 +169,7 @@ export default function PostProduction() {
                   </div>
                   <Button onClick={handleGenerateFromScript} disabled={generatingThumbs} className="gap-2 bg-purple-600 hover:bg-purple-700">
                     {generatingThumbs ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                    {thumbnails.length > 0 ? 'Regenerate' : 'Generate 10 Concepts'}
+                    {thumbnails.length > 0 ? 'Regenerate' : 'Generate 3 Concepts'}
                   </Button>
                 </div>
               </CardContent>

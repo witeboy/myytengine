@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Wand2, MessageSquare } from 'lucide-react';
+import { Loader2, Wand2, MessageSquare, Code2, Sparkles } from 'lucide-react';
 
 const QUICK_SUGGESTIONS = [
   "Make the text bigger and bolder",
@@ -19,9 +19,17 @@ const QUICK_SUGGESTIONS = [
 
 export default function RefineConceptDialog({ thumb, open, onOpenChange, onRefined }) {
   const [feedback, setFeedback] = useState('');
+  const [editablePrompt, setEditablePrompt] = useState('');
   const [refining, setRefining] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState(null);
+  const [showPrompt, setShowPrompt] = useState(false);
+
+  useEffect(() => {
+    if (thumb?.image_prompt) {
+      setEditablePrompt(thumb.image_prompt);
+    }
+  }, [thumb?.id, thumb?.image_prompt]);
 
   const handleRefine = async () => {
     if (!feedback.trim()) return;
@@ -34,7 +42,7 @@ export default function RefineConceptDialog({ thumb, open, onOpenChange, onRefin
     setResult(res.data);
     setRefining(false);
     if (res.data.success && res.data.updated_prompt) {
-      // Auto-generate the new image immediately
+      setEditablePrompt(res.data.updated_prompt);
       setGenerating(true);
       const { url } = await base44.integrations.Core.GenerateImage({
         prompt: `16:9 aspect ratio, 1280x720, widescreen landscape YouTube thumbnail. ${res.data.updated_prompt}`,
@@ -45,19 +53,33 @@ export default function RefineConceptDialog({ thumb, open, onOpenChange, onRefin
     }
   };
 
+  const handleGenerateFromPrompt = async () => {
+    if (!editablePrompt.trim()) return;
+    setGenerating(true);
+    // Save the edited prompt
+    await base44.entities.ThumbnailConcepts.update(thumb.id, { image_prompt: editablePrompt.trim() });
+    const { url } = await base44.integrations.Core.GenerateImage({
+      prompt: `16:9 aspect ratio, 1280x720, widescreen landscape YouTube thumbnail. ${editablePrompt.trim()}`,
+    });
+    await base44.entities.ThumbnailConcepts.update(thumb.id, { image_url: url });
+    setGenerating(false);
+    onRefined();
+  };
+
   const handleClose = () => {
     setFeedback('');
     setResult(null);
+    setShowPrompt(false);
     onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Wand2 className="w-5 h-5 text-purple-600" />
-            Refine Concept #{thumb?.rank}
+            Enhance Concept #{thumb?.rank}
           </DialogTitle>
         </DialogHeader>
 
@@ -101,8 +123,54 @@ export default function RefineConceptDialog({ thumb, open, onOpenChange, onRefin
             />
           </div>
 
-          {/* Result */}
-          {generating && (
+          <Button
+            onClick={handleRefine}
+            disabled={refining || generating || !feedback.trim()}
+            className="w-full gap-2 bg-purple-600 hover:bg-purple-700"
+          >
+            {refining ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+            {refining ? 'Refining...' : 'AI Refine Concept'}
+          </Button>
+
+          {/* Divider */}
+          <div className="flex items-center gap-2">
+            <div className="flex-1 border-t" />
+            <span className="text-xs text-gray-400">or edit prompt directly</span>
+            <div className="flex-1 border-t" />
+          </div>
+
+          {/* Editable prompt section */}
+          <div>
+            <button
+              className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-800 mb-2"
+              onClick={() => setShowPrompt(!showPrompt)}
+            >
+              <Code2 className="w-3.5 h-3.5" />
+              {showPrompt ? 'Hide Image Prompt' : 'Show & Edit Image Prompt'}
+            </button>
+            {showPrompt && (
+              <div className="space-y-2">
+                <Textarea
+                  value={editablePrompt}
+                  onChange={e => setEditablePrompt(e.target.value)}
+                  className="text-xs min-h-[120px] font-mono bg-slate-50"
+                  placeholder="AI image generation prompt..."
+                />
+                <Button
+                  onClick={handleGenerateFromPrompt}
+                  disabled={generating || !editablePrompt.trim()}
+                  className="w-full gap-2"
+                  variant="outline"
+                >
+                  {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  {generating ? 'Generating...' : 'Generate from Edited Prompt'}
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Status messages */}
+          {generating && !showPrompt && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
               <p className="text-sm text-blue-700">Generating new thumbnail image...</p>
@@ -113,7 +181,6 @@ export default function RefineConceptDialog({ thumb, open, onOpenChange, onRefin
             <div className="bg-green-50 border border-green-200 rounded-lg p-3">
               <p className="text-xs font-medium text-green-700 mb-1">Changes applied:</p>
               <p className="text-sm text-green-800">{result.changes_made}</p>
-              <p className="text-xs text-green-600 mt-1">New thumbnail image generated successfully!</p>
             </div>
           )}
 
@@ -123,24 +190,9 @@ export default function RefineConceptDialog({ thumb, open, onOpenChange, onRefin
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex gap-2">
-            <Button
-              onClick={handleRefine}
-              disabled={refining || generating || !feedback.trim()}
-              className="flex-1 gap-2 bg-purple-600 hover:bg-purple-700"
-            >
-              {refining ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Wand2 className="w-4 h-4" />
-              )}
-              {refining ? 'Refining...' : 'Refine Concept'}
-            </Button>
-            <Button variant="outline" onClick={handleClose}>
-              {result?.success ? 'Done' : 'Cancel'}
-            </Button>
-          </div>
+          <Button variant="outline" onClick={handleClose} className="w-full">
+            {result?.success ? 'Done' : 'Cancel'}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
