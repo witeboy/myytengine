@@ -77,6 +77,8 @@ Brand thumbnail tone: ${thumb_tone}
 - MAX 2-3 text elements in the image prompt
 - Say "graphic design composition" to force flat 2D text overlays
 
+MANDATORY: ALL thumbnails MUST be in 16:9 landscape aspect ratio (1280x720). Every image_prompt MUST explicitly state "16:9 aspect ratio, 1280x720 resolution, widescreen landscape format" at the beginning.
+
 Generate 10 viral thumbnail concepts. Rank top 3 by CTR potential.
 
 RESPOND IN THIS EXACT JSON:
