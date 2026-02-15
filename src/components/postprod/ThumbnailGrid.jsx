@@ -30,14 +30,21 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
     // Force 16:9 widescreen and text overlay into prompt
     let prompt = rawPrompt || '';
     const aspectPrefix = 'CRITICAL: This image MUST be rendered in WIDE 16:9 LANDSCAPE aspect ratio (width is 1.78x the height, like a movie screen or YouTube thumbnail at 1280x720). The image must be significantly WIDER than it is tall — NOT square, NOT portrait. ';
+    const textPrefix = textOverlay
+      ? `HIGHEST PRIORITY — MANDATORY TEXT BURNED INTO IMAGE: This thumbnail MUST contain the exact text "${textOverlay}" rendered as MASSIVE, BOLD, white Impact-font text with a VERY THICK black outline and heavy drop shadow. This text MUST be the SINGLE MOST PROMINENT and LARGEST visual element in the entire image, positioned at the bottom center, taking up at least 30% of the image width. The text "${textOverlay}" MUST be clearly legible and visually dominant over all other elements. `
+      : '';
     const textSuffix = textOverlay 
-      ? ` MANDATORY TEXT OVERLAY: The image MUST include large, bold, white Impact-style text reading "${textOverlay}" with a thick black outline and heavy drop shadow, positioned prominently at the bottom center of the image. This text must be the most visible graphic element, readable even at small sizes.`
+      ? ` REMINDER — TEXT OVERLAY IS NON-NEGOTIABLE: The generated image MUST visually display the bold text "${textOverlay}" burned directly into the image as a graphic design element. Without this text, the thumbnail is INCOMPLETE.`
       : '';
     if (!prompt.toLowerCase().includes('16:9') && !prompt.toLowerCase().includes('landscape')) {
       prompt = aspectPrefix + prompt;
     }
-    if (textOverlay && !prompt.includes(textOverlay)) {
-      prompt += textSuffix;
+    // Always prepend and append text overlay instructions
+    if (textOverlay) {
+      prompt = textPrefix + prompt;
+      if (!prompt.includes(textSuffix.trim())) {
+        prompt += textSuffix;
+      }
     }
     return prompt;
   };
