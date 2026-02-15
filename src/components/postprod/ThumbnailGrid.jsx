@@ -367,7 +367,23 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
                   {previewThumb.text_overlay && (
                     <Badge className="bg-white/20 text-white text-xs">"{previewThumb.text_overlay}"</Badge>
                   )}
-                  <span className="text-white/40 text-xs ml-auto">16:9 • 1280×720</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="ml-auto text-white/60 hover:text-white gap-1"
+                    onClick={() => {
+                      const a = document.createElement('a');
+                      a.href = previewThumb.image_url;
+                      a.download = `thumbnail-${previewThumb.rank}.png`;
+                      a.target = '_blank';
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                    }}
+                  >
+                    <Download className="w-3 h-3" /> Download
+                  </Button>
+                  <span className="text-white/40 text-xs">16:9 • 1280×720</span>
                 </div>
                 <p className="text-white text-sm line-clamp-2">{previewThumb.concept_description}</p>
               </div>
