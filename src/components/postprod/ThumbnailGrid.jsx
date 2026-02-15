@@ -22,6 +22,9 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
   const [ctrResults, setCtrResults] = useState(null);
 
   const [generateError, setGenerateError] = useState(null);
+  const [rephrasingId, setRephrasingId] = useState(null);
+  const [expandedPrompt, setExpandedPrompt] = useState(null);
+  const [editingPrompt, setEditingPrompt] = useState('');
 
   const handleGenerateImage = async (thumb) => {
     setGeneratingImage(thumb.id);
@@ -35,9 +38,41 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
     } catch (err) {
       const msg = err?.message || 'Unknown error';
       if (msg.includes('refused')) {
-        setGenerateError(`Thumbnail #${thumb.rank}: The image was refused by the AI — the prompt may reference real people or copyrighted content. Try editing the prompt to use generic descriptions instead of real names/likenesses.`);
+        setGenerateError({ thumbId: thumb.id, message: `Thumbnail #${thumb.rank}: Image refused — prompt may reference real people or copyrighted content.` });
       } else {
-        setGenerateError(`Thumbnail #${thumb.rank}: ${msg}`);
+        setGenerateError({ thumbId: thumb.id, message: `Thumbnail #${thumb.rank}: ${msg}` });
+      }
+    }
+    setGeneratingImage(null);
+  };
+
+  const handleRephrasePrompt = async (thumb) => {
+    setRephrasingId(thumb.id);
+    setGenerateError(null);
+    const res = await base44.functions.invoke('rephraseThumbnailPrompt', { thumbnail_id: thumb.id });
+    if (res.data.success) {
+      onRefetch();
+    }
+    setRephrasingId(null);
+  };
+
+  const handleSavePromptAndGenerate = async (thumb) => {
+    setGeneratingImage(thumb.id);
+    setGenerateError(null);
+    await base44.entities.ThumbnailConcepts.update(thumb.id, { image_prompt: editingPrompt.trim() });
+    try {
+      const { url } = await base44.integrations.Core.GenerateImage({
+        prompt: `16:9 aspect ratio, 1280x720, widescreen landscape YouTube thumbnail. ${editingPrompt.trim()}`,
+      });
+      await base44.entities.ThumbnailConcepts.update(thumb.id, { image_url: url });
+      onRefetch();
+      setExpandedPrompt(null);
+    } catch (err) {
+      const msg = err?.message || 'Unknown error';
+      if (msg.includes('refused')) {
+        setGenerateError({ thumbId: thumb.id, message: `Still refused — try rephrasing further or editing manually.` });
+      } else {
+        setGenerateError({ thumbId: thumb.id, message: msg });
       }
     }
     setGeneratingImage(null);
