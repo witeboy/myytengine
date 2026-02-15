@@ -150,54 +150,54 @@ export default function YouTubeThumbnailImporter({ projectId, onConceptCreated }
                 {/* Layer breakdown */}
                 {analysis.layers && (
                   <div className="space-y-2 border-t pt-2">
-                    <p className="font-semibold text-gray-700">🎬 Z-Depth Layers:</p>
+                    <p className="font-semibold text-gray-700">🎬 Visual Layers:</p>
                     {analysis.layers.background && (
                       <div className="bg-gray-100 p-2 rounded">
-                        <p className="font-medium text-gray-700">Layer 1 — Background</p>
-                        <p>{analysis.layers.background.content || JSON.stringify(analysis.layers.background)}</p>
+                        <p className="font-medium text-gray-700">Background</p>
+                        <p>{analysis.layers.background.description || analysis.layers.background.setting}</p>
+                        {analysis.layers.background.mood && <p className="text-gray-500">Mood: {analysis.layers.background.mood}</p>}
                       </div>
                     )}
-                    {analysis.layers.midground?.subjects && (
+                    {analysis.layers.midground && (
                       <div className="bg-blue-50 p-2 rounded">
-                        <p className="font-medium text-blue-700">Layer 2 — Mid-ground Anchors</p>
-                        {analysis.layers.midground.subjects.map((s, i) => (
-                          <p key={i}>{s.description} — {s.expression} ({s.position})</p>
+                        <p className="font-medium text-blue-700">Mid-ground</p>
+                        <p>{analysis.layers.midground.description}</p>
+                        {analysis.layers.midground.subjects?.map((s, i) => (
+                          <p key={i} className="ml-2">• <strong>{s.archetype}</strong> — {s.expression}, {s.clothing}</p>
                         ))}
                       </div>
                     )}
                     {analysis.layers.foreground && (
                       <div className="bg-red-50 p-2 rounded">
-                        <p className="font-medium text-red-700">Layer 3 — Foreground Contenders</p>
+                        <p className="font-medium text-red-700">Foreground</p>
                         {analysis.layers.foreground.left_subject && (
-                          <p><strong>Left:</strong> {analysis.layers.foreground.left_subject.expression} — {analysis.layers.foreground.left_subject.clothing} ({analysis.layers.foreground.left_subject.face_angle})</p>
+                          <p><strong>Left:</strong> {analysis.layers.foreground.left_subject.description || `${analysis.layers.foreground.left_subject.archetype} — ${analysis.layers.foreground.left_subject.expression}`}</p>
                         )}
                         {analysis.layers.foreground.right_subject && (
-                          <p><strong>Right:</strong> {analysis.layers.foreground.right_subject.expression} — {analysis.layers.foreground.right_subject.clothing} ({analysis.layers.foreground.right_subject.face_angle})</p>
+                          <p><strong>Right:</strong> {analysis.layers.foreground.right_subject.description || `${analysis.layers.foreground.right_subject.archetype} — ${analysis.layers.foreground.right_subject.expression}`}</p>
                         )}
                       </div>
                     )}
-                    {analysis.layers.ui_overlay && (
+                    {analysis.layers.text_and_graphics?.elements && (
                       <div className="bg-yellow-50 p-2 rounded">
-                        <p className="font-medium text-yellow-700">Layer 4 — UI Overlay</p>
-                        {analysis.layers.ui_overlay.text_elements?.map((t, i) => (
-                          <p key={i}><strong>"{t.text}"</strong> — {t.font}, {t.color}, {t.position}</p>
-                        ))}
-                        {analysis.layers.ui_overlay.graphic_elements?.map((g, i) => (
-                          <p key={i}>• {g.type}: {g.details} ({g.position})</p>
+                        <p className="font-medium text-yellow-700">Text & Graphics</p>
+                        {analysis.layers.text_and_graphics.elements.map((el, i) => (
+                          <p key={i}>• <strong>{el.type}:</strong> {el.description}</p>
                         ))}
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* Styling rules */}
-                {analysis.styling_rules && (
+                {/* Styling */}
+                {analysis.styling && (
                   <div className="border-t pt-2">
-                    <p className="font-semibold text-gray-700">🎨 Styling Rules:</p>
-                    <p>Rim Light: {analysis.styling_rules.rim_light}</p>
-                    <p>Saturation: {analysis.styling_rules.saturation}</p>
-                    <p>Contrast: {analysis.styling_rules.contrast}</p>
-                    <p>Text: {analysis.styling_rules.text_style}</p>
+                    <p className="font-semibold text-gray-700">🎨 Styling:</p>
+                    <p>Aesthetic: {analysis.styling.aesthetic}</p>
+                    <p>Contrast: {analysis.styling.contrast}</p>
+                    <p>Saturation: {analysis.styling.saturation}</p>
+                    <p>Rim Lighting: {analysis.styling.rim_lighting}</p>
+                    <p>Render: {analysis.styling.render_quality}</p>
                   </div>
                 )}
 
