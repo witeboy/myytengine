@@ -116,10 +116,11 @@ RESPOND IN THIS EXACT JSON:
 
     const thumbnails = [];
     for (const t of result.thumbnails) {
+      const layerSummary = t.layers ? `\n\n📐 LAYERS:\nBG: ${t.layers.background}\nMid: ${t.layers.midground}\nLeft: ${t.layers.foreground_left}\nRight: ${t.layers.foreground_right}\nUI: ${t.layers.ui_overlay}` : '';
       const record = await base44.entities.ThumbnailConcepts.create({
         project_id,
         rank: t.rank,
-        concept_description: `[${t.template_type}] ${t.concept_description}\n\n🎯 Hook: ${t.emotional_hook}\n🛑 Scroll-stop: ${t.scroll_stop_reason}`,
+        concept_description: `[${t.template_type}] ${t.concept_description}\n\n🎯 Hook: ${t.emotional_hook}\n🛑 Scroll-stop: ${t.scroll_stop_reason}${layerSummary}`,
         facial_expression: t.subject_description,
         visual_metaphor: t.template_type,
         color_scheme: `${t.color_scheme} | Accent: ${t.accent_color} | Font: ${t.font_color} ${t.font_style} ${t.font_effects} | Effects: ${t.visual_effects}`,
