@@ -27,10 +27,10 @@ const HOOK_COLORS = {
   pattern_break: 'bg-pink-100 text-pink-800',
 };
 
-export default function SeoTitlesPanel({ titles, seoAnalysis, onSelectTitle }) {
-  const [selectedIdx, setSelectedIdx] = useState(0);
-
+export default function SeoTitlesPanel({ titles, seoAnalysis, selectedTitles = [], onToggleTitle }) {
   if (!titles || titles.length === 0) return null;
+
+  const isSelected = (t) => selectedTitles.some(s => s.rank === (t.rank || 0));
 
   return (
     <div className="space-y-4">
@@ -74,9 +74,9 @@ export default function SeoTitlesPanel({ titles, seoAnalysis, onSelectTitle }) {
         {titles.map((t, idx) => (
           <div
             key={idx}
-            onClick={() => { setSelectedIdx(idx); onSelectTitle?.(t); }}
+            onClick={() => onToggleTitle?.(t)}
             className={`flex items-center gap-3 p-3 rounded-xl border-2 cursor-pointer transition-all ${
-              selectedIdx === idx
+              isSelected(t)
                 ? 'border-blue-500 bg-blue-50 shadow-md'
                 : 'border-gray-100 bg-white hover:border-gray-200 hover:shadow-sm'
             }`}

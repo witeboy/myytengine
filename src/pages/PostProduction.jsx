@@ -31,7 +31,7 @@ export default function PostProduction() {
   const [tagsBreakdown, setTagsBreakdown] = useState(null);
   const [hashtags, setHashtags] = useState(null);
   const [pinnedComment, setPinnedComment] = useState('');
-  const [selectedTitle, setSelectedTitle] = useState(null);
+  const [selectedTitles, setSelectedTitles] = useState([]);
 
   // Reference style from imported thumbnail
   const [referenceStyle, setReferenceStyle] = useState('');
@@ -79,7 +79,7 @@ export default function PostProduction() {
       reference_style: referenceStyle || undefined,
       niche_dna: selectedNiche?.synthesized_dna || undefined,
       niche_name: selectedNiche?.name || undefined,
-      selected_title: selectedTitle?.title || undefined,
+      selected_title: selectedTitles.length > 0 ? selectedTitles.map(t => t.title).join(' | ') : undefined,
     });
     refetchThumbs();
     setGeneratingThumbs(false);
@@ -173,7 +173,7 @@ export default function PostProduction() {
                       <p className="font-semibold text-sm">Generate from Your Script</p>
                       <p className="text-xs text-gray-500">
                         AI analyzes your script to find the most click-worthy moments
-                        {selectedTitle && <span className="text-blue-600"> + overlay: "{selectedTitle.title}"</span>}
+                        {selectedTitles.length > 0 && <span className="text-blue-600"> + {selectedTitles.length} title{selectedTitles.length > 1 ? 's' : ''} selected</span>}
                         {referenceStyle && <span className="text-purple-600"> + using imported style</span>}
                         {selectedNiche && <span className="text-amber-600"> + niche: {selectedNiche.icon} {selectedNiche.name}</span>}
                       </p>
@@ -252,14 +252,28 @@ export default function PostProduction() {
 
             {seoTitles && !generatingSeo && (
               <div className="space-y-4">
-                <SeoTitlesPanel titles={seoTitles} seoAnalysis={seoAnalysis} onSelectTitle={setSelectedTitle} />
-                {selectedTitle && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
-                    <p className="text-sm text-blue-800">
-                      Selected: <strong>"{selectedTitle.title}"</strong> — this will be used as the text overlay in generated thumbnails.
-                      <button className="text-blue-600 underline ml-2 text-xs" onClick={() => setSelectedTitle(null)}>Clear</button>
-                    </p>
+                <SeoTitlesPanel titles={seoTitles} seoAnalysis={seoAnalysis} selectedTitles={selectedTitles} onToggleTitle={(t) => {
+                  setSelectedTitles(prev => {
+                    const exists = prev.find(s => s.rank === t.rank);
+                    if (exists) return prev.filter(s => s.rank !== t.rank);
+                    return [...prev, t];
+                  });
+                }} />
+                {selectedTitles.length > 0 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-start gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                    <div className="flex-1 text-sm text-blue-800">
+                      <p className="font-medium mb-1">{selectedTitles.length} title{selectedTitles.length > 1 ? 's' : ''} selected for thumbnail overlays:</p>
+                      <ul className="space-y-0.5">
+                        {selectedTitles.map(t => (
+                          <li key={t.rank} className="flex items-center gap-1">
+                            <span>• "{t.title}"</span>
+                            <button className="text-blue-500 hover:text-blue-700 text-xs underline ml-1" onClick={() => setSelectedTitles(prev => prev.filter(s => s.rank !== t.rank))}>remove</button>
+                          </li>
+                        ))}
+                      </ul>
+                      <button className="text-blue-600 underline text-xs mt-1" onClick={() => setSelectedTitles([])}>Clear all</button>
+                    </div>
                   </div>
                 )}
               </div>
