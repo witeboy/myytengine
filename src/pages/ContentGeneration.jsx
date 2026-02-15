@@ -143,6 +143,11 @@ export default function ContentGeneration() {
                 <Download className="w-4 h-4 mr-1" /> Export
               </Button>
             )}
+            {scenes.length > 0 && imageCount > 0 && (
+              <Button onClick={handleContinueToTimeline} className="bg-blue-600 hover:bg-blue-700 gap-2">
+                Next: Timeline <ArrowRight className="w-5 h-5" />
+              </Button>
+            )}
           </div>
         </div>
         <p className="text-gray-600 mb-8">Import your script, generate scene images and animations</p>
