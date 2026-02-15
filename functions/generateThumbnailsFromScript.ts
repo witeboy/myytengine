@@ -327,6 +327,10 @@ STYLE:
 
 MANDATORY ASPECT RATIO: ALL image prompts MUST explicitly state "16:9 aspect ratio, 1280x720 resolution, widescreen landscape format" at the very beginning. Every thumbnail is a WIDE landscape composition, never square or portrait.
 
+      ASPECT RATIO — THE SINGLE MOST IMPORTANT RULE:
+      Every prompt MUST begin with: "CRITICAL: This image MUST be rendered in WIDE 16:9 LANDSCAPE aspect ratio (width is 1.78x the height, like a movie screen or YouTube thumbnail at 1280x720). The image must be significantly WIDER than it is tall — NOT square, NOT portrait."
+      Then continue with the rest of the prompt. If the output looks square, you have FAILED.
+
       Each prompt MUST be 300+ words incorporating EVERY detail from the forensic description.
 
       RESPOND IN THIS EXACT JSON:
