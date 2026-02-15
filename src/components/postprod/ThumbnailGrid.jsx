@@ -213,6 +213,57 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
                   <p className="text-xs text-gray-500">Metaphor: {thumb.visual_metaphor}</p>
                 )}
 
+                {/* Expandable prompt viewer/editor */}
+                <div>
+                  <button
+                    className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
+                    onClick={() => {
+                      if (expandedPrompt === thumb.id) {
+                        setExpandedPrompt(null);
+                      } else {
+                        setExpandedPrompt(thumb.id);
+                        setEditingPrompt(thumb.image_prompt || '');
+                      }
+                    }}
+                  >
+                    <Code2 className="w-3 h-3" />
+                    {expandedPrompt === thumb.id ? 'Hide Prompt' : 'View/Edit Prompt'}
+                    {expandedPrompt === thumb.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  </button>
+                  {expandedPrompt === thumb.id && (
+                    <div className="mt-2 space-y-2">
+                      <Textarea
+                        value={editingPrompt}
+                        onChange={e => setEditingPrompt(e.target.value)}
+                        className="text-[11px] min-h-[100px] font-mono bg-slate-50"
+                      />
+                      <Button
+                        size="sm"
+                        className="w-full gap-1"
+                        onClick={() => handleSavePromptAndGenerate(thumb)}
+                        disabled={generatingImage === thumb.id || !editingPrompt.trim()}
+                      >
+                        {generatingImage === thumb.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                        Save & Generate from Edited Prompt
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Rewrite button (policy fix) — shown when there's no image or generation was refused */}
+                {(!thumb.image_url || generateError?.thumbId === thumb.id) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full border-amber-300 text-amber-700 hover:bg-amber-50 gap-1"
+                    onClick={() => handleRephrasePrompt(thumb)}
+                    disabled={rephrasingId === thumb.id}
+                  >
+                    {rephrasingId === thumb.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                    {rephrasingId === thumb.id ? 'Rewriting...' : 'Rewrite Prompt (Policy Fix)'}
+                  </Button>
+                )}
+
                 <div className="flex flex-wrap gap-2">
                   {thumb.image_url && (
                     <Button
@@ -237,7 +288,7 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
                     ) : (
                       <Sparkles className="w-3 h-3" />
                     )}
-                    {thumb.image_url ? 'Regenerate' : 'Generate'}
+                    {thumb.image_url ? 'Regenerate' : 'Generate Image'}
                   </Button>
                   <Button
                     size="sm"
