@@ -300,13 +300,14 @@ CHARACTERS MUST BE IN ACTION (CRITICAL):
 - Villains/antagonists: make them LOOMING, SHADOWY, MENACING — larger than the hero, pointing, threatening
 - Characters MUST interact: eye contact, confrontation, turning away — never both staring blankly at camera
 
-TEXT OVERLAY (MOST IMPORTANT VISUAL ELEMENT):
-- The text_overlay MUST be the SINGLE MOST PROMINENT graphic element in the thumbnail
-- Describe text as a MASSIVE DESIGN UNIT: "enormous bold white Impact-style text reading 'EXACT WORDS' with very thick black outline and heavy drop shadow, positioned at bottom center of the frame"
+TEXT OVERLAY (MOST IMPORTANT VISUAL ELEMENT — NON-NEGOTIABLE):
+- The text_overlay MUST be the SINGLE MOST PROMINENT graphic element in the thumbnail — BIGGER than any face or object
+- Describe text as a MASSIVE DESIGN UNIT: "enormous bold white Impact-style text reading 'EXACT WORDS' with very thick black outline and heavy drop shadow, positioned at bottom center of the frame, taking up at least 25% of the image width"
 - Text MUST create a CURIOSITY GAP — a question, NOT an answer. Never give away the story.
 - Text must NEVER overlap faces or key subjects — always in negative space
 - Text must be READABLE at phone thumbnail size — this means HUGE, high-contrast, minimal words (2-4 max)
-- Include "graphic design composition" to force flat 2D text overlays
+- Include "graphic design composition with bold typography overlay" to force flat 2D text overlays
+- CRITICAL: If the image does NOT have visible text burned into it, the thumbnail is INCOMPLETE and USELESS. The text MUST be part of the generated image.
 
 COLOR & CONTRAST (THE "HEAVEN VS HELL" APPROACH):
 - Use EXTREME warm vs cold color contrast for split compositions
