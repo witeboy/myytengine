@@ -145,8 +145,8 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
           <CardContent className="py-3 px-4 flex items-start gap-2">
             <X className="w-4 h-4 text-red-500 mt-0.5 shrink-0" />
             <div className="flex-1">
-              <p className="text-sm text-red-700">{generateError}</p>
-              <p className="text-xs text-red-500 mt-1">Tip: Edit the image prompt to remove real names/faces, then try Regenerate.</p>
+              <p className="text-sm text-red-700">{generateError.message}</p>
+              <p className="text-xs text-red-500 mt-1">Use "Rewrite Prompt" on the thumbnail to auto-fix, or edit the prompt manually.</p>
             </div>
             <Button size="sm" variant="ghost" className="text-red-400" onClick={() => setGenerateError(null)}>
               <X className="w-3 h-3" />
