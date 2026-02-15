@@ -117,6 +117,11 @@ export default function StoryScript() {
                 </Button>
               </>
             )}
+            {allCompleted && latestScript && (
+              <Button onClick={handleContinue} className="bg-blue-600 hover:bg-blue-700 gap-2">
+                Next: Content <ArrowRight className="w-5 h-5" />
+              </Button>
+            )}
           </div>
         </div>
         <p className="text-gray-600 mb-8">
