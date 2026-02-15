@@ -107,6 +107,12 @@ RESPOND IN THIS EXACT JSON:
 
     const result = await safeGeminiCall(prompt, 0.95);
 
+    // Delete existing thumbnails for this project before creating new ones
+    const existing = await base44.entities.ThumbnailConcepts.filter({ project_id });
+    for (const e of existing) {
+      await base44.entities.ThumbnailConcepts.delete(e.id);
+    }
+
     const thumbnails = [];
     for (const t of result.thumbnails) {
       const record = await base44.entities.ThumbnailConcepts.create({
