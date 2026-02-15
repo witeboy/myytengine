@@ -20,13 +20,25 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
   const [analyzingCtr, setAnalyzingCtr] = useState(false);
   const [ctrResults, setCtrResults] = useState(null);
 
+  const [generateError, setGenerateError] = useState(null);
+
   const handleGenerateImage = async (thumb) => {
     setGeneratingImage(thumb.id);
-    const { url } = await base44.integrations.Core.GenerateImage({
-      prompt: `16:9 aspect ratio, 1280x720, widescreen landscape YouTube thumbnail. ${thumb.image_prompt}`,
-    });
-    await base44.entities.ThumbnailConcepts.update(thumb.id, { image_url: url });
-    onRefetch();
+    setGenerateError(null);
+    try {
+      const { url } = await base44.integrations.Core.GenerateImage({
+        prompt: `16:9 aspect ratio, 1280x720, widescreen landscape YouTube thumbnail. ${thumb.image_prompt}`,
+      });
+      await base44.entities.ThumbnailConcepts.update(thumb.id, { image_url: url });
+      onRefetch();
+    } catch (err) {
+      const msg = err?.message || 'Unknown error';
+      if (msg.includes('refused')) {
+        setGenerateError(`Thumbnail #${thumb.rank}: The image was refused by the AI — the prompt may reference real people or copyrighted content. Try editing the prompt to use generic descriptions instead of real names/likenesses.`);
+      } else {
+        setGenerateError(`Thumbnail #${thumb.rank}: ${msg}`);
+      }
+    }
     setGeneratingImage(null);
   };
 
