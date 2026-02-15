@@ -4,7 +4,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { Loader2, Sparkles, CheckCircle2, Image as ImageIcon, Star, Eye, X } from 'lucide-react';
+import { Loader2, Sparkles, CheckCircle2, Image as ImageIcon, Star, Eye, X, Wand2 } from 'lucide-react';
+import RefineConceptDialog from './RefineConceptDialog';
 
 export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
   const [generatingImage, setGeneratingImage] = useState(null);
