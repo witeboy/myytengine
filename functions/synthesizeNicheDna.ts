@@ -57,14 +57,16 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'No templates in this niche yet. Feed some thumbnails first.' }, { status: 400 });
     }
 
-    // Build a summary of all templates for synthesis
+    // Build a summary of all templates for synthesis — sanitize to avoid control chars
+    const sanitize = (str) => (str || '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ');
+    
     const templateSummaries = templates.map((t, i) => `
-TEMPLATE ${i + 1} (${t.template_type}, quality: ${t.quality_score}/10, tone: ${t.emotional_tone}):
-- Composition: ${(t.composition_blueprint || '').substring(0, 500)}
-- Color: ${(t.color_strategy || '').substring(0, 300)}
-- Text: ${(t.text_strategy || '').substring(0, 300)}
-- Character Actions: ${(t.character_action_notes || '').substring(0, 300)}
-- Prompt Template: ${(t.recreate_prompt || '').substring(0, 400)}
+TEMPLATE ${i + 1} (${sanitize(t.template_type)}, quality: ${t.quality_score || 0}/10, tone: ${sanitize(t.emotional_tone)}):
+- Composition: ${sanitize(t.composition_blueprint).substring(0, 500)}
+- Color: ${sanitize(t.color_strategy).substring(0, 300)}
+- Text: ${sanitize(t.text_strategy).substring(0, 300)}
+- Character Actions: ${sanitize(t.character_action_notes).substring(0, 300)}
+- Prompt Template: ${sanitize(t.recreate_prompt).substring(0, 400)}
 `).join('\n---\n');
 
     const prompt = `You are the world's #1 YouTube thumbnail style analyst. You have analyzed ${templates.length} world-class thumbnails from the "${niche.name}" niche.
