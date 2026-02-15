@@ -17,11 +17,13 @@ export default function YouTubeThumbnailImporter({ projectId, onConceptCreated }
   const [editablePrompt, setEditablePrompt] = useState('');
   const [generating, setGenerating] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [step, setStep] = useState('input'); // 'input' | 'review' | 'prompt' | 'done'
 
   const handleAnalyze = async () => {
     if (!url.trim()) return;
     setAnalyzing(true);
     setAnalysis(null);
+    setStep('input');
     const res = await base44.functions.invoke('analyzeYouTubeThumbnail', {
       youtube_url: url.trim(),
       project_id: projectId,
@@ -30,18 +32,21 @@ export default function YouTubeThumbnailImporter({ projectId, onConceptCreated }
     setThumbnailUrl(res.data.thumbnail_url);
     setEditablePrompt(res.data.analysis.recreate_prompt || '');
     setAnalyzing(false);
+    setStep('review'); // Go to review step first
+  };
+
+  const handleProceedToPrompt = () => {
+    setStep('prompt');
   };
 
   const handleCreateConcept = async () => {
     if (!analysis) return;
     setGenerating(true);
 
-    // Generate image from the prompt
     const { url: imageUrl } = await base44.integrations.Core.GenerateImage({
       prompt: `16:9 aspect ratio, 1280x720, widescreen landscape YouTube thumbnail. ${editablePrompt}`,
     });
 
-    // Save as a thumbnail concept
     await base44.entities.ThumbnailConcepts.create({
       project_id: projectId,
       rank: 0,
@@ -60,6 +65,7 @@ export default function YouTubeThumbnailImporter({ projectId, onConceptCreated }
     setGenerating(false);
     setAnalysis(null);
     setUrl('');
+    setStep('input');
     onConceptCreated();
   };
 
