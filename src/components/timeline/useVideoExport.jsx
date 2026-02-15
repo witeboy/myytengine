@@ -20,6 +20,30 @@ export default function useVideoExport() {
   const [error, setError] = useState(null);
   const cancelledRef = useRef(false);
   const encoderRef = useRef(null);
+  const wakeLockRef = useRef(null);
+
+  // Acquire wake lock to prevent browser from throttling/sleeping
+  const acquireWakeLock = async () => {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLockRef.current = await navigator.wakeLock.request('screen');
+        // Re-acquire on visibility change
+        document.addEventListener('visibilitychange', reacquireWakeLock);
+      }
+    } catch {}
+  };
+
+  const reacquireWakeLock = async () => {
+    if (wakeLockRef.current !== null && document.visibilityState === 'visible') {
+      try { wakeLockRef.current = await navigator.wakeLock.request('screen'); } catch {}
+    }
+  };
+
+  const releaseWakeLock = () => {
+    document.removeEventListener('visibilitychange', reacquireWakeLock);
+    try { wakeLockRef.current?.release(); } catch {}
+    wakeLockRef.current = null;
+  };
 
   const checkSupport = useCallback(async (quality, orientation) => {
     if (!('VideoEncoder' in window)) {
@@ -43,7 +67,7 @@ export default function useVideoExport() {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`Failed to load image`));
+    img.onerror = () => reject(new Error('Failed to load image'));
     img.src = url;
   });
 
@@ -59,18 +83,16 @@ export default function useVideoExport() {
     video.src = url;
   });
 
-  // Seek video with timeout to prevent hanging
   const seekVideo = (video, time) => new Promise((resolve) => {
     const target = Math.max(0, Math.min(time, (video.duration || 0) - 0.01));
     if (Math.abs(video.currentTime - target) < 0.05) { resolve(); return; }
-    const timer = setTimeout(resolve, 500); // 500ms timeout fallback
+    const timer = setTimeout(resolve, 500);
     video.onseeked = () => { clearTimeout(timer); resolve(); };
     video.currentTime = target;
   });
 
   const drawFrame = (ctx, canvas, media, mediaType) => {
-    const w = canvas.width;
-    const h = canvas.height;
+    const w = canvas.width, h = canvas.height;
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, w, h);
     if (!media) return;
@@ -100,6 +122,9 @@ export default function useVideoExport() {
     setPhase('checking');
     setError(null);
 
+    // Acquire wake lock to keep tab active
+    await acquireWakeLock();
+
     try {
       const presets = orientation === 'portrait' ? PORTRAIT_PRESETS : QUALITY_PRESETS;
       const preset = presets[quality];
@@ -118,48 +143,21 @@ export default function useVideoExport() {
         } catch {}
       }
 
-      // Setup muxer
-      const muxCfg = {
-        target: new ArrayBufferTarget(),
-        video: { codec: 'avc', width: W, height: H },
-        fastStart: 'in-memory',
-      };
-      if (hasAudio) {
-        muxCfg.audio = { codec: 'aac', sampleRate: 48000, numberOfChannels: 2 };
-      }
-      const muxer = new Muxer(muxCfg);
-
-      // Video encoder
-      let encodeError = null;
-      const videoEncoder = new VideoEncoder({
-        output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-        error: (e) => { encodeError = e; },
-      });
-      encoderRef.current = videoEncoder;
-
-      videoEncoder.configure({ codec: videoCodec, width: W, height: H, bitrate: BR, framerate: fps });
-
-      // Audio encoder
-      let audioEncoder = null;
-      if (hasAudio) {
-        audioEncoder = new AudioEncoder({
-          output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
-          error: (e) => { console.warn('Audio encode error:', e); },
-        });
-        audioEncoder.configure({ codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2, bitrate: 128_000 });
-      }
-
-      // Canvas
+      // ----- PHASE 1: Pre-render all frames as ImageBitmaps -----
+      // This avoids needing media elements during encoding (which causes codec reclaim)
+      setPhase('loading');
+      
       const canvas = new OffscreenCanvas(W, H);
       const ctx = canvas.getContext('2d');
+      const allBitmaps = []; // store ImageBitmap per frame
 
-      // PHASE: Load media
-      setPhase('loading');
-      const sceneMedia = [];
-      for (let i = 0; i < scenes.length; i++) {
+      let bitmapIdx = 0;
+      for (let si = 0; si < scenes.length; si++) {
         if (cancelledRef.current) throw new Error('cancelled');
-        setProgress(Math.round((i / scenes.length) * 20));
-        const scene = scenes[i];
+
+        const scene = scenes[si];
+        const dur = scene.duration_seconds || 8;
+        const sceneFrames = Math.ceil(dur * fps);
         const vidUrl = scene.video_url || '';
         const imgUrl = scene.image_url || '';
         const validVid = vidUrl.startsWith('http');
@@ -172,55 +170,89 @@ export default function useVideoExport() {
         } else if (validImg) {
           try { media = await loadImage(imgUrl); } catch {}
         }
-        sceneMedia.push({ media, mediaType });
-      }
 
-      // PHASE: Encode frames
-      setPhase('encoding');
-      let globalFrame = 0;
-
-      for (let si = 0; si < scenes.length; si++) {
-        if (cancelledRef.current) throw new Error('cancelled');
-        if (encodeError) throw encodeError;
-
-        const dur = scenes[si].duration_seconds || 8;
-        const sceneFrames = Math.ceil(dur * fps);
-        const { media, mediaType } = sceneMedia[si];
-
-        // For video media, reset to start
+        // Pre-render every frame for this scene
         if (media && mediaType === 'video') {
           await seekVideo(media, 0);
         }
 
         for (let f = 0; f < sceneFrames; f++) {
           if (cancelledRef.current) throw new Error('cancelled');
-          if (encodeError) throw encodeError;
 
           if (media && mediaType === 'video') {
             await seekVideo(media, f / fps);
           }
 
           drawFrame(ctx, canvas, media, mediaType);
-          const timestamp = Math.round(globalFrame * (1_000_000 / fps));
-          const frame = new VideoFrame(canvas, { timestamp });
-          videoEncoder.encode(frame, { keyFrame: globalFrame % (fps * 2) === 0 });
-          frame.close();
-          globalFrame++;
+          // Capture as ImageBitmap (independent of source media)
+          const bitmap = await createImageBitmap(canvas);
+          allBitmaps.push(bitmap);
+          bitmapIdx++;
 
-          // Yield to UI every 10 frames
-          if (globalFrame % 10 === 0) {
-            setProgress(20 + Math.round((globalFrame / totalFrames) * 60));
-            await new Promise(r => setTimeout(r, 0));
+          // Update progress (0-40% for pre-rendering)
+          if (bitmapIdx % 15 === 0) {
+            setProgress(Math.round((bitmapIdx / totalFrames) * 40));
+            // Use MessageChannel for yielding - NOT setTimeout (which gets throttled in background tabs)
+            await new Promise(r => { const ch = new MessageChannel(); ch.port1.onmessage = r; ch.port2.postMessage(null); });
           }
+        }
+      }
+
+      // ----- PHASE 2: Encode all pre-rendered bitmaps (no media dependency) -----
+      setPhase('encoding');
+
+      const muxCfg = {
+        target: new ArrayBufferTarget(),
+        video: { codec: 'avc', width: W, height: H },
+        fastStart: 'in-memory',
+      };
+      if (hasAudio) {
+        muxCfg.audio = { codec: 'aac', sampleRate: 48000, numberOfChannels: 2 };
+      }
+      const muxer = new Muxer(muxCfg);
+
+      let encodeError = null;
+      const videoEncoder = new VideoEncoder({
+        output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+        error: (e) => { encodeError = e; },
+      });
+      encoderRef.current = videoEncoder;
+      videoEncoder.configure({ codec: videoCodec, width: W, height: H, bitrate: BR, framerate: fps });
+
+      let audioEncoder = null;
+      if (hasAudio) {
+        audioEncoder = new AudioEncoder({
+          output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+          error: (e) => { console.warn('Audio encode error:', e); },
+        });
+        audioEncoder.configure({ codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2, bitrate: 128_000 });
+      }
+
+      // Encode bitmaps in tight batches to keep encoder busy and prevent "inactivity" reclaim
+      const BATCH_SIZE = 60; // encode 60 frames (2s @ 30fps) per batch before yielding
+      for (let i = 0; i < allBitmaps.length; i++) {
+        if (cancelledRef.current) throw new Error('cancelled');
+        if (encodeError) throw encodeError;
+
+        const timestamp = Math.round(i * (1_000_000 / fps));
+        const frame = new VideoFrame(allBitmaps[i], { timestamp });
+        videoEncoder.encode(frame, { keyFrame: i % (fps * 2) === 0 });
+        frame.close();
+        allBitmaps[i].close(); // free memory immediately
+
+        // Yield every BATCH_SIZE frames using MessageChannel (background-safe)
+        if ((i + 1) % BATCH_SIZE === 0) {
+          setProgress(40 + Math.round((i / allBitmaps.length) * 35));
+          await new Promise(r => { const ch = new MessageChannel(); ch.port1.onmessage = r; ch.port2.postMessage(null); });
         }
       }
 
       if (cancelledRef.current) throw new Error('cancelled');
 
-      // PHASE: Audio
+      // ----- PHASE 3: Audio -----
       if (hasAudio && audioEncoder) {
         setPhase('audio');
-        setProgress(80);
+        setProgress(78);
 
         const sampleRate = 48000;
         const totalSamples = Math.ceil(totalDuration * sampleRate);
@@ -235,7 +267,6 @@ export default function useVideoExport() {
           const chCount = Math.min(buf.numberOfChannels, 2);
           const chData = [];
           for (let c = 0; c < chCount; c++) chData.push(buf.getChannelData(c));
-
           for (let i = 0; i < totalSamples; i++) {
             const srcIdx = loop ? (i % buf.length) : i;
             if (srcIdx >= buf.length) break;
@@ -244,13 +275,11 @@ export default function useVideoExport() {
           }
         }
 
-        // Clamp
         for (let i = 0; i < totalSamples; i++) {
           mixedL[i] = Math.max(-1, Math.min(1, mixedL[i]));
           mixedR[i] = Math.max(-1, Math.min(1, mixedR[i]));
         }
 
-        // Encode in 1-second chunks
         const CHUNK = sampleRate;
         for (let offset = 0; offset < totalSamples; offset += CHUNK) {
           if (cancelledRef.current) throw new Error('cancelled');
@@ -273,7 +302,7 @@ export default function useVideoExport() {
         setProgress(90);
       }
 
-      // PHASE: Finalize
+      // ----- PHASE 4: Finalize -----
       setPhase('finalizing');
       setProgress(95);
 
@@ -288,12 +317,13 @@ export default function useVideoExport() {
       setProgress(100);
       setPhase('done');
       setExporting(false);
+      releaseWakeLock();
       return blob;
 
     } catch (e) {
-      // Cleanup encoders
       try { encoderRef.current?.close(); } catch {}
       encoderRef.current = null;
+      releaseWakeLock();
 
       if (e.message === 'cancelled') {
         setExporting(false);
@@ -312,6 +342,7 @@ export default function useVideoExport() {
     cancelledRef.current = true;
     try { encoderRef.current?.close(); } catch {}
     encoderRef.current = null;
+    releaseWakeLock();
     setExporting(false);
     setPhase('');
     setProgress(0);
