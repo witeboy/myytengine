@@ -10,9 +10,10 @@ import StageProgress from '@/components/StageProgress';
 import SceneGrid from '@/components/content/SceneGrid';
 import VoiceoverPanel from '@/components/script/VoiceoverPanel';
 import VisualStyleSelector from '@/components/content/VisualStyleSelector';
+import OrientationSelector from '@/components/content/OrientationSelector';
 import MusicPanel from '@/components/content/MusicPanel';
 import AudioMixerPanel from '@/components/content/AudioMixerPanel';
-import { Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film, Palette, Sparkles } from 'lucide-react';
+import { Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film, Palette, Sparkles, Monitor } from 'lucide-react';
 
 export default function ContentGeneration() {
   const navigate = useNavigate();
@@ -146,6 +147,19 @@ export default function ContentGeneration() {
         </div>
         <p className="text-gray-600 mb-8">Import your script, generate scene images and animations</p>
 
+        {/* Orientation Selector */}
+        {project && (
+          <div className="bg-white p-5 rounded-lg shadow-sm border mb-6">
+            <OrientationSelector
+              selectedOrientation={project.orientation || 'landscape'}
+              onSelect={async (orientation) => {
+                await base44.entities.Projects.update(projectId, { orientation });
+                refetchProject();
+              }}
+            />
+          </div>
+        )}
+
         {/* Visual Style Selector - always show when project exists */}
         {project && (
           <div className="bg-white p-5 rounded-lg shadow-sm border mb-6">
@@ -163,18 +177,24 @@ export default function ContentGeneration() {
         <div className="bg-white p-4 rounded-lg shadow-sm border mb-6 flex flex-wrap items-center gap-3">
           {scenes.length === 0 ? (
             <>
-              <Button onClick={handleImport} disabled={importing || !project?.visual_style} className="bg-blue-600 hover:bg-blue-700">
+              <Button onClick={handleImport} disabled={importing || !project?.visual_style || !project?.orientation} className="bg-blue-600 hover:bg-blue-700">
                 {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Import className="w-4 h-4 mr-2" />}
                 {importing ? 'Breaking Script into Scenes...' : 'Import Script & Generate Scenes'}
               </Button>
-              {!project?.visual_style && (
+              {(!project?.visual_style || !project?.orientation) && (
                 <p className="text-sm text-amber-600 flex items-center gap-1">
-                  <Palette className="w-4 h-4" /> Please select a visual style above first
+                  <Palette className="w-4 h-4" /> Please select orientation and visual style above first
                 </p>
               )}
             </>
           ) : (
             <>
+              {project?.orientation && (
+                      <Badge className="bg-blue-100 text-blue-800 text-xs">
+                        <Monitor className="w-3 h-3 mr-1" />
+                        {project.orientation === 'portrait' ? '9:16 Portrait' : '16:9 Landscape'}
+                      </Badge>
+                    )}
               {project?.visual_style && (
                       <Badge className="bg-purple-100 text-purple-800 text-xs">
                         <Palette className="w-3 h-3 mr-1" />
