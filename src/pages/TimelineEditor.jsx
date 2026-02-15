@@ -194,6 +194,49 @@ export default function TimelineEditor() {
     }
   }, [currentTime, isPlaying, pixelsPerSecond]);
 
+  const isDraggingPlayhead = useRef(false);
+
+  const getTimeFromMouseEvent = (e) => {
+    const container = timelineRef.current;
+    if (!container) return 0;
+    const rect = container.getBoundingClientRect();
+    const x = e.clientX - rect.left + container.scrollLeft - 96;
+    return Math.max(0, Math.min(totalDuration, x / pixelsPerSecond));
+  };
+
+  const handlePlayheadMouseDown = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    isDraggingPlayhead.current = true;
+    const wasPlaying = isPlaying;
+    if (wasPlaying) setIsPlaying(false);
+
+    const onMove = (ev) => {
+      if (isDraggingPlayhead.current) {
+        const t = getTimeFromMouseEvent(ev);
+        setCurrentTime(t);
+        if (voiceoverRef.current) voiceoverRef.current.currentTime = t;
+      }
+    };
+    const onUp = () => {
+      isDraggingPlayhead.current = false;
+      sfxRefs.current = {};
+      if (wasPlaying) setIsPlaying(true);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  const handleTimelineClick = (e) => {
+    if (e.target.closest('[data-scene-block]')) return;
+    const t = getTimeFromMouseEvent(e);
+    setCurrentTime(t);
+    if (voiceoverRef.current) voiceoverRef.current.currentTime = t;
+    sfxRefs.current = {};
+  };
+
   const handlePlayPause = () => setIsPlaying(prev => !prev);
   const handleSeek = (time) => setCurrentTime(Math.max(0, Math.min(totalDuration, time)));
 
