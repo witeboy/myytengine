@@ -13,6 +13,13 @@ const PORTRAIT_PRESETS = {
   '480p': { width: 480, height: 854, bitrate: 1_500_000 },
 };
 
+// Yield via MessageChannel (not throttled in background tabs unlike setTimeout)
+const yieldToMain = () => new Promise(r => {
+  const ch = new MessageChannel();
+  ch.port1.onmessage = r;
+  ch.port2.postMessage(null);
+});
+
 export default function useVideoExport() {
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -22,23 +29,19 @@ export default function useVideoExport() {
   const encoderRef = useRef(null);
   const wakeLockRef = useRef(null);
 
-  // Acquire wake lock to prevent browser from throttling/sleeping
   const acquireWakeLock = async () => {
     try {
       if ('wakeLock' in navigator) {
         wakeLockRef.current = await navigator.wakeLock.request('screen');
-        // Re-acquire on visibility change
         document.addEventListener('visibilitychange', reacquireWakeLock);
       }
     } catch {}
   };
-
   const reacquireWakeLock = async () => {
     if (wakeLockRef.current !== null && document.visibilityState === 'visible') {
       try { wakeLockRef.current = await navigator.wakeLock.request('screen'); } catch {}
     }
   };
-
   const releaseWakeLock = () => {
     document.removeEventListener('visibilitychange', reacquireWakeLock);
     try { wakeLockRef.current?.release(); } catch {}
@@ -54,9 +57,7 @@ export default function useVideoExport() {
     const profiles = ['avc1.42001e', 'avc1.4d001e', 'avc1.640028', 'avc1.42001f'];
     for (const codec of profiles) {
       try {
-        const support = await VideoEncoder.isConfigSupported({
-          codec, width: preset.width, height: preset.height, bitrate: preset.bitrate,
-        });
+        const support = await VideoEncoder.isConfigSupported({ codec, width: preset.width, height: preset.height, bitrate: preset.bitrate });
         if (support.supported) return { supported: true, warning: false, codec };
       } catch {}
     }
@@ -122,14 +123,12 @@ export default function useVideoExport() {
     setPhase('checking');
     setError(null);
 
-    // Acquire wake lock to keep tab active
     await acquireWakeLock();
 
     try {
       const presets = orientation === 'portrait' ? PORTRAIT_PRESETS : QUALITY_PRESETS;
       const preset = presets[quality];
       const W = preset.width, H = preset.height, BR = preset.bitrate;
-
       const totalDuration = scenes.reduce((sum, s) => sum + (s.duration_seconds || 8), 0);
       const totalFrames = Math.ceil(totalDuration * fps);
       const hasAudio = !!(voiceoverUrl || musicUrl);
@@ -143,21 +142,46 @@ export default function useVideoExport() {
         } catch {}
       }
 
-      // ----- PHASE 1: Pre-render all frames as ImageBitmaps -----
-      // This avoids needing media elements during encoding (which causes codec reclaim)
-      setPhase('loading');
-      
+      // Setup muxer
+      const muxCfg = {
+        target: new ArrayBufferTarget(),
+        video: { codec: 'avc', width: W, height: H },
+        fastStart: 'in-memory',
+      };
+      if (hasAudio) {
+        muxCfg.audio = { codec: 'aac', sampleRate: 48000, numberOfChannels: 2 };
+      }
+      const muxer = new Muxer(muxCfg);
+
+      // Video encoder
+      let encodeError = null;
+      const videoEncoder = new VideoEncoder({
+        output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+        error: (e) => { encodeError = e; },
+      });
+      encoderRef.current = videoEncoder;
+      videoEncoder.configure({ codec: videoCodec, width: W, height: H, bitrate: BR, framerate: fps });
+
+      // Audio encoder
+      let audioEncoder = null;
+      if (hasAudio) {
+        audioEncoder = new AudioEncoder({
+          output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+          error: (e) => { console.warn('Audio encode error:', e); },
+        });
+        audioEncoder.configure({ codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2, bitrate: 128_000 });
+      }
+
       const canvas = new OffscreenCanvas(W, H);
       const ctx = canvas.getContext('2d');
-      const allBitmaps = []; // store ImageBitmap per frame
 
-      let bitmapIdx = 0;
-      for (let si = 0; si < scenes.length; si++) {
+      // ===== PHASE 1: Load all scene media first =====
+      setPhase('loading');
+      const sceneMedia = [];
+      for (let i = 0; i < scenes.length; i++) {
         if (cancelledRef.current) throw new Error('cancelled');
-
-        const scene = scenes[si];
-        const dur = scene.duration_seconds || 8;
-        const sceneFrames = Math.ceil(dur * fps);
+        setProgress(Math.round((i / scenes.length) * 15));
+        const scene = scenes[i];
         const vidUrl = scene.video_url || '';
         const imgUrl = scene.image_url || '';
         const validVid = vidUrl.startsWith('http');
@@ -170,86 +194,88 @@ export default function useVideoExport() {
         } else if (validImg) {
           try { media = await loadImage(imgUrl); } catch {}
         }
+        sceneMedia.push({ media, mediaType });
+      }
 
-        // Pre-render every frame for this scene
+      // ===== PHASE 2: For IMAGE-only scenes, pre-render a single bitmap =====
+      // (Much cheaper than storing all frames — one bitmap per image scene)
+      // For video scenes we'll still seek frame-by-frame but with small batches
+      setPhase('encoding');
+      const imageBitmapCache = new Map(); // sceneIndex -> ImageBitmap
+
+      for (let si = 0; si < scenes.length; si++) {
+        const { media, mediaType } = sceneMedia[si];
+        if (media && mediaType === 'image') {
+          drawFrame(ctx, canvas, media, mediaType);
+          imageBitmapCache.set(si, await createImageBitmap(canvas));
+        }
+      }
+
+      // ===== PHASE 3: Encode frames — scene by scene, streaming =====
+      // Key strategy: flush encoder frequently to prevent queue buildup & keep codec active
+      let globalFrame = 0;
+      const FLUSH_EVERY = fps * 3; // flush every ~3 seconds of video to keep codec alive
+      let framesSinceFlush = 0;
+
+      for (let si = 0; si < scenes.length; si++) {
+        if (cancelledRef.current) throw new Error('cancelled');
+        if (encodeError) throw encodeError;
+
+        const dur = scenes[si].duration_seconds || 8;
+        const sceneFrames = Math.ceil(dur * fps);
+        const { media, mediaType } = sceneMedia[si];
+        const cachedBitmap = imageBitmapCache.get(si);
+
+        // For video, seek to start
         if (media && mediaType === 'video') {
           await seekVideo(media, 0);
         }
 
         for (let f = 0; f < sceneFrames; f++) {
           if (cancelledRef.current) throw new Error('cancelled');
+          if (encodeError) throw encodeError;
 
-          if (media && mediaType === 'video') {
+          // Draw frame
+          if (cachedBitmap) {
+            // Image scene: draw cached bitmap (very fast, no media dependency)
+            ctx.drawImage(cachedBitmap, 0, 0);
+          } else if (media && mediaType === 'video') {
             await seekVideo(media, f / fps);
+            drawFrame(ctx, canvas, media, mediaType);
+          } else {
+            // No media — black frame
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, W, H);
           }
 
-          drawFrame(ctx, canvas, media, mediaType);
-          // Capture as ImageBitmap (independent of source media)
-          const bitmap = await createImageBitmap(canvas);
-          allBitmaps.push(bitmap);
-          bitmapIdx++;
+          const timestamp = Math.round(globalFrame * (1_000_000 / fps));
+          const frame = new VideoFrame(canvas, { timestamp });
+          videoEncoder.encode(frame, { keyFrame: globalFrame % (fps * 2) === 0 });
+          frame.close();
+          globalFrame++;
+          framesSinceFlush++;
 
-          // Update progress (0-40% for pre-rendering)
-          if (bitmapIdx % 15 === 0) {
-            setProgress(Math.round((bitmapIdx / totalFrames) * 40));
-            // Use MessageChannel for yielding - NOT setTimeout (which gets throttled in background tabs)
-            await new Promise(r => { const ch = new MessageChannel(); ch.port1.onmessage = r; ch.port2.postMessage(null); });
+          // Flush periodically to keep codec active and prevent reclaim
+          if (framesSinceFlush >= FLUSH_EVERY) {
+            await videoEncoder.flush();
+            framesSinceFlush = 0;
+          }
+
+          // Yield every 8 frames via MessageChannel (not throttled in background)
+          if (globalFrame % 8 === 0) {
+            setProgress(15 + Math.round((globalFrame / totalFrames) * 60));
+            await yieldToMain();
           }
         }
       }
 
-      // ----- PHASE 2: Encode all pre-rendered bitmaps (no media dependency) -----
-      setPhase('encoding');
-
-      const muxCfg = {
-        target: new ArrayBufferTarget(),
-        video: { codec: 'avc', width: W, height: H },
-        fastStart: 'in-memory',
-      };
-      if (hasAudio) {
-        muxCfg.audio = { codec: 'aac', sampleRate: 48000, numberOfChannels: 2 };
-      }
-      const muxer = new Muxer(muxCfg);
-
-      let encodeError = null;
-      const videoEncoder = new VideoEncoder({
-        output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-        error: (e) => { encodeError = e; },
-      });
-      encoderRef.current = videoEncoder;
-      videoEncoder.configure({ codec: videoCodec, width: W, height: H, bitrate: BR, framerate: fps });
-
-      let audioEncoder = null;
-      if (hasAudio) {
-        audioEncoder = new AudioEncoder({
-          output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
-          error: (e) => { console.warn('Audio encode error:', e); },
-        });
-        audioEncoder.configure({ codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2, bitrate: 128_000 });
-      }
-
-      // Encode bitmaps in tight batches to keep encoder busy and prevent "inactivity" reclaim
-      const BATCH_SIZE = 60; // encode 60 frames (2s @ 30fps) per batch before yielding
-      for (let i = 0; i < allBitmaps.length; i++) {
-        if (cancelledRef.current) throw new Error('cancelled');
-        if (encodeError) throw encodeError;
-
-        const timestamp = Math.round(i * (1_000_000 / fps));
-        const frame = new VideoFrame(allBitmaps[i], { timestamp });
-        videoEncoder.encode(frame, { keyFrame: i % (fps * 2) === 0 });
-        frame.close();
-        allBitmaps[i].close(); // free memory immediately
-
-        // Yield every BATCH_SIZE frames using MessageChannel (background-safe)
-        if ((i + 1) % BATCH_SIZE === 0) {
-          setProgress(40 + Math.round((i / allBitmaps.length) * 35));
-          await new Promise(r => { const ch = new MessageChannel(); ch.port1.onmessage = r; ch.port2.postMessage(null); });
-        }
-      }
+      // Free image bitmap cache
+      for (const bm of imageBitmapCache.values()) bm.close();
+      imageBitmapCache.clear();
 
       if (cancelledRef.current) throw new Error('cancelled');
 
-      // ----- PHASE 3: Audio -----
+      // ===== PHASE 4: Audio =====
       if (hasAudio && audioEncoder) {
         setPhase('audio');
         setProgress(78);
@@ -280,7 +306,7 @@ export default function useVideoExport() {
           mixedR[i] = Math.max(-1, Math.min(1, mixedR[i]));
         }
 
-        const CHUNK = sampleRate;
+        const CHUNK = sampleRate; // 1s chunks
         for (let offset = 0; offset < totalSamples; offset += CHUNK) {
           if (cancelledRef.current) throw new Error('cancelled');
           const len = Math.min(CHUNK, totalSamples - offset);
@@ -302,7 +328,7 @@ export default function useVideoExport() {
         setProgress(90);
       }
 
-      // ----- PHASE 4: Finalize -----
+      // ===== PHASE 5: Finalize =====
       setPhase('finalizing');
       setProgress(95);
 
