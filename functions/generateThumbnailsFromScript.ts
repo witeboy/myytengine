@@ -44,63 +44,64 @@ Deno.serve(async (req) => {
     const truncatedScript = scriptContent.substring(0, 3000);
 
     const styleInstruction = reference_style 
-      ? `\n\nIMPORTANT: Use this reference thumbnail style as inspiration:\n${reference_style}\nAdapt this EXACT visual style to the video's content.`
+      ? `\n\nIMPORTANT — REFERENCE STYLE BLUEPRINT:\nYou MUST replicate this EXACT layout/layer structure for the new topic:\n${reference_style}\nAdapt the subjects and text to the video's content but keep the IDENTICAL layer composition, positioning, rim lighting, text styling, and banner structure.`
       : '';
 
-    const prompt = `You are the world's #1 YouTube thumbnail designer. Your thumbnails have generated BILLIONS of views. You understand the psychology of clicking better than anyone alive.
+    const prompt = `You are the world's #1 YouTube thumbnail architect. You design thumbnails using a Z-DEPTH LAYER SYSTEM on a 1920x1080 canvas.
 
 VIDEO TOPIC: "${topic.title}"
 VIDEO TITLE: "${script.title}"
 NICHE: "${project.niche}"
 
-SCRIPT EXCERPT (use this to find the most shocking/emotional/curiosity-inducing moments):
+SCRIPT EXCERPT (find the most shocking/emotional/curiosity-inducing moments):
 ${truncatedScript}
 ${styleInstruction}
 
-Create 10 KILLER thumbnail concepts. These must be SCROLL-STOPPING, IMPOSSIBLE TO IGNORE thumbnails.
+=== Z-DEPTH LAYER SYSTEM ===
+Every thumbnail MUST be described as 4 layers:
 
-Each concept must follow these YouTube thumbnail laws:
-🔥 HIGH CONTRAST - Colors must POP and be visible at small sizes
-🔥 EMOTIONAL TRIGGER - Must trigger curiosity, shock, fear, awe, or urgency
-🔥 3-SECOND RULE - Viewer must understand the concept in under 3 seconds
-🔥 TEXT IS MINIMAL - Max 3-4 words, HUGE, readable at thumbnail size
-🔥 VISUAL MYSTERY - Show enough to intrigue but NOT enough to satisfy (curiosity gap)
-🔥 PATTERN INTERRUPT - Must look different from other thumbnails in the niche
-🔥 FACE RULE - If using faces, extreme emotions (shock, terror, excitement)
+LAYER 1 — BACKGROUND (Depth 0): Blurred setting, atmosphere, colors, vignette
+LAYER 2 — ANCHORS (Depth 1): Center mid-ground subjects (2-3 figures at 50% height)
+LAYER 3 — CONTENDERS (Depth 2): Foreground face-off subjects on extreme left/right (110% height, rim-lit, 30° face angles)
+LAYER 4 — UI OVERLAY (Depth 3): Title text, banners, logos, badges with EXACT positioning
 
-Mix these proven thumbnail TEMPLATES:
-- "The Reveal" - something being uncovered/exposed
-- "The Contrast" - before/after, good vs evil, expected vs reality
-- "The Warning" - danger/urgency visual
-- "The Mystery" - blurred element, redacted text, hidden object
-- "The Reaction" - extreme human emotion
-- "The Bold Statement" - massive text dominating the frame
-- "The Evidence" - screenshot/document/proof style
-- "The Countdown" - numbered list teaser
-- "The Transformation" - dramatic change visual
-- "The Forbidden" - crossed out, banned, restricted look
+=== STYLING RULES ===
+- Rim Light: bright edge light on outer face of foreground subjects
+- Saturation: boosted +20% hyper-realistic
+- Contrast: high — deep blacks, bright highlights  
+- Text: Impact/Bebas Neue, white fill + thick black stroke + drop shadow
+- 3-SECOND RULE: concept must be understood instantly at thumbnail size
+
+Create 10 KILLER thumbnail concepts using this layer system.
 
 RESPOND IN THIS EXACT JSON:
 {
   "thumbnails": [
     {
       "rank": 1,
-      "template_type": "The Reveal / The Contrast / etc",
-      "concept_description": "Detailed visual concept — what EXACTLY the viewer sees",
+      "template_type": "Face-Off / The Reveal / The Contrast / etc",
+      "concept_description": "Detailed visual concept decomposed by layers",
       "emotional_hook": "What emotion this triggers and WHY it's impossible to scroll past",
-      "text_overlay": "3-4 word text (HUGE, readable)",
-      "font_style": "Impact bold / condensed / handwritten / etc",
-      "font_color": "#hex",
-      "font_effects": "black outline, drop shadow, glow, etc",
-      "background_description": "Detailed background — colors, elements, mood",
-      "subject_description": "Main visual subject — face, object, scene",
+      "text_overlay": "3-4 word text (HUGE, readable at thumbnail size)",
+      "layers": {
+        "background": "Layer 1: Blurred [setting] with [atmosphere], [colors #hex], gaussian blur 25%, dark vignette edges",
+        "midground": "Layer 2: [center subjects] at center, 50% canvas height, [clothing], [expressions]",
+        "foreground_left": "Layer 3 Left: [Subject] at left 0-30%, facing 30° right, [expression], [clothing color], rim light on left edge, cropped mid-chest up, 110% canvas height",
+        "foreground_right": "Layer 3 Right: [Subject] at right 70-100%, facing 30° left, [expression], [clothing color], rim light on right edge, cropped mid-chest up, 110% canvas height",
+        "ui_overlay": "Layer 4: '[TITLE]' top center 3% from top, white Impact bold, 3px black outline, drop shadow. Bottom banner spanning full width [color #hex] with '[LEFT TEXT] vs [RIGHT TEXT]' and logos on corners"
+      },
+      "font_style": "extra-bold Impact/Bebas sans-serif",
+      "font_color": "#FFFFFF",
+      "font_effects": "3px black outline #000000, drop shadow 4px down-right, 60% opacity",
+      "background_description": "Detailed background with blur level, colors, atmosphere",
+      "subject_description": "Main visual subjects with positions, expressions, clothing",
       "accent_color": "#hex of the color that pops most",
-      "color_scheme": "Overall color approach — warm/cold, saturated, contrast level",
-      "visual_effects": "arrows, circles, blur, glow, split, etc",
-      "style_reference": "cinema / minimal / documentary / reaction / bold",
+      "color_scheme": "Overall color approach — warm/cold, saturation +20%, high contrast",
+      "visual_effects": "rim lighting, vignette, bokeh, split composition, etc",
+      "style_reference": "cinema / minimal / documentary / sports / gaming",
       "ctr_score": 9,
       "scroll_stop_reason": "1 sentence why NO ONE can scroll past this",
-      "image_prompt": "DETAILED AI image prompt — include composition, camera angle, lighting, colors, mood, style, text placement, all visual elements. Be extremely specific."
+      "image_prompt": "LAYERED BLUEPRINT PROMPT: 'A 1920x1080 YouTube thumbnail. Layer 1 (Background): [blurred setting, colors, atmosphere]. Layer 2 (Mid-ground): [center subjects, position, scale, details]. Layer 3 (Foreground): [left subject at 0-30% facing right, expression, clothing, rim light] and [right subject at 70-100% facing left, expression, clothing, rim light], both 110% canvas height, cropped mid-chest up. Layer 4 (UI): [exact text, font, color, outline, shadow, position] and [banners, logos, badges with positions and colors]. Styling: hyper-saturated +20%, high contrast, rim lighting on foreground subjects. 4K resolution, sharp focus.'"
     }
   ]
 }`;
