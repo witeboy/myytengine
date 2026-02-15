@@ -275,9 +275,14 @@ RESPOND IN THIS EXACT JSON:
     // ============================================================
     // PHASE 2: Transform each forensic description into an AI image prompt
     // ============================================================
+    const phase2TitleInstruction = selected_title
+      ? `\n\nMANDATORY TITLE OVERLAY RULE: The user selected this SEO title: "${selected_title}"\nThe "text_overlay" for EVERY concept MUST be a powerful 2-4 word fragment derived from this title. This text MUST appear as MASSIVE BOLD TEXT burned directly into the generated image — it is the MOST prominent visual element. If the generated image does not contain this text rendered visually, the thumbnail is USELESS. Include the EXACT text_overlay words in every image_prompt with explicit instructions to render them as large bold white Impact text with thick black outline.`
+      : '';
+
     const phase2Prompt = `You are the world's #1 AI image prompt engineer specializing in YouTube thumbnails.
 
 Below are 3 FORENSIC VISUAL DESCRIPTIONS of thumbnail concepts. Your job is to transform EACH one into a PERFECT AI image generation prompt.
+${phase2TitleInstruction}
 
 === FORENSIC CONCEPT BLUEPRINTS ===
 ${JSON.stringify(phase1Result.concepts, null, 2)}
