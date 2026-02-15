@@ -15,7 +15,7 @@ import PreviewMonitor from '@/components/timeline/PreviewMonitor';
 import ExportPanel from '@/components/timeline/ExportPanel';
 import VideoExporter from '@/components/timeline/VideoExporter';
 import useVideoExport from '@/components/timeline/useVideoExport';
-import { Loader2, Import, Download, Film, Play, Package } from 'lucide-react';
+import { Loader2, Import, Download, Film, Play, Package, ArrowRight } from 'lucide-react';
 
 export default function TimelineEditor() {
   const navigate = useNavigate();
@@ -303,6 +303,16 @@ export default function TimelineEditor() {
                 <Button variant="outline" onClick={() => setShowExportPanel(p => !p)}>
                   <Package className="w-4 h-4 mr-2" />
                   {showExportPanel ? 'Hide Assets' : 'Export Assets'}
+                </Button>
+                <Button
+                  onClick={async () => {
+                    await base44.entities.Projects.update(projectId, { status: 'post_production', current_step: 11 });
+                    navigate(createPageUrl(`PostProduction?project_id=${projectId}`));
+                  }}
+                  className="bg-orange-600 hover:bg-orange-700"
+                >
+                  <ArrowRight className="w-4 h-4 mr-2" />
+                  Post Production
                 </Button>
               </>
             )}

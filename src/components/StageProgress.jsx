@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, Image, Film, Home } from 'lucide-react';
+import { BookOpen, Image, Film, Home, Megaphone } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ export default function StageProgress({ currentStage = 1 }) {
     { num: 1, label: 'Story Generation', Icon: BookOpen },
     { num: 2, label: 'Content Creation', Icon: Image },
     { num: 3, label: 'Timeline & Export', Icon: Film },
+    { num: 4, label: 'Post Production', Icon: Megaphone },
   ];
 
   const getStageClasses = (stageNum) => {

@@ -12,12 +12,14 @@ const STAGE_INFO = [
   { num: 1, label: 'Story', Icon: BookOpen, barClass: 'bg-blue-500', badgeClass: 'bg-blue-100 text-blue-800' },
   { num: 2, label: 'Content', Icon: Image, barClass: 'bg-purple-500', badgeClass: 'bg-purple-100 text-purple-800' },
   { num: 3, label: 'Timeline', Icon: Film, barClass: 'bg-green-500', badgeClass: 'bg-green-100 text-green-800' },
+  { num: 4, label: 'Post Prod', Icon: Film, barClass: 'bg-orange-500', badgeClass: 'bg-orange-100 text-orange-800' },
 ];
 
 function getStage(status) {
   if (['created', 'topics_ready', 'topic_selected', 'outline_ready', 'hooks_ready', 'scripting', 'script_complete'].includes(status)) return 1;
   if (['content_generation', 'scenes_ready'].includes(status)) return 2;
   if (['timeline_editing', 'compiled'].includes(status)) return 3;
+  if (['post_production', 'published'].includes(status)) return 4;
   return 1;
 }
 
@@ -29,6 +31,7 @@ function getRoute(project) {
   if (s === 'hooks_ready' || s === 'scripting' || s === 'script_complete') return `StoryScript?project_id=${project.id}`;
   if (s === 'content_generation' || s === 'scenes_ready') return `ContentGeneration?project_id=${project.id}`;
   if (s === 'timeline_editing' || s === 'compiled') return `TimelineEditor?project_id=${project.id}`;
+  if (s === 'post_production' || s === 'published') return `PostProduction?project_id=${project.id}`;
   return `StoryTopics?project_id=${project.id}`;
 }
 
