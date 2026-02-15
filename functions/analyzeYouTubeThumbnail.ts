@@ -90,45 +90,137 @@ Deno.serve(async (req) => {
       finalThumbUrl = fallbackUrl;
     }
 
-    // Analyze the thumbnail with Gemini Vision
-    const analysis = await callGeminiWithImage(`You are a world-class YouTube thumbnail analyst and designer. Analyze this YouTube thumbnail in extreme detail so another AI can recreate it perfectly.
+    // Analyze the thumbnail with Gemini Vision — pixel-perfect verbatim recreation prompt
+    const analysis = await callGeminiWithImage(`You are a FORENSIC thumbnail analyst. Your job is to describe this YouTube thumbnail with such SURGICAL PRECISION that an AI image generator can reproduce it VERBATIM — pixel-for-pixel, element-for-element, position-for-position.
 
-Describe EVERY element:
-1. Layout & Composition - exact positioning of elements (left/right/center, foreground/background)
-2. Colors - dominant colors, gradients, contrast levels, color temperature
-3. Typography - font style (bold/thin/serif/sans), size relative to image, color, effects (outline, shadow, glow), exact text shown
-4. Facial expressions & people - age, emotion, angle, lighting on face
-5. Objects & props - what objects are visible, their placement
-6. Background - what's behind, blur level, style
-7. Visual effects - any overlays, arrows, circles, emojis, borders, glow effects
-8. Emotional hook - what emotion does this thumbnail trigger (curiosity, shock, fear, excitement)
-9. Style category - is this cinema, minimal, documentary, reaction, tutorial, storytime
+Treat the thumbnail as a 1280x720 canvas. Describe EVERY element using EXACT coordinates and percentages.
 
-Generate a DETAILED image generation prompt that would recreate this thumbnail style for a different video topic.
+=== MANDATORY ANALYSIS CHECKLIST ===
+
+1. CANVAS & GRID:
+   - Divide the image into a 3x3 grid. What is in each cell?
+   - What percentage of the canvas does each major element occupy?
+
+2. PEOPLE (for EACH person visible):
+   - Exact position (e.g. "left 10%-35% of canvas width, top 5%-95% of canvas height")
+   - Face angle (straight-on, 3/4 left, 3/4 right, profile)
+   - Expression (mouth open/closed, eyebrows raised/furrowed, eyes wide/squinting)
+   - What they're wearing (colors, style)
+   - Lighting direction on their face (left, right, top, rim light)
+   - Cutoff point (head only, shoulders, waist, full body)
+   - Size relative to canvas height (e.g. "face occupies ~30% of canvas height")
+
+3. TEXT OVERLAYS (for EACH text element):
+   - EXACT text shown (verbatim, case-sensitive)
+   - Position: top/center/bottom, left/center/right + percentage from edges
+   - Font size relative to canvas (e.g. "text height is ~8% of canvas height")
+   - Font weight: thin/regular/bold/extra-bold/black
+   - Font family: sans-serif (Impact/Bebas/Montserrat-like), serif, handwritten, etc.
+   - EXACT font color (#hex)
+   - Text effects: outline (color + thickness), drop shadow (direction + color + blur), glow (color + spread), 3D extrude, gradient fill
+   - Letter spacing: tight/normal/wide
+   - Text transform: uppercase/lowercase/mixed
+   - Background behind text: none, solid rectangle (color + opacity), gradient bar, banner shape
+   - If text is inside a shape/banner: describe shape, color (#hex), border radius, padding
+
+4. BACKGROUND:
+   - What is the background? (solid color, gradient, photo, blurred scene, pattern)
+   - Exact colors (#hex) and gradient direction if applicable
+   - Blur level (sharp, slight blur, heavy blur, bokeh)
+   - Any overlays on background (dark vignette, color tint, light rays, particles)
+
+5. GRAPHIC ELEMENTS:
+   - Arrows (position, color, size, style — solid/outlined/hand-drawn)
+   - Circles/highlights (position, color, thickness, dashed/solid)
+   - Emojis (which emoji, position, size)
+   - Logos/icons (position, size, what they depict)
+   - Borders/frames (color, thickness, position)
+   - Split lines/dividers (vertical/horizontal/diagonal, color, position)
+   - Banners/ribbons/badges (shape, color, position, text inside)
+
+6. COLOR ANALYSIS:
+   - Dominant color (#hex) and % of canvas it covers
+   - Secondary color (#hex) and % coverage
+   - Accent/pop color (#hex) — the color that draws the eye
+   - Overall temperature: warm/cool/neutral
+   - Contrast level: low/medium/high/extreme
+   - Saturation: desaturated/normal/vivid/hyper-saturated
+
+7. LIGHTING & MOOD:
+   - Primary light source direction
+   - Light color temperature (warm yellow, cool blue, neutral white)
+   - Dramatic shadows? Where?
+   - Overall mood: dark/moody, bright/energetic, warm/cozy, cold/clinical
+
+NOW — generate a "recreate_prompt" that is an EXACT blueprint. This prompt must:
+- Describe the EXACT composition using spatial language ("left third", "bottom 15%", "centered at 50% width")
+- Specify EVERY text element with exact words, font style, color, size, effects, and position
+- Describe EVERY person's position, expression, clothing, and lighting
+- Include ALL graphic elements (arrows, circles, banners, overlays) with positions and colors
+- Specify the EXACT background treatment
+- Include color hex codes for every color mentioned
+- Be so detailed that someone who has NEVER seen the original could recreate it identically
 
 RESPOND IN THIS EXACT JSON FORMAT:
 {
-  "detailed_description": "Comprehensive description of every visual element",
-  "layout_breakdown": "How elements are arranged spatially",
+  "detailed_description": "500+ word forensic description of every visual element with positions, sizes, colors",
+  "layout_breakdown": "Grid-based spatial breakdown — what's in each third of the canvas",
+  "people": [
+    {
+      "position": "left 5%-30%, full height",
+      "description": "detailed description of person",
+      "expression": "mouth open, shocked eyes, raised eyebrows",
+      "clothing": "what they wear",
+      "lighting": "rim light from right, warm key light from left"
+    }
+  ],
+  "text_elements": [
+    {
+      "text": "EXACT TEXT",
+      "position": "top center, 5% from top edge",
+      "size": "8% of canvas height",
+      "font": "extra-bold condensed sans-serif (Impact/Bebas style)",
+      "color": "#FFFFFF",
+      "effects": "2px black outline, drop shadow 3px down-right #000000 50% opacity",
+      "background": "none / red rectangle #FF0000 with 4px border radius / etc",
+      "letter_spacing": "tight",
+      "transform": "uppercase"
+    }
+  ],
+  "graphic_elements": [
+    {
+      "type": "arrow/circle/emoji/logo/banner/divider",
+      "position": "where on canvas",
+      "color": "#hex",
+      "size": "relative to canvas",
+      "details": "any additional details"
+    }
+  ],
+  "background": {
+    "type": "solid/gradient/photo/blurred",
+    "colors": ["#hex1", "#hex2"],
+    "blur_level": "none/slight/heavy",
+    "overlays": "dark vignette, color tint, etc"
+  },
   "color_palette": ["#hex1", "#hex2", "#hex3", "#hex4", "#hex5"],
   "typography": {
-    "text_shown": "exact text on thumbnail",
-    "font_style": "bold sans-serif / thin serif / etc",
-    "font_color": "#hex",
-    "font_effects": "outline, shadow, glow, etc"
+    "text_shown": "ALL text verbatim, separated by newlines",
+    "font_style": "exact font description",
+    "font_color": "#hex primary text color",
+    "font_effects": "all effects described"
   },
-  "emotional_hook": "What emotion this triggers and why",
-  "style_category": "cinema / minimal / documentary / reaction / tutorial",
-  "ctr_analysis": "Why this thumbnail would get clicks - what makes it impossible to scroll past",
-  "recreate_prompt": "Detailed AI image generation prompt to recreate this EXACT style for a different topic. Include composition, colors, lighting, effects, text placement style.",
+  "emotional_hook": "What emotion this triggers and why — the psychology behind it",
+  "style_category": "cinema / minimal / documentary / reaction / tutorial / sports / gaming",
+  "ctr_analysis": "Why this SPECIFIC layout + color + text combo makes it impossible to scroll past",
+  "recreate_prompt": "ULTRA-DETAILED 300+ word AI image generation prompt that specifies EXACT positions (use percentages), EXACT colors (#hex), EXACT text with styling, EXACT expressions, EXACT lighting, EXACT background — everything needed to recreate this thumbnail VERBATIM. Include spatial coordinates for every element. Describe text overlays with exact words, font size, weight, color, outline, shadow, and position. This must read like architectural blueprints for the thumbnail.",
   "editable_elements": {
-    "background_description": "Describe background for editing",
-    "subject_description": "Describe the main subject/person",
-    "text_overlay": "The text shown",
-    "accent_color": "#hex of most eye-catching color",
-    "mood": "The overall mood/vibe"
+    "background_description": "Detailed background for editing",
+    "subject_description": "Main subject with full detail",
+    "text_overlay": "All text shown",
+    "accent_color": "#hex of the eye-catching pop color",
+    "mood": "Overall mood/vibe"
   }
-}`, finalThumbUrl, 0.5);
+}`, finalThumbUrl, 0.3);
 
     return Response.json({
       success: true,
