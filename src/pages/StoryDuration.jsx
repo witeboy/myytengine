@@ -114,21 +114,7 @@ export default function StoryDuration() {
               </div>
             </div>
 
-            <Button
-              onClick={handleGenerate}
-              disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700"
-              size="lg"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  Generating Outline...
-                </>
-              ) : (
-                'Generate Outline & Continue'
-              )}
-            </Button>
+{/* Button moved to header */}
           </CardContent>
         </Card>
       </div>
