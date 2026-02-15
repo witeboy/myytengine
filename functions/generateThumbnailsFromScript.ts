@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, reference_style } = await req.json();
+    const { project_id, reference_style, template_blueprint } = await req.json();
 
     const project = await base44.entities.Projects.get(project_id);
     const script = await base44.entities.Scripts.get(project.script_id);
@@ -104,6 +104,31 @@ Deno.serve(async (req) => {
       ? `\n\nIMPORTANT — REFERENCE STYLE FROM IMPORTED THUMBNAIL:\nYou MUST replicate this EXACT visual style, layout, and composition:\n${reference_style}\nAdapt subjects and text to THIS video's content but keep IDENTICAL composition, rim lighting, depth, text treatment, aesthetic.`
       : '';
 
+    const templateInstruction = template_blueprint
+      ? `\n\n=== MANDATORY TEMPLATE BLUEPRINT (from a proven world-class thumbnail) ===
+You MUST follow this EXACT composition, color, text, and character action blueprint. Adapt subjects/content to THIS video but keep the IDENTICAL visual structure.
+
+COMPOSITION RULES TO FOLLOW:
+${template_blueprint.composition_blueprint || ''}
+
+COLOR STRATEGY TO FOLLOW:
+${template_blueprint.color_strategy || ''}
+
+TEXT STRATEGY TO FOLLOW:
+${template_blueprint.text_strategy || ''}
+
+CHARACTER ACTION RULES TO FOLLOW:
+${template_blueprint.character_action_notes || ''}
+
+TEMPLATE TYPE: ${template_blueprint.template_type || ''}
+EMOTIONAL TONE TARGET: ${template_blueprint.emotional_tone || ''}
+
+REFERENCE PROMPT (adapt subjects but keep composition):
+${template_blueprint.recreate_prompt || ''}
+
+CRITICAL: The above blueprint is from a PROVEN viral thumbnail. Your concepts MUST follow its composition, color, depth, text, and action rules EXACTLY while adapting the SUBJECTS to match THIS video's script content.`
+      : '';
+
     const rawStyle = project.visual_style || 'cinematic_realistic';
     // Never use children's styles for thumbnails - override to cinematic
     const childStyles = ['picstory_cocomelon', 'cartoon_2d'];
@@ -122,6 +147,7 @@ VIDEO ORIENTATION: "${project.orientation || 'landscape'}"
 ${brandContext}
 ${sceneContext}
 ${styleInstruction}
+${templateInstruction}
 
 FULL SCRIPT (find the most shocking, emotional, curiosity-inducing, visually compelling moments):
 ${truncatedScript}
