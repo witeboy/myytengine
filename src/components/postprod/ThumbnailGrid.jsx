@@ -4,9 +4,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Loader2, Sparkles, CheckCircle2, Image as ImageIcon, Star, Eye, X, Wand2,
-  BarChart3, ArrowUpDown, TrendingUp
+  BarChart3, ArrowUpDown, TrendingUp, RefreshCw, Code2, ChevronDown, ChevronUp
 } from 'lucide-react';
 import RefineConceptDialog from './RefineConceptDialog';
 import ThumbnailCtrBreakdown from './ThumbnailCtrBreakdown';
