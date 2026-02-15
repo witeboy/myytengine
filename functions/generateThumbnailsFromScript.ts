@@ -172,6 +172,9 @@ RESPOND IN THIS EXACT JSON:
     console.log("Phase 1: Generating forensic concept descriptions...");
     const phase1Result = await safeGeminiCall(phase1Prompt, 0.95, 16384);
 
+    // Brief pause between phases to avoid rate limiting
+    await new Promise(r => setTimeout(r, 3000));
+
     // ============================================================
     // PHASE 2: Transform each forensic description into an AI image prompt
     // ============================================================
