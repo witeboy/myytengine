@@ -97,6 +97,12 @@ RESPOND IN THIS EXACT JSON FORMAT:
       return Response.json({ error: result.error }, { status: 500 });
     }
 
+    // Delete existing thumbnails for this project before creating new ones
+    const existing = await base44.entities.ThumbnailConcepts.filter({ project_id });
+    for (const e of existing) {
+      await base44.entities.ThumbnailConcepts.delete(e.id);
+    }
+
     const thumbnails = [];
 
     for (const t of result.data.thumbnails) {
