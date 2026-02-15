@@ -38,7 +38,7 @@ export default function YouTubeThumbnailImporter({ projectId, onConceptCreated }
 
     // Generate image from the prompt
     const { url: imageUrl } = await base44.integrations.Core.GenerateImage({
-      prompt: editablePrompt,
+      prompt: `16:9 aspect ratio, 1280x720, widescreen landscape YouTube thumbnail. ${editablePrompt}`,
     });
 
     // Save as a thumbnail concept
