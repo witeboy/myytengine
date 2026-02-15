@@ -11,6 +11,7 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
   const [generatingImage, setGeneratingImage] = useState(null);
   const [selecting, setSelecting] = useState(null);
   const [previewThumb, setPreviewThumb] = useState(null);
+  const [refineThumb, setRefineThumb] = useState(null);
 
   const handleGenerateImage = async (thumb) => {
     setGeneratingImage(thumb.id);
