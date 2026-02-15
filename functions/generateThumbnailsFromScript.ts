@@ -130,7 +130,7 @@ CRITICAL: The above blueprint is from a PROVEN viral thumbnail. Your concepts MU
       : '';
 
     const selectedTitleInstruction = selected_title
-      ? `\n\nMANDATORY TITLE OVERLAY: The user has selected this SEO title for the video: "${selected_title}"\nYou MUST derive the 2-4 word thumbnail text overlay from this title. Extract the most curiosity-inducing, scroll-stopping fragment from this title. The text_overlay for ALL 3 concepts MUST be based on this title — pick the most powerful 2-4 words that create a curiosity gap.`
+      ? `\n\nMANDATORY TITLE OVERLAY: The user has selected this SEO title for the video: "${selected_title}"\nYou MUST derive the 2-4 word thumbnail text overlay from this title. Extract the most curiosity-inducing, scroll-stopping fragment from this title. The text_overlay for ALL 3 concepts MUST be based on this title — pick the most powerful 2-4 words that create a curiosity gap.\nCRITICAL: The text_overlay MUST appear as LARGE BOLD TEXT rendered directly on the thumbnail image. It is NOT optional — it must be the most prominent visual element. Include it explicitly in the forensic description and in the final image prompt.`
       : '';
 
     const nicheDnaInstruction = niche_dna
