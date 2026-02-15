@@ -2,7 +2,7 @@ import React from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Archive, BookOpen, Image, Film } from 'lucide-react';
+import { Plus, Archive, BookOpen, Image, Film, FolderOpen, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -56,9 +56,14 @@ export default function Dashboard() {
             <h1 className="text-4xl font-bold text-gray-900">AI Video Engine</h1>
             <p className="text-gray-500 mt-1">Faceless YouTube content pipeline</p>
           </div>
-          <Button onClick={() => navigate(createPageUrl('NewProject'))} className="bg-blue-600 hover:bg-blue-700">
-            <Plus className="w-5 h-5 mr-2" /> New Project
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => navigate(createPageUrl('MediaLibrary'))}>
+              <FolderOpen className="w-4 h-4 mr-2" /> Media Library
+            </Button>
+            <Button onClick={() => navigate(createPageUrl('NewProject'))} className="bg-blue-600 hover:bg-blue-700">
+              <Plus className="w-5 h-5 mr-2" /> New Project
+            </Button>
+          </div>
         </div>
 
         {/* Stage Legend */}
@@ -99,12 +104,20 @@ export default function Dashboard() {
                         <CardTitle className="text-lg group-hover:text-blue-600 transition-colors">{project.name}</CardTitle>
                         <p className="text-sm text-gray-500">{project.niche}</p>
                       </div>
-                      <Button variant="ghost" size="icon" onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm('Archive this project?')) archiveMutation.mutate(project.id);
-                      }}>
-                        <Archive className="w-4 h-4 text-gray-400" />
-                      </Button>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(createPageUrl(`VersionHistory?project_id=${project.id}`));
+                        }}>
+                          <History className="w-4 h-4 text-gray-400" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm('Archive this project?')) archiveMutation.mutate(project.id);
+                        }}>
+                          <Archive className="w-4 h-4 text-gray-400" />
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent>

@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { createPageUrl } from '@/utils';
 import { Loader2, Sparkles } from 'lucide-react';
+import ProjectTemplates from '@/components/templates/ProjectTemplates';
 
 export default function NewProject() {
   const navigate = useNavigate();
@@ -33,39 +34,47 @@ export default function NewProject() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
-      <Card className="w-full max-w-lg">
-        <CardHeader className="text-center">
-          <Sparkles className="w-10 h-10 text-blue-600 mx-auto mb-2" />
-          <CardTitle className="text-2xl">New Video Project</CardTitle>
-          <p className="text-gray-500 text-sm mt-1">Enter your content niche to get started</p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Input
-            placeholder="e.g. True Crime, Tech Reviews, History..."
-            value={niche}
-            onChange={e => setNiche(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleCreate()}
-            disabled={loading}
-            className="text-lg py-6"
-          />
-          <Button
-            onClick={handleCreate}
-            disabled={!niche.trim() || loading}
-            className="w-full bg-blue-600 hover:bg-blue-700"
-            size="lg"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                Generating 10 Topics...
-              </>
-            ) : (
-              'Create Project & Generate Topics'
-            )}
-          </Button>
-        </CardContent>
-      </Card>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+      <div className="max-w-5xl mx-auto space-y-8 py-8">
+        {/* Custom Project */}
+        <Card className="w-full max-w-lg mx-auto">
+          <CardHeader className="text-center">
+            <Sparkles className="w-10 h-10 text-blue-600 mx-auto mb-2" />
+            <CardTitle className="text-2xl">New Video Project</CardTitle>
+            <p className="text-gray-500 text-sm mt-1">Enter your content niche to get started</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Input
+              placeholder="e.g. True Crime, Tech Reviews, History..."
+              value={niche}
+              onChange={e => setNiche(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleCreate()}
+              disabled={loading}
+              className="text-lg py-6"
+            />
+            <Button
+              onClick={handleCreate}
+              disabled={!niche.trim() || loading}
+              className="w-full bg-blue-600 hover:bg-blue-700"
+              size="lg"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Generating 10 Topics...
+                </>
+              ) : (
+                'Create Project & Generate Topics'
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Templates */}
+        <div className="border-t pt-8">
+          <ProjectTemplates />
+        </div>
+      </div>
     </div>
   );
 }
