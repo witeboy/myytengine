@@ -9,6 +9,7 @@ import { Loader2, Sparkles, CheckCircle2, Image as ImageIcon, Star, Eye, X } fro
 export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
   const [generatingImage, setGeneratingImage] = useState(null);
   const [selecting, setSelecting] = useState(null);
+  const [previewThumb, setPreviewThumb] = useState(null);
 
   const handleGenerateImage = async (thumb) => {
     setGeneratingImage(thumb.id);
