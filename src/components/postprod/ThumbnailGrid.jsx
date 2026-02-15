@@ -26,12 +26,27 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
   const [expandedPrompt, setExpandedPrompt] = useState(null);
   const [editingPrompt, setEditingPrompt] = useState('');
 
+  const buildFinalPrompt = (rawPrompt, textOverlay) => {
+    // Force 16:9 widescreen and text overlay into prompt
+    let prompt = rawPrompt || '';
+    const aspectPrefix = 'CRITICAL: This image MUST be rendered in WIDE 16:9 LANDSCAPE aspect ratio (width is 1.78x the height, like a movie screen or YouTube thumbnail at 1280x720). The image must be significantly WIDER than it is tall — NOT square, NOT portrait. ';
+    const textSuffix = textOverlay 
+      ? ` MANDATORY TEXT OVERLAY: The image MUST include large, bold, white Impact-style text reading "${textOverlay}" with a thick black outline and heavy drop shadow, positioned prominently at the bottom center of the image. This text must be the most visible graphic element, readable even at small sizes.`
+      : '';
+    if (!prompt.toLowerCase().includes('16:9') && !prompt.toLowerCase().includes('landscape')) {
+      prompt = aspectPrefix + prompt;
+    }
+    if (textOverlay && !prompt.includes(textOverlay)) {
+      prompt += textSuffix;
+    }
+    return prompt;
+  };
+
   const handleGenerateImage = async (thumb) => {
     setGeneratingImage(thumb.id);
     setGenerateError(null);
     try {
-      const promptPrefix = '16:9 aspect ratio, 1280x720 resolution, widescreen landscape format YouTube thumbnail. ';
-      const finalPrompt = (thumb.image_prompt || '').toLowerCase().includes('16:9') ? thumb.image_prompt : promptPrefix + thumb.image_prompt;
+      const finalPrompt = buildFinalPrompt(thumb.image_prompt, thumb.text_overlay);
       const { url } = await base44.integrations.Core.GenerateImage({
         prompt: finalPrompt,
       });
