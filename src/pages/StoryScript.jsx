@@ -47,6 +47,8 @@ export default function StoryScript() {
   const [autoGenTriggered, setAutoGenTriggered] = useState(false);
   useEffect(() => {
     if (autoGenTriggered || generating) return;
+    // Don't re-trigger if script is already complete
+    if (project?.status === 'script_complete') return;
     const hasPendingBatches = batches.length > 0 && batches.some(b => b.status === 'pending');
     const hasNoContent = !batches.some(b => b.status === 'completed' && b.content);
     if (hasPendingBatches && hasNoContent && project?.id) {
