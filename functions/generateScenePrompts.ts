@@ -68,7 +68,8 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id } = await req.json();
+    const { project_id, batch_index } = await req.json();
+    const currentBatch = batch_index || 0;
 
     // Get project and script
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
@@ -78,12 +79,6 @@ Deno.serve(async (req) => {
     const scripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
     const script = scripts.sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0];
     if (!script?.full_script) return Response.json({ error: 'No script found' }, { status: 400 });
-
-    // Delete old scenes
-    const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-    for (const s of oldScenes) {
-      await base44.asServiceRole.entities.Scenes.delete(s.id);
-    }
 
     // ── VISUAL STYLE MAPPING ──
     const styleMap = {
@@ -116,64 +111,95 @@ Deno.serve(async (req) => {
       animationFramingGuide = "widescreen 16:9 frame — prefer horizontal pans, dolly movements, wide-angle tracking shots, and lateral parallax depth.";
     }
 
-    // ── COMBINED STYLE + ORIENTATION PREFIX (every image prompt must start with this) ──
     const promptPrefix = `${styleDirective}, ${orientationDirective}`;
 
     const fullScript = script.full_script;
     const wordCount = fullScript.split(/\s+/).length;
     
-    // Use video duration for scene count: 1 scene per ~8 seconds
     const durationMinutes = project.video_duration_minutes || Math.ceil(wordCount / 150);
     const totalTargetScenes = Math.max(5, Math.round(durationMinutes * 60 / 8));
-    
-    // Each batch handles ~10 scenes to stay safely within Gemini's 16k output token limit
     const SCENES_PER_BATCH = 10;
     const numBatches = Math.ceil(totalTargetScenes / SCENES_PER_BATCH);
-    
-    console.log(`Script: ${wordCount} words → ${totalTargetScenes} target scenes in ${numBatches} batch(es) [${orientation}]`);
 
-    // Split script into chunks for each batch
+    // Split script into chunks
     const scriptChunks = splitScriptIntoChunks(fullScript, numBatches);
 
-    // ── SHARED RULES BLOCK (used in all batches) ──
+    // ── FIRST BATCH: delete old scenes, extract characters ──
+    if (currentBatch === 0) {
+      // Delete old scenes
+      const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
+      for (const s of oldScenes) {
+        await base44.asServiceRole.entities.Scenes.delete(s.id);
+      }
+
+      await base44.asServiceRole.entities.Projects.update(project_id, {
+        status: "content_generation",
+        current_step: 5
+      });
+    }
+
+    // Count existing scenes to determine scene numbering offset
+    const existingScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
+    const sceneOffset = existingScenes.length;
+
+    // Check if we've already generated enough scenes
+    if (currentBatch >= scriptChunks.length || sceneOffset >= totalTargetScenes) {
+      return Response.json({ 
+        success: true, 
+        done: true, 
+        scene_count: sceneOffset,
+        total_batches: numBatches
+      });
+    }
+
+    const scenesForBatch = Math.min(SCENES_PER_BATCH, totalTargetScenes - sceneOffset);
+
+    // ── SHARED RULES ──
     const imageRules = `**CRITICAL IMAGE PROMPT RULES:**
 1. EVERY image_prompt MUST begin with EXACTLY this prefix: "${promptPrefix}."
 2. ${compositionGuide}
-3. When ANY character appears in a scene, you MUST COPY-PASTE their COMPLETE character description into the image_prompt. Do NOT abbreviate, summarize, or paraphrase. Include EVERY detail: age, ethnicity, hair, facial hair, clothing, build, features. This is the #1 most important rule.
-4. FACIAL HAIR IS CRITICAL: If a character has a beard, EVERY scene must include the exact beard description. If clean-shaven, EVERY scene must say "clean-shaven". Never omit facial hair.
+3. When ANY character appears in a scene, you MUST COPY-PASTE their COMPLETE character description into the image_prompt. Do NOT abbreviate, summarize, or paraphrase. Include EVERY detail: age, ethnicity, hair, facial hair, clothing, build, features.
+4. FACIAL HAIR IS CRITICAL: If a character has a beard, EVERY scene must include the exact beard description. If clean-shaven, EVERY scene must say "clean-shaven".
 5. Characters wear the EXACT SAME clothing and have the EXACT SAME appearance across ALL scenes unless the story explicitly says otherwise.
-6. Include specific lighting direction (e.g. "warm golden rim light from upper left"), color palette (e.g. "muted earth tones with amber highlights"), and atmosphere (e.g. "soft morning haze", "dust particles in air").
+6. Include specific lighting direction, color palette, and atmosphere in every prompt.
 7. NEVER use generic descriptions like "a man" or "a woman" — always use the full character description block.
 8. End each image_prompt with: "masterpiece, highly detailed, 8K, professional composition"
 9. NO text, watermarks, signatures, or UI elements in the image.`;
 
     const animationRules = `**CRITICAL ANIMATION PROMPT RULES:**
 1. Every animation_prompt must be designed for ${animationFramingGuide}
-2. Include ALL of these: specific camera movement (direction, speed, arc type), atmospheric motion (particles, fog, light rays, weather), subject micro-motion (breathing, hair sway, fabric, blinking), depth-of-field shifts (rack focus, bokeh changes), and lighting transitions.
-3. Match emotional arc: tension = slow creeping zoom tight framing; revelation = dramatic pull-back wide angle; calm = gentle floating dolly soft bokeh; action = quick tracking dynamic angles.
-4. Avoid jarring or unrealistic movements. Keep it smooth and cinematic.`;
+2. Include ALL of these: specific camera movement (direction, speed, arc type), atmospheric motion (particles, fog, light rays, weather), subject micro-motion (breathing, hair sway, fabric, blinking), depth-of-field shifts, and lighting transitions.
+3. Match emotional arc: tension = slow creeping zoom; revelation = dramatic pull-back; calm = gentle floating dolly; action = quick tracking.`;
 
     const narrationRules = `**NARRATION RULES:**
 - narration_text must be the EXACT words from the script — do NOT modify, summarize, or paraphrase.
-- Each scene = 5-15 seconds of narration (roughly 15-40 words per scene).
-- Cover the FULL narration segment — do NOT skip any words from the script.`;
+- Each scene = 5-15 seconds of narration (~15-40 words per scene).
+- Cover the FULL narration segment — do NOT skip any words.`;
 
-    const continuityRules = `**CONTINUITY RULES:**
-- Use consistent color grading language across all prompts.
-- Maintain consistent time-of-day and weather across related scenes.
-- Scenes should feel like sequential frames from a single cinematic production.`;
-
-    // ── BATCH 1: Extract characters + first batch of scenes ──
+    // ── BUILD PROMPT BASED ON BATCH ──
     let characters = [];
-    const allScenes = [];
-    let sceneOffset = 0;
+    
+    // Try to load existing character descriptions from project
+    if (project.character_descriptions) {
+      try {
+        characters = JSON.parse(project.character_descriptions);
+      } catch (_) {}
+    }
 
-    const firstChunkPrompt = `You are a world-class video production director and cinematographer. You are given a narration script segment (voiceover text only). Your job is to:
+    const characterBlock = characters.length > 0
+      ? characters.map(c => `[${c.name}: ${c.description}]`).join("\n")
+      : "";
+
+    let prompt;
+
+    if (currentBatch === 0) {
+      // First batch: extract characters + generate scenes
+      prompt = `You are a world-class video production director and cinematographer. You are given a narration script segment. Your job is to:
 
 1. FIRST, identify ALL KEY CHARACTERS in the story and write extremely detailed, locked-in character descriptions
-2. Break this narration segment into individual scenes (each scene = one visual moment)
+2. Break this narration segment into individual scenes
 3. For each scene, write a detailed AI image generation prompt optimized for ${orientationDirective}
-4. For each scene, write a cinematic animation/motion prompt optimized for ${animationFramingGuide}
+4. For each scene, write a cinematic animation/motion prompt
 
 **Narration Script Segment (Part 1 of ${numBatches}):**
 """
@@ -185,19 +211,19 @@ ${scriptChunks[0]}
 **MANDATORY VISUAL STYLE**: ${styleDirective}
 **MANDATORY FORMAT**: ${orientationDirective}
 
-**TARGET: approximately ${Math.min(SCENES_PER_BATCH, totalTargetScenes)} scenes for this segment.**
+**TARGET: approximately ${scenesForBatch} scenes for this segment.**
 
 Return JSON:
 {
   "characters": [
-    {"name": "Character Name", "description": "Extremely detailed physical description: exact age (e.g. 45-year-old), gender, ethnicity, hair color AND style AND length (e.g. dark brown short wavy hair), specific facial hair (e.g. full thick dark beard and mustache OR clean-shaven — be exact), facial features (eye color, nose shape, jaw), body build, exact clothing (e.g. dark charcoal wool three-piece suit with white collar shirt and dark tie), distinguishing features (scars, glasses, etc.). Be MAXIMALLY specific."}
+    {"name": "Character Name", "description": "Extremely detailed physical description: exact age, gender, ethnicity, hair color/style/length, specific facial hair, facial features, body build, exact clothing, distinguishing features. Be MAXIMALLY specific."}
   ],
   "scenes": [
     {
       "scene_number": 1,
-      "narration_text": "The exact narration text for this scene...",
-      "image_prompt": "${promptPrefix}. [detailed scene composition and character descriptions here]. masterpiece, highly detailed, 8K, professional composition",
-      "animation_prompt": "For ${animationFramingGuide}: [detailed camera and motion description]",
+      "narration_text": "The exact narration text...",
+      "image_prompt": "${promptPrefix}. [scene description]. masterpiece, highly detailed, 8K, professional composition",
+      "animation_prompt": "For ${animationFramingGuide}: [motion description]",
       "duration_seconds": 8
     }
   ]
@@ -209,56 +235,20 @@ ${animationRules}
 
 ${narrationRules}
 
-${continuityRules}`;
+**CONTINUITY RULES:**
+- Use consistent color grading across all prompts.
+- Maintain consistent time-of-day and weather across related scenes.`;
 
-    console.log("Batch 1: extracting characters + scenes...");
-    const firstResult = await callGemini(firstChunkPrompt, 0.6);
-
-    if (firstResult.characters && firstResult.characters.length > 0) {
-      characters = firstResult.characters;
-      await base44.asServiceRole.entities.Projects.update(project_id, {
-        character_descriptions: JSON.stringify(characters),
-      });
-    }
-
-    if (firstResult.scenes) {
-      for (const scene of firstResult.scenes) {
-        const sceneNum = allScenes.length + 1;
-        allScenes.push({ ...scene, scene_number: sceneNum });
-        
-        await base44.asServiceRole.entities.Scenes.create({
-          project_id,
-          scene_number: sceneNum,
-          narration_text: scene.narration_text,
-          image_prompt: scene.image_prompt,
-          animation_prompt: scene.animation_prompt,
-          duration_seconds: scene.duration_seconds || 8,
-          status: "prompts_ready"
-        });
-      }
-    }
-    sceneOffset = allScenes.length;
-    console.log(`Batch 1 complete: ${firstResult.scenes?.length || 0} scenes, ${characters.length} characters`);
-
-    // ── SUBSEQUENT BATCHES: Use established characters ──
-    const characterBlock = characters.length > 0
-      ? characters.map(c => `[${c.name}: ${c.description}]`).join("\n")
-      : "No named characters identified.";
-
-    for (let b = 1; b < scriptChunks.length; b++) {
-      const batchNum = b + 1;
-      const scenesForBatch = Math.min(SCENES_PER_BATCH, totalTargetScenes - allScenes.length);
-      
-      if (scenesForBatch <= 0) break;
-
-      const batchPrompt = `You are a world-class video production director continuing to break a narration script into scenes.
+    } else {
+      // Subsequent batches: use established characters
+      prompt = `You are a world-class video production director continuing to break a narration script into scenes.
 
 **ESTABLISHED CHARACTERS (COPY-PASTE these EXACT full descriptions whenever a character appears — NEVER abbreviate):**
 ${characterBlock}
 
-**Narration Script Segment (Part ${batchNum} of ${numBatches}):**
+**Narration Script Segment (Part ${currentBatch + 1} of ${numBatches}):**
 """
-${scriptChunks[b]}
+${scriptChunks[currentBatch]}
 """
 
 **Topic context**: "${project.name}" in the "${project.niche}" niche
@@ -274,9 +264,9 @@ Return JSON:
   "scenes": [
     {
       "scene_number": ${sceneOffset + 1},
-      "narration_text": "The exact narration text for this scene...",
-      "image_prompt": "${promptPrefix}. [detailed scene composition and character descriptions here]. masterpiece, highly detailed, 8K, professional composition",
-      "animation_prompt": "For ${animationFramingGuide}: [detailed camera and motion description]",
+      "narration_text": "The exact narration text...",
+      "image_prompt": "${promptPrefix}. [scene description]. masterpiece, highly detailed, 8K, professional composition",
+      "animation_prompt": "For ${animationFramingGuide}: [motion description]",
       "duration_seconds": 8
     }
   ]
@@ -289,45 +279,52 @@ ${animationRules}
 ${narrationRules}
 
 **CONTINUITY:**
-- These scenes continue from scene ${sceneOffset}. Maintain consistent color grading, time-of-day, weather, and environment details.
-- Keep visual coherence with all previous scenes in this production.`;
+- These scenes continue from scene ${sceneOffset}. Maintain consistent color grading, time-of-day, weather, and environment.`;
+    }
 
-      console.log(`Batch ${batchNum}/${scriptChunks.length}: generating scenes ${sceneOffset + 1}+...`);
-      
-      try {
-        const batchResult = await callGemini(batchPrompt, 0.6);
-        
-        if (batchResult.scenes) {
-          for (const scene of batchResult.scenes) {
-            const sceneNum = allScenes.length + 1;
-            allScenes.push({ ...scene, scene_number: sceneNum });
-            
-            await base44.asServiceRole.entities.Scenes.create({
-              project_id,
-              scene_number: sceneNum,
-              narration_text: scene.narration_text,
-              image_prompt: scene.image_prompt,
-              animation_prompt: scene.animation_prompt,
-              duration_seconds: scene.duration_seconds || 8,
-              status: "prompts_ready"
-            });
-          }
-          sceneOffset = allScenes.length;
-          console.log(`Batch ${batchNum} complete: ${batchResult.scenes.length} scenes (total: ${allScenes.length})`);
-        }
-      } catch (err) {
-        console.error(`Batch ${batchNum} failed: ${err.message}. Continuing with remaining batches...`);
+    // ── CALL GEMINI ──
+    console.log(`Batch ${currentBatch + 1}/${numBatches}: generating scenes ${sceneOffset + 1}+ (target: ${scenesForBatch} scenes)...`);
+    const result = await callGemini(prompt, 0.6);
+
+    // Save characters on first batch
+    if (currentBatch === 0 && result.characters && result.characters.length > 0) {
+      await base44.asServiceRole.entities.Projects.update(project_id, {
+        character_descriptions: JSON.stringify(result.characters),
+      });
+    }
+
+    // Save scenes
+    let scenesCreated = 0;
+    if (result.scenes) {
+      for (const scene of result.scenes) {
+        const sceneNum = sceneOffset + scenesCreated + 1;
+        await base44.asServiceRole.entities.Scenes.create({
+          project_id,
+          scene_number: sceneNum,
+          narration_text: scene.narration_text,
+          image_prompt: scene.image_prompt,
+          animation_prompt: scene.animation_prompt,
+          duration_seconds: scene.duration_seconds || 8,
+          status: "prompts_ready"
+        });
+        scenesCreated++;
       }
     }
 
-    // ── UPDATE PROJECT ──
-    await base44.asServiceRole.entities.Projects.update(project_id, {
-      status: "content_generation",
-      current_step: 5
-    });
+    const totalScenesNow = sceneOffset + scenesCreated;
+    const isDone = (currentBatch + 1) >= scriptChunks.length || totalScenesNow >= totalTargetScenes;
 
-    console.log(`Done! Created ${allScenes.length} scenes for project ${project_id}`);
-    return Response.json({ success: true, scene_count: allScenes.length });
+    console.log(`Batch ${currentBatch + 1} complete: ${scenesCreated} scenes (total: ${totalScenesNow}/${totalTargetScenes}) ${isDone ? '✓ DONE' : ''}`);
+
+    return Response.json({ 
+      success: true, 
+      done: isDone,
+      batch_completed: currentBatch,
+      scenes_created: scenesCreated,
+      total_scenes: totalScenesNow,
+      total_target: totalTargetScenes,
+      total_batches: numBatches
+    });
   } catch (error) {
     console.error("generateScenePrompts error:", error.message);
     return Response.json({ error: error.message }, { status: 500 });
