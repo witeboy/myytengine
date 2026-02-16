@@ -14,6 +14,7 @@ export default function StoryScript() {
   const projectId = new URLSearchParams(window.location.search).get('project_id');
   const [generating, setGenerating] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [autoGenTriggered, setAutoGenTriggered] = useState(false);
 
   const { data: project, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
@@ -40,45 +41,90 @@ export default function StoryScript() {
     enabled: !!projectId,
   });
 
-  // Only show the latest script (the final merged one)
-  const latestScript = [...scripts].sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0];
+  const completedCount = batches.filter(b => b.status === 'completed').length;
+  const allCompleted = batches.length > 0 && completedCount === batches.length;
 
-  // Auto-generate batches when arriving with pending batches
-  const [autoGenTriggered, setAutoGenTriggered] = useState(false);
+  // Only show the latest script, and ONLY if all batches are complete
+  const latestScript = allCompleted
+    ? [...scripts].sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0]
+    : null;
+
+  // Auto-generate: delete old scripts first, then generate batches
   useEffect(() => {
     if (autoGenTriggered || generating) return;
-    // Don't re-trigger if script is already complete
     if (project?.status === 'script_complete') return;
+
     const hasPendingBatches = batches.length > 0 && batches.some(b => b.status === 'pending');
     const hasNoContent = !batches.some(b => b.status === 'completed' && b.content);
+
     if (hasPendingBatches && hasNoContent && project?.id) {
       setAutoGenTriggered(true);
       setGenerating(true);
-      base44.functions.invoke('generateScriptBatches', {
-        project_id: projectId,
-        selected_hook_id: project.selected_hook_id,
-      }).then(() => Promise.all([refetchProject(), refetchBatches(), refetchScripts()]))
-        .finally(() => setGenerating(false));
+
+      const cleanupAndGenerate = async () => {
+        try {
+          // Delete any old stale scripts before generating
+          const oldScripts = await base44.entities.Scripts.filter({ project_id: projectId });
+          for (const s of oldScripts) {
+            await base44.entities.Scripts.delete(s.id);
+          }
+          await refetchScripts();
+
+          await base44.functions.invoke('generateScriptBatches', {
+            project_id: projectId,
+            selected_hook_id: project.selected_hook_id,
+          });
+
+          await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
+        } catch (err) {
+          console.error('Script generation error:', err);
+        } finally {
+          setGenerating(false);
+        }
+      };
+
+      cleanupAndGenerate();
     }
-  }, [project?.id, batches, autoGenTriggered, generating]);
+  }, [project?.id, project?.status, batches, autoGenTriggered, generating]);
 
   const handleRegenerate = async () => {
     setRegenerating(true);
+
+    // Reset all batches to pending
     for (const b of batches) {
-      await base44.entities.ScriptBatches.update(b.id, { content: '', word_count: 0, status: 'pending', scene_image_url: '' });
+      await base44.entities.ScriptBatches.update(b.id, {
+        content: '',
+        word_count: 0,
+        status: 'pending',
+        scene_image_url: '',
+      });
     }
+
+    // Delete all old scripts
     for (const s of scripts) {
       await base44.entities.Scripts.delete(s.id);
     }
-    await base44.entities.Projects.update(projectId, { status: 'hooks_ready', script_id: '' });
+
+    await base44.entities.Projects.update(projectId, {
+      status: 'hooks_ready',
+      script_id: '',
+    });
+
+    await refetchScripts();
     setGenerating(true);
     setRegenerating(false);
-    await base44.functions.invoke('generateScriptBatches', {
-      project_id: projectId,
-      selected_hook_id: project.selected_hook_id,
-    });
-    await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
-    setGenerating(false);
+
+    try {
+      await base44.functions.invoke('generateScriptBatches', {
+        project_id: projectId,
+        selected_hook_id: project.selected_hook_id,
+      });
+      await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
+    } catch (err) {
+      console.error('Regeneration error:', err);
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const handleExport = () => {
@@ -95,9 +141,6 @@ export default function StoryScript() {
   const handleContinue = () => {
     navigate(createPageUrl(`ContentGeneration?project_id=${projectId}`));
   };
-
-  const completedCount = batches.filter(b => b.status === 'completed').length;
-  const allCompleted = batches.length > 0 && completedCount === batches.length;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -127,11 +170,15 @@ export default function StoryScript() {
           </div>
         </div>
         <p className="text-gray-600 mb-8">
-          {generating ? 'AI is writing your script batch by batch...' : allCompleted ? 'Script generation complete.' : 'Preparing script...'}
+          {generating
+            ? 'AI is writing your script batch by batch...'
+            : allCompleted
+            ? 'Script generation complete.'
+            : 'Preparing script...'}
         </p>
 
         <div className="space-y-6">
-          {/* Progress */}
+          {/* Progress bar while generating */}
           {batches.length > 0 && !allCompleted && (
             <div className="bg-white p-4 rounded-lg shadow-sm border">
               <div className="flex items-center justify-between mb-2">
@@ -139,7 +186,7 @@ export default function StoryScript() {
                   <FileText className="w-4 h-4 text-blue-600" />
                   {completedCount}/{batches.length} batches
                 </span>
-                <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                {generating && <Loader2 className="w-4 h-4 animate-spin text-blue-600" />}
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
@@ -150,24 +197,23 @@ export default function StoryScript() {
             </div>
           )}
 
-          {/* Batch Cards (only show while generating) */}
-          {!allCompleted && batches.map(batch => (
-            <BatchCard
-              key={batch.id}
-              batch={batch}
-              onUpdate={() => { refetchBatches(); refetchScripts(); }}
-            />
-          ))}
+          {/* Batch Cards — show while generating or when not all complete */}
+          {!allCompleted &&
+            batches.map((batch) => (
+              <BatchCard
+                key={batch.id}
+                batch={batch}
+                onUpdate={() => {
+                  refetchBatches();
+                  refetchScripts();
+                }}
+              />
+            ))}
 
-          {/* Full Script Editor — only show after all batches are complete */}
+          {/* Full Script Editor — ONLY after all batches complete AND script exists */}
           {allCompleted && latestScript && (
-            <ScriptEditor
-              script={latestScript}
-              onSaved={() => refetchScripts()}
-            />
+            <ScriptEditor script={latestScript} onSaved={() => refetchScripts()} />
           )}
-
-          {/* Continue button moved to header */}
         </div>
       </div>
     </div>
