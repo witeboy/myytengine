@@ -29,6 +29,7 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
   const buildFinalPrompt = (rawPrompt, textOverlay) => {
     // Force 16:9 widescreen and text overlay into prompt
     let prompt = rawPrompt || '';
+    const safetyPrefix = 'IMPORTANT: All characters must be 100% fictional originals — no real people, celebrities, or public figures. No graphic violence, blood, or weapons aimed at people. No copyrighted characters or logos. Use dramatic lighting, emotion, and atmosphere instead. ';
     const aspectPrefix = 'CRITICAL: This image MUST be rendered in WIDE 16:9 LANDSCAPE aspect ratio (width is 1.78x the height, like a movie screen or YouTube thumbnail at 1280x720). The image must be significantly WIDER than it is tall — NOT square, NOT portrait. ';
     const textPrefix = textOverlay
       ? `HIGHEST PRIORITY — MANDATORY TEXT BURNED INTO IMAGE: This thumbnail MUST contain the exact text "${textOverlay}" rendered as MASSIVE, BOLD, white Impact-font text with a VERY THICK black outline and heavy drop shadow. This text MUST be the SINGLE MOST PROMINENT and LARGEST visual element in the entire image, positioned at the bottom center, taking up at least 30% of the image width. The text "${textOverlay}" MUST be clearly legible and visually dominant over all other elements. `
