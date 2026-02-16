@@ -95,6 +95,30 @@ export default function StoryScript() {
     }
   }, [project?.id, project?.status, batches, autoGenTriggered, generating]);
 
+  // ⚡ NEW: Auto-trigger the Merge function when batches hit 100%
+  useEffect(() => {
+    // Only trigger if all batches are done AND we don't have the final script yet
+    if (allCompleted && !latestScript && !generating && project?.status !== 'script_complete') {
+      
+      const triggerMerge = async () => {
+        try {
+          console.log("All batches complete. Starting final merge...");
+          // This calls your 'generateFullScript' Deno function
+          await base44.functions.invoke('generateFullScript', {
+            project_id: projectId
+          });
+          // Refresh everything so the final script pops up
+          await Promise.all([refetchProject(), refetchScripts()]);
+        } catch (err) {
+          console.error('Merge error:', err);
+        }
+      };
+
+      triggerMerge();
+    }
+  }, [allCompleted, latestScript, generating, project?.status, projectId]);
+
+
   const handleRegenerate = async () => {
     setRegenerating(true);
 
