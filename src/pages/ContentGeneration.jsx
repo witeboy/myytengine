@@ -152,7 +152,7 @@ export default function ContentGeneration() {
     queryFn: () => base44.entities.Scripts.filter({ project_id: projectId }),
     enabled: !!projectId,
   });
-  const latestScript = [...scripts].sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0];
+  const latestScript = scripts.find(s => s.version === 'final_aggregated') || null;
 
   const imageCount = scenes.filter(s => s.image_url).length;
   const videoCount = scenes.filter(s => s.video_url).length;
