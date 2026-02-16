@@ -231,15 +231,16 @@ COMPOSITION & LAYOUT:
 - Visual hierarchy: what is BIGGEST and most eye-catching, what supports it
 - Any diagonal lines, V-shapes, triangular compositions
 
-EVERY SUBJECT/PERSON/CHARACTER (based on the script's characters):
-- Full archetype: age range, build, skin tone shade, face shape, jawline
+EVERY SUBJECT/PERSON/CHARACTER (must be 100% FICTIONAL ORIGINALS — never resembling any real person):
+- Full FICTIONAL archetype: age range, build, skin tone shade, face shape, jawline — must be a UNIQUE original character
 - Hair: style, color shade, texture, length
 - Expression: which facial muscles are engaged (furrowed brow, wide eyes, clenched jaw, open mouth shock)
-- BODY ACTION: what are they DOING? (holding a child, shielding someone, pointing, running, clutching something) — never just standing
-- Clothing: exact garment types, specific color names (not "red" but "deep crimson" or "blood red"), patterns, fabric texture
+- BODY ACTION: what are they DOING? (holding an object, shielding someone, pointing, running, clutching something) — never just standing
+- Clothing: exact garment types, specific color names (not "red" but "deep crimson" or "burgundy"), patterns, fabric texture
 - Body angle, crop (extreme close-up head only, head-and-shoulders, chest up), facing direction
 - Lighting ON them: key light direction, rim/edge light color and side, any colored light cast
-- INTERACTION: how do they relate to other characters? Eye contact? Confrontation? Protection?
+- INTERACTION: how do they relate to other characters? Eye contact? Dramatic tension through body language and opposing light?
+- SAFETY: Replace any violence/threat with SYMBOLIC drama — shadows, silhouettes, environmental tension, atmospheric effects. Never depict weapons aimed at people or graphic injuries.
 
 BACKGROUND:
 - Setting derived from script's key locations
