@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
     const { project_id, topic_id, topic_title, topic_description, selected_hook } = body;
 
     const prompt = `
-You are an elite YouTube documentary scriptwriter, retention strategist, and narrative psychologist.
+You are an elite YouTube scriptwriter, retention strategist, and narrative psychologist.
 
 Your task is to write a high-retention, cinematic YouTube script about "${topic_title}".
 Target duration: approximately 150 words per minute voiceover pacing.
@@ -66,8 +66,18 @@ Target duration: approximately 150 words per minute voiceover pacing.
 Context:
 ${topic_description}
 
-Cold open hook to integrate naturally:
-"${selected_hook}"
+HOOK 
+${selected_hook}
+
+RULES FOR USING THE HOOK:
+
+1. Preserve its emotional intensity and narrative power.
+2. Do NOT rewrite or dilute its meaning.
+3. You may slightly adjust wording ONLY if needed for flow.
+4. Integrate it as a true cinematic cold open.
+5. After the hook, transition smoothly into Act 1 without repeating ideas.
+6. The hook must feel intentional — not pasted.
+
 
 ────────────────────────
 AUTO NICHE DETECTION SYSTEM
