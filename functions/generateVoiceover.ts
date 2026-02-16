@@ -17,12 +17,14 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'AI33_API_KEY not configured' }, { status: 500 });
     }
 
-  // Get the LATEST script for this project (ignore stale old versions)
+  /// Get the final aggregated script only
     const allScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
-    const script = allScripts.sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0];
+    const script = allScripts.find(s => s.version === 'final_aggregated');
     if (!script?.full_script) {
-      return Response.json({ error: 'No script found for this project' }, { status: 404 });
+      return Response.json({ error: 'No final script found. Please generate the full script first.' }, { status: 404 });
     }
+
+    console.log(`Voiceover using final_aggregated script, words: ${script.full_script.split(/\s+/).length}`);
 
     // Clean the script text — remove any non-narration content
     const textToSpeak = script.full_script
