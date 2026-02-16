@@ -48,6 +48,25 @@ async function callGemini(prompt, temperature = 0.7) {
   }
 }
 
+// Clean narration text — remove any scene directions, labels, or non-spoken content
+function cleanNarrationText(text) {
+  if (!text) return text;
+  let cleaned = text;
+  // Remove [SCENE: ...], [CUT TO: ...], [MUSIC: ...], [SOUND: ...] etc
+  cleaned = cleaned.replace(/\[[^\]]*\]/gi, '');
+  // Remove VOICEOVER:, Narrator:, VO:, Sound:, Music: prefixes
+  cleaned = cleaned.replace(/^(VOICEOVER|NARRATOR|VO|SOUND|MUSIC|SFX|SCENE)\s*:\s*/gim, '');
+  // Remove **bold labels** like **VISUAL:** or **Act 1:**
+  cleaned = cleaned.replace(/\*\*[^*]+\*\*:?\s*/g, '');
+  // Remove (parenthetical directions) like (Voiceover, urgent and compelling)
+  cleaned = cleaned.replace(/\([^)]*(?:voiceover|urgent|compelling|pause|beat|whisper|dramatic|slow|softly)[^)]*\)/gi, '');
+  // Remove timestamp patterns
+  cleaned = cleaned.replace(/\(?\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\)?/g, '');
+  // Clean up extra whitespace
+  cleaned = cleaned.replace(/\n{2,}/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  return cleaned;
+}
+
 // Split script into roughly equal chunks by sentence boundaries
 function splitScriptIntoChunks(script, numChunks) {
   const sentences = script.match(/[^.!?]+[.!?]+[\s]*/g) || [script];
@@ -103,127 +122,150 @@ Deno.serve(async (req) => {
 
     if (orientation === 'portrait') {
       orientationDirective = "PORTRAIT 9:16 vertical format (720x1280)";
-      compositionGuide = "Compose for VERTICAL 9:16 frame: use tall compositions, center subjects vertically, emphasize height and vertical depth, close-up and medium shots work best, stack visual elements top-to-bottom, leave space for text overlays at top and bottom.";
-      animationFramingGuide = "vertical 9:16 frame — prefer tilt up/down movements, vertical reveals, close-up push-ins, and vertical parallax.";
+      compositionGuide = "Compose for VERTICAL 9:16 frame: use tall compositions, center subjects vertically, close-up and medium shots work best.";
+      animationFramingGuide = "vertical 9:16 frame — prefer tilt up/down movements, vertical reveals, close-up push-ins.";
     } else {
       orientationDirective = "LANDSCAPE 16:9 widescreen horizontal format (1280x720)";
-      compositionGuide = "Compose for WIDESCREEN 16:9 frame: use wide establishing shots, place subjects using rule-of-thirds horizontally, emphasize panoramic depth and horizontal scope, use negative space on sides for cinematic feel, wide and medium-wide shots work best, leverage the full width for environmental storytelling.";
-      animationFramingGuide = "widescreen 16:9 frame — prefer horizontal pans, dolly movements, wide-angle tracking shots, and lateral parallax depth.";
+      compositionGuide = "Compose for WIDESCREEN 16:9 frame: use wide establishing shots, rule-of-thirds horizontal placement, panoramic depth, negative space on sides for cinematic feel.";
+      animationFramingGuide = "widescreen 16:9 frame — prefer horizontal pans, dolly movements, wide-angle tracking shots, lateral parallax.";
     }
 
     const promptPrefix = `${styleDirective}, ${orientationDirective}`;
 
-    const fullScript = script.full_script;
-    const wordCount = fullScript.split(/\s+/).length;
+    // ── CLEAN THE SCRIPT before splitting ──
+    // Remove any scene directions, VOICEOVER tags etc from the script itself
+    let cleanedScript = script.full_script;
+    cleanedScript = cleanedScript.replace(/\[[^\]]*\]/gi, '');
+    cleanedScript = cleanedScript.replace(/^(VOICEOVER|NARRATOR|VO|SOUND|MUSIC|SFX|SCENE)\s*:\s*/gim, '');
+    cleanedScript = cleanedScript.replace(/\*\*[^*]+\*\*:?\s*/g, '');
+    cleanedScript = cleanedScript.replace(/\([^)]*(?:voiceover|urgent|compelling|pause|beat|whisper|dramatic|slow|softly)[^)]*\)/gi, '');
+    cleanedScript = cleanedScript.replace(/\n{3,}/g, '\n\n').trim();
+
+    const wordCount = cleanedScript.split(/\s+/).length;
     
     const durationMinutes = project.video_duration_minutes || Math.ceil(wordCount / 150);
     const totalTargetScenes = Math.max(5, Math.round(durationMinutes * 60 / 8));
     const SCENES_PER_BATCH = 10;
     const numBatches = Math.ceil(totalTargetScenes / SCENES_PER_BATCH);
 
-    // Split script into chunks
-    const scriptChunks = splitScriptIntoChunks(fullScript, numBatches);
+    const scriptChunks = splitScriptIntoChunks(cleanedScript, numBatches);
 
-    // ── FIRST BATCH: delete old scenes, extract characters ──
+    // ── FIRST BATCH: delete old scenes ──
     if (currentBatch === 0) {
-      // Delete old scenes
       const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
       for (const s of oldScenes) {
         await base44.asServiceRole.entities.Scenes.delete(s.id);
       }
-
       await base44.asServiceRole.entities.Projects.update(project_id, {
         status: "content_generation",
         current_step: 5
       });
     }
 
-    // Count existing scenes to determine scene numbering offset
+    // Count existing scenes for offset
     const existingScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
     const sceneOffset = existingScenes.length;
 
-    // Check if we've already generated enough scenes
     if (currentBatch >= scriptChunks.length || sceneOffset >= totalTargetScenes) {
-      return Response.json({ 
-        success: true, 
-        done: true, 
-        scene_count: sceneOffset,
-        total_batches: numBatches
-      });
+      return Response.json({ success: true, done: true, scene_count: sceneOffset, total_batches: numBatches });
     }
 
     const scenesForBatch = Math.min(SCENES_PER_BATCH, totalTargetScenes - sceneOffset);
 
+    // ── SHOT TYPE VARIETY LIST ──
+    // Forces Gemini to vary compositions instead of repeating the same framing
+    const shotTypes = [
+      "extreme wide establishing shot showing the full environment",
+      "medium wide shot with subject in context of surroundings", 
+      "medium close-up showing subject from chest up with background detail",
+      "dramatic close-up focusing on face/hands with shallow depth of field",
+      "over-the-shoulder perspective looking at the scene",
+      "bird's eye aerial view looking down at the scene",
+      "low angle shot looking up at the subject for dramatic power",
+      "silhouette shot with subject backlit against dramatic sky/light",
+      "detail/insert shot of a specific meaningful object or texture",
+      "wide tracking shot following movement through the environment"
+    ];
+
     // ── SHARED RULES ──
     const imageRules = `**CRITICAL IMAGE PROMPT RULES:**
-1. EVERY image_prompt MUST begin with EXACTLY this prefix: "${promptPrefix}."
+1. EVERY image_prompt MUST begin with: "${promptPrefix}."
 2. ${compositionGuide}
-3. When ANY character appears in a scene, you MUST COPY-PASTE their COMPLETE character description into the image_prompt. Do NOT abbreviate, summarize, or paraphrase. Include EVERY detail: age, ethnicity, hair, facial hair, clothing, build, features.
-4. FACIAL HAIR IS CRITICAL: If a character has a beard, EVERY scene must include the exact beard description. If clean-shaven, EVERY scene must say "clean-shaven".
-5. Characters wear the EXACT SAME clothing and have the EXACT SAME appearance across ALL scenes unless the story explicitly says otherwise.
-6. Include specific lighting direction, color palette, and atmosphere in every prompt.
-7. NEVER use generic descriptions like "a man" or "a woman" — always use the full character description block.
-8. End each image_prompt with: "masterpiece, highly detailed, 8K, professional composition"
-9. NO text, watermarks, signatures, or UI elements in the image.`;
+3. VISUAL VARIETY IS MANDATORY: Each scene MUST use a DIFFERENT shot type/camera angle. Cycle through: wide establishing shots, medium shots, close-ups, over-the-shoulder, bird's eye, low angle, silhouette, detail shots, tracking shots. NEVER repeat the same framing for consecutive scenes.
+4. When a character appears, include their FULL description from the characters list. Never abbreviate.
+5. FACIAL HAIR: always include exact facial hair details.
+6. Same clothing/appearance across all scenes unless story says otherwise.
+7. Include specific lighting (direction + color), color palette, and atmosphere.
+8. NEVER use generic descriptions like "a man" or "a woman".
+9. ABSOLUTELY NO TEXT, WORDS, LETTERS, NUMBERS, TITLES, CAPTIONS, WATERMARKS, LOGOS, OR WRITTEN CONTENT OF ANY KIND in the image. The image must be purely visual with zero readable text or typography.
+10. End each image_prompt with: "absolutely no text or writing in the image, masterpiece, highly detailed, 8K, professional composition"
+11. Each scene must show a DIFFERENT moment, action, or perspective. If the narration talks about an event, show the EVENT — not the same character standing in the same pose.`;
 
-    const animationRules = `**CRITICAL ANIMATION PROMPT RULES:**
-1. Every animation_prompt must be designed for ${animationFramingGuide}
-2. Include ALL of these: specific camera movement (direction, speed, arc type), atmospheric motion (particles, fog, light rays, weather), subject micro-motion (breathing, hair sway, fabric, blinking), depth-of-field shifts, and lighting transitions.
-3. Match emotional arc: tension = slow creeping zoom; revelation = dramatic pull-back; calm = gentle floating dolly; action = quick tracking.`;
+    const animationRules = `**ANIMATION PROMPT RULES:**
+1. Designed for ${animationFramingGuide}
+2. Include: camera movement (direction/speed/arc), atmospheric motion, subject micro-motion, depth-of-field shifts, lighting transitions.
+3. Match emotional arc of narration. Each scene must have DIFFERENT camera movement — don't repeat "slow pan" for every scene.`;
 
-    const narrationRules = `**NARRATION RULES:**
-- narration_text must be the EXACT words from the script — do NOT modify, summarize, or paraphrase.
-- Each scene = 5-15 seconds of narration (~15-40 words per scene).
-- Cover the FULL narration segment — do NOT skip any words.`;
+    const narrationRules = `**NARRATION TEXT RULES — EXTREMELY IMPORTANT:**
+- narration_text must contain ONLY the spoken voiceover words — the exact text the narrator reads aloud.
+- ABSOLUTELY DO NOT include: [SCENE:], [CUT TO:], [MUSIC:], [SOUND:], VOICEOVER:, Narrator:, Sound:, or ANY direction/label/tag.
+- ABSOLUTELY DO NOT include parenthetical directions like (pause), (dramatic), (whisper).
+- The narration_text field is PURE SPOKEN WORDS ONLY. Nothing else.
+- Each scene should contain 15-40 words of narration (5-15 seconds of speech).
+- Use the EXACT words from the script. Do not modify, paraphrase, or summarize.
+- Cover the FULL narration segment — do not skip any words from the script.
+- Each sentence from the script should appear in EXACTLY ONE scene — no duplicates.`;
 
-    // ── BUILD PROMPT BASED ON BATCH ──
+    // ── LOAD CHARACTERS ──
     let characters = [];
-    
-    // Try to load existing character descriptions from project
     if (project.character_descriptions) {
-      try {
-        characters = JSON.parse(project.character_descriptions);
-      } catch (_) {}
+      try { characters = JSON.parse(project.character_descriptions); } catch (_) {}
     }
 
     const characterBlock = characters.length > 0
       ? characters.map(c => `[${c.name}: ${c.description}]`).join("\n")
       : "";
 
+    // Pick shot types for this batch to suggest variety
+    const batchShotSuggestions = [];
+    for (let i = 0; i < scenesForBatch; i++) {
+      batchShotSuggestions.push(shotTypes[(sceneOffset + i) % shotTypes.length]);
+    }
+
     let prompt;
 
     if (currentBatch === 0) {
-      // First batch: extract characters + generate scenes
-      prompt = `You are a world-class video production director and cinematographer. You are given a narration script segment. Your job is to:
+      prompt = `You are a world-class video production director and cinematographer. Break this narration into visual scenes.
 
-1. FIRST, identify ALL KEY CHARACTERS in the story and write extremely detailed, locked-in character descriptions
-2. Break this narration segment into individual scenes
-3. For each scene, write a detailed AI image generation prompt optimized for ${orientationDirective}
-4. For each scene, write a cinematic animation/motion prompt
-
-**Narration Script Segment (Part 1 of ${numBatches}):**
+**NARRATION SCRIPT (Part 1 of ${numBatches}):**
 """
 ${scriptChunks[0]}
 """
 
-**Topic context**: "${project.name}" in the "${project.niche}" niche
+**Topic**: "${project.name}" in the "${project.niche}" niche
+**VISUAL STYLE**: ${styleDirective}
+**FORMAT**: ${orientationDirective}
+**TARGET: ${scenesForBatch} scenes**
 
-**MANDATORY VISUAL STYLE**: ${styleDirective}
-**MANDATORY FORMAT**: ${orientationDirective}
+STEP 1: Identify all key characters and write detailed physical descriptions.
+STEP 2: Split the narration into ${scenesForBatch} scenes. Each scene = one visual moment (15-40 words of narration).
+STEP 3: For each scene, write an image prompt showing what viewers SEE while hearing the narration.
+STEP 4: For each scene, write a cinematic animation prompt.
 
-**TARGET: approximately ${scenesForBatch} scenes for this segment.**
+**SUGGESTED SHOT TYPES** (use one per scene for variety):
+${batchShotSuggestions.map((shot, i) => `Scene ${i + 1}: ${shot}`).join('\n')}
 
 Return JSON:
 {
   "characters": [
-    {"name": "Character Name", "description": "Extremely detailed physical description: exact age, gender, ethnicity, hair color/style/length, specific facial hair, facial features, body build, exact clothing, distinguishing features. Be MAXIMALLY specific."}
+    {"name": "Name", "description": "Exact age, gender, ethnicity, hair (color/style/length), facial hair (be specific — beard/mustache/clean-shaven), eye color, build, exact clothing, distinguishing features."}
   ],
   "scenes": [
     {
       "scene_number": 1,
-      "narration_text": "(PASTE the actual words from the script segment that correspond to this scene - do not use placeholder text)",
-      "image_prompt": "${promptPrefix}. [scene description]. masterpiece, highly detailed, 8K, professional composition",
-      "animation_prompt": "For ${animationFramingGuide}: [motion description]",
+      "narration_text": "Only the spoken words the narrator says — no directions or labels",
+      "image_prompt": "${promptPrefix}. [shot type]. [what is happening in the scene]. [character full description if present]. [lighting and atmosphere]. absolutely no text or writing in the image, masterpiece, highly detailed, 8K, professional composition",
+      "animation_prompt": "[camera movement], [atmospheric motion], [subject motion], [depth of field changes]",
       "duration_seconds": 8
     }
   ]
@@ -235,38 +277,40 @@ ${animationRules}
 
 ${narrationRules}
 
-**CONTINUITY RULES:**
-- Use consistent color grading across all prompts.
-- Maintain consistent time-of-day and weather across related scenes.`;
+**SCENE VARIETY RULES:**
+- Each scene must depict a DIFFERENT visual moment — different action, different angle, different composition.
+- Show what is HAPPENING in the story, not just a static portrait of the same character.
+- If the narration describes an event (explosion, meeting, discovery), SHOW that event.
+- Alternate between: establishing shots, action shots, emotional close-ups, environmental shots, symbolic imagery.
+- NEVER generate two consecutive scenes with the same character in the same pose/setting.`;
 
     } else {
-      // Subsequent batches: use established characters
-      prompt = `You are a world-class video production director continuing to break a narration script into scenes.
+      prompt = `Continue breaking narration into visual scenes.
 
-**ESTABLISHED CHARACTERS (COPY-PASTE these EXACT full descriptions whenever a character appears — NEVER abbreviate):**
+**ESTABLISHED CHARACTERS (copy-paste FULL descriptions when they appear):**
 ${characterBlock}
 
-**Narration Script Segment (Part ${currentBatch + 1} of ${numBatches}):**
+**NARRATION SCRIPT (Part ${currentBatch + 1} of ${numBatches}):**
 """
 ${scriptChunks[currentBatch]}
 """
 
-**Topic context**: "${project.name}" in the "${project.niche}" niche
+**Topic**: "${project.name}" in the "${project.niche}" niche
+**VISUAL STYLE**: ${styleDirective}
+**FORMAT**: ${orientationDirective}
+**TARGET: ${scenesForBatch} scenes, starting at scene ${sceneOffset + 1}**
 
-**MANDATORY VISUAL STYLE**: ${styleDirective}
-**MANDATORY FORMAT**: ${orientationDirective}
-
-**TARGET: approximately ${scenesForBatch} scenes for this segment.**
-**START scene_number at: ${sceneOffset + 1}**
+**SUGGESTED SHOT TYPES** (use one per scene for variety):
+${batchShotSuggestions.map((shot, i) => `Scene ${sceneOffset + i + 1}: ${shot}`).join('\n')}
 
 Return JSON:
 {
   "scenes": [
     {
       "scene_number": ${sceneOffset + 1},
-      "narration_text": "(PASTE the actual words from the script segment that correspond to this scene - do not use placeholder text)",
-      "image_prompt": "${promptPrefix}. [scene description]. masterpiece, highly detailed, 8K, professional composition",
-      "animation_prompt": "For ${animationFramingGuide}: [motion description]",
+      "narration_text": "Only the spoken words — no directions or labels",
+      "image_prompt": "${promptPrefix}. [shot type]. [what is happening]. [character descriptions]. [lighting]. absolutely no text or writing in the image, masterpiece, highly detailed, 8K, professional composition",
+      "animation_prompt": "[camera movement], [atmospheric motion], [subject motion], [depth of field]",
       "duration_seconds": 8
     }
   ]
@@ -278,12 +322,16 @@ ${animationRules}
 
 ${narrationRules}
 
-**CONTINUITY:**
-- These scenes continue from scene ${sceneOffset}. Maintain consistent color grading, time-of-day, weather, and environment.`;
+**SCENE VARIETY:**
+- Each scene = a DIFFERENT visual moment. Different action, angle, composition.
+- Show what is HAPPENING — not static portraits.
+- Alternate: establishing shots, action, close-ups, environmental, symbolic imagery.
+- NEVER two consecutive scenes with same character in same pose/setting.
+- Continuing from scene ${sceneOffset} — maintain visual coherence but VARY compositions.`;
     }
 
     // ── CALL GEMINI ──
-    console.log(`Batch ${currentBatch + 1}/${numBatches}: generating scenes ${sceneOffset + 1}+ (target: ${scenesForBatch} scenes)...`);
+    console.log(`Batch ${currentBatch + 1}/${numBatches}: generating scenes ${sceneOffset + 1}+ (target: ${scenesForBatch})...`);
     const result = await callGemini(prompt, 0.6);
 
     // Save characters on first batch
@@ -293,16 +341,26 @@ ${narrationRules}
       });
     }
 
-    // Save scenes
+    // Save scenes with cleaned narration
     let scenesCreated = 0;
     if (result.scenes) {
       for (const scene of result.scenes) {
         const sceneNum = sceneOffset + scenesCreated + 1;
+        
+        // Clean the narration text to remove any leaked directions
+        const cleanedNarration = cleanNarrationText(scene.narration_text);
+        
+        // Also ensure "no text" is in the image prompt
+        let imagePrompt = scene.image_prompt || "";
+        if (!imagePrompt.toLowerCase().includes("no text")) {
+          imagePrompt += ", absolutely no text or writing in the image";
+        }
+        
         await base44.asServiceRole.entities.Scenes.create({
           project_id,
           scene_number: sceneNum,
-          narration_text: scene.narration_text,
-          image_prompt: scene.image_prompt,
+          narration_text: cleanedNarration,
+          image_prompt: imagePrompt,
           animation_prompt: scene.animation_prompt,
           duration_seconds: scene.duration_seconds || 8,
           status: "prompts_ready"
@@ -317,13 +375,9 @@ ${narrationRules}
     console.log(`Batch ${currentBatch + 1} complete: ${scenesCreated} scenes (total: ${totalScenesNow}/${totalTargetScenes}) ${isDone ? '✓ DONE' : ''}`);
 
     return Response.json({ 
-      success: true, 
-      done: isDone,
-      batch_completed: currentBatch,
-      scenes_created: scenesCreated,
-      total_scenes: totalScenesNow,
-      total_target: totalTargetScenes,
-      total_batches: numBatches
+      success: true, done: isDone,
+      batch_completed: currentBatch, scenes_created: scenesCreated,
+      total_scenes: totalScenesNow, total_target: totalTargetScenes, total_batches: numBatches
     });
   } catch (error) {
     console.error("generateScenePrompts error:", error.message);
