@@ -13,7 +13,7 @@ async function safeGeminiCall(prompt, temperature = 0.8) {
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: { 
             temperature, 
-            maxOutputTokens: 8192
+            maxOutputTokens: 16384
           }
         })
       }
@@ -38,6 +38,32 @@ async function safeGeminiCall(prompt, temperature = 0.8) {
   }
 }
 
+function cleanNarration(text) {
+  let content = text;
+  // Remove bracketed tags: [SCENE: ...], [CUT TO: ...], [MUSIC: ...], etc.
+  content = content.replace(/\[[^\]]*\]/gi, '');
+  // Remove **VISUAL:** or **AUDIO:** or **MUSIC:** lines
+  content = content.replace(/\*\*(VISUAL|AUDIO|MUSIC|SOUND|SFX|TRANSITION|CUT TO|FADE|NOTE|DIRECTION|CAMERA|IMAGE)[:\s]?\*\*[^\n]*/gi, '');
+  // Remove standalone visual/audio direction lines
+  content = content.replace(/^(VISUAL|AUDIO|MUSIC|SOUND|SFX|TRANSITION|CUT TO|FADE|CAMERA)\s*:.*$/gim, '');
+  // Remove timestamp patterns
+  content = content.replace(/\(?\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\)?/g, '');
+  // Remove "Narrator:", "VO:", etc. labels
+  content = content.replace(/^(Narrator|VO|Voiceover)\s*:\s*/gim, '');
+  // Remove bold markdown headers like **Act 1:** or **Opening:**
+  content = content.replace(/^\*\*[^*]+\*\*:?\s*$/gim, '');
+  // Remove any markdown formatting
+  content = content.replace(/\*\*/g, '');
+  content = content.replace(/\*/g, '');
+  // Clean up extra blank lines
+  content = content.replace(/\n{3,}/g, '\n\n').trim();
+  return content;
+}
+
+function countWords(text) {
+  return text.split(/\s+/).filter(w => w.length > 0).length;
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -48,167 +74,222 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-     const { project_id, selected_hook_id } = body;
+    const { project_id, selected_hook_id } = body;
 
-     // Get project details
-     const projects = await base44.asServiceRole.entities.Projects.list();
-     const project = projects.find(p => p.id === project_id);
+    // Get project details
+    const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
+    const project = projects[0];
+    if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-     if (!project) {
-       return Response.json({ error: 'Project not found' }, { status: 404 });
-     }
+    // Get topic
+    const topics = await base44.asServiceRole.entities.Topics.filter({ id: project.selected_topic_id });
+    const topic = topics[0];
+    if (!topic) return Response.json({ error: 'Topic not found' }, { status: 404 });
 
-     // Get topic
-     const topics = await base44.asServiceRole.entities.Topics.list();
-     const topic = topics.find(t => t.id === project.selected_topic_id);
+    // Get selected hook if provided
+    let selectedHook = null;
+    if (selected_hook_id) {
+      const hooks = await base44.asServiceRole.entities.Hooks.filter({ id: selected_hook_id });
+      selectedHook = hooks[0];
+    }
 
-     // Get selected hook if provided
-     let selectedHook = null;
-     if (selected_hook_id) {
-       const hooks = await base44.asServiceRole.entities.Hooks.list();
-       selectedHook = hooks.find(h => h.id === selected_hook_id);
-     }
+    // Get batches created by initializeScriptBatches
+    let batches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
+    batches = batches.sort((a, b) => a.batch_number - b.batch_number);
 
-    // Get batches created by generateOutline
-    const allBatches = await base44.asServiceRole.entities.ScriptBatches.list();
-    let batches = allBatches
-      .filter(b => b.project_id === project_id)
-      .sort((a, b) => a.batch_number - b.batch_number);
-
-    // If no batches exist from generateOutline, initialize them
+    // If no batches exist, initialize them first
     if (batches.length === 0) {
-      const initResult = await base44.asServiceRole.functions.invoke('initializeScriptBatches', {
-        project_id: project_id,
-      });
+      console.log("No batches found, initializing...");
+      await base44.asServiceRole.functions.invoke('initializeScriptBatches', { project_id });
 
-      // Re-fetch batches after initialization
-      const updatedBatches = await base44.asServiceRole.entities.ScriptBatches.list();
-      batches = updatedBatches
-        .filter(b => b.project_id === project_id)
-        .sort((a, b) => a.batch_number - b.batch_number);
+      batches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
+      batches = batches.sort((a, b) => a.batch_number - b.batch_number);
 
       if (batches.length === 0) {
         return Response.json({ error: 'No batches found after initialization' }, { status: 404 });
       }
     }
 
+    const totalBatches = batches.length;
+    const durationMinutes = project.video_duration_minutes || 10;
+
     // Generate each batch sequentially with continuity context
     let previousBatchEnding = "";
     let fullScript = "";
 
     for (const batch of batches) {
-      await base44.asServiceRole.entities.ScriptBatches.update(batch.id, {
-        status: "generating"
-      });
+      await base44.asServiceRole.entities.ScriptBatches.update(batch.id, { status: "generating" });
 
-      const synopsis = batch.synopsis || batch.focus_area;
-      const prevBatch = batches[batches.findIndex(b => b.id === batch.id) - 1];
-      const nextBatch = batches[batches.findIndex(b => b.id === batch.id) + 1];
-      
+      const targetWords = batch.target_words || 1500;
+      // Set a minimum acceptable threshold — at least 80% of target
+      const minimumWords = Math.round(targetWords * 0.8);
+
+      const batchIndex = batches.findIndex(b => b.id === batch.id);
+      const prevBatch = batches[batchIndex - 1];
+      const nextBatch = batches[batchIndex + 1];
+
       let hookInstruction = '';
       if (batch.batch_number === 1 && selectedHook) {
-        hookInstruction = `\n**OPENING HOOK (MUST INCLUDE)**: "${selectedHook.hook_text}"\nEnsure this hook appears naturally at the very beginning of batch 1 to grab viewer attention immediately.`;
+        hookInstruction = `\n**OPENING HOOK (MUST USE)**: "${selectedHook.hook_text}"
+This hook MUST appear naturally in the very first paragraph to grab viewers instantly.`;
       }
 
       let continuityInstruction = '';
       if (previousBatchEnding) {
-        continuityInstruction = `\n**CONTINUITY — the previous batch ended with these exact words**:\n"...${previousBatchEnding}"\nYou MUST continue seamlessly from this point. Do NOT repeat or paraphrase the ending above. Pick up the narrative naturally as if it's the same script flowing forward.\n`;
+        continuityInstruction = `\n**CONTINUITY — the previous batch ended with these exact words**:
+"...${previousBatchEnding}"
+You MUST continue seamlessly from this point. Do NOT repeat or paraphrase the ending above. Pick up the narrative naturally as if it's one continuous script flowing forward.`;
       }
 
       let nextBatchHint = '';
       if (nextBatch) {
-        nextBatchHint = `\n**NEXT BATCH PREVIEW**: The next segment is "${nextBatch.story_segment}" focusing on "${nextBatch.focus_area}". End this batch with a natural bridge or hook leading into that topic.`;
+        nextBatchHint = `\n**WHAT COMES NEXT**: The next segment is "${nextBatch.story_segment}" about "${nextBatch.focus_area}". End this batch with a natural bridge, transition, or cliffhanger leading into that topic.`;
       }
 
-      const prompt = `You are writing batch ${batch.batch_number} of ${batches.length} for a ${project.video_duration_minutes}-minute YouTube documentary in "${project.storytelling_format}" format.
+      // Build the main prompt
+      const buildPrompt = (isRetry, existingContent, existingWordCount) => {
+        let retryBlock = '';
+        if (isRetry && existingContent) {
+          retryBlock = `
+**IMPORTANT — EXPANSION REQUIRED**:
+Your previous attempt was only ${existingWordCount} words. The target is ${targetWords} words. You need to write approximately ${targetWords - existingWordCount} MORE words.
+
+Here is what you wrote before — you must EXPAND and ENRICH this, not replace it:
+"""
+${existingContent}
+"""
+
+Expand by:
+- Adding more specific details, facts, and examples to each point
+- Including additional anecdotes, stories, or case studies
+- Deepening the emotional narrative with more descriptive language
+- Adding more context, background, and implications
+- Exploring sub-topics and tangents that enrich the main narrative
+- Using more vivid imagery and sensory language
+
+Write the COMPLETE expanded version (not just the additions).`;
+        }
+
+        return `You are writing batch ${batch.batch_number} of ${totalBatches} for a ${durationMinutes}-minute YouTube documentary.
 
 **Topic**: ${topic.title}
 **Topic Description**: ${topic.description}
 **Niche**: ${project.niche}
+**Storytelling Format**: ${project.storytelling_format || 'Documentary'}
 ${hookInstruction}${continuityInstruction}
-
-**BATCH SYNOPSIS & CONTEXT**:
-${synopsis}
-
-${prevBatch ? `**Previous Batch was about**: ${prevBatch.story_segment} — ${prevBatch.focus_area}` : ''}
 ${nextBatchHint}
 
-**This Batch**: ${batch.story_segment}
-**Focus Areas**: ${batch.focus_area}
-**Target Word Count**: ~${batch.target_words || 1500} words (${Math.round((batch.target_words || 1500) / 150)} minutes)
+**THIS BATCH**:
+- **Segment**: ${batch.story_segment}
+- **Focus**: ${batch.focus_area}
+- **Detailed Synopsis**: ${batch.synopsis || 'No synopsis available — write compelling narrative based on the focus area.'}
 
-**CRITICAL OUTPUT FORMAT**:
-- Write ONLY the spoken narration text — the exact words the voiceover artist will read aloud.
-- Do NOT include any scene directions, visual descriptions, stage directions, or camera cues.
-- Do NOT include [SCENE: ...], [CUT TO: ...], [MUSIC: ...], [SOUND: ...] or any bracketed tags.
-- Do NOT include labels like "Narrator:", "VO:", "Act 1", or any speaker/section labels.
-- Do NOT include any metadata, JSON, or formatting instructions.
-- Do NOT include timestamps like (0:00-2:00) or any time markers.
-- Do NOT include **VISUAL:** descriptions, **AUDIO:** cues, or any production directions.
-- Do NOT use markdown bold headers like **Act 1:** or **Opening:** — just write flowing narration.
-- The output should be PURE narration text, paragraph by paragraph, ready to be converted directly to speech.
+**═══════════════════════════════════════════════════**
+**WORD COUNT TARGET: EXACTLY ${targetWords} WORDS**
+**MINIMUM ACCEPTABLE: ${minimumWords} WORDS**
+**═══════════════════════════════════════════════════**
 
-**Narrative Requirements**:
-- Match the established tone, cadence, and character perspective from earlier batches
-- Maintain consistent pacing: 140-150 words per minute
-- Develop emotional arc: build curiosity, tension, then payoff
-- Use dramatic pauses and strategic emphasis on key terms
-- Write vivid, evocative language that paints pictures with words (since visuals will be added separately)
-${batch.batch_number < batches.length ? '- End with a hook/cliffhanger leading into the next segment' : '- End with a strong call to action and closing'}
-${batch.batch_number === 1 ? '- Open strong to hook viewers in the first 10 seconds' : '- Continue naturally and seamlessly from where the previous batch left off'}
-- Keep character/subject voice consistent throughout`;
+This is NOT optional. Your output MUST contain at least ${minimumWords} words of narration. Count carefully. A ${targetWords}-word narration is approximately ${Math.round(targetWords / 250)} pages of text or ${Math.round(targetWords / 150)} minutes of spoken audio at 150 wpm.
 
-      const result = await safeGeminiCall(prompt, 0.8);
+To reach ${targetWords} words, you need approximately ${Math.round(targetWords / 100)} substantial paragraphs, each 80-120 words long.
+${retryBlock}
 
-      if (!result.success) {
-        await base44.asServiceRole.entities.ScriptBatches.update(batch.id, {
-          status: "pending"
-        });
-        return Response.json({ error: result.error }, { status: 500 });
+**OUTPUT FORMAT — CRITICAL**:
+- Write ONLY the spoken narration — the exact words a voiceover artist reads aloud.
+- Do NOT include [SCENE:], [CUT TO:], [MUSIC:], or ANY bracketed directions.
+- Do NOT include "Narrator:", "VO:", act labels, timestamps, or section headers.
+- Do NOT include **bold headers** or any formatting — just flowing prose paragraphs.
+- NO visual descriptions, camera directions, or production notes.
+- PURE narration text only, paragraph by paragraph.
+
+**WRITING QUALITY**:
+- Pacing: 140-150 words per minute, natural speaking rhythm
+- Use vivid, evocative language that paints pictures with words
+- Build emotional arc within this segment: setup → tension → mini-payoff
+- Include specific facts, names, dates, and numbers — not vague generalities
+- Use rhetorical questions, dramatic pauses (short sentences), and callbacks
+- Vary sentence length: mix punchy 5-word sentences with flowing 30-word ones
+- Write for the EAR not the eye — use conversational language, contractions, natural phrasing
+${batch.batch_number === 1 ? '- Open STRONG — the first 2 sentences must hook the viewer immediately' : '- Continue naturally from where the previous batch left off'}
+${batch.batch_number === totalBatches ? '- End with a powerful conclusion and call to action (like, subscribe, comment)' : '- End with a hook or cliffhanger leading into the next segment'}
+- Keep character/subject references consistent throughout
+
+**REMEMBER: You MUST write at least ${minimumWords} words. Write deep, rich, detailed narration. Do NOT rush through the synopsis — explore every beat thoroughly.**`;
+      };
+
+      // ── GENERATE WITH RETRY LOGIC ──
+      let finalContent = '';
+      let finalWordCount = 0;
+      const MAX_ATTEMPTS = 3;
+
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        const isRetry = attempt > 1;
+        const prompt = buildPrompt(isRetry, finalContent, finalWordCount);
+
+        console.log(`Batch ${batch.batch_number}: attempt ${attempt}/${MAX_ATTEMPTS} (target: ${targetWords} words, min: ${minimumWords})...`);
+
+        const result = await safeGeminiCall(prompt, 0.8);
+
+        if (!result.success) {
+          if (attempt === MAX_ATTEMPTS) {
+            // If all attempts fail, mark as pending and abort
+            await base44.asServiceRole.entities.ScriptBatches.update(batch.id, { status: "pending" });
+            return Response.json({ error: `Batch ${batch.batch_number} failed: ${result.error}` }, { status: 500 });
+          }
+          console.log(`Batch ${batch.batch_number} attempt ${attempt} failed, retrying...`);
+          continue;
+        }
+
+        const cleaned = cleanNarration(result.text);
+        const wordCount = countWords(cleaned);
+
+        console.log(`Batch ${batch.batch_number} attempt ${attempt}: got ${wordCount} words`);
+
+        // If this attempt is better than previous, keep it
+        if (wordCount > finalWordCount) {
+          finalContent = cleaned;
+          finalWordCount = wordCount;
+        }
+
+        // If we hit the minimum threshold, we're good
+        if (finalWordCount >= minimumWords) {
+          console.log(`Batch ${batch.batch_number}: ✓ accepted with ${finalWordCount} words`);
+          break;
+        }
+
+        // If still too short and we have retries left, try again
+        if (attempt < MAX_ATTEMPTS) {
+          console.log(`Batch ${batch.batch_number}: ${finalWordCount}/${minimumWords} words — retrying with expansion prompt...`);
+        } else {
+          // Out of retries — use what we have
+          console.log(`Batch ${batch.batch_number}: accepting ${finalWordCount} words after ${MAX_ATTEMPTS} attempts`);
+        }
       }
 
-      // Aggressively clean any residual non-narration content
-      let content = result.text;
-      // Remove bracketed tags: [SCENE: ...], [CUT TO: ...], [MUSIC: ...], etc.
-      content = content.replace(/\[[^\]]*\]/gi, '');
-      // Remove **VISUAL:** or **AUDIO:** or **MUSIC:** lines (with everything until next paragraph)
-      content = content.replace(/\*\*(VISUAL|AUDIO|MUSIC|SOUND|SFX|TRANSITION|CUT TO|FADE|NOTE|DIRECTION|CAMERA|IMAGE)[:\s]?\*\*[^\n]*/gi, '');
-      // Remove standalone visual/audio direction lines without bold markers
-      content = content.replace(/^(VISUAL|AUDIO|MUSIC|SOUND|SFX|TRANSITION|CUT TO|FADE|CAMERA)\s*:.*$/gim, '');
-      // Remove timestamp patterns like (0:00-2:00) or (0:00 - 2:00) or 0:00-2:00
-      content = content.replace(/\(?\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\)?/g, '');
-      // Remove "Narrator:", "VO:", etc. labels
-      content = content.replace(/^(Narrator|VO|Voiceover)\s*:\s*/gim, '');
-      // Remove bold markdown headers like **Act 1:** or **Opening:**
-      content = content.replace(/^\*\*[^*]+\*\*:?\s*$/gim, '');
-      // Clean up extra blank lines
-      content = content.replace(/\n{3,}/g, '\n\n').trim();
-      const wordCount = content.split(/\s+/).length;
-
-      // Save the last ~80 words for continuity into the next batch
-      const words = content.split(/\s+/);
+      // Save the last ~80 words for continuity
+      const words = finalContent.split(/\s+/);
       previousBatchEnding = words.slice(Math.max(0, words.length - 80)).join(' ');
 
       await base44.asServiceRole.entities.ScriptBatches.update(batch.id, {
-        content: content,
-        word_count: wordCount,
+        content: finalContent,
+        word_count: finalWordCount,
         status: "completed"
       });
 
-      fullScript += content + "\n\n";
+      fullScript += finalContent + "\n\n";
     }
 
-    // Create or update draft script (avoid duplicates)
-    const totalWords = fullScript.split(/\s+/).length;
+    // ── CREATE / UPDATE FINAL SCRIPT ──
+    const totalWords = countWords(fullScript);
     const estimatedDuration = Math.round((totalWords / 150) * 60);
 
-    const existingScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id: project_id });
+    const existingScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
     const existingDraft = existingScripts.find(s => s.version === 'draft');
 
     let script;
     if (existingDraft) {
       await base44.asServiceRole.entities.Scripts.update(existingDraft.id, {
-        full_script: fullScript,
+        full_script: fullScript.trim(),
         word_count: totalWords,
         estimated_duration_sec: estimatedDuration,
         title: topic.title,
@@ -216,22 +297,23 @@ ${batch.batch_number === 1 ? '- Open strong to hook viewers in the first 10 seco
       script = existingDraft;
     } else {
       script = await base44.asServiceRole.entities.Scripts.create({
-        project_id: project_id,
+        project_id,
         topic_id: project.selected_topic_id,
         version: "draft",
         title: topic.title,
-        full_script: fullScript,
+        full_script: fullScript.trim(),
         word_count: totalWords,
         estimated_duration_sec: estimatedDuration
       });
     }
 
-    // Update project — mark as script_complete so the UI knows we're done
     await base44.asServiceRole.entities.Projects.update(project_id, {
       script_id: script.id,
       status: "script_complete",
       current_step: 4
     });
+
+    console.log(`Script complete! ${totalWords} words, ~${Math.round(estimatedDuration / 60)} min`);
 
     return Response.json({ 
       success: true, 
@@ -240,6 +322,7 @@ ${batch.batch_number === 1 ? '- Open strong to hook viewers in the first 10 seco
       estimated_duration_sec: estimatedDuration
     });
   } catch (error) {
+    console.error("generateScriptBatches error:", error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
