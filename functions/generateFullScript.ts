@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
       script = await base44.asServiceRole.entities.Scripts.create({
         project_id,
         topic_id: project.selected_topic_id,
-        version: "draft",
+        version: "final_aggregated",
         title: topic?.title || project.name,
         full_script: fullScript.trim(),
         word_count: totalWords,
