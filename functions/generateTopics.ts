@@ -53,33 +53,32 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { project_id, niche } = body;
 
-    const prompt = `I want to build a faceless YouTube channel creating short documentaries in ${niche}. Find 10 trending topics that:
+    const prompt = `
+I want to build a faceless YouTube channel. 
+CORE TOPIC: "${niche}"
 
-- Have underexploited keyword potential
-- Have 100K-2M monthly searches
-- Are emotional, shocking, or curiosity-driven
-- Can be told in under 10 minutes
-- Have strong comment section engagement
+Your task: Generate 10 viral video topics that are 100% focused ONLY on "${niche}". 
 
-Rank them by viral potential, storytelling strength, and emotional payoff.
+For every topic, you must apply a "Viral Filter" to the CORE TOPIC:
+1. THE SHOCKING ANGLE: Take a standard fact about "${niche}" and frame it as a hidden danger or a "lie" everyone believes.
+2. THE EMOTIONAL STAKES: Explain how failing to understand "${niche}" ruins lives, creates "financial' slavery," or steals a viewer's future.
+3. THE "US VS THEM" NARRATIVE: Frame the topic as a secret the "1%" or "Banks" don't want the viewer to know.
 
-Return ONLY valid JSON in this exact format (no extra text before or after):
+CRITICAL RULE: Do NOT suggest general finance topics like "Landlords," "Car costs," or "Coffee habits." If the topic is "${niche}", every single suggestion must be a surgical deep-dive into the math, psychology, or strategy of "${niche}".
 
+Return ONLY valid JSON in this exact format:
 {
   "topics": [
     {
       "rank": 1,
-      "title": "Topic Title Here",
-      "description": "Why this topic is trending and compelling",
-      "keyword_potential": "Keyword opportunity analysis",
-      "monthly_searches": "Estimated range e.g. 500K-800K",
-      "viral_score": 9,
-      "storytelling_score": 8,
-      "emotional_score": 9,
-      "engagement_notes": "Why comments will be strong"
+      "title": "A Shocking, Curiosity-Driven Title",
+      "description": "A high-stakes, emotional synopsis that explains why NOT knowing this about ${niche} is a disaster.",
+      "viral_score": 10,
+      ...
     }
   ]
 }`;
+
 
     const result = await safeGeminiCall(prompt, 0.8);
 
