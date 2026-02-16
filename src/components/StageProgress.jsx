@@ -8,10 +8,10 @@ export default function StageProgress({ currentStage = 1 }) {
   const navigate = useNavigate();
 
   const stages = [
-    { num: 1, label: 'Story Generation', Icon: BookOpen },
-    { num: 2, label: 'Content Creation', Icon: Image },
-    { num: 3, label: 'Timeline & Export', Icon: Film },
-    { num: 4, label: 'Post Production', Icon: Megaphone },
+    { num: 1, label: 'Story Generation', Icon: BookOpen, page: 'StoryScript' },
+    { num: 2, label: 'Content Creation', Icon: Image, page: 'ContentGeneration' },
+    { num: 3, label: 'Timeline & Export', Icon: Film, page: 'TimelineEditor' },
+    { num: 4, label: 'Post Production', Icon: Megaphone, page: 'PostProduction' },
   ];
 
   const getStageClasses = (stageNum) => {
@@ -22,6 +22,13 @@ export default function StageProgress({ currentStage = 1 }) {
 
   const getLineClass = (stageNum) => {
     return currentStage > stageNum ? 'bg-green-400' : 'bg-gray-200';
+  };
+
+  const handleStageClick = (stage) => {
+    const projectId = new URLSearchParams(window.location.search).get('project_id');
+    if (projectId && currentStage >= stage.num) {
+      navigate(createPageUrl(`${stage.page}?project_id=${projectId}`));
+    }
   };
 
   return (
@@ -38,11 +45,15 @@ export default function StageProgress({ currentStage = 1 }) {
         <div className="flex items-center gap-2 flex-1">
           {stages.map((stage, idx) => (
             <React.Fragment key={stage.num}>
-              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${getStageClasses(stage.num)}`}>
+              <button
+                onClick={() => handleStageClick(stage)}
+                disabled={currentStage < stage.num}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${getStageClasses(stage.num)} ${currentStage >= stage.num ? 'cursor-pointer hover:ring-2 hover:ring-blue-300' : 'cursor-not-allowed'}`}
+              >
                 <stage.Icon className="w-4 h-4" />
                 <span className="hidden sm:inline">{stage.label}</span>
                 <span className="sm:hidden">Stage {stage.num}</span>
-              </div>
+              </button>
               {idx < stages.length - 1 && (
                 <div className={`flex-1 h-0.5 ${getLineClass(stage.num)}`} />
               )}
