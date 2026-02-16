@@ -46,12 +46,9 @@ export default function ContentGeneration() {
   // Import: break script into scenes (with live progress polling)
   const handleImport = async () => {
     setImporting(true);
-    
-    // Start polling for scene progress every 5 seconds
     const pollInterval = setInterval(async () => {
       await refetchScenes();
     }, 5000);
-    
     try {
       await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
     } finally {
