@@ -181,14 +181,32 @@ export default function StoryScript() {
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-3xl font-bold">Script Generation</h1>
-          <div className="flex gap-2">
+                    <div className="flex gap-2">
             {allCompleted && (
               <>
+                {!latestScript && (
+                  <Button 
+                    variant="outline" 
+                    onClick={async () => {
+                      setGenerating(true);
+                      try {
+                        await base44.functions.invoke('generateFullScript', { project_id: projectId });
+                        await refetchScripts();
+                      } finally {
+                        setGenerating(false);
+                      }
+                    }}
+                    className="border-orange-500 text-orange-600 hover:bg-orange-50"
+                  >
+                    <RefreshCw className={`w-4 h-4 mr-1 ${generating ? 'animate-spin' : ''}`} />
+                    Force Merge Script
+                  </Button>
+                )}
                 <Button variant="outline" onClick={handleRegenerate} disabled={regenerating}>
                   <RefreshCw className={`w-4 h-4 mr-1 ${regenerating ? 'animate-spin' : ''}`} />
                   Regenerate
                 </Button>
-                <Button variant="outline" onClick={handleExport}>
+                <Button variant="outline" onClick={handleExport} disabled={!latestScript}>
                   <Download className="w-4 h-4 mr-1" />
                   Export
                 </Button>
@@ -200,6 +218,7 @@ export default function StoryScript() {
               </Button>
             )}
           </div>
+
         </div>
                 <p className="text-gray-600 mb-8">
           {generating
