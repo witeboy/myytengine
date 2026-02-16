@@ -70,7 +70,7 @@ Pick the BEST storytelling format from: Big Lie, Untold Truth, Domino, Reveal, Z
 
 Create exactly ${numBatches} batches, each ~${wordsPerBatch} words (150 words per minute).
 
-For each batch write a synopsis (2-3 sentences, no newlines inside the string).
+For each batch write a DETAILED synopsis (5-8 sentences, 150-200 words, no newlines inside the string). Include specific narrative beats, facts, names, events, anecdotes, emotional turning points, and how the segment should open and close. The more detail, the better the final script.
 
 Respond with ONLY a JSON object (no markdown, no code fences):
 {"storytelling_format": "Format Name", "batches": [{"batch_number": 1, "story_segment": "Segment Title", "focus_area": "Focus description", "target_words": ${wordsPerBatch}, "synopsis": "Two to three sentences describing this batch."}]}`;
