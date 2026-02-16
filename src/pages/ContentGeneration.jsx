@@ -43,13 +43,23 @@ export default function ContentGeneration() {
     enabled: !!projectId,
   });
 
-  // Import: break script into scenes
+  // Import: break script into scenes (with live progress polling)
   const handleImport = async () => {
     setImporting(true);
-    await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
-    await refetchScenes();
-    await refetchProject();
-    setImporting(false);
+    
+    // Start polling for scene progress every 5 seconds
+    const pollInterval = setInterval(async () => {
+      await refetchScenes();
+    }, 5000);
+    
+    try {
+      await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
+    } finally {
+      clearInterval(pollInterval);
+      await refetchScenes();
+      await refetchProject();
+      setImporting(false);
+    }
   };
 
   // Generate all images
