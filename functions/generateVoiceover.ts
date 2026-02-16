@@ -17,22 +17,23 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'AI33_API_KEY not configured' }, { status: 500 });
     }
 
-    // Get the script
-    const script = await base44.entities.Scripts.get(script_id);
-    if (!script) {
-      return Response.json({ error: 'Script not found' }, { status: 404 });
+  // Get the LATEST script for this project (ignore stale old versions)
+    const allScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
+    const script = allScripts.sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0];
+    if (!script?.full_script) {
+      return Response.json({ error: 'No script found for this project' }, { status: 404 });
     }
 
-    const rawText = script.full_script || [script.cold_open, script.act_1, script.act_2, script.act_3, script.outro].filter(Boolean).join('\n\n');
-
-    // Strip scene directions [SCENE: ...] and "Narrator:" tags to get pure narration
-    const textToSpeak = rawText
-      .replace(/\[SCENE:[^\]]*\]/gi, '')   // Remove [SCENE: ...] blocks
-      .replace(/\[.*?\]/g, '')              // Remove any other bracketed directions
-      .replace(/Narrator:\s*/gi, '')        // Remove "Narrator:" labels
-      .replace(/Sound:\s*[^\.\n]*/gi, '')   // Remove "Sound:" descriptions
-      .replace(/\n{3,}/g, '\n\n')           // Collapse excessive newlines
+    // Clean the script text — remove any non-narration content
+    const textToSpeak = script.full_script
+      .replace(/\[[^\]]*\]/gi, '')                    // Remove all [bracketed] directions
+      .replace(/^(VOICEOVER|NARRATOR|VO|SOUND|MUSIC|SFX|SCENE)\s*:\s*/gim, '')  // Remove labels
+      .replace(/\*\*[^*]+\*\*:?\s*/g, '')             // Remove **bold headers**
+      .replace(/\([^)]*(?:voiceover|pause|beat|whisper|dramatic)[^)]*\)/gi, '')  // Remove (parenthetical directions)
+      .replace(/\(?\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\)?/g, '')            // Remove timestamps
+      .replace(/\n{3,}/g, '\n\n')
       .trim();
+    
 
     // Call ai33.pro text-to-speech API
     const ttsResponse = await fetch(`https://api.ai33.pro/v1/text-to-speech/${voice_id}?output_format=mp3_44100_128`, {
