@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Save, Eye, Pencil } from 'lucide-react';
+import { Loader2, Save, Eye, Pencil, Download } from 'lucide-react';
 import ReactQuill from 'react-quill';
 
 export default function ScriptEditor({ script, onSaved }) {
