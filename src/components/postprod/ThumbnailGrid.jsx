@@ -40,7 +40,8 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
     if (!prompt.toLowerCase().includes('16:9') && !prompt.toLowerCase().includes('landscape')) {
       prompt = aspectPrefix + prompt;
     }
-    // Always prepend and append text overlay instructions
+    // Always prepend safety + text overlay instructions
+    prompt = safetyPrefix + prompt;
     if (textOverlay) {
       prompt = textPrefix + prompt;
       if (!prompt.includes(textSuffix.trim())) {
