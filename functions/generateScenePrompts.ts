@@ -70,20 +70,34 @@ Deno.serve(async (req) => {
     const sceneExtractionPrompt = `
 You are a professional film director and cinematographer.
 
-Break the following documentary script into cinematic scenes based on emotional shifts and visual beats — NOT by sentence count.
+Break this documentary script into cinematic "Visual Scenes" that will be used to generate AI images and Sora video, based on emotional shifts and visual beats — NOT by sentence count.
+Split the scenes based on visual beats—a new scene should happen every ~10-15 seconds of narration.
+
 
 SCRIPT:
 ${script.full_script}
 
 INSTRUCTIONS:
 
+DIRECTOR'S REQUIREMENTS:
+1. CONSISTENCY: Identify recurring characters and describe them identically every time.
+2. SHOT VARIETY: Mix Close-ups, Wide shots, and Tracking shots.
+3. STYLE: Every image_prompt MUST integrate these style rules: "${styleDirective}".
+4. FORMAT: Every image_prompt MUST follow: "${orientationDirective}".
+5. NO TEXT: Image prompts must NOT contain words like "Title", "Text", or "Subtitles".
+
+
 1. Extract recurring characters and assign consistency_id.
-2. Maintain identical physical descriptions across scenes.
-3. Do not mutate wardrobe unless narratively required.
-4. Each scene must have a clear emotional beat.
-5. Use varied shot types (wide, medium, close-up, insert, tracking, over-the-shoulder).
-6. Maintain visual continuity.
-7. Include full cinematic image_prompt combining:
+2. SHOT VARIETY: Mix Close-ups, Wide shots, and Tracking shots.
+3. Maintain identical physical descriptions across scenes.
+4. Do not mutate wardrobe unless narratively required.
+5. Each scene must have a clear emotional beat.
+6. Use varied shot types (wide, medium, close-up, insert, tracking, over-the-shoulder).
+7. Maintain visual continuity.
+8.  STYLE: Every image_prompt MUST integrate these style rules: "${styleDirective}".
+9. FORMAT: Every image_prompt MUST follow: "${orientationDirective}".
+10. NO TEXT: Image prompts must NOT contain words like "Title", "Text", or "Subtitles".
+11. Include full cinematic image_prompt combining:
    - ${styleDirective}
    - ${orientationDirective}
    - Camera
