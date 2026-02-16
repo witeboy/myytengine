@@ -93,6 +93,12 @@ Deno.serve(async (req) => {
       selectedHook = hooks[0];
     }
 
+// Delete any pre-existing scripts so the UI doesn't show stale previews
+    const oldScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
+    for (const s of oldScripts) {
+      await base44.asServiceRole.entities.Scripts.delete(s.id);
+    }
+
     // Get batches created by initializeScriptBatches
     let batches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
     batches = batches.sort((a, b) => a.batch_number - b.batch_number);
