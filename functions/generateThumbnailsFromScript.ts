@@ -160,6 +160,16 @@ CRITICAL: Every thumbnail concept MUST follow the composition patterns, color DN
     // ============================================================
     const phase1Prompt = `You are the world's #1 YouTube thumbnail conceptualizer with expertise in viral content across ALL niches.
 
+=== CONTENT SAFETY — READ FIRST ===
+ALL characters MUST be 100% FICTIONAL, ORIGINAL creations. NEVER reference, depict, or resemble ANY real person (living or dead), celebrity, politician, historical figure, or public figure — even indirectly.
+- Use ORIGINAL fictional archetypes: "a weathered middle-aged man", "a determined young woman with braided hair" — NEVER "looks like [celebrity]"
+- NEVER depict graphic violence, blood, gore, weapons pointed at people, or threatening scenarios involving minors
+- NEVER use copyrighted characters, logos, brands, or trademarked imagery
+- Replace any potentially unsafe concept with an equally dramatic but SAFE alternative (e.g. "a shadowy silhouette looming behind" instead of depicting violence)
+- When the script references real people/events, abstract them into FICTIONAL archetypes that convey the same EMOTION without depicting anyone real
+- Focus on EMOTION, MYSTERY, and VISUAL DRAMA — these create better thumbnails than shock or controversy
+=== END SAFETY RULES ===
+
 VIDEO TOPIC: "${topic.title}"
 VIDEO TITLE: "${script.title}"
 NICHE: "${project.niche}"
