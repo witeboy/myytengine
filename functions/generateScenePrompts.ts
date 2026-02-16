@@ -101,16 +101,16 @@ Deno.serve(async (req) => {
 
     // ── VISUAL STYLE MAPPING ──
     const styleMap = {
-      cinematic_realistic: "Cinematic realistic film still, dramatic lighting, shallow depth of field, Hollywood production quality, moody atmosphere, anamorphic lens feel",
-      photorealistic_4k: "Ultra-photorealistic 4K photography, sharp detail, natural lighting, DSLR quality, editorial photo, professional color grading",
-      cinematic_anime: "Cinematic anime style, dramatic lighting and composition, detailed anime illustration with film-like framing, Makoto Shinkai inspired, wide cinematic framing",
-      anime: "Anime illustration style, vibrant colors, clean linework, expressive characters, manga-influenced, detailed anime art",
-      cartoon_2d: "2D cartoon style, flat colors, bold outlines, playful and colorful, animated series quality, clean vector-like illustration",
-      picstory_cocomelon: "3D rendered children's animation style like Cocomelon/PicStory, bright colors, soft rounded characters, cheerful and cute, Pixar-like rendering for kids",
-      cinematic_picstory: "Cinematic 3D animation style like Pixar/DreamWorks, high-quality 3D rendering, dramatic lighting, expressive 3D characters, movie-quality CGI",
-      oil_painting: "Classical oil painting style, rich textures, visible brushstrokes, Renaissance-inspired composition, warm color palette, museum-quality artwork, wide canvas format",
-      watercolor: "Soft watercolor illustration, gentle color washes, delicate details, dreamy and ethereal atmosphere, artistic illustration",
-      comic_book: "Bold comic book style, strong ink outlines, halftone dot shading, dynamic panel composition, vibrant saturated colors, graphic novel quality",
+      cinematic_realistic: "Cinematic film still shot on ARRI Alexa, anamorphic lens flare, 2.39:1 aspect feel, shallow depth of field f/1.4, dramatic three-point lighting with rim light, color graded with teal and orange tones, film grain, volumetric lighting, lens breathing, Hollywood blockbuster cinematography, photorealistic",
+      photorealistic_4k: "Ultra-photorealistic DSLR photograph shot on Canon EOS R5 85mm f/1.2, razor-sharp detail, natural ambient lighting, professional color grading, editorial photography, skin texture visible, accurate shadows, real-world proportions, no AI artifacts",
+      cinematic_anime: "Cinematic anime illustration in the style of Makoto Shinkai and Ufotable, dramatic volumetric god rays, detailed background art with painted clouds, film-grain overlay, anime characters with realistic proportions, dynamic camera angle, depth of field bokeh, color palette of warm sunset oranges and cool sky blues",
+      anime: "High-quality anime illustration, Studio Ghibli meets modern anime aesthetic, vibrant saturated colors, clean precise linework, cel-shaded with soft gradients, expressive detailed eyes, detailed hair strands, colorful background art, manga panel composition",
+      cartoon_2d: "Professional 2D vector animation style like modern Cartoon Network or Disney TVA, flat cel-shaded colors, bold clean outlines, playful exaggerated proportions, bright primary color palette, clean gradient backgrounds, animation keyframe quality",
+      picstory_cocomelon: "3D rendered Pixar-quality children's animation, soft subsurface scattering on skin, rounded chunky character design, oversized expressive eyes, bright candy-colored palette, soft ambient occlusion, cheerful warm global illumination, toy-like proportions, smooth plastic-like materials",
+      cinematic_picstory: "Cinematic 3D CGI render like Pixar/DreamWorks feature film, subsurface scattering, ray-traced global illumination, volumetric fog, dramatic rim lighting, physically based rendering (PBR), detailed fabric and hair simulation, film color grading with rich contrast, IMAX quality framing",
+      oil_painting: "Classical oil painting on textured canvas, visible impasto brushstrokes, chiaroscuro lighting technique, Rembrandt-inspired dramatic shadow, rich umber and sienna undertones, warm golden varnish glow, museum-quality fine art, Renaissance composition with golden ratio, thick paint texture, gallery lighting",
+      watercolor: "Delicate watercolor painting on cold-pressed paper, visible paper grain texture, soft wet-on-wet color bleeding, transparent luminous washes, gentle color gradients, white paper showing through highlights, loose expressive brushwork, muted pastel palette with occasional vivid accents, dreamy atmospheric perspective",
+      comic_book: "Bold American comic book art style, heavy black ink outlines, Ben-Day halftone dot shading, dynamic foreshortened perspective, speed lines for motion, dramatic chiaroscuro inking, saturated CMYK color palette, Jack Kirby-inspired dynamic composition, thick panel borders, action-packed graphic novel quality",
     };
 
     const visualStyle = project.visual_style || 'cinematic_realistic';
