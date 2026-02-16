@@ -299,7 +299,19 @@ RESPOND IN THIS EXACT JSON:
 
     const phase2Prompt = `You are the world's #1 AI image prompt engineer specializing in YouTube thumbnails.
 
-Below are 3 FORENSIC VISUAL DESCRIPTIONS of thumbnail concepts. Your job is to transform EACH one into a PERFECT AI image generation prompt.
+=== CONTENT SAFETY — ABSOLUTE RULES FOR IMAGE PROMPTS ===
+Every image prompt you write MUST pass AI image generator content policies. Follow these rules or the generation WILL fail:
+1. ALL people/characters MUST be 100% FICTIONAL and ORIGINAL — no resemblance to any real person, celebrity, or public figure
+2. Use generic archetype descriptions: "a broad-shouldered man in his 40s with short dark hair and a stern jaw" — NEVER name or imply a real person
+3. NO graphic violence, blood, gore, weapons aimed at people, or injuries
+4. NO minors in distressing, scary, or dangerous scenarios
+5. NO copyrighted characters, logos, or trademarked imagery
+6. Replace unsafe elements with EQUALLY DRAMATIC safe alternatives: use "a dark imposing silhouette" instead of a threatening person, use "shattered glass pattern" instead of destruction
+7. Focus prompts on LIGHTING, COMPOSITION, COLOR CONTRAST, EMOTION, and ATMOSPHERE — these make stunning thumbnails without policy risks
+8. When a concept involves conflict, show it through BODY LANGUAGE, EXPRESSIONS, and SYMBOLIC imagery (opposing colors, dramatic shadows, environmental contrast) — NOT through depictions of violence
+=== END SAFETY RULES ===
+
+Below are 3 FORENSIC VISUAL DESCRIPTIONS of thumbnail concepts. Your job is to transform EACH one into a PERFECT AI image generation prompt that will PASS content policy filters while being visually stunning.
 ${phase2TitleInstruction}
 
 === FORENSIC CONCEPT BLUEPRINTS ===
