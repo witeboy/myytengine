@@ -44,15 +44,34 @@ export default function ContentGeneration() {
   });
 
   // Import: break script into scenes (with live progress polling)
+ // Import: break script into scenes (batch by batch to avoid timeouts)
   const handleImport = async () => {
     setImporting(true);
-    const pollInterval = setInterval(async () => {
-      await refetchScenes();
-    }, 5000);
+    let batchIndex = 0;
+    let done = false;
+
     try {
-      await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
+      while (!done) {
+        console.log(`Generating scene batch ${batchIndex + 1}...`);
+        
+        const result = await base44.functions.invoke('generateScenePrompts', { 
+          project_id: projectId, 
+          batch_index: batchIndex 
+        });
+
+        // Refresh scenes after each batch so user sees progress
+        await refetchScenes();
+
+        if (result.done) {
+          done = true;
+          console.log(`All scenes generated! Total: ${result.total_scenes}`);
+        } else {
+          batchIndex++;
+        }
+      }
+    } catch (err) {
+      console.error('Scene generation error:', err);
     } finally {
-      clearInterval(pollInterval);
       await refetchScenes();
       await refetchProject();
       setImporting(false);
