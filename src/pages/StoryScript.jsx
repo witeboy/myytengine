@@ -35,16 +35,17 @@ export default function StoryScript() {
     refetchInterval: generating ? 3000 : false,
   });
 
-    const { data: scripts = [], refetch: refetchScripts } = useQuery({
+      const { data: scripts = [], refetch: refetchScripts } = useQuery({
     queryKey: ['scripts', projectId],
     queryFn: () => base44.entities.Scripts.filter({ project_id: projectId }),
     enabled: !!projectId,
-    // 🔄 Keep checking every 2 seconds if we don't have the final version yet
+    // 🛡️ Added Array.isArray check to prevent the TypeError
     refetchInterval: (data) => {
-      const hasFinal = data?.some(s => s.version === 'final_aggregated');
+      const hasFinal = Array.isArray(data) && data.some(s => s.version === 'final_aggregated');
       return hasFinal ? false : 2000;
     }
   });
+
 
 
   const completedCount = batches.filter(b => b.status === 'completed').length;
