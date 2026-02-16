@@ -52,30 +52,40 @@ Deno.serve(async (req) => {
     const totalWords = fullScript.split(/\s+/).filter(w => w.length > 0).length;
     const estimatedDuration = Math.round((totalWords / 150) * 60);
 
-    // Check if a draft script already exists — update it instead of creating duplicates
+        // 1. Find if we already made a "Final" version before (to avoid duplicates)
     const oldScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
-    const existingDraft = oldScripts.find(s => s.version === 'draft');
+    const existingFinal = oldScripts.find(s => s.version === 'final_aggregated');
 
     let script;
-    if (existingDraft) {
-      await base44.asServiceRole.entities.Scripts.update(existingDraft.id, {
+    if (existingFinal) {
+      // 2. If it exists, update it with the new merged content
+      await base44.asServiceRole.entities.Scripts.update(existingFinal.id, {
         full_script: fullScript.trim(),
         word_count: totalWords,
         estimated_duration_sec: estimatedDuration,
         title: topic?.title || project.name,
       });
-      script = { ...existingDraft, id: existingDraft.id };
+      script = { ...existingFinal, id: existingFinal.id };
     } else {
+      // 3. If it doesn't exist, create it for the first time
       script = await base44.asServiceRole.entities.Scripts.create({
         project_id,
         topic_id: project.selected_topic_id,
-        version: "final_aggregated",
+        version: "final_aggregated", // <--- THE SECRET CODE FOR THE FRONTEND
         title: topic?.title || project.name,
         full_script: fullScript.trim(),
         word_count: totalWords,
         estimated_duration_sec: estimatedDuration
       });
     }
+
+    // 4. Tell the project it is officially ready
+    await base44.asServiceRole.entities.Projects.update(project_id, {
+      script_id: script.id,
+      status: "script_complete",
+      current_step: 4
+    });
+
 
     // Update project
     await base44.asServiceRole.entities.Projects.update(project_id, {
