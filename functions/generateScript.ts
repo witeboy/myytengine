@@ -57,21 +57,129 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { project_id, topic_id, topic_title, topic_description, selected_hook } = body;
 
-    const prompt = `Write a YouTube documentary script about "${topic_title}".
+    const prompt = `
+You are an elite YouTube documentary scriptwriter, retention strategist, and narrative psychologist.
 
-Context: ${topic_description}
+Your task is to write a high-retention, cinematic YouTube script about "${topic_title}".
+Target duration: approximately 140 words per minute voiceover pacing.
 
-Use this hook for the cold open: "${selected_hook}"
+Context:
+${topic_description}
 
-Format as narration + scene direction. Include:
+Cold open hook to integrate naturally:
+"${selected_hook}"
 
-→ Cold open that hooks in 7 seconds
-→ Emotional arc (curiosity, conflict, payoff)
-→ 3-act structure like a Netflix episode
-→ Voiceover pacing at 140 words per minute
-→ Visual timing for 16:9 Sora animations
+────────────────────────
+AUTO NICHE DETECTION SYSTEM
+────────────────────────
 
-Each paragraph should be a new visual scene.
+First, silently analyze "${topic_title}" and "${topic_description}" and determine the dominant niche:
+
+Possible niches include (but are not limited to):
+• Finance / Business / Economics
+• Technology / AI / Product Review
+• Crime / Investigation
+• History / Biography
+• Geopolitics / War / Law
+• Science / Engineering
+• Storytelling / Human Drama
+• Philosophy / Psychology
+• Cultural Commentary
+
+Then automatically adjust tone, pacing, and structure accordingly:
+
+IF Finance/Business:
+- Break down incentives, power structures, risk, and economic consequences.
+- Translate mechanisms clearly.
+- Highlight hidden leverage, money flows, and long-term ripple effects.
+
+IF Technology:
+- Translate features into real-world impact.
+- Contrast promise vs reality.
+- Include adoption implications and future disruption angles.
+
+IF Crime:
+- Maintain timeline clarity.
+- Layer psychological profiling.
+- Escalate moral tension and unanswered questions.
+
+IF History/Biography:
+- Emphasize character motivations.
+- Show stakes of decisions.
+- Connect past to present relevance.
+
+IF Geopolitics/Law:
+- Explain power dynamics.
+- Clarify strategic incentives.
+- Highlight unintended consequences.
+
+IF Storytelling/Human Drama:
+- Deep emotional immersion.
+- Sensory detail.
+- Internal conflict emphasis.
+
+────────────────────────
+STRUCTURE REQUIREMENTS
+────────────────────────
+
+Use a 3-Act Netflix-style documentary structure.
+
+ACT 1 — GRAVITY HOOK & WORLD SETUP
+- Open with tension immediately (no “In this video…”).
+- Use the selected hook naturally.
+- Create curiosity before explanation.
+- Establish stakes and central conflict.
+
+ACT 2 — ESCALATION & HIDDEN LAYERS
+- Go beyond “what happened.”
+- Explore why it mattered.
+- Insert micro-hooks every 60–90 seconds such as:
+  “But that wasn’t the real story.”
+  “What happened next changed everything.”
+  “Almost no one noticed this.”
+  “And this is where it gets uncomfortable.”
+- Increase either tension, emotional depth, or insight with every section.
+- Never plateau.
+
+ACT 3 — TURNING POINT & AFTERMATH
+- Introduce a critical decision, betrayal, revelation, collapse, or shift.
+- Slow pacing slightly for emotional weight.
+- Examine consequences and long-term impact.
+- End with a profound, lingering realization — not a summary.
+
+OUTRO
+- Subtle, intelligent call to action.
+- Reinforce the emotional or intellectual takeaway.
+
+────────────────────────
+RETENTION RULES
+────────────────────────
+
+- No filler.
+- No repetition for word count.
+- No robotic phrasing.
+- Vary sentence length.
+- Tight paragraphs.
+- Every paragraph must add new insight, tension, or depth.
+- Maintain escalating narrative momentum.
+- Make viewers feel something.
+
+────────────────────────
+VISUAL FORMAT REQUIREMENTS
+────────────────────────
+
+Each paragraph must follow this exact pattern:
+
+Narration text.
+
+[SCENE: Highly specific cinematic 16:9 Sora direction including camera movement, lighting style, mood, color grading, depth of field, environmental detail, and emotional tone.]
+
+Every paragraph = new visual scene.
+Assume widescreen 16:9 cinematic composition.
+
+────────────────────────
+OUTPUT FORMAT
+────────────────────────
 
 RESPOND IN THIS EXACT JSON FORMAT:
 
@@ -83,9 +191,16 @@ RESPOND IN THIS EXACT JSON FORMAT:
   "act_3": "Full Act 3 narration with [SCENE: directions] for each paragraph",
   "outro": "Closing narration with call to action",
   "full_script": "The complete script combining all acts in order",
-  "word_count": 1260,
-  "estimated_duration_sec": 540
-}`;
+  "word_count": 0,
+  "estimated_duration_sec": 0
+}
+
+IMPORTANT:
+- Calculate accurate word_count.
+- Calculate estimated_duration_sec at ~140 words per minute.
+- Ensure the script length aligns with documentary pacing.
+- Zero fluff. Every line must earn its place.
+`;
 
     const result = await safeGeminiCall(prompt, 0.8);
 
