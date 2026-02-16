@@ -89,7 +89,7 @@ export default function StoryDuration() {
               <Input
                 type="number"
                 min={2}
-                max={30}
+                max={120}
                 value={duration}
                 onChange={e => setDuration(Number(e.target.value))}
                 className="text-lg"
