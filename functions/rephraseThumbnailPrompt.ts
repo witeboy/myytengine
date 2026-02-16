@@ -16,24 +16,40 @@ Deno.serve(async (req) => {
     const project = projects[0];
 
     const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
-      prompt: `You are an AI image prompt rewriter. The following thumbnail image generation prompt was REJECTED by an AI image generator due to content policy violations (real people's likenesses, copyrighted imagery, violence, etc).
+      prompt: `You are an expert AI image prompt rewriter specializing in making prompts PASS content policy filters while maintaining maximum visual impact.
 
-Your job: Rewrite the image prompt so it conveys the SAME visual concept, composition, mood, and emotional impact, but using ONLY safe, generic, fictional characters that will NOT trigger content policy filters.
+The following prompt was REJECTED. Your job: completely rewrite it to be 100% policy-safe while keeping the same EMOTIONAL IMPACT and COMPOSITION.
 
-Rules:
-- NEVER reference real people by name or likeness
-- Replace real people with generic archetypes (e.g. "a middle-aged man with a confident expression" instead of a specific celebrity)
-- Keep the SAME composition, layout, camera angles, lighting, and color palette
-- Keep the SAME text overlays, badges, and graphic elements
-- Maintain the visual style: ${project?.visual_style || 'cinematic'}
-- Keep the 16:9 aspect ratio, 1280x720 format
-- The prompt should be 200+ words, detailed and descriptive
+=== WHAT CAUSES REJECTIONS (avoid ALL of these) ===
+- Any resemblance to real people (even indirect — "a man who looks presidential" can trigger filters)
+- Graphic violence, blood, gore, visible injuries, weapons pointed at people
+- Minors in distressing or dangerous situations
+- Copyrighted characters, logos, brand names
+- Threatening scenarios (someone looming menacingly over another person)
+- Military/war imagery with casualties
 
-ORIGINAL PROMPT THAT WAS REJECTED:
+=== HOW TO REPLACE UNSAFE ELEMENTS ===
+- Real people → completely generic fictional archetypes with UNIQUE features (specific hair color, clothing, build)
+- Violence/threat → dramatic SHADOWS, SILHOUETTES, environmental danger (storm, fire glow, crumbling walls)
+- Confrontation → opposing COLOR TEMPERATURE (warm vs cold), characters on opposite sides with contrasting lighting
+- Fear/danger → atmospheric effects (fog, embers, dramatic backlighting, heavy shadows)
+- Weapons → symbolic objects (a key, a document, a photograph, a broken chain)
+
+=== KEEP THESE UNCHANGED ===
+- Exact composition layout, camera angles, framing
+- Color palette and lighting approach
+- All text overlays (exact words, font style, position)
+- 16:9 aspect ratio, 1280x720 widescreen format
+- Visual style: ${project?.visual_style || 'cinematic'}
+- 200+ words, highly detailed
+
+REJECTED PROMPT:
 ${thumb.image_prompt}
 
-CONCEPT DESCRIPTION (for context):
-${thumb.concept_description}`,
+CONTEXT:
+${thumb.concept_description}
+
+TEXT OVERLAY TO PRESERVE: "${thumb.text_overlay || 'none'}"`,
       response_json_schema: {
         type: "object",
         properties: {
