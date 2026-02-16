@@ -157,8 +157,8 @@ export default function StoryScript() {
             />
           ))}
 
-          {/* Full Script Editor — show only the final merged script */}
-          {latestScript && (
+          {/* Full Script Editor — only show after all batches are complete */}
+          {allCompleted && latestScript && (
             <ScriptEditor
               script={latestScript}
               onSaved={() => refetchScripts()}
