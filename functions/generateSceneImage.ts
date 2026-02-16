@@ -15,21 +15,20 @@ Deno.serve(async (req) => {
     const scene = scenes[0];
     if (!scene) return Response.json({ error: 'Scene not found' }, { status: 404 });
 
-    // Get project for orientation and reference image
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: scene.project_id });
     const project = projects[0];
 
-    // Determine orientation and build aspect ratio instructions
+    // Determine orientation
     const orientation = project?.orientation || 'landscape';
     
     let aspectBlock;
     if (orientation === 'portrait') {
-      aspectBlock = 'CRITICAL: PORTRAIT orientation, 9:16 vertical aspect ratio, 720x1280 resolution. Tall vertical composition.';
+      aspectBlock = 'PORTRAIT orientation, 9:16 vertical aspect ratio, 720x1280. Tall vertical composition.';
     } else {
-      aspectBlock = 'CRITICAL: LANDSCAPE orientation, 16:9 widescreen horizontal aspect ratio, 1280x720 resolution. Wide horizontal cinematic composition.';
+      aspectBlock = 'LANDSCAPE orientation, 16:9 widescreen horizontal aspect ratio, 1280x720. Wide horizontal cinematic composition.';
     }
 
-    // Sanitize the image prompt to avoid content policy violations
+    // Sanitize the image prompt
     let basePrompt = scene.image_prompt || "";
     
     const sanitizations = [
@@ -43,27 +42,30 @@ Deno.serve(async (req) => {
     for (const [pattern, replacement] of sanitizations) {
       basePrompt = basePrompt.replace(pattern, replacement);
     }
+
+    // Remove any text/title/caption related words from the prompt that could cause
+    // the image model to render text in the image
+    basePrompt = basePrompt.replace(/\b(title|headline|caption|subtitle|text overlay|text on screen|words|writing|lettering|typography|banner|sign reading|label|logo)\b/gi, '');
+    // Remove quoted text that image models might try to render
+    basePrompt = basePrompt.replace(/"[^"]{3,}"/g, '');
+    basePrompt = basePrompt.replace(/'[^']{3,}'/g, '');
     
-    // Build the final prompt with orientation enforced at BOTH start and end
-    // (some image gen models pay more attention to beginning/end)
+    // Build final prompt
     let fullPrompt = `${aspectBlock} ${basePrompt}`;
     
-    // Ensure the prompt doesn't already have conflicting orientation instructions
+    // Strip conflicting orientation
     if (orientation === 'landscape') {
-      // Remove any portrait instructions that might have slipped in
       fullPrompt = fullPrompt.replace(/portrait|vertical|9:16|720x1280/gi, '');
     } else {
-      // Remove any landscape instructions that might have slipped in
       fullPrompt = fullPrompt.replace(/landscape|horizontal|16:9|1280x720/gi, '');
     }
     
-    // Re-append orientation at end as a reinforcement
-    fullPrompt += `. ${aspectBlock}`;
-
-    // Add safety wrapper
-    fullPrompt = `Artistic, dignified, historically respectful illustration. No graphic violence, gore, or suffering. No text, watermarks, or signatures. ${fullPrompt}`;
+    // Add strong no-text instruction at both start and end
+    const noTextRule = "CRITICAL: Generate a purely visual image with absolutely NO text, NO words, NO letters, NO numbers, NO titles, NO captions, NO watermarks, NO logos, NO signs with writing, NO typography of any kind anywhere in the image.";
     
-    // If project has character descriptions, prepend them
+    fullPrompt = `${noTextRule} Artistic, dignified illustration. No graphic violence. ${fullPrompt}. ${noTextRule}`;
+    
+    // Prepend character descriptions if available
     if (project?.character_descriptions) {
       try {
         const chars = JSON.parse(project.character_descriptions);
@@ -76,20 +78,19 @@ Deno.serve(async (req) => {
       } catch (_) {}
     }
     
-    // Truncate if too long (image gen APIs have limits)
+    // Truncate if needed, preserving no-text rule at the end
     if (fullPrompt.length > 2000) {
-      // Keep the orientation block at the end even after truncation
-      const endBlock = ` ${aspectBlock} masterpiece, highly detailed, 8K, professional composition`;
+      const endBlock = ` ${aspectBlock} ${noTextRule}`;
       fullPrompt = fullPrompt.substring(0, 2000 - endBlock.length) + endBlock;
     }
 
-    // Check for reference image from scene 1
+    // Reference image from scene 1
     const referenceImages = [];
     if (project?.reference_image_url) {
       referenceImages.push(project.reference_image_url);
     }
 
-    // Try generating with full context first, then fallback
+    // Generate with fallback retries
     let result;
     try {
       const generateParams = { prompt: fullPrompt };
@@ -98,18 +99,17 @@ Deno.serve(async (req) => {
       }
       result = await base44.asServiceRole.integrations.Core.GenerateImage(generateParams);
     } catch (firstErr) {
-      console.log("First attempt failed, retrying without reference images:", firstErr.message);
+      console.log("First attempt failed, retrying without reference:", firstErr.message);
       try {
         result = await base44.asServiceRole.integrations.Core.GenerateImage({ prompt: fullPrompt });
       } catch (secondErr) {
-        console.log("Second attempt failed, retrying with simplified prompt:", secondErr.message);
-        // Final retry: just the base prompt + strong orientation instruction
-        const simplePrompt = `${aspectBlock} ${scene.image_prompt || basePrompt}. ${aspectBlock}`;
+        console.log("Second attempt failed, simplified prompt:", secondErr.message);
+        const simplePrompt = `${aspectBlock} ${basePrompt}. ${noTextRule}`;
         result = await base44.asServiceRole.integrations.Core.GenerateImage({ prompt: simplePrompt });
       }
     }
 
-    // If this is scene 1 and project has no reference image yet, save it
+    // Save scene 1 as reference
     if (scene.scene_number === 1 && !project?.reference_image_url) {
       await base44.asServiceRole.entities.Projects.update(scene.project_id, {
         reference_image_url: result.url
