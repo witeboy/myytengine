@@ -35,19 +35,26 @@ export default function StoryScript() {
     refetchInterval: generating ? 3000 : false,
   });
 
-  const { data: scripts = [], refetch: refetchScripts } = useQuery({
+    const { data: scripts = [], refetch: refetchScripts } = useQuery({
     queryKey: ['scripts', projectId],
     queryFn: () => base44.entities.Scripts.filter({ project_id: projectId }),
     enabled: !!projectId,
+    // 🔄 Keep checking every 2 seconds if we don't have the final version yet
+    refetchInterval: (data) => {
+      const hasFinal = data?.some(s => s.version === 'final_aggregated');
+      return hasFinal ? false : 2000;
+    }
   });
+
 
   const completedCount = batches.filter(b => b.status === 'completed').length;
   const allCompleted = batches.length > 0 && completedCount === batches.length;
 
-  // Only show the latest script, and ONLY if all batches are complete
+    // 🎯 Strictly look for the version created by your 'generateFullScript' function
   const latestScript = allCompleted
-    ? [...scripts].sort((a, b) => new Date(b.created_date) - new Date(a.created_date))[0]
+    ? scripts.find(s => s.version === 'final_aggregated')
     : null;
+
 
   // Auto-generate: delete old scripts first, then generate batches
   useEffect(() => {
@@ -169,13 +176,16 @@ export default function StoryScript() {
             )}
           </div>
         </div>
-        <p className="text-gray-600 mb-8">
+                <p className="text-gray-600 mb-8">
           {generating
             ? 'AI is writing your script batch by batch...'
+            : (allCompleted && !latestScript)
+            ? 'Batches finished! Merging and cleaning the final documentary script...'
             : allCompleted
             ? 'Script generation complete.'
             : 'Preparing script...'}
         </p>
+
 
         <div className="space-y-6">
           {/* Progress bar while generating */}
