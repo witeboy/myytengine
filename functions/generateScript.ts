@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
 You are an elite YouTube documentary scriptwriter, retention strategist, and narrative psychologist.
 
 Your task is to write a high-retention, cinematic YouTube script about "${topic_title}".
-Target duration: approximately 140 words per minute voiceover pacing.
+Target duration: approximately 150 words per minute voiceover pacing.
 
 Context:
 ${topic_description}
@@ -197,7 +197,7 @@ RESPOND IN THIS EXACT JSON FORMAT:
 
 IMPORTANT:
 - Calculate accurate word_count.
-- Calculate estimated_duration_sec at ~140 words per minute.
+- Calculate estimated_duration_sec at ~150 words per minute.
 - Ensure the script length aligns with documentary pacing.
 - Zero fluff. Every line must earn its place.
 `;
