@@ -15,21 +15,23 @@ Deno.serve(async (req) => {
     const scene = scenes[0];
     if (!scene) return Response.json({ error: 'Scene not found' }, { status: 404 });
 
-    // Get project for reference image
+    // Get project for orientation and reference image
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: scene.project_id });
     const project = projects[0];
 
-    // Determine orientation and enforce aspect ratio in prompt
+    // Determine orientation and build aspect ratio instructions
     const orientation = project?.orientation || 'landscape';
-    const aspectRatioInstruction = orientation === 'portrait'
-      ? 'IMPORTANT: Generate this image in PORTRAIT orientation (9:16 aspect ratio, vertical format, 720x1280).'
-      : 'IMPORTANT: Generate this image in LANDSCAPE orientation (16:9 aspect ratio, horizontal format, 1280x720).';
+    
+    let aspectBlock;
+    if (orientation === 'portrait') {
+      aspectBlock = 'CRITICAL: PORTRAIT orientation, 9:16 vertical aspect ratio, 720x1280 resolution. Tall vertical composition.';
+    } else {
+      aspectBlock = 'CRITICAL: LANDSCAPE orientation, 16:9 widescreen horizontal aspect ratio, 1280x720 resolution. Wide horizontal cinematic composition.';
+    }
 
     // Sanitize the image prompt to avoid content policy violations
-    // Replace direct depictions of suffering/violence with tasteful artistic alternatives
     let basePrompt = scene.image_prompt || "";
     
-    // Remove problematic content patterns and replace with safer alternatives
     const sanitizations = [
       [/child('s)?\s+(face|eyes|body).*?(hunger|sick|starv|suffer|dying|dead|gaunt|tattered)/gi, "a solemn historical scene with dignified figures in period clothing"],
       [/bodies?\s+(lying|in the street|dead|piled)/gi, "a somber empty street scene"],
@@ -42,8 +44,24 @@ Deno.serve(async (req) => {
       basePrompt = basePrompt.replace(pattern, replacement);
     }
     
-    // Add safety wrapper + orientation
-    let fullPrompt = `${aspectRatioInstruction} Artistic, dignified, historically respectful illustration. No graphic violence or suffering. ${basePrompt}`;
+    // Build the final prompt with orientation enforced at BOTH start and end
+    // (some image gen models pay more attention to beginning/end)
+    let fullPrompt = `${aspectBlock} ${basePrompt}`;
+    
+    // Ensure the prompt doesn't already have conflicting orientation instructions
+    if (orientation === 'landscape') {
+      // Remove any portrait instructions that might have slipped in
+      fullPrompt = fullPrompt.replace(/portrait|vertical|9:16|720x1280/gi, '');
+    } else {
+      // Remove any landscape instructions that might have slipped in
+      fullPrompt = fullPrompt.replace(/landscape|horizontal|16:9|1280x720/gi, '');
+    }
+    
+    // Re-append orientation at end as a reinforcement
+    fullPrompt += `. ${aspectBlock}`;
+
+    // Add safety wrapper
+    fullPrompt = `Artistic, dignified, historically respectful illustration. No graphic violence, gore, or suffering. No text, watermarks, or signatures. ${fullPrompt}`;
     
     // If project has character descriptions, prepend them
     if (project?.character_descriptions) {
@@ -53,23 +71,25 @@ Deno.serve(async (req) => {
           const charBlock = chars.map(c => 
             `[CHARACTER: ${c.name} — ${c.description}]`
           ).join(" ");
-          fullPrompt = `IMPORTANT — Maintain EXACT character appearance. ${charBlock}. ${fullPrompt}`;
+          fullPrompt = `MAINTAIN EXACT character appearances: ${charBlock}. ${fullPrompt}`;
         }
       } catch (_) {}
     }
     
     // Truncate if too long (image gen APIs have limits)
     if (fullPrompt.length > 2000) {
-      fullPrompt = fullPrompt.substring(0, 2000);
+      // Keep the orientation block at the end even after truncation
+      const endBlock = ` ${aspectBlock} masterpiece, highly detailed, 8K, professional composition`;
+      fullPrompt = fullPrompt.substring(0, 2000 - endBlock.length) + endBlock;
     }
 
-    // Check if we have a reference image from scene 1 to use as style reference
+    // Check for reference image from scene 1
     const referenceImages = [];
     if (project?.reference_image_url) {
       referenceImages.push(project.reference_image_url);
     }
 
-    // Try generating with full context first, then fallback to simpler prompt
+    // Try generating with full context first, then fallback
     let result;
     try {
       const generateParams = { prompt: fullPrompt };
@@ -78,14 +98,14 @@ Deno.serve(async (req) => {
       }
       result = await base44.asServiceRole.integrations.Core.GenerateImage(generateParams);
     } catch (firstErr) {
-      console.log("First attempt failed, retrying with simpler prompt:", firstErr.message);
+      console.log("First attempt failed, retrying without reference images:", firstErr.message);
       try {
-        // Retry without reference images
         result = await base44.asServiceRole.integrations.Core.GenerateImage({ prompt: fullPrompt });
       } catch (secondErr) {
-        console.log("Second attempt failed, retrying with base prompt only:", secondErr.message);
-        // Final retry with just the scene image prompt
-        result = await base44.asServiceRole.integrations.Core.GenerateImage({ prompt: scene.image_prompt });
+        console.log("Second attempt failed, retrying with simplified prompt:", secondErr.message);
+        // Final retry: just the base prompt + strong orientation instruction
+        const simplePrompt = `${aspectBlock} ${scene.image_prompt || basePrompt}. ${aspectBlock}`;
+        result = await base44.asServiceRole.integrations.Core.GenerateImage({ prompt: simplePrompt });
       }
     }
 
@@ -104,7 +124,6 @@ Deno.serve(async (req) => {
     return Response.json({ success: true, image_url: result.url });
   } catch (error) {
     console.error("generateSceneImage error:", error.message);
-    // Mark scene as failed so user can rephrase the prompt
     try {
       if (scene_id) {
         await base44.asServiceRole.entities.Scenes.update(scene_id, { status: "failed" });
