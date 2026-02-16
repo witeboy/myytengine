@@ -221,7 +221,7 @@ Return JSON:
   "scenes": [
     {
       "scene_number": 1,
-      "narration_text": "The exact narration text...",
+      "narration_text": "(PASTE the actual words from the script segment that correspond to this scene - do not use placeholder text)",
       "image_prompt": "${promptPrefix}. [scene description]. masterpiece, highly detailed, 8K, professional composition",
       "animation_prompt": "For ${animationFramingGuide}: [motion description]",
       "duration_seconds": 8
@@ -264,7 +264,7 @@ Return JSON:
   "scenes": [
     {
       "scene_number": ${sceneOffset + 1},
-      "narration_text": "The exact narration text...",
+      "narration_text": "(PASTE the actual words from the script segment that correspond to this scene - do not use placeholder text)",
       "image_prompt": "${promptPrefix}. [scene description]. masterpiece, highly detailed, 8K, professional composition",
       "animation_prompt": "For ${animationFramingGuide}: [motion description]",
       "duration_seconds": 8
