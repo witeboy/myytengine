@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'AI33_API_KEY not configured' }, { status: 500 });
     }
 
-  /// Get the final aggregated script only
+    // Get the final aggregated script only
     const allScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
     const script = allScripts.find(s => s.version === 'final_aggregated');
     if (!script?.full_script) {
@@ -36,7 +36,6 @@ Deno.serve(async (req) => {
       .replace(/\n{3,}/g, '\n\n')
       .trim();
     
-
     // Call ai33.pro text-to-speech API
     const ttsResponse = await fetch(`https://api.ai33.pro/v1/text-to-speech/${voice_id}?output_format=mp3_44100_128`, {
       method: 'POST',
@@ -58,11 +57,24 @@ Deno.serve(async (req) => {
 
     const ttsData = await ttsResponse.json();
 
-    // Store task_id in project for polling
-    await base44.entities.Projects.update(project_id, {
-      voiceover_task_id: ttsData.task_id,
-      voiceover_status: 'generating',
-    });
+    // Update or create ProductionSettings with task info
+    const existingSettings = await base44.asServiceRole.entities.ProductionSettings.list();
+    const settings = existingSettings.find(s => s.project_id === project_id);
+
+    if (settings) {
+      await base44.asServiceRole.entities.ProductionSettings.update(settings.id, {
+        selected_voice_id: voice_id,
+        voiceover_status: 'generating',
+        generation_task_id: ttsData.task_id,
+      });
+    } else {
+      await base44.asServiceRole.entities.ProductionSettings.create({
+        project_id,
+        selected_voice_id: voice_id,
+        voiceover_status: 'generating',
+        generation_task_id: ttsData.task_id,
+      });
+    }
 
     return Response.json({
       success: true,
