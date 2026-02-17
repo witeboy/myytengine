@@ -11,7 +11,7 @@ async function safeGeminiCall(prompt, temperature = 0.8) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature, maxOutputTokens: 8192 }
+          generationConfig: { temperature, maxOutputTokens: 2000 }
         })
       }
     );
