@@ -56,9 +56,9 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════════════════
     const orientation = project?.orientation || 'landscape';
     const orientationDirective = orientation === 'portrait'
-      ? 'PORTRAIT VERTICAL 9:16 format (720x1280 pixels), tall vertical composition, center subjects vertically'
-      : 'LANDSCAPE HORIZONTAL 16:9 widescreen format (1280x720 pixels), wide cinematic framing, rule-of-thirds horizontal placement';
-
+  ? 'PORTRAIT VERTICAL 9:16 format, 832x1248 pixels, tall vertical composition, center subjects vertically'
+  : 'LANDSCAPE HORIZONTAL 16:9 widescreen format, 1216x832 pixels, wide cinematic framing, rule-of-thirds horizontal placement, fill entire frame edge to edge';
+  
     const visualStyle = project?.visual_style || 'cinematic_realistic';
     const styleDirective = styleMap[visualStyle] || styleMap.cinematic_realistic;
     const promptPrefix = `${styleDirective}, ${orientationDirective}`;
