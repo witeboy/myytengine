@@ -349,8 +349,27 @@ Deno.serve(async (req) => {
 **━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
 1. **MANDATORY PREFIX:** EVERY image_prompt MUST begin with exactly: "${promptPrefix}."
 2. **COMPOSITION:** ${orientationConfig.composition}
-3. **SHOT VARIETY IS CRITICAL:** Each scene MUST use a DIFFERENT shot type from the provided list. NEVER repeat the same framing for consecutive scenes.
-4. **CHARACTER CONSISTENCY:** When a character appears, include their COMPLETE description every single time (exact age, gender, clothing, etc.).
+3. **VISUAL METAPHOR MANDATE — CRITICAL FOR AI SAFETY:**
+   - NEVER request readable text, numbers, charts, graphs, documents, signs, or screens showing data
+   - Transform abstract concepts into CONCRETE VISUAL METAPHORS:
+     * "inflation erodes savings" → moth eating through dollar bill fabric texture
+     * "financial decline" → hourglass with last sand grains falling in golden light
+     * "market volatility" → domino pieces captured mid-fall with motion blur
+     * "time running out" → melting candle with last flame, NOT calendar showing dates
+     * "retirement crisis" → empty piggy bank with crack, elderly hands holding it
+     * "debt burden" → heavy chains wrapped around hands, NOT loan documents
+   - If documents MUST appear, show them BLURRED with only:
+     * Color (red ink stains, official stamps, worn edges)
+     * Texture (weathered paper, scattered pages, crumpled corners)
+     * Human interaction (worried hands pressing down, person's concerned face reviewing)
+     * Emotional context (shadows, lighting conveying mood)
+   - Financial data becomes SYMBOLIC:
+     * Large numbers → tall stacks of coins, overflowing briefcase, scale tipping heavily
+     * Small numbers → nearly empty jar, single coins on table, thin wallet
+     * Percentages → visual proportion (1/3 empty glass, mostly depleted hourglass)
+     * Trends → physical motion (sand pouring out, water level dropping, pile growing)
+   - FORBIDDEN: Any request for legible text, visible numbers, readable charts, data tables, spreadsheets with entries
+4. **SHOT VARIETY IS CRITICAL:** Each scene MUST use a DIFFERENT shot type from the provided list. NEVER repeat the same framing for consecutive scenes.
 5. **LIGHTING MASTERY:** Current Phase Lighting Requirement: **${lightingForPhase}**.
 6. **TECHNICAL CAMERA DETAILS:** Include specific camera work (angle, lens, depth of field).
 7. **ABSOLUTELY FORBIDDEN:** NO text, words, letters, numbers, captions, or writing of any kind.
