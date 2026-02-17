@@ -11,7 +11,7 @@ async function safeGeminiCall(prompt, temperature = 0.8) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature, maxOutputTokens: 2000 }
+          generationConfig: { temperature, maxOutputTokens: 8192 }
         })
       }
     );
@@ -296,3 +296,4 @@ Generate 5 premium viral topics for "${niche}" now.`;
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
+
