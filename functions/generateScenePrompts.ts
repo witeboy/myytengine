@@ -142,69 +142,53 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
     enhanced = `${falDimension} pixels. ${enhanced}`;
   }
 
-  // Check 1: Minimum length
   if (enhanced.length < 150) {
     issues.push(`Scene ${sceneNumber}: Prompt too short (${enhanced.length} chars)`);
   }
 
-  // Check 2: Must start with style directive
   const styleKeywords = styleConfig.positive.substring(0, 50).toLowerCase();
   if (!enhanced.toLowerCase().includes(styleKeywords.substring(0, 20))) {
     issues.push(`Scene ${sceneNumber}: Missing style directive`);
-    enhanced = `${styleConfig.positive}, ${orientation.directive}. ${enhanced}`;
+    enhanced = `${styleConfig.positive}, ${orientationConfig.directive}. ${enhanced}`;
   }
 
-  // Check 3: Must include orientation
-  if (orientation.format === 'portrait') {
+  if (orientationConfig.format === 'portrait') {
     if (!enhanced.toLowerCase().includes('portrait') && !enhanced.includes('9:16')) {
       issues.push(`Scene ${sceneNumber}: Missing portrait orientation`);
       enhanced = enhanced.replace(/landscape|horizontal|16:?9/gi, '');
-      if (!enhanced.includes(orientation.directive)) {
-        enhanced = `${orientation.directive}. ${enhanced}`;
+      if (!enhanced.includes(orientationConfig.directive)) {
+        enhanced = `${orientationConfig.directive}. ${enhanced}`;
       }
     }
   } else {
     if (!enhanced.toLowerCase().includes('landscape') && !enhanced.includes('16:9')) {
       issues.push(`Scene ${sceneNumber}: Missing landscape orientation`);
       enhanced = enhanced.replace(/portrait|vertical|9:?16/gi, '');
-      if (!enhanced.includes(orientation.directive)) {
-        enhanced = `${orientation.directive}. ${enhanced}`;
+      if (!enhanced.includes(orientationConfig.directive)) {
+        enhanced = `${orientationConfig.directive}. ${enhanced}`;
       }
     }
   }
 
-  // Check 4: Must have "no text" rule
   if (!enhanced.toLowerCase().includes('no text')) {
     issues.push(`Scene ${sceneNumber}: Missing "no text" rule`);
     enhanced += ', ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image';
   }
 
-  // Check 5: Must have quality markers
-  const hasQuality = enhanced.toLowerCase().includes('masterpiece') || 
-                     enhanced.toLowerCase().includes('professional') ||
-                     enhanced.toLowerCase().includes('8k') ||
-                     enhanced.toLowerCase().includes('award');
-  
+  const hasQuality = /masterpiece|professional|8k|award/i.test(enhanced);
   if (!hasQuality) {
     issues.push(`Scene ${sceneNumber}: Missing quality markers`);
     enhanced += ', masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography';
   }
 
-  // Check 6: Should have specific lighting
   const hasLighting = /\b(light|lighting|illumination|glow|shadow|ray|sun|moon|lamp|candle|fire)\b/i.test(enhanced);
-  if (!hasLighting) {
-    issues.push(`Scene ${sceneNumber}: Missing lighting description`);
-  }
+  if (!hasLighting) issues.push(`Scene ${sceneNumber}: Missing lighting description`);
 
-  // Check 7: Should have camera/shot details
   const hasCameraWork = /\b(shot|angle|view|camera|lens|focal|close-up|wide|medium|depth of field|bokeh|f\/\d)\b/i.test(enhanced);
-  if (!hasCameraWork) {
-    issues.push(`Scene ${sceneNumber}: Missing camera/shot details`);
-  }
+  if (!hasCameraWork) issues.push(`Scene ${sceneNumber}: Missing camera/shot details`);
 
-  // Log issues
   if (issues.length > 0) {
-    console.warn(`⚠️ Prompt quality issues found:\n${issues.join('\n')}`);
+    console.warn(`Prompt quality issues:\n${issues.join('\n')}`);
   }
 
   return enhanced;
