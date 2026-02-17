@@ -95,9 +95,9 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════════════════
     // ORIENTATION DIRECTIVE
     // ══════════════════════════════════════════════════════════════════
-    const orientationDirective = orientation === 'portrait'
-      ? 'PORTRAIT VERTICAL 9:16 format (720x1280 pixels), tall vertical composition, center subjects vertically, close-up and medium shots work best'
-      : 'LANDSCAPE HORIZONTAL 16:9 widescreen format (1280x720 pixels), wide cinematic framing, rule-of-thirds horizontal placement, panoramic depth';
+   const orientationDirective = orientation === 'portrait'
+  ? 'PORTRAIT VERTICAL 9:16 format, 832x1248 pixels, tall vertical composition, center subjects vertically, close-up and medium shots work best'
+  : 'LANDSCAPE HORIZONTAL 16:9 widescreen format, 1216x832 pixels, wide cinematic framing, rule-of-thirds horizontal placement, panoramic depth, fill entire frame edge to edge';
 
     const promptPrefix = `${styleConfig.positive}, ${orientationDirective}`;
 
@@ -241,10 +241,14 @@ RETURN ONLY the enhanced prompt as a plain string. No explanations, no JSON, no 
       enhancedPrompt = enhancedPrompt.replace(/\bportrait\b(?!\s+of)/gi, '');
       enhancedPrompt = enhancedPrompt.replace(/\bvertical\b/gi, '');
       enhancedPrompt = enhancedPrompt.replace(/9:16/g, '');
+      enhancedPrompt = enhancedPrompt.replace(/832x1248/g, '');
+      enhancedPrompt = enhancedPrompt.replace(/720x1280/g, '');
     } else {
       enhancedPrompt = enhancedPrompt.replace(/\blandscape\b(?!\s)/gi, '');
       enhancedPrompt = enhancedPrompt.replace(/\bhorizontal\b/gi, '');
       enhancedPrompt = enhancedPrompt.replace(/16:9/g, '');
+      enhancedPrompt = enhancedPrompt.replace(/1216x832/g, '');
+      enhancedPrompt = enhancedPrompt.replace(/1280x720/g, '');
     }
 
     // Patch 4: Strip conflicting style words
