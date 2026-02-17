@@ -82,10 +82,43 @@ Deno.serve(async (req) => {
     ];
     
     for (const [pattern, replacement] of sanitizations) {
-      basePrompt = basePrompt.replace(pattern, replacement);
-    }
+  basePrompt = basePrompt.replace(pattern, replacement);
+}
 
-    basePrompt = basePrompt.replace(/\$[\d,]+(\.\d+)?/g, 'a large sum of money');
+// ══════════════════════════════════════════════════════════════════
+// VISUAL METAPHOR TRANSLATIONS (Safety Net for AI Policy Compliance)
+// ══════════════════════════════════════════════════════════════════
+const documentMetaphors = [
+  // Financial documents → metaphorical alternatives
+  [/balance sheet(s)?/gi, 'weathered financial papers with abstract red markings'],
+  [/financial (report|statement|document|ledger)/gi, 'stack of blurred papers with concerned hands reviewing them'],
+  [/spreadsheet|invoice|receipt|form/gi, 'document held in worried hands, details intentionally out of focus'],
+  
+  // Charts/graphs (literal data → symbolic representation)
+  [/chart showing (decline|decrease|loss|drop|fall)/gi, 'symbolic descending visual elements suggesting downward motion'],
+  [/chart showing (increase|growth|rise|gain)/gi, 'symbolic ascending visual elements suggesting upward motion'],
+  [/(stock|market|financial) chart/gi, 'abstract geometric pattern suggesting market volatility'],
+  [/graph (with|showing|displaying) (red|green|up|down) arrow/gi, 'directional visual metaphor'],
+  [/(pie|bar|line) chart/gi, 'abstract proportional visual representation'],
+  
+  // Text-heavy items → contextual alternatives
+  [/(newspaper|magazine|article) (headline|showing|with|reading)/gi, 'person reading publication with emotional reaction visible'],
+  [/sign (reading|saying|with text|that says)/gi, 'weathered directional marker or symbolic indicator'],
+  [/(computer |phone |tablet |laptop )?screen (showing|displaying|with) (text|numbers|data|information)/gi, 'glowing screen with abstract light patterns reflected on face'],
+  [/website|webpage|app (showing|displaying)/gi, 'device screen with blurred interface elements'],
+  
+  // Numbers/data references → remove or symbolize
+  [/(shows?|displays?|reads?|says|contains?|lists?) (the )?(specific )?(number|figure|amount|data|statistic|percentage)s?/gi, 'suggests scale through visual proportion'],
+  [/with (visible |readable )?(text|numbers|words|digits|letters|writing|captions)/gi, 'with intentionally blurred details'],
+  [/(calendar|clock|watch) showing (date|time)/gi, 'timepiece suggesting urgency through composition'],
+];
+
+for (const [pattern, replacement] of documentMetaphors) {
+  basePrompt = basePrompt.replace(pattern, replacement);
+}
+
+// NOW do the existing number cleanups
+basePrompt = basePrompt.replace(/\$[\d,]+(\.\d+)?/g, 'a large sum of money');
     basePrompt = basePrompt.replace(/\b(19|20)\d{2}\b/g, '');
     basePrompt = basePrompt.replace(/\d+(\.\d+)?%/g, '');
     basePrompt = basePrompt.replace(/\b\d{4,}\b/g, '');
