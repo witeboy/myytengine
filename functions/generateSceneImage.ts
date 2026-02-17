@@ -9,19 +9,22 @@ function getUniversalImageParams(orientation) {
   
   if (mode === 'portrait') {
     return {
-      aspect_ratio: "9:16",   // Forces Gemini/Imagen to be vertical
-      size: "1024x1792",      // Forces DALL-E 3 to be vertical
-      width: 1024, height: 1792 // Forces Stable Diffusion to be vertical
+      aspect_ratio: "9:16",   // Snake_case (Standard for many APIs)
+      aspectRatio: "9:16",    // CamelCase (Standard for Google Cloud)
+      // width: 1024,         <-- REMOVED (Do not send these)
+      // height: 1792         <-- REMOVED (Do not send these)
     };
   } else {
     // Default to Landscape
     return {
-      aspect_ratio: "16:9",   // Forces Gemini/Imagen to be horizontal
-      size: "1792x1024",      // Forces DALL-E 3 to be horizontal
-      width: 1792, height: 1024 // Forces Stable Diffusion to be horizontal
+      aspect_ratio: "16:9",   // Snake_case
+      aspectRatio: "16:9",    // CamelCase
+      // width: 1792,         <-- REMOVED
+      // height: 1024         <-- REMOVED
     };
   }
 }
+
 
 Deno.serve(async (req) => {
   let base44;
