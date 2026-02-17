@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
 
 CHANNEL NICHE: "${niche}"
 
-Your mission: Generate 10 PREMIUM viral video topics that are surgical, specific deep-dives into "${niche}" — NOT generic finance/self-help content that happens to mention the niche.
+Your mission: Generate 5 PREMIUM viral video topics that are surgical, specific deep-dives into "${niche}" — NOT generic finance/self-help content that happens to mention the niche.
 
 ================================================
 NICHE SPECIFICITY MANDATE
@@ -87,7 +87,7 @@ EVERY topic MUST be:
 FORBIDDEN (these are lazy, generic topics):
 - "Why Most People Fail At [niche]" (too vague)
 - "The Beginner's Guide To [niche]" (no intrigue)
-- "Top 10 Tips For [niche]" (listicle, low retention)
+- "Top 5 Tips For [niche]" (listicle, low retention)
 - Topics that could apply to ANY niche with word substitution
 
 ================================================
@@ -204,7 +204,7 @@ CRITICAL REQUIREMENTS:
 - All topics must be executable with research only (no on-camera presenter needed)
 - Rank by overall channel growth potential (viral score x keyword potential x competition)
 
-Generate 10 premium viral topics for "${niche}" now.`;
+Generate 5 premium viral topics for "${niche}" now.`;
 
     const result = await safeGeminiCall(prompt, 0.85);
 
