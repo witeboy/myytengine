@@ -1,5 +1,28 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+/**
+ * 1. ADD THIS HELPER FUNCTION AT THE TOP
+ * This forces the correct parameters for Gemini (aspect_ratio), DALL-E (size), and Stable Diffusion (width/height).
+ */
+function getUniversalImageParams(orientation) {
+  const mode = orientation?.toLowerCase() || 'landscape';
+  
+  if (mode === 'portrait') {
+    return {
+      aspect_ratio: "9:16",   // Forces Gemini/Imagen to be vertical
+      size: "1024x1792",      // Forces DALL-E 3 to be vertical
+      width: 1024, height: 1792 // Forces Stable Diffusion to be vertical
+    };
+  } else {
+    // Default to Landscape
+    return {
+      aspect_ratio: "16:9",   // Forces Gemini/Imagen to be horizontal
+      size: "1792x1024",      // Forces DALL-E 3 to be horizontal
+      width: 1792, height: 1024 // Forces Stable Diffusion to be horizontal
+    };
+  }
+}
+
 Deno.serve(async (req) => {
   let base44;
   let scene_id;
@@ -40,17 +63,17 @@ Deno.serve(async (req) => {
     const styleDirective = styleMap[visualStyle] || styleMap.cinematic_realistic;
 
     // ──────────────────────────────────────────────────────────────
-    // ORIENTATION & DIMENSIONS
+    // 2. CHANGE ORIENTATION LOGIC TO USE THE HELPER
     // ──────────────────────────────────────────────────────────────
     const orientation = project?.orientation || 'landscape';
+    const universalParams = getUniversalImageParams(orientation);
     
-    let aspectBlock, dimensions;
+    // We keep these variables for PROMPT engineering only
+    let aspectBlock;
     if (orientation === 'portrait') {
       aspectBlock = 'PORTRAIT 9:16 vertical composition, tall vertical framing';
-      dimensions = { width: 720, height: 1280 };  // 9:16 aspect ratio
     } else {
       aspectBlock = 'LANDSCAPE 16:9 widescreen horizontal composition, wide cinematic framing, NO black bars, fill the entire frame edge to edge';
-      dimensions = { width: 1280, height: 720 };  // 16:9 aspect ratio
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -58,7 +81,6 @@ Deno.serve(async (req) => {
     // ──────────────────────────────────────────────────────────────
     let basePrompt = scene.image_prompt || "";
 
-    // Content safety sanitization
     const sanitizations = [
       [/child('s)?\s+(face|eyes|body).*?(hunger|sick|starv|suffer|dying|dead|gaunt|tattered)/gi, "a solemn historical scene with dignified figures in period clothing"],
       [/bodies?\s+(lying|in the street|dead|piled)/gi, "a somber empty street scene"],
@@ -71,25 +93,20 @@ Deno.serve(async (req) => {
       basePrompt = basePrompt.replace(pattern, replacement);
     }
 
-    // Strip text-triggering content
-    basePrompt = basePrompt.replace(/\$[\d,]+(\.\d+)?/g, 'a large sum of money');  // Dollar amounts
-    basePrompt = basePrompt.replace(/\b(19|20)\d{2}\b/g, '');  // Years
-    basePrompt = basePrompt.replace(/\d+(\.\d+)?%/g, '');  // Percentages
-    basePrompt = basePrompt.replace(/\b\d{4,}\b/g, '');  // Large numbers
+    basePrompt = basePrompt.replace(/\$[\d,]+(\.\d+)?/g, 'a large sum of money');
+    basePrompt = basePrompt.replace(/\b(19|20)\d{2}\b/g, '');
+    basePrompt = basePrompt.replace(/\d+(\.\d+)?%/g, '');
+    basePrompt = basePrompt.replace(/\b\d{4,}\b/g, '');
     basePrompt = basePrompt.replace(/\b(title|headline|caption|subtitle|text overlay|text on screen|words|writing|lettering|typography|banner|sign reading|label|logo|chart|graph|data|statistics|infographic|diagram|table|spreadsheet|screenshot|display showing|screen showing|showing numbers|with numbers)\b/gi, '');
-    basePrompt = basePrompt.replace(/"[^"]{3,}"/g, '');  // Quoted text
+    basePrompt = basePrompt.replace(/"[^"]{3,}"/g, '');
     basePrompt = basePrompt.replace(/'[^']{3,}'/g, '');
 
-    // ──────────────────────────────────────────────────────────────
-    // STRIP CONFLICTING STYLE WORDS
-    // ──────────────────────────────────────────────────────────────
     if (visualStyle === 'photorealistic_4k' || visualStyle === 'cinematic_realistic') {
       basePrompt = basePrompt.replace(/\b(cartoon|animated|illustration|illustrated|anime|manga|cel.?shaded|comic|painting|painted|watercolor|sketch|drawn|vector|flat.?color|2D|3D render|pixar|ghibli|dreamworks|digital art|concept art)\b/gi, '');
     } else if (visualStyle === 'anime' || visualStyle === 'cinematic_anime') {
       basePrompt = basePrompt.replace(/\b(photograph|photo|DSLR|Canon|Nikon|lens|f\/\d|focal length|RAW|editorial|photorealistic)\b/gi, '');
     }
 
-    // Strip conflicting orientation keywords
     if (orientation === 'landscape') {
       basePrompt = basePrompt.replace(/\bportrait\b(?!\s+of)/gi, '');
       basePrompt = basePrompt.replace(/\bvertical\b/gi, '');
@@ -102,17 +119,9 @@ Deno.serve(async (req) => {
       basePrompt = basePrompt.replace(/1280x720/g, '');
     }
 
-    // ──────────────────────────────────────────────────────────────
-    // BUILD FINAL PROMPT
-    // ──────────────────────────────────────────────────────────────
     const noTextRule = "ABSOLUTELY NO text, NO words, NO letters, NO numbers, NO dates, NO dollar amounts, NO captions, NO watermarks, NO logos, NO signs with writing, NO typography, NO charts, NO graphs anywhere in the image. PURELY VISUAL.";
-
-    // Style FIRST (strongest weight), then aspect, then content, then reinforcement
     let fullPrompt = `${styleDirective}. ${aspectBlock}. ${noTextRule}. ${basePrompt}. ${noTextRule}. ${aspectBlock}. ${styleDirective}.`;
 
-    // ──────────────────────────────────────────────────────────────
-    // ADD CHARACTER DESCRIPTIONS
-    // ──────────────────────────────────────────────────────────────
     if (project?.character_descriptions) {
       try {
         const chars = JSON.parse(project.character_descriptions);
@@ -125,9 +134,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ──────────────────────────────────────────────────────────────
-    // SMART TRUNCATION
-    // ──────────────────────────────────────────────────────────────
     const MAX_PROMPT_LENGTH = 2000;
     if (fullPrompt.length > MAX_PROMPT_LENGTH) {
       const endBlock = `. ${styleDirective}. ${aspectBlock}. ${noTextRule}`;
@@ -135,10 +141,10 @@ Deno.serve(async (req) => {
       fullPrompt = fullPrompt.substring(0, maxContentLen) + endBlock;
     }
 
-    console.log(`Scene ${scene.scene_number} | Style: ${visualStyle} | Orientation: ${orientation} (${dimensions.width}x${dimensions.height}) | Prompt: ${fullPrompt.length} chars`);
+    console.log(`Scene ${scene.scene_number} | Style: ${visualStyle} | Orientation: ${orientation} | Params:`, universalParams);
 
     // ──────────────────────────────────────────────────────────────
-    // GENERATE IMAGE WITH RETRIES
+    // 3. GENERATE IMAGE USING UNIVERSAL PARAMS
     // ──────────────────────────────────────────────────────────────
     const referenceImages = [];
     if (project?.reference_image_url) {
@@ -146,44 +152,40 @@ Deno.serve(async (req) => {
     }
 
     let result;
+    // Create base object with prompt + ALL size parameters
+    const commonParams = {
+      prompt: fullPrompt,
+      ...universalParams // SPREAD THE FIX HERE
+    };
 
-    // Attempt 1: Full prompt with reference images
     try {
-      const generateParams = { 
-        prompt: fullPrompt,
-        width: dimensions.width,
-        height: dimensions.height
-      };
-      
       if (referenceImages.length > 0) {
-        generateParams.existing_image_urls = referenceImages;
-      }
-      
-      result = await base44.asServiceRole.integrations.Core.GenerateImage(generateParams);
-      console.log(`✓ Scene ${scene.scene_number} image generated (attempt 1)`);
-      
-    } catch (firstErr) {
-      console.log(`✗ Attempt 1 failed for scene ${scene.scene_number}:`, firstErr.message);
-      
-      // Attempt 2: Without reference images
-      try {
+        // Attempt 1: Full prompt with reference
         result = await base44.asServiceRole.integrations.Core.GenerateImage({ 
-          prompt: fullPrompt,
-          width: dimensions.width,
-          height: dimensions.height
+          ...commonParams,
+          existing_image_urls: referenceImages
         });
+        console.log(`✓ Scene ${scene.scene_number} image generated (attempt 1)`);
+      } else {
+        throw new Error("No reference image, skipping to attempt 2");
+      }
+    } catch (firstErr) {
+      console.log(`✗ Attempt 1 failed/skipped:`, firstErr.message);
+      
+      try {
+        // Attempt 2: Without reference images (STILL USING UNIVERSAL PARAMS)
+        result = await base44.asServiceRole.integrations.Core.GenerateImage(commonParams);
         console.log(`✓ Scene ${scene.scene_number} image generated (attempt 2, no reference)`);
         
       } catch (secondErr) {
-        console.log(`✗ Attempt 2 failed for scene ${scene.scene_number}:`, secondErr.message);
+        console.log(`✗ Attempt 2 failed:`, secondErr.message);
         
-        // Attempt 3: Simplified prompt
         try {
+          // Attempt 3: Simplified prompt (STILL USING UNIVERSAL PARAMS)
           const simplePrompt = `${styleDirective}. ${aspectBlock}. ${basePrompt}. ${noTextRule}`;
           result = await base44.asServiceRole.integrations.Core.GenerateImage({ 
             prompt: simplePrompt,
-            width: dimensions.width,
-            height: dimensions.height
+            ...universalParams 
           });
           console.log(`✓ Scene ${scene.scene_number} image generated (attempt 3, simplified)`);
           
@@ -194,9 +196,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ──────────────────────────────────────────────────────────────
-    // SAVE SCENE 1 AS REFERENCE
-    // ──────────────────────────────────────────────────────────────
     if (scene.scene_number === 1 && !project?.reference_image_url) {
       await base44.asServiceRole.entities.Projects.update(scene.project_id, {
         reference_image_url: result.url
@@ -204,9 +203,6 @@ Deno.serve(async (req) => {
       console.log(`✓ Scene 1 saved as reference image for project`);
     }
 
-    // ──────────────────────────────────────────────────────────────
-    // UPDATE SCENE
-    // ──────────────────────────────────────────────────────────────
     await base44.asServiceRole.entities.Scenes.update(scene_id, {
       image_url: result.url,
       status: "image_generated"
@@ -215,14 +211,13 @@ Deno.serve(async (req) => {
     return Response.json({ 
       success: true, 
       image_url: result.url,
-      dimensions: dimensions,
+      dimensions: universalParams, // Return the params we used
       scene_number: scene.scene_number
     });
 
   } catch (error) {
     console.error("generateSceneImage error:", error.message);
     
-    // Mark scene as failed
     try {
       if (scene_id && base44) {
         await base44.asServiceRole.entities.Scenes.update(scene_id, { 
