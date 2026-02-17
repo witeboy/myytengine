@@ -123,9 +123,24 @@ function splitScriptByPhase(script, phases) {
 // ══════════════════════════════════════════════════════════════════
 // PREMIUM QUALITY VALIDATION
 // ══════════════════════════════════════════════════════════════════
-function validateAndEnhancePrompt(imagePrompt, styleConfig, orientation, sceneNumber) {
+function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, sceneNumber) {
   let enhanced = imagePrompt;
   const issues = [];
+
+  // Check 0: Strip wrong dimensions, enforce Fal.ai correct ones
+  const falDimension = orientationConfig.format === 'portrait' ? '832x1248' : '1216x832';
+  const wrongDimensions = orientationConfig.format === 'portrait'
+    ? ['720x1280', '720×1280', '1080x1920', '1024x1792', '1280x720', '1216x832']
+    : ['1280x720', '1280×720', '1920x1080', '1792x1024', '720x1280', '832x1248'];
+
+  for (const wrong of wrongDimensions) {
+    enhanced = enhanced.replace(new RegExp(wrong.replace('x', '[x×]'), 'g'), falDimension);
+  }
+
+  if (!enhanced.includes(falDimension)) {
+    issues.push(`Scene ${sceneNumber}: Missing Fal.ai dimension ${falDimension}`);
+    enhanced = `${falDimension} pixels. ${enhanced}`;
+  }
 
   // Check 1: Minimum length
   if (enhanced.length < 150) {
@@ -250,18 +265,18 @@ Deno.serve(async (req) => {
     if (orientation === 'portrait') {
       orientationConfig = {
         format: 'portrait',
-        directive: "PORTRAIT VERTICAL 9:16 format (720×1280 pixels)",
+        directive: "PORTRAIT VERTICAL 9:16 format, 832x1248 pixels, tall vertical framing",
         composition: "Compose for VERTICAL 9:16 mobile frame: use tall vertical compositions with strong vertical leading lines, center subjects in the vertical frame with headroom and foot room, close-up and medium shots work best for vertical format, use vertical depth with foreground/midground/background elements stacked vertically, avoid wide horizontal elements that get cropped",
         animation: "vertical 9:16 smartphone frame — prefer tilt up/down camera movements, vertical reveals and wipes, close-up push-ins and pull-outs, vertical parallax scrolling effects, portrait-oriented motion",
-        dimensions: { width: 720, height: 1280 }
+        dimensions: { width: 832, height: 1248 }
       };
     } else {
       orientationConfig = {
         format: 'landscape',
-        directive: "LANDSCAPE HORIZONTAL 16:9 widescreen format (1280×720 pixels)",
+        directive: "LANDSCAPE HORIZONTAL 16:9 widescreen format, 1216x832 pixels, wide cinematic framing, fill entire frame edge to edge",
         composition: "Compose for WIDESCREEN 16:9 cinematic frame: use wide establishing shots with panoramic depth, apply rule of thirds with subjects placed left/right for negative space, utilize horizontal leading lines and lateral composition, create depth with foreground/midground/background layers spread horizontally, embrace wide cinematic framing with breathing room on sides",
         animation: "widescreen 16:9 cinematic frame — prefer horizontal pans and tracking shots, dolly movements forward/backward, wide-angle crane shots, lateral parallax with depth, horizontal reveals and wipes",
-        dimensions: { width: 1280, height: 720 }
+        dimensions: { width: 1216, height: 832 }
       };
     }
 
