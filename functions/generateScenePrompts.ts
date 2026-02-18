@@ -1,5 +1,17 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+// ══════════════════════════════════════════════════════════════════
+// SCENE PROMPT GENERATOR (v2)
+// ══════════════════════════════════════════════════════════════════
+// PURPOSE: Converts directorial scene breakdowns into image/animation prompts.
+// INPUT:   Scenes with status "breakdown_ready" + scene_blueprint on Project
+// OUTPUT:  Scenes updated with image_prompt + animation_prompt, status → "prompts_ready"
+//
+// Pipeline: Script → Scene Breakdown → [THIS FUNCTION] → Image Gen → Animation
+// ══════════════════════════════════════════════════════════════════
+
+const BATCH_SIZE = 12; // Scenes per Gemini call
+
 async function callGemini(prompt, temperature = 0.7) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   const response = await fetch(
@@ -34,8 +46,8 @@ async function callGemini(prompt, temperature = 0.7) {
     for (const attempt of attempts) {
       try {
         const parsed = JSON.parse(attempt);
-        if (parsed.scenes && Array.isArray(parsed.scenes)) {
-          console.log(`Recovered ${parsed.scenes.length} scenes from truncated JSON`);
+        if (parsed.prompts && Array.isArray(parsed.prompts)) {
+          console.log(`Recovered ${parsed.prompts.length} prompts from truncated JSON`);
           return parsed;
         }
       } catch (_) {}
@@ -44,90 +56,32 @@ async function callGemini(prompt, temperature = 0.7) {
   }
 }
 
-function cleanNarrationText(text) {
-  if (!text) return text;
-  let cleaned = text;
-  cleaned = cleaned.replace(/\[[^\]]*\]/gi, '');
-  cleaned = cleaned.replace(/^(VOICEOVER|NARRATOR|VO|SOUND|MUSIC|SFX|SCENE|V\.?O\.?)\s*:\s*/gim, '');
-  cleaned = cleaned.replace(/^[A-Z\s]+\(V\.?O\.?\)\s*:?\s*/gim, '');
-  cleaned = cleaned.replace(/\*\*[^*]+\*\*:?\s*/g, '');
-  cleaned = cleaned.replace(/\([^)]*(?:voiceover|pause|beat|whisper|dramatic|softly|urgent|compelling)[^)]*\)/gi, '');
-  cleaned = cleaned.replace(/\(?\d{1,2}:\d{2}(?:\s*[-–—]\s*\d{1,2}:\d{2})?\)?/g, '');
-  cleaned = cleaned.replace(/\*\*/g, '');
-  cleaned = cleaned.replace(/\*/g, '');
-  cleaned = cleaned.replace(/\n{2,}/g, ' ').replace(/\s{2,}/g, ' ').trim();
-  return cleaned;
-}
-
-function cleanScriptText(text) {
-  let cleaned = text;
-  cleaned = cleaned.replace(/\[[^\]]*\]/gi, '');
-  cleaned = cleaned.replace(/^(VOICEOVER|NARRATOR|VO|SOUND|MUSIC|SFX|SCENE|V\.?O\.?)\s*:\s*/gim, '');
-  cleaned = cleaned.replace(/^[A-Z\s]+\(V\.?O\.?\)\s*:?\s*/gim, '');
-  cleaned = cleaned.replace(/\*\*[^*]+\*\*:?\s*/g, '');
-  cleaned = cleaned.replace(/\*\*/g, '');
-  cleaned = cleaned.replace(/\*/g, '');
-  cleaned = cleaned.replace(/\([^)]*(?:voiceover|pause|beat|whisper|dramatic|softly|urgent|compelling)[^)]*\)/gi, '');
-  cleaned = cleaned.replace(/\(?\d{1,2}:\d{2}(?:\s*[-–—]\s*\d{1,2}:\d{2})?\)?/g, '');
-  cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
-  return cleaned;
-}
-
 // ══════════════════════════════════════════════════════════════════
-// CINEMATIC LOGIC HELPERS (Infused)
+// PREMIUM VISUAL STYLE MAPPING
 // ══════════════════════════════════════════════════════════════════
-
-function deriveMotifs(niche) {
-  const motifMap = {
-    finance: ["kitchen table with paperwork", "sunlight through blinds", "empty chair at dinner table", "close-up of hands holding bills"],
-    retirement: ["quiet beach shoreline", "old photo album", "suburban home at sunset", "empty park bench"],
-    motivation: ["mountain peak at sunrise", "city skyline at dawn", "training gym", "deep breath before action"]
-  };
-  return motifMap[niche?.toLowerCase()] || ["soft window light", "symbolic interior space", "moody natural light", "shallow depth of field portrait"];
-}
-
-function getRoleBasedShotPattern(phase) {
-  const rolePatterns = {
-    cold_open: ["ECU with shallow depth of field", "detail insert of symbolic object", "wide isolated shot", "low angle dramatic light"],
-    problem: ["medium shot MS environmental context", "OTS over-shoulder", "high angle vulnerable", "handheld doc style"],
-    emotional_core: ["MCU", "tight CU", "two-shot interaction", "silhouette against light source"],
-    resolution: ["wide hopeful lighting", "tracking/dolly shot", "aerial cinematic perspective", "extreme wide establishing"]
-  };
-  return rolePatterns[phase] || rolePatterns.problem;
-}
-
-function splitScriptByPhase(script, phases) {
-  const sentences = script.match(/[^.!?]+[.!?]+[\s]*/g) || [script];
-  const totalSentences = sentences.length;
-  let cursor = 0;
-  const chunks = [];
-
-  for (const phase of phases) {
-    const proportion = phase.scenes / phases.reduce((a, b) => a + b.scenes, 0);
-    const sentenceCount = Math.max(1, Math.round(totalSentences * proportion));
-    // Ensure we don't go out of bounds
-    const endCursor = Math.min(cursor + sentenceCount, totalSentences);
-    
-    // If it's the last phase, take everything remaining
-    const isLast = phase.name === phases[phases.length-1].name;
-    const segment = sentences.slice(cursor, isLast ? totalSentences : endCursor).join("").trim();
-    
-    if (segment.length > 0) {
-        chunks.push({ phase: phase.name, scenes: phase.scenes, text: segment });
-    }
-    cursor = endCursor;
+const styleMap = {
+  cinematic_realistic: {
+    positive: "Cinematic film still shot on ARRI Alexa 65 with anamorphic Panavision lenses, beautiful lens flare and chromatic aberration, shallow depth of field f/1.4 with creamy bokeh, dramatic three-point lighting with hard key light and soft fill, strong rim light separation, color graded with professional teal and orange LUT, subtle Kodak Vision3 film grain texture, volumetric god rays through atmosphere, lens breathing on focus pulls, Hollywood blockbuster cinematography, photorealistic rendering, 8K resolution",
+    negative: "cartoon, anime, illustration, painting, drawing, sketch, 3D render, CGI, video game graphics, cel shaded, flat colors, clipart, comic book, manga, stylized, non-photorealistic, amateur photography, smartphone photo, low quality, blurry, distorted, deformed, oversaturated, artificial looking"
+  },
+  photorealistic_4k: {
+    positive: "Ultra-photorealistic DSLR photograph shot on Canon EOS R5 with RF 85mm f/1.2 L lens, razor-sharp focus with incredible detail, natural ambient lighting with soft diffused quality, professional color grading with accurate skin tones, editorial photography style for National Geographic or Vogue, visible skin texture with pores and fine details, accurate physically-based shadows and highlights, real-world proportions and anatomy, zero AI artifacts, 8K RAW image quality, museum-grade fine art photography",
+    negative: "cartoon, anime, illustration, CGI, 3D render, painting, digital art, artistic interpretation, stylized, unrealistic, soft focus, beauty filter, over-processed, illustration style, non-photographic, video game, synthetic, artificial, heavily edited, HDR overdone"
+  },
+  anime: {
+    positive: "High-quality anime illustration combining Studio Ghibli's whimsy with modern anime aesthetic, vibrant saturated colors with rich tones, clean precise linework with consistent line weight, cel-shaded with soft airbrushed gradients, expressive detailed eyes with multiple highlights and reflections, detailed hair strands with natural flow and movement, colorful detailed background art with atmospheric perspective, well-composed manga panel layout with rule of thirds, professional anime production quality like top-tier seasonal anime",
+    negative: "photorealistic, live action, photograph, 3D render, western cartoon style, rough sketch, amateur coloring, flat backgrounds, inconsistent art style, off-model characters, poorly drawn anatomy, rushed animation, low budget anime, chibi, super deformed"
   }
-  return chunks;
-}
+};
 
 // ══════════════════════════════════════════════════════════════════
-// PREMIUM QUALITY VALIDATION
+// PROMPT QUALITY VALIDATION
 // ══════════════════════════════════════════════════════════════════
 function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, sceneNumber) {
   let enhanced = imagePrompt;
   const issues = [];
 
-  // Check 0: Strip wrong dimensions, enforce Fal.ai correct ones
+  // Enforce correct Fal.ai dimensions
   const falDimension = orientationConfig.format === 'portrait' ? '832x1248' : '1216x832';
   const wrongDimensions = orientationConfig.format === 'portrait'
     ? ['720x1280', '720×1280', '1080x1920', '1024x1792', '1280x720', '1216x832']
@@ -181,12 +135,6 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
     enhanced += ', masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography';
   }
 
-  const hasLighting = /\b(light|lighting|illumination|glow|shadow|ray|sun|moon|lamp|candle|fire)\b/i.test(enhanced);
-  if (!hasLighting) issues.push(`Scene ${sceneNumber}: Missing lighting description`);
-
-  const hasCameraWork = /\b(shot|angle|view|camera|lens|focal|close-up|wide|medium|depth of field|bokeh|f\/\d)\b/i.test(enhanced);
-  if (!hasCameraWork) issues.push(`Scene ${sceneNumber}: Missing camera/shot details`);
-
   if (issues.length > 0) {
     console.warn(`Prompt quality issues:\n${issues.join('\n')}`);
   }
@@ -200,52 +148,63 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, batch_index, selected_hook } = await req.json(); // Added selected_hook to input
+    const { project_id, batch_index } = await req.json();
     const currentBatch = batch_index || 0;
 
-    // Get project
+    // ── Fetch project ──────────────────────────────────────────────
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-    // Get ONLY the final_aggregated script
-    const allScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
-    const script = allScripts.find(s => s.version === 'final_aggregated');
-    if (!script?.full_script) {
-      return Response.json({ error: 'No final script found. Please generate the full script first.' }, { status: 400 });
+    // ── Load blueprint ─────────────────────────────────────────────
+    let blueprint;
+    try {
+      blueprint = JSON.parse(project.scene_blueprint);
+    } catch (e) {
+      return Response.json({
+        error: 'Scene blueprint not found. Run scene breakdown first.'
+      }, { status: 400 });
     }
 
-    console.log(`Using final_aggregated script, words: ${script.full_script.split(/\s+/).length}`);
+    const storyAnalysis = blueprint.story_analysis;
 
-    // ══════════════════════════════════════════════════════════════════
-    // PREMIUM VISUAL STYLE MAPPING
-    // ══════════════════════════════════════════════════════════════════
-    const styleMap = {
-      cinematic_realistic: {
-        positive: "Cinematic film still shot on ARRI Alexa 65 with anamorphic Panavision lenses, beautiful lens flare and chromatic aberration, shallow depth of field f/1.4 with creamy bokeh, dramatic three-point lighting with hard key light and soft fill, strong rim light separation, color graded with professional teal and orange LUT, subtle Kodak Vision3 film grain texture, volumetric god rays through atmosphere, lens breathing on focus pulls, Hollywood blockbuster cinematography, photorealistic rendering, 8K resolution",
-        negative: "cartoon, anime, illustration, painting, drawing, sketch, 3D render, CGI, video game graphics, cel shaded, flat colors, clipart, comic book, manga, stylized, non-photorealistic, amateur photography, smartphone photo, low quality, blurry, distorted, deformed, oversaturated, artificial looking"
-      },
-      photorealistic_4k: {
-        positive: "Ultra-photorealistic DSLR photograph shot on Canon EOS R5 with RF 85mm f/1.2 L lens, razor-sharp focus with incredible detail, natural ambient lighting with soft diffused quality, professional color grading with accurate skin tones, editorial photography style for National Geographic or Vogue, visible skin texture with pores and fine details, accurate physically-based shadows and highlights, real-world proportions and anatomy, zero AI artifacts, 8K RAW image quality, museum-grade fine art photography",
-        negative: "cartoon, anime, illustration, CGI, 3D render, painting, digital art, artistic interpretation, stylized, unrealistic, soft focus, beauty filter, over-processed, illustration style, non-photographic, video game, synthetic, artificial, heavily edited, HDR overdone"
-      },
-      // ... (Keeping your existing styles for brevity, assume all other styles exist here) ...
-      anime: {
-        positive: "High-quality anime illustration combining Studio Ghibli's whimsy with modern anime aesthetic, vibrant saturated colors with rich tones, clean precise linework with consistent line weight, cel-shaded with soft airbrushed gradients, expressive detailed eyes with multiple highlights and reflections, detailed hair strands with natural flow and movement, colorful detailed background art with atmospheric perspective, well-composed manga panel layout with rule of thirds, professional anime production quality like top-tier seasonal anime",
-        negative: "photorealistic, live action, photograph, 3D render, western cartoon style, rough sketch, amateur coloring, flat backgrounds, inconsistent art style, off-model characters, poorly drawn anatomy, rushed animation, low budget anime, chibi, super deformed"
-      }
-    };
+    // ── Fetch scenes that need prompts ─────────────────────────────
+    const allScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
+    const pendingScenes = allScenes
+      .filter(s => s.status === 'breakdown_ready')
+      .sort((a, b) => a.scene_number - b.scene_number);
 
+    if (pendingScenes.length === 0) {
+      return Response.json({
+        success: true,
+        done: true,
+        message: 'All scenes already have prompts.',
+        total_scenes: allScenes.length
+      });
+    }
+
+    // ── Batch the pending scenes ───────────────────────────────────
+    const totalBatches = Math.ceil(pendingScenes.length / BATCH_SIZE);
+    const batchScenes = pendingScenes.slice(
+      currentBatch * BATCH_SIZE,
+      (currentBatch + 1) * BATCH_SIZE
+    );
+
+    if (batchScenes.length === 0) {
+      return Response.json({
+        success: true,
+        done: true,
+        total_scenes: allScenes.length,
+        total_batches: totalBatches
+      });
+    }
+
+    // ── Style & orientation config ─────────────────────────────────
     const visualStyle = project.visual_style || 'cinematic_realistic';
-    // Fallback to cinematic_realistic if specific style not found
-    const styleConfig = styleMap[visualStyle] || styleMap.cinematic_realistic; 
-
-    // ══════════════════════════════════════════════════════════════════
-    // ORIENTATION CONFIGURATION
-    // ══════════════════════════════════════════════════════════════════
+    const styleConfig = styleMap[visualStyle] || styleMap.cinematic_realistic;
     const orientation = project.orientation || 'landscape';
-    let orientationConfig;
 
+    let orientationConfig;
     if (orientation === 'portrait') {
       orientationConfig = {
         format: 'portrait',
@@ -266,300 +225,236 @@ Deno.serve(async (req) => {
 
     const promptPrefix = `${styleConfig.positive}, ${orientationConfig.directive}`;
 
-    // ══════════════════════════════════════════════════════════════════
-    // SCRIPT PROCESSING WITH CINEMATIC PHASING
-    // ══════════════════════════════════════════════════════════════════
-    
-    // 1. Cold Open Integration
-    const cleanedScriptBase = cleanScriptText(script.full_script);
-    let modifiedScript = cleanedScriptBase;
-    
-    if (selected_hook) {
-        const scriptWithoutHook = cleanedScriptBase.replace(selected_hook, "").trim();
-        modifiedScript = `${selected_hook}. ${scriptWithoutHook}`;
-    }
-
-    const wordCount = modifiedScript.split(/\s+/).length;
-    const durationMinutes = project.video_duration_minutes || Math.ceil(wordCount / 150);
-    
-    // 2. Emotional Phase Allocation (Replacing linear math)
-    const MAX_SCENE_SECONDS = 8;
-    const totalTargetScenes = Math.max(8, Math.round((durationMinutes * 60) / MAX_SCENE_SECONDS));
-
-    const phaseWeights = [
-      { name: "cold_open", weight: 0.12 },
-      { name: "problem", weight: 0.30 },
-      { name: "emotional_core", weight: 0.38 },
-      { name: "resolution", weight: 0.20 }
-    ];
-
-    let remainingScenes = totalTargetScenes;
-    const phaseSceneCounts = phaseWeights.map((phase, index) => {
-      if (index === phaseWeights.length - 1) {
-        return { ...phase, scenes: remainingScenes };
-      }
-      const scenes = Math.round(totalTargetScenes * phase.weight);
-      remainingScenes -= scenes;
-      return { ...phase, scenes };
-    });
-
-    // 3. Split Script by Phase
-    // This creates 4 distinct chunks based on narrative flow
-    const scriptChunks = splitScriptByPhase(modifiedScript, phaseSceneCounts);
-    const numBatches = scriptChunks.length;
-
-    // First batch: delete old scenes
-    if (currentBatch === 0) {
-      const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-      for (const s of oldScenes) {
-        await base44.asServiceRole.entities.Scenes.delete(s.id);
-      }
-      await base44.asServiceRole.entities.Projects.update(project_id, {
-        status: "content_generation",
-        current_step: 5,
-        character_descriptions: null // Reset characters on restart
-      });
-    }
-
-    // Count existing scenes for offset
-    const existingScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-    const sceneOffset = existingScenes.length;
-
-    if (currentBatch >= scriptChunks.length) {
-      return Response.json({ success: true, done: true, scene_count: sceneOffset, total_batches: numBatches });
-    }
-
-    const currentPhaseChunk = scriptChunks[currentBatch];
-    const scenesForBatch = currentPhaseChunk.scenes;
-
-    // 4. Derive Visual Assets for this Phase
-    const visualMotifs = deriveMotifs(project.niche);
-    
-    // Lighting progression: dark (cold open/problem) → warm (emotional) → bright (resolution)
-    const lightingStages = ["low-key shadowed", "moody/dramatic", "warm soft light", "bright natural light"];
-    const lightingForPhase = lightingStages[currentBatch % lightingStages.length];
-    
-    const suggestedShotPatterns = getRoleBasedShotPattern(currentPhaseChunk.phase);
-
-    // ══════════════════════════════════════════════════════════════════
-    // COMPREHENSIVE RULES FOR GEMINI
-    // ══════════════════════════════════════════════════════════════════
-    const imageRules = `**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
-**CRITICAL IMAGE PROMPT RULES (MUST FOLLOW EXACTLY):**
-**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
-1. **MANDATORY PREFIX:** EVERY image_prompt MUST begin with exactly: "${promptPrefix}."
-2. **COMPOSITION:** ${orientationConfig.composition}
-3. **VISUAL METAPHOR MANDATE — CRITICAL FOR AI SAFETY:**
-   - NEVER request readable text, numbers, charts, graphs, documents, signs, or screens showing data
-   - Transform abstract concepts into CONCRETE VISUAL METAPHORS:
-     * "inflation erodes savings" → moth eating through dollar bill fabric texture
-     * "financial decline" → hourglass with last sand grains falling in golden light
-     * "market volatility" → domino pieces captured mid-fall with motion blur
-     * "time running out" → melting candle with last flame, NOT calendar showing dates
-     * "retirement crisis" → empty piggy bank with crack, elderly hands holding it
-     * "debt burden" → heavy chains wrapped around hands, NOT loan documents
-   - If documents MUST appear, show them BLURRED with only:
-     * Color (red ink stains, official stamps, worn edges)
-     * Texture (weathered paper, scattered pages, crumpled corners)
-     * Human interaction (worried hands pressing down, person's concerned face reviewing)
-     * Emotional context (shadows, lighting conveying mood)
-   - Financial data becomes SYMBOLIC:
-     * Large numbers → tall stacks of coins, overflowing briefcase, scale tipping heavily
-     * Small numbers → nearly empty jar, single coins on table, thin wallet
-     * Percentages → visual proportion (1/3 empty glass, mostly depleted hourglass)
-     * Trends → physical motion (sand pouring out, water level dropping, pile growing)
-   - FORBIDDEN: Any request for legible text, visible numbers, readable charts, data tables, spreadsheets with entries
-4. **SHOT VARIETY IS CRITICAL:** Each scene MUST use a DIFFERENT shot type from the provided list. NEVER repeat the same framing for consecutive scenes.
-5. **LIGHTING MASTERY:** Current Phase Lighting Requirement: **${lightingForPhase}**.
-6. **TECHNICAL CAMERA DETAILS:** Include specific camera work (angle, lens, depth of field).
-7. **ABSOLUTELY FORBIDDEN:** NO text, words, letters, numbers, captions, or writing of any kind.
-8. **QUALITY MANDATE:** EVERY prompt must end with: "ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image. masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography"
-9. **NEGATIVE ELEMENTS TO AVOID:** ${styleConfig.negative}`;
-
-    const animationRules = `**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
-**ANIMATION PROMPT RULES:**
-**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
-1. **FRAME FORMAT:** Designed for ${orientationConfig.animation}
-2. **MANDATORY ELEMENTS:** Camera movement (direction, speed), Atmospheric motion, Subject micro-motion, Depth-of-field changes.
-3. **EMOTIONAL MATCHING:** Animation movement must match the emotional tone of the "${currentPhaseChunk.phase}" phase.`;
-
-    const narrationRules = `**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
-**NARRATION TEXT RULES — EXTREMELY CRITICAL:**
-**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
-1. **PURE SPOKEN WORDS ONLY:** No [SCENE:], VOICEOVER:, or parenthetical directions.
-2. **EXACT SCRIPT WORDS:** Use the EXACT words from the provided script segment. No paraphrasing.
-3. **COMPLETE COVERAGE:** Every sentence from the script segment must appear in EXACTLY ONE scene.`;
-
-    // ══════════════════════════════════════════════════════════════════
-    // LOAD EXISTING CHARACTERS
-    // ══════════════════════════════════════════════════════════════════
+    // ── Load characters ────────────────────────────────────────────
     let characters = [];
     if (project.character_descriptions) {
-      try { 
-        characters = JSON.parse(project.character_descriptions); 
-      } catch (e) {
-        console.warn('Failed to parse character descriptions:', e);
-      }
-    } else if (currentBatch > 0) {
-        // Double check DB if not on project object yet (race condition safety)
-        const updatedProject = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
-         if (updatedProject[0]?.character_descriptions) {
-            characters = JSON.parse(updatedProject[0].character_descriptions);
-         }
+      try { characters = JSON.parse(project.character_descriptions); } catch (_) {}
     }
 
     const characterBlock = characters.length > 0
-      ? `**ESTABLISHED CHARACTERS (copy FULL description every time they appear):**\n${characters.map(c => `• ${c.name}: ${c.description}`).join("\n")}`
-      : "**NO CHARACTERS ESTABLISHED YET** - If characters appear in this segment, create detailed descriptions in the 'characters' array.";
+      ? `**ESTABLISHED CHARACTERS (embed FULL physical description into every prompt where they appear):**\n${characters.map(c => `• ${c.name}: ${c.visual_description || c.description}`).join('\n')}`
+      : '';
 
-    // ══════════════════════════════════════════════════════════════════
-    // BUILD GEMINI PROMPT
-    // ══════════════════════════════════════════════════════════════════
+    // ── Build the directorial data for this batch ──────────────────
+    const scenesWithDirectorNotes = batchScenes.map(scene => {
+      // Find matching blueprint data
+      const blueprintScene = blueprint.scenes.find(b => b.scene_number === scene.scene_number);
+      return {
+        scene_number: scene.scene_number,
+        scene_id: scene.id,
+        narration_text: scene.narration_text,
+        director: blueprintScene || null
+      };
+    });
+
+    // ── Build Gemini prompt ────────────────────────────────────────
+    const sceneDirections = scenesWithDirectorNotes.map(s => {
+      if (!s.director) {
+        return `Scene ${s.scene_number}: (No director notes — generate based on narration)
+  Narration: "${s.narration_text}"`;
+      }
+      return `Scene ${s.scene_number}:
+  Narration: "${s.narration_text}"
+  Visual Concept: ${s.director.visual_concept}
+  Shot Type: ${s.director.shot_type}
+  Camera Angle: ${s.director.camera_angle}
+  Camera Movement: ${s.director.camera_movement}
+  Lighting: ${s.director.lighting}
+  Color Palette: ${s.director.color_palette}
+  Mood: ${s.director.mood}
+  Depth of Field: ${s.director.depth_of_field}
+  Niche Visual Element: ${s.director.niche_visual_element || 'N/A'}
+  Continuity Bridge: ${s.director.continuity_bridge || 'N/A'}
+  Emotional Intensity: ${s.director.emotional_intensity || 0.5}`;
+    }).join('\n\n');
+
     const prompt = `
 **━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
-**YOUR MISSION: CINEMATIC SCENE GENERATION**
+**MISSION: Convert Director's Scene Notes into Production-Ready Image & Animation Prompts**
 **━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
 
-You are a world-class cinematic director. Your goal is to break a script into high-quality scenes based on the emotional phase of the story.
+You are a visual effects supervisor translating a director's vision into precise technical prompts for AI image generation.
 
-**PROJECT DETAILS:**
+**STORY CONTEXT:**
 - Topic: "${project.name}"
-- Niche: "${project.niche}"
-- Visual Style: ${visualStyle}
-- Format: ${orientationConfig.format} ${orientationConfig.directive}
-- **Current Emotional Phase:** ${currentPhaseChunk.phase.toUpperCase()}
-- **Lighting Atmosphere:** ${lightingForPhase}
-- **Visual Motifs to Weave In:** ${visualMotifs.join(", ")}
-- Target Scenes for this Phase: ${scenesForBatch} scenes
-
-**NARRATION SCRIPT SEGMENT (${currentPhaseChunk.phase}):**
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-${currentPhaseChunk.text}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Central Theme: ${storyAnalysis.central_theme}
+- Visual World: ${storyAnalysis.visual_world}
+- Color Arc: ${storyAnalysis.color_arc}
+- Recurring Motifs: ${JSON.stringify(storyAnalysis.recurring_visual_motifs)}
 
 ${characterBlock}
 
-**WORKFLOW:**
+**VISUAL STYLE:** ${visualStyle}
+**ORIENTATION:** ${orientationConfig.format} (${orientationConfig.directive})
 
-1. **SCENE SEGMENTATION:** Break the narration segment into exactly ${scenesForBatch} separate visual scenes.
-   - Each scene = 1 visual idea.
-   - Use EVERY word from the script exactly once.
+**━━━━ DIRECTOR'S SCENE NOTES ━━━━**
 
-2. **SHOT SELECTION:** Use the following shot patterns prioritized for this phase: 
-   ${suggestedShotPatterns.join(", ")}
+${sceneDirections}
 
-3. **PREMIUM IMAGE PROMPTS:** Write detailed prompts (300+ chars) following the rules below.
+**━━━━ YOUR TASK ━━━━**
 
-**JSON RESPONSE FORMAT:**
+For EACH scene above, produce:
+
+1. **image_prompt** — A single, dense, technical prompt for AI image generation. Rules:
+   - MUST begin with: "${promptPrefix}."
+   - Translate the director's visual concept into a SPECIFIC, DETAILED image description (300+ chars)
+   - Embed the exact shot type, camera angle, and depth of field from the director's notes
+   - Embed the exact lighting setup described
+   - Apply the color palette as color grading direction
+   - If characters appear, embed their FULL physical description inline (not just their name)
+   - ${orientationConfig.composition}
+   - ABSOLUTELY FORBIDDEN: Any text, words, letters, numbers, charts, graphs, signs, or readable content
+   - Transform any abstract concepts into PHYSICAL VISUAL METAPHORS:
+     * Financial decline → hourglass with last grains falling
+     * Loneliness → single place setting at a table for six
+     * Hope → first crack of light through dark curtains
+     * Burden → heavy chains on weathered hands
+   - If documents must appear: ONLY blurred with emotional context (worried hands, scattered pages, red ink stains)
+   - MUST end with: "ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image. masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography"
+
+2. **animation_prompt** — Motion direction for 8-second video animation. Rules:
+   - Translate the director's camera_movement into animation language
+   - Frame format: ${orientationConfig.animation}
+   - Include: camera movement direction + speed, atmospheric motion (particles, fog, light shifts), subject micro-motion (breathing, hair, fabric), depth of field changes
+   - Match the emotional intensity: low intensity = slow/subtle, high intensity = dynamic/dramatic
+   - Create smooth motion that doesn't distract from narration
+
+**RESPONSE FORMAT:**
 {
-  "characters": [
+  "prompts": [
     {
-      "name": "Character Full Name",
-      "description": "Exact age, gender, ethnicity, hair, clothing, features"
-    }
-  ],
-  "scenes": [
-    {
-      "scene_number": ${sceneOffset + 1}, // Start incrementing from here
-      "narration_text": "Exact words from script segment",
-      "image_prompt": "${promptPrefix}. [shot type]. [detailed description]. ABSOLUTELY NO text... masterpiece quality...",
-      "animation_prompt": "[camera movement], [atmospheric motion]",
-      "duration_seconds": 8
+      "scene_number": 1,
+      "image_prompt": "${promptPrefix}. [full detailed prompt]... ABSOLUTELY NO text... masterpiece quality...",
+      "animation_prompt": "[detailed animation direction]"
     }
   ]
 }
 
-${imageRules}
-
-${animationRules}
-
-${narrationRules}
+**QUALITY CHECKLIST (verify EACH prompt):**
+✓ Begins with style prefix? 
+✓ 300+ characters?
+✓ Specific shot type embedded?
+✓ Lighting described technically?
+✓ Color palette applied?
+✓ Characters fully described (not just named)?
+✓ No text/words/numbers in the image?
+✓ Ends with quality markers?
+✓ Abstract concepts converted to physical metaphors?
+✓ Animation matches emotional intensity?
 `;
 
-    // ══════════════════════════════════════════════════════════════════
-    // CALL GEMINI
-    // ══════════════════════════════════════════════════════════════════
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`🎬 Phase: ${currentPhaseChunk.phase} (Batch ${currentBatch + 1}/${numBatches})`);
-    console.log(`📍 Generating scenes ${sceneOffset + 1}-${sceneOffset + scenesForBatch}`);
-    console.log(`🎨 Style: ${visualStyle} | 💡 Lighting: ${lightingForPhase}`);
+    console.log(`🎨 PROMPT GENERATION — Batch ${currentBatch + 1}/${totalBatches}`);
+    console.log(`📍 Converting scenes ${batchScenes[0].scene_number}-${batchScenes[batchScenes.length - 1].scene_number}`);
+    console.log(`🖼️ Style: ${visualStyle} | 📐 Orientation: ${orientation}`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     const result = await callGemini(prompt, 0.7);
 
-    // Save characters if new ones generated and not present
-    if (result.characters && result.characters.length > 0) {
-      const mergedCharacters = [...characters];
-      for (const newChar of result.characters) {
-          if (!mergedCharacters.some(c => c.name === newChar.name)) {
-              mergedCharacters.push(newChar);
-          }
-      }
-      if (mergedCharacters.length > characters.length) {
-          console.log(`✓ Updating characters: ${mergedCharacters.map(c => c.name).join(', ')}`);
-          await base44.asServiceRole.entities.Projects.update(project_id, {
-            character_descriptions: JSON.stringify(mergedCharacters),
-          });
-      }
-    }
-
-    // ══════════════════════════════════════════════════════════════════
-    // VALIDATE & SAVE SCENES
-    // ══════════════════════════════════════════════════════════════════
-    let scenesCreated = 0;
+    // ── Update scenes with generated prompts ───────────────────────
+    let promptsApplied = 0;
     let qualityWarnings = 0;
 
-    if (result.scenes) {
-      for (const scene of result.scenes) {
-        const sceneNum = sceneOffset + scenesCreated + 1;
-        const cleanedNarration = cleanNarrationText(scene.narration_text);
+    if (result.prompts && Array.isArray(result.prompts)) {
+      for (const generated of result.prompts) {
+        // Find the matching scene from our batch
+        const matchingScene = scenesWithDirectorNotes.find(
+          s => s.scene_number === generated.scene_number
+        );
 
-        // Validate and enhance image prompt
-        let imagePrompt = scene.image_prompt || "";
+        if (!matchingScene) {
+          console.warn(`⚠️ Generated prompt for scene ${generated.scene_number} has no matching scene in batch`);
+          continue;
+        }
+
+        // Validate and enhance the image prompt
+        let imagePrompt = generated.image_prompt || "";
         const enhancedPrompt = validateAndEnhancePrompt(
           imagePrompt,
           styleConfig,
           orientationConfig,
-          sceneNum
+          generated.scene_number
         );
 
         if (enhancedPrompt !== imagePrompt) {
           qualityWarnings++;
-          console.warn(`⚠️ Scene ${sceneNum} prompt was enhanced/corrected`);
+          console.warn(`⚠️ Scene ${generated.scene_number} prompt was enhanced/corrected`);
         }
 
-        await base44.asServiceRole.entities.Scenes.create({
-          project_id,
-          scene_number: sceneNum,
-          narration_text: cleanedNarration,
+        const animationPrompt = generated.animation_prompt
+          || "slow gentle camera movement forward, atmospheric haze, subtle subject breathing, shallow depth of field";
+
+        // Update the scene record
+        await base44.asServiceRole.entities.Scenes.update(matchingScene.scene_id, {
           image_prompt: enhancedPrompt,
-          animation_prompt: scene.animation_prompt || "slow gentle camera movement forward, atmospheric haze, subtle subject breathing, shallow depth of field",
-          duration_seconds: scene.duration_seconds || 8,
+          animation_prompt: animationPrompt,
           status: "prompts_ready"
         });
-        
-        scenesCreated++;
+
+        promptsApplied++;
       }
     }
 
-    const totalScenesNow = sceneOffset + scenesCreated;
-    const isDone = (currentBatch + 1) >= numBatches; // Done when all phase chunks are processed
+    // ── Handle any scenes that didn't get prompts (safety net) ─────
+    for (const s of scenesWithDirectorNotes) {
+      const wasProcessed = result.prompts?.some(p => p.scene_number === s.scene_number);
+      if (!wasProcessed) {
+        console.warn(`⚠️ Scene ${s.scene_number} missing from Gemini response — generating fallback`);
+
+        const director = s.director;
+        let fallbackPrompt = `${promptPrefix}. `;
+
+        if (director) {
+          fallbackPrompt += `${director.shot_type}. ${director.visual_concept}. `;
+          fallbackPrompt += `${director.lighting}. Color palette: ${director.color_palette}. `;
+          fallbackPrompt += `${director.depth_of_field}. Mood: ${director.mood}. `;
+        } else {
+          fallbackPrompt += `Cinematic scene depicting the narration. Professional composition. `;
+        }
+
+        fallbackPrompt += 'ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image. masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography';
+
+        const enhancedFallback = validateAndEnhancePrompt(
+          fallbackPrompt, styleConfig, orientationConfig, s.scene_number
+        );
+
+        await base44.asServiceRole.entities.Scenes.update(s.scene_id, {
+          image_prompt: enhancedFallback,
+          animation_prompt: director?.camera_movement
+            || "slow gentle camera movement forward, atmospheric haze, subtle subject breathing, shallow depth of field",
+          status: "prompts_ready"
+        });
+
+        promptsApplied++;
+        qualityWarnings++;
+      }
+    }
+
+    // ── Check completion ───────────────────────────────────────────
+    const remainingAfterBatch = pendingScenes.length - batchScenes.length;
+    const isDone = remainingAfterBatch <= 0 || (currentBatch + 1) >= totalBatches;
+
+    if (isDone) {
+      await base44.asServiceRole.entities.Projects.update(project_id, {
+        status: "content_generation",
+        current_step: 5
+      });
+    }
 
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`✓ Batch ${currentBatch + 1} complete`);
-    console.log(`📊 Created: ${scenesCreated} scenes | Total: ${totalScenesNow}/${totalTargetScenes}`);
-    if (qualityWarnings > 0) console.log(`⚠️ Quality warnings: ${qualityWarnings} prompts enhanced`);
-    console.log(`${isDone ? '🎉 ALL SCENES GENERATED!' : '⏭️ More batches (phases) remaining'}`);
+    console.log(`✓ Prompt batch ${currentBatch + 1} complete`);
+    console.log(`📊 Prompts applied: ${promptsApplied} | Remaining: ${remainingAfterBatch}`);
+    if (qualityWarnings > 0) console.log(`⚠️ Quality warnings: ${qualityWarnings}`);
+    console.log(`${isDone ? '🎉 ALL PROMPTS GENERATED — Ready for image generation' : '⏭️ More batches remaining'}`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     return Response.json({
-      success: true, 
+      success: true,
       done: isDone,
-      batch_completed: currentBatch, 
-      scenes_created: scenesCreated,
-      total_scenes: totalScenesNow, 
-      total_target: totalTargetScenes, 
-      total_batches: numBatches,
+      batch_completed: currentBatch,
+      prompts_applied: promptsApplied,
+      remaining_scenes: remainingAfterBatch,
+      total_batches: totalBatches,
       quality_warnings: qualityWarnings
     });
 
