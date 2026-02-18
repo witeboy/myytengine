@@ -1,27 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-// ══════════════════════════════════════════════════════════════════
-// FAL.AI DIMENSION CONFIGURATION
-// ══════════════════════════════════════════════════════════════════
-function getFalAiImageParams(orientation) {
-  const mode = orientation?.toLowerCase() || 'landscape';
-  
-  if (mode === 'portrait') {
-    return {
-      image_size: { width: 832, height: 1248 },  // Fal.ai portrait (~1MP, divisible by 32)
-      aspect_ratio: "9:16"
-    };
-  } else {
-    return {
-      image_size: { width: 1216, height: 832 },  // Fal.ai landscape (~1MP, divisible by 32)
-      aspect_ratio: "16:9"
-    };
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════
-// PREMIUM VISUAL STYLE MAP
-// ══════════════════════════════════════════════════════════════════
 const STYLE_MAP = {
   cinematic_realistic: "Cinematic film still shot on ARRI Alexa 65 with anamorphic Panavision lenses, beautiful lens flare and chromatic aberration, shallow depth of field f/1.4 with creamy bokeh, dramatic three-point lighting with hard key light and soft fill, strong rim light separation, color graded with professional teal and orange LUT, subtle Kodak Vision3 film grain texture, volumetric god rays through atmosphere, Hollywood blockbuster cinematography, photorealistic rendering, 8K resolution",
   
@@ -49,9 +27,6 @@ Deno.serve(async (req) => {
   let scene_id;
   
   try {
-    // ══════════════════════════════════════════════════════════════════
-    // AUTHENTICATION & DATA LOADING
-    // ══════════════════════════════════════════════════════════════════
     base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
@@ -67,21 +42,19 @@ Deno.serve(async (req) => {
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-    // ══════════════════════════════════════════════════════════════════
-    // STYLE & ORIENTATION CONFIGURATION
-    // ══════════════════════════════════════════════════════════════════
     const visualStyle = project?.visual_style || 'cinematic_realistic';
     const styleDirective = STYLE_MAP[visualStyle] || STYLE_MAP.cinematic_realistic;
-
     const orientation = project?.orientation || 'landscape';
-    const falAiParams = getFalAiImageParams(orientation);
-    
-    const aspectBlock = orientation === 'portrait'
-      ? 'PORTRAIT 9:16 vertical composition, 832x1248 pixels, tall vertical framing'
-      : 'LANDSCAPE 16:9 widescreen horizontal composition, 1216x832 pixels, wide cinematic framing, fill entire frame edge to edge';
 
     // ══════════════════════════════════════════════════════════════════
-    // PROMPT SANITIZATION — LAYER 1: SAFETY (violence/distress)
+    // DIMENSION CONTROL — EMBEDDED IN PROMPT (only way Base44 supports it)
+    // ══════════════════════════════════════════════════════════════════
+    const dimensionBlock = orientation === 'portrait'
+      ? 'VERTICAL PORTRAIT FORMAT, 9:16 aspect ratio, tall narrow composition like a phone screen, height is 1.5x the width'
+      : 'WIDE HORIZONTAL LANDSCAPE FORMAT, 16:9 aspect ratio, ultrawide cinematic widescreen composition like a movie frame, width is nearly 1.5x the height, the image must be significantly wider than it is tall';
+
+    // ══════════════════════════════════════════════════════════════════
+    // PROMPT SANITIZATION — LAYER 1: SAFETY
     // ══════════════════════════════════════════════════════════════════
     let cleanedPrompt = scene.image_prompt || "";
 
@@ -98,28 +71,21 @@ Deno.serve(async (req) => {
     }
 
     // ══════════════════════════════════════════════════════════════════
-    // PROMPT SANITIZATION — LAYER 2: VISUAL METAPHORS (text/documents)
+    // PROMPT SANITIZATION — LAYER 2: VISUAL METAPHORS
     // ══════════════════════════════════════════════════════════════════
     const documentMetaphors = [
-      // Financial documents → metaphorical alternatives
       [/balance sheet(s)?/gi, 'weathered financial papers with abstract red markings'],
       [/financial (report|statement|document|ledger)/gi, 'stack of blurred papers with concerned hands reviewing them'],
       [/spreadsheet|invoice|receipt|form/gi, 'document held in worried hands, details intentionally out of focus'],
-      
-      // Charts/graphs → symbolic representation
       [/chart showing (decline|decrease|loss|drop|fall)/gi, 'symbolic descending visual elements suggesting downward motion'],
       [/chart showing (increase|growth|rise|gain)/gi, 'symbolic ascending visual elements suggesting upward motion'],
       [/(stock|market|financial) chart/gi, 'abstract geometric pattern suggesting market volatility'],
       [/graph (with|showing|displaying) (red|green|up|down) arrow/gi, 'directional visual metaphor'],
       [/(pie|bar|line) chart/gi, 'abstract proportional visual representation'],
-      
-      // Text-heavy items → contextual alternatives
       [/(newspaper|magazine|article) (headline|showing|with|reading)/gi, 'person reading publication with emotional reaction visible'],
       [/sign (reading|saying|with text|that says)/gi, 'weathered directional marker or symbolic indicator'],
       [/(computer |phone |tablet |laptop )?screen (showing|displaying|with) (text|numbers|data|information)/gi, 'glowing screen with abstract light patterns reflected on face'],
       [/website|webpage|app (showing|displaying)/gi, 'device screen with blurred interface elements'],
-      
-      // Numbers/data references → remove or symbolize
       [/(shows?|displays?|reads?|says|contains?|lists?) (the )?(specific )?(number|figure|amount|data|statistic|percentage)s?/gi, 'suggests scale through visual proportion'],
       [/with (visible |readable )?(text|numbers|words|digits|letters|writing|captions)/gi, 'with intentionally blurred details'],
       [/(calendar|clock|watch) showing (date|time)/gi, 'timepiece suggesting urgency through composition'],
@@ -133,12 +99,12 @@ Deno.serve(async (req) => {
     // PROMPT SANITIZATION — LAYER 3: NUMERIC & TEXT REMOVAL
     // ══════════════════════════════════════════════════════════════════
     cleanedPrompt = cleanedPrompt.replace(/\$[\d,]+(\.\d+)?/g, 'a large sum of money');
-    cleanedPrompt = cleanedPrompt.replace(/\b(19|20)\d{2}\b/g, '');  // Strip years
-    cleanedPrompt = cleanedPrompt.replace(/\d+(\.\d+)?%/g, '');  // Strip percentages
-    cleanedPrompt = cleanedPrompt.replace(/\b\d{4,}\b/g, '');  // Strip large numbers
+    cleanedPrompt = cleanedPrompt.replace(/\b(19|20)\d{2}\b/g, '');
+    cleanedPrompt = cleanedPrompt.replace(/\d+(\.\d+)?%/g, '');
+    cleanedPrompt = cleanedPrompt.replace(/\b\d{4,}\b/g, '');
     cleanedPrompt = cleanedPrompt.replace(/\b(title|headline|caption|subtitle|text overlay|text on screen|words|writing|lettering|typography|banner|sign reading|label|logo|chart|graph|data|statistics|infographic|diagram|table|spreadsheet|screenshot|display showing|screen showing|showing numbers|with numbers)\b/gi, '');
-    cleanedPrompt = cleanedPrompt.replace(/"[^"]{3,}"/g, '');  // Strip quoted text
-    cleanedPrompt = cleanedPrompt.replace(/'[^']{3,}'/g, '');  // Strip single-quoted text
+    cleanedPrompt = cleanedPrompt.replace(/"[^"]{3,}"/g, '');
+    cleanedPrompt = cleanedPrompt.replace(/'[^']{3,}'/g, '');
 
     // ══════════════════════════════════════════════════════════════════
     // PROMPT SANITIZATION — LAYER 4: STYLE-CONFLICTING WORDS
@@ -156,22 +122,19 @@ Deno.serve(async (req) => {
       cleanedPrompt = cleanedPrompt.replace(/\bportrait\b(?!\s+of)/gi, '');
       cleanedPrompt = cleanedPrompt.replace(/\bvertical\b/gi, '');
       cleanedPrompt = cleanedPrompt.replace(/9:16/g, '');
-      cleanedPrompt = cleanedPrompt.replace(/720x1280/g, '');
-      cleanedPrompt = cleanedPrompt.replace(/832x1248/g, '');
     } else {
       cleanedPrompt = cleanedPrompt.replace(/\blandscape\b(?!\s)/gi, '');
       cleanedPrompt = cleanedPrompt.replace(/\bhorizontal\b/gi, '');
       cleanedPrompt = cleanedPrompt.replace(/16:9/g, '');
-      cleanedPrompt = cleanedPrompt.replace(/1280x720/g, '');
-      cleanedPrompt = cleanedPrompt.replace(/1216x832/g, '');
     }
 
     // ══════════════════════════════════════════════════════════════════
-    // BUILD FINAL PROMPT
+    // BUILD FINAL PROMPT — DIMENSIONS ARE FRONT-LOADED FOR PRIORITY
     // ══════════════════════════════════════════════════════════════════
     const noTextRule = "ABSOLUTELY NO text, NO words, NO letters, NO numbers, NO dates, NO dollar amounts, NO captions, NO watermarks, NO logos, NO signs with writing, NO typography, NO charts, NO graphs anywhere in the image. PURELY VISUAL.";
     
-    let finalPrompt = `${styleDirective}. ${aspectBlock}. ${noTextRule}. ${cleanedPrompt}. ${noTextRule}. ${aspectBlock}. ${styleDirective}.`;
+    // Dimension block goes FIRST so the model prioritizes it
+    let finalPrompt = `${dimensionBlock}. ${styleDirective}. ${cleanedPrompt}. ${noTextRule}. ${dimensionBlock}.`;
 
     // Add character consistency if available
     if (project?.character_descriptions) {
@@ -186,68 +149,47 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Enforce max length
     const MAX_PROMPT_LENGTH = 2000;
     if (finalPrompt.length > MAX_PROMPT_LENGTH) {
-      const endBlock = `. ${aspectBlock}. ${noTextRule}`;
+      const endBlock = `. ${dimensionBlock}. ${noTextRule}`;
       const maxContentLen = MAX_PROMPT_LENGTH - endBlock.length;
       finalPrompt = finalPrompt.substring(0, maxContentLen) + endBlock;
     }
 
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`Scene ${scene.scene_number} | Style: ${visualStyle} | Orientation: ${orientation}`);
-    console.log(`Fal.ai params: ${JSON.stringify(falAiParams)}`);
     console.log(`Prompt length: ${finalPrompt.length} chars`);
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     // ══════════════════════════════════════════════════════════════════
-    // IMAGE GENERATION WITH 3-ATTEMPT RETRY LOGIC
+    // IMAGE GENERATION — PROMPT-ONLY (Base44 only accepts { prompt })
     // ══════════════════════════════════════════════════════════════════
-    const referenceImages = project?.reference_image_url ? [project.reference_image_url] : [];
-    
-    // ✅ Try this - pass width/height at top level + multiple format hints
-const baseParams = {
-  prompt: finalPrompt,
-  width: falAiParams.image_size.width,
-  height: falAiParams.image_size.height,
-  image_size: falAiParams.image_size,
-  aspect_ratio: falAiParams.aspect_ratio,
-  size: `${falAiParams.image_size.width}x${falAiParams.image_size.height}`
-};
     let result;
 
-    // Attempt 1: With reference image
+    // Attempt 1: Full prompt
     try {
-      if (referenceImages.length > 0) {
-        result = await base44.asServiceRole.integrations.Core.GenerateImage({ 
-          ...baseParams,
-          existing_image_urls: referenceImages
-        });
-        console.log(`✓ Scene ${scene.scene_number} generated (attempt 1 - with reference)`);
-      } else {
-        throw new Error("No reference image available");
-      }
+      result = await base44.asServiceRole.integrations.Core.GenerateImage({ 
+        prompt: finalPrompt
+      });
+      console.log(`✓ Scene ${scene.scene_number} generated (attempt 1)`);
     } catch (firstErr) {
       console.log(`✗ Attempt 1 failed: ${firstErr.message}`);
       
-      // Attempt 2: Without reference image
+      // Attempt 2: Simplified prompt
       try {
-        result = await base44.asServiceRole.integrations.Core.GenerateImage(baseParams);
-        console.log(`✓ Scene ${scene.scene_number} generated (attempt 2 - no reference)`);
-        
+        const simplePrompt = `${dimensionBlock}. ${styleDirective}. ${cleanedPrompt}. ${noTextRule}`;
+        result = await base44.asServiceRole.integrations.Core.GenerateImage({ 
+          prompt: simplePrompt
+        });
+        console.log(`✓ Scene ${scene.scene_number} generated (attempt 2 - simplified)`);
       } catch (secondErr) {
         console.log(`✗ Attempt 2 failed: ${secondErr.message}`);
         
-        // Attempt 3: Simplified prompt
+        // Attempt 3: Minimal prompt
         try {
-          const simplePrompt = `${styleDirective}. ${aspectBlock}. ${cleanedPrompt}. ${noTextRule}`;
+          const minimalPrompt = `${dimensionBlock}. ${cleanedPrompt}. ${noTextRule}`;
           result = await base44.asServiceRole.integrations.Core.GenerateImage({ 
-            prompt: simplePrompt,
-            image_size: falAiParams.image_size,
-            aspect_ratio: falAiParams.aspect_ratio
+            prompt: minimalPrompt
           });
-          console.log(`✓ Scene ${scene.scene_number} generated (attempt 3 - simplified prompt)`);
-          
+          console.log(`✓ Scene ${scene.scene_number} generated (attempt 3 - minimal)`);
         } catch (thirdErr) {
           console.error(`✗ All 3 attempts failed for scene ${scene.scene_number}`);
           throw new Error(`Image generation failed after 3 attempts: ${thirdErr.message}`);
@@ -258,16 +200,13 @@ const baseParams = {
     // ══════════════════════════════════════════════════════════════════
     // SAVE RESULTS
     // ══════════════════════════════════════════════════════════════════
-    
-    // If this is scene 1 and no reference image exists, save it
     if (scene.scene_number === 1 && !project?.reference_image_url) {
       await base44.asServiceRole.entities.Projects.update(scene.project_id, {
         reference_image_url: result.url
       });
-      console.log(`✓ Scene 1 saved as reference image for project`);
+      console.log(`✓ Scene 1 saved as reference image`);
     }
 
-    // Update scene with generated image
     await base44.asServiceRole.entities.Scenes.update(scene_id, {
       image_url: result.url,
       status: "image_generated"
@@ -279,7 +218,6 @@ const baseParams = {
       success: true, 
       image_url: result.url,
       orientation: orientation,
-      dimensions: falAiParams.image_size,
       scene_number: scene.scene_number,
       style: visualStyle,
       prompt_length: finalPrompt.length
@@ -288,12 +226,9 @@ const baseParams = {
   } catch (error) {
     console.error(`❌ generateSceneImage error: ${error.message}`);
     
-    // Attempt to mark scene as failed
     try {
       if (scene_id && base44) {
-        await base44.asServiceRole.entities.Scenes.update(scene_id, { 
-          status: "failed" 
-        });
+        await base44.asServiceRole.entities.Scenes.update(scene_id, { status: "failed" });
       }
     } catch (updateErr) {
       console.error(`Failed to update scene status: ${updateErr.message}`);
