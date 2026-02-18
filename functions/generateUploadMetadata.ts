@@ -57,39 +57,57 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const { project_id } = body;
 
-    const project = await base44.entities.Projects.get(project_id);
+    // Get project
+    const projects = await base44.entities.Projects.filter({ id: project_id });
+    const project = projects[0];
+    if (!project) {
+      return Response.json({ error: 'Project not found' }, { status: 404 });
+    }
 
-    const topic = await base44.entities.Topics.get(project.selected_topic_id);
+    // Get selected topic (filter by is_selected = true)
+    const allTopics = await base44.entities.Topics.filter({ project_id });
+    const selectedTopic = allTopics.find(t => t.is_selected === true);
+    if (!selectedTopic) {
+      return Response.json({ error: 'No selected topic found' }, { status: 400 });
+    }
 
-    const script = await base44.entities.Scripts.get(project.script_id);
+    // Get final script (version = 'final_aggregated')
+    const allScripts = await base44.entities.Scripts.filter({ project_id });
+    const finalScript = allScripts.find(s => s.version === 'final_aggregated');
+    if (!finalScript) {
+      return Response.json({ error: 'No final script found' }, { status: 400 });
+    }
 
-    const prompt = `I'm about to upload this YouTube video about "${topic.title}". Generate:
+    const videoTitle = project.name || selectedTopic.title;
 
-→ SEO-optimized title variations
-→ 3 description templates
-→ 10 relevant tags
-→ Template for pinned comment
-→ Hashtags for discovery
+    const prompt = `I'm about to upload this YouTube video about "${selectedTopic.title}". Generate:
 
-Make sure everything targets watch-time, not just clicks.
+→ SEO-optimized title variations (under 100 characters, clickable but accurate)
+→ 3 description templates (engaging, with timestamps placeholder, CTAs)
+→ 10 relevant tags (mix of broad and specific keywords)
+→ Template for pinned comment (builds community, asks question)
+→ Hashtags for discovery (5-8 relevant hashtags)
 
-Video title: ${script.title}
+Make sure everything targets watch-time and engagement, not just clicks.
 
-Video topic: ${topic.title}
+Video title: ${videoTitle}
+Video topic: ${selectedTopic.title}
+Topic description: ${selectedTopic.description}
+Niche: ${project.niche}
 
-Video description context: ${topic.description}
+Script preview (first 200 chars): ${finalScript.full_script.substring(0, 200)}...
 
 RESPOND IN THIS EXACT JSON FORMAT:
 
 {
-  "title_primary": "Main SEO title",
-  "title_variation_1": "Alt title 1",
-  "title_variation_2": "Alt title 2",
-  "description_template": "Primary description with timestamps and links",
+  "title_primary": "Main SEO title under 100 chars",
+  "title_variation_1": "Alt title 1 under 100 chars",
+  "title_variation_2": "Alt title 2 under 100 chars",
+  "description_template": "Primary description with [TIMESTAMPS] placeholder, links section, and CTA",
   "description_alt_1": "Alternative description 1",
   "description_alt_2": "Alternative description 2",
   "tags": ["tag1", "tag2", "tag3", "tag4", "tag5", "tag6", "tag7", "tag8", "tag9", "tag10"],
-  "pinned_comment": "Template for pinned comment",
+  "pinned_comment": "Engaging pinned comment that asks a question or builds community",
   "hashtags": "#hashtag1 #hashtag2 #hashtag3 #hashtag4 #hashtag5"
 }`;
 
@@ -112,10 +130,21 @@ RESPOND IN THIS EXACT JSON FORMAT:
       hashtags: result.data.hashtags
     });
 
-    await base44.entities.Projects.update(project_id, { current_step: 13, status: "publish_ready" });
+    await base44.entities.Projects.update(project_id, { 
+      current_step: 13, 
+      status: "publish_ready" 
+    });
 
-    return Response.json({ success: true, metadata: metadata });
+    console.log(`Upload metadata generated for: ${videoTitle}`);
+
+    return Response.json({ 
+      success: true, 
+      metadata: metadata,
+      video_title: videoTitle,
+      topic_title: selectedTopic.title
+    });
   } catch (error) {
+    console.error('generateUploadMetadata error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
