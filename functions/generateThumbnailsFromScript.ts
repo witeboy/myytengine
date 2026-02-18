@@ -1,9 +1,131 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-async function safeGeminiCall(prompt, temperature = 0.8, maxTokens = 16384, retries = 3) {
+// ══════════════════════════════════════════════════════════════════
+// KIE AI UNIFIED IMAGE GENERATION (Ideogram V3 + Flux 2 fallback)
+// ══════════════════════════════════════════════════════════════════
+const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
+
+async function kieCreateTask(apiKey, model, input) {
+  const res = await fetch(`${KIE_BASE}/createTask`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ model, input })
+  });
+
+  const result = await res.json();
+  if (!res.ok || result.code !== 200) {
+    throw new Error(`Kie createTask failed (${model}): ${result.msg || JSON.stringify(result)}`);
+  }
+  return result.data.taskId;
+}
+
+async function kiePollResult(apiKey, taskId, maxWaitMs = 120000) {
+  const pollInterval = 4000;
+  const start = Date.now();
+
+  while (Date.now() - start < maxWaitMs) {
+    await new Promise(r => setTimeout(r, pollInterval));
+
+    const res = await fetch(`${KIE_BASE}/recordInfo?taskId=${taskId}`, {
+      headers: { "Authorization": `Bearer ${apiKey}` }
+    });
+
+    const poll = await res.json();
+    if (poll.code !== 200) { console.warn(`Poll error: ${poll.message}`); continue; }
+
+    const state = poll.data?.state;
+
+    if (state === "success") {
+      const resultJson = JSON.parse(poll.data.resultJson || "{}");
+      const url = resultJson.resultUrls?.[0] || resultJson.url || resultJson.imageUrl;
+      if (!url) throw new Error("Task completed but no image URL in resultJson");
+      return url;
+    }
+
+    if (state === "fail") {
+      throw new Error(`Kie task failed: ${poll.data?.failMsg || "Unknown"}`);
+    }
+  }
+
+  throw new Error(`Kie task ${taskId} timed out after ${maxWaitMs / 1000}s`);
+}
+
+// Ideogram V3: Best text rendering, perfect for thumbnails with text overlays
+// image_size: square | square_hd | portrait_4_3 | portrait_16_9 | landscape_4_3 | landscape_16_9
+// style: AUTO | GENERAL | REALISTIC | DESIGN
+// rendering_speed: TURBO | BALANCED | QUALITY
+async function generateWithIdeogram(apiKey, prompt, negativePrompt) {
+  console.log(`[Ideogram V3] Generating 1920x1080 thumbnail...`);
+  const taskId = await kieCreateTask(apiKey, "ideogram/v3-generate", {
+    prompt: `${prompt}. Ultra high resolution 1920x1080 Full HD output, crisp sharp details, professional YouTube thumbnail quality.`,
+    image_size: "landscape_16_9",
+    style: "DESIGN",
+    rendering_speed: "QUALITY",
+    expand_prompt: false,
+    negative_prompt: negativePrompt || "blurry, low quality, pixelated, watermark, signature, low resolution, compressed, artifacts"
+  });
+  return await kiePollResult(apiKey, taskId);
+}
+
+// Flux 2 Pro fallback: High quality, good aspect ratio control
+// aspect_ratio: "1:1" | "16:9" | "9:16" etc.
+async function generateWithFlux2(apiKey, prompt) {
+  console.log(`[Flux 2 Pro] Generating 1920x1080 thumbnail (fallback)...`);
+  const taskId = await kieCreateTask(apiKey, "flux-2/pro-text-to-image", {
+    prompt: `${prompt}. Ultra high resolution 1920x1080 Full HD, crisp details, professional thumbnail.`,
+    aspect_ratio: "16:9",
+    resolution: "2K"
+  });
+  return await kiePollResult(apiKey, taskId);
+}
+
+// Generate single thumbnail image with retry chain
+async function generateThumbnailImage(apiKey, imagePrompt, negativePrompt) {
+  // Attempt 1: Ideogram V3 (best for text in thumbnails)
+  try {
+    const url = await generateWithIdeogram(apiKey, imagePrompt, negativePrompt);
+    return { url, model: "ideogram/v3-generate" };
+  } catch (err1) {
+    console.warn(`Ideogram V3 failed: ${err1.message}`);
+
+    // Attempt 2: Ideogram V3 with simplified prompt
+    try {
+      const simplePrompt = imagePrompt.substring(0, 800);
+      const url = await generateWithIdeogram(apiKey, simplePrompt, negativePrompt);
+      return { url, model: "ideogram/v3-generate (simplified)" };
+    } catch (err2) {
+      console.warn(`Ideogram V3 simplified failed: ${err2.message}`);
+
+      // Attempt 3: Flux 2 Pro fallback
+      try {
+        const url = await generateWithFlux2(apiKey, imagePrompt);
+        return { url, model: "flux-2/pro-text-to-image" };
+      } catch (err3) {
+        console.error(`All image gen failed: ${err3.message}`);
+        return { url: null, model: "none", error: err3.message };
+      }
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GEMINI HELPER
+// ══════════════════════════════════════════════════════════════════
+
+function repairJSON(str) {
+  let s = str;
+  s = s.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+  s = s.replace(/[\x00-\x1F\x7F]/g, c => c === '\n' || c === '\r' || c === '\t' ? c : '');
+  return s;
+}
+
+async function safeGeminiCall(prompt, temperature = 0.8) {
   const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
-  
-  for (let attempt = 0; attempt < retries; attempt++) {
+
+  try {
     const response = await fetch(
       "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + geminiApiKey,
       {
@@ -11,17 +133,14 @@ async function safeGeminiCall(prompt, temperature = 0.8, maxTokens = 16384, retr
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature, maxOutputTokens: maxTokens }
+          generationConfig: {
+            temperature,
+            maxOutputTokens: 4096,
+            responseMimeType: "application/json"
+          }
         })
       }
     );
-
-    if (response.status === 429) {
-      const waitMs = Math.pow(2, attempt + 1) * 5000; // 10s, 20s, 40s
-      console.log(`Rate limited, waiting ${waitMs/1000}s before retry ${attempt + 1}/${retries}...`);
-      await new Promise(r => setTimeout(r, waitMs));
-      continue;
-    }
 
     if (!response.ok) {
       const err = await response.json();
@@ -29,33 +148,58 @@ async function safeGeminiCall(prompt, temperature = 0.8, maxTokens = 16384, retr
     }
 
     const data = await response.json();
-    if (!data.candidates || data.candidates.length === 0) throw new Error("No candidates from Gemini");
-    const text = data.candidates[0].content.parts[0].text;
-    let jsonStr = text;
-    if (text.includes("```json")) jsonStr = text.split("```json")[1].split("```")[0].trim();
-    else if (text.includes("```")) jsonStr = text.split("```")[1].split("```")[0].trim();
-    
-    // Clean common JSON issues from LLM output
-    jsonStr = jsonStr
-      .replace(/[\x00-\x1F\x7F]/g, (ch) => ch === '\n' || ch === '\r' || ch === '\t' ? ch : ' ')  // remove control chars
-      .replace(/,\s*([}\]])/g, '$1')  // remove trailing commas
-      .replace(/(["\w\d])\s*\n\s*"/g, '$1, "');  // fix missing commas between properties
-    
-    try {
-      return JSON.parse(jsonStr);
-    } catch (e) {
-      console.error("JSON parse failed, attempting repair. Error:", e.message);
-      // Try to extract just the array/object structure
-      const objMatch = jsonStr.match(/\{[\s\S]*\}/);
-      if (objMatch) {
-        return JSON.parse(objMatch[0]);
-      }
-      throw new Error("Failed to parse Gemini response as JSON: " + e.message);
+    if (!data.candidates || data.candidates.length === 0) {
+      throw new Error("Gemini returned no candidates.");
     }
+
+    const text = data.candidates[0].content.parts[0].text;
+
+    // 3-stage JSON parsing
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (e1) {
+      try {
+        parsed = JSON.parse(repairJSON(text));
+      } catch (e2) {
+        let jsonStr = text;
+        if (text.includes("```json")) jsonStr = text.split("```json")[1].split("```")[0].trim();
+        else if (text.includes("```")) jsonStr = text.split("```")[1].split("```")[0].trim();
+        parsed = JSON.parse(repairJSON(jsonStr));
+      }
+    }
+
+    return { success: true, data: parsed, raw: text };
+  } catch (error) {
+    console.error("Gemini call failed:", error.message);
+    return { success: false, error: error.message };
   }
-  
-  throw new Error("Gemini API rate limit exceeded after retries. Please try again in a minute.");
 }
+
+// ══════════════════════════════════════════════════════════════════
+// VALIDATION
+// ══════════════════════════════════════════════════════════════════
+
+function validateThumbnail(thumbnail) {
+  const issues = [];
+  if (!thumbnail.image_prompt || thumbnail.image_prompt.length < 100) {
+    issues.push('Image prompt too short (minimum 100 chars)');
+  }
+  if (!thumbnail.text_overlay || thumbnail.text_overlay.trim().length === 0) {
+    issues.push('Missing text overlay');
+  }
+  if (thumbnail.text_overlay && thumbnail.text_overlay.split(' ').length > 5) {
+    issues.push('Text overlay too long (max 5 words)');
+  }
+  if (!thumbnail.ctr_score || thumbnail.ctr_score < 1 || thumbnail.ctr_score > 10) {
+    issues.push('Invalid CTR score');
+  }
+  return { valid: issues.length === 0, issues };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MAIN HANDLER
+// ══════════════════════════════════════════════════════════════════
 
 Deno.serve(async (req) => {
   try {
@@ -63,383 +207,301 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, reference_style, template_blueprint, niche_dna, niche_name, selected_title } = await req.json();
+    const body = await req.json();
+    const { project_id, video_title } = body;
 
-    // ══════════════════════════════════════════════════════════════════
-    // LOAD PROJECT, SCRIPT, TOPIC
-    // ══════════════════════════════════════════════════════════════════
-    const projects = await base44.entities.Projects.filter({ id: project_id });
-    const project = projects[0];
-    if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
+    if (!project_id || !video_title) {
+      return Response.json({ error: 'Missing required fields: project_id, video_title' }, { status: 400 });
+    }
 
-    const allScripts = await base44.entities.Scripts.filter({ project_id });
-    const script = allScripts.find(s => s.version === 'final_aggregated');
-    if (!script) return Response.json({ error: 'No final script found' }, { status: 400 });
+    const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
+    if (!KIE_API_KEY) {
+      return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
+    }
 
-    const allTopics = await base44.entities.Topics.filter({ project_id });
-    const topic = allTopics.find(t => t.is_selected === true);
-    if (!topic) return Response.json({ error: 'No selected topic found' }, { status: 400 });
-
-    // Gather script content
-    const scriptContent = script.full_script || [script.cold_open, script.act_1, script.act_2, script.act_3, script.outro].filter(Boolean).join('\n\n');
-    const truncatedScript = scriptContent.substring(0, 4000);
-
-    // Gather visual style & scene info for context
-    let sceneContext = '';
+    // Load brand identity
+    let thumbTone = 'cinematic documentary';
+    let brandColors = '';
+    let brandStyle = '';
     try {
-      const scenes = await base44.entities.Scenes.filter({ project_id });
-      if (scenes.length > 0) {
-        const sortedScenes = scenes.sort((a, b) => a.scene_number - b.scene_number);
-        const sceneSnippets = sortedScenes.slice(0, 5).map(s => 
-          `Scene ${s.scene_number}: ${s.image_prompt || s.narration_text || ''}`
-        ).join('\n');
-        sceneContext = `\n\nSCENE VISUAL PROMPTS (from the generated content — use these as style reference):\n${sceneSnippets}`;
+      const brand_list = await base44.entities.BrandIdentities.list();
+      const brand = brand_list.find(b => b.project_id === project_id);
+      if (brand) {
+        thumbTone = brand.thumbnail_tone || thumbTone;
+        brandColors = brand.color_palette || '';
+        brandStyle = brand.visual_style || '';
       }
-    } catch (e) {
-      // No scenes available, continue without
+    } catch (brandErr) {
+      console.warn('Could not load brand identity:', brandErr.message);
     }
 
-    // Gather brand identity if available
-    let brandContext = '';
+    // Load topic for context
+    let topicContext = '';
     try {
-      const brands = await base44.entities.BrandIdentities.filter({ project_id });
-      if (brands.length > 0) {
-        const b = brands[0];
-        brandContext = `\n\nBRAND IDENTITY:\n- Thumbnail tone: ${b.thumbnail_tone || 'cinematic'}\n- Colors: ${b.color_primary || ''} / ${b.color_secondary || ''} / ${b.color_accent || ''}\n- Visual rules: ${b.visual_rules || ''}`;
-      }
-    } catch (e) {
-      // No brand, continue
+      const allTopics = await base44.entities.Topics.filter({ project_id });
+      const topic = allTopics.find(t => t.is_selected === true);
+      topicContext = topic?.description || '';
+    } catch (topicErr) {
+      console.warn('Could not load topic context:', topicErr.message);
     }
 
-    const styleInstruction = reference_style 
-      ? `\n\nIMPORTANT — REFERENCE STYLE FROM IMPORTED THUMBNAIL:\nYou MUST replicate this EXACT visual style, layout, and composition:\n${reference_style}\nAdapt subjects and text to THIS video's content but keep IDENTICAL composition, rim lighting, depth, text treatment, aesthetic.`
-      : '';
+    console.log('================================================');
+    console.log('GENERATING THUMBNAIL CONCEPTS + IMAGES');
+    console.log(`Video: ${video_title}`);
+    console.log(`Brand tone: ${thumbTone}`);
+    console.log(`Image gen: Ideogram V3 → Flux 2 Pro fallback`);
+    console.log('================================================');
 
-    const templateInstruction = template_blueprint
-      ? `\n\n=== MANDATORY TEMPLATE BLUEPRINT (from a proven world-class thumbnail) ===
-You MUST follow this EXACT composition, color, text, and character action blueprint. Adapt subjects/content to THIS video but keep the IDENTICAL visual structure.
+    // ══════════════════════════════════════════════════════════════
+    // GEMINI PROMPT — Optimized for Ideogram V3
+    // ══════════════════════════════════════════════════════════════
+    // KEY CHANGE: Ideogram V3 excels at TEXT IN IMAGES, so we
+    // instruct Gemini to include text overlay instructions directly
+    // in the image_prompt (Ideogram will render them natively).
+    // Removed all Fal.ai specific references.
 
-COMPOSITION RULES TO FOLLOW:
-${template_blueprint.composition_blueprint || ''}
+    const prompt = `You are the world's #1 YouTube thumbnail psychologist and visual designer.
 
-COLOR STRATEGY TO FOLLOW:
-${template_blueprint.color_strategy || ''}
+VIDEO TITLE: "${video_title}"
+BRAND THUMBNAIL TONE: ${thumbTone}
+${brandColors ? `BRAND COLORS: ${brandColors}` : ''}
+${brandStyle ? `BRAND VISUAL STYLE: ${brandStyle}` : ''}
+${topicContext ? `VIDEO CONTEXT: ${topicContext}` : ''}
 
-TEXT STRATEGY TO FOLLOW:
-${template_blueprint.text_strategy || ''}
+CHANNEL TYPE: Faceless documentary/educational (no on-camera presenter)
 
-CHARACTER ACTION RULES TO FOLLOW:
-${template_blueprint.character_action_notes || ''}
+IMAGE GENERATION MODEL: Ideogram V3 (excels at rendering text inside images)
 
-TEMPLATE TYPE: ${template_blueprint.template_type || ''}
-EMOTIONAL TONE TARGET: ${template_blueprint.emotional_tone || ''}
+================================================
+THUMBNAIL PSYCHOLOGY TRIGGERS
+================================================
 
-REFERENCE PROMPT (adapt subjects but keep composition):
-${template_blueprint.recreate_prompt || ''}
+1. CURIOSITY GAP: Incomplete/contradictory visuals creating unanswered questions
+2. FEAR/WARNING: Danger, loss, mistakes — red dominance, warning symbols
+3. FORBIDDEN KNOWLEDGE: Classified/suppressed info being revealed
+4. SOCIAL PROOF/STATUS: Insider knowledge, winners vs losers contrast
+5. EMOTIONAL CONTRAST: Visceral dissonance between opposing elements
 
-CRITICAL: The above blueprint is from a PROVEN viral thumbnail. Your concepts MUST follow its composition, color, depth, text, and action rules EXACTLY while adapting the SUBJECTS to match THIS video's script content.`
-      : '';
+================================================
+DESIGN RULES
+================================================
 
-    const selectedTitleInstruction = selected_title
-      ? `\n\nMANDATORY TITLE OVERLAY — THIS IS THE HIGHEST PRIORITY INSTRUCTION:
-The user has selected this SEO title for the video: "${selected_title}"
-RULES:
-1. You MUST derive the "text_overlay" (2-4 words) from this EXACT title — pick the most curiosity-inducing, scroll-stopping fragment.
-2. ALL 3 concepts MUST have a text_overlay derived from this title.
-3. The text_overlay words MUST appear as MASSIVE BOLD WHITE IMPACT-STYLE TEXT rendered directly onto the thumbnail image as the MOST PROMINENT visual element.
-4. In the "forensic_description", you MUST explicitly describe the text overlay words, their exact position, size, color, outline, and shadow.
-5. If any concept's forensic_description does NOT mention the text overlay text by exact words, that concept is INVALID.
-6. The text_overlay creates a CURIOSITY GAP — it must NOT reveal the story, but make viewers desperate to click.`
-      : '';
+FORMAT: Always 1920x1080 (Full HD) 16:9 widescreen landscape
+COLORS: Max 3 dominant colors, named only (no hex). High contrast for thumbnail size readability.
+TEXT: Maximum 4 words (3 ideal). BOLD weight. Upper or lower third. Use quotation marks around text in the prompt so Ideogram renders it.
+FACELESS: No presenter face. Use dramatic objects, data visualizations, environmental storytelling, symbolic compositions, split comparisons, close-up textures.
 
-    const nicheDnaInstruction = niche_dna
-      ? `\n\n=== MANDATORY NICHE STYLE DNA (learned from ${niche_name || 'uploaded'} niche thumbnails) ===
-This Style DNA was synthesized from analyzing multiple world-class thumbnails in the "${niche_name || 'selected'}" niche. You MUST follow ALL of these patterns, rules, and best practices. Your thumbnails must FEEL like they belong in this niche.
+IDEOGRAM V3 PROMPT RULES:
+- Put text to render in "quotation marks" within the prompt
+- Describe text styling: font weight, color, position, container (badge, stamp, banner)
+- Use spatial language: "anchored at left third", "filling upper half"
+- Use photography language: "extreme close-up", "shallow depth of field", "rim lighting"
+- Specify atmosphere: "ominous", "dramatic", "urgent", "mysterious"
+- NEVER use hex codes or percentages
+- Always specify "1920x1080 Full HD 16:9 widescreen landscape format"
+- Always end prompt with "Ultra high resolution, crisp sharp details, professional quality"
 
-${niche_dna}
+================================================
+CONCEPT TYPES (use variety across 10)
+================================================
 
-CRITICAL: Every thumbnail concept MUST follow the composition patterns, color DNA, text rules, character action patterns, and emotional triggers described above. The result must look like it was made by the TOP creator in the "${niche_name || 'selected'}" niche.`
-      : '';
+A=REVELATION, B=WARNING, C=COMPARISON, D=EMOTION CLOSE-UP, E=DATA SHOCK,
+F=FORBIDDEN, G=TRANSFORMATION, H=SYMBOL, I=ENVIRONMENT, J=ABSTRACT METAPHOR
 
-    const rawStyle = project.visual_style || 'cinematic_realistic';
-    // Never use children's styles for thumbnails - override to cinematic
-    const childStyles = ['picstory_cocomelon', 'cartoon_2d'];
-    const visualStyle = childStyles.includes(rawStyle) ? 'cinematic_realistic' : rawStyle;
+================================================
+OUTPUT FORMAT (EXACT JSON)
+================================================
 
-    // ============================================================
-    // PHASE 1: Deep forensic-level description of the IDEAL thumbnail
-    // ============================================================
-    const phase1Prompt = `You are the world's #1 YouTube thumbnail conceptualizer with expertise in viral content across ALL niches.
-
-=== CONTENT SAFETY — READ FIRST ===
-ALL characters MUST be 100% FICTIONAL, ORIGINAL creations. NEVER reference, depict, or resemble ANY real person (living or dead), celebrity, politician, historical figure, or public figure — even indirectly.
-- Use ORIGINAL fictional archetypes: "a weathered middle-aged man", "a determined young woman with braided hair" — NEVER "looks like [celebrity]"
-- NEVER depict graphic violence, blood, gore, weapons pointed at people, or threatening scenarios involving minors
-- NEVER use copyrighted characters, logos, brands, or trademarked imagery
-- Replace any potentially unsafe concept with an equally dramatic but SAFE alternative (e.g. "a shadowy silhouette looming behind" instead of depicting violence)
-- When the script references real people/events, abstract them into FICTIONAL archetypes that convey the same EMOTION without depicting anyone real
-- Focus on EMOTION, MYSTERY, and VISUAL DRAMA — these create better thumbnails than shock or controversy
-=== END SAFETY RULES ===
-
-VIDEO TOPIC: "${topic.title}"
-VIDEO TITLE: "${script.title}"
-NICHE: "${project.niche}"
-VISUAL STYLE used in this project's content: "${visualStyle}"
-VIDEO ORIENTATION: "${project.orientation || 'landscape'}"
-${brandContext}
-${sceneContext}
-${styleInstruction}
-${templateInstruction}
-${nicheDnaInstruction}
-${selectedTitleInstruction}
-
-FULL SCRIPT (find the most shocking, emotional, curiosity-inducing, visually compelling moments):
-${truncatedScript}
-
-=== YOUR MISSION ===
-You must deeply analyze this script and produce 3 THUMBNAIL CONCEPT BLUEPRINTS — exhaustive forensic-level visual descriptions of what each thumbnail should look like. These are NOT prompts yet — they are HYPER-DETAILED creative briefs.
-
-For EACH concept, write a MINIMUM 300-word "forensic_description" covering:
-
-=== WORLD-CLASS THUMBNAIL CHECKLIST (USE THIS AS YOUR YARDSTICK) ===
-Every concept MUST pass ALL of these criteria. If it doesn't, redesign until it does:
-
-1. CHARACTERS = ACTION, NOT PORTRAITS
-   - Characters must be DOING something — holding, shielding, pointing, reacting — NOT just standing/floating
-   - The hero should show a SPECIFIC emotion through body language: defiant stance, protective embrace, heartbroken gaze
-   - Add micro-details that tell the story: a tear, a clenched fist, a protective hand on someone's shoulder
-   - Villains/antagonists must feel THREATENING: looming, shadowy, faceless, pointing, larger than the hero
-   - Characters must INTERACT with each other (eye contact, confrontation, turning away) — never both staring at camera ignoring each other
-
-2. TEXT OVERLAY = CURIOSITY GAP, NOT FACT
-   - Text must create a QUESTION the viewer needs answered, NOT state a fact or reveal the ending
-   - Good: "HE DIDN'T LEAVE", "THEY LET HIM GO...", "THE LAST MARCH" — implies mystery
-   - Bad: "CHOSE HIS CHILDREN" — gives away the story, no reason to click
-   - Text MUST NOT cover faces or key subjects — place in negative space (bottom center, top edge)
-   - Text must be the LARGEST, most readable element — visible at phone thumbnail size
-
-3. COMPOSITION = "HEAVEN vs HELL" EXTREME CONTRAST
-   - Use EXTREME color contrast between opposing sides (warm golden vs cold steel blue)
-   - The "safe" side: warm golden glow, orange rim light, life/hope
-   - The "danger" side: desaturated, cold blue/grey, ash, embers, destruction
-   - Split line should feel VIOLENT — diagonal jagged rip, not a clean vertical line
-   - Heavy vignette to force eye to center
-   - HEAVY depth of field — backgrounds and secondary elements blurred, main subjects razor-sharp
-
-4. SCROLL-STOP ELEMENTS
-   - One dominant emotion must hit in 0.3 seconds
-   - Visual "vectors" that force eye movement (a pointing finger, a gaze direction, a weapon)
-   - The thumbnail must look NOTHING like an educational/textbook illustration — it must feel CINEMATIC and EMOTIONAL
-
-NARRATIVE HOOK:
-- What specific moment/reveal/conflict from the script does this thumbnail capture?
-- What is the curiosity gap — what question does the viewer NEED answered?
-- What emotion should hit the viewer in 0.3 seconds?
-
-COMPOSITION & LAYOUT:
-- Exact layout type (split-screen face-off, centered hero, the reveal, the contrast, the warning, bold statement)
-- What occupies each zone: top-left, center, bottom-right, etc.
-- Visual hierarchy: what is BIGGEST and most eye-catching, what supports it
-- Any diagonal lines, V-shapes, triangular compositions
-
-EVERY SUBJECT/PERSON/CHARACTER (must be 100% FICTIONAL ORIGINALS — never resembling any real person):
-- Full FICTIONAL archetype: age range, build, skin tone shade, face shape, jawline — must be a UNIQUE original character
-- Hair: style, color shade, texture, length
-- Expression: which facial muscles are engaged (furrowed brow, wide eyes, clenched jaw, open mouth shock)
-- BODY ACTION: what are they DOING? (holding an object, shielding someone, pointing, running, clutching something) — never just standing
-- Clothing: exact garment types, specific color names (not "red" but "deep crimson" or "burgundy"), patterns, fabric texture
-- Body angle, crop (extreme close-up head only, head-and-shoulders, chest up), facing direction
-- Lighting ON them: key light direction, rim/edge light color and side, any colored light cast
-- INTERACTION: how do they relate to other characters? Eye contact? Dramatic tension through body language and opposing light?
-- SAFETY: Replace any violence/threat with SYMBOLIC drama — shadows, silhouettes, environmental tension, atmospheric effects. Never depict weapons aimed at people or graphic injuries.
-
-BACKGROUND:
-- Setting derived from script's key locations
-- Blur level: HEAVY Gaussian blur on backgrounds, razor-sharp foreground subjects
-- Atmospheric effects (smoke, haze, particles, floating ash/embers, lens flare, God rays)
-- Color palette: EXTREME warm vs cold contrast if split composition
-- Vignette: heavy dark edges forcing eye to center
-
-TEXT & GRAPHICS:
-- The exact 2-4 word text overlay that creates a CURIOSITY GAP (question, not answer)
-- Font: bold Impact or heavy condensed sans-serif, MASSIVE size
-- Color: pure white with THICK black outline for maximum readability on any background
-- Heavy drop shadow for depth
-- Position: bottom center or top edge — NEVER covering faces/key subjects
-- Any badges, banners, VS dividers, warning graphics
-
-ASPECT RATIO (MANDATORY — MOST CRITICAL RULE):
-- ALL thumbnails MUST be WIDE 16:9 LANDSCAPE aspect ratio (1216x832 pixels optimized for Fal.ai)
-- Width MUST be 1.78x the height — like a movie screen, NOT square, NOT portrait
-- The forensic description MUST explicitly state "wide 16:9 landscape format" and describe all elements in terms of a WIDE horizontal frame
-- Every element placement must reference LEFT/RIGHT/CENTER in a WIDE frame — if your description sounds like a square image, you have FAILED
-
-OVERALL STYLING:
-- NEVER use children's illustration styles (cocomelon, cartoon) for thumbnails — always cinematic/dramatic
-- Must match the project's visual style "${visualStyle}" — if anime, the thumbnail should feel anime; if photorealistic, it should be hyper-real photography
-- Color grading: EXTREME contrast, high saturation on key elements, desaturated on opposing elements
-- Render quality keywords
-
-RESPOND IN THIS EXACT JSON:
 {
-  "concepts": [
-    {
-      "rank": 1,
-      "template_type": "Face-Off / The Reveal / The Contrast / The Reaction / Bold Statement / The Mystery / The Warning",
-      "narrative_moment": "Which specific script moment this captures and WHY it's the most clickable",
-      "curiosity_gap": "The question the viewer must click to answer",
-      "emotional_trigger": "The primary emotion in 0.3 seconds",
-      "scroll_stop_reason": "1 sentence why NO ONE scrolls past this",
-      "text_overlay": "2-4 word text (HUGE, readable at thumbnail size)",
-      "forensic_description": "300+ word exhaustive visual description covering every element: exact composition, every subject archetype with face/hair/expression/clothing/lighting details, background setting with atmosphere, text design, color grading, and style matching the project's visual style"
-    }
-  ]
-}`;
-
-    console.log("Phase 1: Generating forensic concept descriptions...");
-    const phase1Result = await safeGeminiCall(phase1Prompt, 0.95, 16384);
-
-    // Brief pause between phases to avoid rate limiting
-    await new Promise(r => setTimeout(r, 3000));
-
-    // ============================================================
-    // PHASE 2: Transform each forensic description into an AI image prompt
-    // ============================================================
-    const phase2TitleInstruction = selected_title
-      ? `\n\nMANDATORY TITLE OVERLAY RULE: The user selected this SEO title: "${selected_title}"\nThe "text_overlay" for EVERY concept MUST be a powerful 2-4 word fragment derived from this title. This text MUST appear as MASSIVE BOLD TEXT burned directly into the generated image — it is the MOST prominent visual element. If the generated image does not contain this text rendered visually, the thumbnail is USELESS. Include the EXACT text_overlay words in every image_prompt with explicit instructions to render them as large bold white Impact text with thick black outline.`
-      : '';
-
-    const phase2Prompt = `You are the world's #1 AI image prompt engineer specializing in YouTube thumbnails.
-
-=== CONTENT SAFETY — ABSOLUTE RULES FOR IMAGE PROMPTS ===
-Every image prompt you write MUST pass AI image generator content policies. Follow these rules or the generation WILL fail:
-1. ALL people/characters MUST be 100% FICTIONAL and ORIGINAL — no resemblance to any real person, celebrity, or public figure
-2. Use generic archetype descriptions: "a broad-shouldered man in his 40s with short dark hair and a stern jaw" — NEVER name or imply a real person
-3. NO graphic violence, blood, gore, weapons aimed at people, or injuries
-4. NO minors in distressing, scary, or dangerous scenarios
-5. NO copyrighted characters, logos, or trademarked imagery
-6. Replace unsafe elements with EQUALLY DRAMATIC safe alternatives: use "a dark imposing silhouette" instead of a threatening person, use "shattered glass pattern" instead of destruction
-7. Focus prompts on LIGHTING, COMPOSITION, COLOR CONTRAST, EMOTION, and ATMOSPHERE — these make stunning thumbnails without policy risks
-8. When a concept involves conflict, show it through BODY LANGUAGE, EXPRESSIONS, and SYMBOLIC imagery (opposing colors, dramatic shadows, environmental contrast) — NOT through depictions of violence
-=== END SAFETY RULES ===
-
-Below are 3 FORENSIC VISUAL DESCRIPTIONS of thumbnail concepts. Your job is to transform EACH one into a PERFECT AI image generation prompt that will PASS content policy filters while being visually stunning.
-${phase2TitleInstruction}
-
-=== FORENSIC CONCEPT BLUEPRINTS ===
-${JSON.stringify(phase1Result.concepts, null, 2)}
-
-=== CRITICAL PROMPT RULES ===
-Your "image_prompt" output must follow these rules STRICTLY:
-
-GENERAL LANGUAGE:
-- Think in VISUAL CONCEPTS and DESCRIPTIVE LANGUAGE, not CSS/code/measurements
-- NEVER use percentages, pixel coordinates, opacity values, or hex color codes
-- Use SPATIAL RELATIONSHIPS: "anchored at the top center", "filling the left third", "spanning the bottom edge"
-- Use PHOTOGRAPHY LANGUAGE: "extreme close-up", "rim lighting on left profile", "shallow depth of field with heavy bokeh"
-- Use ARCHETYPE descriptions: "bald man with intense expression and dark goatee" NOT "person"
-- Use COLOR NAMES: "crimson red", "electric blue", "pure white" — never #FF0000
-
-CHARACTERS MUST BE IN ACTION (CRITICAL):
-- NEVER describe characters as just "standing" or "facing forward" — this creates static, boring, textbook thumbnails
-- Every character MUST be performing an ACTION: holding, shielding, pointing, embracing, confronting, reacting
-- Add emotional micro-details: "a single tear rolling down his weathered cheek", "his arm wrapped protectively around a small child"
-- Villains/antagonists: make them LOOMING, SHADOWY, MENACING — larger than the hero, pointing, threatening
-- Characters MUST interact: eye contact, confrontation, turning away — never both staring blankly at camera
-
-TEXT OVERLAY (MOST IMPORTANT VISUAL ELEMENT — NON-NEGOTIABLE):
-- The text_overlay MUST be the SINGLE MOST PROMINENT graphic element in the thumbnail — BIGGER than any face or object
-- Describe text as a MASSIVE DESIGN UNIT: "enormous bold white Impact-style text reading 'EXACT WORDS' with very thick black outline and heavy drop shadow, positioned at bottom center of the frame, taking up at least 25% of the image width"
-- Text MUST create a CURIOSITY GAP — a question, NOT an answer. Never give away the story.
-- Text must NEVER overlap faces or key subjects — always in negative space
-- Text must be READABLE at phone thumbnail size — this means HUGE, high-contrast, minimal words (2-4 max)
-- Include "graphic design composition with bold typography overlay" to force flat 2D text overlays
-- CRITICAL: If the image does NOT have visible text burned into it, the thumbnail is INCOMPLETE and USELESS. The text MUST be part of the generated image.
-
-COLOR & CONTRAST (THE "HEAVEN VS HELL" APPROACH):
-- Use EXTREME warm vs cold color contrast for split compositions
-- "Safe" side: warm golden lighting, orange rim light, hope
-- "Danger" side: cold desaturated steel blue, dark grey, ash and embers
-- Split lines should feel VIOLENT: "a jagged diagonal rip dividing the frame" not a clean line
-- HEAVY vignette (dark edges) to force eye to center
-- HEAVY depth of field: backgrounds blurred to creamy bokeh, foreground subjects RAZOR sharp
-
-STYLE:
-- Thumbnails should ALWAYS look cinematic and dramatic, NEVER educational or textbook-like
-- Match the project visual style "${visualStyle}":
-  ${visualStyle === 'anime' || visualStyle === 'cinematic_anime' ? '- Use dramatic anime style: cel-shaded, vibrant anime coloring, bold linework, dynamic emotional poses, dramatic lighting' : ''}
-  ${visualStyle === 'photorealistic_4k' || visualStyle === 'cinematic_realistic' ? '- Use hyper-real cinematic photography: 4K HDR, visible skin detail, DSLR shallow depth, dramatic movie-poster lighting' : ''}
-  ${visualStyle === 'oil_painting' ? '- Use painterly keywords: visible brushstrokes, oil painting texture, chiaroscuro lighting, fine art quality, museum-worthy realism' : ''}
-  ${visualStyle === 'watercolor' ? '- Use watercolor keywords: soft wet edges, translucent washes, paper texture, bleeding colors, delicate light' : ''}
-  ${visualStyle === 'comic_book' ? '- Use comic keywords: halftone dots, bold ink outlines, dynamic action poses, pop art colors' : ''}
-
-ASPECT RATIO — THE SINGLE MOST IMPORTANT RULE:
-Every prompt MUST begin with: "CRITICAL: This image MUST be rendered in WIDE 16:9 LANDSCAPE aspect ratio (1216x832 pixels optimized for Fal.ai — width is 1.78x the height, like a movie screen or YouTube thumbnail). The image must be significantly WIDER than it is tall — NOT square, NOT portrait."
-Then continue with the rest of the prompt. If the output looks square, you have FAILED.
-
-Each prompt MUST be 300+ words incorporating EVERY detail from the forensic description.
-
-RESPOND IN THIS EXACT JSON:
-{
+  "ctr_strategy": "Overall psychological approach",
   "thumbnails": [
     {
       "rank": 1,
-      "template_type": "from Phase 1",
-      "concept_description": "2-3 sentence concept summary",
-      "emotional_hook": "What emotion this triggers and WHY it stops scrolling",
-      "scroll_stop_reason": "1 sentence",
-      "text_overlay": "exact text from Phase 1",
-      "font_style": "heavy Impact / bold condensed sans-serif / etc",
-      "font_color": "white with thick black outline",
-      "font_effects": "thick black outline, heavy drop shadow — described in words",
-      "background_description": "Natural language: blurred dark setting with atmospheric effects",
-      "subject_description": "All subject archetypes with physical details, expressions, clothing",
-      "accent_color": "the eye-catching color name (crimson red, electric blue, etc)",
-      "color_scheme": "Overall approach: warm saturated, cold moody, high contrast vivid",
-      "visual_effects": "rim lighting on profiles, heavy bokeh background, lens flare, vignette",
-      "style_reference": "cinema / minimal / documentary",
+      "concept_type": "revelation/warning/comparison/emotion_closeup/data_shock/forbidden/transformation/symbol/environment/abstract",
+      "psychological_trigger": "curiosity_gap/fear/forbidden_knowledge/social_proof/emotional_contrast",
+      "concept_description": "Why this stops scrolls",
+      "focal_point": "Primary visual element",
+      "visual_metaphor": "Symbolic meaning",
+      "color_scheme": "3 named colors with roles",
+      "text_overlay": "Max 4 words",
+      "text_style": "Font weight, container, position, color",
+      "style_reference": "cinematic/minimal/documentary/dramatic/corporate/gritty",
       "ctr_score": 9,
-      "image_prompt": "A COMPLETE 300+ word natural-language AI image prompt. MUST START WITH: 'A high-detail 4K YouTube thumbnail in 16:9 aspect ratio (1216x832 pixels for Fal.ai), widescreen landscape format, graphic design composition featuring [COMPOSITION TYPE].' Then: STYLE: cinematic, dramatic, emotional storytelling (matching ${visualStyle} but NEVER childish/educational). FOREGROUND: [every subject IN ACTION — holding, shielding, confronting, protecting — with archetype, expression muscles, hair details, clothing color names, crop, facing, rim lighting, INTERACTION between characters]. MID-GROUND: [depth subjects with heavy blur]. BACKGROUND: [EXTREME warm vs cold contrast, heavy bokeh blur, atmospheric effects, ash/embers/smoke, dramatic lighting, heavy vignette darkening edges]. TEXT & GRAPHICS: [MASSIVE bold white Impact text reading 'CURIOSITY GAP WORDS' with very thick black outline and heavy drop shadow, positioned at BOTTOM CENTER in negative space — NEVER covering faces, must be the MOST prominent visual element]. SPLIT: [if split composition, use jagged diagonal rip not clean line]. NO percentages. NO hex codes. NO pixel values. MUST specify 16:9 widescreen at 1216x832 for Fal.ai."
+      "why_it_stops_scrolling": "Psychological reason",
+      "faceless_adaptation": "How it works without a face",
+      "ab_test_alternative": "Which concept to A/B test against",
+      "image_prompt": "1920x1080 Full HD 16:9 widescreen landscape format. [200+ word natural language prompt for Ideogram V3 with: spatial layout, foreground/midground/background, lighting, color palette with named colors, text in quotation marks as design elements with containers, atmosphere, render quality]. End with: Ultra high resolution, crisp sharp details, professional quality. NO hex codes.",
+      "negative_prompt": "Comma-separated list of things to exclude from the image"
     }
   ]
-}`;
+}
 
-    console.log("Phase 2: Generating AI image prompts from forensic descriptions...");
-    const phase2Result = await safeGeminiCall(phase2Prompt, 0.85, 16384);
+REQUIREMENTS:
+- Generate ALL 10 concepts using different concept types
+- Every image_prompt must be 200+ words
+- Every image_prompt must start with "1920x1080 Full HD 16:9 widescreen landscape format"
+- Every image_prompt must end with "Ultra high resolution, crisp sharp details, professional quality"
+- Every concept must score 8+ CTR (Tier 1 only)
+- Rank by CTR potential
+- Faceless channel only
+- Include "negative_prompt" for each (things to exclude)
+- Text overlays in quotation marks within image_prompt so Ideogram V3 renders them
 
-    // Delete existing thumbnails for this project
-    const existing = await base44.entities.ThumbnailConcepts.filter({ project_id });
-    for (const e of existing) {
-      await base44.entities.ThumbnailConcepts.delete(e.id);
+Generate 10 premium viral thumbnail concepts now.`;
+
+    const result = await safeGeminiCall(prompt, 0.9);
+
+    if (!result.success) {
+      console.error('Gemini failed:', result.error);
+      return Response.json({ error: result.error }, { status: 500 });
     }
 
-    // Save the concepts
+    if (!result.data.thumbnails || !Array.isArray(result.data.thumbnails)) {
+      return Response.json({ error: 'Invalid response format from Gemini' }, { status: 500 });
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // DELETE EXISTING THUMBNAILS
+    // ══════════════════════════════════════════════════════════════
+    try {
+      const existing = await base44.entities.ThumbnailConcepts.filter({ project_id });
+      const deletePromises = existing.map(e => base44.entities.ThumbnailConcepts.delete(e.id));
+      await Promise.all(deletePromises);
+    } catch (deleteErr) {
+      console.warn('Failed to delete existing thumbnails:', deleteErr.message);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // SAVE CONCEPTS + GENERATE IMAGES IN PARALLEL
+    // ══════════════════════════════════════════════════════════════
+
     const thumbnails = [];
-    for (const t of phase2Result.thumbnails) {
-      const styleRef = (t.style_reference || 'cinema').split('/')[0].trim().toLowerCase();
-      const validStyles = ['cinema', 'minimal', 'documentary'];
-      
-      const record = await base44.entities.ThumbnailConcepts.create({
-        project_id,
-        rank: t.rank,
-        concept_description: `[${t.template_type}] ${t.concept_description}\n\n🎯 Hook: ${t.emotional_hook}\n🛑 Scroll-stop: ${t.scroll_stop_reason}`,
-        facial_expression: t.subject_description,
-        visual_metaphor: t.template_type,
-        color_scheme: `${t.color_scheme} | Accent: ${t.accent_color} | ${t.font_color} | Effects: ${t.visual_effects}`,
-        text_overlay: t.text_overlay,
-        style_reference: validStyles.includes(styleRef) ? styleRef : 'cinema',
-        ctr_score: t.ctr_score,
-        image_prompt: t.image_prompt,
-        is_selected: false
-      });
-      thumbnails.push(record);
+    const skipped = [];
+    let qualityWarnings = 0;
+
+    // Step 1: Save all concepts first (parallel)
+    const savePromises = result.data.thumbnails.map(async (t, i) => {
+      const validation = validateThumbnail(t);
+      if (!validation.valid) {
+        qualityWarnings++;
+        console.warn(`Thumbnail ${t.rank} issues: ${validation.issues.join(', ')}`);
+      }
+
+      let imagePrompt = t.image_prompt || '';
+      // Ensure 1920x1080 / 16:9 specification
+      if (!imagePrompt.toLowerCase().includes('1920x1080') && !imagePrompt.toLowerCase().includes('16:9')) {
+        imagePrompt = `1920x1080 Full HD 16:9 widescreen landscape format, graphic design composition. ${imagePrompt}`;
+      }
+      // Ensure quality suffix
+      if (!imagePrompt.toLowerCase().includes('crisp sharp details')) {
+        imagePrompt += '. Ultra high resolution, crisp sharp details, professional quality.';
+      }
+
+      try {
+        const record = await base44.entities.ThumbnailConcepts.create({
+          project_id,
+          rank: t.rank || i + 1,
+          concept_type: t.concept_type || 'revelation',
+          psychological_trigger: t.psychological_trigger || 'curiosity_gap',
+          concept_description: t.concept_description || '',
+          focal_point: t.focal_point || '',
+          visual_metaphor: t.visual_metaphor || '',
+          color_scheme: t.color_scheme || '',
+          text_overlay: t.text_overlay || '',
+          text_style: t.text_style || '',
+          style_reference: t.style_reference || 'cinematic',
+          ctr_score: t.ctr_score || 7,
+          why_it_stops_scrolling: t.why_it_stops_scrolling || '',
+          faceless_adaptation: t.faceless_adaptation || '',
+          ab_test_alternative: t.ab_test_alternative || '',
+          image_prompt: imagePrompt,
+          quality_valid: validation.valid,
+          is_selected: false
+        });
+
+        console.log(`✓ Saved concept ${t.rank}: [${t.concept_type}] "${t.text_overlay}" CTR: ${t.ctr_score}/10`);
+        return {
+          success: true,
+          record,
+          imagePrompt,
+          negativePrompt: t.negative_prompt || "blurry, low quality, pixelated, watermark, ugly, distorted text, low resolution, compressed, jpeg artifacts, grainy, out of focus"
+        };
+      } catch (saveErr) {
+        console.error(`✗ Failed to save concept ${t.rank}:`, saveErr.message);
+        skipped.push({ rank: t.rank, error: saveErr.message });
+        return { success: false };
+      }
+    });
+
+    const savedResults = await Promise.all(savePromises);
+    const successfullySaved = savedResults.filter(r => r.success);
+
+    // Step 2: Generate images for ALL saved concepts in parallel
+    console.log(`\n═══ Generating ${successfullySaved.length} thumbnail images ═══`);
+
+    const imagePromises = successfullySaved.map(async (saved) => {
+      const { record, imagePrompt, negativePrompt } = saved;
+      try {
+        const { url, model, error } = await generateThumbnailImage(
+          KIE_API_KEY,
+          imagePrompt,
+          negativePrompt
+        );
+
+        if (url) {
+          // Update the thumbnail record with the generated image URL
+          await base44.asServiceRole.entities.ThumbnailConcepts.update(record.id, {
+            image_url: url
+          });
+          console.log(`✓ Image generated for rank ${record.rank} via ${model}`);
+          thumbnails.push({ ...record, image_url: url, model_used: model });
+        } else {
+          console.warn(`✗ No image for rank ${record.rank}: ${error}`);
+          thumbnails.push({ ...record, image_url: null, model_used: 'failed' });
+        }
+      } catch (imgErr) {
+        console.error(`✗ Image gen error rank ${record.rank}:`, imgErr.message);
+        thumbnails.push({ ...record, image_url: null, model_used: 'error' });
+      }
+    });
+
+    await Promise.all(imagePromises);
+
+    // Step 3: Update project step
+    try {
+      await base44.entities.Projects.update(project_id, { current_step: 12 });
+    } catch (updateErr) {
+      console.warn('Failed to update project step:', updateErr.message);
     }
 
-    console.log(`✓ Generated ${thumbnails.length} thumbnail concepts with Fal.ai dimensions (1216x832)`);
+    const imagesGenerated = thumbnails.filter(t => t.image_url).length;
 
-    return Response.json({ success: true, thumbnails });
+    console.log('================================================');
+    console.log(`Concepts saved: ${successfullySaved.length}`);
+    console.log(`Images generated: ${imagesGenerated}`);
+    console.log(`Skipped: ${skipped.length}`);
+    console.log(`Quality warnings: ${qualityWarnings}`);
+    console.log(`CTR strategy: ${result.data.ctr_strategy}`);
+    console.log('================================================');
+
+    return Response.json({
+      success: true,
+      thumbnails,
+      meta: {
+        ctr_strategy: result.data.ctr_strategy,
+        total_generated: result.data.thumbnails.length,
+        total_saved: successfullySaved.length,
+        total_images: imagesGenerated,
+        total_skipped: skipped.length,
+        quality_warnings: qualityWarnings,
+        image_model_primary: "ideogram/v3-generate",
+        image_model_fallback: "flux-2/pro-text-to-image",
+        skipped_details: skipped
+      }
+    });
+
   } catch (error) {
-    console.error("generateThumbnailsFromScript error:", error.message);
+    console.error('generateThumbnailConcepts error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
