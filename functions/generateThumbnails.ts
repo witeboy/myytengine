@@ -44,8 +44,8 @@ function validateThumbnail(thumbnail) {
   if (!thumbnail.image_prompt || thumbnail.image_prompt.length < 100) {
     issues.push('Image prompt too short (minimum 100 chars)');
   }
-  if (!thumbnail.image_prompt?.toLowerCase().includes('16:9')) {
-    issues.push('Missing 16:9 aspect ratio specification');
+  if (!thumbnail.image_prompt?.toLowerCase().includes('1216x832') && !thumbnail.image_prompt?.toLowerCase().includes('16:9')) {
+    issues.push('Missing Fal.ai dimension specification (1216x832 or 16:9)');
   }
   if (!thumbnail.text_overlay || thumbnail.text_overlay.trim().length === 0) {
     issues.push('Missing text overlay');
@@ -91,11 +91,9 @@ Deno.serve(async (req) => {
     // Load topic for context
     let topicContext = '';
     try {
-      const project = await base44.entities.Projects.get(project_id);
-      if (project?.selected_topic_id) {
-        const topic = await base44.entities.Topics.get(project.selected_topic_id);
-        topicContext = topic?.description || '';
-      }
+      const allTopics = await base44.entities.Topics.filter({ project_id });
+      const topic = allTopics.find(t => t.is_selected === true);
+      topicContext = topic?.description || '';
     } catch (topicErr) {
       console.warn('Could not load topic context:', topicErr.message);
     }
@@ -153,7 +151,7 @@ DESIGN RULES (ABSOLUTE LAWS)
 ================================================
 
 COMPOSITION:
-- ALWAYS 16:9 landscape format (1280x720 pixels) - NON-NEGOTIABLE
+- ALWAYS 16:9 landscape format (1216x832 pixels optimized for Fal.ai) - NON-NEGOTIABLE
 - Rule of thirds: place primary subject at intersection points
 - Leave breathing room: never crowd the frame
 - Depth layers: foreground subject, midground detail, background atmosphere
@@ -267,7 +265,7 @@ OUTPUT FORMAT (EXACT JSON)
       "why_it_stops_scrolling": "Specific psychological reason — what question or emotion hits in under 2 seconds",
       "faceless_adaptation": "How this works without a presenter face",
       "ab_test_alternative": "Which other concept from the list to A/B test against",
-      "image_prompt": "16:9 aspect ratio, 1280x720 resolution, widescreen landscape format, graphic design composition. [COMPLETE 200+ word natural language prompt with: exact spatial layout, foreground/midground/background description, lighting type and direction, color palette with named colors, text as unified design elements with containers, atmosphere and mood, render quality descriptors, photography-style direction]. NO percentages. NO hex codes. NO pixel measurements. Explicitly state 16:9 widescreen format."
+      "image_prompt": "16:9 aspect ratio, 1216x832 resolution (Fal.ai optimized), widescreen landscape format, graphic design composition. [COMPLETE 200+ word natural language prompt with: exact spatial layout, foreground/midground/background description, lighting type and direction, color palette with named colors, text as unified design elements with containers, atmosphere and mood, render quality descriptors, photography-style direction]. NO percentages. NO hex codes. NO pixel measurements. Explicitly state 16:9 widescreen format."
     }
   ]
 }
@@ -278,7 +276,7 @@ REQUIREMENTS:
 - Every concept must score 8+ on CTR (Tier 1 only)
 - Rank by overall CTR and algorithmic performance potential
 - Explicitly design for faceless channel (no presenter face)
-- Every prompt must state 16:9 format explicitly
+- Every prompt must state 16:9 format and 1216x832 Fal.ai dimensions explicitly
 
 Generate 10 premium viral thumbnail concepts now.`;
 
@@ -314,10 +312,10 @@ Generate 10 premium viral thumbnail concepts now.`;
         console.warn(`Thumbnail ${t.rank} issues: ${validation.issues.join(', ')}`);
       }
 
-      // Auto-patch missing 16:9 specification
+      // Auto-patch missing Fal.ai dimension specification
       let imagePrompt = t.image_prompt || '';
-      if (!imagePrompt.toLowerCase().includes('16:9')) {
-        imagePrompt = `16:9 aspect ratio, 1280x720 resolution, widescreen landscape format, graphic design composition. ${imagePrompt}`;
+      if (!imagePrompt.toLowerCase().includes('16:9') && !imagePrompt.toLowerCase().includes('1216x832')) {
+        imagePrompt = `16:9 aspect ratio, 1216x832 resolution (Fal.ai optimized), widescreen landscape format, graphic design composition. ${imagePrompt}`;
       }
 
       try {
