@@ -1,5 +1,127 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+// ══════════════════════════════════════════════════════════════════
+// KIE AI UNIFIED IMAGE GENERATION (Ideogram V3 + Flux 2 fallback)
+// ══════════════════════════════════════════════════════════════════
+const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
+
+async function kieCreateTask(apiKey, model, input) {
+  const res = await fetch(`${KIE_BASE}/createTask`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ model, input })
+  });
+
+  const result = await res.json();
+  if (!res.ok || result.code !== 200) {
+    throw new Error(`Kie createTask failed (${model}): ${result.msg || JSON.stringify(result)}`);
+  }
+  return result.data.taskId;
+}
+
+async function kiePollResult(apiKey, taskId, maxWaitMs = 120000) {
+  const pollInterval = 4000;
+  const start = Date.now();
+
+  while (Date.now() - start < maxWaitMs) {
+    await new Promise(r => setTimeout(r, pollInterval));
+
+    const res = await fetch(`${KIE_BASE}/recordInfo?taskId=${taskId}`, {
+      headers: { "Authorization": `Bearer ${apiKey}` }
+    });
+
+    const poll = await res.json();
+    if (poll.code !== 200) { console.warn(`Poll error: ${poll.message}`); continue; }
+
+    const state = poll.data?.state;
+
+    if (state === "success") {
+      const resultJson = JSON.parse(poll.data.resultJson || "{}");
+      const url = resultJson.resultUrls?.[0] || resultJson.url || resultJson.imageUrl;
+      if (!url) throw new Error("Task completed but no image URL in resultJson");
+      return url;
+    }
+
+    if (state === "fail") {
+      throw new Error(`Kie task failed: ${poll.data?.failMsg || "Unknown"}`);
+    }
+  }
+
+  throw new Error(`Kie task ${taskId} timed out after ${maxWaitMs / 1000}s`);
+}
+
+// Ideogram V3: Best text rendering, perfect for thumbnails with text overlays
+// image_size: square | square_hd | portrait_4_3 | portrait_16_9 | landscape_4_3 | landscape_16_9
+// style: AUTO | GENERAL | REALISTIC | DESIGN
+// rendering_speed: TURBO | BALANCED | QUALITY
+async function generateWithIdeogram(apiKey, prompt, negativePrompt) {
+  console.log(`[Ideogram V3] Generating 1920x1080 thumbnail...`);
+  const taskId = await kieCreateTask(apiKey, "ideogram/v3-generate", {
+    prompt: `${prompt}. Ultra high resolution 1920x1080 Full HD output, crisp sharp details, professional YouTube thumbnail quality.`,
+    image_size: "landscape_16_9",
+    style: "DESIGN",
+    rendering_speed: "QUALITY",
+    expand_prompt: false,
+    negative_prompt: negativePrompt || "blurry, low quality, pixelated, watermark, signature, low resolution, compressed, artifacts"
+  });
+  return await kiePollResult(apiKey, taskId);
+}
+
+// Flux 2 Pro fallback: High quality, good aspect ratio control
+// aspect_ratio: "1:1" | "16:9" | "9:16" etc.
+async function generateWithFlux2(apiKey, prompt) {
+  console.log(`[Flux 2 Pro] Generating 1920x1080 thumbnail (fallback)...`);
+  const taskId = await kieCreateTask(apiKey, "flux-2/pro-text-to-image", {
+    prompt: `${prompt}. Ultra high resolution 1920x1080 Full HD, crisp details, professional thumbnail.`,
+    aspect_ratio: "16:9",
+    resolution: "2K"
+  });
+  return await kiePollResult(apiKey, taskId);
+}
+
+// Generate single thumbnail image with retry chain
+async function generateThumbnailImage(apiKey, imagePrompt, negativePrompt) {
+  // Attempt 1: Ideogram V3 (best for text in thumbnails)
+  try {
+    const url = await generateWithIdeogram(apiKey, imagePrompt, negativePrompt);
+    return { url, model: "ideogram/v3-generate" };
+  } catch (err1) {
+    console.warn(`Ideogram V3 failed: ${err1.message}`);
+
+    // Attempt 2: Ideogram V3 with simplified prompt
+    try {
+      const simplePrompt = imagePrompt.substring(0, 800);
+      const url = await generateWithIdeogram(apiKey, simplePrompt, negativePrompt);
+      return { url, model: "ideogram/v3-generate (simplified)" };
+    } catch (err2) {
+      console.warn(`Ideogram V3 simplified failed: ${err2.message}`);
+
+      // Attempt 3: Flux 2 Pro fallback
+      try {
+        const url = await generateWithFlux2(apiKey, imagePrompt);
+        return { url, model: "flux-2/pro-text-to-image" };
+      } catch (err3) {
+        console.error(`All image gen failed: ${err3.message}`);
+        return { url: null, model: "none", error: err3.message };
+      }
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GEMINI HELPER
+// ══════════════════════════════════════════════════════════════════
+
+function repairJSON(str) {
+  let s = str;
+  s = s.replace(/,\s*}/g, '}').replace(/,\s*]/g, ']');
+  s = s.replace(/[\x00-\x1F\x7F]/g, c => c === '\n' || c === '\r' || c === '\t' ? c : '');
+  return s;
+}
+
 async function safeGeminiCall(prompt, temperature = 0.8) {
   const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
 
@@ -11,7 +133,11 @@ async function safeGeminiCall(prompt, temperature = 0.8) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature, maxOutputTokens: 8192 }
+          generationConfig: {
+            temperature,
+            maxOutputTokens: 4096,
+            responseMimeType: "application/json"
+          }
         })
       }
     );
@@ -27,11 +153,22 @@ async function safeGeminiCall(prompt, temperature = 0.8) {
     }
 
     const text = data.candidates[0].content.parts[0].text;
-    let jsonStr = text;
-    if (text.includes("```json")) jsonStr = text.split("```json")[1].split("```")[0].trim();
-    else if (text.includes("```")) jsonStr = text.split("```")[1].split("```")[0].trim();
 
-    const parsed = JSON.parse(jsonStr);
+    // 3-stage JSON parsing
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch (e1) {
+      try {
+        parsed = JSON.parse(repairJSON(text));
+      } catch (e2) {
+        let jsonStr = text;
+        if (text.includes("```json")) jsonStr = text.split("```json")[1].split("```")[0].trim();
+        else if (text.includes("```")) jsonStr = text.split("```")[1].split("```")[0].trim();
+        parsed = JSON.parse(repairJSON(jsonStr));
+      }
+    }
+
     return { success: true, data: parsed, raw: text };
   } catch (error) {
     console.error("Gemini call failed:", error.message);
@@ -39,13 +176,14 @@ async function safeGeminiCall(prompt, temperature = 0.8) {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════
+// VALIDATION
+// ══════════════════════════════════════════════════════════════════
+
 function validateThumbnail(thumbnail) {
   const issues = [];
   if (!thumbnail.image_prompt || thumbnail.image_prompt.length < 100) {
     issues.push('Image prompt too short (minimum 100 chars)');
-  }
-  if (!thumbnail.image_prompt?.toLowerCase().includes('1216x832') && !thumbnail.image_prompt?.toLowerCase().includes('16:9')) {
-    issues.push('Missing Fal.ai dimension specification (1216x832 or 16:9)');
   }
   if (!thumbnail.text_overlay || thumbnail.text_overlay.trim().length === 0) {
     issues.push('Missing text overlay');
@@ -59,6 +197,10 @@ function validateThumbnail(thumbnail) {
   return { valid: issues.length === 0, issues };
 }
 
+// ══════════════════════════════════════════════════════════════════
+// MAIN HANDLER
+// ══════════════════════════════════════════════════════════════════
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -70,6 +212,11 @@ Deno.serve(async (req) => {
 
     if (!project_id || !video_title) {
       return Response.json({ error: 'Missing required fields: project_id, video_title' }, { status: 400 });
+    }
+
+    const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
+    if (!KIE_API_KEY) {
+      return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
     }
 
     // Load brand identity
@@ -99,12 +246,21 @@ Deno.serve(async (req) => {
     }
 
     console.log('================================================');
-    console.log('GENERATING THUMBNAIL CONCEPTS');
+    console.log('GENERATING THUMBNAIL CONCEPTS + IMAGES');
     console.log(`Video: ${video_title}`);
     console.log(`Brand tone: ${thumbTone}`);
+    console.log(`Image gen: Ideogram V3 → Flux 2 Pro fallback`);
     console.log('================================================');
 
-    const prompt = `You are the world's #1 YouTube thumbnail psychologist and visual designer. You've studied every viral thumbnail across every niche and know exactly what makes someone's thumb stop mid-scroll.
+    // ══════════════════════════════════════════════════════════════
+    // GEMINI PROMPT — Optimized for Ideogram V3
+    // ══════════════════════════════════════════════════════════════
+    // KEY CHANGE: Ideogram V3 excels at TEXT IN IMAGES, so we
+    // instruct Gemini to include text overlay instructions directly
+    // in the image_prompt (Ideogram will render them natively).
+    // Removed all Fal.ai specific references.
+
+    const prompt = `You are the world's #1 YouTube thumbnail psychologist and visual designer.
 
 VIDEO TITLE: "${video_title}"
 BRAND THUMBNAIL TONE: ${thumbTone}
@@ -114,158 +270,68 @@ ${topicContext ? `VIDEO CONTEXT: ${topicContext}` : ''}
 
 CHANNEL TYPE: Faceless documentary/educational (no on-camera presenter)
 
-================================================
-THUMBNAIL PSYCHOLOGY MASTERY
-================================================
-
-The ONLY job of a thumbnail is to create an irresistible NEED to click.
-It does this through ONE primary psychological trigger:
-
-TRIGGER 1 - CURIOSITY GAP:
-Something in the image creates an unanswered question.
-Visual elements that are incomplete, contradictory, or surprising.
-Example: A safe with its door blown open. A graph with a dramatic cliff edge. A face with shocked expression looking at something out of frame.
-
-TRIGGER 2 - FEAR/WARNING:
-The image implies danger, loss, or a mistake the viewer is making right now.
-Visual cues: red color dominance, warning symbols, distressed expressions, dramatic lighting.
-Example: A red X over a common action. A person holding their head in despair. Money falling into a drain.
-
-TRIGGER 3 - FORBIDDEN KNOWLEDGE:
-The image implies classified or suppressed information being revealed.
-Visual cues: classified stamps, leaked documents, shadows and silhouettes, hidden things being uncovered.
-Example: A document with CLASSIFIED stamped on it. A curtain being pulled back. A locked box opening.
-
-TRIGGER 4 - SOCIAL PROOF / STATUS:
-The image implies exclusive insider knowledge only smart people have.
-Visual cues: contrast between "before" and "after", winners vs losers, elite vs masses.
-Example: Two cars side by side (cheap vs expensive). Two graphs (one up, one down).
-
-TRIGGER 5 - EMOTIONAL CONTRAST:
-The image creates visceral emotional dissonance.
-Visual cues: extreme contrast between elements (hope vs despair, wealth vs poverty, simple vs complex).
-Example: A happy family home with a foreclosure sign. A chart going up with a sad face overlay.
+IMAGE GENERATION MODEL: Ideogram V3 (excels at rendering text inside images)
 
 ================================================
-DESIGN RULES (ABSOLUTE LAWS)
+THUMBNAIL PSYCHOLOGY TRIGGERS
 ================================================
 
-COMPOSITION:
-- ALWAYS 16:9 landscape format (1216x832 pixels optimized for Fal.ai) - NON-NEGOTIABLE
-- Rule of thirds: place primary subject at intersection points
-- Leave breathing room: never crowd the frame
-- Depth layers: foreground subject, midground detail, background atmosphere
-- Eye-line direction: subjects should look TOWARD the center of action
-
-COLOR:
-- Use COLOR NAMES only (never hex codes or percentages)
-- Maximum 3 dominant colors for clarity and impact
-- Contrast ratio must be high enough to read at thumbnail size (approx 180x100 pixels)
-- Warm colors (red, orange, yellow) advance - use for subjects and text
-- Cool colors (blue, teal, purple) recede - use for backgrounds
-- Complementary color pairs for maximum impact: red/teal, orange/blue, yellow/purple
-
-TEXT OVERLAYS:
-- MAXIMUM 4 words (3 is ideal)
-- Must be readable at 180x100 pixel thumbnail size
-- Text as design element: describe the container too (red badge, torn paper effect, glowing neon)
-- Font weight: BOLD/EXTRA BOLD only for thumbnails
-- Text position: upper third or lower third (never dead center)
-- Color: white or bright yellow for maximum contrast
-
-FACELESS CHANNEL ADAPTATIONS:
-Since there is no presenter face, use these high-CTR alternatives:
-- Dramatic objects with implied human stakes (empty wallet, burning document, locked door)
-- Data visualizations with shocking results (chart with dramatic cliff, gauge in red zone)
-- Environmental storytelling (the scene tells the story without a person)
-- Symbol + emotion composition (warning sign + distressed hands)
-- Split comparisons (two worlds side by side)
-- Close-up textures with implied narrative (crumpled money, broken glass, torn contract)
-
-PROMPT ENGINEERING RULES:
-- NEVER use percentages, hex codes, or pixel measurements in descriptions
-- Use SPATIAL LANGUAGE: "anchored at left third", "filling upper half", "spanning full width"
-- Use PHOTOGRAPHY LANGUAGE: "extreme close-up", "shallow depth of field", "rim lighting"
-- Use ARCHETYPE descriptions: "weathered hands gripping crumpled cash" not "person's hands"
-- Describe text+container as ONE unit: "bold white text inside a crimson warning badge"
-- Say "graphic design composition" to trigger flat 2D text layers
-- Specify atmosphere: "ominous", "dramatic", "urgent", "mysterious", "shocking"
+1. CURIOSITY GAP: Incomplete/contradictory visuals creating unanswered questions
+2. FEAR/WARNING: Danger, loss, mistakes — red dominance, warning symbols
+3. FORBIDDEN KNOWLEDGE: Classified/suppressed info being revealed
+4. SOCIAL PROOF/STATUS: Insider knowledge, winners vs losers contrast
+5. EMOTIONAL CONTRAST: Visceral dissonance between opposing elements
 
 ================================================
-CTR PERFORMANCE TIERS
+DESIGN RULES
 ================================================
 
-TIER 1 (8-10 CTR score) - Stops EVERY scroll:
-- Immediately creates an emotion
-- Has clear focal point visible at thumbnail size
-- Creates an unanswered question in under 2 seconds
-- Looks completely different from competing videos
+FORMAT: Always 1920x1080 (Full HD) 16:9 widescreen landscape
+COLORS: Max 3 dominant colors, named only (no hex). High contrast for thumbnail size readability.
+TEXT: Maximum 4 words (3 ideal). BOLD weight. Upper or lower third. Use quotation marks around text in the prompt so Ideogram renders it.
+FACELESS: No presenter face. Use dramatic objects, data visualizations, environmental storytelling, symbolic compositions, split comparisons, close-up textures.
 
-TIER 2 (6-7 CTR score) - Stops MOST scrolls:
-- Creates emotion but requires 2-3 seconds to process
-- Clear composition but less immediate impact
-- Good but predictable
-
-TIER 3 (4-5 CTR score) - Stops SOME scrolls:
-- Requires reading text to understand the hook
-- Composition is clear but not immediately arresting
-
-ONLY generate Tier 1 concepts. If a concept would score below 8, discard it and generate a better one.
+IDEOGRAM V3 PROMPT RULES:
+- Put text to render in "quotation marks" within the prompt
+- Describe text styling: font weight, color, position, container (badge, stamp, banner)
+- Use spatial language: "anchored at left third", "filling upper half"
+- Use photography language: "extreme close-up", "shallow depth of field", "rim lighting"
+- Specify atmosphere: "ominous", "dramatic", "urgent", "mysterious"
+- NEVER use hex codes or percentages
+- Always specify "1920x1080 Full HD 16:9 widescreen landscape format"
+- Always end prompt with "Ultra high resolution, crisp sharp details, professional quality"
 
 ================================================
-THUMBNAIL CONCEPT TYPES (use variety across 10 concepts)
+CONCEPT TYPES (use variety across 10)
 ================================================
 
-TYPE A - THE REVELATION: Something hidden being exposed (document, secret, hidden compartment)
-TYPE B - THE WARNING: Danger signal, red alert, cautionary image
-TYPE C - THE COMPARISON: Side-by-side contrast (winner/loser, smart/foolish, before/after)
-TYPE D - THE EMOTION CLOSE-UP: Extreme close-up of hands, objects, or textures with emotional weight
-TYPE E - THE DATA SHOCK: Chart, graph, or number with shocking implication
-TYPE F - THE FORBIDDEN: Classified/banned/censored visual treatment
-TYPE G - THE TRANSFORMATION: Before-and-after visual narrative
-TYPE H - THE SYMBOL: Powerful symbolic object that represents the topic's core tension
-TYPE I - THE ENVIRONMENT: A setting that tells the whole story (abandoned office, luxury vs poverty)
-TYPE J - THE ABSTRACT METAPHOR: Surreal or conceptual visual that forces curiosity
-
-================================================
-EXAMPLES OF 10/10 vs 5/10 THUMBNAILS
-================================================
-
-TOPIC: "How Banks Make Money From Your Account"
-
-5/10 CONCEPTS (DO NOT DESIGN LIKE THESE):
-- "Bank building photo with the video title as text"
-- "Stock photo of money with a question mark"
-- "Generic piggy bank image with text overlay"
-
-10/10 CONCEPTS (DESIGN LIKE THESE):
-- "Extreme close-up of hands tightly gripping a wallet while dollar bills drain out through cracks between fingers, dramatic side lighting creating deep shadows, crimson red background fading to black, bold white text 'THEY KNEW' in upper third inside a red warning stamp, ominous atmosphere"
-- "Split composition: left side shows gleaming marble bank lobby in cool blue tones, right side shows cluttered modest kitchen table with bills and calculator in warm anxious amber tones, bold yellow arrow pointing LEFT toward bank, text 'YOUR MONEY' in gritty stencil font at bottom"
-- "Overhead flat-lay of a paper bank statement with specific line items visible but blurred, one line circled in red marker reading 'WHAT IS THIS CHARGE', dramatic single spotlight, magnifying glass hovering over the circled item, dark wooden desk, urgent documentary atmosphere"
+A=REVELATION, B=WARNING, C=COMPARISON, D=EMOTION CLOSE-UP, E=DATA SHOCK,
+F=FORBIDDEN, G=TRANSFORMATION, H=SYMBOL, I=ENVIRONMENT, J=ABSTRACT METAPHOR
 
 ================================================
 OUTPUT FORMAT (EXACT JSON)
 ================================================
 
 {
-  "ctr_strategy": "Overall psychological approach for this video's thumbnails",
+  "ctr_strategy": "Overall psychological approach",
   "thumbnails": [
     {
       "rank": 1,
       "concept_type": "revelation/warning/comparison/emotion_closeup/data_shock/forbidden/transformation/symbol/environment/abstract",
       "psychological_trigger": "curiosity_gap/fear/forbidden_knowledge/social_proof/emotional_contrast",
-      "concept_description": "Natural language description of the concept and WHY it will stop scrolls",
-      "focal_point": "The single most important visual element the eye goes to first",
-      "visual_metaphor": "What this image symbolically represents about the video topic",
-      "color_scheme": "3 colors maximum, named colors only, with their roles (dominant/accent/text)",
-      "text_overlay": "Maximum 4 words",
-      "text_style": "Description of how text looks (font weight, container, position, color)",
+      "concept_description": "Why this stops scrolls",
+      "focal_point": "Primary visual element",
+      "visual_metaphor": "Symbolic meaning",
+      "color_scheme": "3 named colors with roles",
+      "text_overlay": "Max 4 words",
+      "text_style": "Font weight, container, position, color",
       "style_reference": "cinematic/minimal/documentary/dramatic/corporate/gritty",
       "ctr_score": 9,
-      "why_it_stops_scrolling": "Specific psychological reason — what question or emotion hits in under 2 seconds",
-      "faceless_adaptation": "How this works without a presenter face",
-      "ab_test_alternative": "Which other concept from the list to A/B test against",
-      "image_prompt": "16:9 aspect ratio, 1216x832 resolution (Fal.ai optimized), widescreen landscape format, graphic design composition. [COMPLETE 200+ word natural language prompt with: exact spatial layout, foreground/midground/background description, lighting type and direction, color palette with named colors, text as unified design elements with containers, atmosphere and mood, render quality descriptors, photography-style direction]. NO percentages. NO hex codes. NO pixel measurements. Explicitly state 16:9 widescreen format."
+      "why_it_stops_scrolling": "Psychological reason",
+      "faceless_adaptation": "How it works without a face",
+      "ab_test_alternative": "Which concept to A/B test against",
+      "image_prompt": "1920x1080 Full HD 16:9 widescreen landscape format. [200+ word natural language prompt for Ideogram V3 with: spatial layout, foreground/midground/background, lighting, color palette with named colors, text in quotation marks as design elements with containers, atmosphere, render quality]. End with: Ultra high resolution, crisp sharp details, professional quality. NO hex codes.",
+      "negative_prompt": "Comma-separated list of things to exclude from the image"
     }
   ]
 }
@@ -273,10 +339,13 @@ OUTPUT FORMAT (EXACT JSON)
 REQUIREMENTS:
 - Generate ALL 10 concepts using different concept types
 - Every image_prompt must be 200+ words
-- Every concept must score 8+ on CTR (Tier 1 only)
-- Rank by overall CTR and algorithmic performance potential
-- Explicitly design for faceless channel (no presenter face)
-- Every prompt must state 16:9 format and 1216x832 Fal.ai dimensions explicitly
+- Every image_prompt must start with "1920x1080 Full HD 16:9 widescreen landscape format"
+- Every image_prompt must end with "Ultra high resolution, crisp sharp details, professional quality"
+- Every concept must score 8+ CTR (Tier 1 only)
+- Rank by CTR potential
+- Faceless channel only
+- Include "negative_prompt" for each (things to exclude)
+- Text overlays in quotation marks within image_prompt so Ideogram V3 renders them
 
 Generate 10 premium viral thumbnail concepts now.`;
 
@@ -291,37 +360,47 @@ Generate 10 premium viral thumbnail concepts now.`;
       return Response.json({ error: 'Invalid response format from Gemini' }, { status: 500 });
     }
 
-    // Delete existing thumbnails
+    // ══════════════════════════════════════════════════════════════
+    // DELETE EXISTING THUMBNAILS
+    // ══════════════════════════════════════════════════════════════
     try {
       const existing = await base44.entities.ThumbnailConcepts.filter({ project_id });
-      for (const e of existing) {
-        await base44.entities.ThumbnailConcepts.delete(e.id);
-      }
+      const deletePromises = existing.map(e => base44.entities.ThumbnailConcepts.delete(e.id));
+      await Promise.all(deletePromises);
     } catch (deleteErr) {
       console.warn('Failed to delete existing thumbnails:', deleteErr.message);
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // SAVE CONCEPTS + GENERATE IMAGES IN PARALLEL
+    // ══════════════════════════════════════════════════════════════
 
     const thumbnails = [];
     const skipped = [];
     let qualityWarnings = 0;
 
-    for (const t of result.data.thumbnails) {
+    // Step 1: Save all concepts first (parallel)
+    const savePromises = result.data.thumbnails.map(async (t, i) => {
       const validation = validateThumbnail(t);
       if (!validation.valid) {
         qualityWarnings++;
         console.warn(`Thumbnail ${t.rank} issues: ${validation.issues.join(', ')}`);
       }
 
-      // Auto-patch missing Fal.ai dimension specification
       let imagePrompt = t.image_prompt || '';
-      if (!imagePrompt.toLowerCase().includes('16:9') && !imagePrompt.toLowerCase().includes('1216x832')) {
-        imagePrompt = `16:9 aspect ratio, 1216x832 resolution (Fal.ai optimized), widescreen landscape format, graphic design composition. ${imagePrompt}`;
+      // Ensure 1920x1080 / 16:9 specification
+      if (!imagePrompt.toLowerCase().includes('1920x1080') && !imagePrompt.toLowerCase().includes('16:9')) {
+        imagePrompt = `1920x1080 Full HD 16:9 widescreen landscape format, graphic design composition. ${imagePrompt}`;
+      }
+      // Ensure quality suffix
+      if (!imagePrompt.toLowerCase().includes('crisp sharp details')) {
+        imagePrompt += '. Ultra high resolution, crisp sharp details, professional quality.';
       }
 
       try {
         const record = await base44.entities.ThumbnailConcepts.create({
-          project_id: project_id,
-          rank: t.rank || thumbnails.length + 1,
+          project_id,
+          rank: t.rank || i + 1,
           concept_type: t.concept_type || 'revelation',
           psychological_trigger: t.psychological_trigger || 'curiosity_gap',
           concept_description: t.concept_description || '',
@@ -340,23 +419,67 @@ Generate 10 premium viral thumbnail concepts now.`;
           is_selected: false
         });
 
-        thumbnails.push(record);
-        console.log(`Saved thumbnail ${t.rank}: [${t.concept_type}] "${t.text_overlay}" CTR: ${t.ctr_score}/10`);
+        console.log(`✓ Saved concept ${t.rank}: [${t.concept_type}] "${t.text_overlay}" CTR: ${t.ctr_score}/10`);
+        return {
+          success: true,
+          record,
+          imagePrompt,
+          negativePrompt: t.negative_prompt || "blurry, low quality, pixelated, watermark, ugly, distorted text, low resolution, compressed, jpeg artifacts, grainy, out of focus"
+        };
       } catch (saveErr) {
-        console.error(`Failed to save thumbnail ${t.rank}:`, saveErr.message);
+        console.error(`✗ Failed to save concept ${t.rank}:`, saveErr.message);
         skipped.push({ rank: t.rank, error: saveErr.message });
+        return { success: false };
       }
-    }
+    });
 
+    const savedResults = await Promise.all(savePromises);
+    const successfullySaved = savedResults.filter(r => r.success);
+
+    // Step 2: Generate images for ALL saved concepts in parallel
+    console.log(`\n═══ Generating ${successfullySaved.length} thumbnail images ═══`);
+
+    const imagePromises = successfullySaved.map(async (saved) => {
+      const { record, imagePrompt, negativePrompt } = saved;
+      try {
+        const { url, model, error } = await generateThumbnailImage(
+          KIE_API_KEY,
+          imagePrompt,
+          negativePrompt
+        );
+
+        if (url) {
+          // Update the thumbnail record with the generated image URL
+          await base44.asServiceRole.entities.ThumbnailConcepts.update(record.id, {
+            image_url: url
+          });
+          console.log(`✓ Image generated for rank ${record.rank} via ${model}`);
+          thumbnails.push({ ...record, image_url: url, model_used: model });
+        } else {
+          console.warn(`✗ No image for rank ${record.rank}: ${error}`);
+          thumbnails.push({ ...record, image_url: null, model_used: 'failed' });
+        }
+      } catch (imgErr) {
+        console.error(`✗ Image gen error rank ${record.rank}:`, imgErr.message);
+        thumbnails.push({ ...record, image_url: null, model_used: 'error' });
+      }
+    });
+
+    await Promise.all(imagePromises);
+
+    // Step 3: Update project step
     try {
       await base44.entities.Projects.update(project_id, { current_step: 12 });
     } catch (updateErr) {
       console.warn('Failed to update project step:', updateErr.message);
     }
 
+    const imagesGenerated = thumbnails.filter(t => t.image_url).length;
+
     console.log('================================================');
-    console.log(`Thumbnails saved: ${thumbnails.length}`);
-    console.log(`Thumbnails skipped: ${skipped.length}`);
+    console.log(`Concepts saved: ${successfullySaved.length}`);
+    console.log(`Images generated: ${imagesGenerated}`);
+    console.log(`Skipped: ${skipped.length}`);
     console.log(`Quality warnings: ${qualityWarnings}`);
     console.log(`CTR strategy: ${result.data.ctr_strategy}`);
     console.log('================================================');
@@ -367,9 +490,12 @@ Generate 10 premium viral thumbnail concepts now.`;
       meta: {
         ctr_strategy: result.data.ctr_strategy,
         total_generated: result.data.thumbnails.length,
-        total_saved: thumbnails.length,
+        total_saved: successfullySaved.length,
+        total_images: imagesGenerated,
         total_skipped: skipped.length,
         quality_warnings: qualityWarnings,
+        image_model_primary: "ideogram/v3-generate",
+        image_model_fallback: "flux-2/pro-text-to-image",
         skipped_details: skipped
       }
     });
