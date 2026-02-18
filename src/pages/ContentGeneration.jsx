@@ -13,13 +13,15 @@ import VisualStyleSelector from '@/components/content/VisualStyleSelector';
 import OrientationSelector from '@/components/content/OrientationSelector';
 import MusicPanel from '@/components/content/MusicPanel';
 import AudioMixerPanel from '@/components/content/AudioMixerPanel';
-import { Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film, Palette, Sparkles, Monitor } from 'lucide-react';
+import { Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film, Palette, Sparkles, Monitor, Clapperboard, Wand2 } from 'lucide-react';
 
 export default function ContentGeneration() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const projectId = new URLSearchParams(window.location.search).get('project_id');
   const [importing, setImporting] = useState(false);
+  const [importPhase, setImportPhase] = useState(''); // 'breakdown' | 'prompts' | ''
+  const [importProgress, setImportProgress] = useState('');
   const [generatingImages, setGeneratingImages] = useState(false);
   const [generatingVideos, setGeneratingVideos] = useState(false);
   const [audioLevels, setAudioLevels] = useState({ narration: 1, music: 0.3, sfx: 0.5 });
@@ -43,38 +45,73 @@ export default function ContentGeneration() {
     enabled: !!projectId,
   });
 
-  // Import: break script into scenes (with live progress polling)
- // Import: break script into scenes (batch by batch to avoid timeouts)
+  // ══════════════════════════════════════════════════════════════════
+  // TWO-PHASE IMPORT: Scene Breakdown → Prompt Generation
+  // ══════════════════════════════════════════════════════════════════
   const handleImport = async () => {
     setImporting(true);
-    let batchIndex = 0;
-    let done = false;
 
     try {
+      // ── PHASE 1: Cinematic Scene Breakdown ─────────────────────
+      setImportPhase('breakdown');
+      let batchIndex = 0;
+      let done = false;
+
       while (!done) {
-        console.log(`Generating scene batch ${batchIndex + 1}...`);
-        
-        const result = await base44.functions.invoke('generateScenePrompts', { 
-          project_id: projectId, 
-          batch_index: batchIndex 
+        const phaseLabel = batchIndex === 0
+          ? 'Analyzing script & building cinematic blueprint...'
+          : `Breaking down scenes (phase ${batchIndex + 1})...`;
+        setImportProgress(phaseLabel);
+        console.log(`🎬 Scene Breakdown batch ${batchIndex}...`);
+
+        const result = await base44.functions.invoke('generateSceneBreakdown', {
+          project_id: projectId,
+          batch_index: batchIndex,
         });
 
-        // Refresh scenes after each batch so user sees progress
+        // Refresh scenes so user sees progress after each batch
         await refetchScenes();
 
         if (result.done) {
           done = true;
-          console.log(`All scenes generated! Total: ${result.total_scenes}`);
+          console.log(`✓ Scene breakdown complete! ${result.total_scenes} scenes created.`);
         } else {
           batchIndex++;
         }
       }
+
+      // ── PHASE 2: Generate Image & Animation Prompts ────────────
+      setImportPhase('prompts');
+      batchIndex = 0;
+      done = false;
+
+      while (!done) {
+        setImportProgress(`Generating visual prompts (batch ${batchIndex + 1})...`);
+        console.log(`🎨 Prompt generation batch ${batchIndex}...`);
+
+        const result = await base44.functions.invoke('generateScenePrompts', {
+          project_id: projectId,
+          batch_index: batchIndex,
+        });
+
+        await refetchScenes();
+
+        if (result.done) {
+          done = true;
+          console.log(`✓ All prompts generated!`);
+        } else {
+          batchIndex++;
+        }
+      }
+
     } catch (err) {
       console.error('Scene generation error:', err);
     } finally {
       await refetchScenes();
       await refetchProject();
       setImporting(false);
+      setImportPhase('');
+      setImportProgress('');
     }
   };
 
@@ -88,7 +125,6 @@ export default function ContentGeneration() {
       } catch (err) {
         console.warn(`Scene ${scene.scene_number} image failed, skipping:`, err.message);
       }
-      // Refresh after each scene so user sees progress
       await refetchScenes();
     }
     setGeneratingImages(false);
@@ -156,6 +192,8 @@ export default function ContentGeneration() {
 
   const imageCount = scenes.filter(s => s.image_url).length;
   const videoCount = scenes.filter(s => s.video_url).length;
+  const breakdownReadyCount = scenes.filter(s => s.status === 'breakdown_ready').length;
+  const promptsReadyCount = scenes.filter(s => s.status === 'prompts_ready').length;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -191,7 +229,7 @@ export default function ContentGeneration() {
           </div>
         )}
 
-        {/* Visual Style Selector - always show when project exists */}
+        {/* Visual Style Selector */}
         {project && (
           <div className="bg-white p-5 rounded-lg shadow-sm border mb-6">
             <VisualStyleSelector
@@ -204,13 +242,51 @@ export default function ContentGeneration() {
           </div>
         )}
 
+        {/* Import Progress Banner */}
+        {importing && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  {importPhase === 'breakdown' ? (
+                    <Badge className="bg-blue-100 text-blue-800 text-xs">
+                      <Clapperboard className="w-3 h-3 mr-1" />
+                      Phase 1: Director's Breakdown
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-purple-100 text-purple-800 text-xs">
+                      <Wand2 className="w-3 h-3 mr-1" />
+                      Phase 2: Visual Prompts
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-sm text-gray-700">{importProgress}</p>
+                {scenes.length > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {scenes.length} scenes created
+                    {breakdownReadyCount > 0 && ` · ${breakdownReadyCount} awaiting prompts`}
+                    {promptsReadyCount > 0 && ` · ${promptsReadyCount} ready for images`}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Action Bar */}
         <div className="bg-white p-4 rounded-lg shadow-sm border mb-6 flex flex-wrap items-center gap-3">
-          {scenes.length === 0 ? (
+          {scenes.length === 0 && !importing ? (
             <>
-              <Button onClick={handleImport} disabled={importing || !project?.visual_style || !project?.orientation} className="bg-blue-600 hover:bg-blue-700">
-                {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Import className="w-4 h-4 mr-2" />}
-                {importing ? 'Breaking Script into Scenes...' : 'Import Script & Generate Scenes'}
+              <Button
+                onClick={handleImport}
+                disabled={importing || !project?.visual_style || !project?.orientation}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Import className="w-4 h-4 mr-2" />
+                Import Script & Generate Scenes
               </Button>
               {(!project?.visual_style || !project?.orientation) && (
                 <p className="text-sm text-amber-600 flex items-center gap-1">
@@ -218,24 +294,24 @@ export default function ContentGeneration() {
                 </p>
               )}
             </>
-          ) : (
+          ) : scenes.length > 0 ? (
             <>
               {project?.orientation && (
-                      <Badge className="bg-blue-100 text-blue-800 text-xs">
-                        <Monitor className="w-3 h-3 mr-1" />
-                        {project.orientation === 'portrait' ? '9:16 Portrait' : '16:9 Landscape'}
-                      </Badge>
-                    )}
+                <Badge className="bg-blue-100 text-blue-800 text-xs">
+                  <Monitor className="w-3 h-3 mr-1" />
+                  {project.orientation === 'portrait' ? '9:16 Portrait' : '16:9 Landscape'}
+                </Badge>
+              )}
               {project?.visual_style && (
-                      <Badge className="bg-purple-100 text-purple-800 text-xs">
-                        <Palette className="w-3 h-3 mr-1" />
-                        {project.visual_style.replace(/_/g, ' ')}
-                      </Badge>
-                    )}
-                    <div className="flex items-center gap-2 text-sm font-medium">
-                      <Layers className="w-4 h-4 text-blue-600" />
-                      {scenes.length} scenes
-                    </div>
+                <Badge className="bg-purple-100 text-purple-800 text-xs">
+                  <Palette className="w-3 h-3 mr-1" />
+                  {project.visual_style.replace(/_/g, ' ')}
+                </Badge>
+              )}
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Layers className="w-4 h-4 text-blue-600" />
+                {scenes.length} scenes
+              </div>
               <div className="flex items-center gap-2 text-sm">
                 <ImageIcon className="w-4 h-4 text-green-600" />
                 {imageCount}/{scenes.length} images
@@ -271,17 +347,17 @@ export default function ContentGeneration() {
                 {generatingVideos ? 'Animating...' : 'Animate All Scenes'}
               </Button>
             </>
-          )}
+          ) : null}
         </div>
 
-        {/* Scene Grid with Drag & Drop, Acts, and Notes */}
+        {/* Scene Grid */}
         {scenes.length > 0 && (
           <div className="mb-8">
             <SceneGrid scenes={scenes} onRefetch={refetchScenes} />
           </div>
         )}
 
-        {/* Audio Section: Voiceover, Music, Mixer */}
+        {/* Audio Section */}
         {project && (
           <div className="mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {latestScript && (
@@ -300,8 +376,6 @@ export default function ContentGeneration() {
             />
           </div>
         )}
-
-{/* Continue button moved to header */}
       </div>
     </div>
   );
