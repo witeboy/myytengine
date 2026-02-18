@@ -1,5 +1,41 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+function repairJSON(str) {
+  // Remove trailing commas before } or ]
+  str = str.replace(/,\s*([}\]])/g, '$1');
+  // Fix unescaped newlines inside strings
+  str = str.replace(/(?<=":[\s]*"[^"]*)\n([^"]*")/g, '\\n$1');
+  // Remove control characters
+  str = str.replace(/[\x00-\x1F\x7F]/g, (ch) => {
+    if (ch === '\n' || ch === '\r' || ch === '\t') return ch;
+    return '';
+  });
+  return str;
+}
+
+function extractJSON(text) {
+  let jsonStr = text;
+  if (text.includes("```json")) jsonStr = text.split("```json")[1].split("```")[0].trim();
+  else if (text.includes("```")) jsonStr = text.split("```")[1].split("```")[0].trim();
+
+  try {
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    console.warn("First parse failed, attempting repair...");
+    try {
+      return JSON.parse(repairJSON(jsonStr));
+    } catch (e2) {
+      // Last resort: find the outermost { }
+      const start = jsonStr.indexOf('{');
+      const end = jsonStr.lastIndexOf('}');
+      if (start !== -1 && end !== -1) {
+        return JSON.parse(repairJSON(jsonStr.substring(start, end + 1)));
+      }
+      throw e2;
+    }
+  }
+}
+
 async function safeGeminiCall(prompt, temperature = 0.8) {
   const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
   
@@ -11,7 +47,11 @@ async function safeGeminiCall(prompt, temperature = 0.8) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature, maxOutputTokens: 4096 }
+          generationConfig: { 
+            temperature, 
+            maxOutputTokens: 4096,
+            responseMimeType: "application/json"
+          }
         })
       }
     );
@@ -27,11 +67,7 @@ async function safeGeminiCall(prompt, temperature = 0.8) {
     }
 
     const text = data.candidates[0].content.parts[0].text;
-    let jsonStr = text;
-    if (text.includes("```json")) jsonStr = text.split("```json")[1].split("```")[0].trim();
-    else if (text.includes("```")) jsonStr = text.split("```")[1].split("```")[0].trim();
-
-    const parsed = JSON.parse(jsonStr);
+    const parsed = extractJSON(text);
     return { success: true, data: parsed, raw: text };
   } catch (error) {
     console.error("Gemini call failed:", error.message);
@@ -85,7 +121,7 @@ Each topic must:
 - Be executable with research only (no on-camera presenter)
 - Score 8+ on viral potential
 
-JSON FORMAT:
+Return a JSON object with this exact structure:
 {
   "niche_analysis": "Brief understanding of viral potential",
   "content_strategy": "Overarching content approach",
@@ -94,7 +130,7 @@ JSON FORMAT:
       "rank": 1,
       "title": "Viral, specific, curiosity-driven title",
       "description": "2-3 sentences explaining stakes and why viewers NEED this",
-      "viral_angle": "hidden_truth/betrayal/discovery/warning/shortcut/myth",
+      "viral_angle": "hidden_truth",
       "villain": "The system working against viewers",
       "unanswered_question": "The burning question this answers",
       "search_intent": "What people type when desperate for this info",
@@ -102,16 +138,16 @@ JSON FORMAT:
       "viral_score": 9,
       "storytelling_score": 8,
       "emotional_score": 9,
-      "keyword_potential": "high/medium/low",
+      "keyword_potential": "high",
       "monthly_searches": "10K-50K",
-      "competition_level": "low/medium/high",
+      "competition_level": "low",
       "content_depth": "How many minutes of valuable content this supports",
       "engagement_notes": "Comment triggers and discussion angles"
     }
   ]
 }
 
-Generate 5 topics ranked by viral potential. Return ONLY valid JSON, no extra text.`;
+IMPORTANT: Do NOT use special characters, line breaks, or unescaped quotes inside string values. Keep all string values simple and clean. Generate 5 topics ranked by viral potential.`;
 
     const result = await safeGeminiCall(prompt, 0.85);
 
