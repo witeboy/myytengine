@@ -81,46 +81,36 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
   let enhanced = imagePrompt;
   const issues = [];
 
-  // Enforce correct Fal.ai dimensions
-  const falDimension = orientationConfig.format === 'portrait' ? '832x1248' : '1216x832';
-  const wrongDimensions = orientationConfig.format === 'portrait'
-    ? ['720x1280', '720×1280', '1080x1920', '1024x1792', '1280x720', '1216x832']
-    : ['1280x720', '1280×720', '1920x1080', '1792x1024', '720x1280', '832x1248'];
-
-  for (const wrong of wrongDimensions) {
-    enhanced = enhanced.replace(new RegExp(wrong.replace('x', '[x×]'), 'g'), falDimension);
-  }
-
-  if (!enhanced.includes(falDimension)) {
-    issues.push(`Scene ${sceneNumber}: Missing Fal.ai dimension ${falDimension}`);
-    enhanced = `${falDimension} pixels. ${enhanced}`;
-  }
+  // Strip any pixel dimension strings — image gen handles dimensions via API params
+  enhanced = enhanced.replace(/\b\d{3,4}\s*[x×]\s*\d{3,4}\s*(pixels?|px)?\s*\.?\s*/gi, '');
 
   if (enhanced.length < 150) {
     issues.push(`Scene ${sceneNumber}: Prompt too short (${enhanced.length} chars)`);
   }
 
+  // Ensure style directive is present
   const styleKeywords = styleConfig.positive.substring(0, 50).toLowerCase();
   if (!enhanced.toLowerCase().includes(styleKeywords.substring(0, 20))) {
     issues.push(`Scene ${sceneNumber}: Missing style directive`);
-    enhanced = `${styleConfig.positive}, ${orientationConfig.directive}. ${enhanced}`;
+    enhanced = `${styleConfig.positive}. ${enhanced}`;
   }
 
+  // Ensure composition hint for orientation (no pixel dimensions — just framing language)
+  const compositionHint = orientationConfig.format === 'portrait'
+    ? 'vertical 9:16 frame, tall vertical composition'
+    : 'widescreen 16:9 cinematic frame, wide horizontal composition';
+
   if (orientationConfig.format === 'portrait') {
-    if (!enhanced.toLowerCase().includes('portrait') && !enhanced.includes('9:16')) {
-      issues.push(`Scene ${sceneNumber}: Missing portrait orientation`);
-      enhanced = enhanced.replace(/landscape|horizontal|16:?9/gi, '');
-      if (!enhanced.includes(orientationConfig.directive)) {
-        enhanced = `${orientationConfig.directive}. ${enhanced}`;
-      }
+    if (!enhanced.toLowerCase().includes('portrait') && !enhanced.toLowerCase().includes('vertical') && !enhanced.includes('9:16')) {
+      issues.push(`Scene ${sceneNumber}: Missing portrait composition hint`);
+      enhanced = enhanced.replace(/landscape|horizontal|widescreen|16:?9/gi, '');
+      enhanced = `${compositionHint}. ${enhanced}`;
     }
   } else {
-    if (!enhanced.toLowerCase().includes('landscape') && !enhanced.includes('16:9')) {
-      issues.push(`Scene ${sceneNumber}: Missing landscape orientation`);
+    if (!enhanced.toLowerCase().includes('landscape') && !enhanced.toLowerCase().includes('widescreen') && !enhanced.includes('16:9')) {
+      issues.push(`Scene ${sceneNumber}: Missing landscape composition hint`);
       enhanced = enhanced.replace(/portrait|vertical|9:?16/gi, '');
-      if (!enhanced.includes(orientationConfig.directive)) {
-        enhanced = `${orientationConfig.directive}. ${enhanced}`;
-      }
+      enhanced = `${compositionHint}. ${enhanced}`;
     }
   }
 
@@ -208,18 +198,16 @@ Deno.serve(async (req) => {
     if (orientation === 'portrait') {
       orientationConfig = {
         format: 'portrait',
-        directive: "PORTRAIT VERTICAL 9:16 format, 832x1248 pixels, tall vertical framing",
+        directive: "PORTRAIT VERTICAL 9:16 format, tall vertical framing",
         composition: "Compose for VERTICAL 9:16 mobile frame: use tall vertical compositions with strong vertical leading lines, center subjects in the vertical frame with headroom and foot room, close-up and medium shots work best for vertical format, use vertical depth with foreground/midground/background elements stacked vertically, avoid wide horizontal elements that get cropped",
-        animation: "vertical 9:16 smartphone frame — prefer tilt up/down camera movements, vertical reveals and wipes, close-up push-ins and pull-outs, vertical parallax scrolling effects, portrait-oriented motion",
-        dimensions: { width: 832, height: 1248 }
+        animation: "vertical 9:16 smartphone frame — prefer tilt up/down camera movements, vertical reveals and wipes, close-up push-ins and pull-outs, vertical parallax scrolling effects, portrait-oriented motion"
       };
     } else {
       orientationConfig = {
         format: 'landscape',
-        directive: "LANDSCAPE HORIZONTAL 16:9 widescreen format, 1216x832 pixels, wide cinematic framing, fill entire frame edge to edge",
+        directive: "LANDSCAPE HORIZONTAL 16:9 widescreen format, wide cinematic framing, fill entire frame edge to edge",
         composition: "Compose for WIDESCREEN 16:9 cinematic frame: use wide establishing shots with panoramic depth, apply rule of thirds with subjects placed left/right for negative space, utilize horizontal leading lines and lateral composition, create depth with foreground/midground/background layers spread horizontally, embrace wide cinematic framing with breathing room on sides",
-        animation: "widescreen 16:9 cinematic frame — prefer horizontal pans and tracking shots, dolly movements forward/backward, wide-angle crane shots, lateral parallax with depth, horizontal reveals and wipes",
-        dimensions: { width: 1216, height: 832 }
+        animation: "widescreen 16:9 cinematic frame — prefer horizontal pans and tracking shots, dolly movements forward/backward, wide-angle crane shots, lateral parallax with depth, horizontal reveals and wipes"
       };
     }
 
