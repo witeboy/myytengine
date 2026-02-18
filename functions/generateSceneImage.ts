@@ -205,12 +205,15 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════════════════
     const referenceImages = project?.reference_image_url ? [project.reference_image_url] : [];
     
-    const baseParams = {
-      prompt: finalPrompt,
-      image_size: falAiParams.image_size,
-      aspect_ratio: falAiParams.aspect_ratio
-    };
-
+    // ✅ Try this - pass width/height at top level + multiple format hints
+const baseParams = {
+  prompt: finalPrompt,
+  width: falAiParams.image_size.width,
+  height: falAiParams.image_size.height,
+  image_size: falAiParams.image_size,
+  aspect_ratio: falAiParams.aspect_ratio,
+  size: `${falAiParams.image_size.width}x${falAiParams.image_size.height}`
+};
     let result;
 
     // Attempt 1: With reference image
