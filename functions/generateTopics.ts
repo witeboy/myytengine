@@ -11,7 +11,7 @@ async function safeGeminiCall(prompt, temperature = 0.8) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature, maxOutputTokens: 8192 }
+          generationConfig: { temperature, maxOutputTokens: 4096 }
         })
       }
     );
@@ -111,7 +111,7 @@ JSON FORMAT:
   ]
 }
 
-Generate 5 topics ranked by viral potential.`;
+Generate 5 topics ranked by viral potential. Return ONLY valid JSON, no extra text.`;
 
     const result = await safeGeminiCall(prompt, 0.85);
 
@@ -127,11 +127,9 @@ Generate 5 topics ranked by viral potential.`;
     console.log(`Niche analysis: ${result.data.niche_analysis}`);
     console.log(`Topics generated: ${result.data.topics.length}`);
 
-    const created_topics = [];
-    const skipped_topics = [];
     let qualityWarnings = 0;
 
-    for (const topic of result.data.topics) {
+    const savePromises = result.data.topics.map(async (topic, i) => {
       const validation = validateTopic(topic);
       if (!validation.valid) {
         qualityWarnings++;
@@ -141,7 +139,7 @@ Generate 5 topics ranked by viral potential.`;
       try {
         const record = await base44.entities.Topics.create({
           project_id: project_id,
-          rank: topic.rank || created_topics.length + 1,
+          rank: topic.rank || i + 1,
           title: topic.title || '',
           description: topic.description || '',
           viral_angle: topic.viral_angle || '',
@@ -160,14 +158,16 @@ Generate 5 topics ranked by viral potential.`;
           quality_valid: validation.valid,
           is_selected: false
         });
-
-        created_topics.push(record);
-        console.log(`Saved topic ${topic.rank}: "${topic.title?.substring(0, 60)}..." Score: ${topic.viral_score}/10`);
+        return { success: true, record };
       } catch (saveErr) {
         console.error(`Failed to save topic ${topic.rank}:`, saveErr.message);
-        skipped_topics.push({ rank: topic.rank, error: saveErr.message });
+        return { success: false, rank: topic.rank, error: saveErr.message };
       }
-    }
+    });
+
+    const saveResults = await Promise.all(savePromises);
+    const created_topics = saveResults.filter(r => r.success).map(r => r.record);
+    const skipped_topics = saveResults.filter(r => !r.success);
 
     try {
       await base44.entities.Projects.update(project_id, {
