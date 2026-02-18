@@ -1,5 +1,91 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+// ══════════════════════════════════════════════════════════════════
+// KIE AI UNIFIED IMAGE GENERATION
+// ══════════════════════════════════════════════════════════════════
+const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
+
+async function kieCreateTask(apiKey, model, input) {
+  const res = await fetch(`${KIE_BASE}/createTask`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ model, input })
+  });
+
+  const result = await res.json();
+  if (!res.ok || result.code !== 200) {
+    throw new Error(`Kie createTask failed (${model}): ${result.msg || JSON.stringify(result)}`);
+  }
+  return result.data.taskId;
+}
+
+async function kiePollResult(apiKey, taskId, maxWaitMs = 120000) {
+  const pollInterval = 4000;
+  const start = Date.now();
+
+  while (Date.now() - start < maxWaitMs) {
+    await new Promise(r => setTimeout(r, pollInterval));
+
+    const res = await fetch(`${KIE_BASE}/recordInfo?taskId=${taskId}`, {
+      headers: { "Authorization": `Bearer ${apiKey}` }
+    });
+
+    const poll = await res.json();
+    if (poll.code !== 200) { console.warn(`Poll error: ${poll.message}`); continue; }
+
+    const state = poll.data?.state;
+    console.log(`Task ${taskId}: ${state}`);
+
+    if (state === "success") {
+      const resultJson = JSON.parse(poll.data.resultJson || "{}");
+      const url = resultJson.resultUrls?.[0] || resultJson.url || resultJson.imageUrl;
+      if (!url) throw new Error("Task completed but no image URL found in resultJson");
+      return url;
+    }
+
+    if (state === "fail") {
+      throw new Error(`Kie task failed: ${poll.data?.failMsg || "Unknown"}`);
+    }
+  }
+
+  throw new Error(`Kie task ${taskId} timed out after ${maxWaitMs / 1000}s`);
+}
+
+// Grok Imagine: aspect_ratio supports "2:3", "3:2", "1:1", "9:16", "16:9"
+async function generateWithGrok(apiKey, prompt, aspectRatio) {
+  console.log(`[Grok Imagine] Generating with aspect_ratio: ${aspectRatio}`);
+  const taskId = await kieCreateTask(apiKey, "grok-imagine/text-to-image", {
+    prompt,
+    aspect_ratio: aspectRatio
+  });
+  return await kiePollResult(apiKey, taskId);
+}
+
+// Qwen: image_size supports "square", "square_hd", "portrait_4_3", "portrait_16_9", "landscape_4_3", "landscape_16_9"
+function orientationToQwenSize(orientation) {
+  return orientation === 'portrait' ? 'portrait_16_9' : 'landscape_16_9';
+}
+
+async function generateWithQwen(apiKey, prompt, orientation) {
+  const imageSize = orientationToQwenSize(orientation);
+  console.log(`[Qwen] Generating with image_size: ${imageSize}`);
+  const taskId = await kieCreateTask(apiKey, "qwen/text-to-image", {
+    prompt,
+    image_size: imageSize,
+    output_format: "png",
+    enable_safety_checker: true,
+    num_inference_steps: 30,
+    guidance_scale: 2.5
+  });
+  return await kiePollResult(apiKey, taskId);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// VISUAL STYLE MAP
+// ══════════════════════════════════════════════════════════════════
 const STYLE_MAP = {
   cinematic_realistic: "Cinematic film still shot on ARRI Alexa 65 with anamorphic Panavision lenses, beautiful lens flare and chromatic aberration, shallow depth of field f/1.4 with creamy bokeh, dramatic three-point lighting with hard key light and soft fill, strong rim light separation, color graded with professional teal and orange LUT, subtle Kodak Vision3 film grain texture, volumetric god rays through atmosphere, Hollywood blockbuster cinematography, photorealistic rendering, 8K resolution",
   
@@ -22,6 +108,10 @@ const STYLE_MAP = {
   comic_book: "Bold American comic book art style with heavy black ink outlines and dynamic line weight variation, Ben-Day halftone dot shading for texture and tone, dynamic foreshortened perspective with dramatic angles, motion lines and speed lines for kinetic energy, dramatic chiaroscuro inking with deep blacks and bright highlights, saturated CMYK color palette optimized for print, Jack Kirby-inspired dynamic composition with powerful poses, professional comic book illustration quality"
 };
 
+function getAspectRatio(orientation) {
+  return (orientation?.toLowerCase() === 'portrait') ? '9:16' : '16:9';
+}
+
 Deno.serve(async (req) => {
   let base44;
   let scene_id;
@@ -34,6 +124,9 @@ Deno.serve(async (req) => {
     const body = await req.json();
     scene_id = body.scene_id;
 
+    const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
+    if (!KIE_API_KEY) return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
+
     const scenes = await base44.asServiceRole.entities.Scenes.filter({ id: scene_id });
     const scene = scenes[0];
     if (!scene) return Response.json({ error: 'Scene not found' }, { status: 404 });
@@ -45,19 +138,14 @@ Deno.serve(async (req) => {
     const visualStyle = project?.visual_style || 'cinematic_realistic';
     const styleDirective = STYLE_MAP[visualStyle] || STYLE_MAP.cinematic_realistic;
     const orientation = project?.orientation || 'landscape';
+    const aspectRatio = getAspectRatio(orientation);
 
     // ══════════════════════════════════════════════════════════════════
-    // DIMENSION CONTROL — EMBEDDED IN PROMPT (only way Base44 supports it)
-    // ══════════════════════════════════════════════════════════════════
-    const dimensionBlock = orientation === 'portrait'
-      ? 'VERTICAL PORTRAIT FORMAT, 9:16 aspect ratio, tall narrow composition like a phone screen, height is 1.5x the width'
-      : 'WIDE HORIZONTAL LANDSCAPE FORMAT, 16:9 aspect ratio, ultrawide cinematic widescreen composition like a movie frame, width is nearly 1.5x the height, the image must be significantly wider than it is tall';
-
-    // ══════════════════════════════════════════════════════════════════
-    // PROMPT SANITIZATION — LAYER 1: SAFETY
+    // PROMPT SANITIZATION
     // ══════════════════════════════════════════════════════════════════
     let cleanedPrompt = scene.image_prompt || "";
 
+    // Layer 1: Safety
     const safetySanitizations = [
       [/child('s)?\s+(face|eyes|body).*?(hunger|sick|starv|suffer|dying|dead|gaunt|tattered)/gi, "a solemn historical scene with dignified figures in period clothing"],
       [/bodies?\s+(lying|in the street|dead|piled)/gi, "a somber empty street scene"],
@@ -65,14 +153,11 @@ Deno.serve(async (req) => {
       [/squalor|deprivation|overcrowded/gi, "crowded historical urban setting"],
       [/crying\s+and\s+suffering/gi, "quiet somber atmosphere"],
     ];
-    
     for (const [pattern, replacement] of safetySanitizations) {
       cleanedPrompt = cleanedPrompt.replace(pattern, replacement);
     }
 
-    // ══════════════════════════════════════════════════════════════════
-    // PROMPT SANITIZATION — LAYER 2: VISUAL METAPHORS
-    // ══════════════════════════════════════════════════════════════════
+    // Layer 2: Visual metaphors
     const documentMetaphors = [
       [/balance sheet(s)?/gi, 'weathered financial papers with abstract red markings'],
       [/financial (report|statement|document|ledger)/gi, 'stack of blurred papers with concerned hands reviewing them'],
@@ -90,14 +175,11 @@ Deno.serve(async (req) => {
       [/with (visible |readable )?(text|numbers|words|digits|letters|writing|captions)/gi, 'with intentionally blurred details'],
       [/(calendar|clock|watch) showing (date|time)/gi, 'timepiece suggesting urgency through composition'],
     ];
-
     for (const [pattern, replacement] of documentMetaphors) {
       cleanedPrompt = cleanedPrompt.replace(pattern, replacement);
     }
 
-    // ══════════════════════════════════════════════════════════════════
-    // PROMPT SANITIZATION — LAYER 3: NUMERIC & TEXT REMOVAL
-    // ══════════════════════════════════════════════════════════════════
+    // Layer 3: Numeric & text removal
     cleanedPrompt = cleanedPrompt.replace(/\$[\d,]+(\.\d+)?/g, 'a large sum of money');
     cleanedPrompt = cleanedPrompt.replace(/\b(19|20)\d{2}\b/g, '');
     cleanedPrompt = cleanedPrompt.replace(/\d+(\.\d+)?%/g, '');
@@ -106,37 +188,29 @@ Deno.serve(async (req) => {
     cleanedPrompt = cleanedPrompt.replace(/"[^"]{3,}"/g, '');
     cleanedPrompt = cleanedPrompt.replace(/'[^']{3,}'/g, '');
 
-    // ══════════════════════════════════════════════════════════════════
-    // PROMPT SANITIZATION — LAYER 4: STYLE-CONFLICTING WORDS
-    // ══════════════════════════════════════════════════════════════════
+    // Layer 4: Style-conflicting words
     if (visualStyle === 'photorealistic_4k' || visualStyle === 'cinematic_realistic') {
       cleanedPrompt = cleanedPrompt.replace(/\b(cartoon|animated|illustration|illustrated|anime|manga|cel.?shaded|comic|painting|painted|watercolor|sketch|drawn|vector|flat.?color|2D|3D render|pixar|ghibli|dreamworks|digital art|concept art)\b/gi, '');
     } else if (visualStyle === 'anime' || visualStyle === 'cinematic_anime') {
       cleanedPrompt = cleanedPrompt.replace(/\b(photograph|photo|DSLR|Canon|Nikon|lens|f\/\d|focal length|RAW|editorial|photorealistic)\b/gi, '');
     }
 
-    // ══════════════════════════════════════════════════════════════════
-    // PROMPT SANITIZATION — LAYER 5: ORIENTATION-CONFLICTING WORDS
-    // ══════════════════════════════════════════════════════════════════
+    // Layer 5: Orientation-conflicting words
     if (orientation === 'landscape') {
       cleanedPrompt = cleanedPrompt.replace(/\bportrait\b(?!\s+of)/gi, '');
       cleanedPrompt = cleanedPrompt.replace(/\bvertical\b/gi, '');
-      cleanedPrompt = cleanedPrompt.replace(/9:16/g, '');
     } else {
       cleanedPrompt = cleanedPrompt.replace(/\blandscape\b(?!\s)/gi, '');
       cleanedPrompt = cleanedPrompt.replace(/\bhorizontal\b/gi, '');
-      cleanedPrompt = cleanedPrompt.replace(/16:9/g, '');
     }
 
     // ══════════════════════════════════════════════════════════════════
-    // BUILD FINAL PROMPT — DIMENSIONS ARE FRONT-LOADED FOR PRIORITY
+    // BUILD FINAL PROMPT
     // ══════════════════════════════════════════════════════════════════
-    const noTextRule = "ABSOLUTELY NO text, NO words, NO letters, NO numbers, NO dates, NO dollar amounts, NO captions, NO watermarks, NO logos, NO signs with writing, NO typography, NO charts, NO graphs anywhere in the image. PURELY VISUAL.";
+    const noTextRule = "ABSOLUTELY NO text, NO words, NO letters, NO numbers, NO captions, NO watermarks, NO logos anywhere in the image. PURELY VISUAL.";
     
-    // Dimension block goes FIRST so the model prioritizes it
-    let finalPrompt = `${dimensionBlock}. ${styleDirective}. ${cleanedPrompt}. ${noTextRule}. ${dimensionBlock}.`;
+    let finalPrompt = `${styleDirective}. ${cleanedPrompt}. ${noTextRule}`;
 
-    // Add character consistency if available
     if (project?.character_descriptions) {
       try {
         const chars = JSON.parse(project.character_descriptions);
@@ -149,50 +223,43 @@ Deno.serve(async (req) => {
       }
     }
 
-    const MAX_PROMPT_LENGTH = 2000;
-    if (finalPrompt.length > MAX_PROMPT_LENGTH) {
-      const endBlock = `. ${dimensionBlock}. ${noTextRule}`;
-      const maxContentLen = MAX_PROMPT_LENGTH - endBlock.length;
-      finalPrompt = finalPrompt.substring(0, maxContentLen) + endBlock;
+    if (finalPrompt.length > 2000) {
+      finalPrompt = finalPrompt.substring(0, 1950) + `. ${noTextRule}`;
     }
 
-    console.log(`Scene ${scene.scene_number} | Style: ${visualStyle} | Orientation: ${orientation}`);
+    console.log(`Scene ${scene.scene_number} | Style: ${visualStyle} | Aspect: ${aspectRatio}`);
     console.log(`Prompt length: ${finalPrompt.length} chars`);
 
     // ══════════════════════════════════════════════════════════════════
-    // IMAGE GENERATION — PROMPT-ONLY (Base44 only accepts { prompt })
+    // IMAGE GENERATION: GROK IMAGINE → QWEN FALLBACK
     // ══════════════════════════════════════════════════════════════════
-    let result;
+    let imageUrl;
+    let usedModel = '';
 
-    // Attempt 1: Full prompt
+    // Attempt 1: Grok Imagine (cheap, supports aspect_ratio natively)
     try {
-      result = await base44.asServiceRole.integrations.Core.GenerateImage({ 
-        prompt: finalPrompt
-      });
-      console.log(`✓ Scene ${scene.scene_number} generated (attempt 1)`);
-    } catch (firstErr) {
-      console.log(`✗ Attempt 1 failed: ${firstErr.message}`);
-      
-      // Attempt 2: Simplified prompt
+      imageUrl = await generateWithGrok(KIE_API_KEY, finalPrompt, aspectRatio);
+      usedModel = 'grok-imagine/text-to-image';
+      console.log(`✓ Scene ${scene.scene_number} generated with Grok Imagine`);
+    } catch (grokErr) {
+      console.log(`✗ Grok Imagine failed: ${grokErr.message}`);
+
+      // Attempt 2: Grok with simplified prompt
       try {
-        const simplePrompt = `${dimensionBlock}. ${styleDirective}. ${cleanedPrompt}. ${noTextRule}`;
-        result = await base44.asServiceRole.integrations.Core.GenerateImage({ 
-          prompt: simplePrompt
-        });
-        console.log(`✓ Scene ${scene.scene_number} generated (attempt 2 - simplified)`);
-      } catch (secondErr) {
-        console.log(`✗ Attempt 2 failed: ${secondErr.message}`);
-        
-        // Attempt 3: Minimal prompt
+        const simplePrompt = `${cleanedPrompt}. ${styleDirective}. ${noTextRule}`;
+        imageUrl = await generateWithGrok(KIE_API_KEY, simplePrompt, aspectRatio);
+        usedModel = 'grok-imagine/text-to-image (simplified)';
+        console.log(`✓ Scene ${scene.scene_number} generated with Grok Imagine (simplified)`);
+      } catch (grokErr2) {
+        console.log(`✗ Grok Imagine simplified failed: ${grokErr2.message}`);
+
+        // Attempt 3: Qwen fallback
         try {
-          const minimalPrompt = `${dimensionBlock}. ${cleanedPrompt}. ${noTextRule}`;
-          result = await base44.asServiceRole.integrations.Core.GenerateImage({ 
-            prompt: minimalPrompt
-          });
-          console.log(`✓ Scene ${scene.scene_number} generated (attempt 3 - minimal)`);
-        } catch (thirdErr) {
-          console.error(`✗ All 3 attempts failed for scene ${scene.scene_number}`);
-          throw new Error(`Image generation failed after 3 attempts: ${thirdErr.message}`);
+          imageUrl = await generateWithQwen(KIE_API_KEY, finalPrompt, orientation);
+          usedModel = 'qwen/text-to-image';
+          console.log(`✓ Scene ${scene.scene_number} generated with Qwen (fallback)`);
+        } catch (qwenErr) {
+          throw new Error(`All attempts failed. Grok: ${grokErr.message} | Qwen: ${qwenErr.message}`);
         }
       }
     }
@@ -202,24 +269,26 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════════════════
     if (scene.scene_number === 1 && !project?.reference_image_url) {
       await base44.asServiceRole.entities.Projects.update(scene.project_id, {
-        reference_image_url: result.url
+        reference_image_url: imageUrl
       });
       console.log(`✓ Scene 1 saved as reference image`);
     }
 
     await base44.asServiceRole.entities.Scenes.update(scene_id, {
-      image_url: result.url,
+      image_url: imageUrl,
       status: "image_generated"
     });
 
-    console.log(`✓ Scene ${scene.scene_number} complete: ${result.url}`);
+    console.log(`✓ Scene ${scene.scene_number} complete: ${imageUrl}`);
 
     return Response.json({ 
       success: true, 
-      image_url: result.url,
-      orientation: orientation,
+      image_url: imageUrl,
+      orientation,
+      aspect_ratio: aspectRatio,
       scene_number: scene.scene_number,
       style: visualStyle,
+      model_used: usedModel,
       prompt_length: finalPrompt.length
     });
 
