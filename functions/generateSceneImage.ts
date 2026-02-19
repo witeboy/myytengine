@@ -1,14 +1,41 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // ══════════════════════════════════════════════════════════════════
-// KIE AI UNIFIED IMAGE GENERATION ENGINE (v2.1)
+// SCENE IMAGE GENERATOR v3 — PROMPT PASSTHROUGH ARCHITECTURE
 // ══════════════════════════════════════════════════════════════════
-// Pipeline: Script → Scene Breakdown → Scene Prompts → [THIS] → Animation
 //
-// SAFETY: Rejects scenes with raw DIRECTOR_NOTES (must run prompt gen first)
+// PHILOSOPHY: The prompt from generateScenePrompts is ALREADY complete.
+// It contains style directive, style reinforcement, anti-style,
+// character descriptions, composition hints, and no-text rules.
+// This function is a THIN PASS-THROUGH — it takes the prompt as-is
+// and sends it to the best available image model.
+//
+// MODEL CHAIN:
+//   1. Nano Banana Pro (Gemini 3 Pro Image) via Kie — best quality
+//   2. Nano Banana (Gemini 2.5 Flash Image) via Kie — good quality
+//   3. Gemini Direct API (gemini-2.0-flash-exp-image-generation) — last resort
+//
+// WHAT THIS FUNCTION DOES NOT DO (by design):
+//   ✗ No style sandwich wrapping
+//   ✗ No character block injection
+//   ✗ No director enrichment
+//   ✗ No style conflict stripping
+//   ✗ No prompt rewriting
+//   All of that is handled upstream by generateScenePrompts.
+//
+// WHAT THIS FUNCTION DOES:
+//   ✓ DIRECTOR_NOTES safety check (rejects unconverted notes)
+//   ✓ Safety sanitization (child safety, violence)
+//   ✓ Orientation detection → aspect ratio for model params
+//   ✓ Model cascade with graceful fallback
+//   ✓ Scene status updates
 // ══════════════════════════════════════════════════════════════════
 
 const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
+
+// ══════════════════════════════════════════════════════════════════
+// KIE API HELPERS
+// ══════════════════════════════════════════════════════════════════
 
 async function kieCreateTask(apiKey, model, input) {
   const res = await fetch(`${KIE_BASE}/createTask`, {
@@ -22,7 +49,7 @@ async function kieCreateTask(apiKey, model, input) {
 
   const result = await res.json();
   if (!res.ok || result.code !== 200) {
-    throw new Error(`Kie createTask failed (${model}): ${result.msg || JSON.stringify(result)}`);
+    throw new Error(`Kie createTask (${model}): ${result.msg || JSON.stringify(result)}`);
   }
   return result.data.taskId;
 }
@@ -42,12 +69,10 @@ async function kiePollResult(apiKey, taskId, maxWaitMs = 120000) {
     if (poll.code !== 200) { console.warn(`Poll error: ${poll.message}`); continue; }
 
     const state = poll.data?.state;
-    console.log(`Task ${taskId}: ${state}`);
-
     if (state === "success") {
       const resultJson = JSON.parse(poll.data.resultJson || "{}");
       const url = resultJson.resultUrls?.[0] || resultJson.url || resultJson.imageUrl;
-      if (!url) throw new Error("Task completed but no image URL found in resultJson");
+      if (!url) throw new Error("Task completed but no image URL in resultJson");
       return url;
     }
 
@@ -63,206 +88,119 @@ async function kiePollResult(apiKey, taskId, maxWaitMs = 120000) {
 // IMAGE GENERATION MODELS
 // ══════════════════════════════════════════════════════════════════
 
-async function generateWithGrok(apiKey, prompt, aspectRatio) {
-  console.log(`[Grok Imagine] aspect_ratio: ${aspectRatio}`);
-  const taskId = await kieCreateTask(apiKey, "grok-imagine/text-to-image", {
+// PRIMARY: Nano Banana Pro (Gemini 3 Pro Image) — best composition, lighting, framing
+async function generateWithNanaBananaPro(apiKey, prompt, aspectRatio) {
+  console.log(`[Nano Banana Pro] Gemini 3 Pro Image | aspect: ${aspectRatio}`);
+  const taskId = await kieCreateTask(apiKey, "nano-banana-pro", {
     prompt,
-    aspect_ratio: aspectRatio
+    aspect_ratio: aspectRatio,
+    resolution: "2K",
+    output_format: "png"
   });
   return await kiePollResult(apiKey, taskId);
 }
 
-async function generateWithQwen(apiKey, prompt, orientation) {
-  const imageSize = orientation === 'portrait' ? 'portrait_16_9' : 'landscape_16_9';
-  console.log(`[Qwen] image_size: ${imageSize}`);
-  const taskId = await kieCreateTask(apiKey, "qwen/text-to-image", {
+// FALLBACK 1: Nano Banana (Gemini 2.5 Flash Image) — fast, good quality
+async function generateWithNanaBanana(apiKey, prompt, aspectRatio) {
+  console.log(`[Nano Banana] Gemini 2.5 Flash Image | aspect: ${aspectRatio}`);
+  const taskId = await kieCreateTask(apiKey, "google/nano-banana", {
     prompt,
-    image_size: imageSize,
-    output_format: "png",
-    enable_safety_checker: true,
-    num_inference_steps: 30,
-    guidance_scale: 2.5
+    aspect_ratio: aspectRatio,
+    output_format: "png"
   });
   return await kiePollResult(apiKey, taskId);
 }
 
-// ══════════════════════════════════════════════════════════════════
-// VISUAL STYLE DIRECTIVES
-// ══════════════════════════════════════════════════════════════════
-const STYLE_MAP = {
-  cinematic_realistic: {
-    directive: "Cinematic film still shot on ARRI Alexa 65 with anamorphic Panavision lenses, beautiful lens flare and chromatic aberration, shallow depth of field f/1.4 with creamy bokeh, dramatic three-point lighting with hard key light and soft fill, strong rim light separation, color graded with professional teal and orange LUT, subtle Kodak Vision3 film grain texture, volumetric god rays through atmosphere, Hollywood blockbuster cinematography, photorealistic rendering, 8K resolution",
-    conflicts: /\b(cartoon|animated|illustration|illustrated|anime|manga|cel.?shaded|comic|painting|painted|watercolor|sketch|drawn|vector|flat.?color|2D|3D render|pixar|ghibli|dreamworks|digital art|concept art)\b/gi
-  },
-  photorealistic_4k: {
-    directive: "Ultra-photorealistic DSLR photograph shot on Canon EOS R5 with RF 85mm f/1.2 L lens, razor-sharp focus with incredible detail, natural ambient lighting with soft diffused quality, professional color grading with accurate skin tones, editorial photography style for National Geographic or Vogue, visible skin texture with pores and fine details, accurate physically-based shadows and highlights, real-world proportions and anatomy, zero AI artifacts, 8K RAW image quality, museum-grade fine art photography",
-    conflicts: /\b(cartoon|animated|illustration|illustrated|anime|manga|cel.?shaded|comic|painting|painted|watercolor|sketch|drawn|vector|flat.?color|2D|3D render|pixar|ghibli|dreamworks|digital art|concept art)\b/gi
-  },
-  cinematic_anime: {
-    directive: "Cinematic anime illustration in the signature style of Makoto Shinkai and Ufotable studio, dramatic volumetric god rays with atmospheric scattering, incredibly detailed background art with painted clouds, film-grain overlay texture, anime characters with semi-realistic proportions, dynamic dramatic camera angle with depth, beautiful depth of field bokeh, color palette of warm sunset oranges blending into cool twilight blues, award-winning anime film quality",
-    conflicts: /\b(photograph|photo|DSLR|Canon|Nikon|lens|f\/\d|focal length|RAW|editorial|photorealistic)\b/gi
-  },
-  anime: {
-    directive: "High-quality anime illustration combining Studio Ghibli whimsy with modern anime aesthetic, vibrant saturated colors with rich tones, clean precise linework with consistent line weight, cel-shaded with soft airbrushed gradients, expressive detailed eyes with multiple highlights and reflections, detailed hair strands with natural flow and movement, colorful detailed background art with atmospheric perspective, professional anime production quality",
-    conflicts: /\b(photograph|photo|DSLR|Canon|Nikon|lens|f\/\d|focal length|RAW|editorial|photorealistic)\b/gi
-  },
-  cartoon_2d: {
-    directive: "Professional 2D vector animation style reminiscent of modern Cartoon Network and Disney Television Animation, flat cel-shaded colors with strategic gradients, bold clean outlines with consistent line weight, playful exaggerated proportions, bright cheerful primary color palette, clean gradient backgrounds with atmospheric depth, broadcast television quality",
-    conflicts: /\b(photograph|photo|DSLR|Canon|Nikon|lens|f\/\d|focal length|RAW|editorial|photorealistic|oil painting|watercolor)\b/gi
-  },
-  picstory_cocomelon: {
-    directive: "3D rendered Pixar-quality children's animation with soft subsurface scattering on skin, rounded chunky character design with appeal for young audiences, oversized expressive eyes with detailed reflections, bright candy-colored palette with high saturation, soft ambient occlusion for subtle depth, cheerful warm global illumination with soft shadows, toy-like proportions that feel huggable, smooth plastic-like materials, raytraced rendering quality",
-    conflicts: /\b(photograph|photo|DSLR|Canon|Nikon|gritty|dark|noir|horror|violent)\b/gi
-  },
-  cinematic_picstory: {
-    directive: "Cinematic 3D CGI render matching Pixar Animation Studios or DreamWorks feature film quality, realistic subsurface scattering for skin and translucent materials, raytraced global illumination with accurate light bounces, volumetric fog and atmospheric effects, dramatic rim lighting for character separation, physically based rendering (PBR) with accurate material properties, detailed fabric simulation with realistic wrinkles, advanced hair simulation, film color grading with rich contrast, IMAX-quality framing",
-    conflicts: /\b(photograph|photo|DSLR|Canon|Nikon|2D|flat|sketch|watercolor)\b/gi
-  },
-  oil_painting: {
-    directive: "Classical oil painting on textured linen canvas, visible impasto brushstrokes with thick paint application, chiaroscuro lighting technique with dramatic contrast between light and shadow, Rembrandt-inspired use of dramatic shadow and highlighted faces, rich warm umber and burnt sienna undertones, warm golden varnish glow over the entire piece, museum-quality fine art worthy of the Louvre, Renaissance composition using golden ratio",
-    conflicts: /\b(photograph|photo|DSLR|Canon|Nikon|3D render|CGI|anime|cartoon|vector)\b/gi
-  },
-  watercolor: {
-    directive: "Delicate transparent watercolor painting on cold-pressed Arches paper, visible paper grain texture showing through the paint, soft wet-on-wet color bleeding technique with organic edges, transparent luminous washes layered for atmospheric depth, gentle color gradients that flow naturally, white paper strategically showing through for highlights and sparkle, loose expressive brushwork capturing spontaneity, muted pastel palette with occasional vivid accent colors",
-    conflicts: /\b(photograph|photo|DSLR|Canon|Nikon|3D render|CGI|anime|cartoon|vector|oil painting)\b/gi
-  },
-  comic_book: {
-    directive: "Bold American comic book art style with heavy black ink outlines and dynamic line weight variation, Ben-Day halftone dot shading for texture and tone, dynamic foreshortened perspective with dramatic angles, motion lines and speed lines for kinetic energy, dramatic chiaroscuro inking with deep blacks and bright highlights, saturated CMYK color palette optimized for print, Jack Kirby-inspired dynamic composition with powerful poses, professional comic book illustration quality",
-    conflicts: /\b(photograph|photo|DSLR|Canon|Nikon|3D render|CGI|watercolor|oil painting|pastel)\b/gi
-  }
-};
+// FALLBACK 2: Gemini Direct API — uses GEMINI_API_KEY, returns base64 → data URI
+async function generateWithGeminiDirect(prompt) {
+  const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!geminiApiKey) throw new Error("GEMINI_API_KEY not configured");
 
-// ══════════════════════════════════════════════════════════════════
-// ORIENTATION CONFIGS
-// ══════════════════════════════════════════════════════════════════
-function getOrientationConfig(orientation) {
-  if (orientation === 'portrait') {
-    return {
-      aspectRatio: '9:16',
-      dimensions: '1080x1920',
-      compositionHint: 'vertical 9:16 frame, tall vertical composition, strong vertical leading lines',
-      conflictTerms: /\b(landscape|horizontal|widescreen|panoramic|16:?9)\b/gi
-    };
+  console.log(`[Gemini Direct] gemini-2.0-flash-exp-image-generation`);
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": geminiApiKey,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseModalities: ["TEXT", "IMAGE"]
+        }
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(`Gemini ${response.status}: ${err.error?.message || "Unknown"}`);
   }
-  return {
-    aspectRatio: '16:9',
-    dimensions: '1920x1080',
-    compositionHint: 'widescreen 16:9 cinematic frame, wide horizontal composition, panoramic depth',
-    conflictTerms: /\b(portrait|vertical|tall frame|9:?16)\b/gi
-  };
+
+  const data = await response.json();
+  if (!data.candidates?.length) throw new Error("No candidates from Gemini image gen");
+
+  // Extract image from response parts
+  const parts = data.candidates[0].content?.parts || [];
+  for (const part of parts) {
+    if (part.inlineData?.data) {
+      const mimeType = part.inlineData.mimeType || "image/png";
+      // Return as data URI — works in browsers, storable in DB
+      return `data:${mimeType};base64,${part.inlineData.data}`;
+    }
+  }
+
+  throw new Error("Gemini returned no image data in response parts");
 }
 
 // ══════════════════════════════════════════════════════════════════
-// PROMPT SANITIZATION ENGINE
+// ORIENTATION DETECTION
 // ══════════════════════════════════════════════════════════════════
-function sanitizePrompt(rawPrompt, styleKey, orientation) {
-  let prompt = rawPrompt;
 
-  // ── Safety sanitizations ─────────────────────────────────────
-  const safetySanitizations = [
-    [/child('s)?\s+(face|eyes|body).*?(hunger|sick|starv|suffer|dying|dead|gaunt|tattered)/gi, "a solemn historical scene with dignified figures in period clothing"],
-    [/bodies?\s+(lying|in the street|dead|piled)/gi, "a somber empty street scene"],
-    [/begging\s+for\s+food/gi, "people waiting in line"],
-    [/squalor|deprivation|overcrowded/gi, "crowded historical urban setting"],
-    [/crying\s+and\s+suffering/gi, "quiet somber atmosphere"],
-  ];
-  for (const [pattern, replacement] of safetySanitizations) {
-    prompt = prompt.replace(pattern, replacement);
+function detectOrientation(prompt, projectOrientation) {
+  // Check if the prompt explicitly states orientation
+  const promptLower = (prompt || '').toLowerCase();
+
+  if (/portrait\s+(vertical|9:16|9x16)|vertical\s+9:16|tall\s+vertical/i.test(promptLower)) {
+    return 'portrait';
+  }
+  if (/landscape\s+(horizontal|16:9|16x9)|widescreen\s+16:9|wide\s+horizontal/i.test(promptLower)) {
+    return 'landscape';
   }
 
-  // ── Visual metaphor replacements ─────────────────────────────
-  const documentMetaphors = [
-    [/balance sheet(s)?/gi, 'weathered financial papers with abstract red markings'],
-    [/financial (report|statement|document|ledger)/gi, 'stack of blurred papers with concerned hands reviewing them'],
-    [/spreadsheet|invoice|receipt|form/gi, 'document held in worried hands, details intentionally out of focus'],
-    [/chart showing (decline|decrease|loss|drop|fall)/gi, 'symbolic descending visual elements suggesting downward motion'],
-    [/chart showing (increase|growth|rise|gain)/gi, 'symbolic ascending visual elements suggesting upward motion'],
-    [/(stock|market|financial) chart/gi, 'abstract geometric pattern suggesting market volatility'],
-    [/graph (with|showing|displaying) (red|green|up|down) arrow/gi, 'directional visual metaphor'],
-    [/(pie|bar|line) chart/gi, 'abstract proportional visual representation'],
-    [/(newspaper|magazine|article) (headline|showing|with|reading)/gi, 'person reading publication with emotional reaction visible'],
-    [/sign (reading|saying|with text|that says)/gi, 'weathered directional marker or symbolic indicator'],
-    [/(computer |phone |tablet |laptop )?screen (showing|displaying|with) (text|numbers|data|information)/gi, 'glowing screen with abstract light patterns reflected on face'],
-    [/website|webpage|app (showing|displaying)/gi, 'device screen with blurred interface elements'],
-    [/(shows?|displays?|reads?|says|contains?|lists?) (the )?(specific )?(number|figure|amount|data|statistic|percentage)s?/gi, 'suggests scale through visual proportion'],
-    [/with (visible |readable )?(text|numbers|words|digits|letters|writing|captions)/gi, 'with intentionally blurred details'],
-    [/(calendar|clock|watch) showing (date|time)/gi, 'timepiece suggesting urgency through composition'],
-  ];
-  for (const [pattern, replacement] of documentMetaphors) {
-    prompt = prompt.replace(pattern, replacement);
-  }
+  // Fall back to project setting
+  return projectOrientation || 'landscape';
+}
 
-  // ── Numeric & text removal ───────────────────────────────────
-  prompt = prompt.replace(/\$[\d,]+(\.\d+)?/g, 'a large sum of money');
-  prompt = prompt.replace(/\b(19|20)\d{2}\b/g, '');
-  prompt = prompt.replace(/\d+(\.\d+)?%/g, '');
-  prompt = prompt.replace(/\b\d{4,}\b/g, '');
-  prompt = prompt.replace(/\b(title|headline|caption|subtitle|text overlay|text on screen|words|writing|lettering|typography|banner|sign reading|label|logo|chart|graph|data|statistics|infographic|diagram|table|spreadsheet|screenshot|display showing|screen showing|showing numbers|with numbers)\b/gi, '');
-  prompt = prompt.replace(/"[^"]{3,}"/g, '');
-  prompt = prompt.replace(/'[^']{3,}'/g, '');
+function getAspectRatio(orientation) {
+  return orientation === 'portrait' ? '9:16' : '16:9';
+}
 
-  // ── Strip fake pixel dimensions ──────────────────────────────
-  prompt = prompt.replace(/\b\d{3,4}\s*[x×]\s*\d{3,4}\s*(pixels?|px)?\s*\.?\s*/gi, '');
-
-  // ── Style-conflicting words ──────────────────────────────────
-  const styleEntry = STYLE_MAP[styleKey];
-  if (styleEntry?.conflicts) {
-    prompt = prompt.replace(styleEntry.conflicts, '');
-  }
-
-  // ── Orientation-conflicting words ────────────────────────────
-  const orientConfig = getOrientationConfig(orientation);
-  prompt = prompt.replace(orientConfig.conflictTerms, '');
-
-  // ── Clean up whitespace ──────────────────────────────────────
-  prompt = prompt.replace(/,\s*,/g, ',');
-  prompt = prompt.replace(/\.\s*\./g, '.');
-  prompt = prompt.replace(/\s{2,}/g, ' ');
-  prompt = prompt.trim();
-
-  return prompt;
+function getDimensions(orientation) {
+  return orientation === 'portrait' ? '1080x1920' : '1920x1080';
 }
 
 // ══════════════════════════════════════════════════════════════════
-// BLUEPRINT ENRICHMENT (optional — bonus if field exists)
+// MINIMAL SAFETY SANITIZATION
 // ══════════════════════════════════════════════════════════════════
-function getDirectorEnrichment(blueprint, sceneNumber) {
-  if (!blueprint?.scenes) return null;
-  const directorScene = blueprint.scenes.find(s => s.scene_number === sceneNumber);
-  if (!directorScene) return null;
+// Only safety-critical replacements. NO style changes, NO prompt rewriting.
 
-  const parts = [];
-  if (directorScene.mood) parts.push(`Emotional mood: ${directorScene.mood}`);
-  if (directorScene.color_palette) parts.push(`Color grading: ${directorScene.color_palette}`);
-  if (directorScene.lighting && directorScene.lighting.length > 10) parts.push(`Lighting: ${directorScene.lighting}`);
-  if (directorScene.niche_visual_element) parts.push(`Key visual element: ${directorScene.niche_visual_element}`);
+function safetySanitize(prompt) {
+  let p = prompt;
 
-  return parts.length > 0 ? parts.join('. ') : null;
-}
+  // Child safety
+  p = p.replace(/child('s)?\s+(face|eyes|body).*?(hunger|sick|starv|suffer|dying|dead|gaunt|tattered)/gi,
+    "a solemn historical scene with dignified figures in period clothing");
+  p = p.replace(/bodies?\s+(lying|in the street|dead|piled)/gi,
+    "a somber empty street scene");
+  p = p.replace(/begging\s+for\s+food/gi, "people waiting in line");
+  p = p.replace(/squalor|deprivation|overcrowded/gi, "crowded historical urban setting");
+  p = p.replace(/crying\s+and\s+suffering/gi, "quiet somber atmosphere");
 
-// ══════════════════════════════════════════════════════════════════
-// CHARACTER BLOCK
-// ══════════════════════════════════════════════════════════════════
-function buildCharacterBlock(characterDescriptions) {
-  if (!characterDescriptions) return '';
-
-  let chars;
-  try {
-    chars = typeof characterDescriptions === 'string'
-      ? JSON.parse(characterDescriptions)
-      : characterDescriptions;
-  } catch (_) {
-    return '';
-  }
-
-  if (!Array.isArray(chars) || chars.length === 0) return '';
-
-  const charBlock = chars.map(c => {
-    const desc = c.visual_description || c.description || '';
-    return `[${c.name}: ${desc}]`;
-  }).join(' ');
-
-  return `MAINTAIN EXACT character appearances: ${charBlock}.`;
+  return p;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -284,10 +222,8 @@ Deno.serve(async (req) => {
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
     if (!KIE_API_KEY) return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
 
-    // ── Fetch scene + project (parallel) ───────────────────────────
-    const [scenes, ] = await Promise.all([
-      base44.asServiceRole.entities.Scenes.filter({ id: scene_id }),
-    ]);
+    // ── Fetch scene + project ───────────────────────────────────────
+    const scenes = await base44.asServiceRole.entities.Scenes.filter({ id: scene_id });
     const scene = scenes[0];
     if (!scene) return Response.json({ error: 'Scene not found' }, { status: 404 });
 
@@ -299,7 +235,7 @@ Deno.serve(async (req) => {
     // SAFETY CHECK: Reject raw director notes
     // ══════════════════════════════════════════════════════════════
     if (scene.image_prompt?.startsWith('DIRECTOR_NOTES:')) {
-      console.error(`❌ Scene ${scene.scene_number} still has raw DIRECTOR_NOTES — run generateScenePrompts first`);
+      console.error(`❌ Scene ${scene.scene_number} has raw DIRECTOR_NOTES — run generateScenePrompts first`);
       return Response.json({
         error: 'Scene has raw director notes. Run generateScenePrompts first to convert them to image prompts.',
         scene_number: scene.scene_number,
@@ -315,77 +251,56 @@ Deno.serve(async (req) => {
       }, { status: 400 });
     }
 
-    const visualStyle = project.visual_style || 'cinematic_realistic';
-    const orientation = project.orientation || 'landscape';
-    const styleEntry = STYLE_MAP[visualStyle] || STYLE_MAP.cinematic_realistic;
-    const orientConfig = getOrientationConfig(orientation);
-
-    // ── Load blueprint for director enrichment (optional) ──────────
-    let blueprint = null;
-    if (project.scene_blueprint) {
-      try { blueprint = JSON.parse(project.scene_blueprint); } catch (_) {}
-    }
-
     // ══════════════════════════════════════════════════════════════
-    // PROMPT ASSEMBLY
+    // PROMPT: Pass through as-is (safety sanitize only)
     // ══════════════════════════════════════════════════════════════
+    const rawPrompt = scene.image_prompt;
+    const finalPrompt = safetySanitize(rawPrompt);
 
-    const sanitizedPrompt = sanitizePrompt(scene.image_prompt || '', visualStyle, orientation);
-    const directorEnrichment = getDirectorEnrichment(blueprint, scene.scene_number);
-    const characterBlock = buildCharacterBlock(project.character_descriptions);
-    const noTextRule = "ABSOLUTELY NO text, NO words, NO letters, NO numbers, NO captions, NO watermarks, NO logos anywhere in the image. PURELY VISUAL.";
-
-    const promptParts = [];
-    if (characterBlock) promptParts.push(characterBlock);
-    promptParts.push(styleEntry.directive);
-    promptParts.push(orientConfig.compositionHint);
-    promptParts.push(sanitizedPrompt);
-    if (directorEnrichment) promptParts.push(directorEnrichment);
-    promptParts.push(noTextRule);
-
-    let finalPrompt = promptParts.join('. ');
-
-    if (finalPrompt.length > 2000) {
-      const essential = `${characterBlock ? characterBlock + '. ' : ''}${styleEntry.directive}. ${orientConfig.compositionHint}. ${sanitizedPrompt}. ${noTextRule}`;
-      finalPrompt = essential.substring(0, 1950) + `. ${noTextRule}`;
-    }
+    // Detect orientation from prompt content or project setting
+    const orientation = detectOrientation(finalPrompt, project.orientation);
+    const aspectRatio = getAspectRatio(orientation);
+    const dimensions = getDimensions(orientation);
 
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`🖼️ Scene ${scene.scene_number} | Style: ${visualStyle} | ${orientConfig.dimensions}`);
-    console.log(`📐 Aspect: ${orientConfig.aspectRatio} | Prompt: ${finalPrompt.length} chars`);
-    if (directorEnrichment) console.log(`🎬 Director enrichment applied`);
+    console.log(`🖼️ Scene ${scene.scene_number} | ${dimensions} (${aspectRatio})`);
+    console.log(`📐 Prompt: ${finalPrompt.length} chars | Passthrough mode`);
+    console.log(`🔗 Chain: Nano Banana Pro → Nano Banana → Gemini Direct`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     // ══════════════════════════════════════════════════════════════
-    // IMAGE GENERATION: GROK → GROK SIMPLIFIED → QWEN FALLBACK
+    // IMAGE GENERATION CASCADE
     // ══════════════════════════════════════════════════════════════
     let imageUrl;
     let usedModel = '';
+    const errors = [];
 
-    // Attempt 1: Grok Imagine with full prompt
+    // ── Attempt 1: Nano Banana Pro (Gemini 3 Pro Image) ───────────
     try {
-      imageUrl = await generateWithGrok(KIE_API_KEY, finalPrompt, orientConfig.aspectRatio);
-      usedModel = 'grok-imagine';
-      console.log(`✓ Scene ${scene.scene_number} generated with Grok Imagine`);
-    } catch (grokErr) {
-      console.log(`✗ Grok Imagine failed: ${grokErr.message}`);
+      imageUrl = await generateWithNanaBananaPro(KIE_API_KEY, finalPrompt, aspectRatio);
+      usedModel = 'nano-banana-pro';
+      console.log(`✓ Scene ${scene.scene_number} generated with Nano Banana Pro (Gemini 3 Pro)`);
+    } catch (err1) {
+      errors.push(`NanaBananaPro: ${err1.message}`);
+      console.warn(`✗ Nano Banana Pro failed: ${err1.message}`);
 
-      // Attempt 2: Grok with stripped-down prompt
+      // ── Attempt 2: Nano Banana (Gemini 2.5 Flash Image) ────────
       try {
-        const simplePrompt = `${styleEntry.directive}. ${orientConfig.compositionHint}. ${sanitizedPrompt}. ${noTextRule}`;
-        imageUrl = await generateWithGrok(KIE_API_KEY, simplePrompt, orientConfig.aspectRatio);
-        usedModel = 'grok-imagine (simplified)';
-        console.log(`✓ Scene ${scene.scene_number} generated with Grok Imagine (simplified)`);
-      } catch (grokErr2) {
-        console.log(`✗ Grok Imagine simplified failed: ${grokErr2.message}`);
+        imageUrl = await generateWithNanaBanana(KIE_API_KEY, finalPrompt, aspectRatio);
+        usedModel = 'google/nano-banana';
+        console.log(`✓ Scene ${scene.scene_number} generated with Nano Banana (Gemini 2.5 Flash)`);
+      } catch (err2) {
+        errors.push(`NanaBanana: ${err2.message}`);
+        console.warn(`✗ Nano Banana failed: ${err2.message}`);
 
-        // Attempt 3: Qwen fallback
+        // ── Attempt 3: Gemini Direct API ──────────────────────────
         try {
-          imageUrl = await generateWithQwen(KIE_API_KEY, finalPrompt, orientation);
-          usedModel = 'qwen';
-          console.log(`✓ Scene ${scene.scene_number} generated with Qwen (fallback)`);
-        } catch (qwenErr) {
-          throw new Error(`All generation attempts failed. Grok: ${grokErr.message} | Grok-simple: ${grokErr2.message} | Qwen: ${qwenErr.message}`);
+          imageUrl = await generateWithGeminiDirect(finalPrompt);
+          usedModel = 'gemini-direct';
+          console.log(`✓ Scene ${scene.scene_number} generated with Gemini Direct API`);
+        } catch (err3) {
+          errors.push(`GeminiDirect: ${err3.message}`);
+          throw new Error(`All generation attempts failed:\n  ${errors.join('\n  ')}`);
         }
       }
     }
@@ -394,11 +309,16 @@ Deno.serve(async (req) => {
     // SAVE RESULTS
     // ══════════════════════════════════════════════════════════════
 
+    // Save scene 1 as reference image for style consistency
     if (scene.scene_number === 1 && !project.reference_image_url) {
-      await base44.asServiceRole.entities.Projects.update(scene.project_id, {
-        reference_image_url: imageUrl
-      });
-      console.log(`✓ Scene 1 saved as reference image`);
+      try {
+        await base44.asServiceRole.entities.Projects.update(scene.project_id, {
+          reference_image_url: imageUrl
+        });
+        console.log(`✓ Scene 1 saved as reference image`);
+      } catch (refErr) {
+        console.warn(`Failed to save reference image: ${refErr.message}`);
+      }
     }
 
     await base44.asServiceRole.entities.Scenes.update(scene_id, {
@@ -406,19 +326,18 @@ Deno.serve(async (req) => {
       status: "image_generated"
     });
 
-    console.log(`✓ Scene ${scene.scene_number} complete: ${imageUrl}`);
+    console.log(`✓ Scene ${scene.scene_number} complete: ${usedModel} | ${imageUrl.substring(0, 80)}...`);
 
     return Response.json({
       success: true,
       image_url: imageUrl,
       orientation,
-      dimensions: orientConfig.dimensions,
-      aspect_ratio: orientConfig.aspectRatio,
+      dimensions,
+      aspect_ratio: aspectRatio,
       scene_number: scene.scene_number,
-      style: visualStyle,
       model_used: usedModel,
       prompt_length: finalPrompt.length,
-      director_enriched: !!directorEnrichment
+      prompt_mode: 'passthrough'
     });
 
   } catch (error) {
