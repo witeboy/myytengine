@@ -47,62 +47,35 @@ export default function ContentGeneration() {
 
   // ══════════════════════════════════════════════════════════════════
   // TWO-PHASE IMPORT: Scene Breakdown → Prompt Generation
+  // Both are single-call functions — no batch looping needed
   // ══════════════════════════════════════════════════════════════════
   const handleImport = async () => {
     setImporting(true);
 
     try {
-      // ── PHASE 1: Cinematic Scene Breakdown ─────────────────────
+      // ── PHASE 1: Cinematic Scene Breakdown (single call) ───────
       setImportPhase('breakdown');
-      let batchIndex = 0;
-      let done = false;
+      setImportProgress('Analyzing script & breaking down into cinematic scenes...');
+      console.log('🎬 Starting scene breakdown...');
 
-      while (!done) {
-        const phaseLabel = batchIndex === 0
-          ? 'Analyzing script & building cinematic blueprint...'
-          : `Breaking down scenes (phase ${batchIndex + 1})...`;
-        setImportProgress(phaseLabel);
-        console.log(`🎬 Scene Breakdown batch ${batchIndex}...`);
+      const breakdownResult = await base44.functions.invoke('generateSceneBreakdown', {
+        project_id: projectId,
+      });
 
-        const result = await base44.functions.invoke('generateSceneBreakdown', {
-          project_id: projectId,
-          batch_index: batchIndex,
-        });
+      await refetchScenes();
+      console.log(`✓ Scene breakdown complete! ${breakdownResult.scenes_created} scenes created.`);
 
-        // Refresh scenes so user sees progress after each batch
-        await refetchScenes();
-
-        if (result.done) {
-          done = true;
-          console.log(`✓ Scene breakdown complete! ${result.total_scenes} scenes created.`);
-        } else {
-          batchIndex++;
-        }
-      }
-
-      // ── PHASE 2: Generate Image & Animation Prompts ────────────
+      // ── PHASE 2: Generate Image & Animation Prompts (single call) ──
       setImportPhase('prompts');
-      batchIndex = 0;
-      done = false;
+      setImportProgress('Converting director notes into visual prompts...');
+      console.log('🎨 Starting prompt generation...');
 
-      while (!done) {
-        setImportProgress(`Generating visual prompts (batch ${batchIndex + 1})...`);
-        console.log(`🎨 Prompt generation batch ${batchIndex}...`);
+      const promptResult = await base44.functions.invoke('generateScenePrompts', {
+        project_id: projectId,
+      });
 
-        const result = await base44.functions.invoke('generateScenePrompts', {
-          project_id: projectId,
-          batch_index: batchIndex,
-        });
-
-        await refetchScenes();
-
-        if (result.done) {
-          done = true;
-          console.log(`✓ All prompts generated!`);
-        } else {
-          batchIndex++;
-        }
-      }
+      await refetchScenes();
+      console.log(`✓ All prompts generated! ${promptResult.prompts_applied} prompts applied.`);
 
     } catch (err) {
       console.error('Scene generation error:', err);
@@ -118,8 +91,30 @@ export default function ContentGeneration() {
   // Generate all images
   const handleGenerateImages = async () => {
     setGeneratingImages(true);
-    const pending = scenes.filter(s => s.status === 'prompts_ready' || !s.image_url);
-    for (const scene of pending) {
+    const pending = scenes.filter(s =>
+      (s.status === 'prompts_ready' || !s.image_url) &&
+      // Safety: skip scenes that still have raw director notes
+      !s.image_prompt?.startsWith('DIRECTOR_NOTES:')
+    );
+
+    if (pending.length === 0 && scenes.some(s => s.image_prompt?.startsWith('DIRECTOR_NOTES:'))) {
+      // Director notes haven't been converted — run prompt generator first
+      console.log('⚠️ Scenes still have director notes. Running prompt generator...');
+      try {
+        await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
+        await refetchScenes();
+      } catch (err) {
+        console.error('Auto prompt generation failed:', err);
+      }
+    }
+
+    // Re-fetch after potential prompt generation
+    const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+    const readyScenes = freshScenes
+      .filter(s => s.status === 'prompts_ready' || (!s.image_url && !s.image_prompt?.startsWith('DIRECTOR_NOTES:')))
+      .sort((a, b) => a.scene_number - b.scene_number);
+
+    for (const scene of readyScenes) {
       try {
         await base44.functions.invoke('generateSceneImage', { scene_id: scene.id });
       } catch (err) {
@@ -194,6 +189,7 @@ export default function ContentGeneration() {
   const videoCount = scenes.filter(s => s.video_url).length;
   const breakdownReadyCount = scenes.filter(s => s.status === 'breakdown_ready').length;
   const promptsReadyCount = scenes.filter(s => s.status === 'prompts_ready').length;
+  const directorNotesCount = scenes.filter(s => s.image_prompt?.startsWith('DIRECTOR_NOTES:')).length;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -272,6 +268,43 @@ export default function ContentGeneration() {
                   </p>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Director Notes Warning */}
+        {!importing && directorNotesCount > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-3">
+              <Wand2 className="w-5 h-5 text-amber-600" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-amber-800">
+                  {directorNotesCount} scene{directorNotesCount > 1 ? 's have' : ' has'} director notes that need converting to image prompts
+                </p>
+                <p className="text-xs text-amber-600 mt-1">
+                  Click below to generate visual prompts before creating images.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                className="bg-amber-600 hover:bg-amber-700"
+                onClick={async () => {
+                  setImporting(true);
+                  setImportPhase('prompts');
+                  setImportProgress('Converting director notes into visual prompts...');
+                  try {
+                    await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
+                    await refetchScenes();
+                  } catch (err) {
+                    console.error('Prompt generation failed:', err);
+                  }
+                  setImporting(false);
+                  setImportPhase('');
+                  setImportProgress('');
+                }}
+              >
+                <Wand2 className="w-4 h-4 mr-1" /> Generate Prompts
+              </Button>
             </div>
           </div>
         )}
