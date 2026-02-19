@@ -1,8 +1,18 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // ══════════════════════════════════════════════════════════════════
-// KIE AI IMAGE GENERATION (Ideogram V3 primary, Flux 2 Pro fallback)
+// THUMBNAIL ENGINE v3 — SCRIPT-ANCHORED 3-PHASE PIPELINE
 // ══════════════════════════════════════════════════════════════════
+// Phase 1: Script Anchor Extraction → Topic-Specific Text Engine
+// Phase 2: Anchor-Driven Three-Element Visual Composition
+// Phase 3: 5-Block Ideogram V3 Prompt Engineering
+//
+// UPGRADE: Every thumbnail is now VISUALLY ANCHORED to the script's
+// actual content. No more generic "THEY LIED" on a shocked face.
+// Instead: specific objects, symbols, and data from the script
+// appear IN the image alongside emotional triggers.
+// ══════════════════════════════════════════════════════════════════
+
 const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
 
 async function kieCreateTask(apiKey, model, input) {
@@ -41,6 +51,7 @@ async function kiePollResult(apiKey, taskId, maxWaitMs = 120000) {
 }
 
 async function generateThumbnailImage(apiKey, imagePrompt, negativePrompt) {
+  // Attempt 1: Ideogram V3 QUALITY
   try {
     console.log(`[Ideogram V3] Generating...`);
     const taskId = await kieCreateTask(apiKey, "ideogram/v3-generate", {
@@ -55,6 +66,7 @@ async function generateThumbnailImage(apiKey, imagePrompt, negativePrompt) {
     if (url) return { url, model: "ideogram/v3-generate" };
   } catch (e) { console.warn(`Ideogram V3 failed: ${e.message}`); }
 
+  // Attempt 2: Ideogram V3 BALANCED (shorter prompt)
   try {
     const taskId = await kieCreateTask(apiKey, "ideogram/v3-generate", {
       prompt: `${imagePrompt.substring(0, 800)}. 1920x1080 Full HD, professional YouTube thumbnail.`,
@@ -68,6 +80,7 @@ async function generateThumbnailImage(apiKey, imagePrompt, negativePrompt) {
     if (url) return { url, model: "ideogram/v3-generate (simplified)" };
   } catch (e) { console.warn(`Ideogram simplified failed: ${e.message}`); }
 
+  // Attempt 3: Flux 2 Pro fallback
   try {
     console.log(`[Flux 2 Pro] Fallback...`);
     const taskId = await kieCreateTask(apiKey, "flux-2/pro-text-to-image", {
@@ -213,67 +226,92 @@ Deno.serve(async (req) => {
       ? `\nSEO TITLE: "${selected_title}" — derive text from this title. AMPLIFY the curiosity gap, don't repeat verbatim.` : '';
 
     console.log('══════════════════════════════════════════════════════');
-    console.log('THUMBNAILS: 3-PHASE (TEXT → 3-ELEMENT VISUAL → PROMPT)');
+    console.log('THUMBNAILS v3: SCRIPT-ANCHORED 3-PHASE PIPELINE');
     console.log(`Video: ${script.title}`);
     console.log(`Style: ${visualStyle} | Ideogram V3 → Flux 2`);
     console.log('══════════════════════════════════════════════════════');
 
     // ╔═══════════════════════════════════════════════════════════════╗
-    // ║  PHASE 1: SCROLL-STOPPING TEXT ENGINE                        ║
-    // ║  Extract climax → 10 text options across 3 psych categories  ║
-    // ║  → score → pick top 3 → assign background color pair +       ║
-    // ║  subject hook type for each winner                           ║
+    // ║  PHASE 1: SCRIPT ANCHOR EXTRACTION + TEXT ENGINE              ║
+    // ║  Step 0: Extract visual anchors from script                   ║
+    // ║  Step 1: Climax extraction                                    ║
+    // ║  Step 2: 10 topic-specific text options (6+ must have anchor) ║
+    // ║  Step 3: Design each with color blocking + subject hook       ║
+    // ║  Step 4: Score → pick top 3                                   ║
     // ╚═══════════════════════════════════════════════════════════════╝
 
-    const phase1Prompt = `You are the world's #1 YouTube thumbnail text copywriter. 10+ year track record. 12%+ CTR consistently.
+    const phase1Prompt = `You are the world's #1 YouTube thumbnail text copywriter AND visual psychologist. 10+ year track record. 12%+ CTR consistently.
 
 === MISSION ===
-Analyze this script. Extract the emotional climax. Generate 10 SCROLL-STOPPING text options. Score each. Pick the top 3.
+Analyze this script. Extract visual anchors. Extract emotional climax. Generate 10 SCRIPT-SPECIFIC scroll-stopping text options. Score each. Pick top 3.
 
 VIDEO TOPIC: "${topic.title}"
 VIDEO TITLE: "${script.title}"
 NICHE: "${project.niche}"
 ${brandContext}${selectedTitleContext}
 
-SCRIPT (find the ONE sentence with highest emotional/logical stakes):
+SCRIPT (extract visual anchors + find climax):
 ${truncatedScript}
+
+=== STEP 0: SCRIPT ANCHOR EXTRACTION ===
+BEFORE generating ANY text, extract these physical/visual anchors from the script:
+
+1. VILLAIN OBJECT: The physical thing causing harm (mortgage contract, bank building, credit card, hospital bill, algorithm, corporation, foreclosure sign, insurance denial letter, tax form, etc.)
+2. VICTIM OBJECT: The physical thing being harmed (family home, savings jar, paycheck, small business, retirement fund, health, neighborhood, childhood dream, etc.)
+3. TRAP SYMBOL: A visual metaphor for the script's core trap (chains around house, cage around family, mousetrap with cheese-shaped-like-house, sinking ship, cracking foundation, puppet strings, ticking time bomb, etc.)
+4. SHOCK DATA: Any specific number, percentage, or timeline from the script that creates visceral reaction ("30 years", "crashed 40%", "$0 equity", "2008", "$500,000 in interest", etc.)
+5. CONTRAST PAIR: The before/after or illusion/reality from the script (happy family vs foreclosure, American dream vs nightmare, "your house" vs "bank's house", healthy vs sick, free vs trapped, etc.)
+6. NICHE OBJECTS: 3-5 physical items viewers in this niche immediately recognize (for finance: house keys, mortgage papers, bank vault, "APPROVED/DENIED" stamps, dollar bills; for health: pills, hospital bed, test results, etc.)
+
+These anchors MUST appear in your text options and subject descriptions. Generic emotional text without script anchors is BANNED.
 
 === STEP 1: CLIMAX EXTRACTION ===
 Find the ONE sentence with: highest emotional stakes, biggest surprise/contradiction/turning point, would stop someone mid-scroll.
 
 === STEP 2: GENERATE 10 TEXT OPTIONS ===
 
-CATEGORY A — CURIOSITY GAP (4 options)
-Incomplete thought that DEMANDS resolution.
-- Technique: Incomplete sentences, ellipsis, pronouns without naming who
-- Examples: "THEY KNEW...", "HE DIDN'T LEAVE", "SHE LIED"
-- Power: Brain cannot rest until gap is closed
+CATEGORY A — ANCHOR-SPECIFIC CURIOSITY GAP (4 options)
+Incomplete thought referencing the script's ACTUAL topic — not generic outrage.
+- Technique: Reference the villain_object or victim_object without fully explaining
+- GOOD examples for a mortgage script: "YOU OWN NOTHING", "BANK'S HOUSE", "NOT YOURS", "RENTING FOREVER"
+- GOOD examples for a health script: "YOUR DOCTOR KNEW", "PILL TRAP", "WRONG DIAGNOSIS"
+- BAD (too generic — works on ANY video): "THEY LIED", "THEY KNEW", "IT'S OVER", "BE CAREFUL"
+- Power: Brain cannot rest AND the topic is clear from 2 words
 
-CATEGORY B — FORBIDDEN KNOWLEDGE / NEGATIVE FRAMING (3 options)
-Loss aversion — 2x more motivating than gain.
-- Technique: Frame as warning/prohibition/reversal. "How to succeed" → "STOP DOING THIS"
-- Examples: "STOP WATCHING", "I WAS WRONG", "THEY HID THIS"
-- Power: Triggers fight-or-flight
+CATEGORY B — ANCHOR-SPECIFIC FORBIDDEN KNOWLEDGE (3 options)
+Loss aversion tied to THIS SPECIFIC threat, not generic fear.
+- Technique: Reference the trap_symbol or shock_data from the script
+- GOOD for mortgage: "30 YEAR TRAP", "FAKE EQUITY", "$0 YOURS"
+- GOOD for diet: "POISON LABEL", "FDA LIED", "NOT FOOD"
+- BAD (too generic): "STOP WATCHING", "I WAS WRONG", "THEY HID THIS"
+- Power: Triggers fight-or-flight about THIS SPECIFIC THREAT the viewer faces
 
-CATEGORY C — SHOCK / CONTRADICTION (3 options)
-Cognitive dissonance — text clashes with expected visual.
-- Examples: "IT'S FAKE", "HE SMILED", "ONLY $1", "THEY AGREED"
-- Power: Mismatch detection → must resolve → click
+CATEGORY C — ANCHOR-SPECIFIC SHOCK / CONTRADICTION (3 options)
+Cognitive dissonance using the contrast_pair from the script.
+- Technique: State the illusion to create dissonance with the visual reality
+- GOOD for mortgage: "DREAM HOME?", "SAFE INVESTMENT?", "GUARANTEED?"
+- GOOD for career: "DREAM JOB?", "PROMOTION TRAP", "SUCCESS?"
+- BAD (too generic): "IT'S FAKE", "HE SMILED", "THEY AGREED"
+- Power: Viewer's belief system is challenged about a SPECIFIC thing they own/do/believe
+
+TOPIC ANCHOR RULE: At least 6 of 10 text options MUST contain a word directly referencing the script's specific topic (house, mortgage, bank, debt, rent, own, equity, crash, trap, doctor, pill, algorithm, etc.). Pure emotion words without topic anchoring ("THEY LIED", "IT'S OVER") limited to MAX 4 of 10.
+
+SPECIFICITY TEST: For each text option ask "Would this work on 50 different video topics?" If YES → too generic → rewrite with a topic word.
 
 === TEXT HARD RULES ===
 1. MAX 3 WORDS (ideal: 2). Never exceed 4.
 2. ALL CAPS always
-3. Never reveal the answer
+3. Never reveal the full answer — tease, never tell
 4. BANNED: "AMAZING", "INCREDIBLE", "YOU WON'T BELIEVE", "SHOCKING TRUTH"
-5. Power verbs: STOP, HIDE, BROKE, LIED, KNEW, LEFT, GONE, CAUGHT, LEAKED, EXPOSED
-6. Pronouns over names: "THEY KNEW" > "THE CEO KNEW"
+5. Power verbs: STOP, HIDE, BROKE, LIED, KNEW, LEFT, GONE, CAUGHT, LEAKED, EXPOSED, TRAP, OWN, STOLE, FAKE
+6. Pronouns > names EXCEPT when the specific entity IS the hook: "THE BANK LIED" > "THEY LIED" for finance
 7. Positive topic? FLIP negative: "How to save" → "YOU'RE WASTING IT"
-8. Must work WITHOUT any context
+8. Must hint at specific topic even without context — "YOU OWN NOTHING" hints at ownership, "BANK'S HOUSE" hints at mortgage
 
 === STEP 3: DESIGN EACH TEXT OPTION ===
 
 TEXT COLOR + COMPLEMENTARY BACKGROUND PAIR:
-This is critical — the text color determines the ENTIRE background color of the thumbnail.
+The text color determines the ENTIRE background color of the thumbnail.
 
 | Text Color | Background Color Pair | Never Use As BG | Psychological Effect |
 |---|---|---|---|
@@ -283,45 +321,47 @@ This is critical — the text color determines the ENTIRE background color of th
 | Hot amber orange | Deep indigo / cobalt | Red (too close), grey | Urgency against the abyss |
 | Neon lime green | Deep magenta / dark berry | Black (too generic) | Toxic shock against drama |
 
-IMPORTANT: The "background_color_pair" you choose here will become the DOMINANT background color of the entire thumbnail. Choose based on maximum contrast with text.
-
 TEXT POSITION:
 - UPPER-LEFT: Best default. Left-to-right reading. Avoids all YouTube UI.
 - UPPER-CENTER: Maximum dominance. Subject below.
 - BOTTOM-CENTER: Only if upper area has key visual. NEVER bottom-right (timestamp death zone).
 - ACROSS-CENTER: Text IS the thumbnail. Maximum disruption.
 
-TEXT SIZE:
-- MASSIVE (one-third of frame width): 1-2 word options
-- LARGE (one-quarter of frame width): 3 word options
+TEXT SIZE: MASSIVE (one-third of frame) for 1-2 words. LARGE (one-quarter) for 3 words.
 
-CONTAINER:
-- RAW: No container. Outline + shadow only. Most versatile.
-- BANNER: Full-width colored strip. Breaking news feel.
-- STAMP: Tilted, rough edges. Classified/leaked feel.
-- BADGE: Rounded rectangle. Clean, professional.
-- GLOW: Colored halo/aura. Ethereal, mysterious.
+CONTAINER: RAW (outline+shadow), BANNER (full-width strip), STAMP (tilted, rough), BADGE (rounded rect), GLOW (colored halo).
 
-FONT: Impact, Bebas Neue, or bold condensed sans-serif. Never decorative or script fonts.
+FONT: Impact, Bebas Neue, or bold condensed sans-serif. Never decorative.
 
-=== STEP 4: SUBJECT HOOK TYPE ===
-For each text option, specify what TYPE of visual subject creates maximum tension with this text:
+=== STEP 4: ANCHOR-BASED SUBJECT HOOK ===
+For EACH text option, specify the visual subject. CRITICAL: The subject MUST include a SCRIPT ANCHOR OBJECT.
+A shocked face ALONE is generic. A shocked face HOLDING a foreclosure notice = script-specific.
 
-- exaggerated_emotion: Extreme close-up face (shock, fear, defiance). Eyes wide, mouth open, brow furrowed. Boosts CTR 35%.
-- scale_shock: Something unnaturally large/small next to reference object (giant stack of cash, tiny person next to massive door)
-- mystery_object: Single unexplained object that text references but doesn't explain (glowing key, sealed envelope, cracked vault)
-- environmental_stakes: Location that tells the story (empty boardroom, burning building, abandoned room, dark alley)
+- exaggerated_emotion_WITH_ANCHOR: Extreme close-up face with a script-relevant object visible — holding it, reflected in eyes, looming behind, being crushed by it. Face provides EMOTION, anchor provides TOPIC CONTEXT. "Shocked face" = REJECTED. "Shocked face gripping crumbling house deed" = APPROVED.
+- scale_shock_WITH_ANCHOR: The villain_object or trap_symbol at unnatural scale next to victim_object. Giant bank stamp crushing tiny house. Massive chain around small family. Enormous "DENIED" over house deed.
+- anchor_object_spotlight: The villain_object or trap_symbol as dramatic hero object, lit like evidence. Mortgage contract with glowing clause, house keys in mousetrap, sinking house.
+- environmental_anchor: The contrast_pair as split environment. Left: dream/illusion. Right: nightmare/reality. Beautiful house exterior / rotting interior.
 
-=== STEP 5: SCORE ===
-Score 1-10:
-- STOP_POWER (40%): Stops scrolling in 0.3 seconds?
-- CURIOSITY (30%): Unbearable need to click?
-- CLARITY (20%): Readable at phone thumbnail size?
-- UNIVERSALITY (10%): Works without any context?
+EVERY subject description must name at least ONE specific object from the script anchors.
+
+=== STEP 5: SCORE 1-10 ===
+- STOP_POWER (30%): Stops scrolling in 0.3 seconds?
+- CURIOSITY (25%): Unbearable need to click?
+- TOPIC_SPECIFICITY (25%): Can viewer identify the video's topic from thumbnail alone?
+- CLARITY (10%): Readable at phone thumbnail size?
+- UNIVERSALITY (10%): Works across the niche audience?
 
 RESPOND IN EXACT JSON:
 {
-  "script_climax": "The single highest-stakes sentence",
+  "script_anchors": {
+    "villain_object": "The physical thing causing harm — be specific",
+    "victim_object": "The physical thing being harmed — be specific",
+    "trap_symbol": "Visual metaphor for the core trap — describe it visually",
+    "shock_data": "Specific number/percentage/timeline from the script",
+    "contrast_pair": { "illusion": "What people believe", "reality": "What's actually true" },
+    "niche_objects": ["object1", "object2", "object3", "object4", "object5"]
+  },
+  "script_climax": "The single highest-stakes sentence from the script",
   "curiosity_gap_identified": "The core unanswered question",
   "text_options": [
     {
@@ -329,10 +369,13 @@ RESPOND IN EXACT JSON:
       "text": "EXACT WORDS IN CAPS",
       "word_count": 2,
       "category": "curiosity_gap / forbidden_knowledge / shock_contradiction",
-      "psychological_mechanism": "Which bias + WHY it stops scrolling",
+      "topic_anchor_word": "The specific topic word in this text (house/bank/mortgage/etc) or 'emotion_only' if none",
+      "psychological_mechanism": "Which bias + WHY it stops scrolling for THIS topic",
+      "script_connection": "Which sentence/concept from the script this text references",
       "negative_framing_applied": true,
-      "text_color_name": "Vivid color name for Ideogram",
-      "background_color_pair": "The complementary background color name from the table above",
+      "specificity_test": "Would this work on 50 different videos? YES=too generic / NO=good",
+      "text_color_name": "Vivid color name",
+      "background_color_pair": "Complementary background color from table",
       "outline_color": "very thick black / thick dark navy / thick deep red",
       "shadow": "heavy black drop shadow / colored glow / none",
       "container": "raw / banner / stamp / badge / glow",
@@ -340,20 +383,24 @@ RESPOND IN EXACT JSON:
       "position": "upper-left / upper-center / bottom-center / across-center",
       "size": "massive / large",
       "font_style": "Impact / Bebas Neue / bold condensed sans-serif",
-      "subject_hook_type": "exaggerated_emotion / scale_shock / mystery_object / environmental_stakes",
-      "subject_hook_description": "1 sentence: what specific subject creates maximum tension with this text",
+      "subject_hook_type": "exaggerated_emotion_WITH_ANCHOR / scale_shock_WITH_ANCHOR / anchor_object_spotlight / environmental_anchor",
+      "subject_hook_description": "What specific subject + what script anchor object is visible — BOTH required",
+      "anchor_object_in_subject": "Name the specific anchor object that appears in this subject",
       "stop_power_score": 9,
-      "curiosity_score": 10,
+      "curiosity_score": 9,
+      "topic_specificity_score": 9,
       "clarity_score": 9,
       "universality_score": 8,
-      "total_ctr_score": 9.2,
-      "why_this_wins": "1 sentence"
+      "total_ctr_score": 9.0,
+      "why_this_wins": "1 sentence connecting text + anchor + emotion"
     }
   ],
-  "top_3_winners": [1, 2, 3]
+  "top_3_winners": [1, 2, 3],
+  "topic_anchor_count": 7,
+  "emotion_only_count": 3
 }`;
 
-    console.log("Phase 1: Text engine (10 options + scoring)...");
+    console.log("Phase 1: Script anchors + topic-specific text engine...");
     const phase1Result = await safeGeminiCall(phase1Prompt, 0.95, 4096);
 
     const top3Indices = phase1Result.top_3_winners || [1, 2, 3];
@@ -367,27 +414,29 @@ RESPOND IN EXACT JSON:
       if (next) winningTexts.push(next); else break;
     }
 
+    const anchors = phase1Result.script_anchors || {};
     console.log(`✓ Phase 1: ${allTextOptions.length} texts → ${winningTexts.length} winners`);
-    winningTexts.forEach(w => console.log(`  "${w.text}" [${w.category}] CTR:${w.total_ctr_score} | ${w.text_color_name} on ${w.background_color_pair} | subject: ${w.subject_hook_type}`));
+    console.log(`  Anchors: villain=${anchors.villain_object} | victim=${anchors.victim_object} | trap=${anchors.trap_symbol}`);
+    console.log(`  Topic words: ${phase1Result.topic_anchor_count || '?'}/10 | Emotion-only: ${phase1Result.emotion_only_count || '?'}/10`);
+    winningTexts.forEach(w => console.log(`  "${w.text}" [${w.category}] anchor:${w.anchor_object_in_subject || 'none'} | ${w.text_color_name} on ${w.background_color_pair} | CTR:${w.total_ctr_score}`));
 
     await new Promise(r => setTimeout(r, 2000));
 
     // ╔═══════════════════════════════════════════════════════════════╗
-    // ║  PHASE 2: THREE-ELEMENT VISUAL COMPOSITION                   ║
-    // ║  Each concept = exactly 3 elements: Subject + Text + BG      ║
-    // ║  Built AROUND winning text. Background is a designed          ║
-    // ║  psychological element, not filler.                          ║
+    // ║  PHASE 2: ANCHOR-DRIVEN THREE-ELEMENT VISUAL COMPOSITION     ║
+    // ║  Each concept = Subject (with anchor) + Text + Background     ║
+    // ║  The anchor object makes the thumbnail TOPIC-SPECIFIC         ║
     // ╚═══════════════════════════════════════════════════════════════╝
 
     const phase2Prompt = `You are the world's #1 thumbnail visual architect. You design thumbnails using the THREE-ELEMENT COMPOSITION RULE used by MrBeast, Veritasium, and top creators.
 
 === THE THREE-ELEMENT RULE ===
 High-CTR thumbnails NEVER exceed 3 distinct visual elements. More = cognitive overload = scroll past.
-- ELEMENT 1 — SUBJECT: The image hook (face, object, environment)
+- ELEMENT 1 — SUBJECT: The image hook — MUST contain a script anchor object
 - ELEMENT 2 — TEXT: The cognitive itch (from Phase 1 winners — already designed)
-- ELEMENT 3 — BACKGROUND: The visual separation layer (psychologically designed, not filler)
+- ELEMENT 3 — BACKGROUND: The visual separation layer (psychologically designed)
 
-Each element has ONE job. If any element doesn't serve Contrast, Context, or Constraint — delete it.
+Each element serves: Contrast, Context, or Constraint. If it doesn't — delete it.
 
 === SAFETY ===
 ALL characters 100% FICTIONAL. No real people. No violence. Symbolic drama only.
@@ -398,64 +447,68 @@ ${brandContext}${sceneContext}${styleInstruction}${templateInstruction}${nicheDn
 CLIMAX: "${phase1Result.script_climax || ''}"
 CURIOSITY GAP: "${phase1Result.curiosity_gap_identified || ''}"
 
+=== SCRIPT VISUAL ANCHORS (from Phase 1) ===
+${JSON.stringify(anchors, null, 2)}
+
+CRITICAL RULE: Every concept MUST include at least ONE script anchor object visible in the thumbnail.
+The viewer must identify WHAT TOPIC this video is about within 0.3 seconds from the visual alone — BEFORE reading text.
+"Shocked face + THEY LIED" = generic outrage = 6% CTR.
+"Shocked face gripping crumbling house deed + YOU OWN NOTHING" = specific financial fear = 12% CTR.
+
 === THE 3 WINNING TEXTS (each concept built around ONE) ===
 ${JSON.stringify(winningTexts, null, 2)}
 
-=== DESIGN EACH CONCEPT AS EXACTLY 3 ELEMENTS ===
+=== ELEMENT 1 — SUBJECT DESIGN (WITH ANCHOR) ===
 
-ELEMENT 1 — SUBJECT (The Image Hook):
-The subject provides the VISUAL STAKES that the text references.
+Design rules by subject_hook_type:
 
-Design rules per subject_hook_type from Phase 1:
-
-IF exaggerated_emotion:
+IF exaggerated_emotion_WITH_ANCHOR:
 - EXTREME close-up face (head fills 40-50% of frame)
-- Specific muscles: wide eyes (orbicularis oculi fully retracted), raised brows (frontalis engaged), open mouth (masseter dropped), flared nostrils
-- Eye direction: DIRECTLY at camera (confrontational, breaks 4th wall) OR looking at the mystery element (guides viewer gaze)
-- Positioned on LEFT or RIGHT vertical third line (rule of thirds) — NEVER dead center
-- Warm rim light on one side, cool fill on other side for dimension
+- Specific muscles: wide eyes, raised brows, open mouth, furrowed brow, flared nostrils
+- Eye direction: at camera (confrontational) OR at the anchor object (guides gaze to topic)
+- MUST include a script anchor: hands gripping the villain_object, anchor object visible over shoulder, trap_symbol looming behind face, anchor reflected in eyes, face pressed against victim_object
+- The face provides EMOTION. The anchor provides TOPIC CONTEXT. Both required.
+- Positioned on LEFT or RIGHT third line — anchor on opposing side or overlapping face
+- Warm rim light one side, cool fill other side
 
-IF scale_shock:
-- Unnaturally large or small object next to a human-scale reference
-- The size difference must be IMMEDIATELY obvious — exaggerated beyond reality
-- Object positioned on one third line, reference on the other
+IF scale_shock_WITH_ANCHOR:
+- The villain_object or trap_symbol at unnatural scale next to victim_object
+- Size difference IMMEDIATELY obvious — exaggerated beyond reality
+- Object on one third line, reference on the other
+- Dramatic spotlight / volumetric light on the anchor
 
-IF mystery_object:
-- Single unexplained object in sharp focus, everything else blurred
-- Object should be LIT differently from surroundings (spotlight, glow, rim light)
-- Viewer must think "what IS that?" in 0.3 seconds
+IF anchor_object_spotlight:
+- Single anchor object (villain_object or trap_symbol) as dramatic hero
+- LIT differently from surroundings (spotlight, glow, rim light)
+- Razor-sharp focus, everything else blurred
+- Viewer must think "what IS that?" in 0.3 seconds AND identify the topic
 
-IF environmental_stakes:
-- Location that tells the entire story in one frame
-- Use EXTREME depth (foreground element sharp, background heavily blurred)
-- Environmental mood must match the text's psychological category
+IF environmental_anchor:
+- The contrast_pair shown as split environment
+- Left: dream/illusion | Right: nightmare/reality
+- OR above: pristine exterior | Below: rotting interior
+- Extreme depth (foreground sharp, background blurred)
 
 SUBJECT POSITIONING — RULE OF THIRDS:
-- Place subject on LEFT or RIGHT vertical gridline (one-third or two-thirds mark)
-- NEVER centered — centered = amateur, off-center = professional tension
-- Subject and text must be in OPPOSING quadrants (subject right → text left, etc.)
+- LEFT or RIGHT vertical gridline — NEVER dead center
+- Subject and text in OPPOSING quadrants
 
-ELEMENT 2 — TEXT (from Phase 1 — already fully designed):
-- Carry forward: exact words, color, outline, shadow, container, position, size, font
-- Position validated: text and subject occupy DIFFERENT quadrants
-- Text has clear negative space behind it
+=== ELEMENT 2 — TEXT (from Phase 1 — carry forward exactly) ===
+- Exact words, color, outline, shadow, container, position, size, font
+- Text and subject in DIFFERENT quadrants
+- Clear negative space behind text
 
-ELEMENT 3 — BACKGROUND (The Visual Separation Layer):
-THIS IS NOT FILLER. The background is a designed psychological element.
+=== ELEMENT 3 — BACKGROUND (psychological layer) ===
+5 MANDATORY QUESTIONS:
+1. COLOR: Dominant = background_color_pair from Phase 1 (complementary opposite of text)
+2. BLUR: Heavy Gaussian / cinematic bokeh — 3D depth
+3. VIGNETTE: Heavy dark edges ALL four sides
+4. PSYCHOLOGY: What it communicates (danger=embers/smoke, mystery=fog, wealth=gold, isolation=emptiness)
+5. ANCHOR ECHO: Can a SUBTLE anchor element appear in the background? (faint house silhouette in fog, chain texture in vignette, faint dollar signs in bokeh) — this reinforces topic WITHOUT adding a 4th element
+6. AVOIDANCE: No pure RED, WHITE, or dark GREY backgrounds (YouTube UI conflict)
 
-Background MUST answer these 5 questions:
-1. COLOR: What is the dominant background color? (MUST be the background_color_pair from Phase 1 — the complementary opposite of the text color)
-2. BLUR: Heavy Gaussian blur / cinematic bokeh — creates 3D depth, forces eye to subject + text
-3. VIGNETTE: Heavy dark edges on ALL four sides — tunnels vision to center
-4. PSYCHOLOGY: What does this background COMMUNICATE? (danger = embers/smoke, mystery = fog/darkness, wealth = gold shimmer, isolation = empty vastness)
-5. AVOIDANCE: Background MUST NOT use YouTube UI colors as dominant tone:
-   - No pure RED backgrounds (conflicts with YouTube subscribe/like buttons)
-   - No pure WHITE backgrounds (conflicts with YouTube light mode)
-   - No dark GREY backgrounds (conflicts with YouTube dark mode)
-   Use the complementary color pair instead.
-
-COLOR BLOCKING TABLE (mandatory):
-| If text is... | Background MUST be... |
+COLOR BLOCKING TABLE:
+| Text Color | Background MUST Be |
 |---|---|
 | Vivid crimson red | Deep teal / dark cyan gradient |
 | Electric neon yellow | Deep purple / violet gradient |
@@ -464,20 +517,19 @@ COLOR BLOCKING TABLE (mandatory):
 | Neon lime green | Deep magenta / dark berry gradient |
 
 === DEAD ZONE ENFORCEMENT ===
-- BOTTOM-RIGHT QUADRANT: Completely clear. No text, no faces, no key objects. YouTube places timestamp here.
-- All critical elements in UPPER TWO-THIRDS and LEFT TWO-THIRDS of frame.
-- If any element falls in bottom-right → move it. No exceptions.
+BOTTOM-RIGHT QUADRANT: Completely clear. No text, no faces, no key objects.
+All critical elements in UPPER TWO-THIRDS and LEFT TWO-THIRDS.
 
 === THREE-ELEMENT VALIDATION ===
-After designing each concept, count the distinct visual elements. If there are MORE than 3 (subject, text, background), you have FAILED. Remove the extra elements. Simplicity = clarity = clicks.
+After designing each concept, count elements. MORE than 3 = FAILED. Remove extras.
+The background anchor echo counts as part of element 3 (background), NOT a 4th element.
 
 For EACH concept write a 300+ word forensic description structured as:
-
-ELEMENT 1 — SUBJECT: [full description with hook type, positioning on third line, expression/scale/object details, lighting, eye direction, crop]
-ELEMENT 2 — TEXT: [exact words, color, outline, shadow, container, position, size — carried from Phase 1. What's directly behind the text zone — must be dark/contrasting/empty]
-ELEMENT 3 — BACKGROUND: [dominant color from pair table, blur level, vignette, atmospheric effects, psychological purpose. NOT YouTube UI colors.]
-DEAD ZONE CHECK: [confirm bottom-right is clear]
-THREE-ELEMENT CHECK: [confirm only 3 elements, nothing extra]
+ELEMENT 1 — SUBJECT + ANCHOR: [full description with anchor object, positioning, expression, lighting]
+ELEMENT 2 — TEXT: [exact words, color, position — carried from Phase 1]
+ELEMENT 3 — BACKGROUND + ANCHOR ECHO: [dominant color, blur, vignette, atmosphere, subtle anchor element]
+DEAD ZONE CHECK: [confirm bottom-right clear]
+THREE-ELEMENT CHECK: [confirm only 3 elements]
 
 RESPOND IN EXACT JSON:
 {
@@ -496,43 +548,46 @@ RESPOND IN EXACT JSON:
         "font_style": "from Phase 1"
       },
       "element_1_subject": {
-        "hook_type": "exaggerated_emotion / scale_shock / mystery_object / environmental_stakes",
-        "description": "Full subject description with positioning, expression, action, lighting",
+        "hook_type": "exaggerated_emotion_WITH_ANCHOR / scale_shock_WITH_ANCHOR / anchor_object_spotlight / environmental_anchor",
+        "description": "Full subject + anchor object description",
+        "anchor_object": "The specific script anchor visible in this subject",
+        "anchor_placement": "held by subject / reflected in eyes / looming behind / over shoulder / hero object / split environment",
         "position_on_grid": "left-third / right-third",
-        "eye_direction": "at camera / at mystery element / at text",
+        "eye_direction": "at camera / at anchor object / at text",
         "crop": "extreme close-up / chest-up / wide"
       },
       "element_3_background": {
-        "dominant_color": "The complementary color from the pair table",
-        "color_pair_reason": "Why this color maximizes contrast with text",
+        "dominant_color": "Complementary color from pair table",
+        "color_pair_reason": "Why this maximizes contrast",
         "blur_level": "heavy Gaussian / cinematic bokeh",
-        "vignette": "heavy dark edges on all sides",
-        "atmospheric_effects": "smoke / embers / fog / particles / God rays / none",
+        "vignette": "heavy dark edges all sides",
+        "atmospheric_effects": "smoke / embers / fog / particles / god rays / none",
+        "anchor_echo": "Subtle anchor element in background (faint silhouette / texture / pattern) or none",
         "psychological_purpose": "danger / mystery / wealth / isolation / revelation / urgency",
         "avoids_youtube_ui": true
       },
       "template_type": "Face-Off / Reveal / Contrast / Warning / Bold Statement / Mystery",
       "narrative_moment": "Script moment + WHY clickable",
-      "text_visual_synergy": "How text + subject + background create ONE message",
+      "text_visual_synergy": "How text + subject (with anchor) + background create ONE topic-specific message",
       "negative_space_strategy": "Where text sits + what's behind it",
       "dead_zone_clear": true,
       "three_element_check": true,
+      "topic_identifiable_without_text": true,
       "emotional_trigger": "Primary emotion in 0.3s",
       "scroll_stop_reason": "1 sentence",
-      "forensic_description": "300+ words structured as Element 1 → Element 2 → Element 3 → Dead Zone → Validation"
+      "forensic_description": "300+ words: Element 1 (subject+anchor) → Element 2 (text) → Element 3 (background+echo) → Dead Zone → Validation"
     }
   ]
 }`;
 
-    console.log("Phase 2: Three-element visual composition...");
+    console.log("Phase 2: Anchor-driven 3-element visual composition...");
     const phase2Result = await safeGeminiCall(phase2Prompt, 0.9, 8192);
 
     await new Promise(r => setTimeout(r, 2000));
 
     // ╔═══════════════════════════════════════════════════════════════╗
     // ║  PHASE 3: IDEOGRAM V3 PROMPT ENGINEERING                     ║
-    // ║  5-block structure: Opening → Text → Subject → Background    ║
-    // ║  → Style. Each block is a designed psychological element.    ║
+    // ║  5-block structure with anchor objects embedded               ║
     // ╚═══════════════════════════════════════════════════════════════╝
 
     const styleBlock = visualStyle === 'anime' || visualStyle === 'cinematic_anime'
@@ -554,37 +609,40 @@ STYLE: "${visualStyle}"
 === SAFETY ===
 All characters 100% FICTIONAL. No real people. No violence. Symbolic drama only.
 
+=== SCRIPT ANCHORS (must appear in prompts) ===
+${JSON.stringify(anchors, null, 2)}
+
 === THREE-ELEMENT CONCEPTS FROM PHASE 2 ===
 ${JSON.stringify(phase2Result.concepts, null, 2)}
 
 === MANDATORY 5-BLOCK PROMPT STRUCTURE ===
-Every prompt follows this EXACT order. No exceptions. Each block is a designed element.
 
-BLOCK 1 — OPENING (sets the canvas):
-"1920x1080 Full HD 16:9 widescreen landscape YouTube thumbnail with exactly three visual elements — one dominant subject, one bold text overlay, and one psychologically designed background. Graphic design composition with bold typography."
+BLOCK 1 — OPENING:
+"1920x1080 Full HD 16:9 widescreen landscape YouTube thumbnail with exactly three visual elements — one dominant subject containing a [anchor_object type] anchor, one bold text overlay, and one psychologically designed background. Graphic design composition with bold typography."
 
-BLOCK 2 — TEXT (the STAR — write this FIRST after opening):
-"Dominant text element: massive bold [font_style] text reading "[EXACT WORDS IN CAPS]" in [text_color_name] with [outline_color] outline and [shadow], [container + container_color if not raw], positioned at [position] of the frame, filling approximately [one-third for 2 words / one-quarter for 3 words] of the frame width. The area directly behind the text is [the background_color_pair — deep teal / deep purple / rich navy / deep indigo / deep magenta] ensuring crystal-clear readability. No visual elements compete with or overlap the text."
+BLOCK 2 — TEXT (the STAR):
+"Dominant text element: massive bold [font_style] text reading "[EXACT WORDS IN CAPS]" in [text_color_name] with [outline_color] outline and [shadow], [container + color if not raw], positioned at [position] of the frame, filling approximately [one-third for 2 words / one-quarter for 3 words] of the frame width. The area directly behind the text is [background_color_pair] ensuring crystal-clear readability. No visual elements compete with or overlap the text."
 
-BLOCK 3 — SUBJECT (the image hook — positioned OPPOSITE to text):
-"Primary subject positioned on the [left-third / right-third] vertical gridline using rule of thirds: [FULL DESCRIPTION based on hook_type]:
-- If exaggerated_emotion: extreme close-up of a [fictional archetype] with [specific facial muscles engaged — wide eyes, raised brows, open mouth, furrowed brow, flared nostrils], [eye direction — staring directly at camera / looking toward the text / gazing at mystery element], head filling approximately [40-50%] of the frame, lit with [warm amber rim light on one profile, cool blue fill from opposite side], wearing [specific clothing with color names]. The expression conveys [specific emotion] that creates tension with the text.
-- If scale_shock: [unnaturally large/small object] positioned next to [human-scale reference], the size difference immediately jarring, lit with [dramatic spotlight / volumetric light], creating visual intrigue that the text references but doesn't explain.
-- If mystery_object: [single unexplained object in razor-sharp focus] surrounded by heavy blur, lit with [eerie glow / spotlight / rim light] that makes it the focal anchor, positioned on the [third line] with everything else soft and atmospheric.
-- If environmental_stakes: [dramatic location/setting] with extreme depth — sharp foreground element, heavily blurred background, environmental mood matching the text's psychological trigger."
+BLOCK 3 — SUBJECT WITH ANCHOR (positioned OPPOSITE to text):
+"Primary subject on the [left-third / right-third] vertical gridline: [FULL DESCRIPTION based on hook_type]:
+- If exaggerated_emotion_WITH_ANCHOR: extreme close-up of a [fictional archetype] with [specific facial muscles], [eye direction], head filling 40-50% of frame. CRITICALLY: [describe the anchor object and how it's integrated — gripped in hands, visible over shoulder, reflected in eyes, looming behind]. The [anchor object] identifies THIS as a [topic] video, not generic outrage. Lit with [warm/cool rim lighting].
+- If scale_shock_WITH_ANCHOR: [anchor object at unnatural scale] next to [human-scale reference], immediately jarring, lit with [dramatic light]. The anchor connects viewer to the specific topic.
+- If anchor_object_spotlight: [anchor object as hero] in razor-sharp focus, surrounded by blur, lit with [spotlight/glow]. This single object tells the entire video's story.
+- If environmental_anchor: [contrast_pair as split environment] with extreme depth. The environment itself IS the script's story."
 
-BLOCK 4 — BACKGROUND (psychological separation layer — NOT filler):
-"Background designed as visual separation: dominant color is [background_color_pair from Phase 1 — the complementary opposite of text color] as a [gradient / solid / atmospheric wash]. Heavy Gaussian blur creating cinematic bokeh depth effect that makes subject and text float in 3D space. [Atmospheric elements based on psychological_purpose: thin wisps of smoke for danger, rolling fog for mystery, floating golden particles for wealth, vast emptiness for isolation, scattered embers for destruction, subtle light rays for revelation]. Heavy vignette darkening ALL FOUR edges, creating a visual tunnel that forces the viewer's eye to the subject and text in the center. The background avoids YouTube UI colors — no pure red, no white, no dark grey as dominant tones. The [background color] creates maximum chromatic contrast against the [text color], making the typography impossible to miss."
+BLOCK 4 — BACKGROUND WITH ANCHOR ECHO:
+"Background: dominant color is [background_color_pair] as [gradient/wash]. Heavy Gaussian blur creating cinematic bokeh depth. [Atmospheric elements: smoke/embers/fog/particles based on psychological_purpose]. [If anchor_echo exists: subtle [anchor silhouette/texture/pattern] barely visible through the atmosphere, reinforcing the topic subconsciously]. Heavy vignette darkening ALL four edges. Avoids YouTube UI colors."
 
 BLOCK 5 — STYLE + QUALITY + DEAD ZONE:
-"${styleBlock} Heavy vignette on all edges. The bottom-right quadrant of the frame is deliberately kept clear of all text, faces, and key visual elements to avoid conflict with YouTube's timestamp overlay. All critical visual information occupies the upper two-thirds and left two-thirds of the frame. Ultra high resolution, crisp sharp details, professional thumbnail quality."
+"${styleBlock} Heavy vignette on all edges. Bottom-right quadrant deliberately clear of all elements. All critical visuals in upper two-thirds and left two-thirds. Ultra high resolution, crisp sharp details, professional thumbnail quality."
 
 === HARD RULES ===
-- Text in "QUOTATION MARKS" — Ideogram renders these
+- Text in "QUOTATION MARKS" for Ideogram rendering
 - NO hex codes, NO pixel values, NO percentages — named colors and spatial language only
-- THREE ELEMENTS ONLY — if the prompt describes more than subject + text + background, delete the extras
-- Subject and text in OPPOSING quadrants — never same side
-- Background color from the complementary pair table — never generic "dark background"
+- THREE ELEMENTS ONLY — subject (with anchor) + text + background (with echo)
+- Subject and text in OPPOSING quadrants
+- Anchor object MUST be described in Block 3 — this is what makes the thumbnail topic-specific
+- Background color from complementary pair table
 - Dead zone (bottom-right) always clear
 - Each prompt 300+ words following all 5 blocks
 
@@ -594,7 +652,7 @@ RESPOND IN EXACT JSON:
     {
       "rank": 1,
       "template_type": "from Phase 2",
-      "concept_description": "2-3 sentence summary of the three elements working together",
+      "concept_description": "Three elements + anchor working together",
       "text_overlay": "EXACT TEXT IN CAPS",
       "text_design": {
         "color": "vivid color name",
@@ -607,19 +665,24 @@ RESPOND IN EXACT JSON:
         "font_style": "font name"
       },
       "subject_design": {
-        "hook_type": "type from Phase 2",
+        "hook_type": "type",
         "grid_position": "left-third / right-third",
-        "eye_direction": "at camera / at text / at mystery",
+        "anchor_object": "The specific anchor object visible",
+        "anchor_placement": "How anchor is integrated into subject",
+        "eye_direction": "at camera / at anchor / at text",
         "crop": "extreme close-up / chest-up / wide"
       },
       "background_design": {
-        "dominant_color": "complementary color name",
+        "dominant_color": "complementary color",
         "blur": "heavy Gaussian bokeh",
         "vignette": "heavy all edges",
         "atmosphere": "smoke / embers / fog / particles / clean",
+        "anchor_echo": "subtle anchor element or none",
         "psychological_purpose": "danger / mystery / wealth / isolation"
       },
-      "text_visual_synergy": "How all 3 elements create one message",
+      "script_anchor_used": "Which anchor appears (villain_object / victim_object / trap_symbol / shock_data / contrast_pair)",
+      "topic_identifiable": "Can viewer identify video topic from image alone before reading text? YES/NO + why",
+      "text_visual_synergy": "How all 3 elements + anchor create one topic-specific message",
       "emotional_hook": "Emotion + why it stops scrolling",
       "scroll_stop_reason": "1 sentence",
       "accent_color": "eye-catching accent",
@@ -629,13 +692,13 @@ RESPOND IN EXACT JSON:
       "ctr_score": 9,
       "dead_zone_clear": true,
       "three_element_count": 3,
-      "negative_prompt": "blurry, low quality, pixelated, watermark, low resolution, compressed, distorted text, misspelled text, illegible text, small text, text overlap on face, more than three visual elements, cluttered composition, pure red background, pure white background, dark grey background, jpeg artifacts, text in bottom right",
-      "image_prompt": "300+ word prompt following BLOCK 1→2→3→4→5 structure exactly. Text in quotation marks. Three elements only."
+      "negative_prompt": "blurry, low quality, pixelated, watermark, distorted text, misspelled text, illegible text, small text, text overlap on face, more than three visual elements, cluttered, pure red background, pure white background, dark grey background, jpeg artifacts, text in bottom right, generic expression without context object",
+      "image_prompt": "300+ words following BLOCK 1→2→3→4→5. Anchor object described in Block 3. Text in quotes."
     }
   ]
 }`;
 
-    console.log("Phase 3: Ideogram V3 prompts (5-block, 3-element)...");
+    console.log("Phase 3: Ideogram V3 prompts (anchor-embedded 5-block)...");
     const phase3Result = await safeGeminiCall(phase3Prompt, 0.85, 8192);
 
     // ══════════════════════════════════════════════════════════════
@@ -667,13 +730,13 @@ RESPOND IN EXACT JSON:
       const sd = t.subject_design || {};
       const bd = t.background_design || {};
 
-      const designSummary = `TEXT: ${td.color || 'white'} ${td.container || 'raw'} @ ${td.position || 'upper-left'} ${td.size || 'massive'} | SUBJECT: ${sd.hook_type || 'emotion'} @ ${sd.grid_position || 'right-third'} | BG: ${bd.dominant_color || 'dark'} ${bd.atmosphere || 'clean'} ${bd.psychological_purpose || 'drama'}`;
+      const designSummary = `TEXT: ${td.color || 'white'} ${td.container || 'raw'} @ ${td.position || 'upper-left'} ${td.size || 'massive'} | SUBJECT: ${sd.hook_type || 'emotion'} @ ${sd.grid_position || 'right-third'} anchor:${sd.anchor_object || 'none'} | BG: ${bd.dominant_color || 'dark'} ${bd.atmosphere || 'clean'} echo:${bd.anchor_echo || 'none'} [${bd.psychological_purpose || 'drama'}]`;
 
       try {
         const record = await base44.entities.ThumbnailConcepts.create({
           project_id,
           rank: t.rank || i + 1,
-          concept_description: `[${t.template_type}] ${t.concept_description}\n\n🎯 ${t.emotional_hook}\n🛑 ${t.scroll_stop_reason}\n🔗 ${t.text_visual_synergy || ''}\n📐 3-Element: ${designSummary}`,
+          concept_description: `[${t.template_type}] ${t.concept_description}\n\n🎯 ${t.emotional_hook}\n🛑 ${t.scroll_stop_reason}\n🔗 ${t.text_visual_synergy || ''}\n🏷️ Anchor: ${t.script_anchor_used || 'none'} | Topic ID: ${t.topic_identifiable || 'unknown'}\n📐 3-Element: ${designSummary}`,
           facial_expression: typeof t.subject_design === 'object' ? JSON.stringify(t.subject_design) : (t.subject_description || ''),
           visual_metaphor: t.template_type,
           color_scheme: `${t.color_scheme} | Accent: ${t.accent_color} | FX: ${t.visual_effects}`,
@@ -718,8 +781,9 @@ RESPOND IN EXACT JSON:
     const imagesGenerated = thumbnails.filter(t => t.image_url).length;
 
     console.log('══════════════════════════════════════════════════════');
-    console.log(`Phase 1: ${allTextOptions.length} texts → ${winningTexts.length} winners`);
-    console.log(`Phase 2: ${phase2Result.concepts?.length || 0} 3-element compositions`);
+    console.log(`Anchors: villain=${anchors.villain_object} | victim=${anchors.victim_object}`);
+    console.log(`Phase 1: ${allTextOptions.length} texts → ${winningTexts.length} winners (${phase1Result.topic_anchor_count || '?'} topic-specific)`);
+    console.log(`Phase 2: ${phase2Result.concepts?.length || 0} anchor-driven compositions`);
     console.log(`Phase 3: ${phase3Result.thumbnails?.length || 0} Ideogram prompts`);
     console.log(`Images: ${imagesGenerated}/${saved.length}`);
     console.log('══════════════════════════════════════════════════════');
@@ -727,17 +791,20 @@ RESPOND IN EXACT JSON:
     return Response.json({
       success: true,
       thumbnails,
+      script_anchors: anchors,
       text_engine: {
         script_climax: phase1Result.script_climax,
         curiosity_gap: phase1Result.curiosity_gap_identified,
         all_text_options: allTextOptions,
-        winning_texts: winningTexts
+        winning_texts: winningTexts,
+        topic_anchor_count: phase1Result.topic_anchor_count,
+        emotion_only_count: phase1Result.emotion_only_count
       },
       meta: {
         total_concepts: saved.length,
         total_images: imagesGenerated,
         phases: 3,
-        architecture: "text-first → 3-element visual → 5-block Ideogram prompt",
+        architecture: "script-anchored → topic-specific text → anchor-driven 3-element → 5-block Ideogram",
         text_options_generated: allTextOptions.length,
         image_model_primary: "ideogram/v3-generate",
         image_model_fallback: "flux-2/pro-text-to-image",
