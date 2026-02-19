@@ -109,15 +109,63 @@ function extractDirectorNotes(imagePrompt) {
 const styleMap = {
   cinematic_realistic: {
     positive: "Cinematic film still shot on ARRI Alexa 65 with anamorphic Panavision lenses, beautiful lens flare and chromatic aberration, shallow depth of field f/1.4 with creamy bokeh, dramatic three-point lighting with hard key light and soft fill, strong rim light separation, color graded with professional teal and orange LUT, subtle Kodak Vision3 film grain texture, volumetric god rays through atmosphere, Hollywood blockbuster cinematography, photorealistic rendering, 8K resolution",
+    reinforcement: "STYLE LOCK: photorealistic cinematic film still, real actors, real lighting, ARRI camera, Kodak film grain",
+    antiStyle: "NOT a cartoon, NOT illustration, NOT anime, NOT painting, NOT 2D, NOT 3D render, NOT CGI. Photorealistic only",
     negative: "cartoon, anime, illustration, painting, drawing, sketch, 3D render, CGI, video game, cel shaded, flat colors, clipart, comic book, manga, stylized, amateur, low quality, blurry, distorted, deformed, oversaturated"
   },
   photorealistic_4k: {
     positive: "Ultra-photorealistic DSLR photograph shot on Canon EOS R5 with RF 85mm f/1.2 L lens, razor-sharp focus, natural ambient lighting, professional color grading, editorial photography for National Geographic, visible skin texture and pores, accurate shadows and highlights, real-world proportions, zero AI artifacts, 8K RAW quality",
+    reinforcement: "STYLE LOCK: ultra-photorealistic DSLR photograph, real people, visible pores, natural light, Canon RAW quality",
+    antiStyle: "NOT a cartoon, NOT illustration, NOT anime, NOT painting, NOT 3D render, NOT CGI. Photograph only",
     negative: "cartoon, anime, CGI, 3D render, painting, digital art, stylized, unrealistic, soft focus, beauty filter, over-processed, HDR overdone"
+  },
+  cinematic_anime: {
+    positive: "Cinematic anime illustration in the signature style of Makoto Shinkai and Ufotable studio, dramatic volumetric god rays with atmospheric scattering, incredibly detailed background art with painted clouds, film-grain overlay texture, anime characters with semi-realistic proportions, dynamic dramatic camera angle with depth, beautiful depth of field bokeh, award-winning anime film quality",
+    reinforcement: "STYLE LOCK: cinematic anime illustration, Makoto Shinkai style, anime proportions, cel-shaded, painted backgrounds, anime film aesthetic",
+    antiStyle: "NOT a photograph, NOT photorealistic, NOT live action, NOT DSLR, NOT a 3D render. Anime illustration only",
+    negative: "photorealistic, live action, photograph, 3D render, western cartoon, rough sketch"
   },
   anime: {
     positive: "High-quality anime illustration, Studio Ghibli meets modern anime, vibrant saturated colors, clean linework, cel-shaded with soft gradients, expressive detailed eyes, detailed hair with natural flow, colorful background art with atmospheric perspective, professional anime production quality",
+    reinforcement: "STYLE LOCK: anime illustration, cel-shaded, clean linework, anime eyes, vibrant anime colors, Ghibli aesthetic",
+    antiStyle: "NOT a photograph, NOT photorealistic, NOT live action, NOT 3D render, NOT oil painting. Anime only",
     negative: "photorealistic, live action, photograph, 3D render, western cartoon, rough sketch, inconsistent style, off-model, chibi, super deformed"
+  },
+  cartoon_2d: {
+    positive: "Professional 2D vector animation style reminiscent of modern Cartoon Network and Disney Television Animation, flat cel-shaded colors with strategic gradients, bold clean outlines with consistent line weight, playful exaggerated proportions, bright cheerful primary color palette, clean gradient backgrounds with atmospheric depth, broadcast television quality",
+    reinforcement: "STYLE LOCK: 2D cartoon animation, flat colors, bold outlines, exaggerated proportions, Cartoon Network style",
+    antiStyle: "NOT a photograph, NOT photorealistic, NOT 3D rendered, NOT anime, NOT oil painting, NOT watercolor. 2D cartoon only",
+    negative: "photorealistic, photograph, 3D render, anime, oil painting, watercolor, realistic proportions"
+  },
+  picstory_cocomelon: {
+    positive: "3D rendered Pixar-quality children's animation with soft subsurface scattering on skin, rounded chunky character design with appeal for young audiences, oversized expressive eyes with detailed reflections, bright candy-colored palette with high saturation, soft ambient occlusion for subtle depth, cheerful warm global illumination with soft shadows, toy-like proportions that feel huggable, smooth plastic-like materials, raytraced rendering quality",
+    reinforcement: "STYLE LOCK: 3D children's animation, Cocomelon/Pixar style, rounded toy-like characters, bright candy colors, soft 3D rendering",
+    antiStyle: "NOT a photograph, NOT photorealistic, NOT 2D, NOT anime, NOT dark or gritty. Children's 3D animation only",
+    negative: "photorealistic, photograph, 2D, anime, dark, gritty, noir, horror, realistic humans"
+  },
+  cinematic_picstory: {
+    positive: "Cinematic 3D CGI render matching Pixar Animation Studios or DreamWorks feature film quality, realistic subsurface scattering for skin and translucent materials, raytraced global illumination with accurate light bounces, volumetric fog and atmospheric effects, dramatic rim lighting for character separation, physically based rendering (PBR) with accurate material properties, detailed fabric and hair simulation, film color grading with rich contrast, IMAX-quality framing",
+    reinforcement: "STYLE LOCK: cinematic 3D CGI, Pixar/DreamWorks film quality, PBR rendering, raytraced lighting, 3D animated characters",
+    antiStyle: "NOT a photograph, NOT photorealistic, NOT 2D, NOT anime, NOT hand-drawn, NOT watercolor. Cinematic 3D CGI only",
+    negative: "photorealistic, photograph, 2D, flat, sketch, watercolor, anime"
+  },
+  oil_painting: {
+    positive: "Classical oil painting on textured linen canvas, visible impasto brushstrokes with thick paint application, chiaroscuro lighting technique with dramatic contrast between light and shadow, Rembrandt-inspired dramatic shadow and highlighted faces, rich warm umber and burnt sienna undertones, warm golden varnish glow, museum-quality fine art worthy of the Louvre, Renaissance composition using golden ratio",
+    reinforcement: "STYLE LOCK: oil painting, visible brushstrokes, canvas texture, impasto technique, warm varnish glow, Rembrandt lighting",
+    antiStyle: "NOT a photograph, NOT photorealistic, NOT 3D rendered, NOT anime, NOT cartoon, NOT digital art. Oil painting on canvas only",
+    negative: "photorealistic, photograph, 3D render, CGI, anime, cartoon, vector, digital art"
+  },
+  watercolor: {
+    positive: "Delicate transparent watercolor painting on cold-pressed Arches paper, visible paper grain texture showing through the paint, soft wet-on-wet color bleeding technique with organic edges, transparent luminous washes layered for atmospheric depth, gentle color gradients that flow naturally, white paper showing through for highlights, loose expressive brushwork, muted pastel palette with occasional vivid accent colors",
+    reinforcement: "STYLE LOCK: watercolor painting, visible paper texture, transparent washes, color bleeding edges, white paper showing through",
+    antiStyle: "NOT a photograph, NOT photorealistic, NOT 3D rendered, NOT anime, NOT cartoon, NOT oil painting. Watercolor on paper only",
+    negative: "photorealistic, photograph, 3D render, CGI, anime, cartoon, vector, oil painting"
+  },
+  comic_book: {
+    positive: "Bold American comic book art style with heavy black ink outlines and dynamic line weight variation, Ben-Day halftone dot shading for texture and tone, dynamic foreshortened perspective with dramatic angles, motion lines and speed lines for kinetic energy, dramatic chiaroscuro inking with deep blacks and bright highlights, saturated CMYK color palette, Jack Kirby-inspired dynamic composition, professional comic book illustration quality",
+    reinforcement: "STYLE LOCK: comic book art, heavy ink outlines, halftone dots, dynamic poses, CMYK colors, Jack Kirby energy",
+    antiStyle: "NOT a photograph, NOT photorealistic, NOT 3D rendered, NOT watercolor, NOT oil painting. Comic book ink art only",
+    negative: "photorealistic, photograph, 3D render, CGI, watercolor, oil painting, pastel"
   }
 };
 
@@ -309,7 +357,8 @@ ${sceneDirections}
    - FORBIDDEN: text, words, letters, numbers, charts, graphs, signs, readable content
    - Abstract concepts → PHYSICAL METAPHORS (financial decline → hourglass with last grains)
    - Documents → ONLY blurred with emotional context
-   - MUST end with: "ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image. masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography"
+   - - MUST end with the style reinforcement: "${styleConfig.reinforcement}. ${styleConfig.antiStyle}. ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image. masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography"
+   - The LAST 50 words of every prompt MUST reinforce the visual style — this is critical for consistent generation
 
 2. **animation_prompt** — 8-second motion direction:
    - Translate camera_movement into animation language
@@ -322,14 +371,13 @@ ${sceneDirections}
   "prompts": [
     {
       "scene_number": 1,
-      "image_prompt": "${promptPrefix}. [detailed prompt]... ABSOLUTELY NO text... masterpiece...",
+      "image_prompt": "${promptPrefix}. [detailed scene prompt]. ${styleConfig.reinforcement}. ${styleConfig.antiStyle}. ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image. masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography",
       "animation_prompt": "[motion direction]"
     }
   ]
 }
 
-✓ Begins with style prefix? ✓ 300+ chars? ✓ Shot type embedded? ✓ Lighting described? ✓ No text in image? ✓ Ends with quality markers?`;
-
+✓ Begins with style prefix? ✓ 300+ chars? ✓ Shot type embedded? ✓ Lighting described? ✓ No text in image? ✓ Ends with STYLE LOCK + anti-style + quality markers? ✓ Last 50 words reinforce the visual style?`;
       console.log(`🎨 Batch ${bIdx + 1}/${totalBatches}: scenes ${batchScenes[0].scene_number}-${batchScenes[batchScenes.length - 1].scene_number}...`);
 
       const result = await callGemini(prompt, 0.7, 16384);
@@ -362,7 +410,7 @@ ${sceneDirections}
             fallback += `${s.director.lighting}. Color palette: ${s.director.color_palette}. `;
             fallback += `${s.director.depth_of_field}. Mood: ${s.director.mood}. `;
           } else {
-            fallback += `Cinematic scene depicting: ${s.narration_text}. Professional composition. `;
+            fallback += `Cinematic scene depicting: ${s.narration_text}. Professional composition. ${styleConfig.reinforcement}. ${styleConfig.antiStyle}. `;
           }
 
           imagePrompt = validateAndEnhancePrompt(fallback, styleConfig, orientationConfig, s.scene_number);
