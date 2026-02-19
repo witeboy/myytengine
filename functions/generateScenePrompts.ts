@@ -1,136 +1,175 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // ══════════════════════════════════════════════════════════════════
-// SCENE PROMPT GENERATOR (v2)
+// SCENE PROMPT GENERATOR
 // ══════════════════════════════════════════════════════════════════
-// PURPOSE: Converts directorial scene breakdowns into image/animation prompts.
-// INPUT:   Scenes with status "breakdown_ready" + scene_blueprint on Project
-// OUTPUT:  Scenes updated with image_prompt + animation_prompt, status → "prompts_ready"
+// Pipeline: Script → Scene Breakdown → [THIS] → Image Gen → Animation
 //
-// Pipeline: Script → Scene Breakdown → [THIS FUNCTION] → Image Gen → Animation
+// Reads director notes from image_prompt field (DIRECTOR_NOTES: prefix)
+// Converts to production-ready image + animation prompts
+// All batches processed in a single call — no cross-call state
 // ══════════════════════════════════════════════════════════════════
 
 const BATCH_SIZE = 12; // Scenes per Gemini call
 
-async function callGemini(prompt, temperature = 0.7) {
+function repairJSON(str) {
+  return str
+    .replace(/[\x00-\x1F\x7F]/g, c => c === '\n' || c === '\r' || c === '\t' ? c : ' ')
+    .replace(/,\s*([}\]])/g, '$1')
+    .replace(/(["\w\d])\s*\n\s*"/g, '$1, "');
+}
+
+async function callGemini(prompt, temperature = 0.7, maxTokens = 16384, retries = 3) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: 16384, responseMimeType: "application/json" }
-      })
-    }
-  );
 
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(`Gemini error: ${err.error?.message || response.status}`);
-  }
-
-  const data = await response.json();
-  if (!data.candidates?.length) throw new Error("No candidates from Gemini");
-  const rawText = data.candidates[0].content.parts[0].text;
-
-  try {
-    return JSON.parse(rawText);
-  } catch (e) {
-    console.log("JSON parse failed, attempting recovery...");
-    const lastBrace = rawText.lastIndexOf('}');
-    if (lastBrace === -1) throw new Error("Cannot recover JSON from Gemini response");
-    const trimmed = rawText.substring(0, lastBrace + 1);
-    const attempts = [trimmed + ']}', trimmed + '}]}', trimmed];
-    for (const attempt of attempts) {
-      try {
-        const parsed = JSON.parse(attempt);
-        if (parsed.prompts && Array.isArray(parsed.prompts)) {
-          console.log(`Recovered ${parsed.prompts.length} prompts from truncated JSON`);
-          return parsed;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature, maxOutputTokens: maxTokens, responseMimeType: "application/json" }
+          })
         }
-      } catch (_) {}
+      );
+
+      if (response.status === 429) {
+        const waitMs = Math.pow(2, attempt + 1) * 5000;
+        console.log(`Rate limited, waiting ${waitMs / 1000}s...`);
+        await new Promise(r => setTimeout(r, waitMs));
+        continue;
+      }
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(`Gemini ${response.status}: ${err.error?.message || "Unknown"}`);
+      }
+
+      const data = await response.json();
+      if (!data.candidates?.length) throw new Error("No candidates from Gemini");
+      const rawText = data.candidates[0].content.parts[0].text;
+
+      // 3-stage JSON parsing
+      try { return JSON.parse(rawText); } catch (_) {}
+      try { return JSON.parse(repairJSON(rawText)); } catch (_) {}
+
+      let jsonStr = rawText;
+      if (rawText.includes("```json")) jsonStr = rawText.split("```json")[1].split("```")[0].trim();
+      else if (rawText.includes("```")) jsonStr = rawText.split("```")[1].split("```")[0].trim();
+      try { return JSON.parse(repairJSON(jsonStr)); } catch (_) {}
+
+      const objMatch = jsonStr.match(/\{[\s\S]*\}/);
+      if (objMatch) { try { return JSON.parse(objMatch[0]); } catch (_) {} }
+
+      // Truncation recovery
+      const lastBrace = rawText.lastIndexOf('}');
+      if (lastBrace > 0) {
+        const trimmed = rawText.substring(0, lastBrace + 1);
+        for (const suffix of [']}', '}]}', '']) {
+          try {
+            const parsed = JSON.parse(trimmed + suffix);
+            if (parsed.prompts && Array.isArray(parsed.prompts)) return parsed;
+          } catch (_) {}
+        }
+      }
+
+      throw new Error("Failed to parse Gemini JSON after recovery");
+    } catch (error) {
+      if (attempt === retries - 1) throw error;
+      console.warn(`Attempt ${attempt + 1} failed: ${error.message}, retrying...`);
+      await new Promise(r => setTimeout(r, 2000));
     }
-    throw new Error("Failed to parse Gemini JSON response after recovery attempts");
   }
 }
 
 // ══════════════════════════════════════════════════════════════════
-// PREMIUM VISUAL STYLE MAPPING
+// EXTRACT DIRECTOR NOTES FROM image_prompt
 // ══════════════════════════════════════════════════════════════════
+
+function extractDirectorNotes(imagePrompt) {
+  if (!imagePrompt) return null;
+  if (imagePrompt.startsWith('DIRECTOR_NOTES:')) {
+    try {
+      return JSON.parse(imagePrompt.substring('DIRECTOR_NOTES:'.length));
+    } catch (_) {
+      console.warn('Failed to parse director notes from image_prompt');
+      return null;
+    }
+  }
+  return null;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// VISUAL STYLE MAP
+// ══════════════════════════════════════════════════════════════════
+
 const styleMap = {
   cinematic_realistic: {
-    positive: "Cinematic film still shot on ARRI Alexa 65 with anamorphic Panavision lenses, beautiful lens flare and chromatic aberration, shallow depth of field f/1.4 with creamy bokeh, dramatic three-point lighting with hard key light and soft fill, strong rim light separation, color graded with professional teal and orange LUT, subtle Kodak Vision3 film grain texture, volumetric god rays through atmosphere, lens breathing on focus pulls, Hollywood blockbuster cinematography, photorealistic rendering, 8K resolution",
-    negative: "cartoon, anime, illustration, painting, drawing, sketch, 3D render, CGI, video game graphics, cel shaded, flat colors, clipart, comic book, manga, stylized, non-photorealistic, amateur photography, smartphone photo, low quality, blurry, distorted, deformed, oversaturated, artificial looking"
+    positive: "Cinematic film still shot on ARRI Alexa 65 with anamorphic Panavision lenses, beautiful lens flare and chromatic aberration, shallow depth of field f/1.4 with creamy bokeh, dramatic three-point lighting with hard key light and soft fill, strong rim light separation, color graded with professional teal and orange LUT, subtle Kodak Vision3 film grain texture, volumetric god rays through atmosphere, Hollywood blockbuster cinematography, photorealistic rendering, 8K resolution",
+    negative: "cartoon, anime, illustration, painting, drawing, sketch, 3D render, CGI, video game, cel shaded, flat colors, clipart, comic book, manga, stylized, amateur, low quality, blurry, distorted, deformed, oversaturated"
   },
   photorealistic_4k: {
-    positive: "Ultra-photorealistic DSLR photograph shot on Canon EOS R5 with RF 85mm f/1.2 L lens, razor-sharp focus with incredible detail, natural ambient lighting with soft diffused quality, professional color grading with accurate skin tones, editorial photography style for National Geographic or Vogue, visible skin texture with pores and fine details, accurate physically-based shadows and highlights, real-world proportions and anatomy, zero AI artifacts, 8K RAW image quality, museum-grade fine art photography",
-    negative: "cartoon, anime, illustration, CGI, 3D render, painting, digital art, artistic interpretation, stylized, unrealistic, soft focus, beauty filter, over-processed, illustration style, non-photographic, video game, synthetic, artificial, heavily edited, HDR overdone"
+    positive: "Ultra-photorealistic DSLR photograph shot on Canon EOS R5 with RF 85mm f/1.2 L lens, razor-sharp focus, natural ambient lighting, professional color grading, editorial photography for National Geographic, visible skin texture and pores, accurate shadows and highlights, real-world proportions, zero AI artifacts, 8K RAW quality",
+    negative: "cartoon, anime, CGI, 3D render, painting, digital art, stylized, unrealistic, soft focus, beauty filter, over-processed, HDR overdone"
   },
   anime: {
-    positive: "High-quality anime illustration combining Studio Ghibli's whimsy with modern anime aesthetic, vibrant saturated colors with rich tones, clean precise linework with consistent line weight, cel-shaded with soft airbrushed gradients, expressive detailed eyes with multiple highlights and reflections, detailed hair strands with natural flow and movement, colorful detailed background art with atmospheric perspective, well-composed manga panel layout with rule of thirds, professional anime production quality like top-tier seasonal anime",
-    negative: "photorealistic, live action, photograph, 3D render, western cartoon style, rough sketch, amateur coloring, flat backgrounds, inconsistent art style, off-model characters, poorly drawn anatomy, rushed animation, low budget anime, chibi, super deformed"
+    positive: "High-quality anime illustration, Studio Ghibli meets modern anime, vibrant saturated colors, clean linework, cel-shaded with soft gradients, expressive detailed eyes, detailed hair with natural flow, colorful background art with atmospheric perspective, professional anime production quality",
+    negative: "photorealistic, live action, photograph, 3D render, western cartoon, rough sketch, inconsistent style, off-model, chibi, super deformed"
   }
 };
 
 // ══════════════════════════════════════════════════════════════════
-// PROMPT QUALITY VALIDATION
+// PROMPT VALIDATION
 // ══════════════════════════════════════════════════════════════════
+
 function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, sceneNumber) {
   let enhanced = imagePrompt;
-  const issues = [];
 
-  // Strip any pixel dimension strings — image gen handles dimensions via API params
+  // Strip pixel dimensions
   enhanced = enhanced.replace(/\b\d{3,4}\s*[x×]\s*\d{3,4}\s*(pixels?|px)?\s*\.?\s*/gi, '');
 
-  if (enhanced.length < 150) {
-    issues.push(`Scene ${sceneNumber}: Prompt too short (${enhanced.length} chars)`);
-  }
-
-  // Ensure style directive is present
-  const styleKeywords = styleConfig.positive.substring(0, 50).toLowerCase();
-  if (!enhanced.toLowerCase().includes(styleKeywords.substring(0, 20))) {
-    issues.push(`Scene ${sceneNumber}: Missing style directive`);
+  // Ensure style prefix
+  const styleCheck = styleConfig.positive.substring(0, 30).toLowerCase();
+  if (!enhanced.toLowerCase().includes(styleCheck.substring(0, 20))) {
     enhanced = `${styleConfig.positive}. ${enhanced}`;
   }
 
-  // Ensure composition hint for orientation (no pixel dimensions — just framing language)
-  const compositionHint = orientationConfig.format === 'portrait'
+  // Ensure composition hint
+  const compHint = orientationConfig.format === 'portrait'
     ? 'vertical 9:16 frame, tall vertical composition'
     : 'widescreen 16:9 cinematic frame, wide horizontal composition';
 
   if (orientationConfig.format === 'portrait') {
-    if (!enhanced.toLowerCase().includes('portrait') && !enhanced.toLowerCase().includes('vertical') && !enhanced.includes('9:16')) {
-      issues.push(`Scene ${sceneNumber}: Missing portrait composition hint`);
+    if (!/portrait|vertical|9:16/i.test(enhanced)) {
       enhanced = enhanced.replace(/landscape|horizontal|widescreen|16:?9/gi, '');
-      enhanced = `${compositionHint}. ${enhanced}`;
+      enhanced = `${compHint}. ${enhanced}`;
     }
   } else {
-    if (!enhanced.toLowerCase().includes('landscape') && !enhanced.toLowerCase().includes('widescreen') && !enhanced.includes('16:9')) {
-      issues.push(`Scene ${sceneNumber}: Missing landscape composition hint`);
+    if (!/landscape|widescreen|16:9/i.test(enhanced)) {
       enhanced = enhanced.replace(/portrait|vertical|9:?16/gi, '');
-      enhanced = `${compositionHint}. ${enhanced}`;
+      enhanced = `${compHint}. ${enhanced}`;
     }
   }
 
-  if (!enhanced.toLowerCase().includes('no text')) {
-    issues.push(`Scene ${sceneNumber}: Missing "no text" rule`);
+  // Ensure no-text rule
+  if (!/no text/i.test(enhanced)) {
     enhanced += ', ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image';
   }
 
-  const hasQuality = /masterpiece|professional|8k|award/i.test(enhanced);
-  if (!hasQuality) {
-    issues.push(`Scene ${sceneNumber}: Missing quality markers`);
+  // Ensure quality markers
+  if (!/masterpiece|professional|8k|award/i.test(enhanced)) {
     enhanced += ', masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography';
-  }
-
-  if (issues.length > 0) {
-    console.warn(`Prompt quality issues:\n${issues.join('\n')}`);
   }
 
   return enhanced;
 }
+
+// ══════════════════════════════════════════════════════════════════
+// MAIN — ALL BATCHES IN ONE CALL
+// ══════════════════════════════════════════════════════════════════
 
 Deno.serve(async (req) => {
   try {
@@ -138,54 +177,27 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, batch_index } = await req.json();
-    const currentBatch = batch_index || 0;
+    const { project_id } = await req.json();
 
-    // ── Fetch project ──────────────────────────────────────────────
-    const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
+    // ── Fetch project + scenes (parallel) ──────────────────────────
+    const [projects, allScenes] = await Promise.all([
+      base44.asServiceRole.entities.Projects.filter({ id: project_id }),
+      base44.asServiceRole.entities.Scenes.filter({ project_id })
+    ]);
+
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-    // ── Load blueprint ─────────────────────────────────────────────
-    let blueprint;
-    try {
-      blueprint = JSON.parse(project.scene_blueprint);
-    } catch (e) {
-      return Response.json({
-        error: 'Scene blueprint not found. Run scene breakdown first.'
-      }, { status: 400 });
-    }
-
-    const storyAnalysis = blueprint.story_analysis;
-
-    // ── Fetch scenes that need prompts ─────────────────────────────
-    const allScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
+    // ── Find scenes needing prompts ────────────────────────────────
     const pendingScenes = allScenes
       .filter(s => s.status === 'breakdown_ready')
       .sort((a, b) => a.scene_number - b.scene_number);
 
     if (pendingScenes.length === 0) {
       return Response.json({
-        success: true,
-        done: true,
+        success: true, done: true,
         message: 'All scenes already have prompts.',
         total_scenes: allScenes.length
-      });
-    }
-
-    // ── Batch the pending scenes ───────────────────────────────────
-    const totalBatches = Math.ceil(pendingScenes.length / BATCH_SIZE);
-    const batchScenes = pendingScenes.slice(
-      currentBatch * BATCH_SIZE,
-      (currentBatch + 1) * BATCH_SIZE
-    );
-
-    if (batchScenes.length === 0) {
-      return Response.json({
-        success: true,
-        done: true,
-        total_scenes: allScenes.length,
-        total_batches: totalBatches
       });
     }
 
@@ -199,15 +211,15 @@ Deno.serve(async (req) => {
       orientationConfig = {
         format: 'portrait',
         directive: "PORTRAIT VERTICAL 9:16 format, tall vertical framing",
-        composition: "Compose for VERTICAL 9:16 mobile frame: use tall vertical compositions with strong vertical leading lines, center subjects in the vertical frame with headroom and foot room, close-up and medium shots work best for vertical format, use vertical depth with foreground/midground/background elements stacked vertically, avoid wide horizontal elements that get cropped",
-        animation: "vertical 9:16 smartphone frame — prefer tilt up/down camera movements, vertical reveals and wipes, close-up push-ins and pull-outs, vertical parallax scrolling effects, portrait-oriented motion"
+        composition: "Compose for VERTICAL 9:16 mobile frame: tall compositions, center subjects, close-up and medium shots, vertical depth stacking",
+        animation: "vertical 9:16 — tilt up/down, vertical reveals, close-up push-ins, portrait motion"
       };
     } else {
       orientationConfig = {
         format: 'landscape',
-        directive: "LANDSCAPE HORIZONTAL 16:9 widescreen format, wide cinematic framing, fill entire frame edge to edge",
-        composition: "Compose for WIDESCREEN 16:9 cinematic frame: use wide establishing shots with panoramic depth, apply rule of thirds with subjects placed left/right for negative space, utilize horizontal leading lines and lateral composition, create depth with foreground/midground/background layers spread horizontally, embrace wide cinematic framing with breathing room on sides",
-        animation: "widescreen 16:9 cinematic frame — prefer horizontal pans and tracking shots, dolly movements forward/backward, wide-angle crane shots, lateral parallax with depth, horizontal reveals and wipes"
+        directive: "LANDSCAPE HORIZONTAL 16:9 widescreen, wide cinematic framing",
+        composition: "Compose for WIDESCREEN 16:9: wide establishing shots, rule of thirds, horizontal leading lines, foreground/midground/background depth",
+        animation: "widescreen 16:9 — horizontal pans, dolly forward/back, crane shots, lateral parallax"
       };
     }
 
@@ -218,30 +230,47 @@ Deno.serve(async (req) => {
     if (project.character_descriptions) {
       try { characters = JSON.parse(project.character_descriptions); } catch (_) {}
     }
-
     const characterBlock = characters.length > 0
-      ? `**ESTABLISHED CHARACTERS (embed FULL physical description into every prompt where they appear):**\n${characters.map(c => `• ${c.name}: ${c.visual_description || c.description}`).join('\n')}`
+      ? `**CHARACTERS (embed FULL physical description into every prompt where they appear):**\n${characters.map(c => `• ${c.name}: ${c.visual_description || c.description || ''}`).join('\n')}`
       : '';
 
-    // ── Build the directorial data for this batch ──────────────────
-    const scenesWithDirectorNotes = batchScenes.map(scene => {
-      // Find matching blueprint data
-      const blueprintScene = blueprint.scenes.find(b => b.scene_number === scene.scene_number);
-      return {
-        scene_number: scene.scene_number,
-        scene_id: scene.id,
-        narration_text: scene.narration_text,
-        director: blueprintScene || null
-      };
-    });
+    // ── Try to load story analysis (optional — enhances quality) ───
+    let storyContext = '';
+    try {
+      const blueprint = JSON.parse(project.scene_blueprint);
+      const sa = blueprint.story_analysis;
+      storyContext = `**STORY:** Theme: ${sa.central_theme} | Visual World: ${sa.visual_world} | Color Arc: ${sa.color_arc} | Motifs: ${JSON.stringify(sa.recurring_visual_motifs)}`;
+    } catch (_) {
+      storyContext = `**STORY:** Topic: "${project.name}" | Niche: ${project.niche || 'general'}`;
+    }
 
-    // ── Build Gemini prompt ────────────────────────────────────────
-    const sceneDirections = scenesWithDirectorNotes.map(s => {
-      if (!s.director) {
-        return `Scene ${s.scene_number}: (No director notes — generate based on narration)
-  Narration: "${s.narration_text}"`;
-      }
-      return `Scene ${s.scene_number}:
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`🎨 PROMPT GENERATION — ${pendingScenes.length} scenes`);
+    console.log(`🖼️ Style: ${visualStyle} | 📐 ${orientation}`);
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+
+    // ── Process in batches ──────────────────────────────────────────
+    let totalPrompts = 0;
+    let totalWarnings = 0;
+    const totalBatches = Math.ceil(pendingScenes.length / BATCH_SIZE);
+
+    for (let bIdx = 0; bIdx < totalBatches; bIdx++) {
+      const batchScenes = pendingScenes.slice(bIdx * BATCH_SIZE, (bIdx + 1) * BATCH_SIZE);
+      if (batchScenes.length === 0) break;
+
+      if (bIdx > 0) await new Promise(r => setTimeout(r, 2000)); // Rate limit buffer
+
+      // Build scene directions from director notes stored on each scene
+      const scenesWithNotes = batchScenes.map(scene => {
+        const director = extractDirectorNotes(scene.image_prompt);
+        return { scene_number: scene.scene_number, scene_id: scene.id, narration_text: scene.narration_text, director };
+      });
+
+      const sceneDirections = scenesWithNotes.map(s => {
+        if (!s.director) {
+          return `Scene ${s.scene_number}: (No director notes — generate from narration)\n  Narration: "${s.narration_text}"`;
+        }
+        return `Scene ${s.scene_number}:
   Narration: "${s.narration_text}"
   Visual Concept: ${s.director.visual_concept}
   Shot Type: ${s.director.shot_type}
@@ -250,200 +279,135 @@ Deno.serve(async (req) => {
   Lighting: ${s.director.lighting}
   Color Palette: ${s.director.color_palette}
   Mood: ${s.director.mood}
-  Depth of Field: ${s.director.depth_of_field}
-  Niche Visual Element: ${s.director.niche_visual_element || 'N/A'}
-  Continuity Bridge: ${s.director.continuity_bridge || 'N/A'}
-  Emotional Intensity: ${s.director.emotional_intensity || 0.5}`;
-    }).join('\n\n');
+  DOF: ${s.director.depth_of_field}
+  Niche Element: ${s.director.niche_visual_element || 'N/A'}
+  Continuity: ${s.director.continuity_bridge || 'N/A'}
+  Intensity: ${s.director.emotional_intensity || 0.5}`;
+      }).join('\n\n');
 
-    const prompt = `
-**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
-**MISSION: Convert Director's Scene Notes into Production-Ready Image & Animation Prompts**
-**━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━**
+      const prompt = `**MISSION: Convert Director's Notes → Production-Ready Image & Animation Prompts**
 
-You are a visual effects supervisor translating a director's vision into precise technical prompts for AI image generation.
-
-**STORY CONTEXT:**
-- Topic: "${project.name}"
-- Central Theme: ${storyAnalysis.central_theme}
-- Visual World: ${storyAnalysis.visual_world}
-- Color Arc: ${storyAnalysis.color_arc}
-- Recurring Motifs: ${JSON.stringify(storyAnalysis.recurring_visual_motifs)}
+${storyContext}
 
 ${characterBlock}
 
-**VISUAL STYLE:** ${visualStyle}
-**ORIENTATION:** ${orientationConfig.format} (${orientationConfig.directive})
+**STYLE:** ${visualStyle} | **ORIENTATION:** ${orientationConfig.format}
 
-**━━━━ DIRECTOR'S SCENE NOTES ━━━━**
-
+**DIRECTOR'S SCENE NOTES:**
 ${sceneDirections}
 
-**━━━━ YOUR TASK ━━━━**
+**YOUR TASK — for EACH scene produce:**
 
-For EACH scene above, produce:
-
-1. **image_prompt** — A single, dense, technical prompt for AI image generation. Rules:
+1. **image_prompt** — Dense technical prompt for AI image generation:
    - MUST begin with: "${promptPrefix}."
-   - Translate the director's visual concept into a SPECIFIC, DETAILED image description (300+ chars)
-   - Embed the exact shot type, camera angle, and depth of field from the director's notes
-   - Embed the exact lighting setup described
-   - Apply the color palette as color grading direction
-   - If characters appear, embed their FULL physical description inline (not just their name)
+   - Translate visual concept into SPECIFIC, DETAILED image (300+ chars)
+   - Embed exact shot type, camera angle, DOF from director notes
+   - Embed exact lighting setup
+   - Apply color palette as color grading
+   - If characters appear → embed FULL physical description (not just name)
    - ${orientationConfig.composition}
-   - ABSOLUTELY FORBIDDEN: Any text, words, letters, numbers, charts, graphs, signs, or readable content
-   - Transform any abstract concepts into PHYSICAL VISUAL METAPHORS:
-     * Financial decline → hourglass with last grains falling
-     * Loneliness → single place setting at a table for six
-     * Hope → first crack of light through dark curtains
-     * Burden → heavy chains on weathered hands
-   - If documents must appear: ONLY blurred with emotional context (worried hands, scattered pages, red ink stains)
+   - FORBIDDEN: text, words, letters, numbers, charts, graphs, signs, readable content
+   - Abstract concepts → PHYSICAL METAPHORS (financial decline → hourglass with last grains)
+   - Documents → ONLY blurred with emotional context
    - MUST end with: "ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image. masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography"
 
-2. **animation_prompt** — Motion direction for 8-second video animation. Rules:
-   - Translate the director's camera_movement into animation language
-   - Frame format: ${orientationConfig.animation}
-   - Include: camera movement direction + speed, atmospheric motion (particles, fog, light shifts), subject micro-motion (breathing, hair, fabric), depth of field changes
-   - Match the emotional intensity: low intensity = slow/subtle, high intensity = dynamic/dramatic
-   - Create smooth motion that doesn't distract from narration
+2. **animation_prompt** — 8-second motion direction:
+   - Translate camera_movement into animation language
+   - Format: ${orientationConfig.animation}
+   - Include: camera motion + speed, atmospheric motion (particles, fog, light), subject micro-motion (breathing, hair), DOF changes
+   - Low intensity = slow/subtle, high intensity = dynamic/dramatic
 
-**RESPONSE FORMAT:**
+**RESPONSE:**
 {
   "prompts": [
     {
       "scene_number": 1,
-      "image_prompt": "${promptPrefix}. [full detailed prompt]... ABSOLUTELY NO text... masterpiece quality...",
-      "animation_prompt": "[detailed animation direction]"
+      "image_prompt": "${promptPrefix}. [detailed prompt]... ABSOLUTELY NO text... masterpiece...",
+      "animation_prompt": "[motion direction]"
     }
   ]
 }
 
-**QUALITY CHECKLIST (verify EACH prompt):**
-✓ Begins with style prefix? 
-✓ 300+ characters?
-✓ Specific shot type embedded?
-✓ Lighting described technically?
-✓ Color palette applied?
-✓ Characters fully described (not just named)?
-✓ No text/words/numbers in the image?
-✓ Ends with quality markers?
-✓ Abstract concepts converted to physical metaphors?
-✓ Animation matches emotional intensity?
-`;
+✓ Begins with style prefix? ✓ 300+ chars? ✓ Shot type embedded? ✓ Lighting described? ✓ No text in image? ✓ Ends with quality markers?`;
 
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`🎨 PROMPT GENERATION — Batch ${currentBatch + 1}/${totalBatches}`);
-    console.log(`📍 Converting scenes ${batchScenes[0].scene_number}-${batchScenes[batchScenes.length - 1].scene_number}`);
-    console.log(`🖼️ Style: ${visualStyle} | 📐 Orientation: ${orientation}`);
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`🎨 Batch ${bIdx + 1}/${totalBatches}: scenes ${batchScenes[0].scene_number}-${batchScenes[batchScenes.length - 1].scene_number}...`);
 
-    const result = await callGemini(prompt, 0.7);
+      const result = await callGemini(prompt, 0.7, 16384);
 
-    // ── Update scenes with generated prompts ───────────────────────
-    let promptsApplied = 0;
-    let qualityWarnings = 0;
-
-    if (result.prompts && Array.isArray(result.prompts)) {
-      for (const generated of result.prompts) {
-        // Find the matching scene from our batch
-        const matchingScene = scenesWithDirectorNotes.find(
-          s => s.scene_number === generated.scene_number
-        );
-
-        if (!matchingScene) {
-          console.warn(`⚠️ Generated prompt for scene ${generated.scene_number} has no matching scene in batch`);
-          continue;
-        }
-
-        // Validate and enhance the image prompt
-        let imagePrompt = generated.image_prompt || "";
-        const enhancedPrompt = validateAndEnhancePrompt(
-          imagePrompt,
-          styleConfig,
-          orientationConfig,
-          generated.scene_number
-        );
-
-        if (enhancedPrompt !== imagePrompt) {
-          qualityWarnings++;
-          console.warn(`⚠️ Scene ${generated.scene_number} prompt was enhanced/corrected`);
-        }
-
-        const animationPrompt = generated.animation_prompt
-          || "slow gentle camera movement forward, atmospheric haze, subtle subject breathing, shallow depth of field";
-
-        // Update the scene record
-        await base44.asServiceRole.entities.Scenes.update(matchingScene.scene_id, {
-          image_prompt: enhancedPrompt,
-          animation_prompt: animationPrompt,
-          status: "prompts_ready"
-        });
-
-        promptsApplied++;
+      if (!result.prompts || !Array.isArray(result.prompts)) {
+        console.error(`Batch ${bIdx + 1} returned no prompts array`);
+        continue;
       }
-    }
 
-    // ── Handle any scenes that didn't get prompts (safety net) ─────
-    for (const s of scenesWithDirectorNotes) {
-      const wasProcessed = result.prompts?.some(p => p.scene_number === s.scene_number);
-      if (!wasProcessed) {
-        console.warn(`⚠️ Scene ${s.scene_number} missing from Gemini response — generating fallback`);
+      // Update scenes with prompts (parallel within batch)
+      const updatePromises = scenesWithNotes.map(async (s) => {
+        const generated = result.prompts.find(p => p.scene_number === s.scene_number);
 
-        const director = s.director;
-        let fallbackPrompt = `${promptPrefix}. `;
+        let imagePrompt, animationPrompt;
 
-        if (director) {
-          fallbackPrompt += `${director.shot_type}. ${director.visual_concept}. `;
-          fallbackPrompt += `${director.lighting}. Color palette: ${director.color_palette}. `;
-          fallbackPrompt += `${director.depth_of_field}. Mood: ${director.mood}. `;
+        if (generated) {
+          imagePrompt = validateAndEnhancePrompt(
+            generated.image_prompt || '', styleConfig, orientationConfig, s.scene_number
+          );
+          animationPrompt = generated.animation_prompt
+            || "slow gentle camera movement forward, atmospheric haze, subtle breathing, shallow DOF";
         } else {
-          fallbackPrompt += `Cinematic scene depicting the narration. Professional composition. `;
+          // Fallback — build from director notes
+          console.warn(`⚠️ Scene ${s.scene_number} missing from response — building fallback`);
+          totalWarnings++;
+
+          let fallback = `${promptPrefix}. `;
+          if (s.director) {
+            fallback += `${s.director.shot_type}. ${s.director.visual_concept}. `;
+            fallback += `${s.director.lighting}. Color palette: ${s.director.color_palette}. `;
+            fallback += `${s.director.depth_of_field}. Mood: ${s.director.mood}. `;
+          } else {
+            fallback += `Cinematic scene depicting: ${s.narration_text}. Professional composition. `;
+          }
+
+          imagePrompt = validateAndEnhancePrompt(fallback, styleConfig, orientationConfig, s.scene_number);
+          animationPrompt = s.director?.camera_movement
+            || "slow gentle camera movement forward, atmospheric haze, subtle breathing, shallow DOF";
         }
 
-        fallbackPrompt += 'ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image. masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography';
-
-        const enhancedFallback = validateAndEnhancePrompt(
-          fallbackPrompt, styleConfig, orientationConfig, s.scene_number
-        );
-
-        await base44.asServiceRole.entities.Scenes.update(s.scene_id, {
-          image_prompt: enhancedFallback,
-          animation_prompt: director?.camera_movement
-            || "slow gentle camera movement forward, atmospheric haze, subtle subject breathing, shallow depth of field",
-          status: "prompts_ready"
-        });
-
-        promptsApplied++;
-        qualityWarnings++;
-      }
-    }
-
-    // ── Check completion ───────────────────────────────────────────
-    const remainingAfterBatch = pendingScenes.length - batchScenes.length;
-    const isDone = remainingAfterBatch <= 0 || (currentBatch + 1) >= totalBatches;
-
-    if (isDone) {
-      await base44.asServiceRole.entities.Projects.update(project_id, {
-        status: "content_generation",
-        current_step: 5
+        try {
+          await base44.asServiceRole.entities.Scenes.update(s.scene_id, {
+            image_prompt: imagePrompt,
+            animation_prompt: animationPrompt,
+            status: "prompts_ready"
+          });
+          return true;
+        } catch (err) {
+          console.error(`Failed to update scene ${s.scene_number}:`, err.message);
+          return false;
+        }
       });
+
+      const results = await Promise.all(updatePromises);
+      const batchApplied = results.filter(Boolean).length;
+      totalPrompts += batchApplied;
+      console.log(`✓ Batch ${bIdx + 1}: ${batchApplied} prompts applied`);
     }
+
+    // ── Mark complete ──────────────────────────────────────────────
+    try {
+      await base44.asServiceRole.entities.Projects.update(project_id, {
+        status: "content_generation", current_step: 5
+      });
+    } catch (_) {}
 
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`✓ Prompt batch ${currentBatch + 1} complete`);
-    console.log(`📊 Prompts applied: ${promptsApplied} | Remaining: ${remainingAfterBatch}`);
-    if (qualityWarnings > 0) console.log(`⚠️ Quality warnings: ${qualityWarnings}`);
-    console.log(`${isDone ? '🎉 ALL PROMPTS GENERATED — Ready for image generation' : '⏭️ More batches remaining'}`);
+    console.log(`🎉 ALL PROMPTS GENERATED — ${totalPrompts} scenes ready for image gen`);
+    if (totalWarnings > 0) console.log(`⚠️ ${totalWarnings} fallback prompts used`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     return Response.json({
       success: true,
-      done: isDone,
-      batch_completed: currentBatch,
-      prompts_applied: promptsApplied,
-      remaining_scenes: remainingAfterBatch,
+      done: true,
+      prompts_applied: totalPrompts,
+      quality_warnings: totalWarnings,
       total_batches: totalBatches,
-      quality_warnings: qualityWarnings
+      total_scenes: allScenes.length
     });
 
   } catch (error) {
