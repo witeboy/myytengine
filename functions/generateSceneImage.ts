@@ -1,16 +1,11 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // ══════════════════════════════════════════════════════════════════
-// KIE AI UNIFIED IMAGE GENERATION ENGINE (v2)
+// KIE AI UNIFIED IMAGE GENERATION ENGINE (v2.1)
 // ══════════════════════════════════════════════════════════════════
 // Pipeline: Script → Scene Breakdown → Scene Prompts → [THIS] → Animation
 //
-// UPGRADED:
-// - Reads scene_blueprint for directorial metadata (mood, color, lighting)
-// - 1920x1080 (landscape) / 1080x1920 (portrait) target dimensions
-// - Character descriptions compatible with both old + new format
-// - Cleaner prompt assembly — no fake pixel dimensions in text
-// - Blueprint-informed prompt enrichment
+// SAFETY: Rejects scenes with raw DIRECTOR_NOTES (must run prompt gen first)
 // ══════════════════════════════════════════════════════════════════
 
 const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
@@ -68,7 +63,6 @@ async function kiePollResult(apiKey, taskId, maxWaitMs = 120000) {
 // IMAGE GENERATION MODELS
 // ══════════════════════════════════════════════════════════════════
 
-// Grok Imagine: aspect_ratio supports "2:3", "3:2", "1:1", "9:16", "16:9"
 async function generateWithGrok(apiKey, prompt, aspectRatio) {
   console.log(`[Grok Imagine] aspect_ratio: ${aspectRatio}`);
   const taskId = await kieCreateTask(apiKey, "grok-imagine/text-to-image", {
@@ -78,7 +72,6 @@ async function generateWithGrok(apiKey, prompt, aspectRatio) {
   return await kiePollResult(apiKey, taskId);
 }
 
-// Qwen: image_size supports "square", "square_hd", "portrait_4_3", "portrait_16_9", "landscape_4_3", "landscape_16_9"
 async function generateWithQwen(apiKey, prompt, orientation) {
   const imageSize = orientation === 'portrait' ? 'portrait_16_9' : 'landscape_16_9';
   console.log(`[Qwen] image_size: ${imageSize}`);
@@ -208,8 +201,7 @@ function sanitizePrompt(rawPrompt, styleKey, orientation) {
   prompt = prompt.replace(/"[^"]{3,}"/g, '');
   prompt = prompt.replace(/'[^']{3,}'/g, '');
 
-  // ── Strip fake pixel dimensions from prompt text ─────────────
-  // (These were injected by the old prompt generator and do nothing for Grok/Qwen)
+  // ── Strip fake pixel dimensions ──────────────────────────────
   prompt = prompt.replace(/\b\d{3,4}\s*[x×]\s*\d{3,4}\s*(pixels?|px)?\s*\.?\s*/gi, '');
 
   // ── Style-conflicting words ──────────────────────────────────
@@ -222,7 +214,7 @@ function sanitizePrompt(rawPrompt, styleKey, orientation) {
   const orientConfig = getOrientationConfig(orientation);
   prompt = prompt.replace(orientConfig.conflictTerms, '');
 
-  // ── Clean up whitespace artifacts ────────────────────────────
+  // ── Clean up whitespace ──────────────────────────────────────
   prompt = prompt.replace(/,\s*,/g, ',');
   prompt = prompt.replace(/\.\s*\./g, '.');
   prompt = prompt.replace(/\s{2,}/g, ' ');
@@ -232,10 +224,7 @@ function sanitizePrompt(rawPrompt, styleKey, orientation) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// BLUEPRINT ENRICHMENT
-// ══════════════════════════════════════════════════════════════════
-// Pulls directorial metadata from the scene_blueprint to strengthen
-// the image prompt with mood, color, and lighting intent.
+// BLUEPRINT ENRICHMENT (optional — bonus if field exists)
 // ══════════════════════════════════════════════════════════════════
 function getDirectorEnrichment(blueprint, sceneNumber) {
   if (!blueprint?.scenes) return null;
@@ -243,28 +232,16 @@ function getDirectorEnrichment(blueprint, sceneNumber) {
   if (!directorScene) return null;
 
   const parts = [];
-
-  if (directorScene.mood) {
-    parts.push(`Emotional mood: ${directorScene.mood}`);
-  }
-  if (directorScene.color_palette) {
-    parts.push(`Color grading: ${directorScene.color_palette}`);
-  }
-  if (directorScene.lighting && directorScene.lighting.length > 10) {
-    // Only add if the image_prompt doesn't already contain detailed lighting
-    parts.push(`Lighting: ${directorScene.lighting}`);
-  }
-  if (directorScene.niche_visual_element) {
-    parts.push(`Key visual element: ${directorScene.niche_visual_element}`);
-  }
+  if (directorScene.mood) parts.push(`Emotional mood: ${directorScene.mood}`);
+  if (directorScene.color_palette) parts.push(`Color grading: ${directorScene.color_palette}`);
+  if (directorScene.lighting && directorScene.lighting.length > 10) parts.push(`Lighting: ${directorScene.lighting}`);
+  if (directorScene.niche_visual_element) parts.push(`Key visual element: ${directorScene.niche_visual_element}`);
 
   return parts.length > 0 ? parts.join('. ') : null;
 }
 
 // ══════════════════════════════════════════════════════════════════
-// CHARACTER BLOCK BUILDER
-// ══════════════════════════════════════════════════════════════════
-// Handles both old format (c.description) and new format (c.visual_description)
+// CHARACTER BLOCK
 // ══════════════════════════════════════════════════════════════════
 function buildCharacterBlock(characterDescriptions) {
   if (!characterDescriptions) return '';
@@ -307,70 +284,68 @@ Deno.serve(async (req) => {
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
     if (!KIE_API_KEY) return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
 
-    // ── Fetch scene ────────────────────────────────────────────────
-    const scenes = await base44.asServiceRole.entities.Scenes.filter({ id: scene_id });
+    // ── Fetch scene + project (parallel) ───────────────────────────
+    const [scenes, ] = await Promise.all([
+      base44.asServiceRole.entities.Scenes.filter({ id: scene_id }),
+    ]);
     const scene = scenes[0];
     if (!scene) return Response.json({ error: 'Scene not found' }, { status: 404 });
 
-    // ── Fetch project ──────────────────────────────────────────────
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: scene.project_id });
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
+
+    // ══════════════════════════════════════════════════════════════
+    // SAFETY CHECK: Reject raw director notes
+    // ══════════════════════════════════════════════════════════════
+    if (scene.image_prompt?.startsWith('DIRECTOR_NOTES:')) {
+      console.error(`❌ Scene ${scene.scene_number} still has raw DIRECTOR_NOTES — run generateScenePrompts first`);
+      return Response.json({
+        error: 'Scene has raw director notes. Run generateScenePrompts first to convert them to image prompts.',
+        scene_number: scene.scene_number,
+        status: scene.status
+      }, { status: 400 });
+    }
+
+    if (!scene.image_prompt || scene.image_prompt.trim().length < 50) {
+      console.error(`❌ Scene ${scene.scene_number} has no valid image prompt (${scene.image_prompt?.length || 0} chars)`);
+      return Response.json({
+        error: 'Scene has no image prompt. Run generateScenePrompts first.',
+        scene_number: scene.scene_number
+      }, { status: 400 });
+    }
 
     const visualStyle = project.visual_style || 'cinematic_realistic';
     const orientation = project.orientation || 'landscape';
     const styleEntry = STYLE_MAP[visualStyle] || STYLE_MAP.cinematic_realistic;
     const orientConfig = getOrientationConfig(orientation);
 
-    // ── Load blueprint for director enrichment ─────────────────────
+    // ── Load blueprint for director enrichment (optional) ──────────
     let blueprint = null;
     if (project.scene_blueprint) {
       try { blueprint = JSON.parse(project.scene_blueprint); } catch (_) {}
     }
 
-    // ══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // PROMPT ASSEMBLY
-    // ══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
-    // Step 1: Sanitize the raw image prompt
-    const sanitizedPrompt = sanitizePrompt(
-      scene.image_prompt || '',
-      visualStyle,
-      orientation
-    );
-
-    // Step 2: Get director enrichment from blueprint
+    const sanitizedPrompt = sanitizePrompt(scene.image_prompt || '', visualStyle, orientation);
     const directorEnrichment = getDirectorEnrichment(blueprint, scene.scene_number);
-
-    // Step 3: Build character consistency block
     const characterBlock = buildCharacterBlock(project.character_descriptions);
-
-    // Step 4: No-text rule
     const noTextRule = "ABSOLUTELY NO text, NO words, NO letters, NO numbers, NO captions, NO watermarks, NO logos anywhere in the image. PURELY VISUAL.";
 
-    // Step 5: Assemble final prompt
-    // Structure: [Characters] [Style] [Composition] [Scene Prompt] [Director Color/Mood] [No-text]
     const promptParts = [];
-
-    if (characterBlock) {
-      promptParts.push(characterBlock);
-    }
-
+    if (characterBlock) promptParts.push(characterBlock);
     promptParts.push(styleEntry.directive);
     promptParts.push(orientConfig.compositionHint);
     promptParts.push(sanitizedPrompt);
-
-    if (directorEnrichment) {
-      promptParts.push(directorEnrichment);
-    }
-
+    if (directorEnrichment) promptParts.push(directorEnrichment);
     promptParts.push(noTextRule);
 
     let finalPrompt = promptParts.join('. ');
 
-    // Step 6: Trim if too long (Grok/Qwen have prompt limits)
     if (finalPrompt.length > 2000) {
-      // Keep the essentials: style + scene + no-text
       const essential = `${characterBlock ? characterBlock + '. ' : ''}${styleEntry.directive}. ${orientConfig.compositionHint}. ${sanitizedPrompt}. ${noTextRule}`;
       finalPrompt = essential.substring(0, 1950) + `. ${noTextRule}`;
     }
@@ -381,9 +356,9 @@ Deno.serve(async (req) => {
     if (directorEnrichment) console.log(`🎬 Director enrichment applied`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
-    // ══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // IMAGE GENERATION: GROK → GROK SIMPLIFIED → QWEN FALLBACK
-    // ══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     let imageUrl;
     let usedModel = '';
 
@@ -395,7 +370,7 @@ Deno.serve(async (req) => {
     } catch (grokErr) {
       console.log(`✗ Grok Imagine failed: ${grokErr.message}`);
 
-      // Attempt 2: Grok with stripped-down prompt (no character block, shorter)
+      // Attempt 2: Grok with stripped-down prompt
       try {
         const simplePrompt = `${styleEntry.directive}. ${orientConfig.compositionHint}. ${sanitizedPrompt}. ${noTextRule}`;
         imageUrl = await generateWithGrok(KIE_API_KEY, simplePrompt, orientConfig.aspectRatio);
@@ -415,11 +390,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // SAVE RESULTS
-    // ══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
-    // Save scene 1 as reference image for consistency checks
     if (scene.scene_number === 1 && !project.reference_image_url) {
       await base44.asServiceRole.entities.Projects.update(scene.project_id, {
         reference_image_url: imageUrl
