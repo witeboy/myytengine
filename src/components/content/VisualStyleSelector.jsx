@@ -15,6 +15,7 @@ const STYLES = [
   { id: 'watercolor', label: 'Watercolor', desc: 'Soft watercolor illustration style', emoji: '💧' },
   { id: 'comic_book', label: 'Comic Book', desc: 'Bold comic book panels with halftone effects', emoji: '💥' },
   { id: 'humpty_dumpty', label: 'Humpty Dumpty', desc: 'Minimalist stick-figure cartoon with circle heads & flat colors', emoji: '🥚' },
+  { id: 'harry_potter', label: 'Harry Potter', desc: 'Dark whimsical illustration with teal atmosphere & gothic charm', emoji: '🧙' },
 ];
 
 export default function VisualStyleSelector({ selectedStyle, onSelect }) {

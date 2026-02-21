@@ -27,6 +27,7 @@ const VISUAL_STYLES = [
   { value: 'watercolor', label: 'Watercolor' },
   { value: 'comic_book', label: 'Comic Book' },
   { value: 'humpty_dumpty', label: 'Humpty Dumpty' },
+  { value: 'harry_potter', label: 'Harry Potter' },
 ];
 
 export default function ContentRepurpose() {
