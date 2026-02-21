@@ -456,27 +456,69 @@ Write the complete narration script. Return ONLY the script text, no headers or 
         {/* Step 5: Pipeline Running */}
         {step === 5 && (
           <Card>
-            <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Wand2 className="w-5 h-5 text-emerald-600" /> Pipeline</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2"><Wand2 className="w-5 h-5 text-emerald-600" /> Pipeline</CardTitle>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <Badge variant="outline" className="text-[11px]">{selectedStyle.replace(/_/g, ' ')}</Badge>
+                <Badge variant="outline" className="text-[11px]">{selectedOrientation === 'portrait' ? '📱 Portrait' : '🖥️ Landscape'}</Badge>
+                <Badge variant="outline" className="text-[11px]">{newTitle || analysis?.title}</Badge>
+              </div>
+            </CardHeader>
             <CardContent className="space-y-4">
+              {/* Pipeline Steps Tracker */}
+              <div className="space-y-2">
+                {[
+                  { key: 'project', label: 'Create Project', icon: '📁' },
+                  { key: 'script', label: 'Save Script', icon: '📝' },
+                  { key: 'voiceover', label: 'Generate Voiceover', icon: '🎙️' },
+                  { key: 'breakdown', label: 'Scene Breakdown', icon: '🎬' },
+                  { key: 'prompts', label: 'Visual Prompts', icon: '🖌️' },
+                  { key: 'images', label: 'Generate Images', icon: '🖼️' },
+                ].map((s, i) => {
+                  const currentIdx =
+                    pipelineStep.includes('Creating') ? 0 :
+                    pipelineStep.includes('Saving') ? 1 :
+                    pipelineStep.includes('voiceover') ? 2 :
+                    pipelineStep.includes('Breaking') ? 3 :
+                    pipelineStep.includes('visual prompts') || pipelineStep.includes('Converting') ? 4 :
+                    pipelineStep.includes('image') || pipelineStep.includes('Generating image') ? 5 :
+                    pipelineStep.includes('complete') ? 6 : -1;
+
+                  const isDone = i < currentIdx || (!loading && pipelineStep.includes('complete'));
+                  const isActive = i === currentIdx && loading;
+
+                  return (
+                    <div key={s.key} className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${
+                      isDone ? 'bg-green-50 text-green-700' :
+                      isActive ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
+                      'bg-gray-50 text-gray-400'
+                    }`}>
+                      {isDone ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
+                      ) : isActive ? (
+                        <Loader2 className="w-4 h-4 animate-spin text-emerald-600 flex-shrink-0" />
+                      ) : (
+                        <span className="w-4 h-4 flex-shrink-0 text-center text-xs">{s.icon}</span>
+                      )}
+                      <span className="font-medium">{s.label}</span>
+                      {isActive && s.key === 'images' && sceneCount > 0 && (
+                        <span className="ml-auto text-xs">{imagesDone}/{sceneCount}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
               {loading && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
-                  <div className="flex items-center gap-3 mb-2">
-                    <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
-                    <p className="text-sm font-medium text-emerald-800">{pipelineStep}</p>
-                  </div>
-                  <Progress value={
-                    pipelineStep.includes('Creating') ? 5 :
-                    pipelineStep.includes('Saving') ? 10 :
-                    pipelineStep.includes('voiceover') ? 20 :
-                    pipelineStep.includes('Breaking') ? 35 :
-                    pipelineStep.includes('visual prompts') ? 50 :
-                    pipelineStep.includes('image') ? 50 + (imagesDone / Math.max(sceneCount, 1)) * 45 :
-                    pipelineStep.includes('complete') ? 100 : 30
-                  } className="h-2" />
-                  {sceneCount > 0 && pipelineStep.includes('image') && (
-                    <p className="text-xs text-gray-500 mt-1">{imagesDone}/{sceneCount} images generated</p>
-                  )}
-                </div>
+                <Progress value={
+                  pipelineStep.includes('Creating') ? 5 :
+                  pipelineStep.includes('Saving') ? 10 :
+                  pipelineStep.includes('voiceover') ? 20 :
+                  pipelineStep.includes('Breaking') ? 35 :
+                  pipelineStep.includes('visual prompts') || pipelineStep.includes('Converting') ? 50 :
+                  pipelineStep.includes('image') ? 50 + (imagesDone / Math.max(sceneCount, 1)) * 45 :
+                  pipelineStep.includes('complete') ? 100 : 30
+                } className="h-2" />
               )}
 
               {!loading && pipelineStep.includes('complete') && (
@@ -484,7 +526,7 @@ Write the complete narration script. Return ONLY the script text, no headers or 
                   <CheckCircle2 className="w-8 h-8 text-green-600 mx-auto mb-2" />
                   <p className="font-medium text-green-800">Pipeline Complete!</p>
                   <p className="text-xs text-green-600 mt-1">
-                    {sceneCount} scenes created with images. Open the full editor to generate videos and continue.
+                    {sceneCount} scenes created with images. Open the full editor to continue.
                   </p>
                 </div>
               )}
