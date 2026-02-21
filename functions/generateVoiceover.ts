@@ -206,29 +206,32 @@ Deno.serve(async (req) => {
         // Async task — poll for completion
         console.log(`⏳ Polling async TTS task: ${ttsData.task_id}`);
         const result = await pollVoiceoverTask(API_KEY, ttsData.task_id);
-        audioUrl = result.audio_url || result.url || result.output_url;
 
-        if (!audioUrl) {
-          const rd = result.result || result.data || result.output || {};
-          audioUrl = rd.audio_url || rd.url || rd.output_url;
-        }
+        // Poll may have returned an audio response directly
+        if (result._audioResponse) {
+          const pollAudioBuf = await result._audioResponse.arrayBuffer();
+          const pollAudioBytes = new Uint8Array(pollAudioBuf);
+          voiceoverDuration = pollAudioBytes.length / 16000;
+          console.log(`🎙 Poll returned audio: ${pollAudioBytes.length} bytes, ~${voiceoverDuration.toFixed(1)}s`);
 
-        // If still no URL, check if polling returned binary audio data
-        if (!audioUrl && result.audio) {
-          // base64 encoded audio
-          const audioBlob2 = new Blob(
-            [Uint8Array.from(atob(result.audio), c => c.charCodeAt(0))],
-            { type: 'audio/mpeg' }
-          );
-          const upload2 = await base44.asServiceRole.integrations.Core.UploadFile({
-            file: new File([audioBlob2], 'voiceover.mp3', { type: 'audio/mpeg' })
+          const pollBlob = new Blob([pollAudioBytes], { type: 'audio/mpeg' });
+          const pollUpload = await base44.asServiceRole.integrations.Core.UploadFile({
+            file: new File([pollBlob], 'voiceover.mp3', { type: 'audio/mpeg' })
           });
-          audioUrl = upload2.file_url;
+          audioUrl = pollUpload.file_url;
+        } else {
+          audioUrl = result.audio_url || result.url || result.output_url;
+
+          if (!audioUrl) {
+            const rd = result.result || result.data || result.output || {};
+            audioUrl = rd.audio_url || rd.url || rd.output_url;
+          }
+
+          if (!audioUrl) throw new Error('TTS completed but no audio URL found in polling result');
+
+          voiceoverDuration = result.duration_seconds || result.duration || result.audio_duration;
         }
 
-        if (!audioUrl) throw new Error('TTS completed but no audio URL found in polling result');
-
-        voiceoverDuration = result.duration_seconds || result.duration || result.audio_duration;
         console.log(`✓ Audio URL (async): ${audioUrl}`);
 
       } else if (ttsData.detail) {
