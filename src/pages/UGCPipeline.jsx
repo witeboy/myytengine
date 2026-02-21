@@ -116,6 +116,9 @@ export default function UGCPipeline() {
     if (template.influencer_type) setInfluencerType(template.influencer_type);
     if (template.base_image_url) setInfluencerImageUrl(template.base_image_url);
     if (template.base_prompt) setInfluencerPrompt(template.base_prompt);
+    // Pre-fill audience from rich template data
+    if (template.target_audience) setTargetAudience(template.target_audience);
+    if (template.monetization_fit) setTargetMarket(template.monetization_fit);
   };
 
   // ── Step 3: Generate image ──────────────────────────────────
