@@ -42,6 +42,7 @@ export default function ContentRepurpose() {
   const [newTitle, setNewTitle] = useState('');
   const [tweakNotes, setTweakNotes] = useState('');
   const [selectedStyle, setSelectedStyle] = useState('cinematic_realistic');
+  const [selectedOrientation, setSelectedOrientation] = useState('landscape');
 
   // Step 4: New script
   const [newScript, setNewScript] = useState('');
