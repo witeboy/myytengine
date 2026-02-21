@@ -18,6 +18,22 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 const KIE_BASE = 'https://api.kie.ai/api/v1/jobs';
 
+// ── Split text into chunks ─────────────────────────────────────────
+function splitTextIntoChunks(text, maxChars = 4000) {
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  const chunks = [];
+  let current = '';
+  for (const sentence of sentences) {
+    if (current.length + sentence.length > maxChars && current.length > 0) {
+      chunks.push(current.trim());
+      current = '';
+    }
+    current += sentence + ' ';
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks;
+}
+
 // ── Submit TTS task to Kie Market ──────────────────────────────────
 async function submitTtsTask(apiKey, text, voice = 'Rachel') {
   const res = await fetch(`${KIE_BASE}/createTask`, {
@@ -40,7 +56,7 @@ async function submitTtsTask(apiKey, text, voice = 'Rachel') {
   });
 
   const data = await res.json();
-  console.log(`TTS submit: ${res.status} → ${JSON.stringify(data)}`);
+  console.log(`TTS submit: ${res.status} → code=${data.code}`);
 
   if (data.code !== 200) {
     throw new Error(`TTS submit failed: ${data.msg || JSON.stringify(data)}`);
