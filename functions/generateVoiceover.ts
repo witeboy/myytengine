@@ -39,7 +39,7 @@ function splitTextIntoChunks(text, maxChars = 500) {
 }
 
 // ── Generate TTS for a single chunk ────────────────────────────────
-async function generateChunkAudio(apiKey, voiceId, text, chunkIndex) {
+async function generateChunkAudio(apiKey, voiceId, text, chunkIndex, retryCount = 0) {
   const res = await fetch(
     `https://api.ai33.pro/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
     {
