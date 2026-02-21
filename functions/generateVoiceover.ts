@@ -140,7 +140,13 @@ async function generateChunkAudio(apiKey, voiceId, text, chunkIndex) {
 
   if (debugBytes[0] === 0x7B) {
     const debugJson = new TextDecoder().decode(debugBytes);
-    console.log(`Chunk ${chunkIndex} DEBUG JSON: ${debugJson}`);
+    console.log(`Chunk ${chunkIndex} DEBUG FULL JSON: ${debugJson}`);
+    
+    // Check if ec_remain_credits is 0 or low
+    const parsed = JSON.parse(debugJson);
+    if (parsed.ec_remain_credits !== undefined) {
+      console.log(`💰 Remaining credits: ${parsed.ec_remain_credits}`);
+    }
   }
 
   throw new Error(`Chunk ${chunkIndex}: could not get audio from any endpoint. Status=${debugRes.status}, bytes=${debugBytes.length}`);
