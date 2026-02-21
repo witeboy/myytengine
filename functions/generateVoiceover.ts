@@ -115,7 +115,35 @@ async function generateChunkAudio(apiKey, voiceId, text, chunkIndex) {
     }
   }
 
-  throw new Error(`Chunk ${chunkIndex}: could not get audio from any endpoint`);
+  // All endpoints returned JSON with task_id — dump full debug info
+  // Do one final attempt with verbose logging
+  const debugRes = await fetch(
+    `https://api.ai33.pro/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': apiKey,
+      },
+      body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2' }),
+    }
+  );
+
+  // Log ALL response headers for debugging
+  const allHeaders = {};
+  debugRes.headers.forEach((v, k) => { allHeaders[k] = v; });
+  console.log(`Chunk ${chunkIndex} DEBUG headers: ${JSON.stringify(allHeaders)}`);
+
+  const debugBuf = await debugRes.arrayBuffer();
+  const debugBytes = new Uint8Array(debugBuf);
+  console.log(`Chunk ${chunkIndex} DEBUG: ${debugRes.status}, ${debugBytes.length} bytes, first 4: [${debugBytes.slice(0, 4).join(',')}]`);
+
+  if (debugBytes[0] === 0x7B) {
+    const debugJson = new TextDecoder().decode(debugBytes);
+    console.log(`Chunk ${chunkIndex} DEBUG JSON: ${debugJson}`);
+  }
+
+  throw new Error(`Chunk ${chunkIndex}: could not get audio from any endpoint. Status=${debugRes.status}, bytes=${debugBytes.length}`);
 }
 
 
