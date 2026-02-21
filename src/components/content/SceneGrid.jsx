@@ -64,9 +64,13 @@ export default function SceneGrid({ scenes, onRefetch }) {
       onRefetch();
     },
     onAnimateScene: async () => {
-      const res = await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
-      if (res.data?.error) {
-        throw new Error(res.data.error);
+      try {
+        const res = await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
+        if (res.data?.error) {
+          console.warn(`Scene ${scene.scene_number} animate error:`, res.data.error);
+        }
+      } catch (err) {
+        console.warn(`Scene ${scene.scene_number} animate failed:`, err?.response?.data?.error || err.message);
       }
       onRefetch();
     },
