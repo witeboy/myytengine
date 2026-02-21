@@ -153,9 +153,9 @@ Deno.serve(async (req) => {
     const wordCount = cleanedText.split(/\s+/).filter(w => w.length > 0).length;
     console.log(`🎙 Voiceover: ${wordCount} words from final_aggregated script`);
 
-    // ── Generate TTS ───────────────────────────────────────────────
+    // ── Generate TTS (use /stream endpoint to get audio directly) ──
     const ttsResponse = await fetch(
-      `https://api.ai33.pro/v1/text-to-speech/${voice_id}?output_format=mp3_44100_128`,
+      `https://api.ai33.pro/v1/text-to-speech/${voice_id}/stream?output_format=mp3_44100_128`,
       {
         method: 'POST',
         headers: {
@@ -165,7 +165,6 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           text: cleanedText,
           model_id: 'eleven_multilingual_v2',
-          with_transcript: true,
         }),
       }
     );
