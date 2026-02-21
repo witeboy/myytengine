@@ -234,16 +234,17 @@ export default function ResultsGrid() {
 
 function TipHeader({ children, tip, onClick, active }) {
   return (
-    <th
-      className={`py-2 px-2 text-right select-none ${onClick ? "cursor-pointer hover:text-gray-700" : ""}`}
-      onClick={onClick}
-    >
+    <th className="py-2 px-2 text-right select-none">
       <Tooltip>
         <TooltipTrigger asChild>
-          <span className="inline-flex items-center gap-1 border-b border-dashed border-gray-300">
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (onClick) onClick(); }}
+            className={`inline-flex items-center gap-1 border-b border-dashed border-gray-300 bg-transparent text-[10px] font-medium uppercase tracking-wider ${onClick ? "cursor-pointer hover:text-gray-700" : "cursor-help"}`}
+          >
             {children}
             {active && <ArrowUpDown className="w-2.5 h-2.5 text-indigo-600" />}
-          </span>
+          </button>
         </TooltipTrigger>
         <TooltipContent side="top" className="max-w-[220px] text-xs leading-relaxed">{tip}</TooltipContent>
       </Tooltip>
