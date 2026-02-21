@@ -157,68 +157,83 @@ Deno.serve(async (req) => {
       return Response.json({ error: `TTS API error: ${errText}` }, { status: 500 });
     }
 
-    const ttsData = await ttsResponse.json();
-    console.log(`🎙 TTS response keys: ${Object.keys(ttsData).join(', ')}`);
+    // ── Detect response type ───────────────────────────────────────
+    // ai33.pro may return:
+    //   a) Audio binary (Content-Type: audio/mpeg) — stream the bytes, upload to get URL
+    //   b) JSON with audio_url — ready immediately
+    //   c) JSON with task_id — needs polling
+    const contentType = ttsResponse.headers.get('content-type') || '';
+    console.log(`🎙 TTS response content-type: ${contentType}`);
 
-    // ── Determine audio URL and duration ───────────────────────────
-    // ai33.pro may return audio directly OR as an async task
     let audioUrl = null;
     let voiceoverDuration = null;
 
-    if (ttsData.audio_url || ttsData.url || ttsData.output_url) {
-      // Synchronous response — audio ready immediately
-      audioUrl = ttsData.audio_url || ttsData.url || ttsData.output_url;
-      console.log(`✓ Audio URL (sync): ${audioUrl}`);
+    if (contentType.includes('audio/') || contentType.includes('octet-stream')) {
+      // ── Binary audio response — upload to get a public URL ────────
+      console.log(`🎙 Got binary audio stream, uploading...`);
+      const audioBlob = await ttsResponse.blob();
+      console.log(`🎙 Audio blob size: ${audioBlob.size} bytes`);
 
-    } else if (ttsData.task_id) {
-      // Async response — poll for completion
-      console.log(`⏳ Polling task: ${ttsData.task_id}`);
-      const result = await pollVoiceoverTask(API_KEY, ttsData.task_id);
-      audioUrl = result.audio_url || result.url || result.output_url || result.result?.url;
+      // Calculate duration from file size (128kbps MP3)
+      voiceoverDuration = audioBlob.size / 16000;
+      console.log(`🎙 Duration from blob size: ${voiceoverDuration.toFixed(1)}s`);
 
-      // Check if API returned duration
-      voiceoverDuration = result.duration_seconds || result.duration || result.audio_duration;
+      // Upload via Base44
+      const uploadResult = await base44.asServiceRole.integrations.Core.UploadFile({
+        file: new File([audioBlob], 'voiceover.mp3', { type: 'audio/mpeg' })
+      });
+      audioUrl = uploadResult.file_url;
+      console.log(`✓ Audio uploaded: ${audioUrl}`);
 
-      if (!audioUrl) {
-        // Try nested result structures
-        const resultData = result.result || result.data || result.output || {};
-        audioUrl = resultData.audio_url || resultData.url || resultData.output_url;
-      }
-
-      if (!audioUrl) {
-        throw new Error('TTS completed but no audio URL found in response');
-      }
-      console.log(`✓ Audio URL (async): ${audioUrl}`);
     } else {
-      throw new Error('TTS API returned no audio_url or task_id');
-    }
+      // ── JSON response ────────────────────────────────────────────
+      const ttsData = await ttsResponse.json();
+      console.log(`🎙 TTS response keys: ${Object.keys(ttsData).join(', ')}`);
 
-    // ── Check for duration in direct response ──────────────────────
-    if (!voiceoverDuration) {
-      voiceoverDuration = ttsData.duration_seconds || ttsData.duration || ttsData.audio_duration;
-    }
+      if (ttsData.audio_url || ttsData.url || ttsData.output_url) {
+        audioUrl = ttsData.audio_url || ttsData.url || ttsData.output_url;
+        console.log(`✓ Audio URL (sync): ${audioUrl}`);
 
-    // ── Check for duration from transcript timestamps ──────────────
-    if (!voiceoverDuration && ttsData.transcript) {
-      const transcript = typeof ttsData.transcript === 'string'
-        ? JSON.parse(ttsData.transcript)
-        : ttsData.transcript;
+      } else if (ttsData.task_id) {
+        console.log(`⏳ Polling task: ${ttsData.task_id}`);
+        const result = await pollVoiceoverTask(API_KEY, ttsData.task_id);
+        audioUrl = result.audio_url || result.url || result.output_url || result.result?.url;
+        voiceoverDuration = result.duration_seconds || result.duration || result.audio_duration;
 
-      if (transcript.duration_seconds) {
-        voiceoverDuration = transcript.duration_seconds;
-      } else if (transcript.words?.length > 0) {
-        // Get end time of last word
-        const lastWord = transcript.words[transcript.words.length - 1];
-        voiceoverDuration = lastWord.end || lastWord.end_time || lastWord.offset_end;
+        if (!audioUrl) {
+          const resultData = result.result || result.data || result.output || {};
+          audioUrl = resultData.audio_url || resultData.url || resultData.output_url;
+        }
+
+        if (!audioUrl) throw new Error('TTS completed but no audio URL found');
+        console.log(`✓ Audio URL (async): ${audioUrl}`);
+      } else {
+        throw new Error(`TTS API returned unexpected JSON: ${JSON.stringify(ttsData).substring(0, 300)}`);
+      }
+
+      // Check duration from JSON response
+      if (!voiceoverDuration) {
+        voiceoverDuration = ttsData.duration_seconds || ttsData.duration || ttsData.audio_duration;
+      }
+
+      if (!voiceoverDuration && ttsData.transcript) {
+        const transcript = typeof ttsData.transcript === 'string'
+          ? JSON.parse(ttsData.transcript)
+          : ttsData.transcript;
+        if (transcript.duration_seconds) {
+          voiceoverDuration = transcript.duration_seconds;
+        } else if (transcript.words?.length > 0) {
+          const lastWord = transcript.words[transcript.words.length - 1];
+          voiceoverDuration = lastWord.end || lastWord.end_time || lastWord.offset_end;
+        }
       }
     }
 
-    // ── Calculate duration from audio file if still unknown ────────
+    // ── Calculate duration if still unknown ─────────────────────────
     if (!voiceoverDuration && audioUrl) {
       voiceoverDuration = await calculateAudioDuration(audioUrl, wordCount);
     }
 
-    // ── Last resort: estimate from word count ──────────────────────
     if (!voiceoverDuration) {
       voiceoverDuration = (wordCount / 150) * 60;
       console.log(`⚠ Duration estimated from word count: ${voiceoverDuration.toFixed(1)}s`);
