@@ -13,6 +13,7 @@ import {
   Loader2, ArrowLeft, ArrowRight, RefreshCw, Search, FileText,
   Edit, Sparkles, CheckCircle2, Play, Film, Wand2, ImageIcon
 } from 'lucide-react';
+import RepurposeTemplates from '@/components/templates/RepurposeTemplates';
 
 const VISUAL_STYLES = [
   { value: 'cinematic_realistic', label: 'Cinematic Realistic' },
@@ -44,6 +45,14 @@ export default function ContentRepurpose() {
 
   // Step 4: New script
   const [newScript, setNewScript] = useState('');
+
+  const handleRepurposeTemplate = (t) => {
+    if (t.sampleUrl && t.sampleUrl.length > 30) {
+      setVideoUrl(t.sampleUrl);
+    }
+    setTweakNotes(t.tweakHint || '');
+    setSelectedStyle(t.style || 'cinematic_realistic');
+  };
 
   // Step 5: Pipeline
   const [projectId, setProjectId] = useState(null);
@@ -243,19 +252,22 @@ Write a complete narration script (~${analysis.estimated_word_count || 1500} wor
           ))}
         </div>
 
-        {/* Step 1: URL */}
+        {/* Step 1: URL + Templates */}
         {step === 1 && (
-          <Card>
-            <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Search className="w-5 h-5 text-emerald-600" /> YouTube Video URL</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <Input placeholder="https://www.youtube.com/watch?v=..." value={videoUrl} onChange={e => setVideoUrl(e.target.value)} className="text-lg py-6" />
-              <p className="text-xs text-gray-500">AI will analyze the video's style, structure, hooks, and pacing using Gemini with web search.</p>
-              <Button onClick={handleAnalyze} disabled={!videoUrl.trim() || loading} className="w-full bg-emerald-600 hover:bg-emerald-700 gap-2" size="lg">
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
-                {loading ? statusMsg : 'Analyze Video'}
-              </Button>
-            </CardContent>
-          </Card>
+          <div className="space-y-6">
+            <RepurposeTemplates onSelectTemplate={handleRepurposeTemplate} />
+            <Card>
+              <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Search className="w-5 h-5 text-emerald-600" /> YouTube Video URL</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <Input placeholder="https://www.youtube.com/watch?v=..." value={videoUrl} onChange={e => setVideoUrl(e.target.value)} className="text-lg py-6" />
+                <p className="text-xs text-gray-500">AI will analyze the video's style, structure, hooks, and pacing using Gemini with web search.</p>
+                <Button onClick={handleAnalyze} disabled={!videoUrl.trim() || loading} className="w-full bg-emerald-600 hover:bg-emerald-700 gap-2" size="lg">
+                  {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+                  {loading ? statusMsg : 'Analyze Video'}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Step 2: Analysis */}

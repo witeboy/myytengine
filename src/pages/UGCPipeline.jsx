@@ -13,6 +13,7 @@ import {
   Loader2, ArrowLeft, ArrowRight, Users, Wand2, ImageIcon,
   Mic, Video, Download, CheckCircle2, Sparkles, Volume2
 } from 'lucide-react';
+import UGCTemplates from '@/components/templates/UGCTemplates';
 
 const INFLUENCER_TYPES = [
   { value: 'beauty_guru', label: 'Beauty / Skincare Guru' },
@@ -57,6 +58,15 @@ export default function UGCPipeline() {
   const [videoUrl, setVideoUrl] = useState('');
 
   const typeLabel = INFLUENCER_TYPES.find(t => t.value === influencerType)?.label || influencerType;
+
+  const handleTemplateSelect = (t) => {
+    setTargetAudience(t.audience);
+    setTargetDemography(t.demography);
+    setTargetMarket(t.market);
+    setInfluencerType(t.influencerType);
+    setInfluencerAction(t.action);
+    setStep(2);
+  };
 
   // ── Step 2→3: Generate influencer prompt via Gemini ──────────
   const handleGeneratePrompt = async () => {
@@ -254,28 +264,35 @@ Return ONLY the script text.`,
           ))}
         </div>
 
-        {/* Step 1: Audience */}
+        {/* Step 1: Audience + Templates */}
         {step === 1 && (
-          <Card>
-            <CardHeader><CardTitle className="text-lg">Target Audience & Market</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">Target Audience</label>
-                <Input placeholder="e.g. Women 25-35 interested in skincare" value={targetAudience} onChange={e => setTargetAudience(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">Target Demography</label>
-                <Input placeholder="e.g. Urban millennials, middle income" value={targetDemography} onChange={e => setTargetDemography(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">Target Market</label>
-                <Input placeholder="e.g. US, UK, Australia" value={targetMarket} onChange={e => setTargetMarket(e.target.value)} />
-              </div>
-              <Button onClick={() => setStep(2)} disabled={!targetAudience.trim()} className="w-full bg-pink-600 hover:bg-pink-700 gap-2">
-                Next <ArrowRight className="w-4 h-4" />
-              </Button>
-            </CardContent>
-          </Card>
+          <div className="space-y-6">
+            <UGCTemplates onSelectTemplate={handleTemplateSelect} />
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
+              <div className="relative flex justify-center"><span className="bg-pink-50 px-3 text-xs text-gray-500">or fill in manually</span></div>
+            </div>
+            <Card>
+              <CardHeader><CardTitle className="text-lg">Target Audience & Market</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">Target Audience</label>
+                  <Input placeholder="e.g. Women 25-35 interested in skincare" value={targetAudience} onChange={e => setTargetAudience(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">Target Demography</label>
+                  <Input placeholder="e.g. Urban millennials, middle income" value={targetDemography} onChange={e => setTargetDemography(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">Target Market</label>
+                  <Input placeholder="e.g. US, UK, Australia" value={targetMarket} onChange={e => setTargetMarket(e.target.value)} />
+                </div>
+                <Button onClick={() => setStep(2)} disabled={!targetAudience.trim()} className="w-full bg-pink-600 hover:bg-pink-700 gap-2">
+                  Next <ArrowRight className="w-4 h-4" />
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Step 2: Influencer Type */}
