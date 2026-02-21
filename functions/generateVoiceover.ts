@@ -1,22 +1,24 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // ══════════════════════════════════════════════════════════════════
-// VOICEOVER GENERATOR — MASTER CLOCK CREATOR
+// VOICEOVER GENERATOR — AI33 TTS API (ElevenLabs via ai33.pro)
 // ══════════════════════════════════════════════════════════════════
 //
-// Uses Kie Market unified API for ElevenLabs TTS (same KIE_API_KEY
-// as video generation). Async task → poll → download audio URL.
+// Uses AI33 API for ElevenLabs TTS.
+// Endpoint: POST https://api.ai33.pro/v1/text-to-speech/$voice_id
+// Returns task_id → poll GET /v1/task/$task_id → audio_url
 //
 // Flow:
 //   1. Fetch final_aggregated script
 //   2. Clean narration text
-//   3. Submit TTS via Kie Market → get taskId
-//   4. Poll until audio ready → get resultUrl (MP3)
-//   5. Upload to Base44 storage
-//   6. Store voiceover_url + duration
+//   3. Split into chunks if needed
+//   4. Submit each chunk to AI33 TTS → get task_id
+//   5. Poll each task until done → get audio_url
+//   6. Download, concatenate, upload to Base44
+//   7. Store voiceover_url + duration
 // ══════════════════════════════════════════════════════════════════
 
-const KIE_BASE = 'https://api.kie.ai/api/v1/jobs';
+const AI33_BASE = 'https://api.ai33.pro';
 
 // ── Split text into chunks ─────────────────────────────────────────
 function splitTextIntoChunks(text, maxChars = 4000) {
@@ -34,64 +36,64 @@ function splitTextIntoChunks(text, maxChars = 4000) {
   return chunks;
 }
 
-// ── Submit TTS task to Kie Market ──────────────────────────────────
-async function submitTtsTask(apiKey, text, voice = 'Rachel') {
-  const res = await fetch(`${KIE_BASE}/createTask`, {
+// ── Submit TTS task to AI33 ────────────────────────────────────────
+async function submitTtsTask(apiKey, text, voiceId = '21m00Tcm4TlvDq8ikWAM') {
+  const url = `${AI33_BASE}/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`;
+
+  const res = await fetch(url, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
+      'xi-api-key': apiKey,
     },
     body: JSON.stringify({
-      model: 'elevenlabs/text-to-speech-turbo-2-5',
-      input: {
-        text,
-        voice,
-        stability: 0.5,
-        similarity_boost: 0.75,
-        style: 0,
-        speed: 1,
-      },
+      text,
+      model_id: 'eleven_multilingual_v2',
     }),
   });
 
   const data = await res.json();
-  console.log(`TTS submit: ${res.status} → code=${data.code}`);
+  console.log(`TTS submit: ${res.status} → success=${data.success}`);
 
-  if (data.code !== 200) {
-    throw new Error(`TTS submit failed: ${data.msg || JSON.stringify(data)}`);
+  if (!data.success || !data.task_id) {
+    throw new Error(`TTS submit failed: ${JSON.stringify(data)}`);
   }
 
-  return data.data.taskId;
+  return data.task_id;
 }
 
-// ── Poll Kie task until done ──────────────────────────────────────
-async function pollKieTask(apiKey, taskId, maxAttempts = 60, intervalMs = 5000) {
+// ── Poll AI33 task until done ─────────────────────────────────────
+async function pollAi33Task(apiKey, taskId, maxAttempts = 60, intervalMs = 5000) {
   for (let i = 0; i < maxAttempts; i++) {
     if (i > 0) await new Promise(r => setTimeout(r, intervalMs));
 
-    const res = await fetch(`${KIE_BASE}/recordInfo?taskId=${taskId}`, {
-      headers: { 'Authorization': `Bearer ${apiKey}` },
+    const res = await fetch(`${AI33_BASE}/v1/task/${taskId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': apiKey,
+      },
     });
 
-    const data = await res.json();
-    if (data.code !== 200) {
-      console.warn(`Poll ${i + 1}: code=${data.code} msg=${data.message}`);
+    if (!res.ok) {
+      console.warn(`Poll ${i + 1}: HTTP ${res.status}`);
       continue;
     }
 
-    const { state, resultJson, failMsg } = data.data;
-    console.log(`Poll ${i + 1}: state=${state}`);
+    const data = await res.json();
+    console.log(`Poll ${i + 1}: status=${data.status}`);
 
-    if (state === 'success') {
-      const result = JSON.parse(resultJson);
-      return result.resultUrls?.[0] || result.url || null;
+    if (data.status === 'done') {
+      return {
+        audio_url: data.metadata?.audio_url || null,
+        srt_url: data.metadata?.srt_url || null,
+      };
     }
 
-    if (state === 'fail') {
-      throw new Error(`TTS task failed: ${failMsg}`);
+    if (data.status === 'failed' || data.status === 'error') {
+      throw new Error(`TTS task failed: ${data.error_message || 'Unknown error'}`);
     }
-    // waiting / queuing / generating → keep polling
+    // pending/processing → keep polling
   }
 
   throw new Error(`TTS task ${taskId} timed out after ${maxAttempts} polls`);
@@ -112,15 +114,15 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, script_id, voice_id, voice_name = 'Rachel' } = await req.json();
+    const { project_id, script_id, voice_id } = await req.json();
 
     if (!project_id) {
       return Response.json({ error: 'Missing project_id' }, { status: 400 });
     }
 
-    const KIE_API_KEY = Deno.env.get('KIE_API_KEY');
-    if (!KIE_API_KEY) {
-      return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
+    const API_KEY = Deno.env.get('AI33_API_KEY');
+    if (!API_KEY) {
+      return Response.json({ error: 'AI33_API_KEY not configured' }, { status: 500 });
     }
 
     // ── Fetch project ─────────────────────────────────────────────
@@ -152,6 +154,9 @@ Deno.serve(async (req) => {
     const wordCount = cleanedText.split(/\s+/).filter(w => w.length > 0).length;
     console.log(`🎙 Voiceover: ${wordCount} words from final_aggregated script`);
 
+    // ── Default voice ID if none selected ──────────────────────────
+    const selectedVoiceId = voice_id || '21m00Tcm4TlvDq8ikWAM'; // Rachel default
+
     // ── Update status to generating ────────────────────────────────
     const existingSettings = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
     const settings = existingSettings[0];
@@ -167,14 +172,14 @@ Deno.serve(async (req) => {
 
     const audioChunkUrls = [];
     for (let i = 0; i < chunks.length; i++) {
-      console.log(`🎙 Submitting chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars, voice: ${voice_name})...`);
-      const taskId = await submitTtsTask(KIE_API_KEY, chunks[i], voice_name);
+      console.log(`🎙 Submitting chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars, voice: ${selectedVoiceId})...`);
+      const taskId = await submitTtsTask(API_KEY, chunks[i], selectedVoiceId);
       console.log(`🎙 TTS task ${i + 1}: ${taskId}`);
 
-      const audioUrl = await pollKieTask(KIE_API_KEY, taskId);
-      if (!audioUrl) throw new Error(`Chunk ${i + 1}: TTS completed but no audio URL`);
-      console.log(`🎙 Chunk ${i + 1} ready: ${audioUrl.substring(0, 60)}...`);
-      audioChunkUrls.push(audioUrl);
+      const result = await pollAi33Task(API_KEY, taskId);
+      if (!result.audio_url) throw new Error(`Chunk ${i + 1}: TTS completed but no audio URL`);
+      console.log(`🎙 Chunk ${i + 1} ready: ${result.audio_url.substring(0, 60)}...`);
+      audioChunkUrls.push(result.audio_url);
     }
 
     // ── Download all chunks and concatenate ────────────────────────
@@ -210,7 +215,7 @@ Deno.serve(async (req) => {
     // ── Store as MASTER TIMING AUTHORITY ────────────────────────────
     const settingsPayload = {
       project_id,
-      selected_voice_id: voice_id || voice_name,
+      selected_voice_id: selectedVoiceId,
       voiceover_status: 'ready',
       voiceover_url: audioUrl,
       total_duration_seconds: voiceoverDuration,
@@ -234,7 +239,7 @@ Deno.serve(async (req) => {
       voiceover_url: audioUrl,
       voiceover_duration_seconds: voiceoverDuration,
       word_count: wordCount,
-      voice_name,
+      voice_id: selectedVoiceId,
       chunks_count: chunks.length,
     });
 

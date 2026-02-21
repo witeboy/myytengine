@@ -1,6 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-const KIE_BASE = 'https://api.kie.ai/api/v1/jobs';
+const AI33_BASE = 'https://api.ai33.pro';
 
 Deno.serve(async (req) => {
   try {
@@ -18,14 +18,18 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Missing task_id or project_id' }, { status: 400 });
     }
 
-    const KIE_API_KEY = Deno.env.get('KIE_API_KEY');
-    if (!KIE_API_KEY) {
-      return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
+    const API_KEY = Deno.env.get('AI33_API_KEY');
+    if (!API_KEY) {
+      return Response.json({ error: 'AI33_API_KEY not configured' }, { status: 500 });
     }
 
-    // Poll Kie task status
-    const res = await fetch(`${KIE_BASE}/recordInfo?taskId=${task_id}`, {
-      headers: { 'Authorization': `Bearer ${KIE_API_KEY}` },
+    // Poll AI33 task status
+    const res = await fetch(`${AI33_BASE}/v1/task/${task_id}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': API_KEY,
+      },
     });
 
     if (!res.ok) {
@@ -33,28 +37,14 @@ Deno.serve(async (req) => {
       return Response.json({ error: `Status API error: ${error}` }, { status: 500 });
     }
 
-    const data = await res.json();
+    const taskData = await res.json();
 
-    if (data.code !== 200) {
-      return Response.json({
-        success: true,
-        status: 'generating',
-        audio_url: null,
-        error_message: data.message || null,
-      });
-    }
-
-    const { state, resultJson, failMsg } = data.data;
-
-    if (state === 'success') {
-      const result = JSON.parse(resultJson);
-      const audioUrl = result.resultUrls?.[0] || result.url || null;
-
+    if (taskData.status === 'done' && taskData.metadata?.audio_url) {
       // Update ProductionSettings
       const settings = await base44.entities.ProductionSettings.filter({ project_id });
       if (settings.length > 0) {
         await base44.entities.ProductionSettings.update(settings[0].id, {
-          voiceover_url: audioUrl,
+          voiceover_url: taskData.metadata.audio_url,
           voiceover_status: 'completed',
         });
       }
@@ -62,12 +52,13 @@ Deno.serve(async (req) => {
       return Response.json({
         success: true,
         status: 'done',
-        audio_url: audioUrl,
+        audio_url: taskData.metadata.audio_url,
+        srt_url: taskData.metadata.srt_url || null,
         error_message: null,
       });
     }
 
-    if (state === 'fail') {
+    if (taskData.status === 'failed' || taskData.status === 'error') {
       const settings = await base44.entities.ProductionSettings.filter({ project_id });
       if (settings.length > 0) {
         await base44.entities.ProductionSettings.update(settings[0].id, {
@@ -79,14 +70,14 @@ Deno.serve(async (req) => {
         success: true,
         status: 'failed',
         audio_url: null,
-        error_message: failMsg || 'Voiceover generation failed',
+        error_message: taskData.error_message || 'Voiceover generation failed',
       });
     }
 
-    // Still in progress (waiting/queuing/generating)
+    // Still in progress
     return Response.json({
       success: true,
-      status: 'generating',
+      status: taskData.status || 'generating',
       audio_url: null,
       error_message: null,
     });
