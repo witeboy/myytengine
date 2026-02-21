@@ -136,15 +136,14 @@ export default function ResultsGrid() {
       ) : (
         <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[850px]">
+            <table className="w-full min-w-[800px]">
               <thead>
                 <tr className="border-b border-[#1e1e2e] text-[10px] font-medium text-gray-500 uppercase tracking-wider">
                   <th className="py-2.5 px-3 text-center w-10">#</th>
-                  <th className="py-2.5 px-3 text-left">Title</th>
+                  <th className="py-2.5 px-3 text-left">Video</th>
                   <th className="py-2.5 px-3 text-left">Channel</th>
                   <SortHeader field="view_count">Views</SortHeader>
                   <SortHeader field="views_per_day">Views/Day</SortHeader>
-                  <SortHeader field="opportunity_score">Multiplier</SortHeader>
                   <SortHeader field="opportunity_score">Opportunity</SortHeader>
                   <SortHeader field="profitability_score">Profitability</SortHeader>
                 </tr>

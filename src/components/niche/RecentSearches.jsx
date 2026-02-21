@@ -11,6 +11,19 @@ const statusConfig = {
   Pending: { icon: Loader2, color: "text-amber-400" },
 };
 
+function timeAgo(dateStr) {
+  if (!dateStr) return "";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return `${Math.floor(days / 7)}w ago`;
+}
+
 export default function RecentSearches() {
   const { data: searches = [] } = useQuery({
     queryKey: ["recent-searches"],
@@ -28,13 +41,14 @@ export default function RecentSearches() {
         {searches.map((s) => {
           const cfg = statusConfig[s.status] || statusConfig.Pending;
           const Icon = cfg.icon;
+          const isClickable = s.status === "Complete";
           return (
             <Link
               key={s.id}
-              to={s.status === "Complete" ? createPageUrl("ResultsGrid") + `?search_id=${s.id}&keyword=${encodeURIComponent(s.keyword)}` : "#"}
-              onClick={(e) => { if (s.status !== "Complete") e.preventDefault(); }}
+              to={isClickable ? createPageUrl("ResultsGrid") + `?search_id=${s.id}&keyword=${encodeURIComponent(s.keyword)}` : "#"}
+              onClick={(e) => { if (!isClickable) e.preventDefault(); }}
               className={`flex items-center justify-between p-2.5 rounded-lg bg-[#12121a] border border-[#1e1e2e] transition-colors group ${
-                s.status === "Complete" ? "hover:border-indigo-500/30 cursor-pointer" : "opacity-60 cursor-not-allowed"
+                isClickable ? "hover:border-indigo-500/30 cursor-pointer" : "opacity-60 cursor-default"
               }`}
             >
               <div className="flex items-center gap-3">
@@ -42,8 +56,11 @@ export default function RecentSearches() {
                 <span className="text-sm text-gray-300 group-hover:text-white transition-colors">{s.keyword}</span>
                 <span className="text-xs text-gray-600">{s.duration}</span>
               </div>
-              <div className="text-xs text-gray-600">
-                {s.result_count != null && <span>{s.result_count} results</span>}
+              <div className="flex items-center gap-3 text-xs text-gray-600">
+                {s.result_count != null && s.status === "Complete" && (
+                  <span>{s.result_count} results</span>
+                )}
+                <span>{timeAgo(s.created_date)}</span>
               </div>
             </Link>
           );

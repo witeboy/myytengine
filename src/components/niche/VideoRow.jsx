@@ -8,11 +8,27 @@ function formatNumber(n) {
   return n?.toLocaleString() || "0";
 }
 
-export default function VideoRow({ video, index, maxOpp, maxProfit }) {
-  const multiplier = video.subscriber_count > 0
-    ? (video.view_count / video.subscriber_count).toFixed(1)
-    : "∞";
+function formatDuration(sec) {
+  if (!sec) return "";
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
 
+function timeAgo(dateStr) {
+  if (!dateStr) return "";
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days === 0) return "today";
+  if (days === 1) return "1d ago";
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
+
+export default function VideoRow({ video, index, maxOpp, maxProfit }) {
   const isViralGap = video.opportunity_score > 10;
   const isHighRpm = video.profitability_score > 50;
 
@@ -25,33 +41,47 @@ export default function VideoRow({ video, index, maxOpp, maxProfit }) {
         </span>
       </td>
 
-      {/* Title */}
-      <td className="py-3 px-3 max-w-xs">
-        <a
-          href={video.video_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm text-gray-200 hover:text-indigo-400 transition-colors line-clamp-2 flex items-start gap-1.5"
-        >
-          <span className="flex-1">{video.video_title}</span>
-          <ExternalLink className="w-3 h-3 mt-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-        </a>
-        <div className="flex gap-1.5 mt-1">
-          {isViralGap && (
-            <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/20 text-[10px] px-1.5 py-0">
-              Viral Gap
-            </Badge>
+      {/* Thumbnail + Title */}
+      <td className="py-3 px-3 max-w-sm">
+        <div className="flex items-start gap-2.5">
+          {video.thumbnail_url && (
+            <img
+              src={video.thumbnail_url}
+              alt=""
+              className="w-20 h-11 rounded object-cover flex-shrink-0 bg-gray-800"
+            />
           )}
-          {isHighRpm && (
-            <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/20 text-[10px] px-1.5 py-0">
-              High RPM
-            </Badge>
-          )}
-          {video.long_form && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-gray-700 text-gray-500">
-              Long-form
-            </Badge>
-          )}
+          <div className="min-w-0 flex-1">
+            <a
+              href={video.video_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-gray-200 hover:text-indigo-400 transition-colors line-clamp-2 flex items-start gap-1"
+            >
+              <span className="flex-1">{video.video_title}</span>
+              <ExternalLink className="w-3 h-3 mt-0.5 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+            </a>
+            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+              {isViralGap && (
+                <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/20 text-[10px] px-1.5 py-0">
+                  Viral Gap
+                </Badge>
+              )}
+              {isHighRpm && (
+                <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/20 text-[10px] px-1.5 py-0">
+                  High RPM
+                </Badge>
+              )}
+              {video.long_form && (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-gray-700 text-gray-500">
+                  Long-form
+                </Badge>
+              )}
+              {video.duration_seconds > 0 && (
+                <span className="text-[10px] text-gray-600 font-mono">{formatDuration(video.duration_seconds)}</span>
+              )}
+            </div>
+          </div>
         </div>
       </td>
 
@@ -64,18 +94,14 @@ export default function VideoRow({ video, index, maxOpp, maxProfit }) {
       {/* Views */}
       <td className="py-3 px-3 text-right">
         <span className="text-sm font-mono text-white">{formatNumber(video.view_count)}</span>
+        {video.published_date && (
+          <div className="text-[10px] text-gray-600">{timeAgo(video.published_date)}</div>
+        )}
       </td>
 
       {/* Views/Day */}
       <td className="py-3 px-3 text-right">
         <span className="text-sm font-mono text-cyan-400">{formatNumber(video.views_per_day)}</span>
-      </td>
-
-      {/* Multiplier */}
-      <td className="py-3 px-3 text-right">
-        <span className={`text-sm font-mono font-bold ${parseFloat(multiplier) > 10 ? "text-emerald-400" : "text-gray-300"}`}>
-          {multiplier}x
-        </span>
       </td>
 
       {/* Opportunity */}

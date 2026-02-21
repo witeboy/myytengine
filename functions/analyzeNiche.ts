@@ -134,10 +134,13 @@ Deno.serve(async (req) => {
         subscriber_count: subs,
         views_per_day: parseFloat(viewsPerDay.toFixed(1)),
         long_form: isLongForm,
+        duration_seconds: durationSec,
+        published_date: video.snippet.publishedAt,
         opportunity_score: parseFloat(opportunityScore.toFixed(2)),
         profitability_score: parseFloat(profitabilityScore.toFixed(2)),
         niche_category: keyword,
-        video_url: `https://www.youtube.com/watch?v=${video.id}`
+        video_url: `https://www.youtube.com/watch?v=${video.id}`,
+        thumbnail_url: video.snippet.thumbnails?.medium?.url || video.snippet.thumbnails?.default?.url || ''
       };
     });
 

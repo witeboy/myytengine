@@ -1,7 +1,7 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "./utils";
-import { Search, BarChart3, Home, Zap } from "lucide-react";
+import { Search, BarChart3, Home, Zap, ArrowLeft } from "lucide-react";
 
 export default function Layout({ children, currentPageName }) {
   const navItems = [
@@ -46,6 +46,14 @@ export default function Layout({ children, currentPageName }) {
             </span>
           </div>
           <nav className="flex items-center gap-1">
+            <Link
+              to={createPageUrl("Dashboard")}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium text-gray-500 hover:text-gray-200 hover:bg-white/5 transition-colors mr-1"
+            >
+              <ArrowLeft className="w-3 h-3" />
+              <span className="hidden sm:inline">Dashboard</span>
+            </Link>
+            <div className="w-px h-4 bg-[#1e1e2e] mr-1" />
             {navItems.filter(n => nichePages.includes(n.page)).map((item) => (
               <Link
                 key={item.page}
