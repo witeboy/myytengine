@@ -1,5 +1,4 @@
 import React, { useState, useRef } from 'react';
-import { GripVertical } from 'lucide-react';
 
 export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, onSelectScene, onUpdateDuration }) {
   const [resizing, setResizing] = useState(null);
