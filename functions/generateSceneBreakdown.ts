@@ -302,7 +302,7 @@ Deno.serve(async (req) => {
     const nicheProfile = getNicheDirectorProfile(niche);
 
     const MAX_SCENE_SECONDS = 8;
-    const totalTargetScenes = Math.max(8, Math.round((durationMinutes * 60) / MAX_SCENE_SECONDS));
+    const totalTargetScenes = Math.max(7, Math.round((durationMinutes * 60) / MAX_SCENE_SECONDS));
     const phases = calculatePhaseAllocation(totalTargetScenes);
     const scriptChunks = splitScriptByPhase(finalScript, phases);
 
