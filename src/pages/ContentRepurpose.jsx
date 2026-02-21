@@ -172,7 +172,8 @@ Write a complete narration script (~${analysis.estimated_word_count || 1500} wor
     // 3. Generate voiceover (same ai33.pro backend)
     setPipelineStep('Generating voiceover (ai33.pro TTS)...');
     try {
-      await base44.functions.invoke('generateVoiceover', { project_id: project.id });
+      const voResp = await base44.functions.invoke('generateVoiceover', { project_id: project.id });
+      console.log('Voiceover result:', voResp.data);
     } catch (err) {
       console.warn('Voiceover failed:', err.message);
     }
