@@ -29,6 +29,8 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
       return { taskId: scene.video_url.replace('runway_task:', ''), provider: 'runway' };
     if (scene.video_url?.startsWith('freepik_task:'))
       return { taskId: scene.video_url.replace('freepik_task:', ''), provider: 'freepik' };
+    if (scene.video_url?.startsWith('veo_task:'))
+      return { taskId: scene.video_url.replace('veo_task:', ''), provider: 'veo' };
     return null;
   })();
 
@@ -85,7 +87,7 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
     <Card className="overflow-hidden">
       {/* Preview */}
       <div className="aspect-video bg-gray-100 relative">
-        {scene.video_url && !scene.video_url.startsWith('freepik_task:') && !scene.video_url.startsWith('runway_task:') ? (
+        {scene.video_url && !scene.video_url.startsWith('freepik_task:') && !scene.video_url.startsWith('runway_task:') && !scene.video_url.startsWith('veo_task:') ? (
           <video src={scene.video_url} controls className="w-full h-full object-cover" />
         ) : scene.image_url ? (
           <img src={scene.image_url} alt={`Scene ${scene.scene_number}`} className="w-full h-full object-cover" />
