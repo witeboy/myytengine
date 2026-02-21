@@ -6,11 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createPageUrl } from '@/utils';
 import {
   Loader2, ArrowLeft, ArrowRight, Users, Wand2, ImageIcon,
-  Mic, Video, Download, CheckCircle2, Sparkles
+  Mic, Video, Download, CheckCircle2, Sparkles, Volume2
 } from 'lucide-react';
 
 const INFLUENCER_TYPES = [
@@ -30,97 +31,196 @@ export default function UGCPipeline() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [statusMsg, setStatusMsg] = useState('');
 
-  // Step 1: Audience & Demography
+  // Step 1
   const [targetAudience, setTargetAudience] = useState('');
   const [targetDemography, setTargetDemography] = useState('');
   const [targetMarket, setTargetMarket] = useState('');
 
-  // Step 2: Influencer type
+  // Step 2
   const [influencerType, setInfluencerType] = useState('');
   const [influencerAction, setInfluencerAction] = useState('');
 
-  // Step 3: AI prompt
+  // Step 3
   const [influencerPrompt, setInfluencerPrompt] = useState('');
   const [influencerImageUrl, setInfluencerImageUrl] = useState('');
 
-  // Step 4: Voiceover script
+  // Step 4
   const [voiceScript, setVoiceScript] = useState('');
   const [voiceUrl, setVoiceUrl] = useState('');
+  const [voiceDuration, setVoiceDuration] = useState(0);
 
-  // Step 5: Final video
-  const [finalVideoUrl, setFinalVideoUrl] = useState('');
+  // Step 5 — project created, pipeline running
+  const [projectId, setProjectId] = useState(null);
+  const [pipelineStep, setPipelineStep] = useState('');
+  const [videoUrl, setVideoUrl] = useState('');
 
+  const typeLabel = INFLUENCER_TYPES.find(t => t.value === influencerType)?.label || influencerType;
+
+  // ── Step 2→3: Generate influencer prompt via Gemini ──────────
   const handleGeneratePrompt = async () => {
     setLoading(true);
+    setStatusMsg('Generating influencer prompt...');
     const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `You are a UGC (User Generated Content) creative director. Create a detailed AI image generation prompt for a virtual influencer.
+      prompt: `You are a UGC creative director. Create a detailed AI image generation prompt for a virtual influencer.
 
 TARGET AUDIENCE: ${targetAudience}
 TARGET DEMOGRAPHY: ${targetDemography}
 TARGET MARKET: ${targetMarket}
-INFLUENCER TYPE: ${INFLUENCER_TYPES.find(t => t.value === influencerType)?.label || influencerType}
+INFLUENCER TYPE: ${typeLabel}
 WHAT THEY'RE DOING: ${influencerAction}
 
-Create a detailed, photorealistic image generation prompt that describes:
-1. The influencer's appearance (age range, style, outfit, hair, expression)
-2. The environment/setting they're in
+Create a detailed, photorealistic image generation prompt (150-250 words) describing:
+1. Appearance (age range, style, outfit, hair, expression)
+2. Environment/setting
 3. What they're doing/holding
 4. Camera angle and lighting
-5. Overall mood and aesthetic
+5. Mood and aesthetic
 
-The prompt should be 150-250 words, highly detailed, photorealistic quality.
-Return ONLY the prompt text, nothing else.`,
+Return ONLY the prompt text.`,
     });
     setInfluencerPrompt(result);
     setLoading(false);
+    setStatusMsg('');
     setStep(3);
   };
 
+  // ── Step 3: Generate image via Kie (same API as generateSceneImage) ──
   const handleGenerateImage = async () => {
     setLoading(true);
+    setStatusMsg('Generating influencer image...');
     const { url } = await base44.integrations.Core.GenerateImage({
       prompt: influencerPrompt,
     });
     setInfluencerImageUrl(url);
     setLoading(false);
+    setStatusMsg('');
   };
 
+  // ── Step 3→4: Generate voice script via Gemini ──────────────
   const handleGenerateVoiceScript = async () => {
     setLoading(true);
+    setStatusMsg('Writing voiceover script...');
     const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `You are a UGC content scriptwriter. Write a short, authentic voiceover script (30-60 seconds speaking time) for a virtual influencer video.
+      prompt: `You are a UGC scriptwriter. Write a short voiceover script (30-60 seconds) for a virtual influencer.
 
-INFLUENCER TYPE: ${INFLUENCER_TYPES.find(t => t.value === influencerType)?.label || influencerType}
+INFLUENCER TYPE: ${typeLabel}
 ACTION: ${influencerAction}
 TARGET AUDIENCE: ${targetAudience}
 TARGET MARKET: ${targetMarket}
 
 The script should:
-- Sound natural and conversational, like a real person talking to camera
+- Sound natural and conversational
 - Include a hook in the first 3 seconds
-- Feel authentic to UGC style (not overly polished)
-- Include natural pauses and emphasis points
-- Be between 80-150 words
+- Feel authentic UGC style
+- Be 80-150 words
 
-Return ONLY the script text, no directions or labels.`,
+Return ONLY the script text.`,
     });
     setVoiceScript(result);
     setLoading(false);
+    setStatusMsg('');
     setStep(4);
   };
 
-  const handleGenerateVoice = async () => {
+  // ── Step 4→5: Create project, script, generate voiceover, then scene breakdown + images + video ──
+  const handleGenerateFullPipeline = async () => {
     setLoading(true);
-    // Use the TTS pipeline
-    const AI33_KEY = true; // We'll use the existing voiceover pipeline
-    // For now, generate using InvokeLLM to get a polished script, then user can use voiceover panel
-    setVoiceUrl('pending'); // Placeholder — would connect to TTS
-    setLoading(false);
     setStep(5);
+
+    // 1. Create project
+    setPipelineStep('Creating project...');
+    const project = await base44.entities.Projects.create({
+      name: `UGC: ${typeLabel}`,
+      niche: influencerType,
+      tone: 'conversational',
+      visual_style: 'photorealistic_4k',
+      orientation: 'portrait',
+      video_duration_minutes: 1,
+      status: 'script_complete',
+      current_step: 4,
+    });
+    setProjectId(project.id);
+
+    // 2. Create script record
+    setPipelineStep('Saving script...');
+    await base44.entities.Scripts.create({
+      project_id: project.id,
+      version: 'final_aggregated',
+      title: `UGC: ${typeLabel}`,
+      full_script: voiceScript,
+      word_count: voiceScript.split(/\s+/).filter(w => w).length,
+    });
+
+    // 3. Generate voiceover via ai33.pro (same backend function)
+    setPipelineStep('Generating voiceover (ai33.pro TTS)...');
+    try {
+      const voResult = await base44.functions.invoke('generateVoiceover', {
+        project_id: project.id,
+      });
+      setVoiceUrl(voResult.voiceover_url || '');
+      setVoiceDuration(voResult.voiceover_duration_seconds || 0);
+    } catch (err) {
+      console.warn('Voiceover generation failed:', err.message);
+      setPipelineStep('Voiceover failed — continuing with image...');
+    }
+
+    // 4. Create a single scene with the influencer image
+    setPipelineStep('Creating scene with influencer image...');
+    const scene = await base44.entities.Scenes.create({
+      project_id: project.id,
+      scene_number: 1,
+      narration_text: voiceScript,
+      image_prompt: influencerPrompt,
+      image_url: influencerImageUrl,
+      duration_seconds: voiceDuration || 30,
+      status: 'image_generated',
+    });
+
+    // 5. Generate video via Veo 3.1 (same backend function)
+    if (influencerImageUrl && !influencerImageUrl.startsWith('data:')) {
+      setPipelineStep('Submitting to Veo 3.1 for video generation...');
+      try {
+        const vidResult = await base44.functions.invoke('generateSceneVideo', {
+          scene_id: scene.id,
+        });
+
+        if (vidResult.task_id) {
+          setPipelineStep('Video rendering with Veo 3.1 — polling...');
+          // Poll for completion
+          let done = false;
+          let polls = 0;
+          while (!done && polls < 40) {
+            await new Promise(r => setTimeout(r, 15000));
+            polls++;
+            setPipelineStep(`Rendering... (poll ${polls})`);
+            try {
+              const pollResult = await base44.functions.invoke('pollSceneVideo', {
+                scene_id: scene.id,
+              });
+              if (pollResult.status === 'COMPLETED') {
+                setVideoUrl(pollResult.video_url || '');
+                done = true;
+              } else if (pollResult.status === 'FAILED') {
+                console.warn('Video generation failed');
+                done = true;
+              }
+            } catch (pollErr) {
+              console.warn('Poll error:', pollErr.message);
+            }
+          }
+        }
+      } catch (vidErr) {
+        console.warn('Video generation failed:', vidErr.message);
+      }
+    }
+
+    setPipelineStep('Done!');
+    setLoading(false);
   };
 
-  const stepLabels = ['Audience', 'Influencer', 'Image Prompt', 'Voice Script', 'Generate'];
+  const stepLabels = ['Audience', 'Influencer', 'Image', 'Script', 'Pipeline'];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 to-rose-50 p-4">
@@ -134,7 +234,7 @@ Return ONLY the script text, no directions or labels.`,
             <Users className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold">UGC Creator Pipeline</h1>
-          <p className="text-gray-500 mt-1">Generate AI influencer content with lip-sync video</p>
+          <p className="text-gray-500 mt-1">AI influencer → Image → Voice → Lip-sync Video</p>
         </div>
 
         {/* Step Indicator */}
@@ -157,39 +257,21 @@ Return ONLY the script text, no directions or labels.`,
         {/* Step 1: Audience */}
         {step === 1 && (
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Target Audience & Market</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-lg">Target Audience & Market</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">Target Audience</label>
-                <Input
-                  placeholder="e.g. Women 25-35 interested in skincare"
-                  value={targetAudience}
-                  onChange={e => setTargetAudience(e.target.value)}
-                />
+                <Input placeholder="e.g. Women 25-35 interested in skincare" value={targetAudience} onChange={e => setTargetAudience(e.target.value)} />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">Target Demography</label>
-                <Input
-                  placeholder="e.g. Urban millennials, middle income"
-                  value={targetDemography}
-                  onChange={e => setTargetDemography(e.target.value)}
-                />
+                <Input placeholder="e.g. Urban millennials, middle income" value={targetDemography} onChange={e => setTargetDemography(e.target.value)} />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">Target Market</label>
-                <Input
-                  placeholder="e.g. US, UK, Australia"
-                  value={targetMarket}
-                  onChange={e => setTargetMarket(e.target.value)}
-                />
+                <Input placeholder="e.g. US, UK, Australia" value={targetMarket} onChange={e => setTargetMarket(e.target.value)} />
               </div>
-              <Button
-                onClick={() => setStep(2)}
-                disabled={!targetAudience.trim()}
-                className="w-full bg-pink-600 hover:bg-pink-700 gap-2"
-              >
+              <Button onClick={() => setStep(2)} disabled={!targetAudience.trim()} className="w-full bg-pink-600 hover:bg-pink-700 gap-2">
                 Next <ArrowRight className="w-4 h-4" />
               </Button>
             </CardContent>
@@ -199,96 +281,52 @@ Return ONLY the script text, no directions or labels.`,
         {/* Step 2: Influencer Type */}
         {step === 2 && (
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Influencer Details</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-lg">Influencer Details</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">Influencer Type</label>
                 <Select value={influencerType} onValueChange={setInfluencerType}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type..." />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Select type..." /></SelectTrigger>
                   <SelectContent>
-                    {INFLUENCER_TYPES.map(t => (
-                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                    ))}
+                    {INFLUENCER_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">What should the influencer be doing?</label>
-                <Textarea
-                  placeholder="e.g. Unboxing a skincare product, showing before/after results, speaking directly to camera in a bathroom..."
-                  value={influencerAction}
-                  onChange={e => setInfluencerAction(e.target.value)}
-                  className="min-h-[100px]"
-                />
+                <Textarea placeholder="e.g. Unboxing a product, speaking to camera..." value={influencerAction} onChange={e => setInfluencerAction(e.target.value)} className="min-h-[100px]" />
               </div>
               <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setStep(1)} className="gap-2">
-                  <ArrowLeft className="w-4 h-4" /> Back
-                </Button>
-                <Button
-                  onClick={handleGeneratePrompt}
-                  disabled={!influencerType || !influencerAction.trim() || loading}
-                  className="flex-1 bg-pink-600 hover:bg-pink-700 gap-2"
-                >
+                <Button variant="outline" onClick={() => setStep(1)} className="gap-2"><ArrowLeft className="w-4 h-4" /> Back</Button>
+                <Button onClick={handleGeneratePrompt} disabled={!influencerType || !influencerAction.trim() || loading} className="flex-1 bg-pink-600 hover:bg-pink-700 gap-2">
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                  Generate Influencer Prompt
+                  {loading ? statusMsg : 'Generate Influencer Prompt'}
                 </Button>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Step 3: Image Prompt & Generation */}
+        {/* Step 3: Image */}
         {step === 3 && (
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <ImageIcon className="w-5 h-5 text-pink-600" />
-                Influencer Image Prompt
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-lg flex items-center gap-2"><ImageIcon className="w-5 h-5 text-pink-600" /> Influencer Image</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <Textarea
-                value={influencerPrompt}
-                onChange={e => setInfluencerPrompt(e.target.value)}
-                className="min-h-[200px] text-sm"
-                placeholder="AI-generated prompt..."
-              />
-              <Button
-                onClick={handleGenerateImage}
-                disabled={loading || !influencerPrompt.trim()}
-                className="w-full bg-pink-600 hover:bg-pink-700 gap-2"
-              >
+              <Textarea value={influencerPrompt} onChange={e => setInfluencerPrompt(e.target.value)} className="min-h-[180px] text-sm" />
+              <Button onClick={handleGenerateImage} disabled={loading || !influencerPrompt.trim()} className="w-full bg-pink-600 hover:bg-pink-700 gap-2">
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                {loading ? 'Generating Image...' : 'Generate Influencer Image'}
+                {loading ? statusMsg : influencerImageUrl ? 'Regenerate Image' : 'Generate Image'}
               </Button>
-
               {influencerImageUrl && (
                 <div className="space-y-3">
                   <img src={influencerImageUrl} alt="AI Influencer" className="w-full rounded-lg border shadow-sm" />
-                  <div className="flex gap-3">
-                    <Button variant="outline" onClick={handleGenerateImage} disabled={loading} className="gap-2">
-                      <Sparkles className="w-4 h-4" /> Regenerate
-                    </Button>
-                    <Button
-                      onClick={handleGenerateVoiceScript}
-                      disabled={loading}
-                      className="flex-1 bg-pink-600 hover:bg-pink-700 gap-2"
-                    >
-                      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
-                      Generate Voice Script
-                    </Button>
-                  </div>
+                  <Button onClick={handleGenerateVoiceScript} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-700 gap-2">
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
+                    {loading ? statusMsg : 'Generate Voice Script'}
+                  </Button>
                 </div>
               )}
-
-              <Button variant="outline" onClick={() => setStep(2)} className="gap-2">
-                <ArrowLeft className="w-4 h-4" /> Back
-              </Button>
+              <Button variant="outline" onClick={() => setStep(2)} className="gap-2"><ArrowLeft className="w-4 h-4" /> Back</Button>
             </CardContent>
           </Card>
         )}
@@ -296,94 +334,95 @@ Return ONLY the script text, no directions or labels.`,
         {/* Step 4: Voice Script */}
         {step === 4 && (
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Mic className="w-5 h-5 text-pink-600" />
-                Voiceover Script
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Mic className="w-5 h-5 text-pink-600" /> Voiceover Script</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              {influencerImageUrl && (
-                <img src={influencerImageUrl} alt="AI Influencer" className="w-40 h-40 object-cover rounded-lg border mx-auto" />
-              )}
-              <Textarea
-                value={voiceScript}
-                onChange={e => setVoiceScript(e.target.value)}
-                className="min-h-[200px]"
-              />
-              <p className="text-xs text-gray-500">
-                {voiceScript.split(/\s+/).filter(w => w).length} words · ~{Math.round(voiceScript.split(/\s+/).filter(w => w).length / 2.5)}s
-              </p>
+              {influencerImageUrl && <img src={influencerImageUrl} alt="Influencer" className="w-40 h-40 object-cover rounded-lg border mx-auto" />}
+              <Textarea value={voiceScript} onChange={e => setVoiceScript(e.target.value)} className="min-h-[200px]" />
+              <p className="text-xs text-gray-500">{voiceScript.split(/\s+/).filter(w => w).length} words · ~{Math.round(voiceScript.split(/\s+/).filter(w => w).length / 2.5)}s</p>
               <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setStep(3)} className="gap-2">
-                  <ArrowLeft className="w-4 h-4" /> Back
-                </Button>
-                <Button
-                  onClick={handleGenerateVoice}
-                  disabled={loading || !voiceScript.trim()}
-                  className="flex-1 bg-pink-600 hover:bg-pink-700 gap-2"
-                >
+                <Button variant="outline" onClick={() => setStep(3)} className="gap-2"><ArrowLeft className="w-4 h-4" /> Back</Button>
+                <Button onClick={handleGenerateFullPipeline} disabled={loading || !voiceScript.trim()} className="flex-1 bg-pink-600 hover:bg-pink-700 gap-2">
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
-                  Generate Video
+                  Generate Voiceover + Video
                 </Button>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Step 5: Final */}
+        {/* Step 5: Pipeline Running / Results */}
         {step === 5 && (
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Video className="w-5 h-5 text-pink-600" />
-                UGC Video Generation
-              </CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Video className="w-5 h-5 text-pink-600" /> UGC Pipeline</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <div className="bg-pink-50 border border-pink-200 rounded-lg p-4 text-center">
-                <Sparkles className="w-8 h-8 text-pink-400 mx-auto mb-2" />
-                <p className="text-sm font-medium text-pink-800">Video Generation Pipeline</p>
-                <p className="text-xs text-pink-600 mt-1">
-                  The lip-sync video generation will combine your influencer image with the voiceover script.
-                  This feature connects to Kling or similar lip-sync APIs.
-                </p>
-              </div>
+              {loading && (
+                <div className="bg-pink-50 border border-pink-200 rounded-lg p-4">
+                  <div className="flex items-center gap-3 mb-2">
+                    <Loader2 className="w-5 h-5 animate-spin text-pink-600" />
+                    <p className="text-sm font-medium text-pink-800">{pipelineStep}</p>
+                  </div>
+                  <Progress value={
+                    pipelineStep.includes('project') ? 10 :
+                    pipelineStep.includes('script') ? 20 :
+                    pipelineStep.includes('voiceover') ? 40 :
+                    pipelineStep.includes('scene') ? 60 :
+                    pipelineStep.includes('Submitting') ? 70 :
+                    pipelineStep.includes('Rendering') ? 85 :
+                    pipelineStep.includes('Done') ? 100 : 50
+                  } className="h-2" />
+                </div>
+              )}
 
-              {influencerImageUrl && (
-                <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
+                {influencerImageUrl && (
                   <div>
                     <p className="text-xs font-medium text-gray-500 mb-1">Influencer Image</p>
                     <img src={influencerImageUrl} alt="Influencer" className="w-full rounded-lg border" />
                   </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-500 mb-1">Voice Script</p>
-                    <div className="bg-gray-50 p-3 rounded-lg border text-xs text-gray-700 max-h-[200px] overflow-y-auto">
-                      {voiceScript}
-                    </div>
-                  </div>
+                )}
+                <div>
+                  <p className="text-xs font-medium text-gray-500 mb-1">Voice Script</p>
+                  <div className="bg-gray-50 p-3 rounded-lg border text-xs text-gray-700 max-h-[200px] overflow-y-auto">{voiceScript}</div>
                 </div>
-              )}
+              </div>
 
-              {influencerImageUrl && (
-                <Button
-                  onClick={() => {
-                    const a = document.createElement('a');
-                    a.href = influencerImageUrl;
-                    a.download = 'ugc-influencer.png';
-                    a.target = '_blank';
-                    a.click();
-                  }}
-                  variant="outline"
-                  className="w-full gap-2"
-                >
-                  <Download className="w-4 h-4" /> Download Influencer Image
+              {/* Results */}
+              <div className="space-y-2">
+                {voiceUrl && (
+                  <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg p-3">
+                    <Volume2 className="w-4 h-4 text-green-600" />
+                    <span className="text-sm flex-1">Voiceover ready ({voiceDuration}s)</span>
+                    <audio controls src={voiceUrl} className="h-8" />
+                    <Button size="sm" variant="outline" onClick={() => { const a = document.createElement('a'); a.href = voiceUrl; a.download = 'ugc-voiceover.mp3'; a.target = '_blank'; a.click(); }}>
+                      <Download className="w-3 h-3" />
+                    </Button>
+                  </div>
+                )}
+                {videoUrl && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Video className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-medium">Video Generated!</span>
+                    </div>
+                    <video controls src={videoUrl} className="w-full rounded-lg border" />
+                    <Button size="sm" variant="outline" className="mt-2 w-full gap-2" onClick={() => { const a = document.createElement('a'); a.href = videoUrl; a.download = 'ugc-video.mp4'; a.target = '_blank'; a.click(); }}>
+                      <Download className="w-4 h-4" /> Download Video
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {!loading && influencerImageUrl && (
+                <Button variant="outline" className="w-full gap-2" onClick={() => { const a = document.createElement('a'); a.href = influencerImageUrl; a.download = 'ugc-influencer.png'; a.target = '_blank'; a.click(); }}>
+                  <Download className="w-4 h-4" /> Download Image
                 </Button>
               )}
 
-              <Button variant="outline" onClick={() => setStep(4)} className="gap-2">
-                <ArrowLeft className="w-4 h-4" /> Back
-              </Button>
+              {!loading && projectId && (
+                <Button onClick={() => navigate(createPageUrl(`ContentGeneration?project_id=${projectId}`))} className="w-full bg-pink-600 hover:bg-pink-700 gap-2">
+                  Open in Full Pipeline <ArrowRight className="w-4 h-4" />
+                </Button>
+              )}
             </CardContent>
           </Card>
         )}
