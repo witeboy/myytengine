@@ -88,6 +88,17 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       return;
     }
 
+    // generateVoiceover now completes synchronously — check for direct success
+    if (res.data?.success && res.data?.voiceover_url) {
+      const settingsRes = await base44.entities.ProductionSettings.filter({ project_id: project.id });
+      if (settingsRes.length > 0) {
+        setSettings({ ...settingsRes[0], voiceover_status: 'completed', voiceover_url: res.data.voiceover_url });
+      }
+      setGenerating(false);
+      onUpdate?.();
+      return;
+    }
+
     const taskId = res.data?.task_id;
 
     if (settings) {
