@@ -22,6 +22,7 @@ const SORT_FIELDS = [
   { key: "opportunity_score", label: "Opp" },
   { key: "engagement_pct", label: "Eng%" },
   { key: "est_rpm", label: "RPM" },
+  { key: "est_cpm", label: "CPM" },
   { key: "est_total_revenue", label: "Revenue" },
   { key: "profitability_score", label: "Profit Score" },
   { key: "published_date", label: "Age" },
