@@ -208,7 +208,8 @@ Write a complete narration script (~${analysis.estimated_word_count || 1500} wor
         setPipelineStep(`Generating image ${i + 1}/${ready.length}...`);
         setImagesDone(i + 1);
         try {
-          await base44.functions.invoke('generateSceneImage', { scene_id: ready[i].id });
+          const imgResp = await base44.functions.invoke('generateSceneImage', { scene_id: ready[i].id });
+          console.log(`Scene ${ready[i].scene_number} image:`, imgResp.data?.model_used);
         } catch (imgErr) {
           console.warn(`Scene ${ready[i].scene_number} image failed:`, imgErr.message);
         }
