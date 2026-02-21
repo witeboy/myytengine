@@ -222,7 +222,7 @@ Deno.serve(async (req) => {
       output_resolution: '1920x1080',            // enforce YouTube standard
     };
 
-    if (taskId) settingsPayload.generation_task_id = taskId;
+    // no task_id in chunked mode
 
     if (settings) {
       await base44.asServiceRole.entities.ProductionSettings.update(settings.id, settingsPayload);
