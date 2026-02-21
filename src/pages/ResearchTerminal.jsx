@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, Loader2, Zap, TrendingUp, DollarSign, Target } from "lucide-react";
 import RecentSearches from "../components/niche/RecentSearches";
+import TrendingNichesTable from "../components/niche/TrendingNichesTable";
 
 export default function ResearchTerminal() {
   const [keyword, setKeyword] = useState("");
@@ -57,7 +58,7 @@ export default function ResearchTerminal() {
   ];
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)]">
+    <div className="flex flex-col items-center min-h-[calc(100vh-8rem)] py-8">
       <div className="w-full max-w-2xl space-y-8">
         {/* Header */}
         <div className="text-center space-y-3">
@@ -134,6 +135,15 @@ export default function ResearchTerminal() {
 
         {/* Recent Searches */}
         <RecentSearches />
+      </div>
+
+      {/* Trending Niches - full width below */}
+      <div className="w-full max-w-4xl mt-8">
+        <TrendingNichesTable onSelectNiche={(kw) => {
+          setKeyword(kw);
+          // Auto-scroll to top
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }} />
       </div>
     </div>
   );
