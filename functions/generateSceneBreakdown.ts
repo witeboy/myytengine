@@ -301,8 +301,10 @@ Deno.serve(async (req) => {
     const niche = project.niche || 'general';
     const nicheProfile = getNicheDirectorProfile(niche);
 
-    const MAX_SCENE_SECONDS = 5;
-    const totalTargetScenes = Math.max(8, Math.round((durationMinutes * 60) / MAX_SCENE_SECONDS));
+    // Generate DENSE scene coverage — ~3 seconds per scene for rich visual storytelling
+    // This ensures media covers the full voiceover duration with room to spare
+    const MAX_SCENE_SECONDS = 3;
+    const totalTargetScenes = Math.max(12, Math.round((durationMinutes * 60) / MAX_SCENE_SECONDS));
     const phases = calculatePhaseAllocation(totalTargetScenes);
     const scriptChunks = splitScriptByPhase(finalScript, phases);
 
@@ -412,9 +414,9 @@ Create EXACTLY ${chunk.scenes} scenes (numbers ${sceneOffset + 1} to ${sceneOffs
 ${chunk.text}
 
 **CRITICAL RULES:**
-1. MORE SCENES = BETTER ENERGY. Split aggressively — every idea, beat, emotion shift, or emphasis change deserves its own scene. A single sentence can be 2 scenes if the visual changes.
-2. Scenes = VISUAL BEATS not sentences. Director calls CUT when the visual concept changes.
-3. Each scene is SHORT (3-6 seconds). Quick cuts create energy and flow.
+1. MORE SCENES = BETTER ENERGY. Split aggressively — every idea, beat, emotion shift, or emphasis change deserves its own scene. A single sentence can be 2-3 scenes if the visual changes. We need ENOUGH media to cover the FULL voiceover duration.
+2. Scenes = VISUAL BEATS not sentences. Director calls CUT when the visual concept changes. Think music video density — rapid visual variety.
+3. Each scene is SHORT (2-5 seconds). Quick cuts create energy, flow, and cinematic rhythm. Shorter = more scenes = better coverage.
 4. Visual concept = SPECIFIC frozen cinematic moment (2-4 sentences), incredibly detailed.
 5. **CAMERA IS EVERYTHING** — each scene MUST have a DISTINCT camera setup that serves the story:
    - Shot variety: ECU, CU, MCU, MS, MWS, WS, EWS, OTS, INSERT, LOW ANGLE, HIGH ANGLE, DUTCH, POV, AERIAL, STEADICAM, HANDHELD, CRANE
@@ -454,12 +456,12 @@ ${chunk.text}
       "niche_visual_element": "One niche metaphor element that reinforces the emotion",
       "continuity_bridge": "Visual thread to NEXT scene — what carries over",
       "emotional_intensity": 0.5,
-      "duration_seconds": 5
+      "duration_seconds": 4
     }
   ]
 }
 
-EXACTLY ${chunk.scenes} scenes. EVERY script word allocated to a scene. NO added narration. No text/charts in visuals. SHORT narration per scene — split the text across all ${chunk.scenes} scenes evenly.`;
+EXACTLY ${chunk.scenes} scenes. EVERY script word allocated to a scene. NO added narration. No text/charts in visuals. SHORT narration per scene — split the text across all ${chunk.scenes} scenes evenly. Each scene should be 2-5 seconds. More scenes with shorter duration is ALWAYS better than fewer longer scenes.`;
 
       console.log(`🎬 Pass 2.${batchIdx + 1}: ${chunk.phase} (scenes ${sceneOffset + 1}-${sceneOffset + chunk.scenes})...`);
       const batchResult = await callGemini(breakdownPrompt, 0.7, 16384);
@@ -498,7 +500,7 @@ EXACTLY ${chunk.scenes} scenes. EVERY script word allocated to a scene. NO added
             // Director notes stored HERE — prompt generator reads from this
             image_prompt: `DIRECTOR_NOTES:${JSON.stringify(directorNotes)}`,
             animation_prompt: scene.camera_movement || "slow gentle camera drift forward with atmospheric particles",
-            duration_seconds: scene.duration_seconds || 5,
+            duration_seconds: scene.duration_seconds || 4,
             status: "breakdown_ready"
           });
 
