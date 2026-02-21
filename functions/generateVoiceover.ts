@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, voice_id, voice_name = 'Rachel' } = await req.json();
+    const { project_id, script_id, voice_id, voice_name = 'Rachel' } = await req.json();
 
     if (!project_id) {
       return Response.json({ error: 'Missing project_id' }, { status: 400 });
@@ -128,14 +128,24 @@ Deno.serve(async (req) => {
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-    // ── Get final aggregated script ────────────────────────────────
+    // ── Get final aggregated script (or fallback to provided script_id or any script) ──
     const allScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
-    const script = allScripts.find(s => s.version === 'final_aggregated');
+    let script = allScripts.find(s => s.version === 'final_aggregated');
+
+    // Fallback: try the provided script_id
+    if (!script?.full_script && script_id) {
+      script = allScripts.find(s => s.id === script_id && s.full_script);
+    }
+
+    // Fallback: try any script with content
+    if (!script?.full_script) {
+      script = allScripts.find(s => s.full_script);
+    }
 
     if (!script?.full_script) {
       return Response.json({
-        error: 'No final script found. Generate the full script first.'
-      }, { status: 404 });
+        error: 'No script found with content. Generate a script first.'
+      }, { status: 400 });
     }
 
     // ── Clean narration text ───────────────────────────────────────

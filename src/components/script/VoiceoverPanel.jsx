@@ -68,11 +68,19 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
     setGenerating(true);
     setError('');
 
-    const res = await base44.functions.invoke('generateVoiceover', {
-      project_id: project.id,
-      script_id: script.id,
-      voice_id: selectedVoice,
-    });
+    let res;
+    try {
+      res = await base44.functions.invoke('generateVoiceover', {
+        project_id: project.id,
+        script_id: script.id,
+        voice_id: selectedVoice,
+      });
+    } catch (err) {
+      const errMsg = err?.response?.data?.error || err.message || 'Voiceover generation failed';
+      setError(errMsg);
+      setGenerating(false);
+      return;
+    }
 
     if (res.data?.error) {
       setError(res.data.error);
