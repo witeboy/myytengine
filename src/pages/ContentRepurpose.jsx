@@ -21,6 +21,8 @@ const VISUAL_STYLES = [
   { value: 'cinematic_anime', label: 'Cinematic Anime' },
   { value: 'anime', label: 'Anime' },
   { value: 'cartoon_2d', label: 'Cartoon 2D' },
+  { value: 'picstory_cocomelon', label: 'PicStory / CoComelon' },
+  { value: 'cinematic_picstory', label: 'Cinematic PicStory' },
   { value: 'oil_painting', label: 'Oil Painting' },
   { value: 'watercolor', label: 'Watercolor' },
   { value: 'comic_book', label: 'Comic Book' },
