@@ -492,7 +492,7 @@ export default function TimelineEditor() {
                     <div className="w-24 flex-shrink-0 px-3 py-2 bg-gray-900 border-r border-gray-700 text-xs font-medium text-gray-300 flex items-center gap-1">
                       <Play className="w-3 h-3" /> Audio
                     </div>
-                    <div className="flex-1 h-16 bg-gradient-to-r from-blue-100 to-blue-50 flex items-center px-4">
+                    <div className="flex-1 h-16 bg-gray-900 flex items-center px-4">
                       {voiceoverDuration > 0 ? (
                         <div
                           className="h-8 bg-blue-300 rounded flex items-center px-3 text-xs text-blue-800 font-medium border border-blue-400"
@@ -526,7 +526,7 @@ export default function TimelineEditor() {
                     <div className="w-24 flex-shrink-0 px-3 py-2 bg-gray-900 border-r border-gray-700 text-xs font-medium text-gray-300 flex items-center gap-1">
                       🔊 SFX
                     </div>
-                    <div className="flex-1 h-12 bg-gradient-to-r from-amber-50 to-amber-100/30 relative">
+                    <div className="flex-1 h-12 bg-gray-900 relative">
                       {scenesWithTiming.filter(s => s.sound_effect_url).map(scene => (
                         <div
                           key={scene.id}
