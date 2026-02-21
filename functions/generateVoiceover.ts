@@ -158,75 +158,51 @@ Deno.serve(async (req) => {
     }
 
     // ── Detect response type ───────────────────────────────────────
-    // ai33.pro may return:
-    //   a) Audio binary (Content-Type: audio/mpeg) — stream the bytes, upload to get URL
-    //   b) JSON with audio_url — ready immediately
-    //   c) JSON with task_id — needs polling
+    // ai33.pro ElevenLabs-compatible API returns audio as binary stream
+    // Content-Type will be audio/mpeg for MP3
     const contentType = ttsResponse.headers.get('content-type') || '';
-    console.log(`🎙 TTS response content-type: ${contentType}`);
+    console.log(`🎙 TTS response content-type: ${contentType}, status: ${ttsResponse.status}`);
 
     let audioUrl = null;
     let voiceoverDuration = null;
 
-    if (contentType.includes('audio/') || contentType.includes('octet-stream')) {
-      // ── Binary audio response — upload to get a public URL ────────
-      console.log(`🎙 Got binary audio stream, uploading...`);
-      const audioBlob = await ttsResponse.blob();
-      console.log(`🎙 Audio blob size: ${audioBlob.size} bytes`);
+    // ── Always read as binary first — ai33.pro returns raw audio ──
+    const audioArrayBuffer = await ttsResponse.arrayBuffer();
+    const audioBytes = new Uint8Array(audioArrayBuffer);
+    console.log(`🎙 Response size: ${audioBytes.length} bytes`);
 
-      // Calculate duration from file size (128kbps MP3)
-      voiceoverDuration = audioBlob.size / 16000;
-      console.log(`🎙 Duration from blob size: ${voiceoverDuration.toFixed(1)}s`);
+    // Check if it's actually JSON (small response, starts with '{')
+    const isJson = audioBytes.length < 10000 && audioBytes[0] === 0x7B; // '{'
 
-      // Upload via Base44
+    if (isJson) {
+      const jsonText = new TextDecoder().decode(audioBytes);
+      console.log(`🎙 JSON response: ${jsonText.substring(0, 500)}`);
+      const ttsData = JSON.parse(jsonText);
+
+      if (ttsData.audio_url || ttsData.url || ttsData.output_url) {
+        audioUrl = ttsData.audio_url || ttsData.url || ttsData.output_url;
+        console.log(`✓ Audio URL (sync): ${audioUrl}`);
+      } else if (ttsData.detail) {
+        throw new Error(`TTS API error: ${ttsData.detail}`);
+      } else {
+        throw new Error(`TTS returned unexpected JSON: ${jsonText.substring(0, 300)}`);
+      }
+
+      voiceoverDuration = ttsData.duration_seconds || ttsData.duration;
+    } else {
+      // ── Binary audio — upload to get a public URL ────────────────
+      console.log(`🎙 Got binary audio (${audioBytes.length} bytes), uploading...`);
+
+      // Calculate duration from file size (128kbps MP3 = 16,000 bytes/sec)
+      voiceoverDuration = audioBytes.length / 16000;
+      console.log(`🎙 Duration from size: ${voiceoverDuration.toFixed(1)}s`);
+
+      const audioBlob = new Blob([audioBytes], { type: 'audio/mpeg' });
       const uploadResult = await base44.asServiceRole.integrations.Core.UploadFile({
         file: new File([audioBlob], 'voiceover.mp3', { type: 'audio/mpeg' })
       });
       audioUrl = uploadResult.file_url;
       console.log(`✓ Audio uploaded: ${audioUrl}`);
-
-    } else {
-      // ── JSON response ────────────────────────────────────────────
-      const ttsData = await ttsResponse.json();
-      console.log(`🎙 TTS response keys: ${Object.keys(ttsData).join(', ')}`);
-
-      if (ttsData.audio_url || ttsData.url || ttsData.output_url) {
-        audioUrl = ttsData.audio_url || ttsData.url || ttsData.output_url;
-        console.log(`✓ Audio URL (sync): ${audioUrl}`);
-
-      } else if (ttsData.task_id) {
-        console.log(`⏳ Polling task: ${ttsData.task_id}`);
-        const result = await pollVoiceoverTask(API_KEY, ttsData.task_id);
-        audioUrl = result.audio_url || result.url || result.output_url || result.result?.url;
-        voiceoverDuration = result.duration_seconds || result.duration || result.audio_duration;
-
-        if (!audioUrl) {
-          const resultData = result.result || result.data || result.output || {};
-          audioUrl = resultData.audio_url || resultData.url || resultData.output_url;
-        }
-
-        if (!audioUrl) throw new Error('TTS completed but no audio URL found');
-        console.log(`✓ Audio URL (async): ${audioUrl}`);
-      } else {
-        throw new Error(`TTS API returned unexpected JSON: ${JSON.stringify(ttsData).substring(0, 300)}`);
-      }
-
-      // Check duration from JSON response
-      if (!voiceoverDuration) {
-        voiceoverDuration = ttsData.duration_seconds || ttsData.duration || ttsData.audio_duration;
-      }
-
-      if (!voiceoverDuration && ttsData.transcript) {
-        const transcript = typeof ttsData.transcript === 'string'
-          ? JSON.parse(ttsData.transcript)
-          : ttsData.transcript;
-        if (transcript.duration_seconds) {
-          voiceoverDuration = transcript.duration_seconds;
-        } else if (transcript.words?.length > 0) {
-          const lastWord = transcript.words[transcript.words.length - 1];
-          voiceoverDuration = lastWord.end || lastWord.end_time || lastWord.offset_end;
-        }
-      }
     }
 
     // ── Calculate duration if still unknown ─────────────────────────
