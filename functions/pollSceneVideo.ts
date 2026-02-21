@@ -1,25 +1,20 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // ══════════════════════════════════════════════════════════════════
-// SCENE VIDEO POLLER — Checks Veo 3.1 task status via Kie API
+// SCENE VIDEO POLLER — Veo 3.1 Fast + 1080p Upgrade via Kie API
 // ══════════════════════════════════════════════════════════════════
 //
-// Called after generateSceneVideo to check if video is ready.
-// Reads the veo_task:{taskId} stored on scene.video_url.
+// Flow:
+//   1. Poll record-info for base task (veo3_fast)
+//   2. Once base succeeds → request 1080p upgrade
+//   3. Poll 1080p until ready → save final URL
 //
-// FLOW:
-//   1. Extract taskId from scene.video_url
-//   2. Poll /veo/record-info → check successFlag
-//   3. If ready, update scene with final video URL
+// Scene video_url states:
+//   veo_task:{taskId}         — base generation in progress
+//   veo_1080p:{taskId}        — 1080p upgrade in progress
+//   https://...               — final video ready
 //
-// successFlag values (from Kie docs):
-//   0 = generating (still processing)
-//   1 = success (video ready)
-//   2 = failed
-//   3 = generation failed (upstream error)
-//
-// ENDPOINT:
-//   GET https://api.kie.ai/api/v1/veo/record-info?taskId={id}
+// successFlag: 0=generating, 1=success, 2=failed, 3=gen failed
 // ══════════════════════════════════════════════════════════════════
 
 const VEO_BASE = "https://api.kie.ai/api/v1/veo";
@@ -41,43 +36,71 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
     }
 
-    // ── Extract task ID ─────────────────────────────────────────────
     const videoUrl = scene.video_url || '';
 
-    if (!videoUrl.startsWith('veo_task:')) {
-      // Already a real URL
-      if (videoUrl.startsWith('http')) {
-        return Response.json({ success: true, status: 'COMPLETED', video_url: videoUrl });
+    // Already a real URL — done
+    if (videoUrl.startsWith('http')) {
+      return Response.json({ success: true, status: 'COMPLETED', video_url: videoUrl });
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // PHASE 2: 1080p upgrade polling
+    // ═══════════════════════════════════════════════════════════
+    if (videoUrl.startsWith('veo_1080p:')) {
+      const taskId = videoUrl.replace('veo_1080p:', '');
+      console.log(`Polling 1080p upgrade for task: ${taskId}`);
+
+      const res = await fetch(`${VEO_BASE}/get-1080p-video?taskId=${taskId}`, {
+        headers: { "Authorization": `Bearer ${KIE_API_KEY}` }
+      });
+
+      const data = await res.json();
+      console.log(`1080p response (${res.status}): code=${data.code} msg=${data.msg}`);
+
+      if (data.code === 200 && data.data?.resultUrl) {
+        const finalUrl = data.data.resultUrl;
+        console.log(`1080p ready: ${finalUrl.substring(0, 80)}`);
+
+        await base44.asServiceRole.entities.Scenes.update(scene_id, {
+          video_url: finalUrl,
+          status: 'video_generated'
+        });
+
+        return Response.json({
+          success: true,
+          status: 'COMPLETED',
+          video_url: finalUrl,
+          resolution: '1080p',
+          task_id: taskId,
+          scene_number: scene.scene_number
+        });
       }
+
+      // Not ready yet — keep polling
+      return Response.json({
+        success: true,
+        status: 'PROCESSING',
+        phase: '1080p_upgrade',
+        task_id: taskId,
+        scene_number: scene.scene_number
+      });
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // PHASE 1: Base veo3_fast generation polling
+    // ═══════════════════════════════════════════════════════════
+    if (!videoUrl.startsWith('veo_task:')) {
       return Response.json({ error: 'No video task found on this scene', video_url: videoUrl }, { status: 400 });
     }
 
     const taskId = videoUrl.replace('veo_task:', '');
-    console.log(`Polling Veo task: ${taskId} for scene ${scene.scene_number}`);
-
-    // ══════════════════════════════════════════════════════════════
-    // POLL TASK STATUS
-    // ══════════════════════════════════════════════════════════════
+    console.log(`Polling base Veo task: ${taskId} for scene ${scene.scene_number}`);
 
     const statusRes = await fetch(`${VEO_BASE}/record-info?taskId=${taskId}`, {
       headers: { "Authorization": `Bearer ${KIE_API_KEY}` }
     });
 
-    const statusText = await statusRes.text();
-    console.log(`Veo status response (${statusRes.status}): ${statusText.substring(0, 500)}`);
-
-    if (!statusRes.ok) {
-      return Response.json({
-        error: `Veo status check failed: ${statusRes.status} - ${statusText}`
-      }, { status: 500 });
-    }
-
-    let statusData;
-    try {
-      statusData = JSON.parse(statusText);
-    } catch (e) {
-      return Response.json({ error: `Veo returned non-JSON: ${statusText.substring(0, 200)}` }, { status: 500 });
-    }
+    const statusData = await statusRes.json();
 
     if (statusData.code !== 200) {
       return Response.json({
@@ -90,27 +113,23 @@ Deno.serve(async (req) => {
     const successFlag = record?.successFlag;
     const errorMessage = record?.errorMessage;
 
-    console.log(`Task ${taskId}: successFlag=${successFlag}, errorMessage=${errorMessage || 'none'}`);
+    console.log(`Task ${taskId}: successFlag=${successFlag}, error=${errorMessage || 'none'}`);
 
-    // ── Still processing (successFlag === 0) ────────────────────
+    // Still generating
     if (successFlag === 0 || successFlag === null || successFlag === undefined) {
       return Response.json({
         success: true,
         status: 'PROCESSING',
+        phase: 'base_generation',
         task_id: taskId,
-        scene_number: scene.scene_number,
-        created_at: record?.createTime
+        scene_number: scene.scene_number
       });
     }
 
-    // ── Failed (successFlag === 2 or 3) ─────────────────────────
+    // Failed
     if (successFlag === 2 || successFlag === 3) {
-      console.error(`Veo task ${taskId} failed (flag=${successFlag}): ${errorMessage || record?.errorCode}`);
-
-      await base44.asServiceRole.entities.Scenes.update(scene_id, {
-        status: 'failed'
-      });
-
+      console.error(`Veo task ${taskId} failed (flag=${successFlag}): ${errorMessage}`);
+      await base44.asServiceRole.entities.Scenes.update(scene_id, { status: 'failed' });
       return Response.json({
         success: false,
         status: 'FAILED',
@@ -119,133 +138,51 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── Completed (successFlag === 1) ───────────────────────────
+    // Success — now request 1080p upgrade
     if (successFlag === 1) {
-      const response = record?.response || {};
-      const resolution = response.resolution || '';
+      console.log(`Base task ${taskId} complete, requesting 1080p upgrade...`);
 
-      // Check if this is already a 1080p task or if we need to request upgrade
-      const isAlready1080p = resolution === '1080p' || videoUrl.startsWith('veo_1080p:');
+      // Immediately try 1080p
+      const upRes = await fetch(`${VEO_BASE}/get-1080p-video?taskId=${taskId}`, {
+        headers: { "Authorization": `Bearer ${KIE_API_KEY}` }
+      });
+      const upData = await upRes.json();
+      console.log(`1080p request: code=${upData.code} msg=${upData.msg}`);
 
-      if (!isAlready1080p && !videoUrl.startsWith('veo_1080p:')) {
-        // Fast model completed — now request 1080p upgrade
-        console.log(`Veo task ${taskId}: fast gen complete (${resolution}), requesting 1080p upgrade...`);
+      if (upData.code === 200 && upData.data?.resultUrl) {
+        // Already ready
+        const finalUrl = upData.data.resultUrl;
+        console.log(`1080p immediately ready: ${finalUrl.substring(0, 80)}`);
 
-        const upgradeRes = await fetch(`${VEO_BASE}/get-1080p-video?taskId=${taskId}`, {
-          headers: { "Authorization": `Bearer ${KIE_API_KEY}` }
-        });
-        const upgradeText = await upgradeRes.text();
-        console.log(`1080p upgrade response (${upgradeRes.status}): ${upgradeText.substring(0, 500)}`);
-
-        let upgradeData;
-        try { upgradeData = JSON.parse(upgradeText); } catch (_) { upgradeData = null; }
-
-        if (upgradeData?.code === 200 && upgradeData?.data?.resultUrl) {
-          // 1080p ready immediately
-          const hdUrl = upgradeData.data.resultUrl;
-          console.log(`1080p ready immediately: ${hdUrl.substring(0, 80)}`);
-
-          await base44.asServiceRole.entities.Scenes.update(scene_id, {
-            video_url: hdUrl,
-            status: 'video_generated'
-          });
-
-          return Response.json({
-            success: true,
-            status: 'COMPLETED',
-            video_url: hdUrl,
-            resolution: '1080p',
-            task_id: taskId,
-            scene_number: scene.scene_number
-          });
-        }
-
-        // 1080p not ready yet — mark scene so next poll retries the 1080p endpoint
-        console.log(`1080p not ready yet (code=${upgradeData?.code}), will retry on next poll`);
         await base44.asServiceRole.entities.Scenes.update(scene_id, {
-          video_url: `veo_1080p:${taskId}`
+          video_url: finalUrl,
+          status: 'video_generated'
         });
 
         return Response.json({
           success: true,
-          status: 'PROCESSING',
+          status: 'COMPLETED',
+          video_url: finalUrl,
+          resolution: '1080p',
           task_id: taskId,
-          scene_number: scene.scene_number,
-          message: 'Video generated, upgrading to 1080p...'
+          scene_number: scene.scene_number
         });
       }
 
-      // We're in 1080p polling phase — retry the 1080p endpoint
-      if (videoUrl.startsWith('veo_1080p:')) {
-        const realTaskId = videoUrl.replace('veo_1080p:', '');
-        console.log(`Retrying 1080p upgrade for task ${realTaskId}...`);
-
-        const upgradeRes = await fetch(`${VEO_BASE}/get-1080p-video?taskId=${realTaskId}`, {
-          headers: { "Authorization": `Bearer ${KIE_API_KEY}` }
-        });
-        const upgradeText = await upgradeRes.text();
-        console.log(`1080p retry response (${upgradeRes.status}): ${upgradeText.substring(0, 500)}`);
-
-        let upgradeData;
-        try { upgradeData = JSON.parse(upgradeText); } catch (_) { upgradeData = null; }
-
-        if (upgradeData?.code === 200 && upgradeData?.data?.resultUrl) {
-          const hdUrl = upgradeData.data.resultUrl;
-          console.log(`1080p ready: ${hdUrl.substring(0, 80)}`);
-
-          await base44.asServiceRole.entities.Scenes.update(scene_id, {
-            video_url: hdUrl,
-            status: 'video_generated'
-          });
-
-          return Response.json({
-            success: true,
-            status: 'COMPLETED',
-            video_url: hdUrl,
-            resolution: '1080p',
-            task_id: realTaskId,
-            scene_number: scene.scene_number
-          });
-        }
-
-        // Still not ready
-        return Response.json({
-          success: true,
-          status: 'PROCESSING',
-          task_id: realTaskId,
-          scene_number: scene.scene_number,
-          message: 'Upgrading to 1080p...'
-        });
-      }
-
-      // Fallback — use whatever URL we have
-      let finalVideoUrl = response.resultUrls?.[0] || response.originUrls?.[0];
-      console.log(`Veo task ${taskId}: complete | resolution: ${resolution} | url: ${finalVideoUrl?.substring(0, 80)}`);
-
-      if (!finalVideoUrl) {
-        return Response.json({
-          error: 'Task completed but no video URL found in response',
-          task_id: taskId,
-          raw_response: response
-        }, { status: 500 });
-      }
-
+      // Not ready yet — mark scene for 1080p polling phase
       await base44.asServiceRole.entities.Scenes.update(scene_id, {
-        video_url: finalVideoUrl,
-        status: 'video_generated'
+        video_url: `veo_1080p:${taskId}`
       });
 
       return Response.json({
         success: true,
-        status: 'COMPLETED',
-        video_url: finalVideoUrl,
-        resolution: resolution || '1080p',
+        status: 'PROCESSING',
+        phase: '1080p_upgrade',
         task_id: taskId,
         scene_number: scene.scene_number
       });
     }
 
-    // ── Unknown state ───────────────────────────────────────────
     return Response.json({
       success: true,
       status: 'UNKNOWN',
