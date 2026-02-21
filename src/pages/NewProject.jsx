@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { createPageUrl } from '@/utils';
-import { Loader2, Sparkles, Film, Users, RefreshCw, ArrowRight, ArrowLeft, Search } from 'lucide-react';
+import { Loader2, Sparkles, Film, Users, RefreshCw, ArrowRight, ArrowLeft, Search, Shield } from 'lucide-react';
 import ProjectTemplates from '@/components/templates/ProjectTemplates';
 
 const PROJECT_TYPES = [
@@ -46,6 +46,15 @@ const PROJECT_TYPES = [
     bgColor: 'bg-violet-50 border-violet-200 hover:border-violet-400',
     emoji: '🔍',
   },
+  {
+    id: 'audit',
+    name: 'Channel Auditor',
+    description: 'Deep-dive monetized channels for CTR, retention, and profit signals. Not keywords — real data.',
+    icon: Shield,
+    color: 'from-amber-500 to-orange-600',
+    bgColor: 'bg-amber-50 border-amber-200 hover:border-amber-400',
+    emoji: '🏆',
+  },
 ];
 
 export default function NewProject() {
@@ -84,7 +93,7 @@ export default function NewProject() {
             <p className="text-gray-500">Choose your project type to get started</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
             {PROJECT_TYPES.map(type => (
               <Card
                 key={type.id}
@@ -96,6 +105,8 @@ export default function NewProject() {
                     navigate(createPageUrl('ContentRepurpose'));
                   } else if (type.id === 'niche') {
                     navigate(createPageUrl('ResearchTerminal'));
+                  } else if (type.id === 'audit') {
+                    navigate(createPageUrl('ChannelAuditor'));
                   } else {
                     setSelectedType(type.id);
                   }

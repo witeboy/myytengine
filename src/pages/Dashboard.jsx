@@ -2,7 +2,7 @@ import React from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Archive, BookOpen, Image, Film, FolderOpen, History, Users, RefreshCw, Search } from 'lucide-react';
+import { Plus, Archive, BookOpen, Image, Film, FolderOpen, History, Users, RefreshCw, Search, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -71,6 +71,9 @@ export default function Dashboard() {
             </Button>
             <Button variant="outline" onClick={() => navigate(createPageUrl('ResearchTerminal'))}>
               <Search className="w-4 h-4 mr-2" /> Niche Research
+            </Button>
+            <Button variant="outline" onClick={() => navigate(createPageUrl('ChannelAuditor'))}>
+              <Shield className="w-4 h-4 mr-2" /> Channel Auditor
             </Button>
             <Button onClick={() => navigate(createPageUrl('NewProject'))} className="bg-blue-600 hover:bg-blue-700">
               <Plus className="w-5 h-5 mr-2" /> New Project
