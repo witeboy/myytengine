@@ -13,6 +13,7 @@ import VisualStyleSelector from '@/components/content/VisualStyleSelector';
 import OrientationSelector from '@/components/content/OrientationSelector';
 import MusicPanel from '@/components/content/MusicPanel';
 import AudioMixerPanel from '@/components/content/AudioMixerPanel';
+import DownloadAllMedia from '@/components/content/DownloadAllMedia';
 import {
   Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film,
   Palette, Sparkles, Monitor, Clapperboard, Wand2, CheckCircle2,
@@ -562,6 +563,16 @@ export default function ContentGeneration() {
               </Button>
             </div>
           </div>
+        )}
+
+        {/* Download All Media */}
+        {scenes.length > 0 && (
+          <DownloadAllMedia
+            scenes={scenes}
+            voiceoverUrl={null}
+            musicUrl={null}
+            projectName={project?.name}
+          />
         )}
 
         {/* Action Bar */}
