@@ -11,9 +11,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 // and sends it to the best available image model.
 //
 // MODEL CHAIN:
-//   1. Nano Banana Pro (Gemini 3 Pro Image) via Kie — best quality
-//   2. Nano Banana (Gemini 2.5 Flash Image) via Kie — good quality
-//   3. Gemini Direct API (gemini-2.0-flash-exp-image-generation) — last resort
+//   1. Grok Imagine (imageGrok 4.0) via Kie — $0.02/6 images, great quality
+//   2. Gemini Direct API (gemini-2.0-flash-exp-image-generation) — fallback
 //
 // WHAT THIS FUNCTION DOES NOT DO (by design):
 //   ✗ No style sandwich wrapping
@@ -88,22 +87,10 @@ async function kiePollResult(apiKey, taskId, maxWaitMs = 120000) {
 // IMAGE GENERATION MODELS
 // ══════════════════════════════════════════════════════════════════
 
-// PRIMARY: Nano Banana Pro (Gemini 3 Pro Image) — best composition, lighting, framing
-async function generateWithNanaBananaPro(apiKey, prompt, aspectRatio) {
-  console.log(`[Nano Banana Pro] Gemini 3 Pro Image | aspect: ${aspectRatio}`);
-  const taskId = await kieCreateTask(apiKey, "nano-banana-pro", {
-    prompt,
-    aspect_ratio: aspectRatio,
-    resolution: "2K",
-    output_format: "png"
-  });
-  return await kiePollResult(apiKey, taskId);
-}
-
-// FALLBACK 1: Nano Banana (Gemini 2.5 Flash Image) — fast, good quality
-async function generateWithNanaBanana(apiKey, prompt, aspectRatio) {
-  console.log(`[Nano Banana] Gemini 2.5 Flash Image | aspect: ${aspectRatio}`);
-  const taskId = await kieCreateTask(apiKey, "google/nano-banana", {
+// PRIMARY: Grok Imagine via Kie — $0.02/6 images, great quality
+async function generateWithGrokImagine(apiKey, prompt, aspectRatio) {
+  console.log(`[Grok Imagine] imageGrok 4.0 | aspect: ${aspectRatio}`);
+  const taskId = await kieCreateTask(apiKey, "grok-imagine", {
     prompt,
     aspect_ratio: aspectRatio,
     output_format: "png"
@@ -111,7 +98,7 @@ async function generateWithNanaBanana(apiKey, prompt, aspectRatio) {
   return await kiePollResult(apiKey, taskId);
 }
 
-// FALLBACK 2: Gemini Direct API — uses GEMINI_API_KEY, returns base64 → data URI
+// FALLBACK: Gemini Direct API — uses GEMINI_API_KEY, returns base64 → data URI
 async function generateWithGeminiDirect(prompt) {
   const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
   if (!geminiApiKey) throw new Error("GEMINI_API_KEY not configured");
@@ -265,7 +252,7 @@ Deno.serve(async (req) => {
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`🖼️ Scene ${scene.scene_number} | ${dimensions} (${aspectRatio})`);
     console.log(`📐 Prompt: ${finalPrompt.length} chars | Passthrough mode`);
-    console.log(`🔗 Chain: Nano Banana Pro → Nano Banana → Gemini Direct`);
+    console.log(`🔗 Chain: Grok Imagine → Gemini Direct`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     // ══════════════════════════════════════════════════════════════
@@ -275,33 +262,23 @@ Deno.serve(async (req) => {
     let usedModel = '';
     const errors = [];
 
-    // ── Attempt 1: Nano Banana Pro (Gemini 3 Pro Image) ───────────
+    // ── Attempt 1: Grok Imagine via Kie ──────────────────────────
     try {
-      imageUrl = await generateWithNanaBananaPro(KIE_API_KEY, finalPrompt, aspectRatio);
-      usedModel = 'nano-banana-pro';
-      console.log(`✓ Scene ${scene.scene_number} generated with Nano Banana Pro (Gemini 3 Pro)`);
+      imageUrl = await generateWithGrokImagine(KIE_API_KEY, finalPrompt, aspectRatio);
+      usedModel = 'grok-imagine';
+      console.log(`✓ Scene ${scene.scene_number} generated with Grok Imagine`);
     } catch (err1) {
-      errors.push(`NanaBananaPro: ${err1.message}`);
-      console.warn(`✗ Nano Banana Pro failed: ${err1.message}`);
+      errors.push(`GrokImagine: ${err1.message}`);
+      console.warn(`✗ Grok Imagine failed: ${err1.message}`);
 
-      // ── Attempt 2: Nano Banana (Gemini 2.5 Flash Image) ────────
+      // ── Attempt 2: Gemini Direct API ────────────────────────────
       try {
-        imageUrl = await generateWithNanaBanana(KIE_API_KEY, finalPrompt, aspectRatio);
-        usedModel = 'google/nano-banana';
-        console.log(`✓ Scene ${scene.scene_number} generated with Nano Banana (Gemini 2.5 Flash)`);
+        imageUrl = await generateWithGeminiDirect(finalPrompt);
+        usedModel = 'gemini-direct';
+        console.log(`✓ Scene ${scene.scene_number} generated with Gemini Direct API`);
       } catch (err2) {
-        errors.push(`NanaBanana: ${err2.message}`);
-        console.warn(`✗ Nano Banana failed: ${err2.message}`);
-
-        // ── Attempt 3: Gemini Direct API ──────────────────────────
-        try {
-          imageUrl = await generateWithGeminiDirect(finalPrompt);
-          usedModel = 'gemini-direct';
-          console.log(`✓ Scene ${scene.scene_number} generated with Gemini Direct API`);
-        } catch (err3) {
-          errors.push(`GeminiDirect: ${err3.message}`);
-          throw new Error(`All generation attempts failed:\n  ${errors.join('\n  ')}`);
-        }
+        errors.push(`GeminiDirect: ${err2.message}`);
+        throw new Error(`All generation attempts failed:\n  ${errors.join('\n  ')}`);
       }
     }
 
