@@ -17,6 +17,7 @@ import UGCTemplates from '@/components/templates/UGCTemplates';
 import InfluencerPromptBuilder, { buildUGCPrompt } from '@/components/ugc/InfluencerPromptBuilder';
 import SaveInfluencerTemplate from '@/components/ugc/SaveInfluencerTemplate';
 import InfluencerTemplatesPicker from '@/components/ugc/InfluencerTemplatesPicker';
+import ProductUploader from '@/components/ugc/ProductUploader';
 
 const INFLUENCER_TYPES = [
   { value: 'beauty_guru', label: 'Beauty / Skincare Guru' },
@@ -52,6 +53,11 @@ export default function UGCPipeline() {
     hairStyle: '', clothing: '', setting: '', extraNotes: '',
   });
 
+  // Product/App hold config
+  const [holdMode, setHoldMode] = useState('product_review');
+  const [productImageUrl, setProductImageUrl] = useState('');
+  const [productDescription, setProductDescription] = useState('');
+
   // Step 3
   const [influencerPrompt, setInfluencerPrompt] = useState('');
   const [influencerImageUrl, setInfluencerImageUrl] = useState('');
@@ -86,6 +92,8 @@ export default function UGCPipeline() {
       ...appearanceConfig,
       influencerType: typeLabel,
       action: influencerAction,
+      holdMode,
+      productDescription,
     });
     setInfluencerPrompt(prompt);
     setLoading(false);
@@ -114,9 +122,12 @@ export default function UGCPipeline() {
   const handleGenerateImage = async () => {
     setLoading(true);
     setStatusMsg('Generating influencer image...');
-    const { url } = await base44.integrations.Core.GenerateImage({
-      prompt: influencerPrompt,
-    });
+    const genParams = { prompt: influencerPrompt };
+    // Pass product/app image as reference if uploaded
+    if (productImageUrl && holdMode !== 'none') {
+      genParams.existing_image_urls = [productImageUrl];
+    }
+    const { url } = await base44.integrations.Core.GenerateImage(genParams);
     setInfluencerImageUrl(url);
     setLoading(false);
     setStatusMsg('');
@@ -376,6 +387,18 @@ Return ONLY the motion description.`,
                 <div>
                   <label className="text-sm font-medium text-gray-700 mb-1 block">What should the influencer be doing?</label>
                   <Textarea placeholder="e.g. Unboxing a product, speaking to camera..." value={influencerAction} onChange={e => setInfluencerAction(e.target.value)} className="min-h-[80px]" />
+                </div>
+
+                <div className="border-t pt-4">
+                  <p className="text-sm font-medium text-gray-700 mb-3">Product / App to Showcase</p>
+                  <ProductUploader
+                    holdMode={holdMode}
+                    onHoldModeChange={setHoldMode}
+                    productImageUrl={productImageUrl}
+                    onProductImageChange={setProductImageUrl}
+                    productDescription={productDescription}
+                    onProductDescriptionChange={setProductDescription}
+                  />
                 </div>
 
                 <div className="border-t pt-4">
