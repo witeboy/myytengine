@@ -192,6 +192,8 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
   enhanced = enhanced.replace(/\b\d{3,4}\s*[x×]\s*\d{3,4}\s*(pixels?|px)?\s*\.?\s*/gi, '');
 
   const isHumptyDumpty = visualStyle === 'humpty_dumpty';
+  const isHarryPotter = visualStyle === 'harry_potter';
+  const isSpecialStyle = isHumptyDumpty || isHarryPotter;
 
   // Ensure style prefix
   const styleCheck = styleConfig.positive.substring(0, 30).toLowerCase();
@@ -200,8 +202,7 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
   }
 
   // Ensure composition hint
-  if (isHumptyDumpty) {
-    // Humpty Dumpty uses simple framing, not cinematic
+  if (isSpecialStyle) {
     const compHint = orientationConfig.format === 'portrait'
       ? 'vertical 9:16 frame'
       : 'wide 16:9 frame';
@@ -237,10 +238,14 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
     enhanced += ', ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image';
   }
 
-  // Ensure quality markers (skip cinematic markers for humpty dumpty)
+  // Ensure quality markers (style-appropriate)
   if (isHumptyDumpty) {
     if (!/clean|crisp|professional/i.test(enhanced)) {
       enhanced += ', clean crisp illustration, professional web animation quality, solid warm cream background';
+    }
+  } else if (isHarryPotter) {
+    if (!/atmospheric|teal|gothic/i.test(enhanced)) {
+      enhanced += ', dark teal atmospheric illustration, gothic digital painting, volumetric warm amber lighting through teal fog, professional illustration quality';
     }
   } else {
     if (!/masterpiece|professional|8k|award/i.test(enhanced)) {
@@ -580,7 +585,7 @@ ${sceneDirections}
   ]
 }`;
 
-      const prompt = isHumptyDumpty ? humptyDumptySystemPrompt : `**SYSTEM ROLE — You are an expert storyboard artist and cinematic director.**
+      const prompt = isHumptyDumpty ? humptyDumptySystemPrompt : isHarryPotter ? harryPotterSystemPrompt : `**SYSTEM ROLE — You are an expert storyboard artist and cinematic director.**
 Your job is to translate narrative text into highly visual, dynamic image prompts for AI image generation.
 You think like a cinematographer on set — you see the PHYSICAL REALITY of what the narration describes.
 You do NOT take metaphors literally. You do NOT default to abstract symbols or lab settings when the narration describes a human experience.

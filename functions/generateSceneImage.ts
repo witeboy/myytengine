@@ -266,9 +266,9 @@ Deno.serve(async (req) => {
     let usedModel = '';
     const errors = [];
 
-    // For humpty_dumpty style, use reference image from scene 1 for consistency
-    const isHumptyDumpty = project.visual_style === 'humpty_dumpty';
-    const referenceUrl = (isHumptyDumpty && scene.scene_number > 1 && project.reference_image_url)
+    // For stylized styles, use reference image from scene 1 for consistency
+    const usesReferenceImage = ['humpty_dumpty', 'harry_potter'].includes(project.visual_style);
+    const referenceUrl = (usesReferenceImage && scene.scene_number > 1 && project.reference_image_url)
       ? project.reference_image_url : null;
 
     // ── Attempt 1: Grok Imagine via Kie ──────────────────────────
