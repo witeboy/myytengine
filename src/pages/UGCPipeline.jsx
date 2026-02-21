@@ -68,7 +68,7 @@ export default function UGCPipeline() {
     setStep(2);
   };
 
-  // ── Step 2→3: Generate influencer prompt via Gemini ──────────
+  // ── Step 2→3: Generate influencer prompt via LLM ──────────
   const handleGeneratePrompt = async () => {
     setLoading(true);
     setStatusMsg('Generating influencer prompt...');
@@ -88,6 +88,8 @@ Create a detailed, photorealistic image generation prompt (150-250 words) descri
 4. Camera angle and lighting
 5. Mood and aesthetic
 
+CRITICAL: The person must be facing the camera with their face clearly visible — this image will be used for lip-sync avatar animation.
+
 Return ONLY the prompt text.`,
     });
     setInfluencerPrompt(result);
@@ -96,7 +98,7 @@ Return ONLY the prompt text.`,
     setStep(3);
   };
 
-  // ── Step 3: Generate image via Kie (same API as generateSceneImage) ──
+  // ── Step 3: Generate image ──────────────────────────────────
   const handleGenerateImage = async () => {
     setLoading(true);
     setStatusMsg('Generating influencer image...');
@@ -108,7 +110,7 @@ Return ONLY the prompt text.`,
     setStatusMsg('');
   };
 
-  // ── Step 3→4: Generate voice script via Gemini ──────────────
+  // ── Step 3→4: Generate voice script ─────────────────────────
   const handleGenerateVoiceScript = async () => {
     setLoading(true);
     setStatusMsg('Writing voiceover script...');
@@ -134,7 +136,7 @@ Return ONLY the script text.`,
     setStep(4);
   };
 
-  // ── Step 4→5: Create project, script, generate voiceover, then scene breakdown + images + video ──
+  // ── Step 4→5: Full pipeline — Project + Voiceover + Kling Avatar Video ──
   const handleGenerateFullPipeline = async () => {
     setLoading(true);
     setStep(5);
@@ -155,84 +157,113 @@ Return ONLY the script text.`,
 
     // 2. Create script record
     setPipelineStep('Saving script...');
-    const scriptRecord = await base44.entities.Scripts.create({
+    await base44.entities.Scripts.create({
       project_id: project.id,
       version: 'final_aggregated',
       title: `UGC: ${typeLabel}`,
       full_script: voiceScript,
       word_count: voiceScript.split(/\s+/).filter(w => w).length,
     });
-    console.log('Script created:', scriptRecord.id);
 
-    // 3. Generate voiceover via ai33.pro (same backend function)
-    setPipelineStep('Generating voiceover (ai33.pro TTS)...');
+    // 3. Generate voiceover via Kie Market ElevenLabs TTS
+    setPipelineStep('Generating voiceover (ElevenLabs TTS)...');
+    let generatedVoiceUrl = '';
+    let generatedDuration = 0;
     try {
       const voResponse = await base44.functions.invoke('generateVoiceover', {
         project_id: project.id,
+        voice_name: 'Rachel',
       });
       const voResult = voResponse.data || voResponse;
-      setVoiceUrl(voResult.voiceover_url || '');
-      setVoiceDuration(voResult.voiceover_duration_seconds || 0);
+      generatedVoiceUrl = voResult.voiceover_url || '';
+      generatedDuration = voResult.voiceover_duration_seconds || 0;
+      setVoiceUrl(generatedVoiceUrl);
+      setVoiceDuration(generatedDuration);
     } catch (err) {
       console.warn('Voiceover generation failed:', err.message);
       setPipelineStep('Voiceover failed — continuing with image...');
     }
 
-    // 4. Create a single scene with the influencer image
-    setPipelineStep('Creating scene with influencer image...');
-    const scene = await base44.entities.Scenes.create({
-      project_id: project.id,
-      scene_number: 1,
-      narration_text: voiceScript,
-      image_prompt: influencerPrompt,
-      image_url: influencerImageUrl,
-      duration_seconds: voiceDuration || 30,
-      status: 'image_generated',
-    });
-
-    // 5. Upload data URI image if needed, then generate video via Veo 3.1
+    // 4. Create a scene with the influencer image
+    setPipelineStep('Creating scene...');
     let finalImageUrl = influencerImageUrl;
+
+    // Upload data URI if needed
     if (finalImageUrl && finalImageUrl.startsWith('data:')) {
-      setPipelineStep('Uploading influencer image for video generation...');
+      setPipelineStep('Uploading influencer image...');
       try {
         const resp = await fetch(finalImageUrl);
         const blob = await resp.blob();
         const file = new File([blob], 'ugc-influencer.png', { type: 'image/png' });
         const { file_url } = await base44.integrations.Core.UploadFile({ file });
         finalImageUrl = file_url;
-        await base44.entities.Scenes.update(scene.id, { image_url: file_url });
       } catch (uploadErr) {
         console.warn('Image upload failed:', uploadErr.message);
       }
     }
 
-    if (finalImageUrl && finalImageUrl.startsWith('http')) {
-      setPipelineStep('Submitting to Veo 3.1 for video generation...');
+    const scene = await base44.entities.Scenes.create({
+      project_id: project.id,
+      scene_number: 1,
+      narration_text: voiceScript,
+      image_prompt: influencerPrompt,
+      image_url: finalImageUrl,
+      duration_seconds: generatedDuration || 30,
+      status: 'image_generated',
+    });
+
+    // 5. Generate lip-sync avatar video via Kling AI Avatar
+    if (finalImageUrl && finalImageUrl.startsWith('http') && generatedVoiceUrl) {
+      setPipelineStep('Generating motion description for avatar...');
+
+      // AI generates a detailed motion prompt for the avatar
+      let motionPrompt = '';
       try {
-        const vidResponse = await base44.functions.invoke('generateSceneVideo', {
+        motionPrompt = await base44.integrations.Core.InvokeLLM({
+          prompt: `You are a video director. Given this scene description, write a SHORT motion description (1-2 sentences) for a talking-head avatar video.
+
+The person is: ${typeLabel}
+They are doing: ${influencerAction}
+Script they're reading: "${voiceScript.substring(0, 200)}..."
+
+Describe natural head movements, facial expressions, and hand gestures that match the tone. Keep it under 50 words.
+Example: "Speaks enthusiastically with slight head nods, smiles warmly, gestures with right hand when emphasizing key points."
+
+Return ONLY the motion description.`,
+        });
+      } catch (e) {
+        motionPrompt = 'Natural conversational head movements with slight nods and warm expressions.';
+      }
+
+      setPipelineStep('Submitting to Kling AI Avatar (lip-sync)...');
+      try {
+        const avatarRes = await base44.functions.invoke('generateAvatarVideo', {
+          image_url: finalImageUrl,
+          audio_url: generatedVoiceUrl,
+          prompt: motionPrompt,
           scene_id: scene.id,
         });
-        const vidResult = vidResponse.data || vidResponse;
+        const avatarResult = avatarRes.data || avatarRes;
 
-        if (vidResult.task_id) {
-          setPipelineStep('Video rendering with Veo 3.1 — polling...');
-          // Poll for completion
+        if (avatarResult.task_id) {
+          setPipelineStep('Avatar rendering with Kling AI — polling...');
           let done = false;
           let polls = 0;
-          while (!done && polls < 40) {
+          while (!done && polls < 60) {
             await new Promise(r => setTimeout(r, 15000));
             polls++;
-            setPipelineStep(`Rendering... (poll ${polls})`);
+            setPipelineStep(`Kling Avatar rendering... (poll ${polls})`);
             try {
-              const pollResponse = await base44.functions.invoke('pollSceneVideo', {
+              const pollRes = await base44.functions.invoke('pollAvatarVideo', {
+                task_id: avatarResult.task_id,
                 scene_id: scene.id,
               });
-              const pollResult = pollResponse.data || pollResponse;
+              const pollResult = pollRes.data || pollRes;
               if (pollResult.status === 'COMPLETED') {
                 setVideoUrl(pollResult.video_url || '');
                 done = true;
               } else if (pollResult.status === 'FAILED') {
-                console.warn('Video generation failed');
+                console.warn('Avatar video failed:', pollResult.error);
                 done = true;
               }
             } catch (pollErr) {
@@ -241,7 +272,7 @@ Return ONLY the script text.`,
           }
         }
       } catch (vidErr) {
-        console.warn('Video generation failed:', vidErr.message);
+        console.warn('Avatar video generation failed:', vidErr.message);
       }
     }
 
@@ -263,7 +294,7 @@ Return ONLY the script text.`,
             <Users className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold">UGC Creator Pipeline</h1>
-          <p className="text-gray-500 mt-1">AI influencer → Image → Voice → Lip-sync Video</p>
+          <p className="text-gray-500 mt-1">AI influencer → Image → Voice → Kling Lip-sync Video</p>
         </div>
 
         {/* Step Indicator */}
@@ -379,7 +410,7 @@ Return ONLY the script text.`,
                 <Button variant="outline" onClick={() => setStep(3)} className="gap-2"><ArrowLeft className="w-4 h-4" /> Back</Button>
                 <Button onClick={handleGenerateFullPipeline} disabled={loading || !voiceScript.trim()} className="flex-1 bg-pink-600 hover:bg-pink-700 gap-2">
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
-                  Generate Voiceover + Video
+                  Generate Voiceover + Lip-sync Video
                 </Button>
               </div>
             </CardContent>
@@ -400,10 +431,11 @@ Return ONLY the script text.`,
                   <Progress value={
                     pipelineStep.includes('project') ? 10 :
                     pipelineStep.includes('script') ? 20 :
-                    pipelineStep.includes('voiceover') ? 40 :
-                    pipelineStep.includes('scene') ? 60 :
-                    pipelineStep.includes('Submitting') ? 70 :
-                    pipelineStep.includes('Rendering') ? 85 :
+                    pipelineStep.includes('voiceover') || pipelineStep.includes('TTS') ? 35 :
+                    pipelineStep.includes('scene') ? 50 :
+                    pipelineStep.includes('motion') ? 55 :
+                    pipelineStep.includes('Submitting') ? 60 :
+                    pipelineStep.includes('Avatar rendering') || pipelineStep.includes('Kling') ? 75 :
                     pipelineStep.includes('Done') ? 100 : 50
                   } className="h-2" />
                 </div>
@@ -438,7 +470,8 @@ Return ONLY the script text.`,
                   <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-2">
                       <Video className="w-4 h-4 text-green-600" />
-                      <span className="text-sm font-medium">Video Generated!</span>
+                      <span className="text-sm font-medium">Lip-sync Video Generated!</span>
+                      <Badge className="bg-purple-100 text-purple-700 text-xs">Kling AI Avatar</Badge>
                     </div>
                     <video controls src={videoUrl} className="w-full rounded-lg border" />
                     <Button size="sm" variant="outline" className="mt-2 w-full gap-2" onClick={() => { const a = document.createElement('a'); a.href = videoUrl; a.download = 'ugc-video.mp4'; a.target = '_blank'; a.click(); }}>
