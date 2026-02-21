@@ -110,7 +110,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         prompt,
         imageUrls: [scene.image_url],
-        model: "veo3",
+        model: "veo3_fast",
         aspect_ratio: aspectRatio,
         generationType: "FIRST_AND_LAST_FRAMES_2_VIDEO",
         enableTranslation: false
@@ -156,7 +156,7 @@ Deno.serve(async (req) => {
     return Response.json({
       success: true,
       task_id: taskId,
-      provider: "veo3_quality",
+      provider: "veo3_fast",
       status: "CREATED",
       aspect_ratio: aspectRatio,
       resolution: "1080p",
