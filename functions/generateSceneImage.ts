@@ -88,13 +88,17 @@ async function kiePollResult(apiKey, taskId, maxWaitMs = 120000) {
 // ══════════════════════════════════════════════════════════════════
 
 // PRIMARY: Grok Imagine via Kie — $0.02/6 images, great quality
-async function generateWithGrokImagine(apiKey, prompt, aspectRatio) {
-  console.log(`[Grok Imagine] imageGrok 4.0 | aspect: ${aspectRatio}`);
-  const taskId = await kieCreateTask(apiKey, "grok-imagine", {
+async function generateWithGrokImagine(apiKey, prompt, aspectRatio, referenceImageUrl) {
+  console.log(`[Grok Imagine] imageGrok 4.0 | aspect: ${aspectRatio}${referenceImageUrl ? ' | with ref image' : ''}`);
+  const input = {
     prompt,
     aspect_ratio: aspectRatio,
     output_format: "png"
-  });
+  };
+  if (referenceImageUrl) {
+    input.image_url = referenceImageUrl;
+  }
+  const taskId = await kieCreateTask(apiKey, "grok-imagine", input);
   return await kiePollResult(apiKey, taskId);
 }
 
@@ -262,9 +266,14 @@ Deno.serve(async (req) => {
     let usedModel = '';
     const errors = [];
 
+    // For humpty_dumpty style, use reference image from scene 1 for consistency
+    const isHumptyDumpty = project.visual_style === 'humpty_dumpty';
+    const referenceUrl = (isHumptyDumpty && scene.scene_number > 1 && project.reference_image_url)
+      ? project.reference_image_url : null;
+
     // ── Attempt 1: Grok Imagine via Kie ──────────────────────────
     try {
-      imageUrl = await generateWithGrokImagine(KIE_API_KEY, finalPrompt, aspectRatio);
+      imageUrl = await generateWithGrokImagine(KIE_API_KEY, finalPrompt, aspectRatio, referenceUrl);
       usedModel = 'grok-imagine';
       console.log(`✓ Scene ${scene.scene_number} generated with Grok Imagine`);
     } catch (err1) {
