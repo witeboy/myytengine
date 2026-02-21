@@ -444,16 +444,32 @@ export default function TimelineEditor() {
                 {/* Video Track */}
                 <div className="border-t relative">
                   <div className="flex items-center">
-                    <div className="w-24 flex-shrink-0 px-3 py-2 bg-gray-50 border-r text-xs font-medium text-gray-600 flex items-center gap-1">
+                    <div className="w-24 flex-shrink-0 px-3 py-2 bg-gray-900 border-r border-gray-700 text-xs font-medium text-gray-300 flex items-center gap-1">
                       <Film className="w-3 h-3" /> Video
                     </div>
-                    <TimelineTrack
-                      scenes={scenesWithTiming}
-                      pixelsPerSecond={pixelsPerSecond}
-                      selectedScene={selectedScene}
-                      onSelectScene={setSelectedScene}
-                      onUpdateDuration={handleUpdateDuration}
-                    />
+                    <div className="flex-1 relative" style={{ minWidth: totalDuration * pixelsPerSecond }}>
+                      <TimelineTrack
+                        scenes={scenesWithTiming}
+                        pixelsPerSecond={pixelsPerSecond}
+                        selectedScene={selectedScene}
+                        onSelectScene={setSelectedScene}
+                        onUpdateDuration={handleUpdateDuration}
+                      />
+                      {/* Gap indicator: shows red zone where voiceover has no media */}
+                      {voiceoverDuration > 0 && sceneDuration < voiceoverDuration && (
+                        <div
+                          className="absolute top-0 bottom-0 bg-red-900/30 border-l-2 border-red-500 border-dashed flex items-center justify-center"
+                          style={{
+                            left: sceneDuration * pixelsPerSecond,
+                            width: (voiceoverDuration - sceneDuration) * pixelsPerSecond
+                          }}
+                        >
+                          <span className="text-[10px] text-red-400 font-medium whitespace-nowrap px-2">
+                            ⚠ No media ({Math.round(voiceoverDuration - sceneDuration)}s gap)
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   {/* Playhead line on video track */}
                   {scenes.length > 0 && (
