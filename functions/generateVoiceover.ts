@@ -204,16 +204,6 @@ Deno.serve(async (req) => {
     let audioUrl = uploadResult.file_url;
     console.log(`✓ Audio uploaded: ${audioUrl}`);
 
-    // ── Calculate duration if still unknown ─────────────────────────
-    if (!voiceoverDuration && audioUrl) {
-      voiceoverDuration = await calculateAudioDuration(audioUrl, wordCount);
-    }
-
-    if (!voiceoverDuration) {
-      voiceoverDuration = (wordCount / 150) * 60;
-      console.log(`⚠ Duration estimated from word count: ${voiceoverDuration.toFixed(1)}s`);
-    }
-
     // Round to 1 decimal
     voiceoverDuration = Math.round(voiceoverDuration * 10) / 10;
     console.log(`🎙 Final voiceover duration: ${voiceoverDuration}s`);
