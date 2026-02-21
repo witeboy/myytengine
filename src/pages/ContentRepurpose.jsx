@@ -394,14 +394,26 @@ Write the complete narration script. Return ONLY the script text, no headers or 
                 <Input value={newTitle} onChange={e => setNewTitle(e.target.value)} />
                 <p className="text-xs text-gray-400 mt-1">Original: {analysis.title}</p>
               </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">Visual Style</label>
-                <Select value={selectedStyle} onValueChange={setSelectedStyle}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {VISUAL_STYLES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">Visual Style</label>
+                  <Select value={selectedStyle} onValueChange={setSelectedStyle}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {VISUAL_STYLES.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">Orientation</label>
+                  <Select value={selectedOrientation} onValueChange={setSelectedOrientation}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="landscape">🖥️ Landscape (16:9)</SelectItem>
+                      <SelectItem value="portrait">📱 Portrait (9:16)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">What to change?</label>
