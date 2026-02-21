@@ -208,9 +208,10 @@ Return ONLY the script text.`,
             polls++;
             setPipelineStep(`Rendering... (poll ${polls})`);
             try {
-              const pollResult = await base44.functions.invoke('pollSceneVideo', {
+              const pollResponse = await base44.functions.invoke('pollSceneVideo', {
                 scene_id: scene.id,
               });
+              const pollResult = pollResponse.data || pollResponse;
               if (pollResult.status === 'COMPLETED') {
                 setVideoUrl(pollResult.video_url || '');
                 done = true;
