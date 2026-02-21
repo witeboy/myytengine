@@ -292,6 +292,11 @@ export default function TimelineEditor() {
             <p className="text-gray-600">
               {scenes.length} scenes • {Math.round(totalDuration)}s total ({Math.round(totalDuration / 60)} min)
               {voiceoverDuration > 0 && <span className="text-blue-600 ml-1">· VO: {Math.round(voiceoverDuration)}s</span>}
+              {voiceoverDuration > 0 && sceneDuration > 0 && (
+                <span className={`ml-2 font-medium ${sceneDuration >= voiceoverDuration ? 'text-green-600' : 'text-red-600'}`}>
+                  · Coverage: {Math.round((sceneDuration / voiceoverDuration) * 100)}%
+                </span>
+              )}
             </p>
           </div>
           <div className="flex gap-2">
