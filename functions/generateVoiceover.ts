@@ -182,13 +182,42 @@ Deno.serve(async (req) => {
       if (ttsData.audio_url || ttsData.url || ttsData.output_url) {
         audioUrl = ttsData.audio_url || ttsData.url || ttsData.output_url;
         console.log(`✓ Audio URL (sync): ${audioUrl}`);
+        voiceoverDuration = ttsData.duration_seconds || ttsData.duration;
+
+      } else if (ttsData.task_id) {
+        // Async task — poll for completion
+        console.log(`⏳ Polling async TTS task: ${ttsData.task_id}`);
+        const result = await pollVoiceoverTask(API_KEY, ttsData.task_id);
+        audioUrl = result.audio_url || result.url || result.output_url;
+
+        if (!audioUrl) {
+          const rd = result.result || result.data || result.output || {};
+          audioUrl = rd.audio_url || rd.url || rd.output_url;
+        }
+
+        // If still no URL, check if polling returned binary audio data
+        if (!audioUrl && result.audio) {
+          // base64 encoded audio
+          const audioBlob2 = new Blob(
+            [Uint8Array.from(atob(result.audio), c => c.charCodeAt(0))],
+            { type: 'audio/mpeg' }
+          );
+          const upload2 = await base44.asServiceRole.integrations.Core.UploadFile({
+            file: new File([audioBlob2], 'voiceover.mp3', { type: 'audio/mpeg' })
+          });
+          audioUrl = upload2.file_url;
+        }
+
+        if (!audioUrl) throw new Error('TTS completed but no audio URL found in polling result');
+
+        voiceoverDuration = result.duration_seconds || result.duration || result.audio_duration;
+        console.log(`✓ Audio URL (async): ${audioUrl}`);
+
       } else if (ttsData.detail) {
         throw new Error(`TTS API error: ${ttsData.detail}`);
       } else {
         throw new Error(`TTS returned unexpected JSON: ${jsonText.substring(0, 300)}`);
       }
-
-      voiceoverDuration = ttsData.duration_seconds || ttsData.duration;
     } else {
       // ── Binary audio — upload to get a public URL ────────────────
       console.log(`🎙 Got binary audio (${audioBytes.length} bytes), uploading...`);
