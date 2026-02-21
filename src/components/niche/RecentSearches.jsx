@@ -31,8 +31,11 @@ export default function RecentSearches() {
           return (
             <Link
               key={s.id}
-              to={createPageUrl("ResultsGrid") + `?search_id=${s.id}&keyword=${encodeURIComponent(s.keyword)}`}
-              className="flex items-center justify-between p-2.5 rounded-lg bg-[#12121a] border border-[#1e1e2e] hover:border-indigo-500/30 transition-colors group"
+              to={s.status === "Complete" ? createPageUrl("ResultsGrid") + `?search_id=${s.id}&keyword=${encodeURIComponent(s.keyword)}` : "#"}
+              onClick={(e) => { if (s.status !== "Complete") e.preventDefault(); }}
+              className={`flex items-center justify-between p-2.5 rounded-lg bg-[#12121a] border border-[#1e1e2e] transition-colors group ${
+                s.status === "Complete" ? "hover:border-indigo-500/30 cursor-pointer" : "opacity-60 cursor-not-allowed"
+              }`}
             >
               <div className="flex items-center gap-3">
                 <Icon className={`w-3.5 h-3.5 ${cfg.color} ${s.status === "Pending" ? "animate-spin" : ""}`} />

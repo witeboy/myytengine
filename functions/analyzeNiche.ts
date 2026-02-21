@@ -12,6 +12,16 @@ const RPM_MULTIPLIERS = {
   saas: 4, ai: 3, automation: 3
 };
 
+// Parse ISO 8601 duration to seconds (e.g. PT1H2M30S → 3750)
+function parseDuration(iso) {
+  const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!match) return 0;
+  const h = parseInt(match[1] || 0);
+  const m = parseInt(match[2] || 0);
+  const s = parseInt(match[3] || 0);
+  return h * 3600 + m * 60 + s;
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -29,7 +39,7 @@ Deno.serve(async (req) => {
     }
 
     const now = new Date();
-    let publishedAfter = new Date();
+    const publishedAfter = new Date();
 
     if (duration === 'Last 48h') publishedAfter.setDate(now.getDate() - 2);
     else if (duration === 'This Week') publishedAfter.setDate(now.getDate() - 7);
@@ -66,47 +76,54 @@ Deno.serve(async (req) => {
     const videoIds = videos.map(v => v.id.videoId).join(',');
     const channelIds = [...new Set(videos.map(v => v.snippet.channelId))].join(',');
 
-    // STEP 2 — Video details
+    // STEP 2 — Video stats + content details
     const statsUrl =
       `https://www.googleapis.com/youtube/v3/videos?` +
       `part=statistics,contentDetails,snippet&id=${videoIds}&key=${API_KEY}`;
     const statsRes = await fetch(statsUrl);
     const statsData = await statsRes.json();
 
-    // STEP 3 — Channel details
+    // STEP 3 — Channel subscriber counts
     const chanUrl =
       `https://www.googleapis.com/youtube/v3/channels?` +
       `part=statistics&id=${channelIds}&key=${API_KEY}`;
     const chanRes = await fetch(chanUrl);
     const chanData = await chanRes.json();
 
-    const channelStatsMap = {};
+    const channelSubsMap = {};
     (chanData.items || []).forEach(c => {
-      channelStatsMap[c.id] = parseInt(c.statistics.subscriberCount || 1);
+      channelSubsMap[c.id] = parseInt(c.statistics.subscriberCount || 0);
     });
 
     const results = (statsData.items || []).map(video => {
       const views = parseInt(video.statistics.viewCount || 0);
-      const subs = channelStatsMap[video.snippet.channelId] || 1;
+      const subs = channelSubsMap[video.snippet.channelId] || 0;
       const published = new Date(video.snippet.publishedAt);
       const days = Math.max(1, (now - published) / (1000 * 60 * 60 * 24));
       const viewsPerDay = views / days;
 
-      const durationISO = video.contentDetails.duration;
-      const isLongForm = durationISO.includes('M') || durationISO.includes('H');
+      const durationSec = parseDuration(video.contentDetails.duration);
+      const isLongForm = durationSec >= 480; // 8+ minutes = long form (mid-roll eligible)
 
-      const opportunityScore = views / (subs === 0 ? 1 : subs);
+      // Opportunity Score = views / subs  (how much a video outperformed its channel size)
+      const opportunityScore = subs > 0 ? views / subs : (views > 1000 ? 100 : 0);
 
+      // RPM multiplier based on niche keywords
       const keywordLower = keyword.toLowerCase();
-      let multiplier = 2;
+      let rpmMultiplier = 2;
       for (const cat in RPM_MULTIPLIERS) {
         if (keywordLower.includes(cat)) {
-          multiplier = RPM_MULTIPLIERS[cat];
+          rpmMultiplier = RPM_MULTIPLIERS[cat];
           break;
         }
       }
 
-      const profitabilityScore = (viewsPerDay * opportunityScore) * multiplier * (isLongForm ? 1.3 : 1);
+      // Profitability Score (normalized)
+      // = log10(viewsPerDay + 1) × opportunityScore × rpmMultiplier × longFormBonus
+      // Using log scale prevents astronomically large numbers for viral videos
+      const logVpd = Math.log10(viewsPerDay + 1);
+      const cappedOpp = Math.min(opportunityScore, 500); // cap at 500x to prevent outliers
+      const profitabilityScore = logVpd * cappedOpp * rpmMultiplier * (isLongForm ? 1.5 : 1);
 
       return {
         search_id: search_id || '',
@@ -115,7 +132,7 @@ Deno.serve(async (req) => {
         channel_name: video.snippet.channelTitle,
         view_count: views,
         subscriber_count: subs,
-        views_per_day: parseFloat(viewsPerDay.toFixed(2)),
+        views_per_day: parseFloat(viewsPerDay.toFixed(1)),
         long_form: isLongForm,
         opportunity_score: parseFloat(opportunityScore.toFixed(2)),
         profitability_score: parseFloat(profitabilityScore.toFixed(2)),
@@ -124,6 +141,7 @@ Deno.serve(async (req) => {
       };
     });
 
+    // Filter: opportunity > 2 means video got at least 2x the channel's sub count in views
     const filtered = results
       .filter(r => r.opportunity_score > 2)
       .sort((a, b) => b.profitability_score - a.profitability_score);
@@ -135,7 +153,7 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.CachedVideos.bulkCreate(filtered);
     }
 
-    // Update search status
+    // Update search record
     if (search_id) {
       await base44.asServiceRole.entities.Searches.update(search_id, {
         status: 'Complete',
@@ -146,7 +164,7 @@ Deno.serve(async (req) => {
     return Response.json({ success: true, results: filtered, count: filtered.length });
 
   } catch (error) {
-    console.error('analyzeNiche error:', error.message);
+    console.error('analyzeNiche error:', error.message, error.stack);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });

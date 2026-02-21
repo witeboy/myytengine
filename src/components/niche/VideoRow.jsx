@@ -8,13 +8,13 @@ function formatNumber(n) {
   return n?.toLocaleString() || "0";
 }
 
-export default function VideoRow({ video, index }) {
+export default function VideoRow({ video, index, maxOpp, maxProfit }) {
   const multiplier = video.subscriber_count > 0
     ? (video.view_count / video.subscriber_count).toFixed(1)
     : "∞";
 
   const isViralGap = video.opportunity_score > 10;
-  const isHighRpm = video.profitability_score > 70;
+  const isHighRpm = video.profitability_score > 50;
 
   return (
     <tr className="border-b border-[#1e1e2e] hover:bg-white/[0.02] transition-colors group">
@@ -49,7 +49,7 @@ export default function VideoRow({ video, index }) {
           )}
           {video.long_form && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-gray-700 text-gray-500">
-              Long
+              Long-form
             </Badge>
           )}
         </div>
@@ -57,17 +57,13 @@ export default function VideoRow({ video, index }) {
 
       {/* Channel */}
       <td className="py-3 px-3">
-        <span className="text-xs text-gray-400">{video.channel_name}</span>
+        <span className="text-xs text-gray-400 truncate block max-w-[120px]">{video.channel_name}</span>
+        <span className="text-[10px] text-gray-600">{formatNumber(video.subscriber_count)} subs</span>
       </td>
 
       {/* Views */}
       <td className="py-3 px-3 text-right">
         <span className="text-sm font-mono text-white">{formatNumber(video.view_count)}</span>
-      </td>
-
-      {/* Subs */}
-      <td className="py-3 px-3 text-right">
-        <span className="text-sm font-mono text-gray-400">{formatNumber(video.subscriber_count)}</span>
       </td>
 
       {/* Views/Day */}
@@ -84,19 +80,19 @@ export default function VideoRow({ video, index }) {
 
       {/* Opportunity */}
       <td className="py-3 px-3 text-right">
-        <ScoreBar value={video.opportunity_score} max={50} color="emerald" />
+        <ScoreBar value={video.opportunity_score} max={maxOpp || 100} color="emerald" />
       </td>
 
       {/* Profitability */}
       <td className="py-3 px-3 text-right">
-        <ScoreBar value={video.profitability_score} max={500} color="amber" />
+        <ScoreBar value={video.profitability_score} max={maxProfit || 100} color="amber" />
       </td>
     </tr>
   );
 }
 
 function ScoreBar({ value, max, color }) {
-  const pct = Math.min(100, (value / max) * 100);
+  const pct = Math.min(100, max > 0 ? (value / max) * 100 : 0);
   const colorMap = {
     emerald: { bg: "bg-emerald-500/20", fill: "bg-emerald-500", text: "text-emerald-400" },
     amber: { bg: "bg-amber-500/20", fill: "bg-amber-500", text: "text-amber-400" },
@@ -106,8 +102,8 @@ function ScoreBar({ value, max, color }) {
   return (
     <div className="flex items-center gap-2 justify-end">
       <span className={`text-xs font-mono ${c.text}`}>{value.toFixed(1)}</span>
-      <div className={`w-12 h-1.5 rounded-full ${c.bg}`}>
-        <div className={`h-full rounded-full ${c.fill}`} style={{ width: `${pct}%` }} />
+      <div className={`w-14 h-1.5 rounded-full ${c.bg}`}>
+        <div className={`h-full rounded-full ${c.fill} transition-all`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );

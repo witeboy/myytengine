@@ -29,20 +29,25 @@ export default function ResearchTerminal() {
     });
 
     // Trigger analysis
-    const response = await base44.functions.invoke("analyzeNiche", {
-      keyword: keyword.trim(),
-      duration,
-      search_id: searchRecord.id,
-    });
+    try {
+      const response = await base44.functions.invoke("analyzeNiche", {
+        keyword: keyword.trim(),
+        duration,
+        search_id: searchRecord.id,
+      });
 
-    setLoading(false);
+      if (response.data?.error) {
+        setError(response.data.error);
+        setLoading(false);
+        return;
+      }
 
-    if (response.data?.error) {
-      setError(response.data.error);
-      return;
+      setLoading(false);
+      navigate(createPageUrl("ResultsGrid") + `?search_id=${searchRecord.id}&keyword=${encodeURIComponent(keyword.trim())}`);
+    } catch (e) {
+      setError(e.message || "Analysis failed. Please try again.");
+      setLoading(false);
     }
-
-    navigate(createPageUrl("ResultsGrid") + `?search_id=${searchRecord.id}&keyword=${encodeURIComponent(keyword.trim())}`);
   };
 
   const stats = [

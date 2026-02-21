@@ -1,9 +1,9 @@
-import React from "react";
+import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "../utils";
-import { ArrowLeft, BarChart3, TrendingUp, DollarSign, Eye } from "lucide-react";
+import { ArrowLeft, BarChart3, TrendingUp, DollarSign, Eye, Loader2, ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import VideoRow from "../components/niche/VideoRow";
 
@@ -17,6 +17,8 @@ export default function ResultsGrid() {
   const params = new URLSearchParams(window.location.search);
   const searchId = params.get("search_id");
   const keyword = params.get("keyword") || "Unknown";
+  const [sortField, setSortField] = useState("profitability_score");
+  const [sortDir, setSortDir] = useState(-1);
 
   const { data: videos = [], isLoading } = useQuery({
     queryKey: ["cached-videos", searchId],
@@ -27,6 +29,26 @@ export default function ResultsGrid() {
       return base44.entities.CachedVideos.list("-profitability_score", 50);
     },
   });
+
+  const sortedVideos = useMemo(() => {
+    return [...videos].sort((a, b) => {
+      const va = a[sortField] || 0;
+      const vb = b[sortField] || 0;
+      return sortDir === -1 ? vb - va : va - vb;
+    });
+  }, [videos, sortField, sortDir]);
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortDir(d => d * -1);
+    } else {
+      setSortField(field);
+      setSortDir(-1);
+    }
+  };
+
+  const maxOpp = videos.reduce((m, v) => Math.max(m, v.opportunity_score || 0), 1);
+  const maxProfit = videos.reduce((m, v) => Math.max(m, v.profitability_score || 0), 1);
 
   const topViews = videos.reduce((max, v) => Math.max(max, v.view_count || 0), 0);
   const avgOpp = videos.length > 0
@@ -40,9 +62,23 @@ export default function ResultsGrid() {
   const summaryCards = [
     { label: "Videos Found", value: videos.length, icon: BarChart3, color: "text-indigo-400" },
     { label: "Top Views", value: formatNumber(topViews), icon: Eye, color: "text-cyan-400" },
-    { label: "Avg Opportunity", value: avgOpp, icon: TrendingUp, color: "text-emerald-400" },
+    { label: "Avg Opportunity", value: avgOpp + "x", icon: TrendingUp, color: "text-emerald-400" },
     { label: "Avg Profit Score", value: avgProfit, icon: DollarSign, color: "text-amber-400" },
   ];
+
+  const SortHeader = ({ field, children, align = "right" }) => (
+    <th
+      className={`py-2.5 px-3 text-${align} cursor-pointer hover:text-gray-300 transition-colors select-none`}
+      onClick={() => handleSort(field)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {children}
+        {sortField === field && (
+          <ArrowUpDown className="w-2.5 h-2.5 text-indigo-400" />
+        )}
+      </span>
+    </th>
+  );
 
   return (
     <div className="space-y-6">
@@ -82,13 +118,15 @@ export default function ResultsGrid() {
 
       {/* Table */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="text-gray-500 text-sm">Loading results...</div>
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+          <p className="text-gray-500 text-sm">Loading results...</p>
         </div>
       ) : videos.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 space-y-3">
           <BarChart3 className="w-10 h-10 text-gray-700" />
-          <p className="text-gray-500 text-sm">No results found for this search.</p>
+          <p className="text-gray-500 text-sm">No profitable opportunities found for this niche.</p>
+          <p className="text-gray-600 text-xs">Try broadening your keyword or changing the time range.</p>
           <Link to={createPageUrl("ResearchTerminal")}>
             <Button variant="outline" className="border-[#1e1e2e] text-gray-400 hover:text-white">
               New Search
@@ -98,23 +136,22 @@ export default function ResultsGrid() {
       ) : (
         <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px]">
+            <table className="w-full min-w-[850px]">
               <thead>
                 <tr className="border-b border-[#1e1e2e] text-[10px] font-medium text-gray-500 uppercase tracking-wider">
                   <th className="py-2.5 px-3 text-center w-10">#</th>
                   <th className="py-2.5 px-3 text-left">Title</th>
                   <th className="py-2.5 px-3 text-left">Channel</th>
-                  <th className="py-2.5 px-3 text-right">Views</th>
-                  <th className="py-2.5 px-3 text-right">Subs</th>
-                  <th className="py-2.5 px-3 text-right">Views/Day</th>
-                  <th className="py-2.5 px-3 text-right">Multiplier</th>
-                  <th className="py-2.5 px-3 text-right">Opportunity</th>
-                  <th className="py-2.5 px-3 text-right">Profitability</th>
+                  <SortHeader field="view_count">Views</SortHeader>
+                  <SortHeader field="views_per_day">Views/Day</SortHeader>
+                  <SortHeader field="opportunity_score">Multiplier</SortHeader>
+                  <SortHeader field="opportunity_score">Opportunity</SortHeader>
+                  <SortHeader field="profitability_score">Profitability</SortHeader>
                 </tr>
               </thead>
               <tbody>
-                {videos.map((video, i) => (
-                  <VideoRow key={video.id} video={video} index={i} />
+                {sortedVideos.map((video, i) => (
+                  <VideoRow key={video.id} video={video} index={i} maxOpp={maxOpp} maxProfit={maxProfit} />
                 ))}
               </tbody>
             </table>
