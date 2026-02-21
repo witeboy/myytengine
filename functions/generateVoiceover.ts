@@ -4,155 +4,87 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 // VOICEOVER GENERATOR — MASTER CLOCK CREATOR
 // ══════════════════════════════════════════════════════════════════
 //
-// This function is the TIMING AUTHORITY for the entire pipeline.
-// It generates TTS audio and stores `voiceover_duration_seconds`
-// which all downstream functions (timeline, preview) must obey.
+// Uses Kie Market unified API for ElevenLabs TTS (same KIE_API_KEY
+// as video generation). Async task → poll → download audio URL.
 //
 // Flow:
 //   1. Fetch final_aggregated script
-//   2. Clean narration text (strip directions, timestamps, labels)
-//   3. Send to ai33.pro TTS API → get task_id
-//   4. Poll until audio is ready → get audio_url
-//   5. Calculate duration from MP3 file size (128kbps)
-//   6. Store voiceover_url + voiceover_duration_seconds
-//
-// Output format: 1920x1080 YouTube standard (stored for downstream)
+//   2. Clean narration text
+//   3. Submit TTS via Kie Market → get taskId
+//   4. Poll until audio ready → get resultUrl (MP3)
+//   5. Upload to Base44 storage
+//   6. Store voiceover_url + duration
 // ══════════════════════════════════════════════════════════════════
 
-// ── Chunk text for TTS ─────────────────────────────────────────────
-// ai33.pro queues long text asynchronously with no download endpoint.
-// We split into small chunks (~500 chars) that return audio directly.
-function splitTextIntoChunks(text, maxChars = 500) {
-  const sentences = text.split(/(?<=[.!?])\s+/);
-  const chunks = [];
-  let current = '';
+const KIE_BASE = 'https://api.kie.ai/api/v1/jobs';
 
-  for (const sentence of sentences) {
-    if (current.length + sentence.length > maxChars && current.length > 0) {
-      chunks.push(current.trim());
-      current = '';
-    }
-    current += sentence + ' ';
-  }
-  if (current.trim()) chunks.push(current.trim());
-  return chunks;
-}
-
-// ── Generate TTS for a single chunk ────────────────────────────────
-async function generateChunkAudio(apiKey, voiceId, text, chunkIndex) {
-  // Try multiple endpoint patterns to find one that returns audio
-  const endpoints = [
-    // Stream endpoint (ElevenLabs standard for streaming audio)
-    {
-      url: `https://api.ai33.pro/v1/text-to-speech/${voiceId}/stream?output_format=mp3_44100_128`,
-      method: 'POST',
-      body: { text, model_id: 'eleven_multilingual_v2' },
+// ── Submit TTS task to Kie Market ──────────────────────────────────
+async function submitTtsTask(apiKey, text, voice = 'Rachel') {
+  const res = await fetch(`${KIE_BASE}/createTask`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
     },
-    // Non-stream endpoint
-    {
-      url: `https://api.ai33.pro/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
-      method: 'POST',
-      body: { text, model_id: 'eleven_multilingual_v2' },
-    },
-  ];
-
-  for (const ep of endpoints) {
-    let res;
-    try {
-      res = await fetch(ep.url, {
-        method: ep.method,
-        headers: {
-          'Content-Type': 'application/json',
-          'xi-api-key': apiKey,
-        },
-        body: JSON.stringify(ep.body),
-      });
-    } catch (fetchErr) {
-      console.warn(`Chunk ${chunkIndex}: fetch failed for ${ep.url}: ${fetchErr.message}`);
-      continue;
-    }
-
-    const ct = res.headers.get('content-type') || '';
-    const cl = res.headers.get('content-length') || '?';
-    console.log(`Chunk ${chunkIndex} [${ep.url.includes('/stream') ? 'stream' : 'non-stream'}]: ${res.status} ct=${ct} cl=${cl}`);
-
-    if (!res.ok) {
-      console.warn(`Chunk ${chunkIndex}: ${res.status} ${await res.text()}`);
-      continue;
-    }
-
-    // If content-type says audio, great
-    if (ct.includes('audio/') || ct.includes('octet-stream')) {
-      const buf = await res.arrayBuffer();
-      const bytes = new Uint8Array(buf);
-      console.log(`Chunk ${chunkIndex}: got ${bytes.length} bytes of audio`);
-      return bytes;
-    }
-
-    // Read buffer and check
-    const buf = await res.arrayBuffer();
-    const bytes = new Uint8Array(buf);
-
-    // If large and not starting with '{', it's binary audio
-    if (bytes.length > 1000 && bytes[0] !== 0x7B) {
-      console.log(`Chunk ${chunkIndex}: binary audio (${bytes.length} bytes, first byte: 0x${bytes[0].toString(16)})`);
-      return bytes;
-    }
-
-    // JSON response — log and try next endpoint
-    if (bytes[0] === 0x7B) {
-      const jsonText = new TextDecoder().decode(bytes);
-      const data = JSON.parse(jsonText);
-      console.log(`Chunk ${chunkIndex}: JSON — keys: ${Object.keys(data).join(', ')}`);
-
-      if (data.audio_url || data.url) {
-        const audioRes = await fetch(data.audio_url || data.url);
-        const audioBuf = await audioRes.arrayBuffer();
-        return new Uint8Array(audioBuf);
-      }
-      // task_id — try next endpoint
-      continue;
-    }
-  }
-
-  // All endpoints returned JSON with task_id — dump full debug info
-  // Do one final attempt with verbose logging
-  const debugRes = await fetch(
-    `https://api.ai33.pro/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'xi-api-key': apiKey,
+    body: JSON.stringify({
+      model: 'elevenlabs/text-to-speech-turbo-2-5',
+      input: {
+        text,
+        voice,
+        stability: 0.5,
+        similarity_boost: 0.75,
+        style: 0,
+        speed: 1,
       },
-      body: JSON.stringify({ text, model_id: 'eleven_multilingual_v2' }),
-    }
-  );
+    }),
+  });
 
-  // Log ALL response headers for debugging
-  const allHeaders = {};
-  debugRes.headers.forEach((v, k) => { allHeaders[k] = v; });
-  console.log(`Chunk ${chunkIndex} DEBUG headers: ${JSON.stringify(allHeaders)}`);
+  const data = await res.json();
+  console.log(`TTS submit: ${res.status} → ${JSON.stringify(data)}`);
 
-  const debugBuf = await debugRes.arrayBuffer();
-  const debugBytes = new Uint8Array(debugBuf);
-  console.log(`Chunk ${chunkIndex} DEBUG: ${debugRes.status}, ${debugBytes.length} bytes, first 4: [${debugBytes.slice(0, 4).join(',')}]`);
-
-  if (debugBytes[0] === 0x7B) {
-    const debugJson = new TextDecoder().decode(debugBytes);
-    console.log(`Chunk ${chunkIndex} DEBUG FULL JSON: ${debugJson}`);
-    
-    // Check if ec_remain_credits is 0 or low
-    const parsed = JSON.parse(debugJson);
-    if (parsed.ec_remain_credits !== undefined) {
-      console.log(`💰 Remaining credits: ${parsed.ec_remain_credits}`);
-    }
+  if (data.code !== 200) {
+    throw new Error(`TTS submit failed: ${data.msg || JSON.stringify(data)}`);
   }
 
-  throw new Error(`Chunk ${chunkIndex}: could not get audio from any endpoint. Status=${debugRes.status}, bytes=${debugBytes.length}`);
+  return data.data.taskId;
 }
 
+// ── Poll Kie task until done ──────────────────────────────────────
+async function pollKieTask(apiKey, taskId, maxAttempts = 60, intervalMs = 5000) {
+  for (let i = 0; i < maxAttempts; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, intervalMs));
 
+    const res = await fetch(`${KIE_BASE}/recordInfo?taskId=${taskId}`, {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+
+    const data = await res.json();
+    if (data.code !== 200) {
+      console.warn(`Poll ${i + 1}: code=${data.code} msg=${data.message}`);
+      continue;
+    }
+
+    const { state, resultJson, failMsg } = data.data;
+    console.log(`Poll ${i + 1}: state=${state}`);
+
+    if (state === 'success') {
+      const result = JSON.parse(resultJson);
+      return result.resultUrls?.[0] || result.url || null;
+    }
+
+    if (state === 'fail') {
+      throw new Error(`TTS task failed: ${failMsg}`);
+    }
+    // waiting / queuing / generating → keep polling
+  }
+
+  throw new Error(`TTS task ${taskId} timed out after ${maxAttempts} polls`);
+}
+
+// ── Calculate MP3 duration from file size (128kbps) ───────────────
+function estimateMp3Duration(byteLength) {
+  return byteLength / 16000; // 128kbps = 16,000 bytes/sec
+}
 
 // ══════════════════════════════════════════════════════════════════
 // MAIN HANDLER
@@ -164,15 +96,15 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, voice_id = '21m00Tcm4TlvDq8ikWAM' } = await req.json();
+    const { project_id, voice_id, voice_name = 'Rachel' } = await req.json();
 
     if (!project_id) {
       return Response.json({ error: 'Missing project_id' }, { status: 400 });
     }
 
-    const API_KEY = Deno.env.get('AI33_API_KEY');
-    if (!API_KEY) {
-      return Response.json({ error: 'AI33_API_KEY not configured' }, { status: 500 });
+    const KIE_API_KEY = Deno.env.get('KIE_API_KEY');
+    if (!KIE_API_KEY) {
+      return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
     }
 
     // ── Fetch project ─────────────────────────────────────────────
@@ -192,73 +124,67 @@ Deno.serve(async (req) => {
 
     // ── Clean narration text ───────────────────────────────────────
     const cleanedText = script.full_script
-      .replace(/\[[^\]]*\]/gi, '')                                              // [bracketed directions]
-      .replace(/^(VOICEOVER|NARRATOR|VO|SOUND|MUSIC|SFX|SCENE)\s*:\s*/gim, '') // Label prefixes
-      .replace(/\*\*[^*]+\*\*:?\s*/g, '')                                      // **bold headers**
-      .replace(/\([^)]*(?:voiceover|pause|beat|whisper|dramatic)[^)]*\)/gi, '') // (parenthetical directions)
-      .replace(/\(?\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\)?/g, '')           // Timestamps
-      .replace(/#{1,6}\s+/g, '')                                               // Markdown headers
+      .replace(/\[[^\]]*\]/gi, '')
+      .replace(/^(VOICEOVER|NARRATOR|VO|SOUND|MUSIC|SFX|SCENE)\s*:\s*/gim, '')
+      .replace(/\*\*[^*]+\*\*:?\s*/g, '')
+      .replace(/\([^)]*(?:voiceover|pause|beat|whisper|dramatic)[^)]*\)/gi, '')
+      .replace(/\(?\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\)?/g, '')
+      .replace(/#{1,6}\s+/g, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
 
     const wordCount = cleanedText.split(/\s+/).filter(w => w.length > 0).length;
     console.log(`🎙 Voiceover: ${wordCount} words from final_aggregated script`);
 
-    // ── Generate TTS in chunks to avoid async task_id issue ────────
-    // ai33.pro queues long text and returns task_id with no retrievable
-    // endpoint. Small chunks return binary audio directly.
-    const chunks = splitTextIntoChunks(cleanedText, 500);
-    console.log(`🎙 Split into ${chunks.length} chunks for TTS`);
-
-    const audioChunks = [];
-    for (let i = 0; i < chunks.length; i++) {
-      console.log(`🎙 Generating chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)...`);
-      const chunkBytes = await generateChunkAudio(API_KEY, voice_id, chunks[i], i + 1);
-      audioChunks.push(chunkBytes);
+    // ── Update status to generating ────────────────────────────────
+    const existingSettings = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
+    const settings = existingSettings[0];
+    if (settings) {
+      await base44.asServiceRole.entities.ProductionSettings.update(settings.id, {
+        voiceover_status: 'generating',
+      });
     }
 
-    // ── Concatenate all audio chunks ──────────────────────────────
-    const totalLength = audioChunks.reduce((sum, c) => sum + c.length, 0);
-    const combinedAudio = new Uint8Array(totalLength);
-    let offset = 0;
-    for (const chunk of audioChunks) {
-      combinedAudio.set(chunk, offset);
-      offset += chunk.length;
+    // ── Submit TTS to Kie Market ───────────────────────────────────
+    console.log(`🎙 Submitting to Kie ElevenLabs TTS (voice: ${voice_name})...`);
+    const taskId = await submitTtsTask(KIE_API_KEY, cleanedText, voice_name);
+    console.log(`🎙 TTS task created: ${taskId}`);
+
+    // ── Poll until ready ───────────────────────────────────────────
+    console.log(`🎙 Polling for TTS result...`);
+    const audioResultUrl = await pollKieTask(KIE_API_KEY, taskId);
+
+    if (!audioResultUrl) {
+      throw new Error('TTS completed but no audio URL returned');
     }
+    console.log(`🎙 Audio ready: ${audioResultUrl.substring(0, 80)}...`);
 
-    console.log(`🎙 Combined audio: ${combinedAudio.length} bytes`);
+    // ── Download audio and re-upload to Base44 storage ─────────────
+    const audioRes = await fetch(audioResultUrl);
+    const audioBuffer = await audioRes.arrayBuffer();
+    const audioBytes = new Uint8Array(audioBuffer);
+    console.log(`🎙 Downloaded audio: ${audioBytes.length} bytes`);
 
-    // Calculate duration from file size (128kbps MP3 = 16,000 bytes/sec)
-    let voiceoverDuration = combinedAudio.length / 16000;
-    console.log(`🎙 Duration from size: ${voiceoverDuration.toFixed(1)}s`);
-
-    // ── Upload combined audio ─────────────────────────────────────
-    const audioBlob = new Blob([combinedAudio], { type: 'audio/mpeg' });
+    const audioBlob = new Blob([audioBytes], { type: 'audio/mpeg' });
     const uploadResult = await base44.asServiceRole.integrations.Core.UploadFile({
       file: new File([audioBlob], 'voiceover.mp3', { type: 'audio/mpeg' })
     });
-    let audioUrl = uploadResult.file_url;
+    const audioUrl = uploadResult.file_url;
     console.log(`✓ Audio uploaded: ${audioUrl}`);
 
-    // Round to 1 decimal
+    // ── Calculate duration ─────────────────────────────────────────
+    let voiceoverDuration = estimateMp3Duration(audioBytes.length);
     voiceoverDuration = Math.round(voiceoverDuration * 10) / 10;
-    console.log(`🎙 Final voiceover duration: ${voiceoverDuration}s`);
+    console.log(`🎙 Duration: ${voiceoverDuration}s`);
 
     // ── Store as MASTER TIMING AUTHORITY ────────────────────────────
-    const existingSettings = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
-    const settings = existingSettings[0];
-
     const settingsPayload = {
       project_id,
-      selected_voice_id: voice_id,
+      selected_voice_id: voice_id || voice_name,
       voiceover_status: 'ready',
       voiceover_url: audioUrl,
-      voiceover_duration_seconds: voiceoverDuration,
-      total_duration_seconds: voiceoverDuration, // sync legacy field
-      output_resolution: '1920x1080',            // enforce YouTube standard
+      total_duration_seconds: voiceoverDuration,
     };
-
-    // no task_id in chunked mode
 
     if (settings) {
       await base44.asServiceRole.entities.ProductionSettings.update(settings.id, settingsPayload);
@@ -271,15 +197,15 @@ Deno.serve(async (req) => {
       status: 'voiceover_ready'
     });
 
-    console.log(`✓ Voiceover complete: ${voiceoverDuration}s | ${audioUrl.substring(0, 80)}...`);
+    console.log(`✓ Voiceover complete: ${voiceoverDuration}s`);
 
     return Response.json({
       success: true,
       voiceover_url: audioUrl,
       voiceover_duration_seconds: voiceoverDuration,
       word_count: wordCount,
-      voice_id,
-      output_resolution: '1920x1080'
+      voice_name,
+      task_id: taskId,
     });
 
   } catch (error) {
