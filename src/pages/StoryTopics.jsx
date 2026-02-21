@@ -57,7 +57,7 @@ export default function StoryTopics() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      <StageProgress currentStage={1} />
+      <StageProgress currentStage={1} projectStatus={project?.status} />
       <div className="max-w-5xl mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold mb-2">Select a Topic</h1>
         <p className="text-gray-600 mb-8">Choose the best topic for your video ({topics.length} generated)</p>

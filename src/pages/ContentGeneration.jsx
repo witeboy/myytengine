@@ -384,7 +384,7 @@ export default function ContentGeneration() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      <StageProgress currentStage={2} />
+      <StageProgress currentStage={2} projectStatus={project?.status} />
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-3xl font-bold">Content Generation</h1>

@@ -176,7 +176,7 @@ export default function StoryScript() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      <StageProgress currentStage={1} />
+      <StageProgress currentStage={1} projectStatus={project?.status} />
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
