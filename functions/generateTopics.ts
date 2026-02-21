@@ -94,18 +94,53 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
-    const { project_id, niche } = body;
+    const { project_id, niche, exact_topic } = body;
 
     if (!project_id || !niche) {
       return Response.json({ error: 'Missing required fields: project_id, niche' }, { status: 400 });
     }
 
     console.log('================================================');
-    console.log('GENERATING VIRAL TOPICS');
+    console.log(exact_topic ? 'REFINING USER TOPIC' : 'GENERATING VIRAL TOPICS');
     console.log(`Niche: ${niche}`);
+    if (exact_topic) console.log(`Exact topic: ${exact_topic}`);
     console.log('================================================');
 
-    const prompt = `You are an elite YouTube strategist specializing in faceless documentary channels.
+    const prompt = exact_topic
+      ? `You are an elite YouTube strategist specializing in faceless documentary channels.
+
+The user has a specific video topic they want to create. Your job is to REFINE and OPTIMIZE it for maximum viral potential — do NOT change the core idea, just make the title punchier, the angle sharper, and fill in the strategic details.
+
+USER'S TOPIC: "${exact_topic}"
+
+Return a JSON object with this exact structure:
+{
+  "niche_analysis": "Brief understanding of viral potential for this topic",
+  "content_strategy": "Best approach for this specific topic",
+  "topics": [
+    {
+      "rank": 1,
+      "title": "Refined, viral, curiosity-driven version of the user's topic",
+      "description": "2-3 sentences explaining stakes and why viewers NEED this",
+      "viral_angle": "hidden_truth",
+      "villain": "The system working against viewers",
+      "unanswered_question": "The burning question this answers",
+      "search_intent": "What people type when desperate for this info",
+      "recommendation_hook": "Why someone would share this",
+      "viral_score": 9,
+      "storytelling_score": 8,
+      "emotional_score": 9,
+      "keyword_potential": "high",
+      "monthly_searches": "10K-50K",
+      "competition_level": "low",
+      "content_depth": "How many minutes of valuable content this supports",
+      "engagement_notes": "Comment triggers and discussion angles"
+    }
+  ]
+}
+
+IMPORTANT: Generate exactly 1 topic — the refined version of the user's idea. Keep the core concept intact. Do NOT use special characters, line breaks, or unescaped quotes inside string values.`
+      : `You are an elite YouTube strategist specializing in faceless documentary channels.
 
 NICHE: "${niche}"
 
