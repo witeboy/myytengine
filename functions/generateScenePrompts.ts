@@ -405,7 +405,7 @@ ${sceneDirections}
             generated.image_prompt || '', styleConfig, orientationConfig, s.scene_number
           );
           animationPrompt = generated.animation_prompt
-            || "slow gentle camera movement forward, atmospheric haze, subtle breathing, shallow DOF";
+            || "slow deliberate dolly push-in from medium shot to close-up over 5s, atmospheric dust motes floating in golden light, subtle breathing motion on subject, shallow depth of field with gentle focus pull, background slowly going out of focus";
         } else {
           // Fallback — build from director notes
           console.warn(`⚠️ Scene ${s.scene_number} missing from response — building fallback`);
