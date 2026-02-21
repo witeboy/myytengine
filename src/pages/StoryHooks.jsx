@@ -25,6 +25,16 @@ export default function StoryHooks() {
     enabled: !!projectId,
   });
 
+  // Auto-skip if already past hooks
+  React.useEffect(() => {
+    if (!project) return;
+    const s = project.status;
+    if (['hooks_ready', 'scripting', 'script_complete'].includes(s)) navigate(createPageUrl(`StoryScript?project_id=${projectId}`), { replace: true });
+    else if (['content_generation', 'scenes_ready'].includes(s)) navigate(createPageUrl(`ContentGeneration?project_id=${projectId}`), { replace: true });
+    else if (['timeline_editing', 'compiled'].includes(s)) navigate(createPageUrl(`TimelineEditor?project_id=${projectId}`), { replace: true });
+    else if (['post_production', 'published'].includes(s)) navigate(createPageUrl(`PostProduction?project_id=${projectId}`), { replace: true });
+  }, [project?.status]);
+
   const { data: topic } = useQuery({
     queryKey: ['topic', project?.selected_topic_id],
     queryFn: async () => {
@@ -90,7 +100,7 @@ export default function StoryHooks() {
         {generatingHooks ? (
           <div className="flex flex-col items-center justify-center py-20">
             <Loader2 className="w-10 h-10 animate-spin text-blue-600 mb-4" />
-            <p className="text-gray-600 font-medium">Generating 10 viral hooks...</p>
+            <p className="text-gray-600 font-medium">Generating 5 viral hooks...</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

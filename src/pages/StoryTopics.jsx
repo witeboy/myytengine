@@ -14,6 +14,27 @@ export default function StoryTopics() {
   const projectId = new URLSearchParams(window.location.search).get('project_id');
   const [selecting, setSelecting] = useState(null);
 
+  const { data: project } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: async () => {
+      const list = await base44.entities.Projects.filter({ id: projectId });
+      return list[0];
+    },
+    enabled: !!projectId,
+  });
+
+  // Auto-skip if topic already selected — go to the correct next page
+  React.useEffect(() => {
+    if (!project) return;
+    const s = project.status;
+    if (s === 'topic_selected') navigate(createPageUrl(`StoryDuration?project_id=${projectId}`), { replace: true });
+    else if (s === 'outline_ready') navigate(createPageUrl(`StoryHooks?project_id=${projectId}`), { replace: true });
+    else if (['hooks_ready', 'scripting', 'script_complete'].includes(s)) navigate(createPageUrl(`StoryScript?project_id=${projectId}`), { replace: true });
+    else if (['content_generation', 'scenes_ready'].includes(s)) navigate(createPageUrl(`ContentGeneration?project_id=${projectId}`), { replace: true });
+    else if (['timeline_editing', 'compiled'].includes(s)) navigate(createPageUrl(`TimelineEditor?project_id=${projectId}`), { replace: true });
+    else if (['post_production', 'published'].includes(s)) navigate(createPageUrl(`PostProduction?project_id=${projectId}`), { replace: true });
+  }, [project?.status]);
+
   const { data: topics = [], isLoading } = useQuery({
     queryKey: ['topics', projectId],
     queryFn: async () => {
