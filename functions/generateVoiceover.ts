@@ -91,32 +91,7 @@ async function generateChunkAudio(apiKey, voiceId, text, chunkIndex) {
   return bytes;
 }
 
-// ── Duration calculator ────────────────────────────────────────────
-// For MP3 at 128kbps: duration = file_size_bytes / (128000 / 8) = bytes / 16000
-// Fallback: estimate from word count (~150 words/min for narration)
 
-async function calculateAudioDuration(audioUrl, wordCount) {
-  // Method 1: From file size (accurate for CBR MP3)
-  try {
-    const headRes = await fetch(audioUrl, { method: 'HEAD' });
-    const contentLength = parseInt(headRes.headers.get('content-length') || '0', 10);
-
-    if (contentLength > 0) {
-      // 128kbps MP3 = 16,000 bytes per second
-      const durationFromSize = contentLength / 16000;
-      console.log(`Duration from file size: ${durationFromSize.toFixed(1)}s (${contentLength} bytes @ 128kbps)`);
-      return durationFromSize;
-    }
-  } catch (err) {
-    console.warn(`HEAD request failed: ${err.message}`);
-  }
-
-  // Method 2: Estimate from word count (fallback)
-  const WORDS_PER_MINUTE = 150; // standard narration pace
-  const estimatedDuration = (wordCount / WORDS_PER_MINUTE) * 60;
-  console.log(`Duration estimated from words: ${estimatedDuration.toFixed(1)}s (${wordCount} words @ ${WORDS_PER_MINUTE} wpm)`);
-  return estimatedDuration;
-}
 
 // ══════════════════════════════════════════════════════════════════
 // MAIN HANDLER
