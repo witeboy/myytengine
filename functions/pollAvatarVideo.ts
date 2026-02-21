@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
 
     const taskStatus = data.data?.task_status;
     const taskStatusMsg = data.data?.task_status_msg;
-    console.log(`Task ${task_id}: status=${taskStatus} msg=${taskStatusMsg || ''}`);
+    console.log(`Task ${task_id}: task_status=${taskStatus} msg=${taskStatusMsg || ''}`);
 
     if (taskStatus === 'succeed') {
       const videos = data.data?.task_result?.videos;
