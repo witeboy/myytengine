@@ -396,7 +396,7 @@ NICHE (${niche}): Visual World: ${nicheProfile.visual_world} | Palette: ${nicheP
 
       if (batchIdx > 0) await new Promise(r => setTimeout(r, 2000));
 
-      const breakdownPrompt = `You are a film director blocking scenes.
+      const breakdownPrompt = `You are a legendary film director known for breathtaking visual storytelling and dynamic cinematography. You must block this script into MANY short, punchy scenes — each one a distinct visual beat with a UNIQUE camera setup.
 
 **STORY:** Theme: ${storyAnalysis.central_theme} | Arc: ${storyAnalysis.narrative_arc_summary}
 Visual World: ${storyAnalysis.visual_world} | Color Arc: ${storyAnalysis.color_arc}
@@ -406,43 +406,60 @@ ${characterBlock}
 ${continuityCtx}
 
 **PHASE: ${chunk.phase.toUpperCase()}** — ${chunk.purpose}
-Create ${chunk.scenes} scenes (numbers ${sceneOffset + 1} to ${sceneOffset + chunk.scenes})
+Create EXACTLY ${chunk.scenes} scenes (numbers ${sceneOffset + 1} to ${sceneOffset + chunk.scenes})
 
 **SCRIPT:**
 ${chunk.text}
 
-**RULES:**
-1. Scenes = VISUAL BEATS not sentences. Director calls CUT when the visual changes.
-2. Visual concept = SPECIFIC frozen moment (2-4 sentences), not a general idea.
-3. Shot variety — NEVER consecutive duplicates: ECU, CU, MCU, MS, MWS, WS, EWS, OTS, INSERT, LOW ANGLE, HIGH ANGLE, DUTCH, POV
-4. Emotional escalation within the phase.
-5. Adjacent scenes share ONE visual continuity thread.
-6. Abstract → CONCRETE physical metaphors (inflation → receipt curling off counter).
-7. Niche (${niche}): ${nicheProfile.visual_world} | Shots: ${nicheProfile.signature_shots} | AVOID: ${nicheProfile.avoid}
+**CRITICAL RULES:**
+1. MORE SCENES = BETTER ENERGY. Split aggressively — every idea, beat, emotion shift, or emphasis change deserves its own scene. A single sentence can be 2 scenes if the visual changes.
+2. Scenes = VISUAL BEATS not sentences. Director calls CUT when the visual concept changes.
+3. Each scene is SHORT (3-6 seconds). Quick cuts create energy and flow.
+4. Visual concept = SPECIFIC frozen cinematic moment (2-4 sentences), incredibly detailed.
+5. **CAMERA IS EVERYTHING** — each scene MUST have a DISTINCT camera setup that serves the story:
+   - Shot variety: ECU, CU, MCU, MS, MWS, WS, EWS, OTS, INSERT, LOW ANGLE, HIGH ANGLE, DUTCH, POV, AERIAL, STEADICAM, HANDHELD, CRANE
+   - NEVER 2 consecutive scenes with the same shot type
+   - Use camera to convey EMOTION: low angle = power/dominance, high angle = vulnerability, dutch = unease, ECU = intimacy/tension, wide = isolation/grandeur
+   - camera_movement MUST be SPECIFIC and CINEMATIC: "Slow dolly push-in from MS to MCU over 5s, slight left drift" NOT just "slow zoom"
+6. Emotional escalation within the phase — build momentum with increasingly dynamic camera work.
+7. Adjacent scenes share ONE visual continuity thread (color, object, gesture, lighting direction).
+8. Abstract concepts → CONCRETE physical metaphors (inflation → receipt curling off counter, time passing → shadows moving across floor).
+9. Niche (${niche}): ${nicheProfile.visual_world} | Shots: ${nicheProfile.signature_shots} | AVOID: ${nicheProfile.avoid}
+
+**CAMERA MOVEMENT GUIDE — use these to create FLOW:**
+- Emotional reveal: Slow crane up revealing scene, 5s
+- Tension: Steadicam creep forward, tracking subject, slightly off-center
+- Impact: Whip pan left-to-right, 1s, hard stop on subject
+- Intimacy: Gentle dolly-in from MS to CU, barely perceptible drift
+- Power: Low-angle tracking shot, moving with subject, wide lens distortion
+- Vulnerability: Slow overhead crane descending toward subject
+- Urgency: Handheld with deliberate micro-shake, pushing forward
+- Contemplation: Static locked-off frame, subject moves within, atmospheric particles drift
+- Transition: Lateral dolly slide revealing new environment
 
 **RESPONSE:**
 {
   "scenes": [
     {
       "scene_number": ${sceneOffset + 1},
-      "narration_text": "EXACT script words for this scene",
-      "visual_concept": "Rich 2-4 sentence cinematic frozen moment",
-      "shot_type": "e.g. 'ECU — Extreme Close-Up'",
-      "camera_angle": "e.g. 'Low angle, 15 degrees, left of center'",
-      "camera_movement": "e.g. 'Slow push-in 8s, MS to MCU'",
-      "lighting": "e.g. 'Single warm lamp left, deep shadows right, rim light window'",
+      "narration_text": "EXACT script words for this scene — keep it SHORT per scene",
+      "visual_concept": "Rich 2-4 sentence cinematic frozen moment with incredible detail",
+      "shot_type": "e.g. 'ECU — Extreme Close-Up' or 'LOW ANGLE — Wide Shot'",
+      "camera_angle": "e.g. 'Low angle 15°, slightly left of center, lens 35mm'",
+      "camera_movement": "SPECIFIC cinematic direction: 'Slow dolly push-in from MS to MCU over 5s, slight left drift, focus pulls from background to subject at 3s mark'",
+      "lighting": "e.g. 'Hard key light from upper left, soft fill from right, warm practical lamp in frame, rim light from window behind'",
       "color_palette": "e.g. 'Warm amber #D4A574, shadow brown #2C1810, cream #F5F0E8'",
       "mood": "2-3 words",
-      "depth_of_field": "e.g. 'Shallow f/1.4, subject sharp, background bokeh'",
-      "niche_visual_element": "One niche metaphor element",
-      "continuity_bridge": "Visual thread to NEXT scene",
+      "depth_of_field": "e.g. 'Shallow f/1.4, subject sharp, background bokeh circles visible'",
+      "niche_visual_element": "One niche metaphor element that reinforces the emotion",
+      "continuity_bridge": "Visual thread to NEXT scene — what carries over",
       "emotional_intensity": 0.5,
-      "duration_seconds": 8
+      "duration_seconds": 5
     }
   ]
 }
 
-EXACTLY ${chunk.scenes} scenes. EVERY script word used once. NO added narration. No text/charts in visuals.`;
+EXACTLY ${chunk.scenes} scenes. EVERY script word allocated to a scene. NO added narration. No text/charts in visuals. SHORT narration per scene — split the text across all ${chunk.scenes} scenes evenly.`;
 
       console.log(`🎬 Pass 2.${batchIdx + 1}: ${chunk.phase} (scenes ${sceneOffset + 1}-${sceneOffset + chunk.scenes})...`);
       const batchResult = await callGemini(breakdownPrompt, 0.7, 16384);
