@@ -226,10 +226,10 @@ function getNicheDirectorProfile(niche) {
 
 function calculatePhaseAllocation(totalTargetScenes) {
   const phaseWeights = [
-    { name: "cold_open", weight: 0.10, purpose: "Hook — visceral, immediate, intriguing." },
-    { name: "rising_tension", weight: 0.25, purpose: "Build the world and problem — escalate stakes." },
-    { name: "emotional_core", weight: 0.40, purpose: "Heart of story — maximum impact, key revelations." },
-    { name: "resolution", weight: 0.25, purpose: "Payoff — resolution, transformation, call to action." }
+    { name: "cold_open", weight: 0.12, purpose: "Hook — visceral, immediate, intriguing. Rapid cuts to grab attention." },
+    { name: "rising_tension", weight: 0.25, purpose: "Build the world and problem — escalate stakes with varied camera work." },
+    { name: "emotional_core", weight: 0.38, purpose: "Heart of story — maximum impact, key revelations, dynamic cinematography." },
+    { name: "resolution", weight: 0.25, purpose: "Payoff — resolution, transformation, call to action. End with visual punch." }
   ];
 
   let remaining = totalTargetScenes;
