@@ -1,14 +1,47 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { create, getNumericDate } from 'npm:djwt@3.0.2';
 
 // ══════════════════════════════════════════════════════════════════
-// KLING AVATAR VIDEO POLLER — Checks Kie Market task status
+// KLING AVATAR VIDEO POLLER — Direct Kling API
 // ══════════════════════════════════════════════════════════════════
 //
-// Uses unified Kie Market polling endpoint.
-// States: waiting, queuing, generating, success, fail
+// Polls: GET /v1/videos/avatar/image2video/{task_id}
+// States: submitted, processing, succeed, failed
 // ══════════════════════════════════════════════════════════════════
 
-const KIE_BASE = 'https://api.kie.ai/api/v1/jobs';
+const KLING_API_BASE = 'https://api-singapore.klingai.com';
+
+async function generateKlingJwt() {
+  const accessKey = Deno.env.get('KLING_ACCESS_KEY');
+  const secretKey = Deno.env.get('KLING_SECRET_KEY');
+
+  if (!accessKey || !secretKey) {
+    throw new Error('KLING_ACCESS_KEY or KLING_SECRET_KEY not configured');
+  }
+
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secretKey);
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign', 'verify']
+  );
+
+  const token = await create(
+    { alg: 'HS256', typ: 'JWT' },
+    {
+      iss: accessKey,
+      exp: getNumericDate(1800),
+      nbf: getNumericDate(-5),
+      iat: getNumericDate(0),
+    },
+    cryptoKey
+  );
+
+  return token;
+}
 
 Deno.serve(async (req) => {
   try {
@@ -20,30 +53,40 @@ Deno.serve(async (req) => {
 
     if (!task_id) return Response.json({ error: 'Missing task_id' }, { status: 400 });
 
-    const KIE_API_KEY = Deno.env.get('KIE_API_KEY');
-    if (!KIE_API_KEY) return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
-
     console.log(`Polling Kling Avatar task: ${task_id}`);
 
-    const res = await fetch(`${KIE_BASE}/recordInfo?taskId=${task_id}`, {
-      headers: { 'Authorization': `Bearer ${KIE_API_KEY}` },
+    const jwtToken = await generateKlingJwt();
+
+    const res = await fetch(`${KLING_API_BASE}/v1/videos/avatar/image2video/${task_id}`, {
+      headers: {
+        'Authorization': `Bearer ${jwtToken}`,
+        'Content-Type': 'application/json',
+      },
     });
 
     const data = await res.json();
-    if (data.code !== 200) {
-      return Response.json({ error: `Poll error: ${data.message}` }, { status: 500 });
+    console.log(`Poll response: HTTP ${res.status} code=${data.code} message=${data.message}`);
+
+    if (data.code !== 0) {
+      return Response.json({
+        error: `Kling poll error: code=${data.code} message=${data.message}`,
+      }, { status: 500 });
     }
 
-    const { state, resultJson, failMsg } = data.data;
-    console.log(`Task ${task_id}: state=${state}`);
+    const taskStatus = data.data?.task_status;
+    const taskStatusMsg = data.data?.task_status_msg;
+    console.log(`Task ${task_id}: status=${taskStatus} msg=${taskStatusMsg || ''}`);
 
-    if (state === 'success') {
-      const result = JSON.parse(resultJson);
-      const videoUrl = result.resultUrls?.[0] || result.url;
+    if (taskStatus === 'succeed') {
+      const videos = data.data?.task_result?.videos;
+      const videoUrl = videos?.[0]?.url;
+      const videoDuration = videos?.[0]?.duration;
 
       if (!videoUrl) {
-        return Response.json({ error: 'Task success but no video URL', raw: result }, { status: 500 });
+        return Response.json({ error: 'Task succeed but no video URL', raw: data }, { status: 500 });
       }
+
+      console.log(`Avatar video ready: ${videoUrl} (${videoDuration}s)`);
 
       // Update scene if provided
       if (scene_id) {
@@ -57,25 +100,27 @@ Deno.serve(async (req) => {
         success: true,
         status: 'COMPLETED',
         video_url: videoUrl,
+        duration: videoDuration,
       });
     }
 
-    if (state === 'fail') {
+    if (taskStatus === 'failed') {
+      console.warn(`Avatar task failed: ${taskStatusMsg}`);
       if (scene_id) {
         await base44.asServiceRole.entities.Scenes.update(scene_id, { status: 'failed' });
       }
       return Response.json({
         success: false,
         status: 'FAILED',
-        error: failMsg || 'Avatar video generation failed',
+        error: taskStatusMsg || 'Avatar video generation failed',
       });
     }
 
-    // Still processing
+    // Still processing (submitted / processing)
     return Response.json({
       success: true,
       status: 'PROCESSING',
-      state,
+      task_status: taskStatus,
       task_id,
     });
 
