@@ -116,7 +116,7 @@ export default function ContentRepurpose() {
       : '';
 
     const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `You are a professional YouTube scriptwriter. Based on the analysis of an existing high-performing video, write a NEW script in the SAME style but with the user's modifications.
+      prompt: `You are a professional YouTube scriptwriter specializing in content repurposing. Your job is to take an original video's FULL transcript and REWRITE it for a NEW topic/title — while preserving the EXACT same dynamics, flow, beats, pulsating rhythm, and delivery style.
 
 ORIGINAL VIDEO ANALYSIS:
 - Title: ${analysis.title}
@@ -131,12 +131,20 @@ ORIGINAL VIDEO ANALYSIS:
 - Original Outline: ${analysis.reconstructed_outline}
 ${scriptReference}
 
-USER'S MODIFICATIONS:
-- New Title: ${newTitle}
-- Additional Notes: ${tweakNotes || 'None — keep as close to original style as possible'}
+NEW TITLE: "${newTitle}"
+USER NOTES: ${tweakNotes || 'None — keep as close to original style as possible'}
 
-${hasOriginalScript ? 'You have the FULL original script above. Match the EXACT writing style — sentence length, word choice, transitions, rhetorical patterns, hook structure. The new script should feel like it was written by the same creator.' : ''}
-Write a complete narration script (~${analysis.estimated_word_count || 1500} words) matching the EXACT style, tone, and pacing. Return ONLY the script text.`,
+CRITICAL INSTRUCTIONS:
+${hasOriginalScript ? `You have the FULL original transcript above. This is your STYLE BIBLE. You must:
+1. REWRITE every section of the original script but for the NEW title "${newTitle}"
+2. PRESERVE the EXACT same structure — if the original has a shocking hook, yours must too. If it builds tension in paragraph 3, yours must too.
+3. MATCH sentence length patterns — short punchy sentences stay short, long flowing ones stay long
+4. KEEP the same rhetorical devices — questions, callbacks, cliffhangers, reveals at the same beats
+5. RETAIN the same energy arc — if the original starts intense, calms, then peaks, yours must follow the SAME rhythm
+6. MATCH the approximate word count of the original (~${analysis.estimated_word_count || analysis.original_script.split(/\\s+/).length} words)
+7. DO NOT generic-ify the script. The original has a unique voice — replicate it exactly for the new topic.
+8. The new script should feel like the SAME creator made a video on a different topic.` : 'No full transcript available. Write a new script based on the detected style analysis above.'}
+Write the complete narration script. Return ONLY the script text, no headers or meta-commentary.`,
     });
 
     setNewScript(result);
