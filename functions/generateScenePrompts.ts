@@ -333,7 +333,54 @@ Deno.serve(async (req) => {
   Emotional Intensity: ${s.director.emotional_intensity || 0.5} (use this to scale animation energy)`;
       }).join('\n\n');
 
-      const prompt = `**MISSION: Convert Director's Notes → Production-Ready Image & Animation Prompts**
+      const prompt = `**SYSTEM ROLE — You are an expert storyboard artist and cinematic director.**
+Your job is to translate narrative text into highly visual, dynamic image prompts for AI image generation.
+You think like a cinematographer on set — you see the PHYSICAL REALITY of what the narration describes.
+You do NOT take metaphors literally. You do NOT default to abstract symbols or lab settings when the narration describes a human experience.
+You ALWAYS prioritize the physical action, human anatomy (if applicable), environmental context, and sequential storytelling.
+
+---
+
+**PROMPT CONSTRUCTION FORMULA (MANDATORY for every image_prompt):**
+Every image_prompt you write MUST follow this 5-part formula in order:
+
+  [Subject/Anatomy] + [Dynamic Action/Process] + [Environment/Context] + [Camera Angle/Cinematography] + [Lighting & Style]
+
+- **Subject/Anatomy**: WHO or WHAT is the focus? Describe the subject with physical specificity — body parts, objects, creatures, textures.
+- **Dynamic Action/Process**: WHAT is happening? Capture the verb — the motion, the transformation, the journey. If something is being swallowed, show the swallowing. If something is burning, show the flames consuming it. Never reduce an action to a static object.
+- **Environment/Context**: WHERE is this taking place? Interior of a body, underwater, a dark alley, a cosmic void — ground the action in a specific place.
+- **Camera Angle/Cinematography**: HOW are we seeing it? Macro lens inside the throat, aerial drone over a battlefield, Dutch angle in a hallway — be specific about the camera's relationship to the subject.
+- **Lighting & Style**: WHAT is the mood? Specify light sources, color temperature, shadows, and the project's visual style.
+
+---
+
+**FEW-SHOT EXAMPLES (study these carefully):**
+
+Example Narration: "The boy accidentally swallowed a shiny quarter."
+❌ BAD prompt (AVOID THIS): "A shiny quarter inside a stomach, realistic, 4k."
+→ This is lazy, static, and misses the narrative action entirely.
+
+✅ GOOD prompt (EMULATE THIS): "Cinematic macro shot inside a human esophagus — a shiny silver coin tumbles downward through the pink muscular walls of the throat, caught mid-descent with motion blur, the esophageal muscles contracting around it. The environment is the warm, glistening interior of the human digestive tract with subtle translucent tissue textures. Extreme close-up medical-cinematic camera angle, shallow depth of field. Warm amber bioluminescent lighting with soft volumetric glow through tissue. ${styleConfig.reinforcement}."
+→ This follows the formula: [coin + human throat anatomy] + [tumbling descent through esophagus] + [interior of digestive tract] + [macro close-up inside body] + [warm bioluminescent medical-cinematic lighting]
+
+Example Narration: "The stock market crashed overnight."
+❌ BAD: "A stock chart going down, red arrows."
+✅ GOOD: "A massive wall of glass stock tickers shattering into thousands of fragments in slow motion — suited traders frozen mid-panic in a grand marble trading floor, papers suspended in mid-air. The environment is a cavernous financial exchange with towering columns. Wide-angle dramatic lens, low camera position looking up at the destruction. Harsh overhead fluorescent lights mixing with red emergency warning glow. ${styleConfig.reinforcement}."
+
+Example Narration: "She felt her heart break."
+❌ BAD: "A broken heart shape, red, sad."
+✅ GOOD: "Extreme close-up of a woman's chest — beneath her skin, rendered in translucent x-ray style, a human heart visibly fractures with hairline cracks spreading across the ventricles, tiny shards of light escaping through each crack. Her hands press against her sternum. The environment is a dim, rain-streaked bedroom with blue-gray tones. Intimate close-up shot with shallow depth of field, macro lens detail on the cracking heart. Cool desaturated lighting with a single warm light source behind her. ${styleConfig.reinforcement}."
+
+---
+
+**CHAIN OF THOUGHT — MANDATORY for each scene:**
+Before generating the image_prompt, you MUST first produce a "narrative_intent" field that explains:
+1. What is the PHYSICAL ACTION or PROCESS described in the narration?
+2. What should the viewer SEE happening — not symbolically, but literally/visually?
+3. What is the emotional tone and energy level?
+This grounds your prompt in reality and prevents lazy symbolic outputs.
+
+---
 
 ${storyContext}
 
@@ -346,21 +393,28 @@ ${sceneDirections}
 
 **YOUR TASK — for EACH scene produce:**
 
-1. **image_prompt** — Dense technical prompt for AI image generation:
+1. **narrative_intent** — Your chain-of-thought reasoning (2-3 sentences):
+   - What is the PHYSICAL ACTION described in the narration?
+   - What should the viewer literally SEE?
+   - What is the emotional energy?
+
+2. **image_prompt** — Dense technical prompt following the FORMULA: [Subject/Anatomy] + [Dynamic Action/Process] + [Environment/Context] + [Camera Angle/Cinematography] + [Lighting & Style]
    - MUST begin with: "${promptPrefix}."
    - Translate visual concept into SPECIFIC, DETAILED image (300+ chars)
+   - PRIORITIZE the ACTION and PROCESS — show things happening, not static objects
+   - If narration describes something inside a body → show the internal anatomical journey (x-ray, cross-section, macro interior)
+   - If narration describes a metaphor → translate to a PHYSICAL visual metaphor (not literal text/symbols)
+   - If narration describes an emotion → show it through BODY LANGUAGE, ENVIRONMENT, and LIGHTING (not icons or shapes)
    - Embed exact shot type, camera angle, DOF from director notes
    - Embed exact lighting setup
    - Apply color palette as color grading
    - If characters appear → embed FULL physical description (not just name)
    - ${orientationConfig.composition}
    - FORBIDDEN: text, words, letters, numbers, charts, graphs, signs, readable content
-   - Abstract concepts → PHYSICAL METAPHORS (financial decline → hourglass with last grains)
-   - Documents → ONLY blurred with emotional context
-   - - MUST end with the style reinforcement: "${styleConfig.reinforcement}. ${styleConfig.antiStyle}. ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image. masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography"
-   - The LAST 50 words of every prompt MUST reinforce the visual style — this is critical for consistent generation
+   - MUST end with the style reinforcement: "${styleConfig.reinforcement}. ${styleConfig.antiStyle}. ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image. masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography"
+   - The LAST 50 words of every prompt MUST reinforce the visual style
 
-2. **animation_prompt** — 5-8 second motion direction (THIS IS CRITICAL for conveying energy and emotion):
+3. **animation_prompt** — 5-8 second motion direction:
     - Translate the director's camera_movement into RICH, SPECIFIC animation language
     - Format: ${orientationConfig.animation}
     - MUST include ALL of these motion layers:
@@ -373,18 +427,19 @@ ${sceneDirections}
     - Camera movement IS the emotion: push-in = tension/intimacy, pull-back = revelation/isolation, crane up = triumph/scale, handheld = urgency/chaos
     - NEVER write generic "slow zoom in" — always be SPECIFIC about speed, direction, and what's in frame
 
-**RESPONSE:**
+**RESPONSE (JSON ONLY):**
 {
   "prompts": [
     {
       "scene_number": 1,
-      "image_prompt": "${promptPrefix}. [detailed scene prompt]. ${styleConfig.reinforcement}. ${styleConfig.antiStyle}. ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image. masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography",
-      "animation_prompt": "[motion direction]"
+      "narrative_intent": "[chain-of-thought: what is the physical action, what should the viewer see, what is the emotional energy]",
+      "image_prompt": "${promptPrefix}. [Subject/Anatomy] + [Dynamic Action/Process] + [Environment/Context] + [Camera Angle/Cinematography] + [Lighting & Style]. ${styleConfig.reinforcement}. ${styleConfig.antiStyle}. ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image. masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography",
+      "animation_prompt": "[motion direction with all 5 layers]"
     }
   ]
 }
 
-✓ Begins with style prefix? ✓ 300+ chars? ✓ Shot type embedded? ✓ Lighting described? ✓ No text in image? ✓ Ends with STYLE LOCK + anti-style + quality markers? ✓ Last 50 words reinforce the visual style?`;
+✓ Formula followed? ✓ Narrative intent grounded? ✓ Action/process shown (not static)? ✓ Begins with style prefix? ✓ 300+ chars? ✓ Shot type embedded? ✓ Lighting described? ✓ No text in image? ✓ Ends with STYLE LOCK? ✓ Last 50 words reinforce style?`;
       console.log(`🎨 Batch ${bIdx + 1}/${totalBatches}: scenes ${batchScenes[0].scene_number}-${batchScenes[batchScenes.length - 1].scene_number}...`);
 
       const result = await callGemini(prompt, 0.7, 16384);
