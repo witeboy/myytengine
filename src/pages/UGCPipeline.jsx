@@ -193,9 +193,10 @@ Return ONLY the script text.`,
     if (influencerImageUrl && !influencerImageUrl.startsWith('data:')) {
       setPipelineStep('Submitting to Veo 3.1 for video generation...');
       try {
-        const vidResult = await base44.functions.invoke('generateSceneVideo', {
+        const vidResponse = await base44.functions.invoke('generateSceneVideo', {
           scene_id: scene.id,
         });
+        const vidResult = vidResponse.data || vidResponse;
 
         if (vidResult.task_id) {
           setPipelineStep('Video rendering with Veo 3.1 — polling...');
