@@ -54,6 +54,8 @@ import Home from './pages/Home';
 import MediaLibrary from './pages/MediaLibrary';
 import NewProject from './pages/NewProject';
 import PostProduction from './pages/PostProduction';
+import ResearchTerminal from './pages/ResearchTerminal';
+import ResultsGrid from './pages/ResultsGrid';
 import StoryDuration from './pages/StoryDuration';
 import StoryHooks from './pages/StoryHooks';
 import StoryScript from './pages/StoryScript';
@@ -61,8 +63,7 @@ import StoryTopics from './pages/StoryTopics';
 import TimelineEditor from './pages/TimelineEditor';
 import UGCPipeline from './pages/UGCPipeline';
 import VersionHistory from './pages/VersionHistory';
-import ResearchTerminal from './pages/ResearchTerminal';
-import ResultsGrid from './pages/ResultsGrid';
+import ChannelAuditor from './pages/ChannelAuditor';
 import __Layout from './Layout.jsx';
 
 
@@ -74,6 +75,8 @@ export const PAGES = {
     "MediaLibrary": MediaLibrary,
     "NewProject": NewProject,
     "PostProduction": PostProduction,
+    "ResearchTerminal": ResearchTerminal,
+    "ResultsGrid": ResultsGrid,
     "StoryDuration": StoryDuration,
     "StoryHooks": StoryHooks,
     "StoryScript": StoryScript,
@@ -81,8 +84,7 @@ export const PAGES = {
     "TimelineEditor": TimelineEditor,
     "UGCPipeline": UGCPipeline,
     "VersionHistory": VersionHistory,
-    "ResearchTerminal": ResearchTerminal,
-    "ResultsGrid": ResultsGrid,
+    "ChannelAuditor": ChannelAuditor,
 }
 
 export const pagesConfig = {
