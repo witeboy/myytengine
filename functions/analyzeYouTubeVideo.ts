@@ -210,13 +210,14 @@ Deno.serve(async (req) => {
       const aaiKey = Deno.env.get("ASSEMBLYAI_API_KEY");
 
       if (aaiKey) {
-        // Use AssemblyAI directly with the YouTube URL — it supports YouTube natively
+        // AssemblyAI supports YouTube URLs natively
         try {
           console.log('[AssemblyAI] Submitting YouTube URL directly...');
+          const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
           const startRes = await fetch("https://api.assemblyai.com/v2/transcript", {
             method: "POST",
             headers: { "authorization": aaiKey, "content-type": "application/json" },
-            body: JSON.stringify({ audio_url: video_url, language_detection: true })
+            body: JSON.stringify({ audio_url: youtubeUrl })
           });
 
           const startData = await startRes.json();
