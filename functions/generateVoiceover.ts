@@ -57,14 +57,20 @@ async function generateChunkAudio(apiKey, voiceId, text, chunkIndex) {
   ];
 
   for (const ep of endpoints) {
-    const res = await fetch(ep.url, {
-      method: ep.method,
-      headers: {
-        'Content-Type': 'application/json',
-        'xi-api-key': apiKey,
-      },
-      body: JSON.stringify(ep.body),
-    });
+    let res;
+    try {
+      res = await fetch(ep.url, {
+        method: ep.method,
+        headers: {
+          'Content-Type': 'application/json',
+          'xi-api-key': apiKey,
+        },
+        body: JSON.stringify(ep.body),
+      });
+    } catch (fetchErr) {
+      console.warn(`Chunk ${chunkIndex}: fetch failed for ${ep.url}: ${fetchErr.message}`);
+      continue;
+    }
 
     const ct = res.headers.get('content-type') || '';
     const cl = res.headers.get('content-length') || '?';
