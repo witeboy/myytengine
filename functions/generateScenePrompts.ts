@@ -339,7 +339,104 @@ Deno.serve(async (req) => {
   Emotional Intensity: ${s.director.emotional_intensity || 0.5} (use this to scale animation energy)`;
       }).join('\n\n');
 
-      const prompt = `**SYSTEM ROLE — You are an expert storyboard artist and cinematic director.**
+      // ── Style-specific prompt override for non-cinematic styles ───
+      const isHumptyDumpty = visualStyle === 'humpty_dumpty';
+
+      const humptyDumptySystemPrompt = `**SYSTEM ROLE — You are a web animation storyboard artist specializing in the 'Humpty Dumpty' minimalist cartoon style.**
+Your job is to translate narrative text into simple, charming cartoon scene descriptions for AI image generation.
+You think like an animator creating a YouTube explainer/storytime animation with deliberately crude but endearing stick-figure characters.
+
+---
+
+**THE HUMPTY DUMPTY STYLE BIBLE (FOLLOW EXACTLY):**
+
+CHARACTERS:
+- Large white circle head, thick dark-brown outline (#3D2B1F), 3-4px stroke weight
+- Tiny dot-eyes: small horizontal dashes or dots, placed close together in the center of the face
+- Simple line-mouth: curved up = happy, curved down = sad, wavy = worried, V-smirk = mischievous, small O = surprised, flat = neutral
+- Optional: simple angled line-eyebrows for emotion (angry V-brows, raised brows for surprise)
+- NO nose (or tiny dot at most), NO ears, NO detailed features
+- Bean/egg-shaped body with flat solid-color fill, same thick dark-brown outline
+- Noodle arms (simple curved lines), stick legs (two straight lines)
+- Clothing = flat color fill only: dark slate-blue suits, brown casual wear, muted red robes/uniforms, cream shirts, light blue police
+- Distinguish characters by: clothing color, simple accessories (flat-brim hat, police cap with yellow dot badge, tie as small triangle, hair as simple colored shape)
+- Female characters: hair as simple shapes — long dark curtains framing head, blonde side-sweep, bun circle on top, occasionally a small blue tear-dot for crying
+- Size variation for importance: main character slightly larger, background characters smaller
+
+BACKGROUNDS:
+- DEFAULT: solid warm cream (#F5E6D3) or beige (#FAEBD7) — completely flat, no gradient
+- When a LOCATION is needed: draw it in the SAME minimal style — buildings are colored rectangles with thick brown outlines, windows are small blue squares, doors are dark rectangles
+- Simple props: tables are brown rectangles, chairs are simple shapes, frames on walls are colored squares
+
+MIXED MEDIA (KEY SIGNATURE):
+- Occasionally ONE photorealistic object appears next to the drawn characters (police car, house exterior, real product)
+- This creates the comedic juxtaposition that defines the style
+- Characters are ALWAYS drawn simply, even when next to photorealistic objects
+
+COMPOSITION:
+- Characters fill 40-70% of the frame
+- 1-3 characters per scene (occasionally up to 6 for crowd shots)
+- Simple left-to-right reading: character on left, action/object on right (or centered single character)
+- Portraits show characters from waist-up or full-body
+- Group shots: characters side by side, slightly overlapping, different sizes
+
+EXPRESSIONS THROUGH SIMPLICITY:
+- Angry: V-shaped eyebrows, frown mouth, hands on hips
+- Happy: curved-up mouth, maybe arms raised
+- Sad: curved-down mouth, hunched posture, optional tear dot
+- Scheming/Evil: half-closed eyes (horizontal dashes), smirk
+- Surprised: wide dot-eyes, O-mouth, arms out
+- Authoritative: standing tall, hands on hips, neutral or stern face
+
+---
+
+${storyContext}
+
+${characterBlock}
+
+**STYLE:** humpty_dumpty | **ORIENTATION:** ${orientationConfig.format}
+
+**DIRECTOR'S SCENE NOTES:**
+${sceneDirections}
+
+**YOUR TASK — for EACH scene produce:**
+
+1. **narrative_intent** — Your reasoning (2-3 sentences):
+   - What characters are in this scene and what are they doing?
+   - What expression/pose conveys the emotion?
+   - Is there a photorealistic object that would add comedic contrast?
+
+2. **image_prompt** — A description in the Humpty Dumpty style:
+   - MUST begin with: "${promptPrefix}."
+   - Describe the CHARACTER(S): circle head, dot eyes, specific mouth expression, clothing color, any accessories
+   - Describe the POSE/ACTION: what are they doing with their noodle arms and stick legs?
+   - Describe the BACKGROUND: solid cream, or simple drawn environment
+   - If a real-world object is appropriate, describe it as "photorealistic [object] composited next to the drawn character"
+   - Describe COMPOSITION: where characters are positioned, relative sizes
+   - ${orientationConfig.composition}
+   - FORBIDDEN: text, words, letters, numbers, readable content in the image
+   - MUST end with the style reinforcement: "${styleConfig.reinforcement}. ${styleConfig.antiStyle}. ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image."
+   - Keep prompts 200-400 chars — this style is SIMPLE, don't over-describe
+
+3. **animation_prompt** — Simple motion for this cartoon style:
+   - Format: ${orientationConfig.animation}
+   - Humpty Dumpty animations are SIMPLE: slow zoom in/out, gentle pan, slight bounce on characters
+   - NO complex camera movements — this is a web animation, not a movie
+   - Include: subtle character bounce/sway, gentle background drift if any
+
+**RESPONSE (JSON ONLY):**
+{
+  "prompts": [
+    {
+      "scene_number": 1,
+      "narrative_intent": "[reasoning about characters, poses, expressions]",
+      "image_prompt": "${promptPrefix}. [character description with circle head, dot eyes, expression, clothing] + [pose/action] + [background] + [optional photorealistic object]. ${styleConfig.reinforcement}. ${styleConfig.antiStyle}. ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image.",
+      "animation_prompt": "[simple motion: gentle zoom, pan, character bounce]"
+    }
+  ]
+}`;
+
+      const prompt = isHumptyDumpty ? humptyDumptySystemPrompt : `**SYSTEM ROLE — You are an expert storyboard artist and cinematic director.**
 Your job is to translate narrative text into highly visual, dynamic image prompts for AI image generation.
 You think like a cinematographer on set — you see the PHYSICAL REALITY of what the narration describes.
 You do NOT take metaphors literally. You do NOT default to abstract symbols or lab settings when the narration describes a human experience.
