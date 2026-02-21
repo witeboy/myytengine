@@ -62,6 +62,8 @@ export default function DeepVideoRow({ video, index }) {
       <td className="py-2.5 px-2 text-right font-mono text-cyan-600">{fmt(video.views_per_day)}</td>
       <td className="py-2.5 px-2 text-right font-mono text-emerald-600">{(video.opportunity_score || 0).toFixed(1)}x</td>
       <td className="py-2.5 px-2 text-right font-mono text-blue-600">{(video.engagement_pct || 0).toFixed(1)}%</td>
+      <td className="py-2.5 px-2 text-right font-mono text-orange-600">${video.est_rpm || 4}</td>
+      <td className="py-2.5 px-2 text-right font-mono text-pink-600">${Math.round((video.est_rpm || 4) * 0.55)}</td>
       <td className="py-2.5 px-2 text-right">
         <span className="font-mono text-green-700">${fmt(video.est_total_revenue || 0)}</span>
         <div className="text-[9px] text-gray-400">${fmt(video.est_monthly_revenue || 0)}/mo</div>

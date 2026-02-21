@@ -30,7 +30,9 @@ const COL_TIPS = {
   vpd: "Views Per Day — average daily views since publish date. Higher = consistent performer.",
   opp: "Opportunity Score — Views ÷ Subscribers. Higher means the video massively outperformed the channel size (strong CTR signal).",
   engagement: "Engagement % — (Likes + Comments) ÷ Views × 100. Higher correlates with better retention.",
-  revenue: "Estimated total revenue from this video based on niche CPM. Monthly estimate shown below.",
+  rpm: "Revenue Per Mille — estimated earnings per 1,000 views based on niche category. Higher RPM niches (finance, law, insurance) pay significantly more.",
+  cpm: "Cost Per Mille — estimated advertiser cost per 1,000 impressions. Typically ~55% of RPM goes to the creator.",
+  revenue: "Estimated total revenue from this video based on niche RPM. Monthly estimate shown below.",
   age: "How long ago this video was published.",
 };
 
@@ -201,6 +203,8 @@ export default function ResultsGrid() {
                       <TipHeader tip={COL_TIPS.vpd} onClick={() => handleSort("views_per_day")} active={sortField === "views_per_day"}>VPD</TipHeader>
                       <TipHeader tip={COL_TIPS.opp} onClick={() => handleSort("opportunity_score")} active={sortField === "opportunity_score"}>Opp</TipHeader>
                       <TipHeader tip={COL_TIPS.engagement} onClick={() => handleSort("engagement_pct")} active={sortField === "engagement_pct"}>Eng%</TipHeader>
+                      <TipHeader tip={COL_TIPS.rpm} onClick={() => handleSort("est_rpm")} active={sortField === "est_rpm"}>RPM</TipHeader>
+                      <TipHeader tip={COL_TIPS.cpm}>CPM</TipHeader>
                       <TipHeader tip={COL_TIPS.revenue} onClick={() => handleSort("est_total_revenue")} active={sortField === "est_total_revenue"}>Revenue</TipHeader>
                       <TipHeader tip={COL_TIPS.age}>Age</TipHeader>
                     </tr>
