@@ -151,13 +151,45 @@ export default function ContentGeneration() {
     setGeneratingVideos(true);
     pollAbortRef.current = false;
 
-    const ready = scenes.filter(s =>
+    const withImages = scenes.filter(s =>
       s.image_url &&
-      !s.image_url.startsWith('data:') && // Veo needs public URLs
       (s.status === 'image_generated' || s.status === 'prompts_ready')
     );
 
+    if (withImages.length === 0) {
+      setGeneratingVideos(false);
+      return;
+    }
+
+    // Upload any data URI images to get public URLs first (Veo requires them)
+    for (const s of withImages) {
+      if (s.image_url.startsWith('data:')) {
+        setVideoProgress(prev => ({
+          ...prev, phase: 'uploading',
+          sceneName: `Uploading Scene ${s.scene_number} image to get public URL...`
+        }));
+        try {
+          const resp = await fetch(s.image_url);
+          const blob = await resp.blob();
+          const file = new File([blob], `scene_${s.scene_number}.png`, { type: 'image/png' });
+          const { file_url } = await base44.integrations.Core.UploadFile({ file });
+          await base44.entities.Scenes.update(s.id, { image_url: file_url });
+          s.image_url = file_url; // update local ref
+          console.log(`Uploaded Scene ${s.scene_number} image: ${file_url}`);
+        } catch (uploadErr) {
+          console.warn(`Failed to upload Scene ${s.scene_number} image:`, uploadErr.message);
+        }
+      }
+    }
+
+    await refetchScenes();
+
+    const ready = withImages.filter(s =>
+      s.image_url && s.image_url.startsWith('http')
+    );
+
     if (ready.length === 0) {
+      console.warn('No scenes with public image URLs available for animation');
       setGeneratingVideos(false);
       return;
     }
