@@ -128,23 +128,13 @@ Deno.serve(async (req) => {
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-    // ── Get final aggregated script (or fallback to provided script_id or any script) ──
+    // ── Get final aggregated script ────────────────────────────────
     const allScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
-    let script = allScripts.find(s => s.version === 'final_aggregated');
-
-    // Fallback: try the provided script_id
-    if (!script?.full_script && script_id) {
-      script = allScripts.find(s => s.id === script_id && s.full_script);
-    }
-
-    // Fallback: try any script with content
-    if (!script?.full_script) {
-      script = allScripts.find(s => s.full_script);
-    }
+    const script = allScripts.find(s => s.version === 'final_aggregated');
 
     if (!script?.full_script) {
       return Response.json({
-        error: 'No script found with content. Generate a script first.'
+        error: 'No final_aggregated script found. Please generate the full script first (Final Script step).'
       }, { status: 400 });
     }
 
