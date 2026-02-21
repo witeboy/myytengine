@@ -216,3 +216,32 @@ export default function TrendingNichesTable({ onSelectNiche }) {
     </div>
   );
 }
+
+function HeaderWithTooltip({ children, tooltip, align = "left", className = "", sortKey, currentSort, onSort }) {
+  const textAlign = align === "center" ? "text-center" : align === "right" ? "text-right" : "text-left";
+  const isActive = sortKey && currentSort === sortKey;
+
+  const inner = (
+    <span className={`inline-flex items-center gap-1 ${sortKey ? "cursor-pointer hover:text-gray-700 transition-colors" : ""}`}
+      onClick={sortKey ? (e) => { e.stopPropagation(); onSort(sortKey); } : undefined}
+    >
+      {children}
+      {isActive && <ArrowUpDown className="w-2.5 h-2.5 text-indigo-600" />}
+    </span>
+  );
+
+  return (
+    <th className={`py-2 px-3 ${textAlign} ${className}`}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="cursor-help border-b border-dashed border-gray-300">
+            {inner}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-[250px] text-xs leading-relaxed">
+          {tooltip}
+        </TooltipContent>
+      </Tooltip>
+    </th>
+  );
+}
