@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
-import { TrendingUp, TrendingDown, Minus, DollarSign, Eye, Zap, Loader2, RefreshCw, Crown } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, DollarSign, Eye, Zap, Loader2, RefreshCw, Crown, ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const PERIODS = [
   { key: "daily", label: "Daily" },
@@ -24,14 +25,49 @@ function formatNumber(n) {
   return n.toLocaleString();
 }
 
+const SORT_OPTIONS = [
+  { key: "rank", label: "Default Rank" },
+  { key: "avg_rpm_estimate", label: "Est. RPM" },
+  { key: "avg_views", label: "Avg Views" },
+  { key: "avg_opportunity_score", label: "Opp Score" },
+];
+
+const COLUMN_TOOLTIPS = {
+  rank: "Rank — Overall ranking based on a composite of views, opportunity, and RPM potential.",
+  niche: "Niche — The YouTube content category or keyword being tracked.",
+  avg_views: "Avg Views — The average number of views across the top-performing videos in this niche during the selected time period.",
+  opp_score: "Opportunity Score — Measures viral potential by comparing views to subscriber count. Higher means the niche outperforms its audience size (views ÷ subscribers).",
+  rpm: "Estimated RPM — Revenue Per Mille (per 1,000 views). Estimated ad revenue potential based on the niche's advertiser demand. Finance & legal niches pay the most.",
+  trend: "Trend — Indicates whether this niche's viewership is rising, stable, or declining based on recent daily view velocity.",
+};
+
 export default function TrendingNichesTable({ onSelectNiche }) {
   const [period, setPeriod] = useState("daily");
   const [refreshing, setRefreshing] = useState(false);
+  const [sortBy, setSortBy] = useState("rank");
+  const [sortDir, setSortDir] = useState(1); // 1 = asc for rank, -1 = desc for metrics
 
   const { data: niches = [], isLoading, refetch } = useQuery({
     queryKey: ["trending-niches", period],
     queryFn: () => base44.entities.TrendingNiches.filter({ period }, "rank", 25),
   });
+
+  const sortedNiches = useMemo(() => {
+    return [...niches].sort((a, b) => {
+      const va = a[sortBy] || 0;
+      const vb = b[sortBy] || 0;
+      return sortDir === 1 ? va - vb : vb - va;
+    });
+  }, [niches, sortBy, sortDir]);
+
+  const handleSort = (field) => {
+    if (sortBy === field) {
+      setSortDir(d => d * -1);
+    } else {
+      setSortBy(field);
+      setSortDir(field === "rank" ? 1 : -1);
+    }
+  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -52,7 +88,24 @@ export default function TrendingNichesTable({ onSelectNiche }) {
           <Crown className="w-4 h-4 text-amber-500" />
           <h3 className="text-sm font-semibold text-gray-900">Trending Niches</h3>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Sort By */}
+          <div className="flex bg-gray-100 rounded-lg p-0.5">
+            {SORT_OPTIONS.map((s) => (
+              <button
+                key={s.key}
+                onClick={() => handleSort(s.key)}
+                className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors flex items-center gap-1 ${
+                  sortBy === s.key
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                {s.label}
+                {sortBy === s.key && <ArrowUpDown className="w-2.5 h-2.5" />}
+              </button>
+            ))}
+          </div>
           {/* Period Tabs */}
           <div className="flex bg-gray-100 rounded-lg p-0.5">
             {PERIODS.map((p) => (
@@ -95,21 +148,22 @@ export default function TrendingNichesTable({ onSelectNiche }) {
           </Button>
         </div>
       ) : (
+        <TooltipProvider delayDuration={200}>
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-100 text-[10px] font-medium text-gray-500 uppercase tracking-wider">
-                  <th className="py-2 px-3 text-center w-10">#</th>
-                  <th className="py-2 px-3 text-left">Niche</th>
-                  <th className="py-2 px-3 text-right">Avg Views</th>
-                  <th className="py-2 px-3 text-right">Opp Score</th>
-                  <th className="py-2 px-3 text-right">Est. RPM</th>
-                  <th className="py-2 px-3 text-center">Trend</th>
+                  <HeaderWithTooltip align="center" className="w-10" tooltip={COLUMN_TOOLTIPS.rank}>#</HeaderWithTooltip>
+                  <HeaderWithTooltip align="left" tooltip={COLUMN_TOOLTIPS.niche}>Niche</HeaderWithTooltip>
+                  <HeaderWithTooltip align="right" tooltip={COLUMN_TOOLTIPS.avg_views} sortKey="avg_views" currentSort={sortBy} onSort={handleSort}>Avg Views</HeaderWithTooltip>
+                  <HeaderWithTooltip align="right" tooltip={COLUMN_TOOLTIPS.opp_score} sortKey="avg_opportunity_score" currentSort={sortBy} onSort={handleSort}>Opp Score</HeaderWithTooltip>
+                  <HeaderWithTooltip align="right" tooltip={COLUMN_TOOLTIPS.rpm} sortKey="avg_rpm_estimate" currentSort={sortBy} onSort={handleSort}>Est. RPM</HeaderWithTooltip>
+                  <HeaderWithTooltip align="center" tooltip={COLUMN_TOOLTIPS.trend}>Trend</HeaderWithTooltip>
                 </tr>
               </thead>
               <tbody>
-                {niches.map((niche, i) => {
+                {sortedNiches.map((niche, i) => {
                   const trend = trendIcons[niche.growth_trend] || trendIcons.stable;
                   const TrendIcon = trend.icon;
                   return (
@@ -156,6 +210,7 @@ export default function TrendingNichesTable({ onSelectNiche }) {
             </table>
           </div>
         </div>
+        </TooltipProvider>
       )}
       <p className="text-[10px] text-gray-400 text-center">Click any niche to auto-search</p>
     </div>
