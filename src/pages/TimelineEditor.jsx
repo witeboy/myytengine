@@ -15,7 +15,8 @@ import PreviewMonitor from '@/components/timeline/PreviewMonitor';
 import ExportPanel from '@/components/timeline/ExportPanel';
 import VideoExporter from '@/components/timeline/VideoExporter';
 import useVideoExport from '@/components/timeline/useVideoExport';
-import { Loader2, Import, Download, Film, Play, Package, ArrowRight } from 'lucide-react';
+import { Loader2, Import, Download, Film, Play, Package, ArrowRight, Upload } from 'lucide-react';
+import DownloadAllMedia from '@/components/content/DownloadAllMedia';
 
 export default function TimelineEditor() {
   const navigate = useNavigate();
@@ -62,6 +63,7 @@ export default function TimelineEditor() {
     enabled: !!projectId,
   });
   const voiceoverUrl = prodSettings[0]?.voiceover_url;
+  const voiceoverDuration = prodSettings[0]?.voiceover_duration_seconds || prodSettings[0]?.total_duration_seconds || 0;
 
   const { data: musicTracks = [] } = useQuery({
     queryKey: ['music-timeline', projectId],
@@ -83,7 +85,9 @@ export default function TimelineEditor() {
     return acc;
   }, []);
 
-  const totalDuration = scenesWithTiming.reduce((sum, s) => sum + s.duration_seconds, 0);
+  // Master duration = voiceover length (if available), otherwise sum of scenes
+  const sceneDuration = scenesWithTiming.reduce((sum, s) => sum + s.duration_seconds, 0);
+  const totalDuration = voiceoverDuration > 0 ? voiceoverDuration : sceneDuration;
 
   // Find current scene based on playback time
   const getCurrentScene = useCallback((time) => {
@@ -283,6 +287,7 @@ export default function TimelineEditor() {
             <h1 className="text-3xl font-bold">Timeline Editor</h1>
             <p className="text-gray-600">
               {scenes.length} scenes • {Math.round(totalDuration)}s total ({Math.round(totalDuration / 60)} min)
+              {voiceoverDuration > 0 && <span className="text-blue-600 ml-1">· VO: {Math.round(voiceoverDuration)}s</span>}
             </p>
           </div>
           <div className="flex gap-2">
@@ -317,6 +322,16 @@ export default function TimelineEditor() {
             )}
           </div>
         </div>
+
+        {/* Download All Media */}
+        {scenes.length > 0 && (
+          <DownloadAllMedia
+            scenes={scenesWithTiming}
+            voiceoverUrl={voiceoverUrl}
+            musicUrl={musicUrl}
+            projectName={project?.name}
+          />
+        )}
 
         {/* Export Assets Panel */}
         {showExportPanel && scenes.length > 0 && (
@@ -421,21 +436,28 @@ export default function TimelineEditor() {
                   )}
                 </div>
 
-                {/* Audio Track */}
+                {/* Audio Track — Voiceover (master timeline) */}
                 <div className="border-t relative">
                   <div className="flex items-center">
                     <div className="w-24 flex-shrink-0 px-3 py-2 bg-gray-50 border-r text-xs font-medium text-gray-600 flex items-center gap-1">
                       <Play className="w-3 h-3" /> Audio
                     </div>
                     <div className="flex-1 h-16 bg-gradient-to-r from-blue-100 to-blue-50 flex items-center px-4">
-                      {totalDuration > 0 && (
+                      {voiceoverDuration > 0 ? (
+                        <div
+                          className="h-8 bg-blue-300 rounded flex items-center px-3 text-xs text-blue-800 font-medium border border-blue-400"
+                          style={{ width: voiceoverDuration * pixelsPerSecond }}
+                        >
+                          🎙 Voiceover (Master) • {Math.round(voiceoverDuration)}s
+                        </div>
+                      ) : totalDuration > 0 ? (
                         <div
                           className="h-8 bg-blue-200 rounded flex items-center px-3 text-xs text-blue-700"
                           style={{ width: totalDuration * pixelsPerSecond }}
                         >
-                          Voiceover • {Math.round(totalDuration)}s
+                          Audio • {Math.round(totalDuration)}s
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                   {/* Playhead line on audio track */}
@@ -503,4 +525,3 @@ export default function TimelineEditor() {
     </div>
   );
 }
-
