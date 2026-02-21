@@ -75,52 +75,9 @@ async function getYouTubeTranscript(videoId) {
 }
 
 // ===================================================================
-// TIER 2: Cobalt audio extraction
+// TIER 2: AssemblyAI transcription (upload binary + poll)
 // ===================================================================
-async function extractAudioWithCobalt(url) {
-  const cobaltUrl = Deno.env.get("COBALT_API_URL");
-  if (!cobaltUrl) {
-    console.log('[Cobalt] No COBALT_API_URL set');
-    return null;
-  }
-
-  try {
-    console.log(`[Cobalt] Extracting audio from: ${url.substring(0, 80)}...`);
-    const apiEndpoint = cobaltUrl.endsWith('/') ? cobaltUrl : cobaltUrl + '/';
-
-    const response = await fetch(apiEndpoint, {
-      method: "POST",
-      headers: { "Accept": "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify({ url, downloadMode: "audio", audioFormat: "mp3", audioBitrate: "64" })
-    });
-
-    const data = await response.json();
-
-    if (data.status === "redirect" || data.status === "stream" || data.status === "tunnel") {
-      console.log(`[Cobalt] Success (${data.status})`);
-      return data.url;
-    }
-
-    if (data.status === "picker" && data.picker?.length > 0) {
-      const item = data.picker.find(i => i.type === 'audio') || data.picker[0];
-      if (item?.url) {
-        console.log(`[Cobalt] Picker: using ${item.type} option`);
-        return item.url;
-      }
-    }
-
-    console.log(`[Cobalt] Failed: ${data.error?.code || JSON.stringify(data).substring(0, 200)}`);
-    return null;
-  } catch (error) {
-    console.log(`[Cobalt] Error: ${error.message}`);
-    return null;
-  }
-}
-
-// ===================================================================
-// TIER 3: AssemblyAI transcription (from audio binary)
-// ===================================================================
-async function transcribeWithAssemblyAI(audioData) {
+async function transcribeAudioBuffer(audioData) {
   const apiKey = Deno.env.get("ASSEMBLYAI_API_KEY");
   if (!apiKey) {
     console.log('[AssemblyAI] No ASSEMBLYAI_API_KEY set');
@@ -128,7 +85,6 @@ async function transcribeWithAssemblyAI(audioData) {
   }
 
   try {
-    // Upload binary to AssemblyAI
     console.log(`[AssemblyAI] Uploading ${(audioData.byteLength / 1024 / 1024).toFixed(1)}MB...`);
     const uploadRes = await fetch('https://api.assemblyai.com/v2/upload', {
       method: 'POST',
@@ -147,7 +103,6 @@ async function transcribeWithAssemblyAI(audioData) {
       return null;
     }
 
-    // Start transcription
     console.log('[AssemblyAI] Starting transcription...');
     const startRes = await fetch("https://api.assemblyai.com/v2/transcript", {
       method: "POST",
@@ -164,7 +119,6 @@ async function transcribeWithAssemblyAI(audioData) {
     const transcriptId = startData.id;
     console.log(`[AssemblyAI] Job ${transcriptId} — polling...`);
 
-    // Poll for completion (max ~4 min)
     for (let i = 0; i < 80; i++) {
       await new Promise(r => setTimeout(r, 3000));
       const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
@@ -238,40 +192,62 @@ Deno.serve(async (req) => {
       console.warn('Channel fetch failed:', e.message);
     }
 
-    // ── 2. Get FULL transcript (3-tier) ──────────────────────────
+    // ── 2. Get FULL transcript (2-tier: Captions → AssemblyAI) ───
     console.log('[Analyze] Extracting full transcript...');
     let transcript = null;
     let transcriptSource = 'none';
 
-    // Tier 1: YouTube captions
+    // Tier 1: YouTube captions API
     transcript = await getYouTubeTranscript(videoId);
     if (transcript && transcript.length >= 50) {
       transcriptSource = 'youtube_captions';
       console.log(`[Analyze] Transcript from captions: ${transcript.length} chars`);
     }
 
-    // Tier 2+3: Cobalt audio → AssemblyAI
+    // Tier 2: Download YouTube audio via ytdl endpoint and transcribe with AssemblyAI
     if (!transcript || transcript.length < 50) {
-      console.log('[Analyze] No captions, trying Cobalt + AssemblyAI...');
-      const cobaltAudioUrl = await extractAudioWithCobalt(video_url);
+      console.log('[Analyze] No captions found, falling back to AssemblyAI audio transcription...');
+      const aaiKey = Deno.env.get("ASSEMBLYAI_API_KEY");
 
-      if (cobaltAudioUrl) {
+      if (aaiKey) {
+        // Use AssemblyAI directly with the YouTube URL — it supports YouTube natively
         try {
-          console.log('[Analyze] Downloading audio from Cobalt...');
-          const dlResponse = await fetch(cobaltAudioUrl);
-          if (dlResponse.ok) {
-            const audioData = await dlResponse.arrayBuffer();
-            console.log(`[Analyze] Downloaded ${(audioData.byteLength / 1024 / 1024).toFixed(1)}MB`);
+          console.log('[AssemblyAI] Submitting YouTube URL directly...');
+          const startRes = await fetch("https://api.assemblyai.com/v2/transcript", {
+            method: "POST",
+            headers: { "authorization": aaiKey, "content-type": "application/json" },
+            body: JSON.stringify({ audio_url: video_url, language_detection: true })
+          });
 
-            const transcriptText = await transcribeWithAssemblyAI(audioData);
-            if (transcriptText && transcriptText.length >= 50) {
-              transcript = transcriptText;
-              transcriptSource = 'assemblyai';
-              console.log(`[Analyze] Transcript from AssemblyAI: ${transcript.length} chars`);
+          const startData = await startRes.json();
+          if (startData.id && !startData.error) {
+            const transcriptId = startData.id;
+            console.log(`[AssemblyAI] Job ${transcriptId} — polling...`);
+
+            for (let i = 0; i < 80; i++) {
+              await new Promise(r => setTimeout(r, 3000));
+              const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+                headers: { "authorization": aaiKey }
+              });
+              const result = await pollRes.json();
+              console.log(`[AssemblyAI] Poll ${i + 1}: ${result.status}`);
+
+              if (result.status === "completed" && result.text?.length >= 50) {
+                transcript = result.text;
+                transcriptSource = 'assemblyai';
+                console.log(`[AssemblyAI] Done! ${transcript.length} chars`);
+                break;
+              }
+              if (result.status === "error") {
+                console.log(`[AssemblyAI] Error: ${result.error}`);
+                break;
+              }
             }
+          } else {
+            console.log(`[AssemblyAI] Submit failed: ${startData.error || 'unknown'}`);
           }
-        } catch (dlErr) {
-          console.log(`[Analyze] Download/transcribe failed: ${dlErr.message}`);
+        } catch (aaiErr) {
+          console.log(`[AssemblyAI] Error: ${aaiErr.message}`);
         }
       }
     }
@@ -377,10 +353,9 @@ CRITICAL: The "original_script" field must contain the ENTIRE original transcrip
     analysis.transcript_source = transcriptSource;
     analysis.transcript_length = transcript ? transcript.length : 0;
 
-    // If Gemini didn't include the full script but we have the transcript, force it
+    // If Gemini truncated the script, use raw transcript instead
     if (transcript && transcript.length > 100) {
       const scriptField = analysis.original_script || '';
-      // If gemini's version is significantly shorter than actual transcript, use raw transcript
       if (scriptField.length < transcript.length * 0.5) {
         console.log(`[Analyze] Gemini script too short (${scriptField.length} vs ${transcript.length}), using raw transcript`);
         analysis.original_script = transcript;
