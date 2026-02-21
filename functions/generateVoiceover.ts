@@ -161,25 +161,39 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── Submit TTS to Kie Market ───────────────────────────────────
-    console.log(`🎙 Submitting to Kie ElevenLabs TTS (voice: ${voice_name})...`);
-    const taskId = await submitTtsTask(KIE_API_KEY, cleanedText, voice_name);
-    console.log(`🎙 TTS task created: ${taskId}`);
+    // ── Split into chunks if text is too long (>4000 chars) ───────
+    const chunks = splitTextIntoChunks(cleanedText, 4000);
+    console.log(`🎙 Split into ${chunks.length} chunk(s) for TTS`);
 
-    // ── Poll until ready ───────────────────────────────────────────
-    console.log(`🎙 Polling for TTS result...`);
-    const audioResultUrl = await pollKieTask(KIE_API_KEY, taskId);
+    const audioChunkUrls = [];
+    for (let i = 0; i < chunks.length; i++) {
+      console.log(`🎙 Submitting chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars, voice: ${voice_name})...`);
+      const taskId = await submitTtsTask(KIE_API_KEY, chunks[i], voice_name);
+      console.log(`🎙 TTS task ${i + 1}: ${taskId}`);
 
-    if (!audioResultUrl) {
-      throw new Error('TTS completed but no audio URL returned');
+      const audioUrl = await pollKieTask(KIE_API_KEY, taskId);
+      if (!audioUrl) throw new Error(`Chunk ${i + 1}: TTS completed but no audio URL`);
+      console.log(`🎙 Chunk ${i + 1} ready: ${audioUrl.substring(0, 60)}...`);
+      audioChunkUrls.push(audioUrl);
     }
-    console.log(`🎙 Audio ready: ${audioResultUrl.substring(0, 80)}...`);
 
-    // ── Download audio and re-upload to Base44 storage ─────────────
-    const audioRes = await fetch(audioResultUrl);
-    const audioBuffer = await audioRes.arrayBuffer();
-    const audioBytes = new Uint8Array(audioBuffer);
-    console.log(`🎙 Downloaded audio: ${audioBytes.length} bytes`);
+    // ── Download all chunks and concatenate ────────────────────────
+    const allChunkBytes = [];
+    for (let i = 0; i < audioChunkUrls.length; i++) {
+      const audioRes = await fetch(audioChunkUrls[i]);
+      const buf = await audioRes.arrayBuffer();
+      allChunkBytes.push(new Uint8Array(buf));
+      console.log(`🎙 Downloaded chunk ${i + 1}: ${buf.byteLength} bytes`);
+    }
+
+    const totalLength = allChunkBytes.reduce((sum, c) => sum + c.length, 0);
+    const audioBytes = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of allChunkBytes) {
+      audioBytes.set(chunk, offset);
+      offset += chunk.length;
+    }
+    console.log(`🎙 Combined audio: ${audioBytes.length} bytes`);
 
     const audioBlob = new Blob([audioBytes], { type: 'audio/mpeg' });
     const uploadResult = await base44.asServiceRole.integrations.Core.UploadFile({
