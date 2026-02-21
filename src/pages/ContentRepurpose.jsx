@@ -110,6 +110,11 @@ export default function ContentRepurpose() {
     setLoading(true);
     setStatusMsg('Writing new script in original style...');
 
+    const hasOriginalScript = analysis.original_script && analysis.original_script.length > 200;
+    const scriptReference = hasOriginalScript
+      ? `\n\nORIGINAL FULL SCRIPT (use this as your style bible — match tone, sentence structure, transitions, rhetorical devices EXACTLY):\n"""\n${analysis.original_script.substring(0, 40000)}\n"""`
+      : '';
+
     const result = await base44.integrations.Core.InvokeLLM({
       prompt: `You are a professional YouTube scriptwriter. Based on the analysis of an existing high-performing video, write a NEW script in the SAME style but with the user's modifications.
 
@@ -124,11 +129,13 @@ ORIGINAL VIDEO ANALYSIS:
 - Tone: ${analysis.tone_description}
 - Estimated Duration: ${analysis.estimated_duration_seconds}s
 - Original Outline: ${analysis.reconstructed_outline}
+${scriptReference}
 
 USER'S MODIFICATIONS:
 - New Title: ${newTitle}
 - Additional Notes: ${tweakNotes || 'None — keep as close to original style as possible'}
 
+${hasOriginalScript ? 'You have the FULL original script above. Match the EXACT writing style — sentence length, word choice, transitions, rhetorical patterns, hook structure. The new script should feel like it was written by the same creator.' : ''}
 Write a complete narration script (~${analysis.estimated_word_count || 1500} words) matching the EXACT style, tone, and pacing. Return ONLY the script text.`,
     });
 
