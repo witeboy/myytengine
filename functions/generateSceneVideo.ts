@@ -156,7 +156,7 @@ Deno.serve(async (req) => {
     return Response.json({
       success: true,
       task_id: taskId,
-      provider: "veo3_quality",
+      provider: "veo3_fast",
       status: "CREATED",
       aspect_ratio: aspectRatio,
       resolution: "1080p",
