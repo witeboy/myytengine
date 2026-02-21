@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -13,19 +13,32 @@ import VisualStyleSelector from '@/components/content/VisualStyleSelector';
 import OrientationSelector from '@/components/content/OrientationSelector';
 import MusicPanel from '@/components/content/MusicPanel';
 import AudioMixerPanel from '@/components/content/AudioMixerPanel';
-import { Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film, Palette, Sparkles, Monitor, Clapperboard, Wand2 } from 'lucide-react';
+import {
+  Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film,
+  Palette, Sparkles, Monitor, Clapperboard, Wand2, CheckCircle2,
+  XCircle, Clock, Zap, Video
+} from 'lucide-react';
 
 export default function ContentGeneration() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const projectId = new URLSearchParams(window.location.search).get('project_id');
   const [importing, setImporting] = useState(false);
-  const [importPhase, setImportPhase] = useState(''); // 'breakdown' | 'prompts' | ''
+  const [importPhase, setImportPhase] = useState('');
   const [importProgress, setImportProgress] = useState('');
   const [generatingImages, setGeneratingImages] = useState(false);
   const [generatingVideos, setGeneratingVideos] = useState(false);
   const [audioLevels, setAudioLevels] = useState({ narration: 1, music: 0.3, sfx: 0.5 });
   const [enhancingAll, setEnhancingAll] = useState(false);
+
+  // ── Per-scene generation tracking ─────────────────────────────
+  const [imageProgress, setImageProgress] = useState({ current: 0, total: 0, sceneName: '' });
+  const [videoProgress, setVideoProgress] = useState({
+    current: 0, total: 0, sceneName: '',
+    phase: '', // 'submitting' | 'polling' | 'done'
+    sceneStatuses: {} // { [scene_id]: 'queued' | 'submitting' | 'polling' | 'done' | 'failed' }
+  });
+  const pollAbortRef = useRef(false);
 
   const { data: project, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
@@ -45,38 +58,28 @@ export default function ContentGeneration() {
     enabled: !!projectId,
   });
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => { pollAbortRef.current = true; };
+  }, []);
+
   // ══════════════════════════════════════════════════════════════════
   // TWO-PHASE IMPORT: Scene Breakdown → Prompt Generation
-  // Both are single-call functions — no batch looping needed
   // ══════════════════════════════════════════════════════════════════
   const handleImport = async () => {
     setImporting(true);
-
     try {
-      // ── PHASE 1: Cinematic Scene Breakdown (single call) ───────
       setImportPhase('breakdown');
       setImportProgress('Analyzing script & breaking down into cinematic scenes...');
-      console.log('🎬 Starting scene breakdown...');
 
-      const breakdownResult = await base44.functions.invoke('generateSceneBreakdown', {
-        project_id: projectId,
-      });
-
+      await base44.functions.invoke('generateSceneBreakdown', { project_id: projectId });
       await refetchScenes();
-      console.log(`✓ Scene breakdown complete! ${breakdownResult.scenes_created} scenes created.`);
 
-      // ── PHASE 2: Generate Image & Animation Prompts (single call) ──
       setImportPhase('prompts');
       setImportProgress('Converting director notes into visual prompts...');
-      console.log('🎨 Starting prompt generation...');
 
-      const promptResult = await base44.functions.invoke('generateScenePrompts', {
-        project_id: projectId,
-      });
-
+      await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
       await refetchScenes();
-      console.log(`✓ All prompts generated! ${promptResult.prompts_applied} prompts applied.`);
-
     } catch (err) {
       console.error('Scene generation error:', err);
     } finally {
@@ -88,18 +91,19 @@ export default function ContentGeneration() {
     }
   };
 
-  // Generate all images
+  // ══════════════════════════════════════════════════════════════════
+  // GENERATE ALL IMAGES (Grok Imagine via Kie)
+  // ══════════════════════════════════════════════════════════════════
   const handleGenerateImages = async () => {
     setGeneratingImages(true);
+
     const pending = scenes.filter(s =>
       (s.status === 'prompts_ready' || !s.image_url) &&
-      // Safety: skip scenes that still have raw director notes
       !s.image_prompt?.startsWith('DIRECTOR_NOTES:')
     );
 
     if (pending.length === 0 && scenes.some(s => s.image_prompt?.startsWith('DIRECTOR_NOTES:'))) {
-      // Director notes haven't been converted — run prompt generator first
-      console.log('⚠️ Scenes still have director notes. Running prompt generator...');
+      setImageProgress({ current: 0, total: 0, sceneName: 'Converting director notes first...' });
       try {
         await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
         await refetchScenes();
@@ -108,39 +112,177 @@ export default function ContentGeneration() {
       }
     }
 
-    // Re-fetch after potential prompt generation
     const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
     const readyScenes = freshScenes
       .filter(s => s.status === 'prompts_ready' || (!s.image_url && !s.image_prompt?.startsWith('DIRECTOR_NOTES:')))
       .sort((a, b) => a.scene_number - b.scene_number);
 
-    for (const scene of readyScenes) {
+    setImageProgress({ current: 0, total: readyScenes.length, sceneName: '' });
+
+    for (let i = 0; i < readyScenes.length; i++) {
+      const scene = readyScenes[i];
+      setImageProgress({ current: i + 1, total: readyScenes.length, sceneName: `Scene ${scene.scene_number}` });
       try {
         await base44.functions.invoke('generateSceneImage', { scene_id: scene.id });
       } catch (err) {
-        console.warn(`Scene ${scene.scene_number} image failed, skipping:`, err.message);
+        console.warn(`Scene ${scene.scene_number} image failed:`, err.message);
       }
       await refetchScenes();
     }
+
     setGeneratingImages(false);
+    setImageProgress({ current: 0, total: 0, sceneName: '' });
   };
 
-  // Generate all videos from images
+  // ══════════════════════════════════════════════════════════════════
+  // GENERATE & POLL ALL VIDEOS (Veo 3.1 Quality via Kie)
+  // ══════════════════════════════════════════════════════════════════
+  //
+  // Flow:
+  //   1. Submit all scenes → generateSceneVideo (returns task_id)
+  //   2. Poll all pending scenes every 15s → pollSceneVideo
+  //   3. Each COMPLETED scene gets real video_url written to DB
+  //
+  // All scenes submitted first, then polled in parallel rounds.
+  // ══════════════════════════════════════════════════════════════════
+
   const handleGenerateVideos = async () => {
     setGeneratingVideos(true);
-    const ready = scenes.filter(s => s.image_url && s.status === 'image_generated');
-    for (const scene of ready) {
-      try {
-        await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
-      } catch (err) {
-        console.warn(`Scene ${scene.scene_number} video failed, skipping:`, err.message);
-      }
-      await refetchScenes();
+    pollAbortRef.current = false;
+
+    const ready = scenes.filter(s =>
+      s.image_url &&
+      !s.image_url.startsWith('data:') && // Veo needs public URLs
+      (s.status === 'image_generated' || s.status === 'prompts_ready')
+    );
+
+    if (ready.length === 0) {
+      setGeneratingVideos(false);
+      return;
     }
+
+    // Initialize per-scene statuses
+    const initialStatuses = {};
+    ready.forEach(s => { initialStatuses[s.id] = 'queued'; });
+
+    setVideoProgress({
+      current: 0, total: ready.length,
+      sceneName: '', phase: 'submitting',
+      sceneStatuses: { ...initialStatuses }
+    });
+
+    // ── Phase 1: Submit all scenes to Veo ───────────────────────
+    const pendingPolls = [];
+
+    for (let i = 0; i < ready.length; i++) {
+      if (pollAbortRef.current) break;
+      const scene = ready[i];
+
+      setVideoProgress(prev => ({
+        ...prev,
+        current: i + 1,
+        sceneName: `Submitting Scene ${scene.scene_number}...`,
+        phase: 'submitting',
+        sceneStatuses: { ...prev.sceneStatuses, [scene.id]: 'submitting' }
+      }));
+
+      try {
+        const result = await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
+        pendingPolls.push({
+          scene_id: scene.id,
+          task_id: result.task_id,
+          scene_number: scene.scene_number
+        });
+        setVideoProgress(prev => ({
+          ...prev,
+          sceneStatuses: { ...prev.sceneStatuses, [scene.id]: 'polling' }
+        }));
+      } catch (err) {
+        console.warn(`Scene ${scene.scene_number} submit failed:`, err.message);
+        setVideoProgress(prev => ({
+          ...prev,
+          sceneStatuses: { ...prev.sceneStatuses, [scene.id]: 'failed' }
+        }));
+      }
+    }
+
+    // ── Phase 2: Poll all pending scenes until done ─────────────
+    if (pendingPolls.length > 0) {
+      setVideoProgress(prev => ({
+        ...prev,
+        phase: 'polling',
+        sceneName: `${pendingPolls.length} scenes rendering with Veo 3.1...`
+      }));
+
+      let remaining = [...pendingPolls];
+      let pollCount = 0;
+      const MAX_POLLS = 60; // 60 × 15s = 15 min max
+
+      while (remaining.length > 0 && pollCount < MAX_POLLS && !pollAbortRef.current) {
+        await new Promise(r => setTimeout(r, 15000));
+        pollCount++;
+
+        const stillPending = [];
+
+        for (const item of remaining) {
+          if (pollAbortRef.current) break;
+
+          try {
+            const pollResult = await base44.functions.invoke('pollSceneVideo', {
+              scene_id: item.scene_id
+            });
+
+            if (pollResult.status === 'COMPLETED') {
+              setVideoProgress(prev => ({
+                ...prev,
+                sceneStatuses: { ...prev.sceneStatuses, [item.scene_id]: 'done' }
+              }));
+            } else if (pollResult.status === 'FAILED') {
+              setVideoProgress(prev => ({
+                ...prev,
+                sceneStatuses: { ...prev.sceneStatuses, [item.scene_id]: 'failed' }
+              }));
+            } else {
+              stillPending.push(item);
+            }
+          } catch (err) {
+            console.warn(`Poll error scene ${item.scene_number}:`, err.message);
+            stillPending.push(item);
+          }
+        }
+
+        remaining = stillPending;
+        await refetchScenes();
+
+        // Update summary text
+        setVideoProgress(prev => {
+          const s = prev.sceneStatuses;
+          const done = Object.values(s).filter(v => v === 'done').length;
+          const failed = Object.values(s).filter(v => v === 'failed').length;
+          return {
+            ...prev,
+            current: done + failed,
+            sceneName: remaining.length > 0
+              ? `${done} done · ${remaining.length} still rendering...`
+              : `All complete! ${done} videos generated.`
+          };
+        });
+      }
+
+      // Timeout warning
+      if (remaining.length > 0 && pollCount >= MAX_POLLS) {
+        console.warn(`Polling timed out with ${remaining.length} scenes still pending`);
+      }
+    }
+
+    await refetchScenes();
     setGeneratingVideos(false);
+    setVideoProgress({ current: 0, total: 0, sceneName: '', phase: '', sceneStatuses: {} });
   };
 
-  // Enhance all scene prompts with AI
+  // ══════════════════════════════════════════════════════════════════
+  // ENHANCE ALL
+  // ══════════════════════════════════════════════════════════════════
   const handleEnhanceAll = async () => {
     setEnhancingAll(true);
     for (const scene of scenes) {
@@ -185,11 +327,23 @@ export default function ContentGeneration() {
   });
   const latestScript = scripts.find(s => s.version === 'final_aggregated') || null;
 
+  // ── Computed counts ───────────────────────────────────────────
   const imageCount = scenes.filter(s => s.image_url).length;
-  const videoCount = scenes.filter(s => s.video_url).length;
+  const videoCount = scenes.filter(s => s.video_url && !s.video_url.startsWith('veo_task:')).length;
+  const animatingCount = scenes.filter(s => s.video_url?.startsWith('veo_task:') || s.status === 'animating').length;
   const breakdownReadyCount = scenes.filter(s => s.status === 'breakdown_ready').length;
   const promptsReadyCount = scenes.filter(s => s.status === 'prompts_ready').length;
   const directorNotesCount = scenes.filter(s => s.image_prompt?.startsWith('DIRECTOR_NOTES:')).length;
+
+  const videoStatusCounts = videoProgress.sceneStatuses
+    ? {
+        queued: Object.values(videoProgress.sceneStatuses).filter(s => s === 'queued').length,
+        submitting: Object.values(videoProgress.sceneStatuses).filter(s => s === 'submitting').length,
+        polling: Object.values(videoProgress.sceneStatuses).filter(s => s === 'polling').length,
+        done: Object.values(videoProgress.sceneStatuses).filter(s => s === 'done').length,
+        failed: Object.values(videoProgress.sceneStatuses).filter(s => s === 'failed').length,
+      }
+    : { queued: 0, submitting: 0, polling: 0, done: 0, failed: 0 };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -238,13 +392,13 @@ export default function ContentGeneration() {
           </div>
         )}
 
-        {/* Import Progress Banner */}
+        {/* ═══════════════════════════════════════════════════════════
+            IMPORT PROGRESS BANNER
+            ═══════════════════════════════════════════════════════════ */}
         {importing && (
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 mb-6">
             <div className="flex items-center gap-3">
-              <div className="relative">
-                <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
-              </div>
+              <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   {importPhase === 'breakdown' ? (
@@ -267,6 +421,107 @@ export default function ContentGeneration() {
                     {promptsReadyCount > 0 && ` · ${promptsReadyCount} ready for images`}
                   </p>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            IMAGE GENERATION PROGRESS
+            ═══════════════════════════════════════════════════════════ */}
+        {generatingImages && imageProgress.total > 0 && (
+          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-3">
+              <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <Badge className="bg-emerald-100 text-emerald-800 text-xs">
+                    <ImageIcon className="w-3 h-3 mr-1" />
+                    Generating Images
+                  </Badge>
+                  <span className="text-xs font-medium text-emerald-700">
+                    {imageProgress.current} / {imageProgress.total}
+                  </span>
+                </div>
+                <div className="w-full bg-emerald-100 rounded-full h-2 mt-2">
+                  <div
+                    className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${(imageProgress.current / imageProgress.total) * 100}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1.5">
+                  {imageProgress.sceneName} · Grok Imagine via Kie
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            VIDEO GENERATION PROGRESS
+            ═══════════════════════════════════════════════════════════ */}
+        {generatingVideos && videoProgress.total > 0 && (
+          <div className="bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-3">
+              <Loader2 className="w-6 h-6 animate-spin text-violet-600" />
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge className="bg-violet-100 text-violet-800 text-xs">
+                    <Video className="w-3 h-3 mr-1" />
+                    {videoProgress.phase === 'submitting'
+                      ? 'Submitting to Veo 3.1 Quality'
+                      : 'Rendering with Veo 3.1 · 1080p'}
+                  </Badge>
+                </div>
+
+                {/* Progress bar */}
+                <div className="w-full bg-violet-100 rounded-full h-2 mb-3">
+                  <div
+                    className="bg-violet-500 h-2 rounded-full transition-all duration-700"
+                    style={{
+                      width: `${((videoStatusCounts.done + videoStatusCounts.failed) / videoProgress.total) * 100}%`
+                    }}
+                  />
+                </div>
+
+                {/* Per-scene status chips */}
+                <div className="flex flex-wrap gap-1.5">
+                  {Object.entries(videoProgress.sceneStatuses).map(([sceneId, status]) => {
+                    const scene = scenes.find(s => s.id === sceneId);
+                    const num = scene?.scene_number || '?';
+                    const colors = {
+                      done:       'bg-green-100 text-green-700',
+                      failed:     'bg-red-100 text-red-700',
+                      polling:    'bg-amber-100 text-amber-700',
+                      submitting: 'bg-blue-100 text-blue-700',
+                      queued:     'bg-gray-100 text-gray-500',
+                    };
+                    const icons = {
+                      done:       <CheckCircle2 className="w-3 h-3" />,
+                      failed:     <XCircle className="w-3 h-3" />,
+                      polling:    <Clock className="w-3 h-3 animate-pulse" />,
+                      submitting: <Zap className="w-3 h-3" />,
+                      queued:     <Clock className="w-3 h-3 opacity-40" />,
+                    };
+                    return (
+                      <span
+                        key={sceneId}
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${colors[status] || 'bg-gray-100 text-gray-500'}`}
+                      >
+                        {icons[status]}
+                        S{num}
+                      </span>
+                    );
+                  })}
+                </div>
+
+                <p className="text-xs text-gray-500 mt-2">
+                  {videoStatusCounts.done > 0 && `${videoStatusCounts.done} complete`}
+                  {videoStatusCounts.polling > 0 && ` · ${videoStatusCounts.polling} rendering`}
+                  {videoStatusCounts.queued > 0 && ` · ${videoStatusCounts.queued} queued`}
+                  {videoStatusCounts.failed > 0 && ` · ${videoStatusCounts.failed} failed`}
+                  {videoProgress.phase === 'polling' && ' · Polling every 15s'}
+                </p>
               </div>
             </div>
           </div>
@@ -352,6 +607,11 @@ export default function ContentGeneration() {
               <div className="flex items-center gap-2 text-sm">
                 <Film className="w-4 h-4 text-purple-600" />
                 {videoCount}/{scenes.length} videos
+                {animatingCount > 0 && (
+                  <span className="text-xs text-amber-600 font-medium">
+                    ({animatingCount} rendering)
+                  </span>
+                )}
               </div>
               <div className="flex-1" />
               <Button
