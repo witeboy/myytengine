@@ -235,7 +235,7 @@ Deno.serve(async (req) => {
       voiceover_duration_seconds: voiceoverDuration,
       word_count: wordCount,
       voice_name,
-      task_id: taskId,
+      chunks_count: chunks.length,
     });
 
   } catch (error) {
