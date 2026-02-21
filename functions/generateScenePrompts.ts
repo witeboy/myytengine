@@ -584,7 +584,7 @@ ${sceneDirections}
 
         if (generated) {
           imagePrompt = validateAndEnhancePrompt(
-            generated.image_prompt || '', styleConfig, orientationConfig, s.scene_number
+            generated.image_prompt || '', styleConfig, orientationConfig, s.scene_number, visualStyle
           );
           animationPrompt = generated.animation_prompt
             || "slow deliberate dolly push-in from medium shot to close-up over 5s, atmospheric dust motes floating in golden light, subtle breathing motion on subject, shallow depth of field with gentle focus pull, background slowly going out of focus";
@@ -602,7 +602,7 @@ ${sceneDirections}
             fallback += `Cinematic scene depicting: ${s.narration_text}. Professional composition. ${styleConfig.reinforcement}. ${styleConfig.antiStyle}. `;
           }
 
-          imagePrompt = validateAndEnhancePrompt(fallback, styleConfig, orientationConfig, s.scene_number);
+          imagePrompt = validateAndEnhancePrompt(fallback, styleConfig, orientationConfig, s.scene_number, visualStyle);
           animationPrompt = s.director?.camera_movement
             || "slow deliberate dolly push-in from medium shot to close-up over 5s, atmospheric dust motes floating in golden light, subtle breathing motion on subject, shallow depth of field with gentle focus pull";
         }
