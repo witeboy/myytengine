@@ -1,5 +1,24 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+// ══════════════════════════════════════════════════════════════════
+// SCENE VIDEO GENERATOR — Google Veo 3.1 via Kie API
+// ══════════════════════════════════════════════════════════════════
+//
+// Generates animated video from scene still image using Veo 3.1.
+// Image-to-video: scene image becomes the opening frame,
+// animation prompt drives the motion.
+//
+// MODEL: veo3 (Veo 3.1 Quality) — 1080p, 8s, with audio
+// ENDPOINT: https://api.kie.ai/api/v1/veo/generate
+// POLL: https://api.kie.ai/api/v1/veo/record-info?taskId={id}
+// 1080P: https://api.kie.ai/api/v1/veo/get-1080p-video?taskId={id}
+//
+// COST: ~$0.025 per video (5 credits at $0.005/credit)
+// OUTPUT: 1920x1080 (16:9) or 1080x1920 (9:16)
+// ══════════════════════════════════════════════════════════════════
+
+const VEO_BASE = "https://api.kie.ai/api/v1/veo";
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -16,16 +35,28 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Scene image must be generated first' }, { status: 400 });
     }
 
+    // Reject data URIs — Veo needs a publicly accessible URL
+    if (scene.image_url.startsWith('data:')) {
+      return Response.json({
+        error: 'Scene image is a data URI (base64). Veo requires a publicly accessible image URL. Re-generate the scene image with Grok Imagine via Kie.',
+        scene_id
+      }, { status: 400 });
+    }
+
+    const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
+    if (!KIE_API_KEY) {
+      return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
+    }
+
     // Get project for orientation
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: scene.project_id });
     const project = projects[0];
     const orientation = project?.orientation || 'landscape';
-    const runwayRatio = orientation === 'portrait' ? '720:1280' : '1280:720';
+    const aspectRatio = orientation === 'portrait' ? '9:16' : '16:9';
 
-    const duration = scene.duration_seconds && scene.duration_seconds >= 10 ? 10 : 5;
-
-    // Build animation prompt from scene settings
+    // ── Build animation prompt ──────────────────────────────────────
     let prompt = scene.animation_prompt || "Subtle cinematic motion, slow camera movement";
+
     const cameraMap = {
       static: "Static camera, no movement",
       slow_pan: "Slow horizontal pan",
@@ -38,7 +69,13 @@ Deno.serve(async (req) => {
       tilt_up: "Slow upward tilt",
       tilt_down: "Slow downward tilt"
     };
-    const speedMap = { very_slow: "very slow pace", slow: "slow pace", normal: "moderate pace", fast: "fast dynamic pace" };
+
+    const speedMap = {
+      very_slow: "very slow pace",
+      slow: "slow pace",
+      normal: "moderate pace",
+      fast: "fast dynamic pace"
+    };
 
     if (scene.camera_movement && cameraMap[scene.camera_movement]) {
       prompt = cameraMap[scene.camera_movement] + ". " + prompt;
@@ -53,91 +90,71 @@ Deno.serve(async (req) => {
       } catch (_) {}
     }
 
-    // Try Runway first
-    const runwayKey = Deno.env.get("RUNWAY_API_KEY");
-    if (runwayKey) {
-      try {
-        const runwayRes = await fetch("https://api.dev.runwayml.com/v1/image_to_video", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${runwayKey}`,
-            "X-Runway-Version": "2024-11-06"
-          },
-          body: JSON.stringify({
-            model: "gen4_turbo",
-            promptImage: scene.image_url,
-            promptText: prompt,
-            duration: duration,
-            ratio: runwayRatio
-          })
-        });
+    console.log(`🎬 Scene ${scene.scene_number} | Veo 3.1 Quality | ${aspectRatio}`);
+    console.log(`📐 Image: ${scene.image_url.substring(0, 80)}...`);
+    console.log(`🎥 Prompt: ${prompt.substring(0, 120)}...`);
 
-        if (runwayRes.ok) {
-          const data = await runwayRes.json();
-          const taskId = data?.id;
+    // ══════════════════════════════════════════════════════════════
+    // SUBMIT TO VEO 3.1 VIA KIE
+    // ══════════════════════════════════════════════════════════════
 
-          if (taskId) {
-            await base44.asServiceRole.entities.Scenes.update(scene_id, {
-              video_url: `runway_task:${taskId}`,
-              status: "pending"
-            });
-
-            return Response.json({ success: true, task_id: taskId, provider: "runway", status: "CREATED" });
-          }
-        }
-
-        // Log Runway error but fall through to Freepik
-        const errText = await runwayRes.text();
-        console.error("Runway API error (status " + runwayRes.status + "):", errText);
-        console.log("Falling back to Freepik...");
-      } catch (runwayErr) {
-        console.error("Runway request exception:", runwayErr.message, runwayErr.stack);
-        console.log("Falling back to Freepik due to Runway exception...");
-      }
-    }
-
-    // Fallback to Freepik
-    const freepikKey = Deno.env.get("FREEPIK_API_KEY");
-    if (!freepikKey) {
-      return Response.json({ error: 'No video generation API keys configured (RUNWAY_API_KEY or FREEPIK_API_KEY)' }, { status: 500 });
-    }
-
-    const freepikDuration = duration >= 10 ? "10" : "5";
-    const freepikAspectRatio = orientation === 'portrait' ? '9:16' : '16:9';
-    const freepikRes = await fetch("https://api.freepik.com/v1/ai/image-to-video/kling-v2", {
+    const veoResponse = await fetch(`${VEO_BASE}/generate`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        "x-freepik-api-key": freepikKey
+        "Authorization": `Bearer ${KIE_API_KEY}`,
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        image: scene.image_url,
-        duration: freepikDuration,
-        prompt: prompt,
-        aspect_ratio: freepikAspectRatio,
+        prompt,
+        imageUrls: [scene.image_url],
+        model: "veo3",                                    // Quality model = 1080p
+        aspect_ratio: aspectRatio,
+        generationType: "FIRST_AND_LAST_FRAMES_2_VIDEO",  // 1 image = animate from this frame
+        enableTranslation: false                           // prompts already in English
       })
     });
 
-    if (!freepikRes.ok) {
-      const errorText = await freepikRes.text();
-      console.error("Freepik API error:", freepikRes.status, errorText);
-      return Response.json({ error: `Freepik API error: ${freepikRes.status} - ${errorText}` }, { status: 500 });
+    if (!veoResponse.ok) {
+      const errText = await veoResponse.text();
+      console.error(`Veo API error (${veoResponse.status}): ${errText}`);
+      return Response.json({
+        error: `Veo API error: ${veoResponse.status} - ${errText}`
+      }, { status: 500 });
     }
 
-    const freepikData = await freepikRes.json();
-    const freepikTaskId = freepikData?.data?.task_id;
+    const veoData = await veoResponse.json();
 
-    if (!freepikTaskId) {
-      return Response.json({ error: 'No task_id returned from Freepik' }, { status: 500 });
+    if (veoData.code !== 200) {
+      console.error(`Veo API rejected: ${veoData.msg}`);
+      return Response.json({
+        error: `Veo API rejected: ${veoData.msg}`
+      }, { status: 500 });
     }
 
+    const taskId = veoData.data?.taskId;
+    if (!taskId) {
+      return Response.json({ error: 'No taskId returned from Veo API' }, { status: 500 });
+    }
+
+    console.log(`✓ Veo task created: ${taskId}`);
+
+    // ── Store task reference ────────────────────────────────────────
+    // Format: veo_task:{taskId} — pollSceneVideo reads this prefix
     await base44.asServiceRole.entities.Scenes.update(scene_id, {
-      video_url: `freepik_task:${freepikTaskId}`,
-      status: "pending"
+      video_url: `veo_task:${taskId}`,
+      status: "animating"
     });
 
-    return Response.json({ success: true, task_id: freepikTaskId, provider: "freepik", status: "CREATED" });
+    return Response.json({
+      success: true,
+      task_id: taskId,
+      provider: "veo3_quality",
+      status: "CREATED",
+      aspect_ratio: aspectRatio,
+      resolution: "1080p",
+      scene_number: scene.scene_number
+    });
+
   } catch (error) {
     console.error("generateSceneVideo error:", error.message);
     return Response.json({ error: error.message }, { status: 500 });
