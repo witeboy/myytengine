@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
     });
 
     const data = await res.json();
-    console.log(`Poll response: HTTP ${res.status} code=${data.code} message=${data.message}`);
+    console.log(`Poll response: HTTP ${res.status} → ${JSON.stringify(data).substring(0, 500)}`);
 
     if (data.code !== 0) {
       return Response.json({
