@@ -168,198 +168,41 @@ Deno.serve(async (req) => {
     const wordCount = cleanedText.split(/\s+/).filter(w => w.length > 0).length;
     console.log(`🎙 Voiceover: ${wordCount} words from final_aggregated script`);
 
-    // ── Generate TTS (use /stream endpoint to get audio directly) ──
-    const ttsResponse = await fetch(
-      `https://api.ai33.pro/v1/text-to-speech/${voice_id}/stream?output_format=mp3_44100_128`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'xi-api-key': API_KEY,
-        },
-        body: JSON.stringify({
-          text: cleanedText,
-          model_id: 'eleven_multilingual_v2',
-        }),
-      }
-    );
+    // ── Generate TTS in chunks to avoid async task_id issue ────────
+    // ai33.pro queues long text and returns task_id with no retrievable
+    // endpoint. Small chunks return binary audio directly.
+    const chunks = splitTextIntoChunks(cleanedText, 500);
+    console.log(`🎙 Split into ${chunks.length} chunks for TTS`);
 
-    if (!ttsResponse.ok) {
-      const errText = await ttsResponse.text();
-      return Response.json({ error: `TTS API error: ${errText}` }, { status: 500 });
+    const audioChunks = [];
+    for (let i = 0; i < chunks.length; i++) {
+      console.log(`🎙 Generating chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)...`);
+      const chunkBytes = await generateChunkAudio(API_KEY, voice_id, chunks[i], i + 1);
+      audioChunks.push(chunkBytes);
     }
 
-    // ── Detect response type ───────────────────────────────────────
-    // ai33.pro ElevenLabs-compatible API returns audio as binary stream
-    // Content-Type will be audio/mpeg for MP3
-    const contentType = ttsResponse.headers.get('content-type') || '';
-    console.log(`🎙 TTS response content-type: ${contentType}, status: ${ttsResponse.status}`);
-
-    let audioUrl = null;
-    let voiceoverDuration = null;
-    let taskId = null;
-
-    // ── Always read as binary first — ai33.pro returns raw audio ──
-    const audioArrayBuffer = await ttsResponse.arrayBuffer();
-    const audioBytes = new Uint8Array(audioArrayBuffer);
-    console.log(`🎙 Response size: ${audioBytes.length} bytes`);
-
-    // Check if it's actually JSON (small response, starts with '{')
-    const isJson = audioBytes.length < 50000 && audioBytes[0] === 0x7B; // '{'
-
-    if (isJson) {
-      const jsonText = new TextDecoder().decode(audioBytes);
-      console.log(`🎙 JSON response (full): ${jsonText.substring(0, 1000)}`);
-      const ttsData = JSON.parse(jsonText);
-
-      // Log all keys for debugging
-      console.log(`🎙 JSON keys: ${Object.keys(ttsData).join(', ')}`);
-      taskId = ttsData.task_id;
-
-      if (ttsData.audio_url || ttsData.url || ttsData.output_url) {
-        audioUrl = ttsData.audio_url || ttsData.url || ttsData.output_url;
-        console.log(`✓ Audio URL (sync): ${audioUrl}`);
-        voiceoverDuration = ttsData.duration_seconds || ttsData.duration;
-
-      } else if (ttsData.task_id) {
-        // ai33.pro returns task_id for async generation
-        // Try to fetch audio directly from known download patterns
-        console.log(`⏳ Task ID received: ${ttsData.task_id} — attempting direct download patterns...`);
-
-        const downloadUrls = [
-          `https://api.ai33.pro/v1/text-to-speech/${voice_id}/stream?task_id=${ttsData.task_id}`,
-          `https://api.ai33.pro/v1/audio/${ttsData.task_id}`,
-          `https://api.ai33.pro/v1/download/${ttsData.task_id}`,
-          `https://api.ai33.pro/v1/text-to-speech/result/${ttsData.task_id}`,
-        ];
-
-        let audioFetched = false;
-
-        // First: poll the original TTS endpoint again (some APIs queue then serve)
-        for (let attempt = 0; attempt < 12; attempt++) {
-          console.log(`⏳ Retry attempt ${attempt + 1}/12...`);
-          await new Promise(r => setTimeout(r, 10000)); // wait 10s between retries
-
-          // Try original endpoint again
-          try {
-            const retryRes = await fetch(
-              `https://api.ai33.pro/v1/text-to-speech/${voice_id}?output_format=mp3_44100_128`,
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'xi-api-key': API_KEY,
-                },
-                body: JSON.stringify({
-                  text: cleanedText,
-                  model_id: 'eleven_multilingual_v2',
-                }),
-              }
-            );
-            
-            const retryCt = retryRes.headers.get('content-type') || '';
-            console.log(`Retry response: ${retryRes.status}, type: ${retryCt}, size: ~${retryRes.headers.get('content-length') || '?'}`);
-
-            if (retryRes.ok && (retryCt.includes('audio/') || retryCt.includes('octet-stream'))) {
-              const retryBuf = await retryRes.arrayBuffer();
-              const retryBytes = new Uint8Array(retryBuf);
-              if (retryBytes.length > 1000) {
-                console.log(`✓ Got audio on retry: ${retryBytes.length} bytes`);
-                voiceoverDuration = retryBytes.length / 16000;
-                const retryBlob = new Blob([retryBytes], { type: 'audio/mpeg' });
-                const retryUpload = await base44.asServiceRole.integrations.Core.UploadFile({
-                  file: new File([retryBlob], 'voiceover.mp3', { type: 'audio/mpeg' })
-                });
-                audioUrl = retryUpload.file_url;
-                audioFetched = true;
-                break;
-              }
-            } else if (retryRes.ok) {
-              const retryBuf2 = await retryRes.arrayBuffer();
-              const retryBytes2 = new Uint8Array(retryBuf2);
-              // Check if binary audio despite JSON content-type
-              if (retryBytes2.length > 10000 && retryBytes2[0] !== 0x7B) {
-                console.log(`✓ Got binary audio on retry (mistyped CT): ${retryBytes2.length} bytes`);
-                voiceoverDuration = retryBytes2.length / 16000;
-                const retryBlob2 = new Blob([retryBytes2], { type: 'audio/mpeg' });
-                const retryUpload2 = await base44.asServiceRole.integrations.Core.UploadFile({
-                  file: new File([retryBlob2], 'voiceover.mp3', { type: 'audio/mpeg' })
-                });
-                audioUrl = retryUpload2.file_url;
-                audioFetched = true;
-                break;
-              }
-              // Still JSON — check if it now has audio_url
-              const retryJson = JSON.parse(new TextDecoder().decode(retryBytes2));
-              console.log(`Retry JSON keys: ${Object.keys(retryJson).join(', ')}`);
-              if (retryJson.audio_url || retryJson.url || retryJson.output_url) {
-                audioUrl = retryJson.audio_url || retryJson.url || retryJson.output_url;
-                voiceoverDuration = retryJson.duration_seconds || retryJson.duration;
-                audioFetched = true;
-                break;
-              }
-            }
-          } catch (retryErr) {
-            console.warn(`Retry error: ${retryErr.message}`);
-          }
-
-          // Also try download URLs
-          for (const dlUrl of downloadUrls) {
-            try {
-              const dlRes = await fetch(dlUrl, {
-                headers: { 'xi-api-key': API_KEY }
-              });
-              const dlCt = dlRes.headers.get('content-type') || '';
-              console.log(`  ${dlUrl.split('.pro')[1]}: ${dlRes.status} ${dlCt}`);
-
-              if (dlRes.ok && (dlCt.includes('audio/') || dlCt.includes('octet-stream'))) {
-                const dlBuf = await dlRes.arrayBuffer();
-                const dlBytes = new Uint8Array(dlBuf);
-                if (dlBytes.length > 1000) {
-                  console.log(`✓ Got audio from download URL: ${dlBytes.length} bytes`);
-                  voiceoverDuration = dlBytes.length / 16000;
-                  const dlBlob = new Blob([dlBytes], { type: 'audio/mpeg' });
-                  const dlUpload = await base44.asServiceRole.integrations.Core.UploadFile({
-                    file: new File([dlBlob], 'voiceover.mp3', { type: 'audio/mpeg' })
-                  });
-                  audioUrl = dlUpload.file_url;
-                  audioFetched = true;
-                  break;
-                }
-              }
-            } catch (e) {
-              // skip
-            }
-          }
-          if (audioFetched) break;
-        }
-
-        if (!audioFetched) {
-          throw new Error(`TTS returned task_id ${ttsData.task_id} but audio could not be retrieved after 12 retries`);
-        }
-
-        console.log(`✓ Audio URL (async): ${audioUrl}`);
-
-      } else if (ttsData.detail) {
-        throw new Error(`TTS API error: ${ttsData.detail}`);
-      } else {
-        throw new Error(`TTS returned unexpected JSON: ${jsonText.substring(0, 300)}`);
-      }
-    } else {
-      // ── Binary audio — upload to get a public URL ────────────────
-      console.log(`🎙 Got binary audio (${audioBytes.length} bytes), uploading...`);
-
-      // Calculate duration from file size (128kbps MP3 = 16,000 bytes/sec)
-      voiceoverDuration = audioBytes.length / 16000;
-      console.log(`🎙 Duration from size: ${voiceoverDuration.toFixed(1)}s`);
-
-      const audioBlob = new Blob([audioBytes], { type: 'audio/mpeg' });
-      const uploadResult = await base44.asServiceRole.integrations.Core.UploadFile({
-        file: new File([audioBlob], 'voiceover.mp3', { type: 'audio/mpeg' })
-      });
-      audioUrl = uploadResult.file_url;
-      console.log(`✓ Audio uploaded: ${audioUrl}`);
+    // ── Concatenate all audio chunks ──────────────────────────────
+    const totalLength = audioChunks.reduce((sum, c) => sum + c.length, 0);
+    const combinedAudio = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of audioChunks) {
+      combinedAudio.set(chunk, offset);
+      offset += chunk.length;
     }
+
+    console.log(`🎙 Combined audio: ${combinedAudio.length} bytes`);
+
+    // Calculate duration from file size (128kbps MP3 = 16,000 bytes/sec)
+    let voiceoverDuration = combinedAudio.length / 16000;
+    console.log(`🎙 Duration from size: ${voiceoverDuration.toFixed(1)}s`);
+
+    // ── Upload combined audio ─────────────────────────────────────
+    const audioBlob = new Blob([combinedAudio], { type: 'audio/mpeg' });
+    const uploadResult = await base44.asServiceRole.integrations.Core.UploadFile({
+      file: new File([audioBlob], 'voiceover.mp3', { type: 'audio/mpeg' })
+    });
+    let audioUrl = uploadResult.file_url;
+    console.log(`✓ Audio uploaded: ${audioUrl}`);
 
     // ── Calculate duration if still unknown ─────────────────────────
     if (!voiceoverDuration && audioUrl) {
