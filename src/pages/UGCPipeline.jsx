@@ -78,34 +78,36 @@ export default function UGCPipeline() {
     setStep(2);
   };
 
-  // ── Step 2→3: Generate influencer prompt via LLM ──────────
+  // ── Step 2→3: Build influencer prompt from config ──────────
   const handleGeneratePrompt = async () => {
     setLoading(true);
-    setStatusMsg('Generating influencer prompt...');
-    const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `You are a UGC creative director. Create a detailed AI image generation prompt for a virtual influencer.
-
-TARGET AUDIENCE: ${targetAudience}
-TARGET DEMOGRAPHY: ${targetDemography}
-TARGET MARKET: ${targetMarket}
-INFLUENCER TYPE: ${typeLabel}
-WHAT THEY'RE DOING: ${influencerAction}
-
-Create a detailed, photorealistic image generation prompt (150-250 words) describing:
-1. Appearance (age range, style, outfit, hair, expression)
-2. Environment/setting
-3. What they're doing/holding
-4. Camera angle and lighting
-5. Mood and aesthetic
-
-CRITICAL: The person must be facing the camera with their face clearly visible — this image will be used for lip-sync avatar animation.
-
-Return ONLY the prompt text.`,
+    setStatusMsg('Building hyper-realistic prompt...');
+    const prompt = buildUGCPrompt({
+      ...appearanceConfig,
+      influencerType: typeLabel,
+      action: influencerAction,
     });
-    setInfluencerPrompt(result);
+    setInfluencerPrompt(prompt);
     setLoading(false);
     setStatusMsg('');
     setStep(3);
+  };
+
+  // ── Load from saved template ──────────────────────────────
+  const handleLoadTemplate = (template) => {
+    setAppearanceConfig({
+      gender: template.gender || 'female',
+      ageRange: template.age_range || '24-30',
+      skinTone: template.skin_tone || 'medium',
+      ethnicity: template.ethnicity || '',
+      hairStyle: '',
+      clothing: '',
+      setting: '',
+      extraNotes: template.appearance_notes || '',
+    });
+    if (template.influencer_type) setInfluencerType(template.influencer_type);
+    if (template.base_image_url) setInfluencerImageUrl(template.base_image_url);
+    if (template.base_prompt) setInfluencerPrompt(template.base_prompt);
   };
 
   // ── Step 3: Generate image ──────────────────────────────────
