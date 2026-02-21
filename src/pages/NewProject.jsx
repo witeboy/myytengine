@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { createPageUrl } from '@/utils';
-import { Loader2, Sparkles, Film, Users, RefreshCw, ArrowRight, ArrowLeft } from 'lucide-react';
+import { Loader2, Sparkles, Film, Users, RefreshCw, ArrowRight, ArrowLeft, Search } from 'lucide-react';
 import ProjectTemplates from '@/components/templates/ProjectTemplates';
 
 const PROJECT_TYPES = [
@@ -36,6 +36,15 @@ const PROJECT_TYPES = [
     color: 'from-emerald-500 to-teal-600',
     bgColor: 'bg-emerald-50 border-emerald-200 hover:border-emerald-400',
     emoji: '♻️',
+  },
+  {
+    id: 'niche',
+    name: 'Niche Research',
+    description: 'Find profitable YouTube niches with viral gaps and high-RPM opportunities.',
+    icon: Search,
+    color: 'from-violet-500 to-purple-600',
+    bgColor: 'bg-violet-50 border-violet-200 hover:border-violet-400',
+    emoji: '🔍',
   },
 ];
 
@@ -75,7 +84,7 @@ export default function NewProject() {
             <p className="text-gray-500">Choose your project type to get started</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
             {PROJECT_TYPES.map(type => (
               <Card
                 key={type.id}
@@ -85,6 +94,8 @@ export default function NewProject() {
                     navigate(createPageUrl('UGCPipeline'));
                   } else if (type.id === 'repurpose') {
                     navigate(createPageUrl('ContentRepurpose'));
+                  } else if (type.id === 'niche') {
+                    navigate(createPageUrl('ResearchTerminal'));
                   } else {
                     setSelectedType(type.id);
                   }
