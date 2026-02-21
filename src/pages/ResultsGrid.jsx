@@ -19,10 +19,12 @@ function fmt(n) {
 const SORT_FIELDS = [
   { key: "view_count", label: "Views" },
   { key: "views_per_day", label: "VPD" },
-  { key: "opportunity_score", label: "Opportunity" },
+  { key: "opportunity_score", label: "Opp" },
+  { key: "engagement_pct", label: "Eng%" },
+  { key: "est_rpm", label: "RPM" },
   { key: "est_total_revenue", label: "Revenue" },
   { key: "profitability_score", label: "Profit Score" },
-  { key: "engagement_pct", label: "Engagement" },
+  { key: "published_date", label: "Age" },
 ];
 
 const COL_TIPS = {
@@ -78,6 +80,11 @@ export default function ResultsGrid() {
 
   const sortedVideos = useMemo(() => {
     return [...videos].sort((a, b) => {
+      if (sortField === "published_date") {
+        const da = new Date(a.published_date || 0).getTime();
+        const db = new Date(b.published_date || 0).getTime();
+        return sortDir === -1 ? db - da : da - db;
+      }
       const va = a[sortField] || 0;
       const vb = b[sortField] || 0;
       return sortDir === -1 ? vb - va : va - vb;
@@ -204,9 +211,9 @@ export default function ResultsGrid() {
                       <TipHeader tip={COL_TIPS.opp} onClick={() => handleSort("opportunity_score")} active={sortField === "opportunity_score"}>Opp</TipHeader>
                       <TipHeader tip={COL_TIPS.engagement} onClick={() => handleSort("engagement_pct")} active={sortField === "engagement_pct"}>Eng%</TipHeader>
                       <TipHeader tip={COL_TIPS.rpm} onClick={() => handleSort("est_rpm")} active={sortField === "est_rpm"}>RPM</TipHeader>
-                      <TipHeader tip={COL_TIPS.cpm}>CPM</TipHeader>
+                      <TipHeader tip={COL_TIPS.cpm} onClick={() => handleSort("est_rpm")} active={sortField === "est_rpm"}>CPM</TipHeader>
                       <TipHeader tip={COL_TIPS.revenue} onClick={() => handleSort("est_total_revenue")} active={sortField === "est_total_revenue"}>Revenue</TipHeader>
-                      <TipHeader tip={COL_TIPS.age}>Age</TipHeader>
+                      <TipHeader tip={COL_TIPS.age} onClick={() => handleSort("published_date")} active={sortField === "published_date"}>Age</TipHeader>
                     </tr>
                   </thead>
                   <tbody>
