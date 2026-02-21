@@ -360,11 +360,18 @@ ${sceneDirections}
    - - MUST end with the style reinforcement: "${styleConfig.reinforcement}. ${styleConfig.antiStyle}. ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image. masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography"
    - The LAST 50 words of every prompt MUST reinforce the visual style — this is critical for consistent generation
 
-2. **animation_prompt** — 8-second motion direction:
-   - Translate camera_movement into animation language
-   - Format: ${orientationConfig.animation}
-   - Include: camera motion + speed, atmospheric motion (particles, fog, light), subject micro-motion (breathing, hair), DOF changes
-   - Low intensity = slow/subtle, high intensity = dynamic/dramatic
+2. **animation_prompt** — 5-8 second motion direction (THIS IS CRITICAL for conveying energy and emotion):
+    - Translate the director's camera_movement into RICH, SPECIFIC animation language
+    - Format: ${orientationConfig.animation}
+    - MUST include ALL of these motion layers:
+      a) PRIMARY CAMERA: exact movement path, speed, and timing (e.g. "Slow dolly push-in from medium to close-up over 5s")
+      b) ATMOSPHERIC MOTION: particles, fog wisps, light rays shifting, dust motes, smoke curls
+      c) SUBJECT MICRO-MOTION: breathing chest rise, hair sway, fabric ripple, eye blinks, hand trembles
+      d) ENVIRONMENTAL MOTION: leaves rustling, water rippling, curtains billowing, shadows shifting
+      e) FOCUS/DOF SHIFTS: "rack focus from background to subject at 3s mark" or "shallow DOF slowly deepening"
+    - Match emotional_intensity: low (0.1-0.3) = glacial, contemplative | mid (0.4-0.6) = steady, purposeful | high (0.7-1.0) = dynamic, urgent, dramatic
+    - Camera movement IS the emotion: push-in = tension/intimacy, pull-back = revelation/isolation, crane up = triumph/scale, handheld = urgency/chaos
+    - NEVER write generic "slow zoom in" — always be SPECIFIC about speed, direction, and what's in frame
 
 **RESPONSE:**
 {
