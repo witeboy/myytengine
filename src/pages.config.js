@@ -48,6 +48,7 @@
  * The mainPage value must match a key in the PAGES object exactly.
  */
 import ContentGeneration from './pages/ContentGeneration';
+import ContentRepurpose from './pages/ContentRepurpose';
 import Dashboard from './pages/Dashboard';
 import Home from './pages/Home';
 import MediaLibrary from './pages/MediaLibrary';
@@ -58,13 +59,13 @@ import StoryHooks from './pages/StoryHooks';
 import StoryScript from './pages/StoryScript';
 import StoryTopics from './pages/StoryTopics';
 import TimelineEditor from './pages/TimelineEditor';
-import VersionHistory from './pages/VersionHistory';
 import UGCPipeline from './pages/UGCPipeline';
-import ContentRepurpose from './pages/ContentRepurpose';
+import VersionHistory from './pages/VersionHistory';
 
 
 export const PAGES = {
     "ContentGeneration": ContentGeneration,
+    "ContentRepurpose": ContentRepurpose,
     "Dashboard": Dashboard,
     "Home": Home,
     "MediaLibrary": MediaLibrary,
@@ -75,9 +76,8 @@ export const PAGES = {
     "StoryScript": StoryScript,
     "StoryTopics": StoryTopics,
     "TimelineEditor": TimelineEditor,
-    "VersionHistory": VersionHistory,
     "UGCPipeline": UGCPipeline,
-    "ContentRepurpose": ContentRepurpose,
+    "VersionHistory": VersionHistory,
 }
 
 export const pagesConfig = {

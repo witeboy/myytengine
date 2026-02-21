@@ -15,7 +15,9 @@ import PreviewMonitor from '@/components/timeline/PreviewMonitor';
 import ExportPanel from '@/components/timeline/ExportPanel';
 import VideoExporter from '@/components/timeline/VideoExporter';
 import useVideoExport from '@/components/timeline/useVideoExport';
-import { Loader2, Import, Download, Film, Play, Package, ArrowRight, Upload } from 'lucide-react';
+import AudioMixerTimeline from '@/components/timeline/AudioMixerTimeline';
+import SceneReorder from '@/components/timeline/SceneReorder';
+import { Loader2, Import, Download, Film, Play, Package, ArrowRight, Upload, SlidersHorizontal, GripVertical } from 'lucide-react';
 import DownloadAllMedia from '@/components/content/DownloadAllMedia';
 
 export default function TimelineEditor() {
@@ -26,6 +28,8 @@ export default function TimelineEditor() {
   const [pixelsPerSecond, setPixelsPerSecond] = useState(10);
   const [showExportPanel, setShowExportPanel] = useState(false);
   const [showExporter, setShowExporter] = useState(false);
+  const [showMixer, setShowMixer] = useState(false);
+  const [showReorder, setShowReorder] = useState(false);
   const exportHook = useVideoExport();
   const timelineRef = useRef(null);
 
@@ -301,6 +305,14 @@ export default function TimelineEditor() {
             <Button variant="outline" onClick={zoomIn}>+</Button>
             {scenes.length > 0 && (
               <>
+                <Button variant="outline" onClick={() => setShowReorder(p => !p)}>
+                  <GripVertical className="w-4 h-4 mr-1" />
+                  Reorder
+                </Button>
+                <Button variant="outline" onClick={() => setShowMixer(p => !p)}>
+                  <SlidersHorizontal className="w-4 h-4 mr-1" />
+                  Mixer
+                </Button>
                 <Button onClick={() => setShowExporter(true)} className="bg-green-600 hover:bg-green-700">
                   <Download className="w-4 h-4 mr-2" />
                   Export MP4
@@ -331,6 +343,23 @@ export default function TimelineEditor() {
             musicUrl={musicUrl}
             projectName={project?.name}
           />
+        )}
+
+        {/* Editing Panels */}
+        {scenes.length > 0 && (showMixer || showReorder) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            {showReorder && (
+              <SceneReorder scenes={scenesWithTiming} onRefetch={refetchScenes} />
+            )}
+            {showMixer && (
+              <AudioMixerTimeline
+                prodSettings={prodSettings[0]}
+                selectedMusic={selectedMusic}
+                scenes={scenesWithTiming}
+                onRefetch={() => { refetchScenes(); }}
+              />
+            )}
+          </div>
         )}
 
         {/* Export Assets Panel */}
