@@ -11,10 +11,12 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 // MODEL: veo3 (Veo 3.1 Quality) — 1080p, 8s, with audio
 // ENDPOINT: https://api.kie.ai/api/v1/veo/generate
 // POLL: https://api.kie.ai/api/v1/veo/record-info?taskId={id}
-// 1080P: https://api.kie.ai/api/v1/veo/get-1080p-video?taskId={id}
 //
-// COST: ~$0.025 per video (5 credits at $0.005/credit)
-// OUTPUT: 1920x1080 (16:9) or 1080x1920 (9:16)
+// generationType:
+//   FIRST_AND_LAST_FRAMES_2_VIDEO — 1 image = animate from this frame
+//
+// successFlag in poll response:
+//   0 = generating, 1 = success, 2 = failed, 3 = generation failed
 // ══════════════════════════════════════════════════════════════════
 
 const VEO_BASE = "https://api.kie.ai/api/v1/veo";
@@ -38,7 +40,7 @@ Deno.serve(async (req) => {
     // Reject data URIs — Veo needs a publicly accessible URL
     if (scene.image_url.startsWith('data:')) {
       return Response.json({
-        error: 'Scene image is a data URI (base64). Veo requires a publicly accessible image URL. Re-generate the scene image with Grok Imagine via Kie.',
+        error: 'Scene image is a data URI (base64). Veo requires a publicly accessible image URL. Re-generate the scene image.',
         scene_id
       }, { status: 400 });
     }
@@ -90,9 +92,9 @@ Deno.serve(async (req) => {
       } catch (_) {}
     }
 
-    console.log(`🎬 Scene ${scene.scene_number} | Veo 3.1 Quality | ${aspectRatio}`);
-    console.log(`📐 Image: ${scene.image_url.substring(0, 80)}...`);
-    console.log(`🎥 Prompt: ${prompt.substring(0, 120)}...`);
+    console.log(`Scene ${scene.scene_number} | Veo 3.1 Quality | ${aspectRatio}`);
+    console.log(`Image: ${scene.image_url.substring(0, 80)}...`);
+    console.log(`Prompt: ${prompt.substring(0, 120)}...`);
 
     // ══════════════════════════════════════════════════════════════
     // SUBMIT TO VEO 3.1 VIA KIE
@@ -107,42 +109,47 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         prompt,
         imageUrls: [scene.image_url],
-        model: "veo3",                                    // Quality model = 1080p
+        model: "veo3",
         aspect_ratio: aspectRatio,
-        generationType: "FIRST_AND_LAST_FRAMES_2_VIDEO",  // 1 image = animate from this frame
-        enableTranslation: false                           // prompts already in English
+        generationType: "FIRST_AND_LAST_FRAMES_2_VIDEO",
+        enableTranslation: false
       })
     });
 
+    const veoText = await veoResponse.text();
+    console.log(`Veo API response (${veoResponse.status}): ${veoText.substring(0, 500)}`);
+
     if (!veoResponse.ok) {
-      const errText = await veoResponse.text();
-      console.error(`Veo API error (${veoResponse.status}): ${errText}`);
       return Response.json({
-        error: `Veo API error: ${veoResponse.status} - ${errText}`
+        error: `Veo API error: ${veoResponse.status} - ${veoText}`
       }, { status: 500 });
     }
 
-    const veoData = await veoResponse.json();
+    let veoData;
+    try {
+      veoData = JSON.parse(veoText);
+    } catch (e) {
+      return Response.json({ error: `Veo API returned non-JSON: ${veoText.substring(0, 200)}` }, { status: 500 });
+    }
 
     if (veoData.code !== 200) {
-      console.error(`Veo API rejected: ${veoData.msg}`);
       return Response.json({
-        error: `Veo API rejected: ${veoData.msg}`
+        error: `Veo API rejected: ${veoData.msg || JSON.stringify(veoData)}`
       }, { status: 500 });
     }
 
     const taskId = veoData.data?.taskId;
     if (!taskId) {
-      return Response.json({ error: 'No taskId returned from Veo API' }, { status: 500 });
+      return Response.json({ error: 'No taskId returned from Veo API', raw: veoData }, { status: 500 });
     }
 
-    console.log(`✓ Veo task created: ${taskId}`);
+    console.log(`Veo task created: ${taskId}`);
 
     // ── Store task reference ────────────────────────────────────────
-    // Format: veo_task:{taskId} — pollSceneVideo reads this prefix
+    // Use valid enum status "pending" and store task reference in video_url
     await base44.asServiceRole.entities.Scenes.update(scene_id, {
       video_url: `veo_task:${taskId}`,
-      status: "animating"
+      status: "pending"
     });
 
     return Response.json({
@@ -156,7 +163,7 @@ Deno.serve(async (req) => {
     });
 
   } catch (error) {
-    console.error("generateSceneVideo error:", error.message);
+    console.error("generateSceneVideo error:", error.message, error.stack);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
