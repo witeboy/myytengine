@@ -226,13 +226,13 @@ export default function ResultsGrid() {
 
 function TipHeader({ children, tip, onClick, active }) {
   return (
-    <th className="py-2 px-2 text-right">
+    <th
+      className={`py-2 px-2 text-right select-none ${onClick ? "cursor-pointer hover:text-gray-700" : ""}`}
+      onClick={onClick}
+    >
       <Tooltip>
         <TooltipTrigger asChild>
-          <span
-            className={`inline-flex items-center gap-1 cursor-help border-b border-dashed border-gray-300 ${onClick ? "cursor-pointer hover:text-gray-700" : ""}`}
-            onClick={onClick}
-          >
+          <span className="inline-flex items-center gap-1 border-b border-dashed border-gray-300">
             {children}
             {active && <ArrowUpDown className="w-2.5 h-2.5 text-indigo-600" />}
           </span>
