@@ -217,7 +217,7 @@ Deno.serve(async (req) => {
           const startRes = await fetch("https://api.assemblyai.com/v2/transcript", {
             method: "POST",
             headers: { "authorization": aaiKey, "content-type": "application/json" },
-            body: JSON.stringify({ audio_url: youtubeUrl })
+            body: JSON.stringify({ audio_url: youtubeUrl, language_detection: true, speech_model: "best" })
           });
 
           const startData = await startRes.json();
