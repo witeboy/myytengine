@@ -6,9 +6,9 @@ import { createPageUrl } from "../../utils";
 import { Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 
 const statusConfig = {
-  Complete: { icon: CheckCircle2, color: "text-green-400" },
-  Failed: { icon: XCircle, color: "text-red-400" },
-  Pending: { icon: Loader2, color: "text-amber-400" },
+  Complete: { icon: CheckCircle2, color: "text-green-600" },
+  Failed: { icon: XCircle, color: "text-red-500" },
+  Pending: { icon: Loader2, color: "text-amber-500" },
 };
 
 function timeAgo(dateStr) {
@@ -47,16 +47,16 @@ export default function RecentSearches() {
               key={s.id}
               to={isClickable ? createPageUrl("ResultsGrid") + `?search_id=${s.id}&keyword=${encodeURIComponent(s.keyword)}` : "#"}
               onClick={(e) => { if (!isClickable) e.preventDefault(); }}
-              className={`flex items-center justify-between p-2.5 rounded-lg bg-[#12121a] border border-[#1e1e2e] transition-colors group ${
-                isClickable ? "hover:border-indigo-500/30 cursor-pointer" : "opacity-60 cursor-default"
+              className={`flex items-center justify-between p-2.5 rounded-lg bg-white border border-gray-200 transition-colors group shadow-sm ${
+                isClickable ? "hover:border-indigo-300 cursor-pointer" : "opacity-60 cursor-default"
               }`}
             >
               <div className="flex items-center gap-3">
                 <Icon className={`w-3.5 h-3.5 ${cfg.color} ${s.status === "Pending" ? "animate-spin" : ""}`} />
-                <span className="text-sm text-gray-300 group-hover:text-white transition-colors">{s.keyword}</span>
-                <span className="text-xs text-gray-600">{s.duration}</span>
+                <span className="text-sm text-gray-700 group-hover:text-gray-900 transition-colors">{s.keyword}</span>
+                <span className="text-xs text-gray-400">{s.duration}</span>
               </div>
-              <div className="flex items-center gap-3 text-xs text-gray-600">
+              <div className="flex items-center gap-3 text-xs text-gray-400">
                 {s.result_count != null && s.status === "Complete" && (
                   <span>{s.result_count} results</span>
                 )}

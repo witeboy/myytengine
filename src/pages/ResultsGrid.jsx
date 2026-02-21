@@ -60,21 +60,21 @@ export default function ResultsGrid() {
   const viralCount = videos.filter(v => v.opportunity_score > 10).length;
 
   const summaryCards = [
-    { label: "Videos Found", value: videos.length, icon: BarChart3, color: "text-indigo-400" },
-    { label: "Top Views", value: formatNumber(topViews), icon: Eye, color: "text-cyan-400" },
-    { label: "Avg Opportunity", value: avgOpp + "x", icon: TrendingUp, color: "text-emerald-400" },
-    { label: "Avg Profit Score", value: avgProfit, icon: DollarSign, color: "text-amber-400" },
+    { label: "Videos Found", value: videos.length, icon: BarChart3, color: "text-indigo-600" },
+    { label: "Top Views", value: formatNumber(topViews), icon: Eye, color: "text-cyan-600" },
+    { label: "Avg Opportunity", value: avgOpp + "x", icon: TrendingUp, color: "text-emerald-600" },
+    { label: "Avg Profit Score", value: avgProfit, icon: DollarSign, color: "text-amber-600" },
   ];
 
   const SortHeader = ({ field, children, align = "right" }) => (
     <th
-      className={`py-2.5 px-3 text-${align} cursor-pointer hover:text-gray-300 transition-colors select-none`}
+      className={`py-2.5 px-3 text-${align} cursor-pointer hover:text-gray-700 transition-colors select-none`}
       onClick={() => handleSort(field)}
     >
       <span className="inline-flex items-center gap-1">
         {children}
         {sortField === field && (
-          <ArrowUpDown className="w-2.5 h-2.5 text-indigo-400" />
+          <ArrowUpDown className="w-2.5 h-2.5 text-indigo-600" />
         )}
       </span>
     </th>
@@ -86,19 +86,19 @@ export default function ResultsGrid() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Link to={createPageUrl("ResearchTerminal")}>
-            <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white hover:bg-white/5">
+            <Button variant="ghost" size="icon" className="text-gray-500 hover:text-gray-900 hover:bg-gray-100">
               <ArrowLeft className="w-4 h-4" />
             </Button>
           </Link>
           <div>
-            <h1 className="text-xl font-bold text-white">Results: {decodeURIComponent(keyword)}</h1>
+            <h1 className="text-xl font-bold text-gray-900">Results: {decodeURIComponent(keyword)}</h1>
             <p className="text-xs text-gray-500">{videos.length} profitable opportunities detected</p>
           </div>
         </div>
         {viralCount > 0 && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
-            <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-xs font-medium text-emerald-400">{viralCount} Viral Gaps Detected</span>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200">
+            <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+            <span className="text-xs font-medium text-emerald-600">{viralCount} Viral Gaps Detected</span>
           </div>
         )}
       </div>
@@ -106,12 +106,12 @@ export default function ResultsGrid() {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {summaryCards.map((c) => (
-          <div key={c.label} className="bg-[#12121a] border border-[#1e1e2e] rounded-lg p-3">
+          <div key={c.label} className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
             <div className="flex items-center gap-2 mb-1">
               <c.icon className={`w-3.5 h-3.5 ${c.color}`} />
               <span className="text-xs text-gray-500">{c.label}</span>
             </div>
-            <div className="text-lg font-bold text-white font-mono">{c.value}</div>
+            <div className="text-lg font-bold text-gray-900 font-mono">{c.value}</div>
           </div>
         ))}
       </div>
@@ -119,26 +119,26 @@ export default function ResultsGrid() {
       {/* Table */}
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <Loader2 className="w-6 h-6 text-indigo-400 animate-spin" />
+          <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
           <p className="text-gray-500 text-sm">Loading results...</p>
         </div>
       ) : videos.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 space-y-3">
-          <BarChart3 className="w-10 h-10 text-gray-700" />
+          <BarChart3 className="w-10 h-10 text-gray-300" />
           <p className="text-gray-500 text-sm">No profitable opportunities found for this niche.</p>
-          <p className="text-gray-600 text-xs">Try broadening your keyword or changing the time range.</p>
+          <p className="text-gray-400 text-xs">Try broadening your keyword or changing the time range.</p>
           <Link to={createPageUrl("ResearchTerminal")}>
-            <Button variant="outline" className="border-[#1e1e2e] text-gray-400 hover:text-white">
+            <Button variant="outline">
               New Search
             </Button>
           </Link>
         </div>
       ) : (
-        <div className="bg-[#12121a] border border-[#1e1e2e] rounded-xl overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[800px]">
               <thead>
-                <tr className="border-b border-[#1e1e2e] text-[10px] font-medium text-gray-500 uppercase tracking-wider">
+                <tr className="border-b border-gray-200 text-[10px] font-medium text-gray-500 uppercase tracking-wider">
                   <th className="py-2.5 px-3 text-center w-10">#</th>
                   <th className="py-2.5 px-3 text-left">Video</th>
                   <th className="py-2.5 px-3 text-left">Channel</th>
