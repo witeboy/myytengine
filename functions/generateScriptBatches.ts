@@ -176,12 +176,26 @@ Expand by:
 Write the COMPLETE expanded version (not just the additions).`;
         }
 
+        const toneGuide = {
+          dramatic: 'Use intense, high-stakes language. Build tension. Create urgency and emotional weight.',
+          educational: 'Be clear, informative, and structured. Use facts and data. Explain concepts simply.',
+          humorous: 'Be witty, playful, and entertaining. Use clever analogies, comedic timing, and self-aware commentary.',
+          conversational: 'Write like talking to a friend. Use casual language, rhetorical questions, and relatable examples.',
+          inspirational: 'Be uplifting and motivating. Use powerful imagery, success stories, and hopeful language.',
+          suspenseful: 'Build mystery and anticipation. Use cliffhangers, reveals, and "what happens next" pacing.',
+          sarcastic: 'Use dry wit, irony, and sharp observations. Be clever and cutting but not mean-spirited.',
+        };
+        const projectTone = project.tone || 'dramatic';
+        const toneInstruction = toneGuide[projectTone] || toneGuide.dramatic;
+        const audienceInstruction = project.target_audience ? `\n**Target Audience**: ${project.target_audience} — tailor vocabulary, references, and examples to resonate with this specific audience.` : '';
+
         return `You are writing batch ${batch.batch_number} of ${totalBatches} for a ${durationMinutes}-minute YouTube documentary.
 
 **Topic**: ${topic.title}
 **Topic Description**: ${topic.description}
 **Niche**: ${project.niche}
 **Storytelling Format**: ${project.storytelling_format || 'Documentary'}
+**Tone**: ${projectTone} — ${toneInstruction}${audienceInstruction}
 ${hookInstruction}${continuityInstruction}
 ${nextBatchHint}
 

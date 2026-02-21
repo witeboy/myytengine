@@ -94,15 +94,18 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
-    const { project_id, niche, exact_topic } = body;
+    const { project_id, niche, exact_topic, tone, target_audience } = body;
 
     if (!project_id || !niche) {
       return Response.json({ error: 'Missing required fields: project_id, niche' }, { status: 400 });
     }
 
+    const effectiveTone = tone || 'dramatic';
+    const audienceContext = target_audience ? `\nTARGET AUDIENCE: "${target_audience}" — tailor language, examples, and references to resonate with this specific audience.` : '';
+
     console.log('================================================');
     console.log(exact_topic ? 'REFINING USER TOPIC' : 'GENERATING VIRAL TOPICS');
-    console.log(`Niche: ${niche}`);
+    console.log(`Niche: ${niche} | Tone: ${effectiveTone} | Audience: ${target_audience || 'general'}`);
     if (exact_topic) console.log(`Exact topic: ${exact_topic}`);
     console.log('================================================');
 
@@ -112,6 +115,7 @@ Deno.serve(async (req) => {
 The user has a specific video topic they want to create. Your job is to REFINE and OPTIMIZE it for maximum viral potential — do NOT change the core idea, just make the title punchier, the angle sharper, and fill in the strategic details.
 
 USER'S TOPIC: "${exact_topic}"
+TONE: "${effectiveTone}" — the topic title, description, and all angles must match this tone.${audienceContext}
 
 Return a JSON object with this exact structure:
 {
@@ -143,6 +147,7 @@ IMPORTANT: Generate exactly 1 topic — the refined version of the user's idea. 
       : `You are an elite YouTube strategist specializing in faceless documentary channels.
 
 NICHE: "${niche}"
+TONE: "${effectiveTone}" — all topic titles and descriptions must match this tone (e.g. if humorous, be witty and playful; if educational, be informative and clear; if dramatic, be intense and high-stakes).${audienceContext}
 
 Generate 5 viral video topics that are:
 - Surgical deep-dives into "${niche}" mechanics/psychology
