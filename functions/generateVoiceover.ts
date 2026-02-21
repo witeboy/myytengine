@@ -19,61 +19,76 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 // Output format: 1920x1080 YouTube standard (stored for downstream)
 // ══════════════════════════════════════════════════════════════════
 
-// ── ai33.pro polling helper ────────────────────────────────────────
-async function pollVoiceoverTask(apiKey, taskId, maxWaitMs = 120000) {
-  const pollInterval = 5000;
-  const start = Date.now();
+// ── Chunk text for TTS ─────────────────────────────────────────────
+// ai33.pro queues long text asynchronously with no download endpoint.
+// We split into small chunks (~500 chars) that return audio directly.
+function splitTextIntoChunks(text, maxChars = 500) {
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  const chunks = [];
+  let current = '';
 
-  // Try multiple endpoint patterns used by ElevenLabs-compatible APIs
-  const endpoints = [
-    `https://api.ai33.pro/v1/history/${taskId}`,
-    `https://api.ai33.pro/v1/text-to-speech/${taskId}`,
-    `https://api.ai33.pro/v1/tasks/${taskId}`,
-  ];
-
-  while (Date.now() - start < maxWaitMs) {
-    await new Promise(r => setTimeout(r, pollInterval));
-
-    for (const url of endpoints) {
-      try {
-        const res = await fetch(url, {
-          headers: { 'xi-api-key': apiKey }
-        });
-
-        console.log(`Poll ${url.split('/').slice(-2).join('/')}: HTTP ${res.status}`);
-
-        if (!res.ok) continue;
-
-        const contentType = res.headers.get('content-type') || '';
-
-        // If we get audio back directly from polling
-        if (contentType.includes('audio/') || contentType.includes('octet-stream')) {
-          console.log(`✓ Got audio from poll endpoint`);
-          return { _audioResponse: res };
-        }
-
-        const data = await res.json();
-        const status = data.status || data.state;
-        console.log(`Poll result: ${JSON.stringify(data).substring(0, 300)}`);
-
-        if (status === 'completed' || status === 'success' || status === 'done' || data.audio_url) {
-          return data;
-        }
-
-        if (status === 'failed' || status === 'error') {
-          throw new Error(`TTS task failed: ${data.error || data.message || 'Unknown'}`);
-        }
-
-        // Found a valid endpoint, stop trying others
-        break;
-      } catch (pollErr) {
-        if (pollErr.message.includes('TTS task failed')) throw pollErr;
-        // Continue to next endpoint
-      }
+  for (const sentence of sentences) {
+    if (current.length + sentence.length > maxChars && current.length > 0) {
+      chunks.push(current.trim());
+      current = '';
     }
+    current += sentence + ' ';
+  }
+  if (current.trim()) chunks.push(current.trim());
+  return chunks;
+}
+
+// ── Generate TTS for a single chunk ────────────────────────────────
+async function generateChunkAudio(apiKey, voiceId, text, chunkIndex) {
+  const res = await fetch(
+    `https://api.ai33.pro/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_multilingual_v2',
+      }),
+    }
+  );
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`TTS chunk ${chunkIndex} failed: ${res.status} ${errText}`);
   }
 
-  throw new Error(`TTS task ${taskId} timed out after ${maxWaitMs / 1000}s`);
+  const buf = await res.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+
+  // Check if JSON (async task) vs binary audio
+  if (bytes.length < 50000 && bytes[0] === 0x7B) {
+    const jsonText = new TextDecoder().decode(bytes);
+    const data = JSON.parse(jsonText);
+    console.log(`Chunk ${chunkIndex}: JSON response — keys: ${Object.keys(data).join(', ')}`);
+
+    if (data.audio_url || data.url) {
+      // Fetch the audio from the URL
+      const audioRes = await fetch(data.audio_url || data.url);
+      const audioBuf = await audioRes.arrayBuffer();
+      return new Uint8Array(audioBuf);
+    }
+
+    // If still async, we need to wait and retry
+    if (data.task_id) {
+      console.log(`Chunk ${chunkIndex}: got task_id, waiting 15s then retrying...`);
+      await new Promise(r => setTimeout(r, 15000));
+      // Retry the same chunk
+      return generateChunkAudio(apiKey, voiceId, text, chunkIndex);
+    }
+
+    throw new Error(`Chunk ${chunkIndex}: unexpected JSON: ${jsonText.substring(0, 200)}`);
+  }
+
+  console.log(`Chunk ${chunkIndex}: got ${bytes.length} bytes of audio`);
+  return bytes;
 }
 
 // ── Duration calculator ────────────────────────────────────────────
