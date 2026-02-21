@@ -123,6 +123,18 @@ Feels like a spontaneous ${holdMode === "phone_app" ? "app recommendation" : "pr
 Quality:
 High resolution but not artificially enhanced. Natural grain. No AI smoothness. No CGI look. PORTRAIT 9:16 vertical format.
 
+Micro-Realism Details:
+Slight camera auto-exposure fluctuation — subtle brightness shift as if the phone is adjusting mid-recording.
+Minor skin texture variation across cheeks — one cheek slightly rougher or more flushed than the other.
+Subtle under-eye darkness — natural fatigue shadows, not concealed, not exaggerated.
+Very faint asymmetry in eyebrows — one slightly higher or thicker than the other.
+Natural lip dryness texture — slight chapping or dry patches on lips, not glossy or perfectly moisturized.
+Tiny facial micro-expressions — subtle tension in forehead, slight nostril flare, micro-movement frozen mid-frame.
+Slight background blur noise — bokeh has subtle chromatic aberration and digital artifacts like a real phone sensor.
+Very subtle digital noise like smartphone sensor — fine grain visible especially in shadow areas and skin mid-tones, consistent with iPhone front camera in natural light.
+
+Expression conveys trust and subtle excitement, like ${pronoun} just discovered something useful and wants to share it with a friend.
+
 ${extraNotes ? `Additional Notes: ${extraNotes}` : ""}
 
 Negative Prompts: No plastic skin, no hyper-symmetry, no perfect teeth glow, no overly smooth forehead, no unrealistically sharp jawline, no fashion editorial lighting, no 3D render look, no doll-like skin, no exaggerated eyelashes, no artificial blur, no landscape/horizontal format.`;
