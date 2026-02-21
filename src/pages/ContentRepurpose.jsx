@@ -191,7 +191,8 @@ Write a complete narration script (~${analysis.estimated_word_count || 1500} wor
     // 5. Generate scene prompts (same Gemini backend)
     setPipelineStep('Converting to visual prompts...');
     try {
-      await base44.functions.invoke('generateScenePrompts', { project_id: project.id });
+      const promptsResp = await base44.functions.invoke('generateScenePrompts', { project_id: project.id });
+      console.log('Scene prompts result:', promptsResp.data);
     } catch (err) {
       console.warn('Prompt generation failed:', err.message);
     }
