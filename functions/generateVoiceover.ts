@@ -20,38 +20,56 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 // ══════════════════════════════════════════════════════════════════
 
 // ── ai33.pro polling helper ────────────────────────────────────────
-async function pollVoiceoverTask(apiKey, taskId, maxWaitMs = 180000) {
-  const pollInterval = 3000;
+async function pollVoiceoverTask(apiKey, taskId, maxWaitMs = 120000) {
+  const pollInterval = 5000;
   const start = Date.now();
+
+  // Try multiple endpoint patterns used by ElevenLabs-compatible APIs
+  const endpoints = [
+    `https://api.ai33.pro/v1/history/${taskId}`,
+    `https://api.ai33.pro/v1/text-to-speech/${taskId}`,
+    `https://api.ai33.pro/v1/tasks/${taskId}`,
+  ];
 
   while (Date.now() - start < maxWaitMs) {
     await new Promise(r => setTimeout(r, pollInterval));
 
-    try {
-      const res = await fetch(`https://api.ai33.pro/v1/tasks/${taskId}`, {
-        headers: { 'xi-api-key': apiKey }
-      });
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url, {
+          headers: { 'xi-api-key': apiKey }
+        });
 
-      if (!res.ok) {
-        console.warn(`Poll ${taskId}: HTTP ${res.status}`);
-        continue;
+        console.log(`Poll ${url.split('/').slice(-2).join('/')}: HTTP ${res.status}`);
+
+        if (!res.ok) continue;
+
+        const contentType = res.headers.get('content-type') || '';
+
+        // If we get audio back directly from polling
+        if (contentType.includes('audio/') || contentType.includes('octet-stream')) {
+          console.log(`✓ Got audio from poll endpoint`);
+          return { _audioResponse: res };
+        }
+
+        const data = await res.json();
+        const status = data.status || data.state;
+        console.log(`Poll result: ${JSON.stringify(data).substring(0, 300)}`);
+
+        if (status === 'completed' || status === 'success' || status === 'done' || data.audio_url) {
+          return data;
+        }
+
+        if (status === 'failed' || status === 'error') {
+          throw new Error(`TTS task failed: ${data.error || data.message || 'Unknown'}`);
+        }
+
+        // Found a valid endpoint, stop trying others
+        break;
+      } catch (pollErr) {
+        if (pollErr.message.includes('TTS task failed')) throw pollErr;
+        // Continue to next endpoint
       }
-
-      const data = await res.json();
-      const status = data.status || data.state;
-
-      console.log(`Poll ${taskId}: ${status}`);
-
-      if (status === 'completed' || status === 'success' || status === 'done') {
-        return data;
-      }
-
-      if (status === 'failed' || status === 'error') {
-        throw new Error(`TTS task failed: ${data.error || data.message || 'Unknown'}`);
-      }
-    } catch (pollErr) {
-      if (pollErr.message.includes('TTS task failed')) throw pollErr;
-      console.warn(`Poll error (retrying): ${pollErr.message}`);
     }
   }
 
