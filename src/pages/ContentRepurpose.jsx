@@ -160,7 +160,7 @@ Write a complete narration script (~${analysis.estimated_word_count || 1500} wor
 
     // 2. Create script
     setPipelineStep('Saving script...');
-    await base44.entities.Scripts.create({
+    const scriptRecord = await base44.entities.Scripts.create({
       project_id: project.id,
       version: 'final_aggregated',
       title: newTitle || analysis.title,
@@ -168,6 +168,7 @@ Write a complete narration script (~${analysis.estimated_word_count || 1500} wor
       word_count: newScript.split(/\s+/).filter(w => w).length,
       estimated_duration_sec: analysis.estimated_duration_seconds || 600,
     });
+    console.log('Script created:', scriptRecord.id);
 
     // 3. Generate voiceover (same ai33.pro backend)
     setPipelineStep('Generating voiceover (ai33.pro TTS)...');
