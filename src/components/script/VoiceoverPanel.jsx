@@ -72,7 +72,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
     try {
       res = await base44.functions.invoke('generateVoiceover', {
         project_id: project.id,
-        script_id: script.id,
+        script_id: script?.id,
         voice_id: selectedVoice,
       });
     } catch (err) {
