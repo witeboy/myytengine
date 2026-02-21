@@ -375,7 +375,7 @@ Deno.serve(async (req) => {
       output_resolution: '1920x1080',            // enforce YouTube standard
     };
 
-    if (ttsData.task_id) settingsPayload.generation_task_id = ttsData.task_id;
+    if (taskId) settingsPayload.generation_task_id = taskId;
 
     if (settings) {
       await base44.asServiceRole.entities.ProductionSettings.update(settings.id, settingsPayload);
