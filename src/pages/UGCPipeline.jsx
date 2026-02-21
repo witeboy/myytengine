@@ -408,13 +408,26 @@ Return ONLY the motion description.`,
               {influencerImageUrl && (
                 <div className="space-y-3">
                   <img src={influencerImageUrl} alt="AI Influencer" className="w-full rounded-lg border shadow-sm" />
-                  <Button onClick={handleGenerateVoiceScript} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-700 gap-2">
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
-                    {loading ? statusMsg : 'Generate Voice Script'}
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button onClick={() => setShowSaveTemplate(true)} variant="outline" className="gap-2">
+                      <Save className="w-4 h-4" /> Save as Template
+                    </Button>
+                    <Button onClick={handleGenerateVoiceScript} disabled={loading} className="flex-1 bg-pink-600 hover:bg-pink-700 gap-2">
+                      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
+                      {loading ? statusMsg : 'Generate Voice Script'}
+                    </Button>
+                  </div>
                 </div>
               )}
               <Button variant="outline" onClick={() => setStep(2)} className="gap-2"><ArrowLeft className="w-4 h-4" /> Back</Button>
+              <SaveInfluencerTemplate
+                open={showSaveTemplate}
+                onClose={() => setShowSaveTemplate(false)}
+                config={appearanceConfig}
+                imageUrl={influencerImageUrl}
+                prompt={influencerPrompt}
+                influencerType={influencerType}
+              />
             </CardContent>
           </Card>
         )}
