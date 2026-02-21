@@ -61,6 +61,9 @@ import StoryTopics from './pages/StoryTopics';
 import TimelineEditor from './pages/TimelineEditor';
 import UGCPipeline from './pages/UGCPipeline';
 import VersionHistory from './pages/VersionHistory';
+import ResearchTerminal from './pages/ResearchTerminal';
+import ResultsGrid from './pages/ResultsGrid';
+import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
@@ -78,9 +81,12 @@ export const PAGES = {
     "TimelineEditor": TimelineEditor,
     "UGCPipeline": UGCPipeline,
     "VersionHistory": VersionHistory,
+    "ResearchTerminal": ResearchTerminal,
+    "ResultsGrid": ResultsGrid,
 }
 
 export const pagesConfig = {
     mainPage: "Dashboard",
     Pages: PAGES,
+    Layout: __Layout,
 };
