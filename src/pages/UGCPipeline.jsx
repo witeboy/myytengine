@@ -155,13 +155,14 @@ Return ONLY the script text.`,
 
     // 2. Create script record
     setPipelineStep('Saving script...');
-    await base44.entities.Scripts.create({
+    const scriptRecord = await base44.entities.Scripts.create({
       project_id: project.id,
       version: 'final_aggregated',
       title: `UGC: ${typeLabel}`,
       full_script: voiceScript,
       word_count: voiceScript.split(/\s+/).filter(w => w).length,
     });
+    console.log('Script created:', scriptRecord.id);
 
     // 3. Generate voiceover via ai33.pro (same backend function)
     setPipelineStep('Generating voiceover (ai33.pro TTS)...');
