@@ -120,7 +120,8 @@ Deno.serve(async (req) => {
     return Response.json({
       success: true,
       status: 'PROCESSING',
-      task_status: taskStatus || 'processing',
+      task_status: taskStatus,
+      state: taskStatus,
       task_id,
     });
 
