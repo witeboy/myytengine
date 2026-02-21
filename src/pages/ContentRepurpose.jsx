@@ -60,60 +60,25 @@ export default function ContentRepurpose() {
   const [sceneCount, setSceneCount] = useState(0);
   const [imagesDone, setImagesDone] = useState(0);
 
-  // ── Step 1→2: Analyze video via Gemini with internet ──────────
+  // ── Step 1→2: Analyze video via YouTube API + Gemini ──────────
   const [analyzeError, setAnalyzeError] = useState('');
 
   const handleAnalyze = async () => {
     setLoading(true);
-    setStatusMsg('AI is analyzing the video...');
+    setStatusMsg('Fetching video data from YouTube...');
     setAnalyzeError('');
 
     try {
-      const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `You are a YouTube content analyst. I need you to look up this YouTube video and extract a complete breakdown of its content, style, and structure.
+      const resp = await base44.functions.invoke('analyzeYouTubeVideo', { video_url: videoUrl });
+      const result = resp.data;
 
-VIDEO URL: ${videoUrl}
+      if (result.error) {
+        setAnalyzeError(result.error);
+        setLoading(false);
+        setStatusMsg('');
+        return;
+      }
 
-IMPORTANT: Search the internet for this video. Find the actual video title, channel, content topic, and details. If you cannot find the video, make your best educated guess based on the URL.
-
-Provide a thorough analysis with ALL fields filled in — do NOT leave any field empty or null. Every field must have a meaningful value.
-
-Return a JSON object with these fields:
-- title: The actual video title (or best guess)
-- estimated_duration_seconds: Video length in seconds (guess 600 if unknown)
-- niche: The content niche/category (e.g. "true crime", "personal finance", "tech reviews")
-- script_style: Writing style description (e.g. "documentary narration with dramatic pauses")
-- voiceover_style: Voice delivery style (e.g. "deep authoritative male voice, slow pacing")
-- visual_style: Visual production style (e.g. "cinematic stock footage with text overlays")
-- pacing: Content pacing (e.g. "fast", "medium", "slow build with climax")
-- hook_technique: How the video hooks viewers in first 10 seconds
-- content_structure: Overall structure (e.g. "problem-solution", "chronological narrative", "listicle")
-- key_topics: Array of 3-5 main topics covered
-- estimated_word_count: Estimated script word count (150 words per minute of video)
-- reconstructed_outline: A detailed outline of the video's content flow
-- tone_description: Overall tone (e.g. "dramatic and suspenseful", "casual and humorous")`,
-        add_context_from_internet: true,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            title: { type: "string" },
-            estimated_duration_seconds: { type: "number" },
-            niche: { type: "string" },
-            script_style: { type: "string" },
-            voiceover_style: { type: "string" },
-            visual_style: { type: "string" },
-            pacing: { type: "string" },
-            hook_technique: { type: "string" },
-            content_structure: { type: "string" },
-            key_topics: { type: "array", items: { type: "string" } },
-            estimated_word_count: { type: "number" },
-            reconstructed_outline: { type: "string" },
-            tone_description: { type: "string" },
-          }
-        }
-      });
-
-      // Validate we got meaningful data
       if (!result || (!result.title && !result.niche)) {
         setAnalyzeError('Analysis returned empty results. Please check the URL and try again.');
         setLoading(false);
@@ -123,7 +88,6 @@ Return a JSON object with these fields:
 
       setAnalysis(result);
       setNewTitle(result.title || 'Untitled Video');
-      // Auto-detect visual style
       const vs = (result.visual_style || '').toLowerCase();
       if (vs.includes('anime')) setSelectedStyle('cinematic_anime');
       else if (vs.includes('cartoon')) setSelectedStyle('cartoon_2d');
@@ -135,7 +99,7 @@ Return a JSON object with these fields:
       setStep(2);
     } catch (err) {
       console.error('Analysis failed:', err);
-      setAnalyzeError('Analysis failed: ' + (err.message || 'Unknown error. Please try again.'));
+      setAnalyzeError('Analysis failed: ' + (err.response?.data?.error || err.message || 'Unknown error. Please try again.'));
       setLoading(false);
       setStatusMsg('');
     }
@@ -320,9 +284,15 @@ Write a complete narration script (~${analysis.estimated_word_count || 1500} wor
             <CardContent className="space-y-4">
               <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
                 <h3 className="font-semibold text-lg">{analysis.title}</h3>
+                {analysis.youtube_stats && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    {analysis.youtube_stats.channel} • {analysis.youtube_stats.views?.toLocaleString()} views • {analysis.youtube_stats.likes?.toLocaleString()} likes
+                  </p>
+                )}
                 <div className="flex flex-wrap gap-2 mt-2">
                   <Badge variant="outline">{analysis.niche}</Badge>
                   <Badge variant="outline">{Math.ceil((analysis.estimated_duration_seconds || 600) / 60)} min</Badge>
+                  {analysis.is_short && <Badge className="bg-red-100 text-red-700">Short</Badge>}
                   <Badge variant="outline">{analysis.pacing} pacing</Badge>
                   <Badge variant="outline">~{analysis.estimated_word_count || 1500} words</Badge>
                 </div>
