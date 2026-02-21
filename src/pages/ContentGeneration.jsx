@@ -188,7 +188,9 @@ export default function ContentGeneration() {
       }));
 
       try {
-        const result = await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
+        const response = await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
+        const result = response.data || response;
+        console.log(`Scene ${scene.scene_number} submit result:`, result);
         pendingPolls.push({
           scene_id: scene.id,
           task_id: result.task_id,
@@ -229,9 +231,11 @@ export default function ContentGeneration() {
           if (pollAbortRef.current) break;
 
           try {
-            const pollResult = await base44.functions.invoke('pollSceneVideo', {
+            const pollResponse = await base44.functions.invoke('pollSceneVideo', {
               scene_id: item.scene_id
             });
+            const pollResult = pollResponse.data || pollResponse;
+            console.log(`Poll scene ${item.scene_number}:`, pollResult);
 
             if (pollResult.status === 'COMPLETED') {
               setVideoProgress(prev => ({
