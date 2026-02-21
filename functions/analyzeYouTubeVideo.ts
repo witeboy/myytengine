@@ -204,52 +204,98 @@ Deno.serve(async (req) => {
       console.log(`[Analyze] Transcript from captions: ${transcript.length} chars`);
     }
 
-    // Tier 2: Download YouTube audio via ytdl endpoint and transcribe with AssemblyAI
+    // Tier 2: Cobalt (extract audio) → AssemblyAI (speech-to-text)
     if (!transcript || transcript.length < 50) {
-      console.log('[Analyze] No captions found, falling back to AssemblyAI audio transcription...');
+      console.log('[Analyze] No captions found, falling back to Cobalt + AssemblyAI...');
+      const cobaltUrl = Deno.env.get("COBALT_API_URL");
       const aaiKey = Deno.env.get("ASSEMBLYAI_API_KEY");
 
-      if (aaiKey) {
-        // AssemblyAI supports YouTube URLs natively
+      if (cobaltUrl && aaiKey) {
         try {
-          console.log('[AssemblyAI] Submitting YouTube URL directly...');
+          // Step A: Extract audio via Cobalt
+          console.log('[Cobalt] Requesting audio extraction...');
           const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
-          const startRes = await fetch("https://api.assemblyai.com/v2/transcript", {
+          const cobaltRes = await fetch(`${cobaltUrl}/`, {
             method: "POST",
-            headers: { "authorization": aaiKey, "content-type": "application/json" },
-            body: JSON.stringify({ audio_url: youtubeUrl, language_detection: true, speech_models: ["best"] })
+            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            body: JSON.stringify({ url: youtubeUrl, downloadMode: "audio", audioFormat: "mp3" })
           });
 
-          const startData = await startRes.json();
-          if (startData.id && !startData.error) {
-            const transcriptId = startData.id;
-            console.log(`[AssemblyAI] Job ${transcriptId} — polling...`);
+          const cobaltData = await cobaltRes.json();
+          const audioUrl = cobaltData.url;
 
-            for (let i = 0; i < 80; i++) {
-              await new Promise(r => setTimeout(r, 3000));
-              const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
-                headers: { "authorization": aaiKey }
+          if (!audioUrl) {
+            console.log(`[Cobalt] No audio URL returned: ${JSON.stringify(cobaltData).substring(0, 300)}`);
+          } else {
+            console.log(`[Cobalt] Got audio URL, downloading...`);
+
+            // Step B: Download the audio
+            const audioRes = await fetch(audioUrl);
+            if (!audioRes.ok) {
+              console.log(`[Cobalt] Audio download failed: ${audioRes.status}`);
+            } else {
+              const audioData = await audioRes.arrayBuffer();
+              console.log(`[Cobalt] Downloaded ${(audioData.byteLength / 1024 / 1024).toFixed(1)}MB`);
+
+              // Step C: Upload raw audio to AssemblyAI
+              console.log('[AssemblyAI] Uploading audio...');
+              const uploadRes = await fetch('https://api.assemblyai.com/v2/upload', {
+                method: 'POST',
+                headers: { 'authorization': aaiKey, 'content-type': 'application/octet-stream' },
+                body: audioData,
               });
-              const result = await pollRes.json();
-              console.log(`[AssemblyAI] Poll ${i + 1}: ${result.status}`);
 
-              if (result.status === "completed" && result.text?.length >= 50) {
-                transcript = result.text;
-                transcriptSource = 'assemblyai';
-                console.log(`[AssemblyAI] Done! ${transcript.length} chars`);
-                break;
-              }
-              if (result.status === "error") {
-                console.log(`[AssemblyAI] Error: ${result.error}`);
-                break;
+              if (!uploadRes.ok) {
+                console.log(`[AssemblyAI] Upload failed: ${uploadRes.status}`);
+              } else {
+                const uploadData = await uploadRes.json();
+                if (!uploadData.upload_url) {
+                  console.log('[AssemblyAI] No upload_url returned');
+                } else {
+                  // Step D: Start transcription
+                  console.log('[AssemblyAI] Starting transcription...');
+                  const startRes = await fetch("https://api.assemblyai.com/v2/transcript", {
+                    method: "POST",
+                    headers: { "authorization": aaiKey, "content-type": "application/json" },
+                    body: JSON.stringify({ audio_url: uploadData.upload_url, language_detection: true })
+                  });
+
+                  const startData = await startRes.json();
+                  if (startData.id && !startData.error) {
+                    const transcriptId = startData.id;
+                    console.log(`[AssemblyAI] Job ${transcriptId} — polling...`);
+
+                    for (let i = 0; i < 80; i++) {
+                      await new Promise(r => setTimeout(r, 3000));
+                      const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+                        headers: { "authorization": aaiKey }
+                      });
+                      const result = await pollRes.json();
+                      console.log(`[AssemblyAI] Poll ${i + 1}: ${result.status}`);
+
+                      if (result.status === "completed" && result.text?.length >= 50) {
+                        transcript = result.text;
+                        transcriptSource = 'cobalt_assemblyai';
+                        console.log(`[AssemblyAI] Done! ${transcript.length} chars`);
+                        break;
+                      }
+                      if (result.status === "error") {
+                        console.log(`[AssemblyAI] Error: ${result.error}`);
+                        break;
+                      }
+                    }
+                  } else {
+                    console.log(`[AssemblyAI] Submit failed: ${startData.error || 'unknown'}`);
+                  }
+                }
               }
             }
-          } else {
-            console.log(`[AssemblyAI] Submit failed: ${startData.error || 'unknown'}`);
           }
-        } catch (aaiErr) {
-          console.log(`[AssemblyAI] Error: ${aaiErr.message}`);
+        } catch (err) {
+          console.log(`[Cobalt+AssemblyAI] Error: ${err.message}`);
         }
+      } else {
+        console.log('[Analyze] Missing COBALT_API_URL or ASSEMBLYAI_API_KEY for Tier 2');
       }
     }
 
