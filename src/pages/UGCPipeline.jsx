@@ -166,9 +166,10 @@ Return ONLY the script text.`,
     // 3. Generate voiceover via ai33.pro (same backend function)
     setPipelineStep('Generating voiceover (ai33.pro TTS)...');
     try {
-      const voResult = await base44.functions.invoke('generateVoiceover', {
+      const voResponse = await base44.functions.invoke('generateVoiceover', {
         project_id: project.id,
       });
+      const voResult = voResponse.data || voResponse;
       setVoiceUrl(voResult.voiceover_url || '');
       setVoiceDuration(voResult.voiceover_duration_seconds || 0);
     } catch (err) {
