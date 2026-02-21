@@ -31,7 +31,7 @@ export default function ResearchTerminal() {
 
     // Trigger analysis
     try {
-      const response = await base44.functions.invoke("analyzeNiche", {
+      const response = await base44.functions.invoke("deepNicheAnalysis", {
         keyword: keyword.trim(),
         duration,
         search_id: searchRecord.id,

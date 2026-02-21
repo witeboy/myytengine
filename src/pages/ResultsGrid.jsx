@@ -3,32 +3,76 @@ import { base44 } from "@/api/base44Client";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "../utils";
-import { ArrowLeft, BarChart3, TrendingUp, DollarSign, Eye, Loader2, ArrowUpDown } from "lucide-react";
+import { ArrowLeft, BarChart3, TrendingUp, DollarSign, Eye, Loader2, ArrowUpDown, Users, List } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import VideoRow from "../components/niche/VideoRow";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import DeepVideoRow from "../components/niche/DeepVideoRow";
+import ChannelSummaryCard from "../components/niche/ChannelSummaryCard";
 
-function formatNumber(n) {
+function fmt(n) {
   if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
   if (n >= 1000) return (n / 1000).toFixed(1) + "K";
   return n?.toLocaleString() || "0";
 }
 
+const SORT_FIELDS = [
+  { key: "view_count", label: "Views" },
+  { key: "views_per_day", label: "VPD" },
+  { key: "opportunity_score", label: "Opportunity" },
+  { key: "est_total_revenue", label: "Revenue" },
+  { key: "profitability_score", label: "Profit Score" },
+  { key: "engagement_pct", label: "Engagement" },
+];
+
+const COL_TIPS = {
+  views: "Total views this video has received since published.",
+  vpd: "Views Per Day — average daily views since publish date. Higher = consistent performer.",
+  opp: "Opportunity Score — Views ÷ Subscribers. Higher means the video massively outperformed the channel size (strong CTR signal).",
+  engagement: "Engagement % — (Likes + Comments) ÷ Views × 100. Higher correlates with better retention.",
+  revenue: "Estimated total revenue from this video based on niche CPM. Monthly estimate shown below.",
+  age: "How long ago this video was published.",
+};
+
 export default function ResultsGrid() {
   const params = new URLSearchParams(window.location.search);
   const searchId = params.get("search_id");
   const keyword = params.get("keyword") || "Unknown";
-  const [sortField, setSortField] = useState("profitability_score");
+  const [sortField, setSortField] = useState("view_count");
   const [sortDir, setSortDir] = useState(-1);
+  const [viewMode, setViewMode] = useState("videos"); // "videos" | "channels"
 
-  const { data: videos = [], isLoading } = useQuery({
-    queryKey: ["cached-videos", searchId],
+  const { data, isLoading } = useQuery({
+    queryKey: ["deep-results", searchId],
     queryFn: async () => {
       if (searchId) {
-        return base44.entities.CachedVideos.filter({ search_id: searchId }, "-profitability_score", 50);
+        // Fetch from the deep analysis results stored in CachedVideos
+        const videos = await base44.entities.CachedVideos.filter({ search_id: searchId }, "-view_count", 100);
+        return { videos, channels: [] };
       }
-      return base44.entities.CachedVideos.list("-profitability_score", 50);
+      const videos = await base44.entities.CachedVideos.list("-view_count", 100);
+      return { videos, channels: [] };
     },
   });
+
+  // Also try to get fresh deep data if we navigated with search_id
+  const { data: deepData } = useQuery({
+    queryKey: ["deep-live", searchId, keyword],
+    queryFn: async () => {
+      // Re-fetch deep analysis for channel data
+      const res = await base44.functions.invoke("deepNicheAnalysis", {
+        keyword: decodeURIComponent(keyword),
+        duration: "This Month",
+      });
+      return res.data;
+    },
+    enabled: !!keyword && keyword !== "Unknown",
+    staleTime: 60000,
+  });
+
+  const videos = deepData?.results || data?.videos || [];
+  const channels = deepData?.channels || [];
+  const rpmEstimate = deepData?.rpm_estimate || 4;
 
   const sortedVideos = useMemo(() => {
     return [...videos].sort((a, b) => {
@@ -39,124 +83,158 @@ export default function ResultsGrid() {
   }, [videos, sortField, sortDir]);
 
   const handleSort = (field) => {
-    if (sortField === field) {
-      setSortDir(d => d * -1);
-    } else {
-      setSortField(field);
-      setSortDir(-1);
-    }
+    if (sortField === field) setSortDir(d => d * -1);
+    else { setSortField(field); setSortDir(-1); }
   };
 
-  const maxOpp = videos.reduce((m, v) => Math.max(m, v.opportunity_score || 0), 1);
-  const maxProfit = videos.reduce((m, v) => Math.max(m, v.profitability_score || 0), 1);
-
-  const topViews = videos.reduce((max, v) => Math.max(max, v.view_count || 0), 0);
-  const avgOpp = videos.length > 0
-    ? (videos.reduce((s, v) => s + (v.opportunity_score || 0), 0) / videos.length).toFixed(1)
-    : 0;
-  const avgProfit = videos.length > 0
-    ? (videos.reduce((s, v) => s + (v.profitability_score || 0), 0) / videos.length).toFixed(1)
-    : 0;
-  const viralCount = videos.filter(v => v.opportunity_score > 10).length;
+  const topViews = videos.reduce((m, v) => Math.max(m, v.view_count || 0), 0);
+  const totalRevenue = videos.reduce((s, v) => s + (v.est_total_revenue || 0), 0);
+  const avgEngagement = videos.length ? (videos.reduce((s, v) => s + (v.engagement_pct || 0), 0) / videos.length).toFixed(1) : 0;
+  const viralCount = videos.filter(v => (v.opportunity_score || 0) > 10).length;
 
   const summaryCards = [
-    { label: "Videos Found", value: videos.length, icon: BarChart3, color: "text-indigo-600" },
-    { label: "Top Views", value: formatNumber(topViews), icon: Eye, color: "text-cyan-600" },
-    { label: "Avg Opportunity", value: avgOpp + "x", icon: TrendingUp, color: "text-emerald-600" },
-    { label: "Avg Profit Score", value: avgProfit, icon: DollarSign, color: "text-amber-600" },
+    { label: "Videos Analyzed", value: videos.length, icon: BarChart3, color: "text-indigo-600" },
+    { label: "Top Views", value: fmt(topViews), icon: Eye, color: "text-cyan-600" },
+    { label: "Channels Found", value: channels.length || "—", icon: Users, color: "text-purple-600" },
+    { label: "Total Est. Revenue", value: `$${fmt(totalRevenue)}`, icon: DollarSign, color: "text-green-600" },
+    { label: "Avg Engagement", value: avgEngagement + "%", icon: TrendingUp, color: "text-emerald-600" },
+    { label: "Viral Outliers", value: viralCount, icon: TrendingUp, color: "text-amber-600" },
   ];
 
-  const SortHeader = ({ field, children, align = "right" }) => (
-    <th
-      className={`py-2.5 px-3 text-${align} cursor-pointer hover:text-gray-700 transition-colors select-none`}
-      onClick={() => handleSort(field)}
-    >
-      <span className="inline-flex items-center gap-1">
-        {children}
-        {sortField === field && (
-          <ArrowUpDown className="w-2.5 h-2.5 text-indigo-600" />
-        )}
-      </span>
-    </th>
-  );
-
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Link to={createPageUrl("ResearchTerminal")}>
-            <Button variant="ghost" size="icon" className="text-gray-500 hover:text-gray-900 hover:bg-gray-100">
-              <ArrowLeft className="w-4 h-4" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">Results: {decodeURIComponent(keyword)}</h1>
-            <p className="text-xs text-gray-500">{videos.length} profitable opportunities detected</p>
+    <TooltipProvider delayDuration={200}>
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Link to={createPageUrl("ResearchTerminal")}>
+              <Button variant="ghost" size="icon" className="text-gray-500 hover:text-gray-900 hover:bg-gray-100">
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">
+                Top 100: {decodeURIComponent(keyword)}
+              </h1>
+              <p className="text-xs text-gray-500">
+                {videos.length} videos • {channels.length} channels • Est. RPM ${rpmEstimate}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex bg-gray-100 rounded-lg p-0.5">
+              <button onClick={() => setViewMode("videos")}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${viewMode === "videos" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>
+                <List className="w-3 h-3" /> Videos
+              </button>
+              <button onClick={() => setViewMode("channels")}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors flex items-center gap-1.5 ${viewMode === "channels" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>
+                <Users className="w-3 h-3" /> Channels
+              </button>
+            </div>
+            {viralCount > 0 && (
+              <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-xs px-2 py-0.5">
+                🔥 {viralCount} Viral Outliers
+              </Badge>
+            )}
           </div>
         </div>
-        {viralCount > 0 && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200">
-            <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
-            <span className="text-xs font-medium text-emerald-600">{viralCount} Viral Gaps Detected</span>
+
+        {/* Summary */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {summaryCards.map((c) => (
+            <div key={c.label} className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
+              <div className="flex items-center gap-1.5 mb-1">
+                <c.icon className={`w-3.5 h-3.5 ${c.color}`} />
+                <span className="text-[10px] text-gray-500">{c.label}</span>
+              </div>
+              <div className="text-lg font-bold text-gray-900 font-mono">{c.value}</div>
+            </div>
+          ))}
+        </div>
+
+        {isLoading && !deepData ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
+            <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
+            <p className="text-gray-500 text-sm">Fetching top 100 videos & channel data...</p>
+          </div>
+        ) : videos.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 space-y-3">
+            <BarChart3 className="w-10 h-10 text-gray-300" />
+            <p className="text-gray-500 text-sm">No results found.</p>
+            <Link to={createPageUrl("ResearchTerminal")}><Button variant="outline">New Search</Button></Link>
+          </div>
+        ) : viewMode === "channels" && channels.length > 0 ? (
+          /* CHANNEL VIEW */
+          <div className="space-y-3">
+            <p className="text-xs text-gray-500">{channels.length} unique channels ranked by total views in results. Expand to see all their top videos.</p>
+            {channels.map((ch, i) => (
+              <ChannelSummaryCard key={ch.channel_id} channel={ch} rank={i} />
+            ))}
+          </div>
+        ) : (
+          /* VIDEO TABLE */
+          <div className="space-y-3">
+            {/* Sort pills */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] text-gray-500 font-medium uppercase tracking-wider">Sort by:</span>
+              {SORT_FIELDS.map(s => (
+                <button key={s.key} onClick={() => handleSort(s.key)}
+                  className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors flex items-center gap-1 ${
+                    sortField === s.key ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-600 hover:text-gray-900"
+                  }`}>
+                  {s.label}
+                  {sortField === s.key && <ArrowUpDown className="w-2.5 h-2.5" />}
+                </button>
+              ))}
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px]">
+                  <thead>
+                    <tr className="border-b border-gray-200 text-[10px] font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="py-2 px-2 text-center w-8">#</th>
+                      <th className="py-2 px-2 text-left">Video</th>
+                      <th className="py-2 px-2 text-left">Channel</th>
+                      <TipHeader tip={COL_TIPS.views} onClick={() => handleSort("view_count")} active={sortField === "view_count"}>Views</TipHeader>
+                      <TipHeader tip={COL_TIPS.vpd} onClick={() => handleSort("views_per_day")} active={sortField === "views_per_day"}>VPD</TipHeader>
+                      <TipHeader tip={COL_TIPS.opp} onClick={() => handleSort("opportunity_score")} active={sortField === "opportunity_score"}>Opp</TipHeader>
+                      <TipHeader tip={COL_TIPS.engagement} onClick={() => handleSort("engagement_pct")} active={sortField === "engagement_pct"}>Eng%</TipHeader>
+                      <TipHeader tip={COL_TIPS.revenue} onClick={() => handleSort("est_total_revenue")} active={sortField === "est_total_revenue"}>Revenue</TipHeader>
+                      <TipHeader tip={COL_TIPS.age}>Age</TipHeader>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedVideos.map((video, i) => (
+                      <DeepVideoRow key={video.video_id} video={video} index={i} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
       </div>
+    </TooltipProvider>
+  );
+}
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {summaryCards.map((c) => (
-          <div key={c.label} className="bg-white border border-gray-200 rounded-lg p-3 shadow-sm">
-            <div className="flex items-center gap-2 mb-1">
-              <c.icon className={`w-3.5 h-3.5 ${c.color}`} />
-              <span className="text-xs text-gray-500">{c.label}</span>
-            </div>
-            <div className="text-lg font-bold text-gray-900 font-mono">{c.value}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Table */}
-      {isLoading ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3">
-          <Loader2 className="w-6 h-6 text-indigo-600 animate-spin" />
-          <p className="text-gray-500 text-sm">Loading results...</p>
-        </div>
-      ) : videos.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 space-y-3">
-          <BarChart3 className="w-10 h-10 text-gray-300" />
-          <p className="text-gray-500 text-sm">No profitable opportunities found for this niche.</p>
-          <p className="text-gray-400 text-xs">Try broadening your keyword or changing the time range.</p>
-          <Link to={createPageUrl("ResearchTerminal")}>
-            <Button variant="outline">
-              New Search
-            </Button>
-          </Link>
-        </div>
-      ) : (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px]">
-              <thead>
-                <tr className="border-b border-gray-200 text-[10px] font-medium text-gray-500 uppercase tracking-wider">
-                  <th className="py-2.5 px-3 text-center w-10">#</th>
-                  <th className="py-2.5 px-3 text-left">Video</th>
-                  <th className="py-2.5 px-3 text-left">Channel</th>
-                  <SortHeader field="view_count">Views</SortHeader>
-                  <SortHeader field="views_per_day">Views/Day</SortHeader>
-                  <SortHeader field="opportunity_score">Opportunity</SortHeader>
-                  <SortHeader field="profitability_score">Profitability</SortHeader>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedVideos.map((video, i) => (
-                  <VideoRow key={video.id} video={video} index={i} maxOpp={maxOpp} maxProfit={maxProfit} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
+function TipHeader({ children, tip, onClick, active }) {
+  return (
+    <th className="py-2 px-2 text-right">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            className={`inline-flex items-center gap-1 cursor-help border-b border-dashed border-gray-300 ${onClick ? "cursor-pointer hover:text-gray-700" : ""}`}
+            onClick={onClick}
+          >
+            {children}
+            {active && <ArrowUpDown className="w-2.5 h-2.5 text-indigo-600" />}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-[220px] text-xs leading-relaxed">{tip}</TooltipContent>
+      </Tooltip>
+    </th>
   );
 }
