@@ -46,9 +46,16 @@ export default function UGCPipeline() {
   const [influencerType, setInfluencerType] = useState('');
   const [influencerAction, setInfluencerAction] = useState('');
 
+  // Step 2.5 — appearance config
+  const [appearanceConfig, setAppearanceConfig] = useState({
+    gender: 'female', ageRange: '24-30', skinTone: 'medium', ethnicity: '',
+    hairStyle: '', clothing: '', setting: '', extraNotes: '',
+  });
+
   // Step 3
   const [influencerPrompt, setInfluencerPrompt] = useState('');
   const [influencerImageUrl, setInfluencerImageUrl] = useState('');
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
 
   // Step 4
   const [voiceScript, setVoiceScript] = useState('');
