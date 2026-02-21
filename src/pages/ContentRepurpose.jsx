@@ -352,6 +352,26 @@ Write a complete narration script (~${analysis.estimated_word_count || 1500} wor
           <Card>
             <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Edit className="w-5 h-5 text-emerald-600" /> Customize</CardTitle></CardHeader>
             <CardContent className="space-y-4">
+              {/* Original Transcript Display */}
+              {analysis.original_script && analysis.original_script.length > 100 && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                      <FileText className="w-4 h-4 text-emerald-600" /> Original Transcript
+                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="outline" className="text-[10px]">
+                        {analysis.transcript_source === 'youtube_captions' ? '📝 Captions' : analysis.transcript_source === 'assemblyai' ? '🎤 Audio' : 'Metadata'}
+                      </Badge>
+                      <Badge variant="outline" className="text-[10px]">{analysis.original_script.split(/\s+/).length} words</Badge>
+                    </div>
+                  </div>
+                  <div className="max-h-52 overflow-y-auto text-sm text-gray-700 whitespace-pre-wrap leading-relaxed bg-white rounded p-3 border border-gray-100">
+                    {analysis.original_script}
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-2">This transcript will be used as the style blueprint — AI will rewrite it for your new title while keeping the same dynamics, flow, beats & delivery.</p>
+                </div>
+              )}
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">New Title</label>
                 <Input value={newTitle} onChange={e => setNewTitle(e.target.value)} />
