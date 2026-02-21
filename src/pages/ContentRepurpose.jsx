@@ -26,6 +26,7 @@ const VISUAL_STYLES = [
   { value: 'oil_painting', label: 'Oil Painting' },
   { value: 'watercolor', label: 'Watercolor' },
   { value: 'comic_book', label: 'Comic Book' },
+  { value: 'humpty_dumpty', label: 'Humpty Dumpty' },
 ];
 
 export default function ContentRepurpose() {
