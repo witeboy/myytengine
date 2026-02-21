@@ -189,8 +189,23 @@ Return ONLY the script text.`,
       status: 'image_generated',
     });
 
-    // 5. Generate video via Veo 3.1 (same backend function)
-    if (influencerImageUrl && !influencerImageUrl.startsWith('data:')) {
+    // 5. Upload data URI image if needed, then generate video via Veo 3.1
+    let finalImageUrl = influencerImageUrl;
+    if (finalImageUrl && finalImageUrl.startsWith('data:')) {
+      setPipelineStep('Uploading influencer image for video generation...');
+      try {
+        const resp = await fetch(finalImageUrl);
+        const blob = await resp.blob();
+        const file = new File([blob], 'ugc-influencer.png', { type: 'image/png' });
+        const { file_url } = await base44.integrations.Core.UploadFile({ file });
+        finalImageUrl = file_url;
+        await base44.entities.Scenes.update(scene.id, { image_url: file_url });
+      } catch (uploadErr) {
+        console.warn('Image upload failed:', uploadErr.message);
+      }
+    }
+
+    if (finalImageUrl && finalImageUrl.startsWith('http')) {
       setPipelineStep('Submitting to Veo 3.1 for video generation...');
       try {
         const vidResponse = await base44.functions.invoke('generateSceneVideo', {
