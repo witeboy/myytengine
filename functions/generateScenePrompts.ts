@@ -179,11 +179,13 @@ const styleMap = {
 // PROMPT VALIDATION
 // ══════════════════════════════════════════════════════════════════
 
-function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, sceneNumber) {
+function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, sceneNumber, visualStyle) {
   let enhanced = imagePrompt;
 
   // Strip pixel dimensions
   enhanced = enhanced.replace(/\b\d{3,4}\s*[x×]\s*\d{3,4}\s*(pixels?|px)?\s*\.?\s*/gi, '');
+
+  const isHumptyDumpty = visualStyle === 'humpty_dumpty';
 
   // Ensure style prefix
   const styleCheck = styleConfig.positive.substring(0, 30).toLowerCase();
@@ -192,19 +194,35 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
   }
 
   // Ensure composition hint
-  const compHint = orientationConfig.format === 'portrait'
-    ? 'vertical 9:16 frame, tall vertical composition'
-    : 'widescreen 16:9 cinematic frame, wide horizontal composition';
-
-  if (orientationConfig.format === 'portrait') {
-    if (!/portrait|vertical|9:16/i.test(enhanced)) {
-      enhanced = enhanced.replace(/landscape|horizontal|widescreen|16:?9/gi, '');
-      enhanced = `${compHint}. ${enhanced}`;
+  if (isHumptyDumpty) {
+    // Humpty Dumpty uses simple framing, not cinematic
+    const compHint = orientationConfig.format === 'portrait'
+      ? 'vertical 9:16 frame'
+      : 'wide 16:9 frame';
+    if (orientationConfig.format === 'portrait') {
+      if (!/portrait|vertical|9:16/i.test(enhanced)) {
+        enhanced = `${compHint}. ${enhanced}`;
+      }
+    } else {
+      if (!/landscape|widescreen|16:9/i.test(enhanced)) {
+        enhanced = `${compHint}. ${enhanced}`;
+      }
     }
   } else {
-    if (!/landscape|widescreen|16:9/i.test(enhanced)) {
-      enhanced = enhanced.replace(/portrait|vertical|9:?16/gi, '');
-      enhanced = `${compHint}. ${enhanced}`;
+    const compHint = orientationConfig.format === 'portrait'
+      ? 'vertical 9:16 frame, tall vertical composition'
+      : 'widescreen 16:9 cinematic frame, wide horizontal composition';
+
+    if (orientationConfig.format === 'portrait') {
+      if (!/portrait|vertical|9:16/i.test(enhanced)) {
+        enhanced = enhanced.replace(/landscape|horizontal|widescreen|16:?9/gi, '');
+        enhanced = `${compHint}. ${enhanced}`;
+      }
+    } else {
+      if (!/landscape|widescreen|16:9/i.test(enhanced)) {
+        enhanced = enhanced.replace(/portrait|vertical|9:?16/gi, '');
+        enhanced = `${compHint}. ${enhanced}`;
+      }
     }
   }
 
@@ -213,9 +231,15 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
     enhanced += ', ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image';
   }
 
-  // Ensure quality markers
-  if (!/masterpiece|professional|8k|award/i.test(enhanced)) {
-    enhanced += ', masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography';
+  // Ensure quality markers (skip cinematic markers for humpty dumpty)
+  if (isHumptyDumpty) {
+    if (!/clean|crisp|professional/i.test(enhanced)) {
+      enhanced += ', clean crisp illustration, professional web animation quality, solid warm cream background';
+    }
+  } else {
+    if (!/masterpiece|professional|8k|award/i.test(enhanced)) {
+      enhanced += ', masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography';
+    }
   }
 
   return enhanced;
