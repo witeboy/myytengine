@@ -76,12 +76,14 @@ async function generateChunkAudio(apiKey, voiceId, text, chunkIndex, retryCount 
       return new Uint8Array(audioBuf);
     }
 
-    // If still async, we need to wait and retry
+    // If still async, we need to wait and retry (max 3 retries)
     if (data.task_id) {
-      console.log(`Chunk ${chunkIndex}: got task_id, waiting 15s then retrying...`);
+      if (retryCount >= 3) {
+        throw new Error(`Chunk ${chunkIndex}: still returning task_id after ${retryCount} retries`);
+      }
+      console.log(`Chunk ${chunkIndex}: got task_id, waiting 15s then retrying (attempt ${retryCount + 1}/3)...`);
       await new Promise(r => setTimeout(r, 15000));
-      // Retry the same chunk
-      return generateChunkAudio(apiKey, voiceId, text, chunkIndex);
+      return generateChunkAudio(apiKey, voiceId, text, chunkIndex, retryCount + 1);
     }
 
     throw new Error(`Chunk ${chunkIndex}: unexpected JSON: ${jsonText.substring(0, 200)}`);
