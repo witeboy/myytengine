@@ -180,7 +180,8 @@ Write a complete narration script (~${analysis.estimated_word_count || 1500} wor
     // 4. Scene breakdown (same Gemini backend)
     setPipelineStep('Breaking down script into cinematic scenes...');
     try {
-      const breakdownResult = await base44.functions.invoke('generateSceneBreakdown', { project_id: project.id });
+      const breakdownResponse = await base44.functions.invoke('generateSceneBreakdown', { project_id: project.id });
+      const breakdownResult = breakdownResponse.data || breakdownResponse;
       setSceneCount(breakdownResult.scenes_created || 0);
     } catch (err) {
       console.warn('Scene breakdown failed:', err.message);
