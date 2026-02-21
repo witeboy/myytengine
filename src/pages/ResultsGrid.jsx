@@ -212,7 +212,7 @@ export default function ResultsGrid() {
                       <TipHeader tip={COL_TIPS.opp} onClick={() => handleSort("opportunity_score")} active={sortField === "opportunity_score"}>Opp</TipHeader>
                       <TipHeader tip={COL_TIPS.engagement} onClick={() => handleSort("engagement_pct")} active={sortField === "engagement_pct"}>Eng%</TipHeader>
                       <TipHeader tip={COL_TIPS.rpm} onClick={() => handleSort("est_rpm")} active={sortField === "est_rpm"}>RPM</TipHeader>
-                      <TipHeader tip={COL_TIPS.cpm} onClick={() => handleSort("est_rpm")} active={sortField === "est_rpm"}>CPM</TipHeader>
+                      <TipHeader tip={COL_TIPS.cpm} onClick={() => handleSort("est_cpm")} active={sortField === "est_cpm"}>CPM</TipHeader>
                       <TipHeader tip={COL_TIPS.revenue} onClick={() => handleSort("est_total_revenue")} active={sortField === "est_total_revenue"}>Revenue</TipHeader>
                       <TipHeader tip={COL_TIPS.age} onClick={() => handleSort("published_date")} active={sortField === "published_date"}>Age</TipHeader>
                     </tr>
