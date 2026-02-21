@@ -323,14 +323,14 @@ Deno.serve(async (req) => {
   Visual Concept: ${s.director.visual_concept}
   Shot Type: ${s.director.shot_type}
   Camera Angle: ${s.director.camera_angle}
-  Camera Movement: ${s.director.camera_movement}
+  ★ Camera Movement (CRITICAL for animation): ${s.director.camera_movement}
   Lighting: ${s.director.lighting}
   Color Palette: ${s.director.color_palette}
   Mood: ${s.director.mood}
   DOF: ${s.director.depth_of_field}
   Niche Element: ${s.director.niche_visual_element || 'N/A'}
   Continuity: ${s.director.continuity_bridge || 'N/A'}
-  Intensity: ${s.director.emotional_intensity || 0.5}`;
+  Emotional Intensity: ${s.director.emotional_intensity || 0.5} (use this to scale animation energy)`;
       }).join('\n\n');
 
       const prompt = `**MISSION: Convert Director's Notes → Production-Ready Image & Animation Prompts**
