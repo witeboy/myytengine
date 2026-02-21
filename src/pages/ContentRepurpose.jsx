@@ -166,7 +166,7 @@ Write the complete narration script. Return ONLY the script text, no headers or 
       niche: analysis.niche,
       tone: analysis.script_style,
       visual_style: selectedStyle,
-      orientation: 'landscape',
+      orientation: selectedOrientation,
       video_duration_minutes: Math.ceil((analysis.estimated_duration_seconds || 600) / 60),
       status: 'script_complete',
       current_step: 4,
