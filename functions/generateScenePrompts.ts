@@ -422,7 +422,7 @@ ${sceneDirections}
 
           imagePrompt = validateAndEnhancePrompt(fallback, styleConfig, orientationConfig, s.scene_number);
           animationPrompt = s.director?.camera_movement
-            || "slow gentle camera movement forward, atmospheric haze, subtle breathing, shallow DOF";
+            || "slow deliberate dolly push-in from medium shot to close-up over 5s, atmospheric dust motes floating in golden light, subtle breathing motion on subject, shallow depth of field with gentle focus pull";
         }
 
         try {
