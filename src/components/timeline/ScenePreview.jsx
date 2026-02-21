@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import MediaUploader from './MediaUploader';
-import { X, Clock, RefreshCw, Loader2, ImageIcon, Film } from 'lucide-react';
+import SceneTrimmer from './SceneTrimmer';
+import TransitionPicker from './TransitionPicker';
+import { X, Clock, RefreshCw, Loader2, ImageIcon, Film, Scissors, Layers } from 'lucide-react';
 
 export default function ScenePreview({ scene, onClose, onUpdateDuration, onRefetch }) {
   const [duration, setDuration] = useState(scene?.duration_seconds || 8);
@@ -103,13 +105,14 @@ export default function ScenePreview({ scene, onClose, onUpdateDuration, onRefet
                 <Button size="sm" onClick={handleSave} variant="outline">Save</Button>
               </div>
             </div>
+
+            {/* Trim & Transition controls */}
+            <SceneTrimmer scene={scene} onSave={onRefetch} />
+            <TransitionPicker scene={scene} onSave={onRefetch} />
+
             <div>
               <p className="text-xs font-medium text-gray-500">Image Prompt</p>
               <p className="text-xs text-gray-600 mt-1 line-clamp-3">{scene.image_prompt}</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-gray-500">Animation</p>
-              <p className="text-xs text-gray-600 mt-1 line-clamp-3">{scene.animation_prompt}</p>
             </div>
           </div>
         </div>
