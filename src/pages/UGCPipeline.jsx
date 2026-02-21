@@ -357,33 +357,42 @@ Return ONLY the motion description.`,
           </div>
         )}
 
-        {/* Step 2: Influencer Type */}
+        {/* Step 2: Influencer Type + Appearance */}
         {step === 2 && (
-          <Card>
-            <CardHeader><CardTitle className="text-lg">Influencer Details</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">Influencer Type</label>
-                <Select value={influencerType} onValueChange={setInfluencerType}>
-                  <SelectTrigger><SelectValue placeholder="Select type..." /></SelectTrigger>
-                  <SelectContent>
-                    {INFLUENCER_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700 mb-1 block">What should the influencer be doing?</label>
-                <Textarea placeholder="e.g. Unboxing a product, speaking to camera..." value={influencerAction} onChange={e => setInfluencerAction(e.target.value)} className="min-h-[100px]" />
-              </div>
-              <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setStep(1)} className="gap-2"><ArrowLeft className="w-4 h-4" /> Back</Button>
-                <Button onClick={handleGeneratePrompt} disabled={!influencerType || !influencerAction.trim() || loading} className="flex-1 bg-pink-600 hover:bg-pink-700 gap-2">
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-                  {loading ? statusMsg : 'Generate Influencer Prompt'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="space-y-4">
+            <InfluencerTemplatesPicker onSelect={handleLoadTemplate} />
+            <Card>
+              <CardHeader><CardTitle className="text-lg">Influencer Details</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">Influencer Type</label>
+                  <Select value={influencerType} onValueChange={setInfluencerType}>
+                    <SelectTrigger><SelectValue placeholder="Select type..." /></SelectTrigger>
+                    <SelectContent>
+                      {INFLUENCER_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-1 block">What should the influencer be doing?</label>
+                  <Textarea placeholder="e.g. Unboxing a product, speaking to camera..." value={influencerAction} onChange={e => setInfluencerAction(e.target.value)} className="min-h-[80px]" />
+                </div>
+
+                <div className="border-t pt-4">
+                  <p className="text-sm font-medium text-gray-700 mb-3">Appearance & Demographics</p>
+                  <InfluencerPromptBuilder config={appearanceConfig} onChange={setAppearanceConfig} />
+                </div>
+
+                <div className="flex gap-3">
+                  <Button variant="outline" onClick={() => setStep(1)} className="gap-2"><ArrowLeft className="w-4 h-4" /> Back</Button>
+                  <Button onClick={handleGeneratePrompt} disabled={!influencerType || !influencerAction.trim() || !appearanceConfig.gender || !appearanceConfig.skinTone || loading} className="flex-1 bg-pink-600 hover:bg-pink-700 gap-2">
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                    {loading ? statusMsg : 'Build Hyper-Realistic Prompt'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Step 3: Image */}
