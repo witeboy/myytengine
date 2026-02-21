@@ -6,9 +6,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createPageUrl } from '@/utils';
 import { Loader2, Sparkles, Film, Users, RefreshCw, ArrowRight, ArrowLeft, Search, Shield, Lightbulb, Pencil } from 'lucide-react';
 import ProjectTemplates from '@/components/templates/ProjectTemplates';
+
+const TONE_OPTIONS = [
+  { value: 'dramatic', label: '🎭 Dramatic' },
+  { value: 'educational', label: '📚 Educational' },
+  { value: 'humorous', label: '😂 Humorous' },
+  { value: 'conversational', label: '💬 Conversational' },
+  { value: 'inspirational', label: '✨ Inspirational' },
+  { value: 'suspenseful', label: '🔥 Suspenseful' },
+  { value: 'sarcastic', label: '😏 Sarcastic' },
+];
 
 const PROJECT_TYPES = [
   {
@@ -64,6 +75,8 @@ export default function NewProject() {
   const [mode, setMode] = useState(null); // 'niche' or 'topic'
   const [niche, setNiche] = useState('');
   const [customTopic, setCustomTopic] = useState('');
+  const [tone, setTone] = useState('dramatic');
+  const [targetAudience, setTargetAudience] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleCreateFromNiche = async () => {
@@ -73,7 +86,8 @@ export default function NewProject() {
     const project = await base44.entities.Projects.create({
       name: niche.trim(),
       niche: niche.trim(),
-      tone: 'dramatic',
+      tone,
+      target_audience: targetAudience.trim() || undefined,
       status: 'created',
       current_step: 0,
     });
@@ -81,6 +95,8 @@ export default function NewProject() {
     await base44.functions.invoke('generateTopics', {
       project_id: project.id,
       niche: niche.trim(),
+      tone,
+      target_audience: targetAudience.trim() || undefined,
     });
 
     navigate(createPageUrl(`StoryTopics?project_id=${project.id}`));
@@ -93,7 +109,8 @@ export default function NewProject() {
     const project = await base44.entities.Projects.create({
       name: customTopic.trim(),
       niche: customTopic.trim(),
-      tone: 'dramatic',
+      tone,
+      target_audience: targetAudience.trim() || undefined,
       status: 'created',
       current_step: 0,
     });
@@ -103,6 +120,8 @@ export default function NewProject() {
       project_id: project.id,
       niche: customTopic.trim(),
       exact_topic: customTopic.trim(),
+      tone,
+      target_audience: targetAudience.trim() || undefined,
     });
 
     // Auto-select the top ranked topic
@@ -238,6 +257,28 @@ export default function NewProject() {
                 disabled={loading}
                 className="text-base min-h-[100px]"
               />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Tone</label>
+                  <Select value={tone} onValueChange={setTone}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {TONE_OPTIONS.map(t => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Target Audience <span className="text-gray-400">(optional)</span></label>
+                  <Input
+                    placeholder="e.g. young adults 18-25"
+                    value={targetAudience}
+                    onChange={e => setTargetAudience(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+              </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setMode(null)} disabled={loading}>
                   Back
@@ -279,6 +320,28 @@ export default function NewProject() {
                 disabled={loading}
                 className="text-lg py-6"
               />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Tone</label>
+                  <Select value={tone} onValueChange={setTone}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {TONE_OPTIONS.map(t => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">Target Audience <span className="text-gray-400">(optional)</span></label>
+                  <Input
+                    placeholder="e.g. tech enthusiasts, parents"
+                    value={targetAudience}
+                    onChange={e => setTargetAudience(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+              </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setMode(null)} disabled={loading}>
                   Back
