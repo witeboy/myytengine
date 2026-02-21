@@ -15,7 +15,7 @@ export default function Layout({ children, currentPageName }) {
   const isNichePage = nichePages.includes(currentPageName);
 
   // For non-niche pages, just render children (existing app layout)
-  if (!isNichePage && currentPageName !== "Dashboard") {
+  if (!isNichePage) {
     return <>{children}</>;
   }
 
