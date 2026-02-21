@@ -321,6 +321,18 @@ Write a complete narration script (~${analysis.estimated_word_count || 1500} wor
                   {analysis.key_topics.map((t, i) => <Badge key={i} variant="secondary" className="text-xs">{t}</Badge>)}
                 </div>
               )}
+              {analysis.original_script && analysis.original_script.length > 100 && (
+                <div className="bg-white p-3 rounded border">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-gray-500 text-xs font-medium">Original Script</p>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[10px]">{analysis.transcript_source === 'youtube_captions' ? '📝 Captions' : analysis.transcript_source === 'assemblyai' ? '🎤 Audio Transcription' : 'Metadata'}</Badge>
+                      <Badge variant="outline" className="text-[10px]">{analysis.original_script.split(/\s+/).length} words</Badge>
+                    </div>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto text-sm text-gray-700 whitespace-pre-wrap leading-relaxed bg-gray-50 rounded p-2">{analysis.original_script}</div>
+                </div>
+              )}
               <Button onClick={() => setStep(3)} className="w-full bg-emerald-600 hover:bg-emerald-700 gap-2">
                 Customize & Recreate <ArrowRight className="w-4 h-4" />
               </Button>
