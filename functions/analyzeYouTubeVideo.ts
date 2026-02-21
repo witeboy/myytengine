@@ -1,35 +1,199 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+// ===================================================================
+// HELPERS
+// ===================================================================
 function extractVideoId(url) {
-  // Handle youtube.com/shorts/ID
   const shortsMatch = url.match(/\/shorts\/([a-zA-Z0-9_-]{11})/);
   if (shortsMatch) return shortsMatch[1];
-
-  // Handle youtube.com/watch?v=ID
   const watchMatch = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
   if (watchMatch) return watchMatch[1];
-
-  // Handle youtu.be/ID
   const shortMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
   if (shortMatch) return shortMatch[1];
-
-  // Handle youtube.com/embed/ID
   const embedMatch = url.match(/\/embed\/([a-zA-Z0-9_-]{11})/);
   if (embedMatch) return embedMatch[1];
-
   return null;
 }
 
 function parseDuration(iso) {
-  // PT1H2M3S -> seconds
   const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
   if (!match) return 60;
-  const h = parseInt(match[1] || '0');
-  const m = parseInt(match[2] || '0');
-  const s = parseInt(match[3] || '0');
-  return h * 3600 + m * 60 + s;
+  return parseInt(match[1] || '0') * 3600 + parseInt(match[2] || '0') * 60 + parseInt(match[3] || '0');
 }
 
+// ===================================================================
+// TIER 1: YouTube Transcript API (captions)
+// ===================================================================
+async function getYouTubeTranscript(videoId) {
+  const apiKey = Deno.env.get("YOUTUBE_TRANSCRIPT_API_KEY");
+  if (!apiKey) {
+    console.log('[Transcript] No YOUTUBE_TRANSCRIPT_API_KEY set');
+    return null;
+  }
+
+  try {
+    console.log(`[Transcript] Fetching captions for ${videoId}...`);
+    const response = await fetch('https://youtubetranscript.dev/api/v2/batch', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ video_ids: [videoId], lang: 'en', preserve_formatting: false })
+    });
+
+    if (!response.ok) {
+      console.log(`[Transcript] API returned ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    if (!data.results?.[0] || data.results[0].status !== 'completed') {
+      console.log('[Transcript] No completed result');
+      return null;
+    }
+
+    const transcriptData = data.results[0].data?.transcript;
+    let transcript = '';
+    if (typeof transcriptData === 'string') {
+      transcript = transcriptData;
+    } else if (transcriptData?.text) {
+      transcript = transcriptData.text;
+    } else if (Array.isArray(transcriptData?.segments)) {
+      transcript = transcriptData.segments.map(seg => seg.text || seg.utf8 || '').join(' ').replace(/\s+/g, ' ').trim();
+    }
+
+    if (transcript && transcript.length > 50) {
+      console.log(`[Transcript] Got ${transcript.length} chars from captions`);
+      return transcript;
+    }
+    return null;
+  } catch (error) {
+    console.log(`[Transcript] Error: ${error.message}`);
+    return null;
+  }
+}
+
+// ===================================================================
+// TIER 2: Cobalt audio extraction
+// ===================================================================
+async function extractAudioWithCobalt(url) {
+  const cobaltUrl = Deno.env.get("COBALT_API_URL");
+  if (!cobaltUrl) {
+    console.log('[Cobalt] No COBALT_API_URL set');
+    return null;
+  }
+
+  try {
+    console.log(`[Cobalt] Extracting audio from: ${url.substring(0, 80)}...`);
+    const apiEndpoint = cobaltUrl.endsWith('/') ? cobaltUrl : cobaltUrl + '/';
+
+    const response = await fetch(apiEndpoint, {
+      method: "POST",
+      headers: { "Accept": "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ url, downloadMode: "audio", audioFormat: "mp3", audioBitrate: "64" })
+    });
+
+    const data = await response.json();
+
+    if (data.status === "redirect" || data.status === "stream" || data.status === "tunnel") {
+      console.log(`[Cobalt] Success (${data.status})`);
+      return data.url;
+    }
+
+    if (data.status === "picker" && data.picker?.length > 0) {
+      const item = data.picker.find(i => i.type === 'audio') || data.picker[0];
+      if (item?.url) {
+        console.log(`[Cobalt] Picker: using ${item.type} option`);
+        return item.url;
+      }
+    }
+
+    console.log(`[Cobalt] Failed: ${data.error?.code || JSON.stringify(data).substring(0, 200)}`);
+    return null;
+  } catch (error) {
+    console.log(`[Cobalt] Error: ${error.message}`);
+    return null;
+  }
+}
+
+// ===================================================================
+// TIER 3: AssemblyAI transcription (from audio binary)
+// ===================================================================
+async function transcribeWithAssemblyAI(audioData) {
+  const apiKey = Deno.env.get("ASSEMBLYAI_API_KEY");
+  if (!apiKey) {
+    console.log('[AssemblyAI] No ASSEMBLYAI_API_KEY set');
+    return null;
+  }
+
+  try {
+    // Upload binary to AssemblyAI
+    console.log(`[AssemblyAI] Uploading ${(audioData.byteLength / 1024 / 1024).toFixed(1)}MB...`);
+    const uploadRes = await fetch('https://api.assemblyai.com/v2/upload', {
+      method: 'POST',
+      headers: { 'authorization': apiKey, 'content-type': 'application/octet-stream' },
+      body: audioData,
+    });
+
+    if (!uploadRes.ok) {
+      console.log(`[AssemblyAI] Upload failed: ${uploadRes.status}`);
+      return null;
+    }
+
+    const uploadData = await uploadRes.json();
+    if (!uploadData.upload_url) {
+      console.log('[AssemblyAI] No upload_url returned');
+      return null;
+    }
+
+    // Start transcription
+    console.log('[AssemblyAI] Starting transcription...');
+    const startRes = await fetch("https://api.assemblyai.com/v2/transcript", {
+      method: "POST",
+      headers: { "authorization": apiKey, "content-type": "application/json" },
+      body: JSON.stringify({ audio_url: uploadData.upload_url, language_detection: true })
+    });
+
+    const startData = await startRes.json();
+    if (startData.error) {
+      console.log(`[AssemblyAI] Start error: ${startData.error}`);
+      return null;
+    }
+
+    const transcriptId = startData.id;
+    console.log(`[AssemblyAI] Job ${transcriptId} — polling...`);
+
+    // Poll for completion (max ~4 min)
+    for (let i = 0; i < 80; i++) {
+      await new Promise(r => setTimeout(r, 3000));
+      const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
+        headers: { "authorization": apiKey }
+      });
+      const result = await pollRes.json();
+      console.log(`[AssemblyAI] Poll ${i + 1}: ${result.status}`);
+
+      if (result.status === "completed") {
+        console.log(`[AssemblyAI] Done! ${result.text?.length} chars`);
+        return result.text;
+      }
+      if (result.status === "error") {
+        console.log(`[AssemblyAI] Error: ${result.error}`);
+        return null;
+      }
+    }
+
+    console.log('[AssemblyAI] Timed out');
+    return null;
+  } catch (error) {
+    console.log(`[AssemblyAI] Error: ${error.message}`);
+    return null;
+  }
+}
+
+// ===================================================================
+// MAIN
+// ===================================================================
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -43,8 +207,10 @@ Deno.serve(async (req) => {
     if (!videoId) return Response.json({ error: 'Could not extract video ID from URL' }, { status: 400 });
 
     const apiKey = Deno.env.get("YOUTUBE_API_KEY");
+    const geminiKey = Deno.env.get("GEMINI_API_KEY");
 
-    // Fetch video details from YouTube Data API
+    // ── 1. Fetch YouTube metadata ────────────────────────────────
+    console.log(`[Analyze] Fetching YouTube metadata for ${videoId}...`);
     const ytUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${videoId}&key=${apiKey}`;
     const ytResp = await fetch(ytUrl);
     const ytData = await ytResp.json();
@@ -59,7 +225,6 @@ Deno.serve(async (req) => {
     const durationSec = parseDuration(video.contentDetails.duration);
     const isShort = durationSec <= 60 || video_url.includes('/shorts/');
 
-    // Fetch channel info
     let channelName = snippet.channelTitle;
     let subscriberCount = 0;
     try {
@@ -73,44 +238,106 @@ Deno.serve(async (req) => {
       console.warn('Channel fetch failed:', e.message);
     }
 
-    // Now use Gemini to do deep content analysis with the REAL metadata
-    const geminiKey = Deno.env.get("GEMINI_API_KEY");
-    const analysisPrompt = `You are a YouTube content analyst. Analyze this video based on the real metadata below and provide a detailed content breakdown.
+    // ── 2. Get FULL transcript (3-tier) ──────────────────────────
+    console.log('[Analyze] Extracting full transcript...');
+    let transcript = null;
+    let transcriptSource = 'none';
+
+    // Tier 1: YouTube captions
+    transcript = await getYouTubeTranscript(videoId);
+    if (transcript && transcript.length >= 50) {
+      transcriptSource = 'youtube_captions';
+      console.log(`[Analyze] Transcript from captions: ${transcript.length} chars`);
+    }
+
+    // Tier 2+3: Cobalt audio → AssemblyAI
+    if (!transcript || transcript.length < 50) {
+      console.log('[Analyze] No captions, trying Cobalt + AssemblyAI...');
+      const cobaltAudioUrl = await extractAudioWithCobalt(video_url);
+
+      if (cobaltAudioUrl) {
+        try {
+          console.log('[Analyze] Downloading audio from Cobalt...');
+          const dlResponse = await fetch(cobaltAudioUrl);
+          if (dlResponse.ok) {
+            const audioData = await dlResponse.arrayBuffer();
+            console.log(`[Analyze] Downloaded ${(audioData.byteLength / 1024 / 1024).toFixed(1)}MB`);
+
+            const transcriptText = await transcribeWithAssemblyAI(audioData);
+            if (transcriptText && transcriptText.length >= 50) {
+              transcript = transcriptText;
+              transcriptSource = 'assemblyai';
+              console.log(`[Analyze] Transcript from AssemblyAI: ${transcript.length} chars`);
+            }
+          }
+        } catch (dlErr) {
+          console.log(`[Analyze] Download/transcribe failed: ${dlErr.message}`);
+        }
+      }
+    }
+
+    if (!transcript || transcript.length < 50) {
+      console.log('[Analyze] WARNING: No transcript available, analysis will be metadata-only');
+    }
+
+    // ── 3. Deep analysis with Gemini (using real transcript) ─────
+    const maxTranscriptLen = 50000;
+    const truncatedTranscript = transcript
+      ? (transcript.length > maxTranscriptLen
+          ? transcript.substring(0, maxTranscriptLen) + '... [truncated]'
+          : transcript)
+      : null;
+
+    const transcriptSection = truncatedTranscript
+      ? `\n\nFULL ORIGINAL TRANSCRIPT (${transcript.length} chars):\n"""\n${truncatedTranscript}\n"""`
+      : '\n\n(No transcript available — analyze based on metadata only)';
+
+    const analysisPrompt = `You are an elite YouTube content analyst and scriptwriting expert. Analyze this video using BOTH the metadata AND the full transcript below.
 
 VIDEO METADATA:
 - Title: "${snippet.title}"
 - Channel: "${channelName}" (${subscriberCount.toLocaleString()} subscribers)
-- Description: "${(snippet.description || '').substring(0, 1000)}"
-- Tags: ${(snippet.tags || []).slice(0, 15).join(', ') || 'none'}
-- Category: ${snippet.categoryId}
+- Description: "${(snippet.description || '').substring(0, 2000)}"
+- Tags: ${(snippet.tags || []).slice(0, 20).join(', ') || 'none'}
 - Duration: ${durationSec} seconds (${isShort ? 'YouTube Short' : 'standard video'})
 - Views: ${parseInt(stats.viewCount || '0').toLocaleString()}
 - Likes: ${parseInt(stats.likeCount || '0').toLocaleString()}
 - Comments: ${parseInt(stats.commentCount || '0').toLocaleString()}
 - Published: ${snippet.publishedAt}
-- URL: ${video_url}
+${transcriptSection}
 
-Based on the title, description, tags, and metrics, provide a thorough content analysis. For a Short, estimate ~100-200 words of script. For longer videos, estimate ~150 words per minute.
+INSTRUCTIONS:
+${truncatedTranscript ? `You have the FULL original transcript. Use it to:
+1. Identify the EXACT script style — word choice, sentence length, rhetorical devices, transitions
+2. Capture the EXACT hook/opening technique used (quote the first 2-3 sentences)
+3. Map the complete content structure with timestamps
+4. Note signature phrases, recurring patterns, and stylistic choices
+5. The "original_script" field MUST contain the COMPLETE cleaned-up transcript — every word of the original narration, cleaned of filler/timestamps but preserving the full content. Do NOT summarize — include the ENTIRE script.
+6. The "reconstructed_outline" should be a detailed beat-by-beat breakdown of the video` :
+`No transcript available. Analyze based on metadata, title patterns, description, and tags. Estimate the script style and structure.
+The "original_script" field should say "Transcript unavailable — metadata-only analysis"`}
 
 Return a JSON object:
 {
   "title": "exact video title",
   "estimated_duration_seconds": ${durationSec},
   "niche": "content niche category",
-  "script_style": "writing/narration style description",
-  "voiceover_style": "voice delivery style",
+  "script_style": "detailed description of writing/narration style with specific examples from transcript",
+  "voiceover_style": "voice delivery style — tone, speed, emphasis patterns",
   "visual_style": "visual production style",
-  "pacing": "content pacing description",
-  "hook_technique": "how the video hooks viewers in first seconds",
-  "content_structure": "overall content structure",
-  "key_topics": ["topic1", "topic2", "topic3"],
-  "estimated_word_count": ${Math.round(durationSec / 60 * 150)},
-  "reconstructed_outline": "detailed outline of likely content flow",
-  "tone_description": "overall tone and mood"
+  "pacing": "content pacing — fast/medium/slow with specifics",
+  "hook_technique": "exact opening hook technique with quote if available",
+  "content_structure": "detailed content structure breakdown",
+  "key_topics": ["topic1", "topic2", ...],
+  "estimated_word_count": ${transcript ? transcript.split(/\\s+/).length : Math.round(durationSec / 60 * 150)},
+  "reconstructed_outline": "detailed beat-by-beat outline of the video content",
+  "tone_description": "overall tone and mood with examples",
+  "original_script": "THE COMPLETE ORIGINAL TRANSCRIPT/SCRIPT — every word, cleaned up but FULL. This is critical for repurposing."
 }
 
-Fill in ALL fields with meaningful values based on the metadata. Never leave any field empty.`;
+CRITICAL: The "original_script" field must contain the ENTIRE original transcript, not a summary. This is used downstream for content repurposing.`;
 
+    console.log('[Analyze] Sending to Gemini for deep analysis...');
     const geminiResp = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
       {
@@ -118,13 +345,14 @@ Fill in ALL fields with meaningful values based on the metadata. Never leave any
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: analysisPrompt }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 4096, responseMimeType: "application/json" }
+          generationConfig: { temperature: 0.5, maxOutputTokens: 65536, responseMimeType: "application/json" }
         })
       }
     );
 
     const geminiData = await geminiResp.json();
     if (!geminiData.candidates?.[0]) {
+      console.error('[Analyze] Gemini failed:', JSON.stringify(geminiData).substring(0, 500));
       return Response.json({ error: 'AI analysis failed' }, { status: 500 });
     }
 
@@ -133,7 +361,6 @@ Fill in ALL fields with meaningful values based on the metadata. Never leave any
     try {
       analysis = JSON.parse(analysisText);
     } catch (e) {
-      // Try to extract JSON
       const start = analysisText.indexOf('{');
       const end = analysisText.lastIndexOf('}');
       if (start !== -1 && end !== -1) {
@@ -143,12 +370,23 @@ Fill in ALL fields with meaningful values based on the metadata. Never leave any
       }
     }
 
-    // Ensure title is always the real title
+    // Override with real data
     analysis.title = snippet.title;
     analysis.estimated_duration_seconds = durationSec;
     analysis.is_short = isShort;
+    analysis.transcript_source = transcriptSource;
+    analysis.transcript_length = transcript ? transcript.length : 0;
 
-    // Add raw YouTube stats for UI
+    // If Gemini didn't include the full script but we have the transcript, force it
+    if (transcript && transcript.length > 100) {
+      const scriptField = analysis.original_script || '';
+      // If gemini's version is significantly shorter than actual transcript, use raw transcript
+      if (scriptField.length < transcript.length * 0.5) {
+        console.log(`[Analyze] Gemini script too short (${scriptField.length} vs ${transcript.length}), using raw transcript`);
+        analysis.original_script = transcript;
+      }
+    }
+
     analysis.youtube_stats = {
       views: parseInt(stats.viewCount || '0'),
       likes: parseInt(stats.likeCount || '0'),
@@ -158,7 +396,9 @@ Fill in ALL fields with meaningful values based on the metadata. Never leave any
       published: snippet.publishedAt,
     };
 
+    console.log(`[Analyze] Complete! Transcript: ${transcriptSource} (${analysis.original_script?.length || 0} chars script)`);
     return Response.json(analysis);
+
   } catch (error) {
     console.error('analyzeYouTubeVideo error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
