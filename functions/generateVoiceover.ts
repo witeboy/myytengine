@@ -39,58 +39,77 @@ function splitTextIntoChunks(text, maxChars = 500) {
 }
 
 // ── Generate TTS for a single chunk ────────────────────────────────
-async function generateChunkAudio(apiKey, voiceId, text, chunkIndex, retryCount = 0) {
-  const res = await fetch(
-    `https://api.ai33.pro/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
+async function generateChunkAudio(apiKey, voiceId, text, chunkIndex) {
+  // Try multiple endpoint patterns to find one that returns audio
+  const endpoints = [
+    // Stream endpoint (ElevenLabs standard for streaming audio)
     {
+      url: `https://api.ai33.pro/v1/text-to-speech/${voiceId}/stream?output_format=mp3_44100_128`,
       method: 'POST',
+      body: { text, model_id: 'eleven_multilingual_v2' },
+    },
+    // Non-stream endpoint
+    {
+      url: `https://api.ai33.pro/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
+      method: 'POST',
+      body: { text, model_id: 'eleven_multilingual_v2' },
+    },
+  ];
+
+  for (const ep of endpoints) {
+    const res = await fetch(ep.url, {
+      method: ep.method,
       headers: {
         'Content-Type': 'application/json',
         'xi-api-key': apiKey,
       },
-      body: JSON.stringify({
-        text,
-        model_id: 'eleven_multilingual_v2',
-      }),
-    }
-  );
+      body: JSON.stringify(ep.body),
+    });
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`TTS chunk ${chunkIndex} failed: ${res.status} ${errText}`);
-  }
+    const ct = res.headers.get('content-type') || '';
+    const cl = res.headers.get('content-length') || '?';
+    console.log(`Chunk ${chunkIndex} [${ep.url.includes('/stream') ? 'stream' : 'non-stream'}]: ${res.status} ct=${ct} cl=${cl}`);
 
-  const buf = await res.arrayBuffer();
-  const bytes = new Uint8Array(buf);
-
-  // Check if JSON (async task) vs binary audio
-  if (bytes.length < 50000 && bytes[0] === 0x7B) {
-    const jsonText = new TextDecoder().decode(bytes);
-    const data = JSON.parse(jsonText);
-    console.log(`Chunk ${chunkIndex}: JSON response — keys: ${Object.keys(data).join(', ')}`);
-
-    if (data.audio_url || data.url) {
-      // Fetch the audio from the URL
-      const audioRes = await fetch(data.audio_url || data.url);
-      const audioBuf = await audioRes.arrayBuffer();
-      return new Uint8Array(audioBuf);
+    if (!res.ok) {
+      console.warn(`Chunk ${chunkIndex}: ${res.status} ${await res.text()}`);
+      continue;
     }
 
-    // If still async, we need to wait and retry (max 3 retries)
-    if (data.task_id) {
-      if (retryCount >= 3) {
-        throw new Error(`Chunk ${chunkIndex}: still returning task_id after ${retryCount} retries`);
+    // If content-type says audio, great
+    if (ct.includes('audio/') || ct.includes('octet-stream')) {
+      const buf = await res.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      console.log(`Chunk ${chunkIndex}: got ${bytes.length} bytes of audio`);
+      return bytes;
+    }
+
+    // Read buffer and check
+    const buf = await res.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+
+    // If large and not starting with '{', it's binary audio
+    if (bytes.length > 1000 && bytes[0] !== 0x7B) {
+      console.log(`Chunk ${chunkIndex}: binary audio (${bytes.length} bytes, first byte: 0x${bytes[0].toString(16)})`);
+      return bytes;
+    }
+
+    // JSON response — log and try next endpoint
+    if (bytes[0] === 0x7B) {
+      const jsonText = new TextDecoder().decode(bytes);
+      const data = JSON.parse(jsonText);
+      console.log(`Chunk ${chunkIndex}: JSON — keys: ${Object.keys(data).join(', ')}`);
+
+      if (data.audio_url || data.url) {
+        const audioRes = await fetch(data.audio_url || data.url);
+        const audioBuf = await audioRes.arrayBuffer();
+        return new Uint8Array(audioBuf);
       }
-      console.log(`Chunk ${chunkIndex}: got task_id, waiting 15s then retrying (attempt ${retryCount + 1}/3)...`);
-      await new Promise(r => setTimeout(r, 15000));
-      return generateChunkAudio(apiKey, voiceId, text, chunkIndex, retryCount + 1);
+      // task_id — try next endpoint
+      continue;
     }
-
-    throw new Error(`Chunk ${chunkIndex}: unexpected JSON: ${jsonText.substring(0, 200)}`);
   }
 
-  console.log(`Chunk ${chunkIndex}: got ${bytes.length} bytes of audio`);
-  return bytes;
+  throw new Error(`Chunk ${chunkIndex}: could not get audio from any endpoint`);
 }
 
 
