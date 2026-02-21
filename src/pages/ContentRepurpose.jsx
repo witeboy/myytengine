@@ -61,49 +61,84 @@ export default function ContentRepurpose() {
   const [imagesDone, setImagesDone] = useState(0);
 
   // ── Step 1→2: Analyze video via Gemini with internet ──────────
+  const [analyzeError, setAnalyzeError] = useState('');
+
   const handleAnalyze = async () => {
     setLoading(true);
     setStatusMsg('AI is analyzing the video...');
+    setAnalyzeError('');
 
-    const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `You are a YouTube content analyst. Analyze this YouTube video URL and extract a complete breakdown.
+    try {
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `You are a YouTube content analyst. I need you to look up this YouTube video and extract a complete breakdown of its content, style, and structure.
 
 VIDEO URL: ${videoUrl}
 
-Return a detailed JSON breakdown including: title, estimated_duration_seconds, niche, script_style, voiceover_style, visual_style, pacing, hook_technique, content_structure, key_topics, estimated_word_count, reconstructed_outline, tone_description.`,
-      add_context_from_internet: true,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          title: { type: "string" },
-          estimated_duration_seconds: { type: "number" },
-          niche: { type: "string" },
-          script_style: { type: "string" },
-          voiceover_style: { type: "string" },
-          visual_style: { type: "string" },
-          pacing: { type: "string" },
-          hook_technique: { type: "string" },
-          content_structure: { type: "string" },
-          key_topics: { type: "array", items: { type: "string" } },
-          estimated_word_count: { type: "number" },
-          reconstructed_outline: { type: "string" },
-          tone_description: { type: "string" },
+IMPORTANT: Search the internet for this video. Find the actual video title, channel, content topic, and details. If you cannot find the video, make your best educated guess based on the URL.
+
+Provide a thorough analysis with ALL fields filled in — do NOT leave any field empty or null. Every field must have a meaningful value.
+
+Return a JSON object with these fields:
+- title: The actual video title (or best guess)
+- estimated_duration_seconds: Video length in seconds (guess 600 if unknown)
+- niche: The content niche/category (e.g. "true crime", "personal finance", "tech reviews")
+- script_style: Writing style description (e.g. "documentary narration with dramatic pauses")
+- voiceover_style: Voice delivery style (e.g. "deep authoritative male voice, slow pacing")
+- visual_style: Visual production style (e.g. "cinematic stock footage with text overlays")
+- pacing: Content pacing (e.g. "fast", "medium", "slow build with climax")
+- hook_technique: How the video hooks viewers in first 10 seconds
+- content_structure: Overall structure (e.g. "problem-solution", "chronological narrative", "listicle")
+- key_topics: Array of 3-5 main topics covered
+- estimated_word_count: Estimated script word count (150 words per minute of video)
+- reconstructed_outline: A detailed outline of the video's content flow
+- tone_description: Overall tone (e.g. "dramatic and suspenseful", "casual and humorous")`,
+        add_context_from_internet: true,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            estimated_duration_seconds: { type: "number" },
+            niche: { type: "string" },
+            script_style: { type: "string" },
+            voiceover_style: { type: "string" },
+            visual_style: { type: "string" },
+            pacing: { type: "string" },
+            hook_technique: { type: "string" },
+            content_structure: { type: "string" },
+            key_topics: { type: "array", items: { type: "string" } },
+            estimated_word_count: { type: "number" },
+            reconstructed_outline: { type: "string" },
+            tone_description: { type: "string" },
+          }
         }
+      });
+
+      // Validate we got meaningful data
+      if (!result || (!result.title && !result.niche)) {
+        setAnalyzeError('Analysis returned empty results. Please check the URL and try again.');
+        setLoading(false);
+        setStatusMsg('');
+        return;
       }
-    });
 
-    setAnalysis(result);
-    setNewTitle(result.title || '');
-    // Auto-detect visual style
-    const vs = (result.visual_style || '').toLowerCase();
-    if (vs.includes('anime')) setSelectedStyle('cinematic_anime');
-    else if (vs.includes('cartoon')) setSelectedStyle('cartoon_2d');
-    else if (vs.includes('painting')) setSelectedStyle('oil_painting');
-    else setSelectedStyle('cinematic_realistic');
+      setAnalysis(result);
+      setNewTitle(result.title || 'Untitled Video');
+      // Auto-detect visual style
+      const vs = (result.visual_style || '').toLowerCase();
+      if (vs.includes('anime')) setSelectedStyle('cinematic_anime');
+      else if (vs.includes('cartoon')) setSelectedStyle('cartoon_2d');
+      else if (vs.includes('painting')) setSelectedStyle('oil_painting');
+      else setSelectedStyle('cinematic_realistic');
 
-    setLoading(false);
-    setStatusMsg('');
-    setStep(2);
+      setLoading(false);
+      setStatusMsg('');
+      setStep(2);
+    } catch (err) {
+      console.error('Analysis failed:', err);
+      setAnalyzeError('Analysis failed: ' + (err.message || 'Unknown error. Please try again.'));
+      setLoading(false);
+      setStatusMsg('');
+    }
   };
 
   // ── Step 3→4: Generate new script via Gemini ──────────────────
@@ -266,6 +301,9 @@ Write a complete narration script (~${analysis.estimated_word_count || 1500} wor
               <CardContent className="space-y-4">
                 <Input placeholder="https://www.youtube.com/watch?v=..." value={videoUrl} onChange={e => setVideoUrl(e.target.value)} className="text-lg py-6" />
                 <p className="text-xs text-gray-500">AI will analyze the video's style, structure, hooks, and pacing using Gemini with web search.</p>
+                {analyzeError && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">{analyzeError}</div>
+                )}
                 <Button onClick={handleAnalyze} disabled={!videoUrl.trim() || loading} className="w-full bg-emerald-600 hover:bg-emerald-700 gap-2" size="lg">
                   {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
                   {loading ? statusMsg : 'Analyze Video'}
@@ -298,7 +336,7 @@ Write a complete narration script (~${analysis.estimated_word_count || 1500} wor
                 ].map(([label, val]) => (
                   <div key={label} className="bg-white p-3 rounded border">
                     <p className="text-gray-500 text-xs mb-1">{label}</p>
-                    <p className="font-medium text-sm">{val}</p>
+                    <p className="font-medium text-sm">{val || <span className="text-gray-400 italic">Not detected</span>}</p>
                   </div>
                 ))}
               </div>
