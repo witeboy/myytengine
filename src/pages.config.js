@@ -47,6 +47,7 @@
  *
  * The mainPage value must match a key in the PAGES object exactly.
  */
+import ChannelAuditor from './pages/ChannelAuditor';
 import ContentGeneration from './pages/ContentGeneration';
 import ContentRepurpose from './pages/ContentRepurpose';
 import Dashboard from './pages/Dashboard';
@@ -63,11 +64,11 @@ import StoryTopics from './pages/StoryTopics';
 import TimelineEditor from './pages/TimelineEditor';
 import UGCPipeline from './pages/UGCPipeline';
 import VersionHistory from './pages/VersionHistory';
-import ChannelAuditor from './pages/ChannelAuditor';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
+    "ChannelAuditor": ChannelAuditor,
     "ContentGeneration": ContentGeneration,
     "ContentRepurpose": ContentRepurpose,
     "Dashboard": Dashboard,
@@ -84,7 +85,6 @@ export const PAGES = {
     "TimelineEditor": TimelineEditor,
     "UGCPipeline": UGCPipeline,
     "VersionHistory": VersionHistory,
-    "ChannelAuditor": ChannelAuditor,
 }
 
 export const pagesConfig = {
