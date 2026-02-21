@@ -8,9 +8,10 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 // Image-to-video: scene image becomes the opening frame,
 // animation prompt drives the motion.
 //
-// MODEL: veo3 (Veo 3.1 Quality) — 1080p, 8s, with audio
+// MODEL: veo3_fast (Veo 3.1 Fast) + 1080p upgrade ($0.025/video)
 // ENDPOINT: https://api.kie.ai/api/v1/veo/generate
 // POLL: https://api.kie.ai/api/v1/veo/record-info?taskId={id}
+// 1080P: https://api.kie.ai/api/v1/veo/get-1080p-video?taskId={id}
 //
 // generationType:
 //   FIRST_AND_LAST_FRAMES_2_VIDEO — 1 image = animate from this frame
