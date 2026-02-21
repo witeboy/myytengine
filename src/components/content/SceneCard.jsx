@@ -73,7 +73,12 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
 
   const handleVideo = async () => {
     setLoadingVideo(true);
-    await onAnimateScene();
+    try {
+      await onAnimateScene();
+    } catch (err) {
+      console.warn("Video generation failed:", err.message);
+      setLoadingVideo(false);
+    }
   };
 
   return (

@@ -33,17 +33,22 @@ Deno.serve(async (req) => {
 
     const taskData = await statusResponse.json();
 
-    // Update project with status
+    // Update ProductionSettings with status (not Projects — those fields don't exist there)
     if (taskData.status === 'done' && taskData.metadata?.audio_url) {
-      await base44.entities.Projects.update(project_id, {
-        voiceover_url: taskData.metadata.audio_url,
-        voiceover_status: 'completed',
-        voiceover_transcript_url: taskData.metadata.srt_url || null,
-      });
+      const settings = await base44.entities.ProductionSettings.filter({ project_id });
+      if (settings.length > 0) {
+        await base44.entities.ProductionSettings.update(settings[0].id, {
+          voiceover_url: taskData.metadata.audio_url,
+          voiceover_status: 'completed',
+        });
+      }
     } else if (taskData.status === 'failed') {
-      await base44.entities.Projects.update(project_id, {
-        voiceover_status: 'failed',
-      });
+      const settings = await base44.entities.ProductionSettings.filter({ project_id });
+      if (settings.length > 0) {
+        await base44.entities.ProductionSettings.update(settings[0].id, {
+          voiceover_status: 'failed',
+        });
+      }
     }
 
     return Response.json({
