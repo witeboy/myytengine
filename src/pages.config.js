@@ -59,6 +59,8 @@ import StoryScript from './pages/StoryScript';
 import StoryTopics from './pages/StoryTopics';
 import TimelineEditor from './pages/TimelineEditor';
 import VersionHistory from './pages/VersionHistory';
+import UGCPipeline from './pages/UGCPipeline';
+import ContentRepurpose from './pages/ContentRepurpose';
 
 
 export const PAGES = {
@@ -74,6 +76,8 @@ export const PAGES = {
     "StoryTopics": StoryTopics,
     "TimelineEditor": TimelineEditor,
     "VersionHistory": VersionHistory,
+    "UGCPipeline": UGCPipeline,
+    "ContentRepurpose": ContentRepurpose,
 }
 
 export const pagesConfig = {
