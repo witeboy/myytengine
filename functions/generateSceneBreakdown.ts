@@ -531,7 +531,7 @@ EXACTLY ${chunk.scenes} scenes. EVERY script word allocated. NO added narration.
             // Director notes stored HERE — prompt generator reads from this
             image_prompt: `DIRECTOR_NOTES:${JSON.stringify(directorNotes)}`,
             animation_prompt: scene.camera_movement || "slow gentle camera drift forward with atmospheric particles",
-            duration_seconds: scene.duration_seconds || 4,
+            duration_seconds: scene.duration_seconds || 3,
             status: "breakdown_ready"
           });
 
