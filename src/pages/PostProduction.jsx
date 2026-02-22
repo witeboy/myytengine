@@ -316,8 +316,22 @@ export default function PostProduction() {
               <Card>
                 <CardContent className="py-12 text-center">
                   <Loader2 className="w-8 h-8 animate-spin text-purple-600 mx-auto mb-3" />
-                  <p className="text-gray-500">Creating scroll-stopping thumbnail concepts from your script...</p>
-                  <p className="text-xs text-gray-400 mt-1">Weaving selected titles + style DNA + script analysis</p>
+                  <p className="text-gray-500 font-medium">Creating 3 scroll-stopping thumbnail designs...</p>
+                  <div className="mt-4 max-w-md mx-auto space-y-2 text-left">
+                    <div className="flex items-center gap-2 text-xs text-purple-700 bg-purple-50 rounded px-3 py-1.5">
+                      <Sparkles className="w-3 h-3 animate-pulse" /> Phase 0: Extracting script essence & emotional hooks
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 rounded px-3 py-1.5">
+                      <Type className="w-3 h-3" /> Phase 1: Generating high-CTR overlay text (max 5 words, power words)
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 rounded px-3 py-1.5">
+                      <ImageIcon className="w-3 h-3" /> Phase 2: Composing visuals (rule of thirds, subject separation)
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 rounded px-3 py-1.5">
+                      <Sparkles className="w-3 h-3" /> Phase 3: Engineering image prompts & generating 3 images
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-4">This takes 1-2 minutes — weaving titles + style DNA + color contrast rules</p>
                 </CardContent>
               </Card>
             )}
