@@ -338,9 +338,9 @@ JSON: {"thumbnails":[{"rank":1,"template_type":"","concept_description":"","text
     console.log("Done: " + imgCount + "/" + good.length + " images");
 
     return Response.json({
-      success: true, thumbnails: results, script_anchors: anchors,
+      success: true, thumbnails: results, script_anchors: anchors, script_essence,
       text_engine: { script_climax: p1.script_climax, all_text_options: allTexts, winning_texts: winners },
-      meta: { total_concepts: good.length, total_images: imgCount, phases: 3 }
+      meta: { total_concepts: good.length, total_images: imgCount, phases: 4 }
     });
   } catch (error) {
     console.error("Error:", error.message, error.stack);
