@@ -171,12 +171,21 @@ JSON: {"thumbnails":[{"rank":1,"template_type":"","concept_description":"","text
       await Promise.all(ex.map(e => base44.entities.ThumbnailConcepts.delete(e.id)));
     } catch (_) {}
 
-    // Save + generate images
-    const thumbs = p3.thumbnails || [];
-    console.log("Phase 3 returned " + thumbs.length + " thumbnails");
-    if (thumbs.length === 0) {
-      console.log("Phase 3 raw:", JSON.stringify(p3).substring(0, 500));
+    // Save + generate images — handle both {thumbnails:[...]} and direct array
+    let thumbs = [];
+    if (Array.isArray(p3)) {
+      thumbs = p3;
+    } else if (Array.isArray(p3.thumbnails)) {
+      thumbs = p3.thumbnails;
+    } else if (Array.isArray(p3.concepts)) {
+      thumbs = p3.concepts;
+    } else {
+      // Try to find any array value in the response
+      for (const val of Object.values(p3 || {})) {
+        if (Array.isArray(val) && val.length > 0) { thumbs = val; break; }
+      }
     }
+    console.log("Phase 3 returned " + thumbs.length + " thumbnails");
     const saved = await Promise.all(thumbs.map(async (t, i) => {
       let ip = t.image_prompt || '';
       if (!ip.includes('1920x1080')) ip = "1920x1080 Full HD 16:9 landscape YouTube thumbnail. " + ip;
