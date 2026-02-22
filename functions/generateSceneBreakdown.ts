@@ -301,10 +301,12 @@ Deno.serve(async (req) => {
     const niche = project.niche || 'general';
     const nicheProfile = getNicheDirectorProfile(niche);
 
-    // HOLLYWOOD DIRECTOR LOGIC: Scene change every ~4 seconds
-    // This ensures we have an image for EVERY 4-second beat of the timeline
-    const SCENE_DURATION_SECONDS = 4;
-    const totalTargetScenes = Math.max(10, Math.round((durationMinutes * 60) / SCENE_DURATION_SECONDS));
+    // HYPER-GRANULAR DIRECTOR LOGIC: ~2.5x more scenes than before
+    // Every emotional micro-beat, camera shift, lighting change, or character gesture = new scene
+    // Where we had 2 scenes for an action, we now want 5 — each flowing into the next
+    const GRANULARITY_MULTIPLIER = 2.5;
+    const baseScenes = Math.max(10, Math.round((durationMinutes * 60) / 4));
+    const totalTargetScenes = Math.round(baseScenes * GRANULARITY_MULTIPLIER);
     const phases = calculatePhaseAllocation(totalTargetScenes);
     const scriptChunks = splitScriptByPhase(finalScript, phases);
 
