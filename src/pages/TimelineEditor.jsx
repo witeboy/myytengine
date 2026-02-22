@@ -273,10 +273,10 @@ export default function TimelineEditor() {
     setImporting(false);
   };
 
-  const handleUpdateDuration = async (sceneId, newDuration) => {
+  const handleUpdateDuration = useMemo(() => debounce(async (sceneId, newDuration) => {
     await base44.entities.Scenes.update(sceneId, { duration_seconds: Math.max(2, newDuration) });
     refetchScenes();
-  };
+  }, 500), [refetchScenes]);
 
   // Compile handled by ExportPanel
 
