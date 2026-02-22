@@ -663,6 +663,12 @@ ${sceneDirections}
    - Embed exact lighting setup
    - Apply color palette as color grading
    - If characters appear → embed FULL physical description (not just name)
+   - **VISUAL CONTINUITY (CRITICAL)**: Check the "CONTINUITY FROM PREVIOUS" and "CONTINUITY TO NEXT" fields.
+     * If a character carries over → use the SAME clothing, hair, features, pose direction
+     * If a background carries over → include the SAME environment elements, just from a different angle
+     * If an object carries over → place it in a consistent position relative to the frame
+     * If lighting carries over → maintain the SAME key light direction and color temperature
+     * Adjacent scenes should look like they belong to the SAME sequence — a viewer should feel continuous visual flow
    - ${orientationConfig.composition}
    - FORBIDDEN: text, words, letters, numbers, charts, graphs, signs, readable content
    - MUST end with the style reinforcement: "${styleConfig.reinforcement}. ${styleConfig.antiStyle}. ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image. masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography"
