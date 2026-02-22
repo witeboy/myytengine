@@ -600,7 +600,7 @@ ${sceneDirections}
   ]
 }`;
 
-      const prompt = isHumptyDumpty ? humptyDumptySystemPrompt : isHarryPotter ? harryPotterSystemPrompt : `**SYSTEM ROLE — You are an expert storyboard artist and cinematic director.**
+      const prompt = isHumptyDumpty ? humptyDumptySystemPrompt : isHarryPotter ? harryPotterSystemPrompt : `${prevBatchLastScene}**SYSTEM ROLE — You are an expert storyboard artist and cinematic director.**
 Your job is to translate narrative text into highly visual, dynamic image prompts for AI image generation.
 You think like a cinematographer on set — you see the PHYSICAL REALITY of what the narration describes.
 You do NOT take metaphors literally. You do NOT default to abstract symbols or lab settings when the narration describes a human experience.
