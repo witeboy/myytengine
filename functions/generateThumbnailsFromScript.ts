@@ -106,22 +106,81 @@ Deno.serve(async (req) => {
     const titleCtx = selected_title ? ' SEO TITLE: "' + selected_title + '"' : '';
     const nicheCtx = niche_dna ? ' NICHE DNA: ' + niche_dna.substring(0, 600) : '';
 
-    console.log("Phase 1: Text engine for " + script.title);
+    // ===== PHASE 0: SCRIPT ESSENCE EXTRACTION =====
+    console.log("Phase 0: Script essence extraction for " + script.title);
+    const essenceScript = fullScript.substring(0, 6000);
+    const script_essence = await gemini(`You are a LEGENDARY YouTube thumbnail creator for channels with 10M+ views. You have created thumbnails for MrBeast, Veritasium, Kurzgesagt, and every top creator. Your thumbnails consistently achieve 15%+ CTR. Your expertise lies in distilling complex video scripts into ONE viral-worthy thumbnail concept that stops the scroll.
 
-    // PHASE 1: Text generation
-    const p1 = await gemini(`You are a top YouTube thumbnail copywriter. Analyze this script and generate thumbnail text options.
+Analyze this video script and extract the CORE ELEMENTS that will drive the highest possible CTR thumbnail.
 
 VIDEO: "${topic.title}" TITLE: "${script.title}" NICHE: "${project.niche}"${titleCtx}
 
-SCRIPT: ${trunc}
+SCRIPT:
+${essenceScript}
 
-Extract: villain_object (thing causing harm), victim_object (thing harmed), trap_symbol (visual metaphor), shock_data (specific number), contrast_pair (illusion vs reality), niche_objects (3-5 items).
+Extract these elements with EXTREME precision — every field drives the thumbnail:
 
-Generate 10 text options (MAX 3 WORDS, ALL CAPS): 4 curiosity gap, 3 forbidden knowledge, 3 shock/contradiction. Each must reference the script's specific topic. For each specify: text, category, text_color_name, background_color_pair, position, subject_hook_type, subject_hook_description, anchor_object_in_subject, total_ctr_score. Pick top 3.
+JSON: {
+  "emotional_hook": "The ONE dominant emotion viewers will feel (Shock, Curiosity, FOMO, Disbelief, Outrage, Wonder). Be specific — not just 'curiosity' but 'morbid curiosity about hidden danger'.",
+  "thumbnail_message_concept": "The scroll-stopping headline concept. MAX 5 words. Must use power words and psychological triggers. Must spark curiosity, FOMO, surprise, urgency, or exclusivity. NO generic phrases. NO emojis. Example: 'THEY HID THIS' not 'Interesting Discovery'.",
+  "impactful_visual_element": "The SINGLE most powerful visual from the script. Be hyper-specific: exact object, exact state, exact framing. Example: 'A glowing red button behind shattered glass' not 'a button'.",
+  "human_emotion_description": "If a human face is relevant: describe the EXACT exaggerated expression needed (wide eyes + dropped jaw + raised eyebrows = pure shock). Must be readable at 120px thumbnail size. If no face needed: 'N/A'.",
+  "key_characters_objects": ["List the 2-3 most visually distinctive characters or objects from the script's climax"],
+  "contrast_description": "The strongest before/after or illusion-vs-reality contrast in the script. This drives the visual tension.",
+  "narrative_summary": "2 sentences: What happens and why viewers MUST click to find out.",
+  "forbidden_knowledge": "What secret or hidden truth does this video reveal that viewers don't know yet?",
+  "stakes": "What is at risk? What could go wrong? Why should the viewer care RIGHT NOW?"
+}`, 0.9, 4096);
 
-Color pairs: red text→teal bg, yellow→purple bg, white→navy bg, orange→indigo bg, green→magenta bg.
+    console.log("Phase 0 done. Hook: " + (script_essence.emotional_hook || 'unknown'));
+    await new Promise(r => setTimeout(r, 2000));
 
-JSON: {"script_anchors":{"villain_object":"","victim_object":"","trap_symbol":"","shock_data":"","contrast_pair":{"illusion":"","reality":""},"niche_objects":[]},"script_climax":"","curiosity_gap_identified":"","text_options":[{"rank":1,"text":"","category":"","text_color_name":"","background_color_pair":"","outline_color":"thick black","shadow":"heavy drop shadow","container":"raw","position":"upper-left","size":"massive","font_style":"Impact","subject_hook_type":"","subject_hook_description":"","anchor_object_in_subject":"","total_ctr_score":9}],"top_3_winners":[1,2,3]}`, 0.95, 4096);
+    // ===== PHASE 1: TEXT ENGINE =====
+    console.log("Phase 1: Text engine for " + script.title);
+    const p1 = await gemini(`You are an elite YouTube thumbnail copywriter. You create overlay text that achieves extremely high CTR. Every word you choose is a psychological trigger.
+
+=== STRICT TEXT RULES ===
+- MAX 5 WORDS per line, MAX 2 lines, ALL CAPS
+- Use POWER WORDS: secret, hidden, banned, exposed, deadly, shocking, impossible, never, always, truth
+- Each text must spark: curiosity, FOMO, surprise, urgency, or exclusivity
+- NO generic phrases ("You Won't Believe", "Watch This")
+- NO emojis ever
+- Text must COMPLEMENT the video title, NOT duplicate it
+- Text must reference THIS script's specific topic
+
+=== COLOR & CONTRAST RULES (CRITICAL FOR MOBILE) ===
+MANDATORY high-contrast pairings (pick from these ONLY):
+- Yellow (#FFD700) text + Black background → maximum attention
+- White text + Navy/Dark background → clean professional
+- Blue text + Orange background → strong professional contrast  
+- Red text + Cyan/Teal background → energetic bright
+- Green text + White/Light background → fresh energetic
+- Orange text + Indigo/Dark background → warm bold
+
+AVOID: Pure red alone (blends with YouTube UI), similar-temperature colors side-by-side (red on orange), muted/low-contrast schemes.
+Stick to 2-3 colors TOTAL to avoid visual noise.
+
+=== TEXT STYLING RULES ===
+- Font: Big thick sans-serif ONLY (Impact, Montserrat Black, Bebas Neue)
+- White text MUST have thick dark outline OR black drop shadow
+- Black text MUST sit on light block/container
+- Add subtle shadow or behind-text box if background is busy
+- Text size: MASSIVE — must be readable at 120px thumbnail width (mobile)
+
+=== PLACEMENT RULES ===
+- NEVER place text in bottom-right (YouTube duration badge)
+- NEVER place text at bottom edges (UI overlaps)
+- Best positions: upper-left, upper-center, center-left
+- Leave negative space around text — don't crowd it
+
+VIDEO: "${topic.title}" TITLE: "${script.title}" NICHE: "${project.niche}"${titleCtx}
+SCRIPT ESSENCE: ${JSON.stringify(script_essence)}
+
+Extract: villain_object, victim_object, trap_symbol, shock_data (specific number from script), contrast_pair (illusion vs reality), niche_objects (3-5 items).
+
+Generate 10 text options: 4 curiosity gap, 3 forbidden knowledge, 3 shock/contradiction. For each specify all fields below. Pick top 3 with highest CTR potential.
+
+JSON: {"script_anchors":{"villain_object":"","victim_object":"","trap_symbol":"","shock_data":"","contrast_pair":{"illusion":"","reality":""},"niche_objects":[]},"script_climax":"","curiosity_gap_identified":"","text_options":[{"rank":1,"text":"","category":"","text_color_name":"","text_hex":"","background_color_name":"","background_hex":"","contrast_pair_name":"e.g. Yellow & Black","outline":"thick black outline","shadow":"heavy drop shadow","container":"raw or box","position":"upper-left","size":"massive","font_style":"Impact","subject_hook_type":"","subject_hook_description":"","anchor_object_in_subject":"","mobile_readable":true,"total_ctr_score":9}],"top_3_winners":[1,2,3]}`, 0.95, 4096);
 
     const allTexts = p1.text_options || [];
     const top3 = (p1.top_3_winners || [1, 2, 3]);
