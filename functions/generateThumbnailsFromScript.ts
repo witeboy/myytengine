@@ -201,14 +201,14 @@ Deno.serve(async (req) => {
     try { brandsData = await base44.entities.BrandIdentities.filter({ project_id }); } catch (e) { console.warn('Brands fetch failed:', e.message); }
 
     let sceneContext = '';
-    if (scenesResult.status === 'fulfilled' && Array.isArray(scenesResult.value) && scenesResult.value.length > 0) {
-      const sorted = [...scenesResult.value].sort((a, b) => a.scene_number - b.scene_number);
+    if (Array.isArray(scenesData) && scenesData.length > 0) {
+      const sorted = [...scenesData].sort((a, b) => a.scene_number - b.scene_number);
       sceneContext = `\nSCENE VISUALS:\n${sorted.slice(0, 5).map(s => `Scene ${s.scene_number}: ${(s.image_prompt || s.narration_text || '').substring(0, 150)}`).join('\n')}`;
     }
 
     let brandContext = '';
-    if (brandsResult.status === 'fulfilled' && Array.isArray(brandsResult.value) && brandsResult.value.length > 0) {
-      const b = brandsResult.value[0];
+    if (Array.isArray(brandsData) && brandsData.length > 0) {
+      const b = brandsData[0];
       brandContext = `\nBRAND: Tone=${b.thumbnail_tone || 'cinematic'}, Colors=${b.color_primary || ''} / ${b.color_secondary || ''} / ${b.color_accent || ''}`;
     }
 
