@@ -1,5 +1,17 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+// Workaround: Deno's Brotli decompressor sometimes fails on SDK responses.
+// Override global fetch to disable Brotli and prefer identity/gzip only.
+const _originalFetch = globalThis.fetch;
+globalThis.fetch = (input, init) => {
+  init = init || {};
+  init.headers = new Headers(init.headers || {});
+  if (!init.headers.has('Accept-Encoding')) {
+    init.headers.set('Accept-Encoding', 'gzip, deflate, identity');
+  }
+  return _originalFetch(input, init);
+};
+
 // ══════════════════════════════════════════════════════════════════
 // THUMBNAIL ENGINE v3 — SCRIPT-ANCHORED 3-PHASE PIPELINE
 // ══════════════════════════════════════════════════════════════════
