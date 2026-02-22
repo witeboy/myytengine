@@ -195,10 +195,10 @@ Deno.serve(async (req) => {
     const scriptContent = script.full_script || [script.cold_open, script.act_1, script.act_2, script.act_3, script.outro].filter(Boolean).join('\n\n');
     const truncatedScript = scriptContent.substring(0, 3000);
 
-    const [scenesResult, brandsResult] = await Promise.allSettled([
-      base44.entities.Scenes.filter({ project_id }),
-      base44.entities.BrandIdentities.filter({ project_id })
-    ]);
+    let scenesData = [];
+    let brandsData = [];
+    try { scenesData = await base44.entities.Scenes.filter({ project_id }); } catch (e) { console.warn('Scenes fetch failed:', e.message); }
+    try { brandsData = await base44.entities.BrandIdentities.filter({ project_id }); } catch (e) { console.warn('Brands fetch failed:', e.message); }
 
     let sceneContext = '';
     if (scenesResult.status === 'fulfilled' && Array.isArray(scenesResult.value) && scenesResult.value.length > 0) {
