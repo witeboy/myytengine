@@ -167,6 +167,10 @@ JSON: {"thumbnails":[{"rank":1,"template_type":"","concept_description":"","text
 
     // Save + generate images
     const thumbs = p3.thumbnails || [];
+    console.log("Phase 3 returned " + thumbs.length + " thumbnails");
+    if (thumbs.length === 0) {
+      console.log("Phase 3 raw:", JSON.stringify(p3).substring(0, 500));
+    }
     const saved = await Promise.all(thumbs.map(async (t, i) => {
       let ip = t.image_prompt || '';
       if (!ip.includes('1920x1080')) ip = "1920x1080 Full HD 16:9 landscape YouTube thumbnail. " + ip;
