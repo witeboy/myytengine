@@ -400,7 +400,19 @@ NICHE (${niche}): Visual World: ${nicheProfile.visual_world} | Palette: ${nicheP
 
       if (batchIdx > 0) await new Promise(r => setTimeout(r, 2000));
 
-      const breakdownPrompt = `You are a legendary film director known for breathtaking visual storytelling and dynamic cinematography. You must block this script into MANY short, punchy scenes — each one a distinct visual beat with a UNIQUE camera setup.
+      const isHookPhase = chunk.phase === 'cold_open';
+      const hookIntensityNote = isHookPhase
+        ? `\n\n**🔥 HOOK PHASE — MAXIMUM INTENSITY 🔥**
+This is the FIRST 30 SECONDS. The viewer decides in 3 seconds whether to stay.
+- EVERY scene must PUNCH with raw emotion — the CORE feeling of the entire script
+- Cut FAST: 1.5-2.5 seconds per scene. Music-video pacing.
+- Start with the most VISCERAL, SHOCKING, or EMOTIONALLY GRIPPING visual from the script
+- Each scene in the hook escalates emotional intensity: 0.7 → 0.8 → 0.9 → 1.0
+- Use the most EXTREME camera angles: ECU eyes, LOW ANGLE power, DUTCH unease, AERIAL scale
+- Color palette should be BOLD and HIGH CONTRAST — no subtlety in the hook`
+        : '';
+
+      const breakdownPrompt = `You are a legendary film director known for breathtaking visual storytelling. You create HYPER-GRANULAR scene breakdowns where every micro-beat of emotion, every camera shift, every lighting change, every character gesture becomes its OWN scene. Where a lesser director would use 2 scenes, you use 5 — and each one FLOWS seamlessly into the next.
 
 **STORY:** Theme: ${storyAnalysis.central_theme} | Arc: ${storyAnalysis.narrative_arc_summary}
 Visual World: ${storyAnalysis.visual_world} | Color Arc: ${storyAnalysis.color_arc}
@@ -411,34 +423,48 @@ ${continuityCtx}
 
 **PHASE: ${chunk.phase.toUpperCase()}** — ${chunk.purpose}
 Create EXACTLY ${chunk.scenes} scenes (numbers ${sceneOffset + 1} to ${sceneOffset + chunk.scenes})
+${hookIntensityNote}
 
 **SCRIPT:**
 ${chunk.text}
 
-**CRITICAL RULES:**
-1. MORE SCENES = BETTER ENERGY. Split aggressively — every idea, beat, emotion shift, or emphasis change deserves its own scene. A single sentence can be 2-3 scenes if the visual changes. We need ENOUGH media to cover the FULL voiceover duration.
-2. Scenes = VISUAL BEATS not sentences. Director calls CUT when the visual concept changes. Think music video density — rapid visual variety.
-3. Each scene is SHORT (2-5 seconds). Quick cuts create energy, flow, and cinematic rhythm. Shorter = more scenes = better coverage.
-4. Visual concept = SPECIFIC frozen cinematic moment (2-4 sentences), incredibly detailed.
-5. **CAMERA IS EVERYTHING** — each scene MUST have a DISTINCT camera setup that serves the story:
-   - Shot variety: ECU, CU, MCU, MS, MWS, WS, EWS, OTS, INSERT, LOW ANGLE, HIGH ANGLE, DUTCH, POV, AERIAL, STEADICAM, HANDHELD, CRANE
-   - NEVER 2 consecutive scenes with the same shot type
-   - Use camera to convey EMOTION: low angle = power/dominance, high angle = vulnerability, dutch = unease, ECU = intimacy/tension, wide = isolation/grandeur
-   - camera_movement MUST be SPECIFIC and CINEMATIC: "Slow dolly push-in from MS to MCU over 5s, slight left drift" NOT just "slow zoom"
-6. Emotional escalation within the phase — build momentum with increasingly dynamic camera work.
-7. Adjacent scenes share ONE visual continuity thread (color, object, gesture, lighting direction).
-8. Abstract concepts → CONCRETE physical metaphors (inflation → receipt curling off counter, time passing → shadows moving across floor).
-9. Niche (${niche}): ${nicheProfile.visual_world} | Shots: ${nicheProfile.signature_shots} | AVOID: ${nicheProfile.avoid}
+**HYPER-GRANULAR BREAKDOWN RULES:**
 
-**CAMERA MOVEMENT GUIDE — use these to create FLOW:**
-- Emotional reveal: Slow crane up revealing scene, 5s
-- Tension: Steadicam creep forward, tracking subject, slightly off-center
-- Impact: Whip pan left-to-right, 1s, hard stop on subject
-- Intimacy: Gentle dolly-in from MS to CU, barely perceptible drift
-- Power: Low-angle tracking shot, moving with subject, wide lens distortion
-- Vulnerability: Slow overhead crane descending toward subject
-- Urgency: Handheld with deliberate micro-shake, pushing forward
-- Contemplation: Static locked-off frame, subject moves within, atmospheric particles drift
+1. **MICRO-BEAT SPLITTING** — One sentence = 2-5 visual scenes. Break EVERY idea into:
+   - WIDE establishing → MEDIUM reaction → CLOSE-UP detail → ECU emotion → CUTAWAY environment
+   - Each emotional shift within a sentence is its own scene
+   - Each new object, gesture, or visual element introduced = new scene
+   - A character speaking = multiple scenes (face, hands, environment reaction, listener reaction)
+
+2. **VISUAL CONTINUITY FLOW (CRITICAL)** — Adjacent scenes MUST share a VISUAL BRIDGE so they feel like one continuous shot sequence:
+   - **CHARACTER FLOW**: Same character appears in consecutive scenes but from different angles/distances (wide → close → hands → eyes)
+   - **BACKGROUND FLOW**: Same environment visible across 3-5 scenes, camera just moves within it
+   - **ELEMENT FLOW**: A specific object, color, light source, or texture carries across scenes (e.g. a red scarf visible in 3 consecutive scenes from different angles)
+   - **LIGHTING FLOW**: Light direction stays consistent across adjacent scenes (if key light is from left in scene 5, it stays left in scene 6)
+   - **COLOR FLOW**: Color palette evolves GRADUALLY — no jarring shifts between adjacent scenes
+   - For each scene, specify EXACTLY what visual element bridges TO the next scene AND what bridges FROM the previous scene
+
+3. **CAMERA VARIETY** — NEVER 2 consecutive scenes with the same shot type:
+   ECU, CU, MCU, MS, MWS, WS, EWS, OTS, INSERT, LOW ANGLE, HIGH ANGLE, DUTCH, POV, AERIAL, STEADICAM, HANDHELD, CRANE
+   Use camera to convey EMOTION: low angle = power, high angle = vulnerability, dutch = unease, ECU = intimacy
+
+4. **SCENE DURATION**: ${isHookPhase ? '1.5-2.5 seconds each (RAPID FIRE for hook)' : '2-4 seconds each. Shorter = better energy.'}
+
+5. Visual concept = SPECIFIC frozen cinematic moment (3-5 sentences), incredibly detailed. Describe what's IN FRAME with physical precision.
+
+6. Abstract concepts → CONCRETE physical metaphors (inflation → receipt curling off counter, time passing → shadows moving across floor).
+
+7. Niche (${niche}): ${nicheProfile.visual_world} | Shots: ${nicheProfile.signature_shots} | AVOID: ${nicheProfile.avoid}
+
+**CAMERA MOVEMENT GUIDE:**
+- Reveal: Slow crane up, 5s
+- Tension: Steadicam creep forward, slightly off-center
+- Impact: Whip pan, 1s, hard stop
+- Intimacy: Gentle dolly-in MS→CU
+- Power: Low-angle tracking, wide lens
+- Vulnerability: Overhead crane descending
+- Urgency: Handheld micro-shake, pushing forward
+- Contemplation: Static locked-off, subject moves within
 - Transition: Lateral dolly slide revealing new environment
 
 **RESPONSE:**
@@ -446,24 +472,25 @@ ${chunk.text}
   "scenes": [
     {
       "scene_number": ${sceneOffset + 1},
-      "narration_text": "EXACT script words for this scene — keep it SHORT per scene",
-      "visual_concept": "Rich 2-4 sentence cinematic frozen moment with incredible detail",
-      "shot_type": "e.g. 'ECU — Extreme Close-Up' or 'LOW ANGLE — Wide Shot'",
+      "narration_text": "EXACT script words — keep VERY SHORT per scene, split text across ALL ${chunk.scenes} scenes",
+      "visual_concept": "Rich 3-5 sentence cinematic frozen moment. Describe the EXACT physical contents of the frame with incredible detail.",
+      "shot_type": "e.g. 'ECU — Extreme Close-Up' (MUST differ from adjacent scenes)",
       "camera_angle": "e.g. 'Low angle 15°, slightly left of center, lens 35mm'",
-      "camera_movement": "SPECIFIC cinematic direction: 'Slow dolly push-in from MS to MCU over 5s, slight left drift, focus pulls from background to subject at 3s mark'",
-      "lighting": "e.g. 'Hard key light from upper left, soft fill from right, warm practical lamp in frame, rim light from window behind'",
+      "camera_movement": "SPECIFIC: 'Slow dolly push-in from MS to MCU over 3s, focus pulls at 2s mark'",
+      "lighting": "EXACT setup: 'Hard key from upper left, soft fill right, warm practical lamp, rim light from window'",
       "color_palette": "e.g. 'Warm amber #D4A574, shadow brown #2C1810, cream #F5F0E8'",
       "mood": "2-3 words",
       "depth_of_field": "e.g. 'Shallow f/1.4, subject sharp, background bokeh circles visible'",
-      "niche_visual_element": "One niche metaphor element that reinforces the emotion",
-      "continuity_bridge": "Visual thread to NEXT scene — what carries over",
-      "emotional_intensity": 0.5,
-      "duration_seconds": 4
+      "niche_visual_element": "One niche metaphor element reinforcing the emotion",
+      "continuity_from_previous": "What visual element carries IN from the previous scene (character, background, object, light, color)",
+      "continuity_to_next": "What visual element carries FORWARD to the next scene",
+      "emotional_intensity": ${isHookPhase ? '0.8' : '0.5'},
+      "duration_seconds": ${isHookPhase ? 2 : 3}
     }
   ]
 }
 
-EXACTLY ${chunk.scenes} scenes. EVERY script word allocated to a scene. NO added narration. No text/charts in visuals. SHORT narration per scene — split the text across all ${chunk.scenes} scenes evenly. Each scene should be 2-5 seconds. More scenes with shorter duration is ALWAYS better than fewer longer scenes.`;
+EXACTLY ${chunk.scenes} scenes. EVERY script word allocated. NO added narration. No text in visuals. VERY SHORT narration per scene.`;
 
       console.log(`🎬 Pass 2.${batchIdx + 1}: ${chunk.phase} (scenes ${sceneOffset + 1}-${sceneOffset + chunk.scenes})...`);
       const batchResult = await callGemini(breakdownPrompt, 0.7, 16384);
