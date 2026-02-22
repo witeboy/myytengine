@@ -31,7 +31,7 @@ async function kiePoll(apiKey, taskId) {
 async function genImage(apiKey, prompt, neg) {
   const n = neg || "blurry, low quality, pixelated, watermark";
   try {
-    const tid = await kieCreate(apiKey, "ideogram/v3", {
+    const tid = await kieCreate(apiKey, "ideogram/v3-text-to-image", {
       prompt: prompt.substring(0, 1500), image_size: "landscape_16_9", style: "DESIGN", rendering_speed: "QUALITY", expand_prompt: false, negative_prompt: n
     });
     const u = await kiePoll(apiKey, tid);
@@ -296,6 +296,8 @@ ANCHORS: ${JSON.stringify(anchors)}
 CONCEPTS: ${JSON.stringify(p2concepts)}
 SCRIPT ESSENCE: ${JSON.stringify(script_essence)}
 
+You MUST generate EXACTLY 3 thumbnails — one for each concept provided. Do not skip any.
+
 For each concept write a 300+ word prompt that includes:
 1. Opening declaration: "1920x1080 Full HD 16:9 landscape YouTube thumbnail"
 2. Text element: the EXACT overlay text in "QUOTATION MARKS", massive bold, with specific color + outline + shadow + position
@@ -304,7 +306,9 @@ For each concept write a 300+ word prompt that includes:
 5. Style/quality markers: ${styleDesc}, 4K, professional lighting
 6. No hex codes — use color names only
 
-JSON: {"thumbnails":[{"rank":1,"template_type":"","concept_description":"","text_overlay":"","text_design":{"color":"","outline":"thick black outline","shadow":"heavy drop shadow","container":"","position":"upper-left","size":"massive","font_style":"Impact","mobile_readable":true},"subject_design":{"hook_type":"","grid_position":"rule-of-thirds","anchor_object":"","crop":"","separation":"rim light + shadow","facial_expression":""},"background_design":{"dominant_color":"","atmosphere":"","blur":"heavy bokeh","desaturation":"slight","anchor_echo":""},"emotional_hook":"","scroll_stop_reason":"","color_scheme":"","visual_effects":"","style_reference":"cinema","ctr_score":9,"negative_prompt":"blurry, low quality, pixelated, watermark, distorted text, small text, cluttered, text in bottom-right, text at bottom edge, low contrast text, muted colors, too many elements","image_prompt":""}]}`, 0.85, 6144);
+CRITICAL: Output EXACTLY 3 objects in the thumbnails array. One per concept.
+
+JSON: {"thumbnails":[{"rank":1,"template_type":"","concept_description":"","text_overlay":"","text_design":{"color":"","outline":"thick black outline","shadow":"heavy drop shadow","container":"","position":"upper-left","size":"massive","font_style":"Impact","mobile_readable":true},"subject_design":{"hook_type":"","grid_position":"rule-of-thirds","anchor_object":"","crop":"","separation":"rim light + shadow","facial_expression":""},"background_design":{"dominant_color":"","atmosphere":"","blur":"heavy bokeh","desaturation":"slight","anchor_echo":""},"emotional_hook":"","scroll_stop_reason":"","color_scheme":"","visual_effects":"","style_reference":"cinema","ctr_score":9,"negative_prompt":"blurry, low quality, pixelated, watermark, distorted text, small text, cluttered, text in bottom-right, text at bottom edge, low contrast text, muted colors, too many elements","image_prompt":""},{"rank":2,"template_type":"","concept_description":"","text_overlay":"","text_design":{"color":"","outline":"thick black outline","shadow":"heavy drop shadow","container":"","position":"upper-center","size":"massive","font_style":"Impact","mobile_readable":true},"subject_design":{"hook_type":"","grid_position":"rule-of-thirds","anchor_object":"","crop":"","separation":"rim light + shadow","facial_expression":""},"background_design":{"dominant_color":"","atmosphere":"","blur":"heavy bokeh","desaturation":"slight","anchor_echo":""},"emotional_hook":"","scroll_stop_reason":"","color_scheme":"","visual_effects":"","style_reference":"cinema","ctr_score":9,"negative_prompt":"blurry, low quality, pixelated, watermark, distorted text, small text, cluttered, text in bottom-right, text at bottom edge, low contrast text, muted colors, too many elements","image_prompt":""},{"rank":3,"template_type":"","concept_description":"","text_overlay":"","text_design":{"color":"","outline":"thick black outline","shadow":"heavy drop shadow","container":"","position":"upper-left","size":"massive","font_style":"Impact","mobile_readable":true},"subject_design":{"hook_type":"","grid_position":"rule-of-thirds","anchor_object":"","crop":"","separation":"rim light + shadow","facial_expression":""},"background_design":{"dominant_color":"","atmosphere":"","blur":"heavy bokeh","desaturation":"slight","anchor_echo":""},"emotional_hook":"","scroll_stop_reason":"","color_scheme":"","visual_effects":"","style_reference":"cinema","ctr_score":9,"negative_prompt":"blurry, low quality, pixelated, watermark, distorted text, small text, cluttered, text in bottom-right, text at bottom edge, low contrast text, muted colors, too many elements","image_prompt":""}]}`, 0.85, 6144);
 
     // Delete existing
     try {
