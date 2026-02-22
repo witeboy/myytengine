@@ -194,17 +194,41 @@ JSON: {"script_anchors":{"villain_object":"","victim_object":"","trap_symbol":""
 
     await new Promise(r => setTimeout(r, 2000));
 
-    // PHASE 2: Visual composition
+    // ===== PHASE 2: VISUAL COMPOSITION =====
     console.log("Phase 2: Visual composition...");
-    const p2 = await gemini(`You are a thumbnail visual architect. Design 3 thumbnail concepts using THREE-ELEMENT COMPOSITION: Subject (with anchor object), Text, Background.
+    const p2 = await gemini(`You are a world-class thumbnail visual architect. Design 3 thumbnail concepts using THREE-ELEMENT COMPOSITION: Subject, Text, Background.
+
+=== LAYOUT & COMPOSITION RULES ===
+RULE OF THIRDS: Place key elements at intersection points of the 3x3 grid — never dead center.
+CLEAR FOCAL POINT: Limit to 1 dominant subject + 1 headline text block. Too many items confuse viewers.
+NEGATIVE SPACE: Leave breathing room. Empty space prevents clutter and draws eye to focal point.
+SUBJECT SEPARATION: Subject MUST pop — use light/dark separation, drop shadows, edge glow, or rim lighting so subject never blends into background.
+
+=== TEXT PLACEMENT (CRITICAL) ===
+- NEVER bottom-right (YouTube duration badge covers it)
+- NEVER bottom edge (YouTube UI overlaps)
+- Text in upper-left or upper-center for maximum visibility
+- White text needs thick dark outline; dark text needs light container/box behind it
+- Must be readable at 120px width (mobile suggested videos)
+
+=== BACKGROUND RULES ===
+- Background must be DIRECTLY tied to video topic — no generic/random filler
+- Slightly blur OR desaturate background to make subject + text pop
+- Use heavy bokeh or atmospheric effects for depth separation
+
+=== COLOR STRATEGY ===
+- Use ONLY high-contrast pairings from Phase 1 winners
+- 2-3 colors total maximum
+- Avoid pure red alone, avoid similar-temperature adjacent colors
 
 VIDEO: "${topic.title}" TITLE: "${script.title}" STYLE: "${style}"${nicheCtx}
 ANCHORS: ${JSON.stringify(anchors)}
 WINNING TEXTS: ${JSON.stringify(winners)}
+SCRIPT ESSENCE: ${JSON.stringify(script_essence)}
 
-For each: subject with script anchor visible, text from winners, complementary background. 300+ word forensic description. All fictional characters. Bottom-right clear.
+For each concept: subject with script anchor visible (incorporating "${script_essence.impactful_visual_element}" and facial expression "${script_essence.human_emotion_description}"), winning text from Phase 1, complementary background echoing "${script_essence.contrast_description}". 300+ word forensic description. All FICTIONAL characters. Bottom-right ALWAYS clear.
 
-JSON: {"concepts":[{"rank":1,"winning_text":"","winning_text_design":{"color":"","outline":"","shadow":"","container":"","position":"","size":"","font_style":""},"element_1_subject":{"hook_type":"","description":"","anchor_object":"","position_on_grid":"","crop":""},"element_3_background":{"dominant_color":"","blur_level":"heavy bokeh","vignette":"heavy","atmospheric_effects":"","anchor_echo":"","psychological_purpose":""},"template_type":"","emotional_trigger":"","scroll_stop_reason":"","forensic_description":""}]}`, 0.9, 6144);
+JSON: {"concepts":[{"rank":1,"winning_text":"","winning_text_design":{"color":"","color_hex":"","outline":"thick dark outline","shadow":"heavy drop shadow","container":"raw or semi-transparent box","position":"upper-left","size":"massive","font_style":"Impact","mobile_readable":true},"element_1_subject":{"hook_type":"","description":"","anchor_object":"","position_on_grid":"rule-of-thirds intersection","crop":"chest-up or medium","separation_method":"rim light + drop shadow","facial_expression":""},"element_3_background":{"dominant_color":"","blur_level":"heavy bokeh","vignette":"heavy","desaturation":"slight","atmospheric_effects":"","anchor_echo":"","psychological_purpose":""},"negative_space_zones":"where empty space exists","template_type":"","emotional_trigger":"","scroll_stop_reason":"","forensic_description":""}]}`, 0.9, 6144);
 
     await new Promise(r => setTimeout(r, 2000));
 
