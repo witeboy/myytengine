@@ -232,21 +232,49 @@ JSON: {"concepts":[{"rank":1,"winning_text":"","winning_text_design":{"color":""
 
     await new Promise(r => setTimeout(r, 2000));
 
-    // PHASE 3: Image prompts
+    // ===== PHASE 3: IMAGE PROMPTS =====
     console.log("Phase 2 concepts: " + (p2.concepts?.length || 0));
     console.log("Phase 3: Image prompts...");
     const styleDesc = style.includes('anime') ? 'anime style' : style.includes('oil') ? 'oil painting' : style.includes('comic') ? 'comic book' : 'cinematic photography 4K HDR';
-    const p3 = await gemini(`You are an Ideogram V3 prompt engineer. Write image generation prompts for these thumbnail concepts.
+    const p3 = await gemini(`You are an elite Ideogram V3 prompt engineer specializing in viral YouTube thumbnails.
 
-Ideogram renders text natively — put text in "QUOTATION MARKS". 1920x1080 16:9 landscape.
-STYLE: ${styleDesc}. All characters FICTIONAL. No violence.
+=== IDEOGRAM TEXT RENDERING ===
+Ideogram renders text natively — ALL overlay text MUST be in "QUOTATION MARKS" in the prompt.
+Text must be MASSIVE, BOLD, thick sans-serif font.
+Text MUST have high-contrast outline: white text → thick black outline, dark text → white/bright outline.
+
+=== IMAGE COMPOSITION RULES ===
+Resolution: 1920x1080 Full HD 16:9 landscape YouTube thumbnail.
+RULE OF THIRDS: Subject at grid intersection, never dead center.
+FOCAL POINT: ONE dominant subject + ONE text block only.
+NEGATIVE SPACE: Include breathing room — do not fill every pixel.
+SUBJECT SEPARATION: Subject must have rim lighting, drop shadow, or edge glow — must pop from background even at tiny sizes.
+BACKGROUND: Directly related to topic, slightly blurred/desaturated behind subject. Heavy bokeh or atmospheric depth.
+
+=== TEXT IN IMAGE RULES ===
+- Text position: upper-left or upper-center ONLY
+- NEVER place text in bottom-right (duration badge) or bottom edge (UI overlap)
+- Text color must be HIGH CONTRAST against background (Yellow on Black, White on Navy, etc.)
+- Include "thick black outline" or "dark drop shadow" on ALL text in prompt
+- Text must be readable at thumbnail size — MASSIVE scale
+
+=== STYLE & QUALITY ===
+STYLE: ${styleDesc}. All characters FICTIONAL. No violence. No real people.
+Quality: 4K detail, professional lighting, cinematic color grading.
 
 ANCHORS: ${JSON.stringify(anchors)}
 CONCEPTS: ${JSON.stringify(p2.concepts || [])}
+SCRIPT ESSENCE: ${JSON.stringify(script_essence)}
 
-For each write 300+ word prompt with: opening (1920x1080 thumbnail), text element (massive bold in quotes), subject with anchor, background with anchor echo, style/quality. No hex codes.
+For each concept write a 300+ word prompt that includes:
+1. Opening declaration: "1920x1080 Full HD 16:9 landscape YouTube thumbnail"
+2. Text element: the EXACT overlay text in "QUOTATION MARKS", massive bold, with specific color + outline + shadow + position
+3. Subject: with anchor object, specific facial expression "${script_essence.human_emotion_description}", rule-of-thirds placement, subject separation technique
+4. Background: topic-relevant, blurred/desaturated, atmospheric depth, anchor echo
+5. Style/quality markers: ${styleDesc}, 4K, professional lighting
+6. No hex codes — use color names only
 
-JSON: {"thumbnails":[{"rank":1,"template_type":"","concept_description":"","text_overlay":"","text_design":{"color":"","outline":"","shadow":"","container":"","position":"","size":"","font_style":""},"subject_design":{"hook_type":"","grid_position":"","anchor_object":"","crop":""},"background_design":{"dominant_color":"","atmosphere":"","anchor_echo":""},"emotional_hook":"","scroll_stop_reason":"","color_scheme":"","visual_effects":"","style_reference":"cinema","ctr_score":9,"negative_prompt":"blurry, low quality, pixelated, watermark, distorted text, small text, cluttered","image_prompt":""}]}`, 0.85, 6144);
+JSON: {"thumbnails":[{"rank":1,"template_type":"","concept_description":"","text_overlay":"","text_design":{"color":"","outline":"thick black outline","shadow":"heavy drop shadow","container":"","position":"upper-left","size":"massive","font_style":"Impact","mobile_readable":true},"subject_design":{"hook_type":"","grid_position":"rule-of-thirds","anchor_object":"","crop":"","separation":"rim light + shadow","facial_expression":""},"background_design":{"dominant_color":"","atmosphere":"","blur":"heavy bokeh","desaturation":"slight","anchor_echo":""},"emotional_hook":"","scroll_stop_reason":"","color_scheme":"","visual_effects":"","style_reference":"cinema","ctr_score":9,"negative_prompt":"blurry, low quality, pixelated, watermark, distorted text, small text, cluttered, text in bottom-right, text at bottom edge, low contrast text, muted colors, too many elements","image_prompt":""}]}`, 0.85, 6144);
 
     // Delete existing
     try {
