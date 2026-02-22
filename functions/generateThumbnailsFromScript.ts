@@ -173,16 +173,22 @@ JSON: {"thumbnails":[{"rank":1,"template_type":"","concept_description":"","text
       const sr = (t.style_reference || 'cinema').split('/')[0].trim().toLowerCase();
       const vs = ['cinema', 'minimal', 'documentary'].includes(sr) ? sr : 'cinema';
       try {
-        const rec = await base44.entities.ThumbnailConcepts.create({
+        console.log("Saving concept rank " + (t.rank || i + 1) + ", text: " + (t.text_overlay || ''));
+        const createData = {
           project_id, rank: t.rank || i + 1,
-          concept_description: "[" + (t.template_type || '') + "] " + (t.concept_description || '') + "\n" + (t.emotional_hook || '') + "\n" + (t.scroll_stop_reason || ''),
-          facial_expression: JSON.stringify(t.subject_design || {}),
-          visual_metaphor: t.template_type || '', color_scheme: (t.color_scheme || '') + " | " + (t.visual_effects || ''),
-          text_overlay: t.text_overlay || '', style_reference: vs, ctr_score: t.ctr_score || 8,
-          image_prompt: ip, is_selected: false
-        });
+          concept_description: ("[" + (t.template_type || '') + "] " + (t.concept_description || '')).substring(0, 2000),
+          visual_metaphor: t.template_type || '',
+          color_scheme: ((t.color_scheme || '') + " | " + (t.visual_effects || '')).substring(0, 500),
+          text_overlay: (t.text_overlay || '').substring(0, 200),
+          style_reference: vs,
+          ctr_score: t.ctr_score || 8,
+          image_prompt: ip,
+          is_selected: false
+        };
+        const rec = await base44.entities.ThumbnailConcepts.create(createData);
+        console.log("Saved concept " + rec.id);
         return { ok: true, rec, ip, neg: t.negative_prompt };
-      } catch (e) { console.error("Save err:", e.message); return { ok: false }; }
+      } catch (e) { console.error("Save err:", e.message, JSON.stringify(e)); return { ok: false }; }
     }));
 
     const good = saved.filter(s => s.ok);
