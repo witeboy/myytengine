@@ -60,14 +60,19 @@ async function gemini(prompt, temp, maxTok) {
     if (!d.candidates?.length) throw new Error("No candidates");
     const t = d.candidates[0].content.parts[0].text;
     try { return JSON.parse(t); } catch (_) {}
-    const fixed = t.replace(/[\x00-\x1F\x7F]/g, c => "\n\r\t".includes(c) ? c : ' ').replace(/,\s*([}\]])/g, '$1');
-    try { return JSON.parse(fixed); } catch (_) {}
+    // Clean control chars and trailing commas
+    const clean = s => s.replace(/[\x00-\x1F\x7F]/g, c => "\n\r\t".includes(c) ? c : ' ').replace(/,\s*([}\]])/g, '$1');
+    try { return JSON.parse(clean(t)); } catch (_) {}
     let j = t;
     if (t.includes("```json")) j = t.split("```json")[1].split("```")[0].trim();
     else if (t.includes("```")) j = t.split("```")[1].split("```")[0].trim();
-    try { return JSON.parse(j.replace(/[\x00-\x1F\x7F]/g, c => "\n\r\t".includes(c) ? c : ' ').replace(/,\s*([}\]])/g, '$1')); } catch (_) {}
-    const m = j.match(/\{[\s\S]*\}/);
-    if (m) return JSON.parse(m[0]);
+    try { return JSON.parse(clean(j)); } catch (_) {}
+    // Try to find outermost JSON object
+    const objM = j.match(/\{[\s\S]*\}/);
+    if (objM) try { return JSON.parse(clean(objM[0])); } catch (_) {}
+    // Try to find outermost array
+    const arrM = j.match(/\[[\s\S]*\]/);
+    if (arrM) try { return JSON.parse(clean(arrM[0])); } catch (_) {}
     throw new Error("Parse failed");
   }
   throw new Error("Rate limited");
