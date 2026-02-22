@@ -556,7 +556,7 @@ export default function TimelineEditor() {
 
         {/* Transcript Bar */}
         {scenes.length > 0 && (
-          <TranscriptBar currentScene={currentScene} currentTime={currentTime} />
+          <TranscriptBar currentScene={currentScene} currentTime={currentTime} projectId={projectId} />
         )}
       </div>
 
