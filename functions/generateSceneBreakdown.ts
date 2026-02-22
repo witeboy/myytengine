@@ -301,10 +301,10 @@ Deno.serve(async (req) => {
     const niche = project.niche || 'general';
     const nicheProfile = getNicheDirectorProfile(niche);
 
-    // Generate DENSE scene coverage — ~3 seconds per scene for rich visual storytelling
-    // This ensures media covers the full voiceover duration with room to spare
-    const MAX_SCENE_SECONDS = 3;
-    const totalTargetScenes = Math.max(12, Math.round((durationMinutes * 60) / MAX_SCENE_SECONDS));
+    // HOLLYWOOD DIRECTOR LOGIC: Scene change every ~4 seconds
+    // This ensures we have an image for EVERY 4-second beat of the timeline
+    const SCENE_DURATION_SECONDS = 4;
+    const totalTargetScenes = Math.max(10, Math.round((durationMinutes * 60) / SCENE_DURATION_SECONDS));
     const phases = calculatePhaseAllocation(totalTargetScenes);
     const scriptChunks = splitScriptByPhase(finalScript, phases);
 
