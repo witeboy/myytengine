@@ -516,7 +516,9 @@ EXACTLY ${chunk.scenes} scenes. EVERY script word allocated. NO added narration.
           mood: scene.mood,
           depth_of_field: scene.depth_of_field,
           niche_visual_element: scene.niche_visual_element,
-          continuity_bridge: scene.continuity_bridge,
+          continuity_from_previous: scene.continuity_from_previous,
+          continuity_to_next: scene.continuity_to_next,
+          continuity_bridge: scene.continuity_to_next || scene.continuity_bridge,
           emotional_intensity: scene.emotional_intensity || 0.5,
           phase: chunk.phase
         };
