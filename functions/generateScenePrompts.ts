@@ -350,6 +350,19 @@ Deno.serve(async (req) => {
       if (bIdx > 0) await new Promise(r => setTimeout(r, 2000)); // Rate limit buffer
 
       // Build scene directions from director notes stored on each scene
+      // Also include the last scene from the previous batch for cross-batch continuity
+      const prevBatchLastScene = bIdx > 0
+        ? (() => {
+            const prevBatch = pendingScenes.slice((bIdx - 1) * BATCH_SIZE, bIdx * BATCH_SIZE);
+            const last = prevBatch[prevBatch.length - 1];
+            if (last) {
+              const d = extractDirectorNotes(last.image_prompt);
+              return d ? `\n**PREVIOUS BATCH LAST SCENE (for continuity bridge):**\nScene ${last.scene_number}: Visual: ${d.visual_concept} | Continuity to next: ${d.continuity_to_next || d.continuity_bridge || 'N/A'} | Color: ${d.color_palette} | Lighting: ${d.lighting}\n` : '';
+            }
+            return '';
+          })()
+        : '';
+
       const scenesWithNotes = batchScenes.map(scene => {
         const director = extractDirectorNotes(scene.image_prompt);
         return { scene_number: scene.scene_number, scene_id: scene.id, narration_text: scene.narration_text, director };
