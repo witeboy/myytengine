@@ -31,7 +31,7 @@ async function kiePoll(apiKey, taskId) {
 async function genImage(apiKey, prompt, neg) {
   const n = neg || "blurry, low quality, pixelated, watermark";
   try {
-    const tid = await kieCreate(apiKey, "ideogram/v3-generate", {
+    const tid = await kieCreate(apiKey, "ideogram/v3", {
       prompt: prompt.substring(0, 1500), image_size: "landscape_16_9", style: "DESIGN", rendering_speed: "QUALITY", expand_prompt: false, negative_prompt: n
     });
     const u = await kiePoll(apiKey, tid);
@@ -233,7 +233,37 @@ JSON: {"concepts":[{"rank":1,"winning_text":"","winning_text_design":{"color":""
     await new Promise(r => setTimeout(r, 2000));
 
     // ===== PHASE 3: IMAGE PROMPTS =====
-    console.log("Phase 2 concepts: " + (p2.concepts?.length || 0));
+    // Extract concepts from Phase 2 — handle various response shapes
+    let p2concepts = [];
+    if (Array.isArray(p2)) {
+      p2concepts = p2;
+    } else if (Array.isArray(p2.concepts)) {
+      p2concepts = p2.concepts;
+    } else if (Array.isArray(p2.thumbnails)) {
+      p2concepts = p2.thumbnails;
+    } else {
+      for (const val of Object.values(p2 || {})) {
+        if (Array.isArray(val) && val.length > 0) { p2concepts = val; break; }
+      }
+    }
+    // If Phase 2 returned fewer than 3, pad with simplified concepts from winners
+    if (p2concepts.length < 3 && winners.length >= 3) {
+      console.log("Phase 2 only returned " + p2concepts.length + " concepts, padding to 3...");
+      while (p2concepts.length < 3) {
+        const w = winners[p2concepts.length] || winners[0];
+        p2concepts.push({
+          rank: p2concepts.length + 1,
+          winning_text: w.text || '',
+          winning_text_design: { color: w.text_color_name || 'yellow', outline: 'thick black outline', shadow: 'heavy drop shadow', position: 'upper-left', size: 'massive', font_style: 'Impact' },
+          element_1_subject: { description: script_essence.impactful_visual_element || 'dramatic central subject', anchor_object: (anchors.trap_symbol || ''), facial_expression: script_essence.human_emotion_description || '' },
+          element_3_background: { dominant_color: 'dark', blur_level: 'heavy bokeh', vignette: 'heavy' },
+          template_type: w.subject_hook_type || 'bold_statement',
+          emotional_trigger: script_essence.emotional_hook || '',
+          forensic_description: 'Auto-generated concept from winning text: ' + (w.text || '')
+        });
+      }
+    }
+    console.log("Phase 2 concepts: " + p2concepts.length);
     console.log("Phase 3: Image prompts...");
     const styleDesc = style.includes('anime') ? 'anime style' : style.includes('oil') ? 'oil painting' : style.includes('comic') ? 'comic book' : 'cinematic photography 4K HDR';
     const p3 = await gemini(`You are an elite Ideogram V3 prompt engineer specializing in viral YouTube thumbnails.
@@ -263,7 +293,7 @@ STYLE: ${styleDesc}. All characters FICTIONAL. No violence. No real people.
 Quality: 4K detail, professional lighting, cinematic color grading.
 
 ANCHORS: ${JSON.stringify(anchors)}
-CONCEPTS: ${JSON.stringify(p2.concepts || [])}
+CONCEPTS: ${JSON.stringify(p2concepts)}
 SCRIPT ESSENCE: ${JSON.stringify(script_essence)}
 
 For each concept write a 300+ word prompt that includes:
