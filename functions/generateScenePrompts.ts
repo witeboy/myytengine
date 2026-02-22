@@ -370,8 +370,10 @@ Deno.serve(async (req) => {
   Mood: ${s.director.mood}
   DOF: ${s.director.depth_of_field}
   Niche Element: ${s.director.niche_visual_element || 'N/A'}
-  Continuity: ${s.director.continuity_bridge || 'N/A'}
-  Emotional Intensity: ${s.director.emotional_intensity || 0.5} (use this to scale animation energy)`;
+  ★ CONTINUITY FROM PREVIOUS: ${s.director.continuity_from_previous || 'N/A'}
+  ★ CONTINUITY TO NEXT: ${s.director.continuity_to_next || s.director.continuity_bridge || 'N/A'}
+  Emotional Intensity: ${s.director.emotional_intensity || 0.5} (use this to scale animation energy)
+  Phase: ${s.director.phase || 'N/A'}`;
       }).join('\n\n');
 
       // ── Style-specific prompt override for non-cinematic styles ───
