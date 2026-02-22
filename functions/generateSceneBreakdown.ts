@@ -392,11 +392,11 @@ NICHE (${niche}): Visual World: ${nicheProfile.visual_world} | Palette: ${nicheP
       const chunk = scriptChunks[batchIdx];
       const sceneOffset = totalScenesCreated;
 
-      // Continuity from last 3 scenes
-      const prev = allScenes.slice(-3);
+      // Continuity from last 5 scenes (more context for tighter visual flow)
+      const prev = allScenes.slice(-5);
       const continuityCtx = prev.length > 0
-        ? `**LAST ${prev.length} SCENES (continuity):**\n${prev.map(s => `Scene ${s.scene_number}: [${s.shot_type}] ${s.visual_concept} | Mood: ${s.mood}`).join('\n')}`
-        : '**OPENING — establish the visual world with a strong first impression.**';
+        ? `**LAST ${prev.length} SCENES (VISUAL CONTINUITY — your scenes MUST flow from these):**\n${prev.map(s => `Scene ${s.scene_number}: [${s.shot_type}] ${s.visual_concept} | Mood: ${s.mood} | BRIDGE TO NEXT: ${s.continuity_to_next || 'N/A'}`).join('\n')}\n\n⚠️ Your FIRST scene in this batch MUST visually connect to Scene ${prev[prev.length - 1].scene_number} — use the same character, environment, object, or lighting direction as a bridge.`
+        : '**OPENING — establish the visual world with a strong first impression. Your first scene sets the visual DNA for the entire video.**';
 
       if (batchIdx > 0) await new Promise(r => setTimeout(r, 2000));
 
