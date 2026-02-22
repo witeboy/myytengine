@@ -226,7 +226,11 @@ ANCHORS: ${JSON.stringify(anchors)}
 WINNING TEXTS: ${JSON.stringify(winners)}
 SCRIPT ESSENCE: ${JSON.stringify(script_essence)}
 
+You MUST design EXACTLY 3 concepts — one for each of the 3 winning texts. Do not skip any winner.
+
 For each concept: subject with script anchor visible (incorporating "${script_essence.impactful_visual_element}" and facial expression "${script_essence.human_emotion_description}"), winning text from Phase 1, complementary background echoing "${script_essence.contrast_description}". 300+ word forensic description. All FICTIONAL characters. Bottom-right ALWAYS clear.
+
+CRITICAL: Output EXACTLY 3 objects in the concepts array.
 
 JSON: {"concepts":[{"rank":1,"winning_text":"","winning_text_design":{"color":"","color_hex":"","outline":"thick dark outline","shadow":"heavy drop shadow","container":"raw or semi-transparent box","position":"upper-left","size":"massive","font_style":"Impact","mobile_readable":true},"element_1_subject":{"hook_type":"","description":"","anchor_object":"","position_on_grid":"rule-of-thirds intersection","crop":"chest-up or medium","separation_method":"rim light + drop shadow","facial_expression":""},"element_3_background":{"dominant_color":"","blur_level":"heavy bokeh","vignette":"heavy","desaturation":"slight","atmospheric_effects":"","anchor_echo":"","psychological_purpose":""},"negative_space_zones":"where empty space exists","template_type":"","emotional_trigger":"","scroll_stop_reason":"","forensic_description":""}]}`, 0.9, 6144);
 
