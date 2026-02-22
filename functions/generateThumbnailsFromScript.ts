@@ -196,6 +196,8 @@ JSON: {"thumbnails":[{"rank":1,"template_type":"","concept_description":"","text
     }));
 
     const good = saved.filter(s => s.ok);
+    const bad = saved.filter(s => !s.ok);
+    console.log("Saved: " + good.length + " ok, " + bad.length + " failed");
     console.log("Generating " + good.length + " images...");
 
     const results = await Promise.all(good.map(async ({ rec, ip, neg }) => {
