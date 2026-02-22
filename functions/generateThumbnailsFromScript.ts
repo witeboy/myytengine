@@ -145,6 +145,7 @@ JSON: {"concepts":[{"rank":1,"winning_text":"","winning_text_design":{"color":""
     await new Promise(r => setTimeout(r, 2000));
 
     // PHASE 3: Image prompts
+    console.log("Phase 2 concepts: " + (p2.concepts?.length || 0));
     console.log("Phase 3: Image prompts...");
     const styleDesc = style.includes('anime') ? 'anime style' : style.includes('oil') ? 'oil painting' : style.includes('comic') ? 'comic book' : 'cinematic photography 4K HDR';
     const p3 = await gemini(`You are an Ideogram V3 prompt engineer. Write image generation prompts for these thumbnail concepts.
