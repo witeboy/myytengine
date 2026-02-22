@@ -535,10 +535,11 @@ EXACTLY ${chunk.scenes} scenes. EVERY script word allocated. NO added narration.
             status: "breakdown_ready"
           });
 
-          // Track in memory for continuity
+          // Track in memory for continuity (including flow fields)
           allScenes.push({
             scene_number: sceneNum,
-            ...directorNotes
+            ...directorNotes,
+            continuity_to_next: scene.continuity_to_next || directorNotes.continuity_to_next
           });
 
           return true;
