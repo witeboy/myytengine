@@ -324,7 +324,7 @@ Deno.serve(async (req) => {
 
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`🎬 SCENE BREAKDOWN — ALL PHASES IN ONE CALL`);
-    console.log(`📖 ${wordCount} words | ~${durationMinutes}min | 🎯 ${totalTargetScenes} scenes | ${scriptChunks.length} phases`);
+    console.log(`📖 ${wordCount} words | ~${durationMinutes}min | 🎯 ${totalTargetScenes} scenes (${GRANULARITY_MULTIPLIER}x granular) | ${scriptChunks.length} phases`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
