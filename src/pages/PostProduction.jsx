@@ -85,13 +85,17 @@ export default function PostProduction() {
   // Generate thumbnails from script (with selected titles + niche DNA baked in)
   const handleGenerateFromScript = async () => {
     setGeneratingThumbs(true);
-    await base44.functions.invoke('generateThumbnailsFromScript', {
-      project_id: projectId,
-      reference_style: referenceStyle || undefined,
-      niche_dna: selectedNiche?.synthesized_dna || undefined,
-      niche_name: selectedNiche?.name || undefined,
-      selected_title: selectedTitles.length > 0 ? selectedTitles.map(t => t.title).join(' | ') : undefined,
-    });
+    try {
+      await base44.functions.invoke('generateThumbnailsFromScript', {
+        project_id: projectId,
+        reference_style: referenceStyle || undefined,
+        niche_dna: selectedNiche?.synthesized_dna || undefined,
+        niche_name: selectedNiche?.name || undefined,
+        selected_title: selectedTitles.length > 0 ? selectedTitles.map(t => t.title).join(' | ') : undefined,
+      });
+    } catch (e) {
+      console.error('Thumbnail generation failed:', e);
+    }
     refetchThumbs();
     setGeneratingThumbs(false);
   };
@@ -99,17 +103,21 @@ export default function PostProduction() {
   // Generate full SEO package
   const handleGenerateSeo = async () => {
     setGeneratingSeo(true);
-    const res = await base44.functions.invoke('generateSeoTitlesDescriptions', {
-      project_id: projectId,
-    });
-    const d = res.data;
-    setSeoTitles(d.titles || []);
-    setSeoDescriptions(d.descriptions || []);
-    setSeoAnalysis(d.seo_analysis || null);
-    setTagsBreakdown(d.tags_breakdown || null);
-    setHashtags(d.metadata?.hashtags?.split(' ').filter(Boolean) || []);
-    setPinnedComment(d.metadata?.pinned_comment || '');
-    refetchMeta();
+    try {
+      const res = await base44.functions.invoke('generateSeoTitlesDescriptions', {
+        project_id: projectId,
+      });
+      const d = res.data;
+      setSeoTitles(d.titles || []);
+      setSeoDescriptions(d.descriptions || []);
+      setSeoAnalysis(d.seo_analysis || null);
+      setTagsBreakdown(d.tags_breakdown || null);
+      setHashtags(d.metadata?.hashtags?.split(' ').filter(Boolean) || []);
+      setPinnedComment(d.metadata?.pinned_comment || '');
+      refetchMeta();
+    } catch (e) {
+      console.error('SEO generation failed:', e);
+    }
     setGeneratingSeo(false);
   };
 
