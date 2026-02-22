@@ -226,10 +226,10 @@ function getNicheDirectorProfile(niche) {
 
 function calculatePhaseAllocation(totalTargetScenes) {
   const phaseWeights = [
-    { name: "cold_open", weight: 0.12, purpose: "Hook — visceral, immediate, intriguing. Rapid cuts to grab attention." },
-    { name: "rising_tension", weight: 0.25, purpose: "Build the world and problem — escalate stakes with varied camera work." },
-    { name: "emotional_core", weight: 0.38, purpose: "Heart of story — maximum impact, key revelations, dynamic cinematography." },
-    { name: "resolution", weight: 0.25, purpose: "Payoff — resolution, transformation, call to action. End with visual punch." }
+    { name: "cold_open", weight: 0.15, purpose: "HOOK (first 30s) — MAXIMUM emotional intensity. Rapid-fire cuts, every 1.5-2s. Each scene must HIT viscerally. Convey the script's core emotion with overwhelming visual force. This is where viewers decide to stay or leave." },
+    { name: "rising_tension", weight: 0.25, purpose: "Build the world and problem — escalate stakes. Each scene introduces a new micro-detail, angle, or emotional layer. Visual continuity threads MUST connect every pair of adjacent scenes." },
+    { name: "emotional_core", weight: 0.35, purpose: "Heart of story — maximum impact, key revelations. Break every beat into multiple visual angles: wide establishing → medium reaction → close-up detail → extreme close-up emotion. Flow like a music video." },
+    { name: "resolution", weight: 0.25, purpose: "Payoff — resolution, transformation, call to action. Mirror opening motifs. End with visual punch that echoes the hook." }
   ];
 
   let remaining = totalTargetScenes;
