@@ -20,7 +20,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 const CLIP_DURATION = 5;
 const MIN_CLIPS = 5;
 const MAX_CLIPS = 40;
-const SHORT_SCRIPT_THRESHOLD = 300; // words
+const SHORT_SCRIPT_THRESHOLD = 750; // words (~5 min at 150 wpm)
 
 function repairJSON(str) {
   return str
@@ -557,7 +557,7 @@ ${finalScript}
 FINAL CHECK: Does your scenes array contain EXACTLY ${maxClips} objects? If not, add or remove until it does.`;
 
       console.log(`🎬 Pass 2 (single call): requesting ${maxClips} beats from ${wordCount} words...`);
-      const result = await callGemini(singleCallPrompt, 0.7, 16384);
+      const result = await callGemini(singleCallPrompt, 0.7, 32768);
 
       if (!result.scenes || !Array.isArray(result.scenes)) {
         throw new Error('Single-call breakdown returned no scenes array');
