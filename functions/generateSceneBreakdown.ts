@@ -557,14 +557,38 @@ ${finalScript}
 FINAL CHECK: Does your scenes array contain EXACTLY ${maxClips} objects? If not, add or remove until it does.`;
 
       console.log(`🎬 Pass 2 (single call): requesting ${maxClips} beats from ${wordCount} words...`);
-      const result = await callGemini(singleCallPrompt, 0.7, 32768);
+      let returnedScenes = [];
+      const MIN_ACCEPTABLE = Math.max(MIN_CLIPS, Math.floor(maxClips * 0.75));
 
-      if (!result.scenes || !Array.isArray(result.scenes)) {
-        throw new Error('Single-call breakdown returned no scenes array');
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const promptToUse = attempt === 0 ? singleCallPrompt
+          : `${singleCallPrompt}\n\n**YOU PREVIOUSLY RETURNED ONLY ${returnedScenes.length} SCENES. THIS IS WRONG.**\nThe video is ${estimatedSeconds} seconds long. At ${CLIP_DURATION}s per beat, that is ${maxClips} beats.\nI need EXACTLY ${maxClips} scenes in the JSON array. Split narration across multiple camera angles to fill all ${maxClips} slots.\nDo NOT group multiple moments into one beat — each beat should be a SINGLE camera angle lasting ${CLIP_DURATION} seconds.\nReturn ${maxClips} objects in the scenes array. COUNT THEM.`;
+
+        const result = await callGemini(promptToUse, 0.7, 32768);
+
+        if (!result.scenes || !Array.isArray(result.scenes)) {
+          console.warn(`Attempt ${attempt + 1}: no scenes array returned`);
+          continue;
+        }
+
+        returnedScenes = result.scenes.slice(0, maxClips);
+        console.log(`✓ Attempt ${attempt + 1}: LLM returned ${result.scenes.length} beats (need ${maxClips}, min ${MIN_ACCEPTABLE})`);
+
+        if (returnedScenes.length >= MIN_ACCEPTABLE) break;
+
+        if (attempt < 2) {
+          console.warn(`⚠️ Only ${returnedScenes.length}/${maxClips} — retrying with stronger enforcement...`);
+          await new Promise(r => setTimeout(r, 2000));
+        }
       }
 
-      const returnedScenes = result.scenes.slice(0, maxClips);
-      console.log(`✓ LLM returned ${result.scenes.length} beats (budget: ${maxClips})`);
+      if (returnedScenes.length === 0) {
+        throw new Error('Failed to generate any scenes after 3 attempts');
+      }
+
+      if (returnedScenes.length < MIN_ACCEPTABLE) {
+        console.warn(`⚠️ Final count ${returnedScenes.length} < min ${MIN_ACCEPTABLE} — proceeding with what we have`);
+      }
 
       const savePromises = returnedScenes.map(async (scene, i) => {
         const sceneNum = i + 1;
