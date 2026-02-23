@@ -13,11 +13,10 @@ import VisualStyleSelector from '@/components/content/VisualStyleSelector';
 import OrientationSelector from '@/components/content/OrientationSelector';
 import MusicPanel from '@/components/content/MusicPanel';
 import AudioMixerPanel from '@/components/content/AudioMixerPanel';
-import DownloadAllMedia from '@/components/content/DownloadAllMedia';
 import {
   Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film,
   Palette, Sparkles, Monitor, Clapperboard, Wand2, CheckCircle2,
-  XCircle, Clock, Zap, Video
+  XCircle, Clock, Zap, Video, FolderDown
 } from 'lucide-react';
 
 export default function ContentGeneration() {
@@ -31,6 +30,8 @@ export default function ContentGeneration() {
   const [generatingVideos, setGeneratingVideos] = useState(false);
   const [audioLevels, setAudioLevels] = useState({ narration: 1, music: 0.3, sfx: 0.5 });
   const [enhancingAll, setEnhancingAll] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState({ current: 0, total: 0, label: '' });
 
   // ── Per-scene generation tracking ─────────────────────────────
   const [imageProgress, setImageProgress] = useState({ current: 0, total: 0, sceneName: '' });
@@ -151,45 +152,13 @@ export default function ContentGeneration() {
     setGeneratingVideos(true);
     pollAbortRef.current = false;
 
-    const withImages = scenes.filter(s =>
+    const ready = scenes.filter(s =>
       s.image_url &&
+      !s.image_url.startsWith('data:') && // Veo needs public URLs
       (s.status === 'image_generated' || s.status === 'prompts_ready')
     );
 
-    if (withImages.length === 0) {
-      setGeneratingVideos(false);
-      return;
-    }
-
-    // Upload any data URI images to get public URLs first (Veo requires them)
-    for (const s of withImages) {
-      if (s.image_url.startsWith('data:')) {
-        setVideoProgress(prev => ({
-          ...prev, phase: 'uploading',
-          sceneName: `Uploading Scene ${s.scene_number} image to get public URL...`
-        }));
-        try {
-          const resp = await fetch(s.image_url);
-          const blob = await resp.blob();
-          const file = new File([blob], `scene_${s.scene_number}.png`, { type: 'image/png' });
-          const { file_url } = await base44.integrations.Core.UploadFile({ file });
-          await base44.entities.Scenes.update(s.id, { image_url: file_url });
-          s.image_url = file_url; // update local ref
-          console.log(`Uploaded Scene ${s.scene_number} image: ${file_url}`);
-        } catch (uploadErr) {
-          console.warn(`Failed to upload Scene ${s.scene_number} image:`, uploadErr.message);
-        }
-      }
-    }
-
-    await refetchScenes();
-
-    const ready = withImages.filter(s =>
-      s.image_url && s.image_url.startsWith('http')
-    );
-
     if (ready.length === 0) {
-      console.warn('No scenes with public image URLs available for animation');
       setGeneratingVideos(false);
       return;
     }
@@ -220,9 +189,7 @@ export default function ContentGeneration() {
       }));
 
       try {
-        const response = await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
-        const result = response.data || response;
-        console.log(`Scene ${scene.scene_number} submit result:`, result);
+        const result = await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
         pendingPolls.push({
           scene_id: scene.id,
           task_id: result.task_id,
@@ -263,11 +230,9 @@ export default function ContentGeneration() {
           if (pollAbortRef.current) break;
 
           try {
-            const pollResponse = await base44.functions.invoke('pollSceneVideo', {
+            const pollResult = await base44.functions.invoke('pollSceneVideo', {
               scene_id: item.scene_id
             });
-            const pollResult = pollResponse.data || pollResponse;
-            console.log(`Poll scene ${item.scene_number}:`, pollResult);
 
             if (pollResult.status === 'COMPLETED') {
               setVideoProgress(prev => ({
@@ -336,21 +301,160 @@ export default function ContentGeneration() {
     setEnhancingAll(false);
   };
 
-  const handleExport = () => {
-    const exportData = scenes.map(s => ({
-      scene_number: s.scene_number,
-      narration: s.narration_text,
-      image_url: s.image_url,
-      video_url: s.video_url,
-      duration: s.duration_seconds,
-    }));
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${project?.name || 'scenes'}-content.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  // ══════════════════════════════════════════════════════════════════
+  // EXPORT — Download all assets as numbered zip
+  // ══════════════════════════════════════════════════════════════════
+  // Files named: S01_setup_image.png, S01_setup_video.mp4, etc.
+  // Sorted by scene_number. Arc position in filename for clarity.
+  // Also includes a manifest.json with all metadata.
+  // ══════════════════════════════════════════════════════════════════
+
+  const loadJSZip = async () => {
+    if (window.JSZip) return window.JSZip;
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+      script.onload = () => resolve(window.JSZip);
+      script.onerror = () => reject(new Error('Failed to load JSZip'));
+      document.head.appendChild(script);
+    });
+  };
+
+  const getArcLabel = (scene) => {
+    try {
+      if (scene.image_prompt?.startsWith('DIRECTOR_NOTES:')) {
+        const notes = JSON.parse(scene.image_prompt.substring('DIRECTOR_NOTES:'.length));
+        const arc = notes.arc_position || notes.phase || '';
+        if (arc.includes('cold_open') || arc.includes('setup')) return 'setup';
+        if (arc.includes('rising')) return 'rising';
+        if (arc.includes('emotional_core') || arc.includes('climax')) return 'climax';
+        if (arc.includes('resolution')) return 'resolution';
+      }
+    } catch (_) {}
+    // Fallback: guess from scene position
+    const pos = scene.scene_number / scenes.length;
+    if (pos <= 0.15) return 'setup';
+    if (pos <= 0.50) return 'rising';
+    if (pos <= 0.75) return 'climax';
+    return 'resolution';
+  };
+
+  const fetchAsBlob = async (url) => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      return await res.blob();
+    } catch (_) {
+      return null;
+    }
+  };
+
+  const getExtension = (url, fallback) => {
+    try {
+      const path = new URL(url).pathname;
+      const ext = path.split('.').pop()?.toLowerCase();
+      if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) return ext;
+      if (['mp4', 'webm', 'mov'].includes(ext)) return ext;
+    } catch (_) {}
+    return fallback;
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    const projectName = (project?.name || 'project').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40);
+
+    try {
+      const JSZip = await loadJSZip();
+      const zip = new JSZip();
+      const folder = zip.folder(`${projectName}_assets`);
+
+      // Count total assets to download
+      const totalAssets = scenes.reduce((sum, s) => {
+        let count = 0;
+        if (s.image_url && !s.image_url.startsWith('data:')) count++;
+        if (s.video_url && !s.video_url.startsWith('veo_task:') && s.video_url.startsWith('http')) count++;
+        return sum + count;
+      }, 0);
+
+      setExportProgress({ current: 0, total: totalAssets, label: 'Preparing...' });
+      let downloaded = 0;
+
+      for (const scene of scenes) {
+        const num = String(scene.scene_number).padStart(2, '0');
+        const arc = getArcLabel(scene);
+        const prefix = `S${num}_${arc}`;
+
+        // ── Download image ────────────────────────────────────────
+        if (scene.image_url && !scene.image_url.startsWith('data:')) {
+          setExportProgress({ current: downloaded, total: totalAssets, label: `${prefix}_image` });
+          const ext = getExtension(scene.image_url, 'png');
+          const blob = await fetchAsBlob(scene.image_url);
+          if (blob) {
+            folder.file(`${prefix}_image.${ext}`, blob);
+          }
+          downloaded++;
+        }
+
+        // ── Download video ────────────────────────────────────────
+        if (scene.video_url && !scene.video_url.startsWith('veo_task:') && scene.video_url.startsWith('http')) {
+          setExportProgress({ current: downloaded, total: totalAssets, label: `${prefix}_video` });
+          const ext = getExtension(scene.video_url, 'mp4');
+          const blob = await fetchAsBlob(scene.video_url);
+          if (blob) {
+            folder.file(`${prefix}_video.${ext}`, blob);
+          }
+          downloaded++;
+        }
+      }
+
+      // ── Add manifest.json ─────────────────────────────────────
+      const manifest = scenes.map(s => ({
+        scene_number: s.scene_number,
+        arc_position: getArcLabel(s),
+        narration: s.narration_text,
+        duration: s.duration_seconds,
+        image_file: s.image_url ? `S${String(s.scene_number).padStart(2, '0')}_${getArcLabel(s)}_image.${getExtension(s.image_url, 'png')}` : null,
+        video_file: (s.video_url && !s.video_url.startsWith('veo_task:') && s.video_url.startsWith('http'))
+          ? `S${String(s.scene_number).padStart(2, '0')}_${getArcLabel(s)}_video.${getExtension(s.video_url, 'mp4')}`
+          : null,
+      }));
+      folder.file('manifest.json', JSON.stringify(manifest, null, 2));
+
+      // ── Generate and download zip ─────────────────────────────
+      setExportProgress({ current: totalAssets, total: totalAssets, label: 'Compressing zip...' });
+      const zipBlob = await zip.generateAsync({ type: 'blob' }, (meta) => {
+        setExportProgress(prev => ({ ...prev, label: `Compressing... ${Math.round(meta.percent)}%` }));
+      });
+
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${projectName}_assets.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+    } catch (err) {
+      console.error('Export failed:', err);
+      // Fallback: export JSON only
+      const exportData = scenes.map(s => ({
+        scene_number: s.scene_number,
+        arc_position: getArcLabel(s),
+        narration: s.narration_text,
+        image_url: s.image_url,
+        video_url: s.video_url,
+        duration: s.duration_seconds,
+      }));
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${project?.name || 'scenes'}-content.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+      setExportProgress({ current: 0, total: 0, label: '' });
+    }
   };
 
   const handleContinueToTimeline = () => {
@@ -384,14 +488,25 @@ export default function ContentGeneration() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      <StageProgress currentStage={2} projectStatus={project?.status} />
+      <StageProgress currentStage={2} />
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-2">
           <h1 className="text-3xl font-bold">Content Generation</h1>
           <div className="flex gap-2">
             {scenes.length > 0 && (
-              <Button variant="outline" onClick={handleExport}>
-                <Download className="w-4 h-4 mr-1" /> Export
+              <Button variant="outline" onClick={handleExport} disabled={exporting}>
+                {exporting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                    {exportProgress.total > 0
+                      ? `${exportProgress.current}/${exportProgress.total}`
+                      : 'Preparing...'}
+                  </>
+                ) : (
+                  <>
+                    <FolderDown className="w-4 h-4 mr-1" /> Export Zip
+                  </>
+                )}
               </Button>
             )}
             {scenes.length > 0 && imageCount > 0 && (
@@ -564,6 +679,37 @@ export default function ContentGeneration() {
           </div>
         )}
 
+        {/* ═══════════════════════════════════════════════════════════
+            EXPORT PROGRESS BANNER
+            ═══════════════════════════════════════════════════════════ */}
+        {exporting && exportProgress.total > 0 && (
+          <div className="bg-gradient-to-r from-sky-50 to-cyan-50 border border-sky-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-3">
+              <Loader2 className="w-6 h-6 animate-spin text-sky-600" />
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <Badge className="bg-sky-100 text-sky-800 text-xs">
+                    <FolderDown className="w-3 h-3 mr-1" />
+                    Exporting Assets
+                  </Badge>
+                  <span className="text-xs font-medium text-sky-700">
+                    {exportProgress.current} / {exportProgress.total}
+                  </span>
+                </div>
+                <div className="w-full bg-sky-100 rounded-full h-2 mt-2">
+                  <div
+                    className="bg-sky-500 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${(exportProgress.current / exportProgress.total) * 100}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1.5">
+                  {exportProgress.label}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Director Notes Warning */}
         {!importing && directorNotesCount > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
@@ -599,16 +745,6 @@ export default function ContentGeneration() {
               </Button>
             </div>
           </div>
-        )}
-
-        {/* Download All Media */}
-        {scenes.length > 0 && (
-          <DownloadAllMedia
-            scenes={scenes}
-            voiceoverUrl={null}
-            musicUrl={null}
-            projectName={project?.name}
-          />
         )}
 
         {/* Action Bar */}
