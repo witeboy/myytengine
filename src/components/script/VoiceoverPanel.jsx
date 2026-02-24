@@ -222,14 +222,20 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
               {/* Selected voice display */}
               {selectedVoiceData && (
                 <div className="flex items-center gap-2 p-2.5 rounded-lg border border-purple-300 bg-purple-50 mb-3">
-                  <button
-                    onClick={() => handlePreviewVoice(selectedVoiceData)}
-                    className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
-                      previewingVoice === selectedVoiceData.voice_id ? 'bg-purple-600 text-white' : 'bg-purple-200 hover:bg-purple-300 text-purple-700'
-                    }`}
-                  >
-                    {previewingVoice === selectedVoiceData.voice_id ? <Square className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
-                  </button>
+                  {selectedVoiceData.preview_url ? (
+                    <button
+                      onClick={() => handlePreviewVoice(selectedVoiceData)}
+                      className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors ${
+                        previewingVoice === selectedVoiceData.voice_id ? 'bg-purple-600 text-white' : 'bg-purple-200 hover:bg-purple-300 text-purple-700'
+                      }`}
+                    >
+                      {previewingVoice === selectedVoiceData.voice_id ? <Square className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
+                    </button>
+                  ) : (
+                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-200 flex items-center justify-center">
+                      <Mic className="w-3.5 h-3.5 text-purple-600" />
+                    </div>
+                  )}
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm truncate">{selectedVoiceData.name}</p>
                     <p className="text-xs text-gray-500 truncate">
