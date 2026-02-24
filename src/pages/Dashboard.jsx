@@ -34,10 +34,15 @@ function getStage(status) {
 
 function getRoute(project) {
   // UGC projects always go to the UGC pipeline
-  if (isUgcProject(project)) return 'UGCPipeline';
+  if (isUgcProject(project)) return `UGCPipeline?project_id=${project.id}`;
   
-  // Repurpose projects go to ContentRepurpose
-  if (isRepurposeProject(project)) return 'ContentRepurpose';
+  // Repurpose projects go to ContentGeneration (they skip repurpose flow once created)
+  if (isRepurposeProject(project)) {
+    const s = project.status;
+    if (['timeline_editing', 'compiled'].includes(s)) return `TimelineEditor?project_id=${project.id}`;
+    if (['post_production', 'published'].includes(s)) return `PostProduction?project_id=${project.id}`;
+    return `ContentGeneration?project_id=${project.id}`;
+  }
 
   const s = project.status;
   if (s === 'created' || s === 'topics_ready') return `StoryTopics?project_id=${project.id}`;
