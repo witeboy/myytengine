@@ -109,7 +109,8 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'All image generation attempts failed' }, { status: 500 });
     }
 
-    console.log(`[TweakedThumb] Generated via ${model}: ${imageUrl.substring(0, 80)}...`);
+    console.log(`[TweakedThumb] Generated via ${model}`);
+    console.log(`[TweakedThumb] URL: ${imageUrl.substring(0, 80)}...`);
     return Response.json({ success: true, image_url: imageUrl, model });
 
   } catch (error) {
