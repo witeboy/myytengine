@@ -437,23 +437,82 @@ Return ONLY the motion description.`,
           </Card>
         )}
 
-        {/* Step 4: Voice Script */}
+        {/* Step 4: Voiceover — Script + Voice + Generate */}
         {step === 4 && (
-          <Card>
-            <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Mic className="w-5 h-5 text-pink-600" /> Voiceover Script</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              {influencerImageUrl && <img src={influencerImageUrl} alt="Influencer" className="w-40 h-40 object-cover rounded-lg border mx-auto" />}
-              <Textarea value={voiceScript} onChange={e => setVoiceScript(e.target.value)} className="min-h-[200px]" />
-              <p className="text-xs text-gray-500">{voiceScript.split(/\s+/).filter(w => w).length} words · ~{Math.round(voiceScript.split(/\s+/).filter(w => w).length / 2.5)}s</p>
-              <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setStep(3)} className="gap-2"><ArrowLeft className="w-4 h-4" /> Back</Button>
-                <Button onClick={handleGenerateFullPipeline} disabled={loading || !voiceScript.trim()} className="flex-1 bg-pink-600 hover:bg-pink-700 gap-2">
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
-                  Generate Voiceover + Lip-sync Video
-                </Button>
+          <div className="space-y-4">
+            {/* Influencer preview */}
+            {influencerImageUrl && (
+              <div className="flex justify-center">
+                <img src={influencerImageUrl} alt="Influencer" className="w-32 h-32 object-cover rounded-xl border shadow-sm" />
               </div>
-            </CardContent>
-          </Card>
+            )}
+
+            {/* Script */}
+            <Card>
+              <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Mic className="w-5 h-5 text-pink-600" /> Voiceover Script</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <Textarea
+                  value={voiceScript}
+                  onChange={e => setVoiceScript(e.target.value)}
+                  placeholder="Type or paste your voiceover script here..."
+                  className="min-h-[160px]"
+                />
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-gray-500">
+                    {voiceScript.split(/\s+/).filter(w => w).length} words · ~{Math.round(voiceScript.split(/\s+/).filter(w => w).length / 2.5)}s
+                  </p>
+                  <Button variant="outline" size="sm" onClick={handleGenerateVoiceScript} disabled={loading} className="gap-1.5 text-xs">
+                    {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                    {loading ? 'Generating...' : 'AI Generate Script'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Voice Selection */}
+            <Card>
+              <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Volume2 className="w-5 h-5 text-pink-600" /> Select Voice</CardTitle></CardHeader>
+              <CardContent>
+                <VoicePicker selectedVoiceId={selectedVoiceId} onSelectVoice={setSelectedVoiceId} />
+              </CardContent>
+            </Card>
+
+            {/* Generate Voiceover */}
+            <Card>
+              <CardContent className="pt-6 space-y-3">
+                <Button
+                  onClick={handleGenerateVoiceover}
+                  disabled={voiceGenerating || !voiceScript.trim() || !selectedVoiceId}
+                  className="w-full bg-pink-600 hover:bg-pink-700 gap-2"
+                >
+                  {voiceGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
+                  {voiceGenerating ? statusMsg || 'Generating...' : voiceUrl ? 'Regenerate Voiceover' : 'Generate Voiceover'}
+                </Button>
+
+                {voiceUrl && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-green-600" />
+                      <span className="text-sm font-medium text-green-700">Voiceover Ready ({voiceDuration}s)</span>
+                    </div>
+                    <audio controls src={voiceUrl} className="w-full h-10" />
+                    <Button
+                      onClick={handleGenerateLipSync}
+                      disabled={loading}
+                      className="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 gap-2"
+                    >
+                      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
+                      Generate Lip-Sync Video (Kling AI)
+                    </Button>
+                  </div>
+                )}
+
+                <Button variant="outline" onClick={() => setStep(3)} className="gap-2">
+                  <ArrowLeft className="w-4 h-4" /> Back
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Step 5: Pipeline Running / Results */}
