@@ -16,6 +16,7 @@ import {
 import RepurposeTemplates from '@/components/templates/RepurposeTemplates';
 import ScriptComparison from '@/components/repurpose/ScriptComparison';
 import HookVariants from '@/components/repurpose/HookVariants';
+import OngoingRepurposeProjects from '@/components/repurpose/OngoingRepurposeProjects';
 
 const VISUAL_STYLES = [
   { value: 'cinematic_realistic', label: 'Cinematic Realistic' },
@@ -277,6 +278,7 @@ export default function ContentRepurpose() {
         {/* Step 1: URL + Templates */}
         {step === 1 && (
           <div className="space-y-6">
+            <OngoingRepurposeProjects />
             <RepurposeTemplates onSelectTemplate={handleRepurposeTemplate} />
             <Card>
               <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Search className="w-5 h-5 text-emerald-600" /> YouTube Video URL</CardTitle></CardHeader>

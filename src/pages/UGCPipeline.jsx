@@ -19,6 +19,7 @@ import SaveInfluencerTemplate from '@/components/ugc/SaveInfluencerTemplate';
 import InfluencerTemplatesPicker from '@/components/ugc/InfluencerTemplatesPicker';
 import ProductUploader from '@/components/ugc/ProductUploader';
 import VoicePicker from '@/components/repurpose/VoicePicker';
+import OngoingUGCProjects from '@/components/ugc/OngoingUGCProjects';
 
 const INFLUENCER_TYPES = [
   { value: 'beauty_guru', label: 'Beauty / Skincare Guru' },
@@ -340,6 +341,7 @@ Return ONLY the motion description.`,
         {/* Step 1: Audience + Templates */}
         {step === 1 && (
           <div className="space-y-6">
+            <OngoingUGCProjects />
             <UGCTemplates onSelectTemplate={handleTemplateSelect} />
             <div className="relative">
               <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
