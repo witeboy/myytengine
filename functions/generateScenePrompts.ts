@@ -350,13 +350,28 @@ Deno.serve(async (req) => {
   Arc Animation: ${arcAnim}`;
       }).join('\n\n');
 
+      // Build style-specific instructions so the LLM knows EXACTLY what aesthetic to produce
+      const styleInstructions = getStyleSpecificInstructions(visualStyle, styleConfig);
+
       const prompt = `**MISSION: Convert Director's Notes → Production-Ready Image & Animation Prompts**
 
 ${storyContext}
 
 ${characterBlock}
 
-**STYLE:** ${visualStyle} | **ORIENTATION:** ${orientationConfig.format}
+**VISUAL STYLE: "${visualStyle}"** — THIS IS THE #1 PRIORITY. Every prompt MUST produce images in this EXACT style.
+**ORIENTATION:** ${orientationConfig.format}
+
+**═══════════════════════════════════════════════════════════════**
+**STYLE DEFINITION — EVERY PROMPT MUST MATCH THIS AESTHETIC:**
+${styleInstructions}
+
+**STYLE PREFIX (must appear at the START of every image_prompt):**
+"${styleConfig.positive}"
+
+**STYLE NEGATIVE (content that must NEVER appear in the image):**
+"${styleConfig.negative}"
+**═══════════════════════════════════════════════════════════════**
 
 **DIRECTOR'S SCENE NOTES:**
 ${sceneDirections}
@@ -364,23 +379,24 @@ ${sceneDirections}
 **YOUR TASK — for EACH scene produce:**
 
 1. **image_prompt** — Dense technical prompt for AI image generation:
-   - MUST begin with: "${promptPrefix}."
-   - Translate visual concept into SPECIFIC, DETAILED image (300+ chars)
-   - Embed exact shot type, camera angle, DOF from director notes
-   - Embed exact lighting setup
-   - Apply color palette as color grading
-   - If characters appear → embed FULL physical description (not just name)
+   - MUST begin EXACTLY with: "${styleConfig.positive}."
+   - Then add: "${orientationConfig.directive}."
+   - Then describe the scene content in the CORRECT STYLE (see style definition above)
+   - DO NOT mix styles. If style is cartoon/anime/low-poly, do NOT use photorealistic language (no "ARRI", "Canon", "DSLR", "f/1.4", "film grain", "bokeh", "anamorphic")
+   - If style is photorealistic, DO use camera/lens language
+   - Translate visual concept into SPECIFIC scene description (300+ chars) using ONLY language appropriate to the selected style
+   - Embed shot type and composition from director notes adapted to the style
+   - If characters appear → embed FULL physical description
    - ${orientationConfig.composition}
-   - FORBIDDEN: text, words, letters, numbers, charts, graphs, signs, readable content
-   - Abstract concepts → PHYSICAL METAPHORS (financial decline → hourglass with last grains)
-   - Documents → ONLY blurred with emotional context
-   - MUST end with: "ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image. masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography"
+   - FORBIDDEN: text, words, letters, numbers, charts, graphs, signs, readable content in the image
+   - Abstract concepts → PHYSICAL METAPHORS appropriate to the style
+   - MUST end with: "ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image"
 
 2. **animation_prompt** — ${CLIP_DURATION}-second motion direction:
    - Translate camera_movement into animation language
    - **RESPECT ARC POSITION**: Use the Arc Animation guidance for pacing
    - Format: ${orientationConfig.animation}
-   - Include: camera motion + speed, atmospheric motion (particles, fog, light), subject micro-motion (breathing, hair), DOF changes
+   - Include: camera motion + speed, atmospheric motion, subject micro-motion
    - Low intensity = slow/subtle, high intensity = dynamic/dramatic
 
 **RESPONSE:**
@@ -388,13 +404,17 @@ ${sceneDirections}
   "prompts": [
     {
       "scene_number": 1,
-      "image_prompt": "${promptPrefix}. [detailed prompt]... ABSOLUTELY NO text... masterpiece...",
+      "image_prompt": "${styleConfig.positive.substring(0, 60)}... [scene description in correct style]... ABSOLUTELY NO text...",
       "animation_prompt": "[motion direction respecting arc position]"
     }
   ]
 }
 
-✓ Begins with style prefix? ✓ 300+ chars? ✓ Shot type embedded? ✓ Lighting described? ✓ No text in image? ✓ Ends with quality markers? ✓ Arc animation respected?`;
+CRITICAL STYLE CHECK before outputting each prompt:
+- Does it start with the exact style prefix? 
+- Is the visual language consistent with "${visualStyle}"?
+- Are there any CONTRADICTORY style terms? (e.g. "photorealistic" in an anime prompt, or "cel-shaded" in a photorealistic prompt)
+- Would this prompt produce an image that looks like ${visualStyle}?`;
 
       console.log(`🎨 Batch ${bIdx + 1}/${totalBatches}: scenes ${batchScenes[0].scene_number}-${batchScenes[batchScenes.length - 1].scene_number}...`);
 
