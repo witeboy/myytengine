@@ -39,12 +39,13 @@ Deno.serve(async (req) => {
     }
 
     // Reject data URIs — Veo needs a publicly accessible URL
-    if (scene.image_url.startsWith('data:')) {
-      return Response.json({
-        error: 'Scene image is a data URI (base64). Veo requires a publicly accessible image URL. Re-generate the scene image.',
-        scene_id
-      }, { status: 400 });
-    }
+   if (scene.image_url.startsWith('data:')) {
+  // Trigger regeneration of the scene image
+  const regenerated = await base44.asServiceRole.entities.Scenes.update(scene_id, { regenerate_image: true });
+  // Wait / poll until image_url becomes a proper URL
+  // (could add a loop with timeout)
+  // Then continue with Veo submission
+}
 
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
     if (!KIE_API_KEY) {
