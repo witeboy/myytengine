@@ -29,21 +29,22 @@ async function kiePoll(apiKey, taskId) {
 }
 
 async function genImage(apiKey, prompt, neg) {
-  const n = neg || "blurry, low quality, pixelated, watermark";
+  // Primary: Grok Imagine text-to-image
+  try {
+    const tid = await kieCreate(apiKey, "grok-imagine/text-to-image", {
+      prompt: prompt.substring(0, 1500), aspect_ratio: "16:9"
+    });
+    const u = await kiePoll(apiKey, tid);
+    if (u) return { url: u, model: "grok-imagine" };
+  } catch (e) { console.warn("grok-imagine failed:", e.message); }
+  // Fallback: Ideogram v3
   try {
     const tid = await kieCreate(apiKey, "ideogram/v3-text-to-image", {
-      prompt: prompt.substring(0, 1500), image_size: "landscape_16_9", style: "DESIGN", rendering_speed: "QUALITY", expand_prompt: false, negative_prompt: n
+      prompt: prompt.substring(0, 1500), image_size: "landscape_16_9", style: "DESIGN", rendering_speed: "QUALITY", expand_prompt: false, negative_prompt: neg || "blurry, low quality, pixelated, watermark"
     });
     const u = await kiePoll(apiKey, tid);
     if (u) return { url: u, model: "ideogram-v3" };
   } catch (e) { console.warn("ideogram failed:", e.message); }
-  try {
-    const tid = await kieCreate(apiKey, "flux-2/pro-text-to-image", {
-      prompt: prompt.substring(0, 1500), aspect_ratio: "16:9", resolution: "2K"
-    });
-    const u = await kiePoll(apiKey, tid);
-    if (u) return { url: u, model: "flux-2" };
-  } catch (e) { console.warn("flux failed:", e.message); }
   return { url: null, model: "none" };
 }
 
