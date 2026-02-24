@@ -57,6 +57,7 @@ Deno.serve(async (req) => {
 
             // Cloned voices
             const clonedVoices = mmData.voice_cloning || [];
+            console.log('MiniMax cloned voice IDs from API:', JSON.stringify(clonedVoices.map(v => v.voice_id)));
             for (const v of clonedVoices) {
               allVoices.push({
                 voice_id: v.voice_id,
@@ -69,15 +70,15 @@ Deno.serve(async (req) => {
               });
             }
 
-            // Hardcoded custom cloned voices
+            // Hardcoded custom cloned voices — always add them
             const customCloned = [
               { voice_id: 'moss_audio_89cf340a-11af-11f1-a643-ae99d2661622', name: 'TL' },
               { voice_id: 'moss_audio_8c92a3c2-0e8e-11f1-b6f2-729162d0a8d2', name: 'FREEVOICE' },
               { voice_id: 'moss_audio_f2cf397e-0e8c-11f1-bfa6-763108879732', name: 'DPO' },
             ];
+            const allVoiceIds = new Set(allVoices.map(v => v.voice_id));
             for (const cv of customCloned) {
-              const alreadyExists = clonedVoices.some(v => v.voice_id === cv.voice_id);
-              if (!alreadyExists) {
+              if (!allVoiceIds.has(cv.voice_id)) {
                 allVoices.push({
                   voice_id: cv.voice_id,
                   name: cv.name,
@@ -87,6 +88,9 @@ Deno.serve(async (req) => {
                   category: 'minimax_cloned',
                   provider: 'minimax',
                 });
+                console.log(`Added hardcoded cloned voice: ${cv.name} (${cv.voice_id})`);
+              } else {
+                console.log(`Hardcoded voice ${cv.name} already exists in list`);
               }
             }
 
