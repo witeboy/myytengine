@@ -104,8 +104,8 @@ export default function StageProgress({ currentStage = 1, projectStatus }) {
             ))}
           </div>
         </div>
-        {/* Sub-steps for Stage 1 */}
-        {currentStage === 1 && projectStatus && (
+        {/* Sub-steps for Stage 1 — always visible when project has a story */}
+        {projectStatus && (
           <div className="flex items-center gap-1 mt-2 ml-12 overflow-x-auto">
             {storySubSteps.map((sub, idx) => {
               const reachable = getSubStepReachable(sub);
