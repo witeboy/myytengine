@@ -245,7 +245,7 @@ Write the complete narration script. Return ONLY the script text, no headers or 
       const voResp = await base44.functions.invoke('generateVoiceover', voPayload);
       console.log('Voiceover result:', voResp.data);
     } catch (err) {
-      console.warn('Voiceover failed:', err.message);
+      console.warn('Voiceover failed, continuing pipeline:', err.message);
     }
 
     // 4. Scene breakdown (deterministic count)
@@ -254,8 +254,9 @@ Write the complete narration script. Return ONLY the script text, no headers or 
       const breakdownResponse = await base44.functions.invoke('generateSceneBreakdown', { project_id: project.id });
       const breakdownResult = breakdownResponse.data || breakdownResponse;
       setSceneCount(breakdownResult.scenes_created || 0);
+      console.log('Scene breakdown result:', breakdownResult);
     } catch (err) {
-      console.warn('Scene breakdown failed:', err.message);
+      console.warn('Scene breakdown failed, continuing pipeline:', err.message);
     }
 
     // 5. Generate scene prompts
@@ -264,17 +265,21 @@ Write the complete narration script. Return ONLY the script text, no headers or 
       const promptsResp = await base44.functions.invoke('generateScenePrompts', { project_id: project.id });
       console.log('Scene prompts result:', promptsResp.data);
     } catch (err) {
-      console.warn('Prompt generation failed:', err.message);
+      console.warn('Prompt generation failed, continuing pipeline:', err.message);
     }
 
-    // 6. Generate images for all scenes (Grok Imagine — returns public URLs)
+    // 6. Generate images for all scenes
     setPipelineStep('Generating scene images...');
-    let imageScenes = [];
     try {
+      // Wait a moment for scene data to settle
+      await new Promise(r => setTimeout(r, 2000));
       const scenes = await base44.entities.Scenes.filter({ project_id: project.id });
-      const ready = scenes.filter(s => s.status === 'prompts_ready').sort((a, b) => a.scene_number - b.scene_number);
+      // Accept both prompts_ready and breakdown_ready scenes (prompts step may update status)
+      const ready = scenes
+        .filter(s => s.status === 'prompts_ready' || s.status === 'breakdown_ready')
+        .sort((a, b) => a.scene_number - b.scene_number);
+      console.log(`Found ${scenes.length} total scenes, ${ready.length} ready for images`);
       setSceneCount(ready.length);
-      imageScenes = ready;
 
       for (let i = 0; i < ready.length; i++) {
         setPipelineStep(`Generating image ${i + 1}/${ready.length}...`);
@@ -294,14 +299,15 @@ Write the complete narration script. Return ONLY the script text, no headers or 
     setVideosDone(0);
     try {
       // Re-fetch scenes to get fresh image_url values
+      await new Promise(r => setTimeout(r, 2000));
       const freshScenes = await base44.entities.Scenes.filter({ project_id: project.id });
       const animReady = freshScenes
         .filter(s => s.image_url && !s.image_url.startsWith('data:') && !s.video_url)
         .sort((a, b) => a.scene_number - b.scene_number);
 
-      if (animReady.length > 0) {
-        console.log(`🎬 Animating ${animReady.length} scenes...`);
+      console.log(`Found ${freshScenes.length} scenes, ${animReady.length} ready for animation`);
 
+      if (animReady.length > 0) {
         // ── Submit all scenes in parallel batches of 5 ──────────
         const SUBMIT_BATCH = 5;
         const pendingPolls = [];
