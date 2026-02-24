@@ -64,13 +64,14 @@ export default function UGCPipeline() {
   const [influencerImageUrl, setInfluencerImageUrl] = useState('');
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
 
-  // Step 4
+  // Step 4 — voiceover
   const [voiceScript, setVoiceScript] = useState('');
+  const [selectedVoiceId, setSelectedVoiceId] = useState('');
   const [voiceUrl, setVoiceUrl] = useState('');
   const [voiceDuration, setVoiceDuration] = useState(0);
+  const [voiceGenerating, setVoiceGenerating] = useState(false);
 
-  // Step 5 — project created, pipeline running
-  const [projectId, setProjectId] = useState(null);
+  // Step 5 — lip-sync video
   const [pipelineStep, setPipelineStep] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
 
