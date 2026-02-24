@@ -56,7 +56,7 @@ Deno.serve(async (req) => {
     try {
       console.log('[Ideogram V3] Generating tweaked thumbnail...');
       const enhancedPrompt = `${prompt}. Ultra high resolution 1920x1080 Full HD, crisp sharp details, professional quality.`;
-      const taskId = await kieCreateTask(KIE_API_KEY, "ideogram/v3-generate", {
+      const taskId = await kieCreateTask(KIE_API_KEY, "ideogram/v3-text-to-image", {
         prompt: enhancedPrompt,
         image_size: "landscape_16_9",
         style: "DESIGN",
@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
     if (!imageUrl) {
       try {
         console.log('[Ideogram V3 Balanced] Fallback...');
-        const taskId = await kieCreateTask(KIE_API_KEY, "ideogram/v3-generate", {
+        const taskId = await kieCreateTask(KIE_API_KEY, "ideogram/v3-text-to-image", {
           prompt: `${prompt.substring(0, 800)}. 1920x1080 Full HD, professional YouTube thumbnail.`,
           image_size: "landscape_16_9",
           style: "DESIGN",

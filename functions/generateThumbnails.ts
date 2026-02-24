@@ -52,7 +52,7 @@ async function generateThumbnailImage(apiKey, imagePrompt, negativePrompt) {
   // Attempt 1: Ideogram V3 QUALITY
   try {
     console.log(`[Ideogram V3] Generating...`);
-    const taskId = await kieCreateTask(apiKey, "ideogram/v3-generate", {
+    const taskId = await kieCreateTask(apiKey, "ideogram/v3-text-to-image", {
       prompt: `${imagePrompt}. Ultra high resolution 1920x1080 Full HD, crisp sharp details, professional quality.`,
       image_size: "landscape_16_9",
       style: "DESIGN",
@@ -66,7 +66,7 @@ async function generateThumbnailImage(apiKey, imagePrompt, negativePrompt) {
 
   // Attempt 2: Ideogram V3 BALANCED
   try {
-    const taskId = await kieCreateTask(apiKey, "ideogram/v3-generate", {
+    const taskId = await kieCreateTask(apiKey, "ideogram/v3-text-to-image", {
       prompt: `${imagePrompt.substring(0, 800)}. 1920x1080 Full HD, professional YouTube thumbnail.`,
       image_size: "landscape_16_9",
       style: "DESIGN",
