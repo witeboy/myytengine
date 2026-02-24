@@ -15,20 +15,36 @@ const STAGE_INFO = [
   { num: 4, label: 'Post Prod', Icon: Film, barClass: 'bg-orange-500', badgeClass: 'bg-orange-100 text-orange-800' },
 ];
 
+function isUgcProject(project) {
+  const ugcNiches = ['beauty_guru', 'tech_reviewer', 'fitness_coach', 'food_reviewer', 'lifestyle', 'fashion', 'travel', 'gaming'];
+  return ugcNiches.includes(project.niche) || project.name?.startsWith('UGC:');
+}
+
+function isRepurposeProject(project) {
+  return project.name?.startsWith('_repurpose_') || (project.tone && project.tone.length > 100);
+}
+
 function getStage(status) {
-  if (['created', 'topics_ready', 'topic_selected', 'outline_ready', 'hooks_ready', 'scripting', 'script_complete'].includes(status)) return 1;
-  if (['content_generation', 'scenes_ready'].includes(status)) return 2;
+  if (['created', 'topics_ready', 'topic_selected', 'outline_ready', 'hooks_ready', 'scripting', 'script_complete', 'voiceover_ready'].includes(status)) return 1;
+  if (['scene_breakdown', 'breakdown_complete', 'content_generation', 'scenes_ready'].includes(status)) return 2;
   if (['timeline_editing', 'compiled'].includes(status)) return 3;
   if (['post_production', 'published'].includes(status)) return 4;
   return 1;
 }
 
 function getRoute(project) {
+  // UGC projects always go to the UGC pipeline
+  if (isUgcProject(project)) return 'UGCPipeline';
+  
+  // Repurpose projects go to ContentRepurpose
+  if (isRepurposeProject(project)) return 'ContentRepurpose';
+
   const s = project.status;
   if (s === 'created' || s === 'topics_ready') return `StoryTopics?project_id=${project.id}`;
   if (s === 'topic_selected') return `StoryDuration?project_id=${project.id}`;
   if (s === 'outline_ready') return `StoryHooks?project_id=${project.id}`;
   if (s === 'hooks_ready' || s === 'scripting' || s === 'script_complete') return `StoryScript?project_id=${project.id}`;
+  if (s === 'voiceover_ready' || s === 'scene_breakdown' || s === 'breakdown_complete') return `ContentGeneration?project_id=${project.id}`;
   if (s === 'content_generation' || s === 'scenes_ready') return `ContentGeneration?project_id=${project.id}`;
   if (s === 'timeline_editing' || s === 'compiled') return `TimelineEditor?project_id=${project.id}`;
   if (s === 'post_production' || s === 'published') return `PostProduction?project_id=${project.id}`;
