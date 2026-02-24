@@ -55,14 +55,22 @@ Deno.serve(async (req) => {
               });
             }
 
+            // Friendly name map for known cloned voice IDs
+            const cloneNameMap = {
+              'moss_audio_89cf340a-11af-11f1-a643-ae99d2661622': 'TL',
+              'moss_audio_8c92a3c2-0e8e-11f1-b6f2-729162d0a8d2': 'FREEVOICE',
+              'moss_audio_f2cf397e-0e8c-11f1-bfa6-763108879732': 'DPO',
+            };
+
             // Cloned voices
             const clonedVoices = mmData.voice_cloning || [];
             console.log('MiniMax cloned voice IDs from API:', JSON.stringify(clonedVoices.map(v => v.voice_id)));
             for (const v of clonedVoices) {
+              const friendlyName = cloneNameMap[v.voice_id] || v.voice_id;
               allVoices.push({
                 voice_id: v.voice_id,
-                name: v.voice_id,
-                description: Array.isArray(v.description) ? v.description.join('. ') : '',
+                name: friendlyName,
+                description: Array.isArray(v.description) ? v.description.join('. ') : (cloneNameMap[v.voice_id] ? 'Custom cloned voice' : ''),
                 preview_url: null,
                 labels: { accent: '', gender: '', age: '', use_case: 'cloned' },
                 category: 'minimax_cloned',
@@ -70,27 +78,20 @@ Deno.serve(async (req) => {
               });
             }
 
-            // Hardcoded custom cloned voices — always add them
-            const customCloned = [
-              { voice_id: 'moss_audio_89cf340a-11af-11f1-a643-ae99d2661622', name: 'TL' },
-              { voice_id: 'moss_audio_8c92a3c2-0e8e-11f1-b6f2-729162d0a8d2', name: 'FREEVOICE' },
-              { voice_id: 'moss_audio_f2cf397e-0e8c-11f1-bfa6-763108879732', name: 'DPO' },
-            ];
-            const allVoiceIds = new Set(allVoices.map(v => v.voice_id));
-            for (const cv of customCloned) {
-              if (!allVoiceIds.has(cv.voice_id)) {
+            // Also ensure hardcoded clones exist even if API didn't return them
+            for (const [vid, vname] of Object.entries(cloneNameMap)) {
+              const alreadyExists = allVoices.some(v => v.voice_id === vid);
+              if (!alreadyExists) {
                 allVoices.push({
-                  voice_id: cv.voice_id,
-                  name: cv.name,
+                  voice_id: vid,
+                  name: vname,
                   description: 'Custom cloned voice',
                   preview_url: null,
                   labels: { accent: '', gender: '', age: '', use_case: 'cloned' },
                   category: 'minimax_cloned',
                   provider: 'minimax',
                 });
-                console.log(`Added hardcoded cloned voice: ${cv.name} (${cv.voice_id})`);
-              } else {
-                console.log(`Hardcoded voice ${cv.name} already exists in list`);
+                console.log(`Added missing hardcoded cloned voice: ${vname} (${vid})`);
               }
             }
 
