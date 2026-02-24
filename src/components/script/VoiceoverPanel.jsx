@@ -320,9 +320,14 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
                           <p className="text-[11px] text-gray-400 truncate mt-0.5">{v.description}</p>
                         )}
                       </div>
-                      {isSelected && (
-                        <Badge className="bg-purple-100 text-purple-700 text-[10px] flex-shrink-0">Selected</Badge>
-                      )}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {v.provider && (
+                          <Badge variant="outline" className="text-[9px] px-1.5">{v.provider === 'minimax' ? 'MM' : 'EL'}</Badge>
+                        )}
+                        {isSelected && (
+                          <Badge className="bg-purple-100 text-purple-700 text-[10px]">Selected</Badge>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
