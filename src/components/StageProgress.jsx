@@ -43,7 +43,7 @@ export default function StageProgress({ currentStage = 1, projectStatus }) {
   };
 
   const handleStageClick = (stage) => {
-    if (projectId && currentStage >= stage.num) {
+    if (projectId) {
       navigate(createPageUrl(`${stage.page}?project_id=${projectId}`));
     }
   };
@@ -65,8 +65,7 @@ export default function StageProgress({ currentStage = 1, projectStatus }) {
               <React.Fragment key={stage.num}>
                 <button
                   onClick={() => handleStageClick(stage)}
-                  disabled={currentStage < stage.num}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${getStageClasses(stage.num)} ${currentStage >= stage.num ? 'cursor-pointer hover:ring-2 hover:ring-blue-300' : 'cursor-not-allowed'}`}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${getStageClasses(stage.num)} cursor-pointer hover:ring-2 hover:ring-blue-300`}
                 >
                   <stage.Icon className="w-4 h-4" />
                   <span className="hidden sm:inline">{stage.label}</span>
@@ -88,12 +87,11 @@ export default function StageProgress({ currentStage = 1, projectStatus }) {
               return (
                 <React.Fragment key={sub.label}>
                   <button
-                    onClick={() => reachable && projectId && navigate(createPageUrl(`${sub.page}?project_id=${projectId}`))}
-                    disabled={!reachable}
-                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                    onClick={() => projectId && navigate(createPageUrl(`${sub.page}?project_id=${projectId}`))}
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
                       isCurrent ? 'bg-blue-600 text-white' :
-                      reachable ? 'bg-blue-50 text-blue-700 hover:bg-blue-100 cursor-pointer' :
-                      'bg-gray-50 text-gray-400 cursor-not-allowed'
+                      reachable ? 'bg-blue-50 text-blue-700 hover:bg-blue-100' :
+                      'bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-gray-600'
                     }`}
                   >
                     {sub.label}
