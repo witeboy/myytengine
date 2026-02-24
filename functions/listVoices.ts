@@ -69,6 +69,27 @@ Deno.serve(async (req) => {
               });
             }
 
+            // Hardcoded custom cloned voices
+            const customCloned = [
+              { voice_id: 'moss_audio_89cf340a-11af-11f1-a643-ae99d2661622', name: 'TL' },
+              { voice_id: 'moss_audio_8c92a3c2-0e8e-11f1-b6f2-729162d0a8d2', name: 'FREEVOICE' },
+              { voice_id: 'moss_audio_f2cf397e-0e8c-11f1-bfa6-763108879732', name: 'DPO' },
+            ];
+            for (const cv of customCloned) {
+              const alreadyExists = clonedVoices.some(v => v.voice_id === cv.voice_id);
+              if (!alreadyExists) {
+                allVoices.push({
+                  voice_id: cv.voice_id,
+                  name: cv.name,
+                  description: 'Custom cloned voice',
+                  preview_url: null,
+                  labels: { accent: '', gender: '', age: '', use_case: 'cloned' },
+                  category: 'minimax_cloned',
+                  provider: 'minimax',
+                });
+              }
+            }
+
             // Generated voices
             const genVoices = mmData.voice_generation || [];
             for (const v of genVoices) {
