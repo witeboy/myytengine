@@ -119,7 +119,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── FALLBACK: AI33 (ElevenLabs) ────────────────────────────────
+    // ── ALSO LOAD: AI33 (ElevenLabs) ────────────────────────────────
     const AI33_KEY = Deno.env.get('AI33_API_KEY');
     if (AI33_KEY) {
       try {
@@ -139,7 +139,7 @@ Deno.serve(async (req) => {
             allVoices.push({
               voice_id: v.voice_id,
               name: v.name,
-              description: v.description || '',
+              description: (v.description || '').substring(0, 100),
               preview_url: v.preview_url,
               labels: v.labels || {},
               category: 'ai33',
@@ -151,22 +151,19 @@ Deno.serve(async (req) => {
           console.log(`✓ AI33 voices loaded: ${defaultVoices.length}`);
         }
 
-        // Also fetch library voices from AI33
-        let page = 0;
-        let hasMore = true;
-        while (hasMore && page < 3) {
-          const libRes = await fetch(`https://api.ai33.pro/v1/shared-voices?page_size=100&sort=usage_character_count_7d&page=${page}`, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json', 'xi-api-key': AI33_KEY },
-          });
-          if (!libRes.ok) break;
+        // Also fetch library voices from AI33 — limit to 1 page to keep response small
+        const libRes = await fetch(`https://api.ai33.pro/v1/shared-voices?page_size=50&sort=usage_character_count_7d&page=0`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json', 'xi-api-key': AI33_KEY },
+        });
+        if (libRes.ok) {
           const libData = await libRes.json();
-          const voices = libData.voices || [];
-          for (const v of voices) {
+          const libVoices = libData.voices || [];
+          for (const v of libVoices) {
             allVoices.push({
               voice_id: v.voice_id,
               name: v.name,
-              description: v.description || '',
+              description: (v.description || '').substring(0, 100),
               preview_url: v.preview_url,
               labels: {
                 accent: v.accent,
@@ -178,8 +175,6 @@ Deno.serve(async (req) => {
               provider: 'ai33',
             });
           }
-          page++;
-          hasMore = libData.has_more === true && voices.length > 0;
         }
       } catch (e) {
         console.warn('AI33 voice list error:', e.message);
