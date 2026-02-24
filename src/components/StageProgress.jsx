@@ -90,7 +90,8 @@ export default function StageProgress({ currentStage = 1, projectStatus }) {
               <React.Fragment key={stage.num}>
                 <button
                   onClick={() => handleStageClick(stage)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${getStageClasses(stage.num)} cursor-pointer hover:ring-2 hover:ring-blue-300`}
+                  disabled={!isStageClickable(stage.num)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${getStageClasses(stage.num)} ${isStageClickable(stage.num) ? 'cursor-pointer hover:ring-2 hover:ring-blue-300' : 'cursor-not-allowed opacity-60'}`}
                 >
                   <stage.Icon className="w-4 h-4" />
                   <span className="hidden sm:inline">{stage.label}</span>
