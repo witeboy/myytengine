@@ -10,8 +10,10 @@ export default function VoicePicker({ selectedVoiceId, onSelectVoice, analysisVo
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [playingId, setPlayingId] = useState(null);
+  const [previewLoading, setPreviewLoading] = useState(null);
   const [filter, setFilter] = useState('all');
   const audioRef = useRef(null);
+  const previewCacheRef = useRef({});
 
   useEffect(() => {
     loadVoices();
@@ -25,31 +27,64 @@ export default function VoicePicker({ selectedVoiceId, onSelectVoice, analysisVo
     setLoading(false);
   };
 
-  const handlePlayPreview = (voice) => {
-    if (!voice.preview_url) return;
+  const handlePlayPreview = async (voice) => {
+    // If already playing this voice, stop
     if (playingId === voice.voice_id) {
       audioRef.current?.pause();
       setPlayingId(null);
       return;
     }
+
+    // Stop current audio
     if (audioRef.current) audioRef.current.pause();
-    const audio = new Audio(voice.preview_url);
-    audio.onended = () => setPlayingId(null);
-    audio.play();
-    audioRef.current = audio;
-    setPlayingId(voice.voice_id);
+
+    // If we already have a preview URL (from API or cache), play it
+    const cachedUrl = voice.preview_url || previewCacheRef.current[voice.voice_id];
+    if (cachedUrl) {
+      const audio = new Audio(cachedUrl);
+      audio.onended = () => setPlayingId(null);
+      audio.onerror = () => setPlayingId(null);
+      audio.play();
+      audioRef.current = audio;
+      setPlayingId(voice.voice_id);
+      return;
+    }
+
+    // Generate preview via TTS
+    setPreviewLoading(voice.voice_id);
+    try {
+      const resp = await base44.functions.invoke('previewVoice', {
+        voice_id: voice.voice_id,
+        provider: voice.provider,
+      });
+      const result = resp.data;
+      if (result?.preview_url) {
+        previewCacheRef.current[voice.voice_id] = result.preview_url;
+        const audio = new Audio(result.preview_url);
+        audio.onended = () => setPlayingId(null);
+        audio.onerror = () => setPlayingId(null);
+        audio.play();
+        audioRef.current = audio;
+        setPlayingId(voice.voice_id);
+      }
+    } catch (err) {
+      console.warn('Preview generation failed:', err.message);
+    }
+    setPreviewLoading(null);
   };
 
   const filtered = voices.filter(v => {
     const q = search.toLowerCase();
     const matchesSearch = !q || v.name?.toLowerCase().includes(q) || v.description?.toLowerCase().includes(q) ||
-      v.labels?.accent?.toLowerCase().includes(q) || v.labels?.gender?.toLowerCase().includes(q);
+      v.labels?.accent?.toLowerCase().includes(q) || v.labels?.gender?.toLowerCase().includes(q) ||
+      v.voice_id?.toLowerCase().includes(q);
     const matchesFilter = filter === 'all' ||
       (filter === 'male' && v.labels?.gender?.toLowerCase() === 'male') ||
       (filter === 'female' && v.labels?.gender?.toLowerCase() === 'female') ||
+      (filter === 'cloned' && (v.category === 'minimax_cloned' || v.labels?.use_case === 'cloned')) ||
       (filter === 'narration' && (v.labels?.use_case?.toLowerCase().includes('narrat') || v.category === 'minimax_system'));
     return matchesSearch && matchesFilter;
-  }).slice(0, 30);
+  }).slice(0, 40);
 
   return (
     <div className="space-y-3">
@@ -72,8 +107,8 @@ export default function VoicePicker({ selectedVoiceId, onSelectVoice, analysisVo
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search voices..." className="pl-8 text-xs h-8" />
             </div>
-            <div className="flex gap-1">
-              {['all', 'male', 'female', 'narration'].map(f => (
+            <div className="flex gap-1 flex-wrap">
+              {['all', 'male', 'female', 'cloned', 'narration'].map(f => (
                 <Button key={f} variant={filter === f ? 'default' : 'outline'} size="sm" className="text-[10px] h-8 px-2"
                   onClick={() => setFilter(f)}>{f === 'all' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}</Button>
               ))}
@@ -98,19 +133,33 @@ export default function VoicePicker({ selectedVoiceId, onSelectVoice, analysisVo
                     {v.labels?.gender && (
                       <Badge variant="secondary" className="text-[9px] px-1">{v.labels.gender}</Badge>
                     )}
-                    {v.labels?.accent && v.labels.accent !== 'English' && (
+                    {v.labels?.accent && v.labels.accent !== 'English' && v.labels.accent && (
                       <Badge variant="outline" className="text-[9px] px-1">{v.labels.accent}</Badge>
+                    )}
+                    {(v.category === 'minimax_cloned' || v.labels?.use_case === 'cloned') && (
+                      <Badge className="text-[9px] px-1 bg-purple-100 text-purple-700">Cloned</Badge>
                     )}
                     <Badge variant="outline" className="text-[9px] px-1 ml-auto">{v.provider}</Badge>
                   </div>
-                  {v.description && <p className="text-[10px] text-gray-400 truncate mt-0.5">{v.description.substring(0, 80)}</p>}
+                  {v.description && v.description !== 'Custom cloned voice' && (
+                    <p className="text-[10px] text-gray-400 truncate mt-0.5">{v.description.substring(0, 80)}</p>
+                  )}
                 </div>
-                {v.preview_url && (
-                  <Button variant="ghost" size="icon" className="h-6 w-6 flex-shrink-0"
-                    onClick={e => { e.stopPropagation(); handlePlayPreview(v); }}>
-                    {playingId === v.voice_id ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
-                  </Button>
-                )}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 flex-shrink-0"
+                  disabled={previewLoading === v.voice_id}
+                  onClick={e => { e.stopPropagation(); handlePlayPreview(v); }}
+                >
+                  {previewLoading === v.voice_id ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : playingId === v.voice_id ? (
+                    <Pause className="w-3 h-3" />
+                  ) : (
+                    <Play className="w-3 h-3" />
+                  )}
+                </Button>
               </div>
             ))}
           </div>
