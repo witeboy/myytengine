@@ -286,7 +286,7 @@ Return ONLY the motion description.`,
     setLoading(false);
   };
 
-  const stepLabels = ['Audience', 'Influencer', 'Image', 'Script', 'Pipeline'];
+  const stepLabels = ['Audience', 'Influencer', 'Image', 'Voice', 'Lip-Sync'];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 to-rose-50 p-4">
