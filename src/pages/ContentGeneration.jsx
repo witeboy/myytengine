@@ -381,7 +381,7 @@ export default function ContentGeneration() {
       const totalAssets = scenes.reduce((sum, s) => {
         let count = 0;
         if (s.image_url && !s.image_url.startsWith('data:')) count++;
-        if (s.video_url && !s.video_url.startsWith('veo_task:') && s.video_url.startsWith('http')) count++;
+        if (s.video_url && !s.video_url.startsWith('veo_task:') && !s.video_url.startsWith('grok_vid_task:') && s.video_url.startsWith('http')) count++;
         return sum + count;
       }, 0);
 
