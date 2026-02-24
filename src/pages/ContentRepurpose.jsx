@@ -203,10 +203,12 @@ Write the complete narration script. Return ONLY the script text, no headers or 
     });
     console.log('Script created:', scriptRecord.id);
 
-    // 3. Generate voiceover
-    setPipelineStep('Generating voiceover (ai33.pro TTS)...');
+    // 3. Generate voiceover (with selected voice)
+    setPipelineStep('Generating voiceover...');
     try {
-      const voResp = await base44.functions.invoke('generateVoiceover', { project_id: project.id });
+      const voPayload = { project_id: project.id };
+      if (selectedVoiceId) voPayload.voice_id = selectedVoiceId;
+      const voResp = await base44.functions.invoke('generateVoiceover', voPayload);
       console.log('Voiceover result:', voResp.data);
     } catch (err) {
       console.warn('Voiceover failed:', err.message);
@@ -688,13 +690,28 @@ Write the complete narration script. Return ONLY the script text, no headers or 
               )}
 
               {projectId && !loading && (
-                <div className="flex gap-3">
-                  <Button onClick={() => navigate(createPageUrl(`ContentGeneration?project_id=${projectId}`))} className="flex-1 bg-emerald-600 hover:bg-emerald-700 gap-2">
-                    <ImageIcon className="w-4 h-4" /> Content Editor
-                  </Button>
-                  <Button variant="outline" onClick={() => navigate(createPageUrl(`TimelineEditor?project_id=${projectId}`))} className="flex-1 gap-2">
-                    <Film className="w-4 h-4" /> Timeline
-                  </Button>
+                <div className="space-y-4">
+                  {/* Thumbnail Recreation */}
+                  <ThumbnailRecreator
+                    videoUrl={videoUrl}
+                    newTitle={newTitle}
+                    projectId={projectId}
+                  />
+
+                  {/* Music Matching */}
+                  <MusicMatcher
+                    analysis={analysis}
+                    projectId={projectId}
+                  />
+
+                  <div className="flex gap-3">
+                    <Button onClick={() => navigate(createPageUrl(`ContentGeneration?project_id=${projectId}`))} className="flex-1 bg-emerald-600 hover:bg-emerald-700 gap-2">
+                      <ImageIcon className="w-4 h-4" /> Content Editor
+                    </Button>
+                    <Button variant="outline" onClick={() => navigate(createPageUrl(`TimelineEditor?project_id=${projectId}`))} className="flex-1 gap-2">
+                      <Film className="w-4 h-4" /> Timeline
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>
