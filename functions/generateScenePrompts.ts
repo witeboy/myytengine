@@ -466,8 +466,16 @@ Deno.serve(async (req) => {
   Arc Animation: ${arcAnim}`;
       }).join('\n\n');
 
-      // Build style-specific instructions so the LLM knows EXACTLY what aesthetic to produce
-      const styleInstructions = getStyleSpecificInstructions(visualStyle, styleConfig);
+      // Build style-specific scene body rules so the LLM describes characters/environments/objects in the right style
+      const styleBodyRules = getStyleSceneBodyRules(visualStyle);
+      const styleBodyBlock = styleBodyRules ? `
+**═══════════════════════════════════════════════════════════════**
+**HOW TO DESCRIBE SCENE CONTENT IN "${visualStyle}" STYLE:**
+**Characters:** ${styleBodyRules.characters}
+**Environments:** ${styleBodyRules.environments}
+**Objects & Props:** ${styleBodyRules.objects}
+**Rendering Language:** ${styleBodyRules.rendering}
+**═══════════════════════════════════════════════════════════════**` : '';
 
       const prompt = `**MISSION: Convert Director's Notes → Production-Ready Image & Animation Prompts**
 
@@ -475,38 +483,30 @@ ${storyContext}
 
 ${characterBlock}
 
-**VISUAL STYLE: "${visualStyle}"** — THIS IS THE #1 PRIORITY. Every prompt MUST produce images in this EXACT style.
+**VISUAL STYLE: "${visualStyle}"**
 **ORIENTATION:** ${orientationConfig.format}
 
-**═══════════════════════════════════════════════════════════════**
-**STYLE DEFINITION — EVERY PROMPT MUST MATCH THIS AESTHETIC:**
-${styleInstructions}
-
-**STYLE PREFIX (must appear at the START of every image_prompt):**
+**STYLE PREFIX (prepended automatically — you still MUST start each image_prompt with it):**
 "${styleConfig.positive}"
-
-**STYLE NEGATIVE (content that must NEVER appear in the image):**
-"${styleConfig.negative}"
-**═══════════════════════════════════════════════════════════════**
+${styleBodyBlock}
 
 **DIRECTOR'S SCENE NOTES:**
 ${sceneDirections}
 
 **YOUR TASK — for EACH scene produce:**
 
-1. **image_prompt** — Dense technical prompt for AI image generation:
-   - MUST begin EXACTLY with: "${styleConfig.positive}."
-   - Then add: "${orientationConfig.directive}."
-   - Then describe the scene content in the CORRECT STYLE (see style definition above)
-   - DO NOT mix styles. If style is cartoon/anime/low-poly, do NOT use photorealistic language (no "ARRI", "Canon", "DSLR", "f/1.4", "film grain", "bokeh", "anamorphic")
-   - If style is photorealistic, DO use camera/lens language
-   - Translate visual concept into SPECIFIC scene description (300+ chars) using ONLY language appropriate to the selected style
-   - Embed shot type and composition from director notes adapted to the style
-   - If characters appear → embed FULL physical description
-   - ${orientationConfig.composition}
-   - FORBIDDEN: text, words, letters, numbers, charts, graphs, signs, readable content in the image
-   - Abstract concepts → PHYSICAL METAPHORS appropriate to the style
-   - MUST end with: "ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image"
+1. **image_prompt** — Production-ready AI image generation prompt:
+   - START with the style prefix: "${styleConfig.positive}."
+   - Then add orientation: "${orientationConfig.directive}."
+   - Then write the SCENE BODY describing what's actually in the frame:
+     • Use the style body rules above to describe characters, environments, and objects
+     • The scene body is WHERE the visual style really shows — describe characters with the style's specific features (e.g. polygon facets for low-poly, bold outlines for cartoon, brushstrokes for oil painting)
+     • Embed shot type and composition from director notes
+     • If characters appear → embed FULL physical description USING THE STYLE'S CHARACTER RULES
+     • ${orientationConfig.composition}
+   - FORBIDDEN: text, words, letters, numbers, charts, graphs, signs in the image
+   - Abstract concepts → PHYSICAL METAPHORS
+   - End with: "ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image"
 
 2. **animation_prompt** — ${CLIP_DURATION}-second motion direction:
    - Translate camera_movement into animation language
@@ -520,17 +520,11 @@ ${sceneDirections}
   "prompts": [
     {
       "scene_number": 1,
-      "image_prompt": "${styleConfig.positive.substring(0, 60)}... [scene description in correct style]... ABSOLUTELY NO text...",
-      "animation_prompt": "[motion direction respecting arc position]"
+      "image_prompt": "[style prefix]. [orientation]. [SCENE BODY using style-specific character/environment/object descriptions]... ABSOLUTELY NO text...",
+      "animation_prompt": "[motion direction]"
     }
   ]
-}
-
-CRITICAL STYLE CHECK before outputting each prompt:
-- Does it start with the exact style prefix? 
-- Is the visual language consistent with "${visualStyle}"?
-- Are there any CONTRADICTORY style terms? (e.g. "photorealistic" in an anime prompt, or "cel-shaded" in a photorealistic prompt)
-- Would this prompt produce an image that looks like ${visualStyle}?`;
+}`;
 
       console.log(`🎨 Batch ${bIdx + 1}/${totalBatches}: scenes ${batchScenes[0].scene_number}-${batchScenes[batchScenes.length - 1].scene_number}...`);
 
