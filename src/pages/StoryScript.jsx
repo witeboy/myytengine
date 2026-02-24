@@ -180,7 +180,12 @@ export default function StoryScript() {
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
-          <h1 className="text-3xl font-bold">Script Generation</h1>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => navigate(createPageUrl(`StoryHooks?project_id=${projectId}`))} className="gap-2" size="sm">
+              <ArrowLeft className="w-4 h-4" /> Hooks
+            </Button>
+            <h1 className="text-3xl font-bold">Script Generation</h1>
+          </div>
                     <div className="flex gap-2">
             {allCompleted && (
               <>
