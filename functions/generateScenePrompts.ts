@@ -476,7 +476,7 @@ CRITICAL STYLE CHECK before outputting each prompt:
 
         if (generated) {
           imagePrompt = validateAndEnhancePrompt(
-            generated.image_prompt || '', styleConfig, orientationConfig, s.scene_number
+            generated.image_prompt || '', styleConfig, orientationConfig, s.scene_number, visualStyle
           );
           animationPrompt = generated.animation_prompt
             || "slow gentle camera movement forward, atmospheric haze, subtle breathing, shallow DOF";
