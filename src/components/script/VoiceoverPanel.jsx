@@ -164,10 +164,8 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
     }, 300000);
   };
 
-  const handlePreviewVoice = (voice) => {
-    const previewUrl = voice.preview_url;
-    if (!previewUrl) return;
-
+  const handlePreviewVoice = async (voice) => {
+    // If already playing this voice, stop it
     if (previewingVoice === voice.voice_id && previewAudioRef.current) {
       previewAudioRef.current.pause();
       previewAudioRef.current.currentTime = 0;
@@ -175,11 +173,32 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       return;
     }
 
+    // Stop any current playback
     if (previewAudioRef.current) {
       previewAudioRef.current.pause();
+      setPreviewingVoice(null);
     }
 
-    const audio = new Audio(previewUrl);
+    // Check for existing preview URL (from voice data or cache)
+    let url = voice.preview_url || previewCache[voice.voice_id];
+
+    // If no URL, generate one via backend
+    if (!url) {
+      setLoadingPreview(voice.voice_id);
+      const res = await base44.functions.invoke('previewVoice', {
+        voice_id: voice.voice_id,
+        provider: voice.provider || 'minimax',
+      });
+      setLoadingPreview(null);
+      if (res.data?.preview_url) {
+        url = res.data.preview_url;
+        setPreviewCache(prev => ({ ...prev, [voice.voice_id]: url }));
+      } else {
+        return; // failed to generate
+      }
+    }
+
+    const audio = new Audio(url);
     previewAudioRef.current = audio;
     setPreviewingVoice(voice.voice_id);
     audio.play();
