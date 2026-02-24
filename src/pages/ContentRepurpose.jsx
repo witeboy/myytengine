@@ -260,21 +260,31 @@ export default function ContentRepurpose() {
           <p className="text-gray-500 mt-1">Analyze → Rewrite → Full Pipeline (same APIs)</p>
         </div>
 
-        {/* Step Indicator */}
+        {/* Step Indicator — clickable for completed steps */}
         <div className="flex items-center justify-center gap-2 mb-8">
-          {stepLabels.map((label, i) => (
-            <React.Fragment key={i}>
-              <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                step > i + 1 ? 'bg-green-100 text-green-700' :
-                step === i + 1 ? 'bg-emerald-100 text-emerald-700' :
-                'bg-gray-100 text-gray-400'
-              }`}>
-                {step > i + 1 ? <CheckCircle2 className="w-3 h-3" /> : <span className="w-3 text-center">{i + 1}</span>}
-                <span className="hidden sm:inline">{label}</span>
-              </div>
-              {i < stepLabels.length - 1 && <div className={`w-6 h-0.5 ${step > i + 1 ? 'bg-green-300' : 'bg-gray-200'}`} />}
-            </React.Fragment>
-          ))}
+          {stepLabels.map((label, i) => {
+            const stepNum = i + 1;
+            const isCompleted = step > stepNum;
+            const isCurrent = step === stepNum;
+            const isClickable = isCompleted && stepNum < 5; // can't go back to pipeline redirect
+            return (
+              <React.Fragment key={i}>
+                <button
+                  onClick={() => isClickable && setStep(stepNum)}
+                  disabled={!isClickable && !isCurrent}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                    isCompleted ? 'bg-green-100 text-green-700 cursor-pointer hover:ring-2 hover:ring-green-300' :
+                    isCurrent ? 'bg-emerald-100 text-emerald-700' :
+                    'bg-gray-100 text-gray-400'
+                  }`}
+                >
+                  {isCompleted ? <CheckCircle2 className="w-3 h-3" /> : <span className="w-3 text-center">{stepNum}</span>}
+                  <span className="hidden sm:inline">{label}</span>
+                </button>
+                {i < stepLabels.length - 1 && <div className={`w-6 h-0.5 ${step > stepNum ? 'bg-green-300' : 'bg-gray-200'}`} />}
+              </React.Fragment>
+            );
+          })}
         </div>
 
         {/* Step 1: URL + Templates */}
