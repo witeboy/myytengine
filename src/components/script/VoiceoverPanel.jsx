@@ -32,7 +32,9 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
         base44.functions.invoke('listVoices', {}),
         base44.entities.ProductionSettings.filter({ project_id: project.id }),
       ]);
-      setVoices(voiceRes.data?.voices || []);
+      const loadedVoices = voiceRes.data?.voices || [];
+      console.log('VoiceoverPanel loaded voices:', loadedVoices.length, 'categories:', loadedVoices.reduce((acc, v) => { acc[v.category] = (acc[v.category] || 0) + 1; return acc; }, {}));
+      setVoices(loadedVoices);
       if (settingsRes.length > 0) {
         setSettings(settingsRes[0]);
         if (settingsRes[0].selected_voice_id) setSelectedVoice(settingsRes[0].selected_voice_id);
