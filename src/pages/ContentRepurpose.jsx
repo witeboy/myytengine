@@ -130,12 +130,15 @@ export default function ContentRepurpose() {
     setStatusMsg('Writing new script in original style...');
 
     const hasOriginalScript = analysis.original_script && analysis.original_script.length > 200;
+    const originalWordCount = hasOriginalScript
+      ? analysis.original_script.split(/\s+/).filter(w => w).length
+      : (analysis.estimated_word_count || 1500);
     const scriptReference = hasOriginalScript
-      ? `\n\nORIGINAL FULL SCRIPT (use this as your style bible — match tone, sentence structure, transitions, rhetorical devices EXACTLY):\n"""\n${analysis.original_script.substring(0, 40000)}\n"""`
+      ? `\n\nORIGINAL FULL SCRIPT (${originalWordCount} words — your new script MUST match this length EXACTLY):\n"""\n${analysis.original_script.substring(0, 40000)}\n"""`
       : '';
 
     const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `You are a professional YouTube scriptwriter specializing in content repurposing. Your job is to take an original video's FULL transcript and REWRITE it for a NEW topic/title — while preserving the EXACT same dynamics, flow, beats, pulsating rhythm, and delivery style.
+      prompt: `You are a professional YouTube scriptwriter specializing in content repurposing. Your job is to take an original video's FULL transcript and REWRITE it for a NEW topic/title — while preserving the EXACT same dynamics, flow, beats, pulsating rhythm, delivery style, AND LENGTH.
 
 ORIGINAL VIDEO ANALYSIS:
 - Title: ${analysis.title}
@@ -148,22 +151,29 @@ ORIGINAL VIDEO ANALYSIS:
 - Tone: ${analysis.tone_description}
 - Estimated Duration: ${analysis.estimated_duration_seconds}s
 - Original Outline: ${analysis.reconstructed_outline}
+- ORIGINAL WORD COUNT: ${originalWordCount} words
 ${scriptReference}
 
 NEW TITLE: "${newTitle}"
 USER NOTES: ${tweakNotes || 'None — keep as close to original style as possible'}
 
-CRITICAL INSTRUCTIONS:
+ABSOLUTE LENGTH REQUIREMENT — THIS IS NON-NEGOTIABLE:
+The original script is EXACTLY ${originalWordCount} words. Your new script MUST be between ${Math.floor(originalWordCount * 0.95)} and ${Math.ceil(originalWordCount * 1.05)} words (within 5% of original). 
+DO NOT summarize. DO NOT condense. DO NOT shorten. If the original is ${originalWordCount} words, yours must be ~${originalWordCount} words.
+Count your words carefully. If your draft is shorter, EXPAND sections with additional detail, examples, or elaboration until you hit the target.
+
+STYLE INSTRUCTIONS:
 ${hasOriginalScript ? `You have the FULL original transcript above. This is your STYLE BIBLE. You must:
 1. REWRITE every section of the original script but for the NEW title "${newTitle}"
 2. PRESERVE the EXACT same structure — if the original has a shocking hook, yours must too. If it builds tension in paragraph 3, yours must too.
 3. MATCH sentence length patterns — short punchy sentences stay short, long flowing ones stay long
 4. KEEP the same rhetorical devices — questions, callbacks, cliffhangers, reveals at the same beats
 5. RETAIN the same energy arc — if the original starts intense, calms, then peaks, yours must follow the SAME rhythm
-6. MATCH the approximate word count of the original (~${analysis.estimated_word_count || analysis.original_script.split(/\\s+/).length} words)
+6. MATCH paragraph-for-paragraph — for every paragraph in the original, write an equivalent paragraph of SIMILAR length for the new topic
 7. DO NOT generic-ify the script. The original has a unique voice — replicate it exactly for the new topic.
-8. The new script should feel like the SAME creator made a video on a different topic.` : 'No full transcript available. Write a new script based on the detected style analysis above.'}
-Write the complete narration script. Return ONLY the script text, no headers or meta-commentary.`,
+8. The new script should feel like the SAME creator made a video on a different topic.
+9. YOUR OUTPUT MUST BE ${originalWordCount} WORDS (±5%). This is the #1 priority after style matching.` : `No full transcript available. Write a new script based on the detected style analysis above. TARGET LENGTH: ${originalWordCount} words.`}
+Write the complete narration script. Return ONLY the script text, no headers or meta-commentary. NO word count annotations.`,
     });
 
     setNewScript(result);
