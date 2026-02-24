@@ -220,10 +220,10 @@ export default function ContentGeneration() {
 
       let remaining = [...pendingPolls];
       let pollCount = 0;
-      const MAX_POLLS = 60; // 60 × 15s = 15 min max
+      const MAX_POLLS = 60; // 60 × 20s = 20 min max (extra time for 1080p upgrade)
 
       while (remaining.length > 0 && pollCount < MAX_POLLS && !pollAbortRef.current) {
-        await new Promise(r => setTimeout(r, 15000));
+        await new Promise(r => setTimeout(r, 20000));
         pollCount++;
 
         const stillPending = [];
