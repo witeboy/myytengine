@@ -631,8 +631,8 @@ export default function ContentGeneration() {
                   <Badge className="bg-violet-100 text-violet-800 text-xs">
                     <Video className="w-3 h-3 mr-1" />
                     {videoProgress.phase === 'submitting'
-                      ? 'Submitting to Veo 3.1 Quality'
-                      : 'Rendering with Veo 3.1 · 1080p'}
+                      ? 'Submitting to Grok Imagine'
+                      : 'Rendering with Grok · 480p'}
                   </Badge>
                 </div>
 
