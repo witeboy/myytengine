@@ -10,16 +10,13 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 // FLOW:
 //   1. Extract taskId from scene.video_url
 //   2. Poll /veo/record-info → check successFlag
-//   3. On complete → grab video URL directly (Veo3 = native 1080p)
-//   4. Update scene with final video URL
+//   3. On complete → request 1080p upgrade via /get-1080p-video
+//   4. If 1080p ready → save final URL; if not → return UPGRADING status
+//   5. Update scene with final 1080p video URL
 //
-// ENDPOINT:
+// ENDPOINTS:
 //   GET https://api.kie.ai/api/v1/veo/record-info?taskId={id}
-//
-// NOTE: The /get-1080p-video upgrade step has been REMOVED.
-//   Veo3 model renders at 1080p natively. The upgrade call was
-//   adding an extra API roundtrip per scene per poll round and
-//   often returned "still processing", wasting time.
+//   GET https://api.kie.ai/api/v1/veo/get-1080p-video?taskId={id}
 // ══════════════════════════════════════════════════════════════════
 
 const VEO_BASE = "https://api.kie.ai/api/v1/veo";
