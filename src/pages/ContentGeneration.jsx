@@ -3,7 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { createPageUrl } from '@/utils';
 import StageProgress from '@/components/StageProgress';
@@ -14,7 +14,7 @@ import OrientationSelector from '@/components/content/OrientationSelector';
 import MusicPanel from '@/components/content/MusicPanel';
 import AudioMixerPanel from '@/components/content/AudioMixerPanel';
 import {
-  Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film,
+  Loader2, ArrowRight, Import, Layers, ImageIcon, Film,
   Palette, Sparkles, Monitor, Clapperboard, Wand2, CheckCircle2,
   XCircle, Clock, Zap, Video, FolderDown, Hammer
 } from 'lucide-react';
@@ -24,27 +24,22 @@ export default function ContentGeneration() {
   const queryClient = useQueryClient();
   const projectId = new URLSearchParams(window.location.search).get('project_id');
   
-  // ── States ──────────────────────────────────────────────────────
   const [importing, setImporting] = useState(false);
-  const [importPhase, setImportPhase] = useState('');
-  const [importProgress, setImportProgress] = useState('');
   const [generatingImages, setGeneratingImages] = useState(false);
   const [generatingVideos, setGeneratingVideos] = useState(false);
   const [fixingImages, setFixingImages] = useState(false); 
   const [enhancingAll, setEnhancingAll] = useState(false);
-  const [exporting, setExporting] = useState(false);
   
   const [audioLevels, setAudioLevels] = useState({ narration: 1, music: 0.3, sfx: 0.5 });
-  const [exportProgress, setExportProgress] = useState({ current: 0, total: 0, label: '' });
   const [imageProgress, setImageProgress] = useState({ current: 0, total: 0, sceneName: '' });
   const [videoProgress, setVideoProgress] = useState({
     current: 0, total: 0, sceneName: '',
     phase: '', 
     sceneStatuses: {} 
   });
+  
   const pollAbortRef = useRef(false);
 
-  // ── Data Fetching ───────────────────────────────────────────
   const { data: project, refetch: refetchProject } = useQuery({
     queryKey: ['project', projectId],
     queryFn: async () => {
@@ -67,52 +62,39 @@ export default function ContentGeneration() {
     return () => { pollAbortRef.current = true; };
   }, []);
 
-  // ── REPAIR LOGIC: Fix Base64 Images ─────────────────────────
+  // ── REPAIR LOGIC: Fixes the "Base64" error for Veo 3.1 ──────────
   const handleFixImages = async () => {
+    if (!projectId) return;
     setFixingImages(true);
     try {
+      // Invokes the robust backend function to wash base64 images into URLs
       const result = await base44.functions.invoke('fix_base64_images', { project_id: projectId });
-      
       if (result && result.success) {
         await refetchScenes();
-        console.log(`Successfully fixed ${result.summary?.fixed || 0} images.`);
       } else {
-        console.error("Repair Function Error:", result?.error || "Unknown error");
-        alert("The repair script ran but encountered an issue: " + (result?.error || "Unknown"));
+        console.error("Repair failed:", result?.error);
       }
     } catch (err) {
-      console.error('Repair failed:', err);
-      alert("Repair failed with a server error. Please check your function logs in the dashboard.");
+      console.error('Repair request failed:', err);
     } finally {
       setFixingImages(false);
     }
   };
 
-  // ── Import & Script Processing ──────────────────────────────
   const handleImport = async () => {
     setImporting(true);
     try {
-      setImportPhase('breakdown');
-      setImportProgress('Analyzing script & breaking down into cinematic scenes...');
       await base44.functions.invoke('generateSceneBreakdown', { project_id: projectId });
       await refetchScenes();
-
-      setImportPhase('prompts');
-      setImportProgress('Converting director notes into visual prompts...');
       await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
       await refetchScenes();
-    } catch (err) {
-      console.error('Scene generation error:', err);
     } finally {
       await refetchScenes();
       await refetchProject();
       setImporting(false);
-      setImportPhase('');
-      setImportProgress('');
     }
   };
 
-  // ── Image Generation (Grok Imagine) ─────────────────────────
   const handleGenerateImages = async () => {
     setGeneratingImages(true);
     const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
@@ -127,24 +109,20 @@ export default function ContentGeneration() {
       setImageProgress({ current: i + 1, total: readyScenes.length, sceneName: `Scene ${scene.scene_number}` });
       try {
         await base44.functions.invoke('generateSceneImage', { scene_id: scene.id });
-      } catch (err) {
-        console.warn(`Scene ${scene.scene_number} image failed:`, err.message);
-      }
+      } catch (err) { console.warn(`Scene ${scene.scene_number} image failed:`, err.message); }
       await refetchScenes();
     }
-
     setGeneratingImages(false);
-    setImageProgress({ current: 0, total: 0, sceneName: '' });
   };
 
-  // ── Video Generation (Veo 3.1) ──────────────────────────────
   const handleGenerateVideos = async () => {
     const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
     
+    // Check for broken Base64 images that Veo 3.1 cannot process
     const broken = freshScenes.filter(s => s.image_url?.startsWith('data:') && !s.video_url);
     if (broken.length > 0) {
       const fix = window.confirm(
-        `${broken.length} scenes have Base64 images that Veo can't animate. Repair them now?`
+        `${broken.length} scenes have broken Base64 images that Veo can't animate. Repair them now?`
       );
       if (fix) {
         await handleFixImages();
@@ -158,54 +136,19 @@ export default function ContentGeneration() {
       !s.video_url
     );
 
-    if (ready.length === 0) {
-      return;
-    }
+    if (ready.length === 0) return;
 
     setGeneratingVideos(true);
     pollAbortRef.current = false;
-    const initialStatuses = {};
-    ready.forEach(s => { initialStatuses[s.id] = 'queued'; });
-
-    setVideoProgress({
-      current: 0, total: ready.length,
-      sceneName: '', phase: 'submitting',
-      sceneStatuses: { ...initialStatuses }
-    });
-
-    const pendingPolls = [];
+    
+    // Process in batches of 5 for speed
     for (let i = 0; i < ready.length; i += 5) {
       if (pollAbortRef.current) break;
       const batch = ready.slice(i, i + 5);
-      const results = await Promise.allSettled(
+      await Promise.allSettled(
         batch.map(scene => base44.functions.invoke('generateSceneVideo', { scene_id: scene.id }))
       );
-      results.forEach((res, idx) => {
-        if (res.status === 'fulfilled' && res.value?.task_id) {
-          pendingPolls.push({ scene_id: batch[idx].id, task_id: res.value.task_id });
-        }
-      });
-    }
-
-    if (pendingPolls.length > 0) {
-      setVideoProgress(p => ({ ...p, phase: 'polling', sceneName: 'Rendering with Veo 3.1...' }));
-      let remaining = [...pendingPolls];
-      while (remaining.length > 0 && !pollAbortRef.current) {
-        await new Promise(r => setTimeout(r, 10000));
-        const pollResults = await Promise.allSettled(
-          remaining.map(item => base44.functions.invoke('pollSceneVideo', { scene_id: item.scene_id }))
-        );
-        const stillPending = [];
-        pollResults.forEach((res, idx) => {
-          if (res.status === 'fulfilled' && res.value?.status === 'COMPLETED') {
-            // Done
-          } else {
-            stillPending.push(remaining[idx]);
-          }
-        });
-        remaining = stillPending;
-        await refetchScenes();
-      }
+      await refetchScenes();
     }
     setGeneratingVideos(false);
   };
@@ -221,7 +164,6 @@ export default function ContentGeneration() {
 
   const handleContinueToTimeline = () => navigate(createPageUrl(`TimelineEditor?project_id=${projectId}`));
 
-  // ── Computed Stats ──────────────────────────────────────────
   const imageCount = scenes.filter(s => s.image_url).length;
   const base64Count = scenes.filter(s => s.image_url?.startsWith('data:')).length;
 
@@ -233,6 +175,9 @@ export default function ContentGeneration() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Content Generation</h1>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={() => navigate(createPageUrl('ProjectList'))}>
+              <FolderDown className="w-4 h-4 mr-1" /> Project List
+            </Button>
             {imageCount > 0 && base64Count === 0 && (
               <Button onClick={handleContinueToTimeline} className="bg-blue-600 hover:bg-blue-700 shadow-md">
                 Next: Timeline <ArrowRight className="ml-2 w-4 h-4" />
@@ -241,7 +186,7 @@ export default function ContentGeneration() {
           </div>
         </div>
 
-        {/* 🚨 REPAIR BANNER */}
+        {/* 🚨 REPAIR BANNER: Appears when base64 images are detected ────────── */}
         {base64Count > 0 && (
           <div className="bg-rose-50 border border-rose-200 rounded-2xl p-6 mb-8 flex flex-col md:flex-row items-center gap-6 shadow-sm">
             <div className="bg-rose-100 p-4 rounded-full text-rose-600">
@@ -250,8 +195,8 @@ export default function ContentGeneration() {
             <div className="flex-1 text-center md:text-left">
               <h3 className="text-lg font-bold text-rose-900">{base64Count} Scenes Need Repair</h3>
               <p className="text-sm text-rose-700 leading-relaxed">
-                Veo 3.1 cannot animate Base64 data. Click Repair to host these images 
-                on a public URL automatically.
+                Veo 3.1 cannot animate Base64 data. Click Repair to convert these images 
+                to public URLs automatically.
               </p>
             </div>
             <Button 
@@ -265,17 +210,19 @@ export default function ContentGeneration() {
           </div>
         )}
 
+        {/* Configuration Selection */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           {project && <OrientationSelector selectedOrientation={project.orientation} onSelect={async (o) => { await base44.entities.Projects.update(projectId, { orientation: o }); refetchProject(); }} />}
           {project && <VisualStyleSelector selectedStyle={project.visual_style} onSelect={async (s) => { await base44.entities.Projects.update(projectId, { visual_style: s }); refetchProject(); }} />}
         </div>
 
+        {/* Action Bar */}
         <Card className="mb-8 border-none shadow-sm overflow-hidden">
           <CardContent className="p-4 flex flex-wrap items-center gap-4 bg-white">
             <div className="flex gap-4 items-center mr-4">
               <Badge variant="secondary" className="bg-slate-100 text-slate-700 px-3 py-1.5">{scenes.length} Scenes</Badge>
               <Badge className={`px-3 py-1.5 ${base64Count > 0 ? 'bg-rose-100 text-rose-700 border-rose-200' : 'bg-green-100 text-green-700 border-green-200'}`}>
-                <ImageIcon className="w-3 h-3 mr-1.5 inline" /> {imageCount} Images {base64Count > 0 && `(Repair Needed)`}
+                <ImageIcon className="w-3 h-3 mr-1.5 inline" /> {imageCount} Images {base64Count > 0 && `(Repair Required)`}
               </Badge>
             </div>
             <div className="flex-1" />
@@ -296,12 +243,14 @@ export default function ContentGeneration() {
           </CardContent>
         </Card>
 
+        {/* Grid of Scenes */}
         {scenes.length > 0 && (
           <div className="mb-12">
             <SceneGrid scenes={scenes} onRefetch={refetchScenes} />
           </div>
         )}
 
+        {/* Audio and Music Panels */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <VoiceoverPanel project={project} onUpdate={refetchProject} />
           <MusicPanel project={project} />
