@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { createPageUrl } from '@/utils';
-import StageProgress from '@/components/StageProgress';
+import EditorTopBar from '@/components/timeline/EditorTopBar';
 import TimelineTrack from '@/components/timeline/TimelineTrack';
 import TimelineRuler from '@/components/timeline/TimelineRuler';
 import PreviewPanel from '@/components/timeline/PreviewPanel';
@@ -290,45 +290,18 @@ export default function TimelineEditor() {
   return (
     <div className="h-screen flex flex-col bg-[#0d0d1a] text-white overflow-hidden">
       {/* Top Navigation Bar */}
-      <div className="bg-[#16213e] border-b border-gray-700/50 px-3 py-1.5 flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <StageProgress currentStage={3} />
-          <div className="w-px h-5 bg-gray-700" />
-          <h1 className="text-sm font-semibold text-white truncate max-w-[200px]">{project?.name || 'Timeline Editor'}</h1>
-          <span className="text-[10px] text-gray-500">
-            {scenes.length} scenes • {Math.round(totalDuration)}s
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          {(scenes.length === 0 || project?.status === 'content_generation' || project?.status === 'scenes_ready') && (
-            <Button onClick={handleImport} disabled={importing} size="sm" className="bg-blue-600 hover:bg-blue-700 text-[10px] h-7 gap-1">
-              {importing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Import className="w-3 h-3" />}
-              Import
-            </Button>
-          )}
-          {scenes.length > 0 && (
-            <>
-              <Button variant="ghost" size="sm" onClick={() => setShowReorder(p => !p)} className="text-gray-400 hover:text-white text-[10px] h-7 gap-1">
-                <GripVertical className="w-3 h-3" /> Reorder
-              </Button>
-              <DownloadAllMedia scenes={scenesWithTiming} voiceoverUrl={voiceoverUrl} musicUrl={musicUrl} projectName={project?.name} />
-              <Button size="sm" onClick={() => setShowExporter(true)} className="bg-green-600 hover:bg-green-700 text-[10px] h-7 gap-1">
-                <Download className="w-3 h-3" /> Export
-              </Button>
-              <Button
-                size="sm"
-                onClick={async () => {
-                  await base44.entities.Projects.update(projectId, { status: 'post_production', current_step: 11 });
-                  navigate(createPageUrl(`PostProduction?project_id=${projectId}`));
-                }}
-                className="bg-blue-600 hover:bg-blue-700 text-[10px] h-7 gap-1"
-              >
-                Next <ArrowRight className="w-3 h-3" />
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+      <EditorTopBar
+        project={project}
+        scenes={scenes}
+        scenesWithTiming={scenesWithTiming}
+        totalDuration={totalDuration}
+        voiceoverUrl={voiceoverUrl}
+        musicUrl={musicUrl}
+        importing={importing}
+        onImport={handleImport}
+        onShowReorder={() => setShowReorder(p => !p)}
+        onShowExporter={() => setShowExporter(true)}
+      />
 
       {/* Reorder & Export Panels */}
       {showReorder && scenes.length > 0 && (
