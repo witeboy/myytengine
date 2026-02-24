@@ -24,25 +24,18 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
     const [rephrasing, setRephrasing] = useState(false);
   const pollRef = useRef(null);
 
-  const pendingTask = (() => {
-    if (scene.video_url?.startsWith('runway_task:'))
-      return { taskId: scene.video_url.replace('runway_task:', ''), provider: 'runway' };
-    if (scene.video_url?.startsWith('freepik_task:'))
-      return { taskId: scene.video_url.replace('freepik_task:', ''), provider: 'freepik' };
-    if (scene.video_url?.startsWith('veo_task:'))
-      return { taskId: scene.video_url.replace('veo_task:', ''), provider: 'veo' };
-    return null;
-  })();
+  const hasPendingTask = scene.video_url?.startsWith('grok_vid_task:') ||
+    scene.video_url?.startsWith('veo_task:') ||
+    scene.video_url?.startsWith('runway_task:') ||
+    scene.video_url?.startsWith('freepik_task:');
 
   useEffect(() => {
-    if (pendingTask && !polling) {
+    if (hasPendingTask && !polling) {
       setPolling(true);
       setLoadingVideo(true);
       pollRef.current = setInterval(async () => {
-        const res = await base44.functions.invoke('checkSceneVideoStatus', {
-          task_id: pendingTask.taskId,
+        const res = await base44.functions.invoke('pollSceneVideo', {
           scene_id: scene.id,
-          provider: pendingTask.provider,
         });
         const status = res.data?.status;
         if (status === 'COMPLETED' || status === 'FAILED') {
@@ -51,10 +44,10 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
           setLoadingVideo(false);
           onSceneUpdated?.();
         }
-      }, 8000);
+      }, 12000);
     }
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [pendingTask?.taskId]);
+  }, [scene.video_url]);
 
   const handleImage = async () => {
     setLoadingImage(true);
