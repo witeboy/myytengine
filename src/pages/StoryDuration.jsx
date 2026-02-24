@@ -66,19 +66,21 @@ export default function StoryDuration() {
               Topic: <span className="font-semibold">{topic?.title || 'Loading...'}</span>
             </p>
           </div>
-          <Button
-            onClick={handleGenerate}
-            disabled={loading}
-            className="bg-blue-600 hover:bg-blue-700 gap-2"
-            size="lg"
-          >
-            {loading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => navigate(createPageUrl(`StoryTopics?project_id=${projectId}`))} className="gap-2">
+              <ArrowLeft className="w-4 h-4" /> Topics
+            </Button>
+            {project && ['outline_ready','hooks_ready','scripting','script_complete','voiceover_ready','scene_breakdown','breakdown_complete','content_generation','scenes_ready'].includes(project.status) ? (
+              <Button onClick={() => navigate(createPageUrl(`StoryHooks?project_id=${projectId}`))} className="bg-blue-600 hover:bg-blue-700 gap-2" size="lg">
+                Continue <ArrowRight className="w-4 h-4" />
+              </Button>
             ) : (
-              <ArrowRight className="w-4 h-4" />
+              <Button onClick={handleGenerate} disabled={loading} className="bg-blue-600 hover:bg-blue-700 gap-2" size="lg">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                {loading ? 'Generating...' : 'Generate & Continue'}
+              </Button>
             )}
-            {loading ? 'Generating...' : 'Generate & Continue'}
-          </Button>
+          </div>
         </div>
 
         <Card>
