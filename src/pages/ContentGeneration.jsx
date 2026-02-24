@@ -189,7 +189,8 @@ export default function ContentGeneration() {
       }));
 
       try {
-        const result = await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
+        const response = await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
+        const result = response.data || response;
         pendingPolls.push({
           scene_id: scene.id,
           task_id: result.task_id,
