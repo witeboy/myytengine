@@ -24,6 +24,48 @@ function parseDuration(iso) {
 // ===================================================================
 // TIER 1: YouTube Transcript API (captions)
 // ===================================================================
+function extractTranscriptText(data) {
+  // Try multiple paths to find transcript text in the API response
+  const result = data.results?.[0];
+  if (!result?.data) return '';
+
+  const rd = result.data;
+
+  // Path 1: data.transcript as string
+  if (typeof rd.transcript === 'string' && rd.transcript.length > 50) {
+    return rd.transcript;
+  }
+
+  // Path 2: data.transcript.text
+  if (rd.transcript?.text && rd.transcript.text.length > 50) {
+    return rd.transcript.text;
+  }
+
+  // Path 3: data.transcript as array of segments
+  if (Array.isArray(rd.transcript)) {
+    const joined = rd.transcript.map(seg => seg.text || seg.utf8 || '').join(' ').replace(/\s+/g, ' ').trim();
+    if (joined.length > 50) return joined;
+  }
+
+  // Path 4: data.transcript.segments array
+  if (Array.isArray(rd.transcript?.segments)) {
+    const joined = rd.transcript.segments.map(seg => seg.text || seg.utf8 || '').join(' ').replace(/\s+/g, ' ').trim();
+    if (joined.length > 50) return joined;
+  }
+
+  // Path 5: data.text directly
+  if (typeof rd.text === 'string' && rd.text.length > 50) {
+    return rd.text;
+  }
+
+  // Path 6: data.content
+  if (typeof rd.content === 'string' && rd.content.length > 50) {
+    return rd.content;
+  }
+
+  return '';
+}
+
 async function getYouTubeTranscript(videoId) {
   const apiKey = Deno.env.get("YOUTUBE_TRANSCRIPT_API_KEY");
   if (!apiKey) {
@@ -31,63 +73,76 @@ async function getYouTubeTranscript(videoId) {
     return null;
   }
 
-  try {
-    console.log(`[Transcript T1] Fetching captions for ${videoId}...`);
-    const response = await fetch('https://youtubetranscript.dev/api/v2/batch', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ video_ids: [videoId], lang: 'en', preserve_formatting: false })
-    });
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY = 4000;
 
-    if (!response.ok) {
-      console.log(`[Transcript T1] API returned ${response.status}`);
-      return null;
-    }
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      console.log(`[Transcript T1] Attempt ${attempt}/${MAX_RETRIES} for ${videoId}...`);
+      const response = await fetch('https://youtubetranscript.dev/api/v2/batch', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ video_ids: [videoId], lang: 'en', preserve_formatting: false })
+      });
 
-    const data = await response.json();
-    console.log(`[Transcript T1] Response status: ${data.results?.[0]?.status || 'no result'}`);
+      if (!response.ok) {
+        console.log(`[Transcript T1] API returned ${response.status}`);
+        return null;
+      }
 
-    if (!data.results?.[0] || data.results[0].status !== 'completed') {
-      // Try extracting from raw data in case it's in a different format
+      const data = await response.json();
+      const status = data.results?.[0]?.status || 'no result';
+      console.log(`[Transcript T1] Response status: ${status}`);
+
+      // Log raw data keys for debugging
       const rawData = data.results?.[0]?.data;
       if (rawData) {
         console.log(`[Transcript T1] Raw data keys: ${Object.keys(rawData).join(', ')}`);
       }
-      console.log('[Transcript T1] No completed result');
+
+      // If still processing, wait and retry
+      if (status === 'processing' || status === 'pending' || status === 'queued') {
+        console.log(`[Transcript T1] Still ${status}, waiting ${RETRY_DELAY}ms before retry...`);
+        // Even while "processing", try to extract — some APIs populate data incrementally
+        const earlyText = extractTranscriptText(data);
+        if (earlyText.length > 50) {
+          console.log(`[Transcript T1] Found text (${earlyText.length} chars) despite '${status}' status`);
+          return earlyText;
+        }
+        if (attempt < MAX_RETRIES) {
+          await new Promise(r => setTimeout(r, RETRY_DELAY));
+          continue;
+        }
+        console.log('[Transcript T1] Max retries reached while processing');
+        return null;
+      }
+
+      // Try to extract regardless of status (some APIs return data with non-"completed" status)
+      const transcript = extractTranscriptText(data);
+      if (transcript.length > 50) {
+        console.log(`[Transcript T1] Got ${transcript.length} chars (status: ${status})`);
+        return transcript;
+      }
+
+      if (status === 'completed') {
+        console.log(`[Transcript T1] Status completed but no usable text found. Full data: ${JSON.stringify(rawData).substring(0, 500)}`);
+      }
+
+      console.log(`[Transcript T1] No usable transcript (status: ${status})`);
+      return null;
+    } catch (error) {
+      console.log(`[Transcript T1] Error on attempt ${attempt}: ${error.message}`);
+      if (attempt < MAX_RETRIES) {
+        await new Promise(r => setTimeout(r, RETRY_DELAY));
+        continue;
+      }
       return null;
     }
-
-    const transcriptData = data.results[0].data?.transcript;
-    let transcript = '';
-    if (typeof transcriptData === 'string') {
-      transcript = transcriptData;
-    } else if (transcriptData?.text) {
-      transcript = transcriptData.text;
-    } else if (Array.isArray(transcriptData?.segments)) {
-      transcript = transcriptData.segments.map(seg => seg.text || seg.utf8 || '').join(' ').replace(/\s+/g, ' ').trim();
-    } else if (Array.isArray(transcriptData)) {
-      // Handle array of {text, start, duration} objects
-      transcript = transcriptData.map(seg => seg.text || '').join(' ').replace(/\s+/g, ' ').trim();
-    }
-
-    // Also check data.results[0].data directly for transcript text
-    if ((!transcript || transcript.length < 50) && data.results[0].data?.text) {
-      transcript = data.results[0].data.text;
-    }
-
-    if (transcript && transcript.length > 50) {
-      console.log(`[Transcript T1] Got ${transcript.length} chars from captions`);
-      return transcript;
-    }
-    console.log(`[Transcript T1] Transcript too short: ${transcript?.length || 0} chars`);
-    return null;
-  } catch (error) {
-    console.log(`[Transcript T1] Error: ${error.message}`);
-    return null;
   }
+  return null;
 }
 
 // ===================================================================
