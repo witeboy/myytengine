@@ -291,6 +291,38 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Tier 1.75: Try supadata.ai free transcript API
+    if (!transcript || transcript.length < 50) {
+      try {
+        console.log(`[Transcript T1.75] Trying Supadata API...`);
+        const supaRes = await fetch(`https://api.supadata.ai/v1/youtube/transcript?videoId=${videoId}&lang=en`);
+        if (supaRes.ok) {
+          const supaData = await supaRes.json();
+          let supaText = '';
+          if (typeof supaData === 'string') {
+            supaText = supaData;
+          } else if (supaData?.content) {
+            supaText = supaData.content;
+          } else if (supaData?.transcript) {
+            supaText = typeof supaData.transcript === 'string' ? supaData.transcript : '';
+          } else if (Array.isArray(supaData)) {
+            supaText = supaData.map(s => s.text || s.content || '').join(' ').replace(/\s+/g, ' ').trim();
+          }
+          if (supaText && supaText.length > 50) {
+            transcript = supaText;
+            transcriptSource = 'supadata';
+            console.log(`[Transcript T1.75] Got ${transcript.length} chars from Supadata`);
+          } else {
+            console.log(`[Transcript T1.75] No usable text (${supaText?.length || 0} chars)`);
+          }
+        } else {
+          console.log(`[Transcript T1.75] Supadata returned ${supaRes.status}`);
+        }
+      } catch (err) {
+        console.log(`[Transcript T1.75] Error: ${err.message}`);
+      }
+    }
+
     // Tier 2: Cobalt (extract audio) → AssemblyAI (speech-to-text)
     if (!transcript || transcript.length < 50) {
       console.log('[Analyze] No captions found, falling back to Cobalt + AssemblyAI...');
