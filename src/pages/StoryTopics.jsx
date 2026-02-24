@@ -23,17 +23,7 @@ export default function StoryTopics() {
     enabled: !!projectId,
   });
 
-  // Auto-skip if topic already selected — go to the correct next page
-  React.useEffect(() => {
-    if (!project) return;
-    const s = project.status;
-    if (s === 'topic_selected') navigate(createPageUrl(`StoryDuration?project_id=${projectId}`), { replace: true });
-    else if (s === 'outline_ready') navigate(createPageUrl(`StoryHooks?project_id=${projectId}`), { replace: true });
-    else if (['hooks_ready', 'scripting', 'script_complete'].includes(s)) navigate(createPageUrl(`StoryScript?project_id=${projectId}`), { replace: true });
-    else if (['content_generation', 'scenes_ready'].includes(s)) navigate(createPageUrl(`ContentGeneration?project_id=${projectId}`), { replace: true });
-    else if (['timeline_editing', 'compiled'].includes(s)) navigate(createPageUrl(`TimelineEditor?project_id=${projectId}`), { replace: true });
-    else if (['post_production', 'published'].includes(s)) navigate(createPageUrl(`PostProduction?project_id=${projectId}`), { replace: true });
-  }, [project?.status]);
+  // No auto-skip — users can always come back to regenerate or re-select topics
 
   const { data: topics = [], isLoading } = useQuery({
     queryKey: ['topics', projectId],
