@@ -338,7 +338,11 @@ Deno.serve(async (req) => {
           const cobaltEndpoint = cobaltUrl.replace(/\/+$/, '');
           const cobaltRes = await fetch(cobaltEndpoint, {
             method: "POST",
-            headers: { "Content-Type": "application/json", "Accept": "application/json" },
+            headers: { 
+              "Content-Type": "application/json", 
+              "Accept": "application/json",
+              "User-Agent": "Mozilla/5.0"
+            },
             body: JSON.stringify({ url: youtubeUrl, downloadMode: "audio", audioFormat: "mp3" })
           });
 
