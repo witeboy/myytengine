@@ -172,25 +172,97 @@ const styleMap = {
 // STYLE-SPECIFIC INSTRUCTIONS FOR LLM
 // ══════════════════════════════════════════════════════════════════
 
-function getStyleSpecificInstructions(styleName, styleConfig) {
-  const instructions = {
-    cinematic_realistic: `PHOTOREALISTIC CINEMATIC: Use real-world camera language — ARRI Alexa, anamorphic lenses, f/1.4 bokeh, film grain, three-point lighting, color LUT grading. Images should look like frames from a Hollywood movie.`,
-    photorealistic_4k: `PHOTOREALISTIC PHOTOGRAPHY: Use DSLR camera language — Canon/Sony, real lens specs, natural lighting, RAW photo quality. Images should look like professional editorial photographs.`,
-    anime: `ANIME ILLUSTRATION: Use anime art language — cel-shading, clean linework, vibrant colors, expressive eyes, Studio Ghibli quality. NO camera or lens terms. NO photorealistic language. Describe scenes as anime illustrations, not photographs.`,
-    cinematic_anime: `CINEMATIC ANIME: Use cinematic anime language — Makoto Shinkai quality, dramatic lighting with god rays, ultra-detailed anime backgrounds, sharp linework, vibrant color grading. Blend anime art with cinematic composition. NO real camera/lens terms.`,
-    cartoon_2d: `2D CARTOON: Use cartoon art language — bold outlines, flat vibrant colors, expressive character design, dynamic poses, Cartoon Network quality. NO photorealistic language at all. Describe as cartoon illustrations.`,
-    picstory_cocomelon: `3D CHILDREN'S ANIMATION: Use CoComelon/Pixar Junior language — soft rounded 3D characters, big expressive eyes, pastel colors, plastic-like textures, warm cheerful lighting. NO photorealistic camera terms.`,
-    cinematic_picstory: `CINEMATIC 3D ANIMATION: Use Pixar/DreamWorks language — high-quality 3D rendering, stylized characters, dramatic lighting, subsurface scattering, depth of field. Describe as animated film frames, not photographs.`,
-    oil_painting: `OIL PAINTING: Use fine art language — impasto brushstrokes, pigment texture, chiaroscuro, Rembrandt lighting, canvas texture, classical composition, glazing technique. NO camera or digital terms.`,
-    watercolor: `WATERCOLOR PAINTING: Use watercolor art language — translucent washes, paper grain, wet-on-wet blending, bleeding edges, granulation, luminous transparency. NO camera or digital terms.`,
-    comic_book: `COMIC BOOK ART: Use comic art language — bold ink outlines, halftone dots, vibrant colors, dynamic action lines, dramatic foreshortening, Marvel/DC quality. NO photorealistic camera terms.`,
-    humpty_dumpty: `STORYBOOK ILLUSTRATION: Use children's book art language — whimsical hand-drawn quality, watercolor washes, rounded friendly characters, fairy tale aesthetic, warm nostalgic nursery rhyme feel. NO camera terms.`,
-    harry_potter: `MAGICAL FANTASY: Use fantasy concept art language — warm candlelight, gothic stone textures, floating candles, jewel-tone colors, ethereal glow, parchment textures, magical particles. Can use cinematic composition but focus on magical atmosphere.`,
-    "3d_whiteboard_cartoon": `WHITEBOARD CARTOON: Use explainer cartoon language — clean black outlines, flat color fills, friendly exaggerated proportions, isometric perspective, bright cheerful colors, YouTube explainer style. NO photorealistic terms at all.`,
-    low_poly_3d_cartoon: `LOW-POLY 3D CARTOON: Use low-poly 3D language — visible flat-shaded polygon facets, geometric triangular surfaces, chunky stylized characters with oversized heads, angular noses, big expressive eyes, matte plastic-like materials, bright saturated primary colors, soft ambient occlusion, NO smooth rendering. Describe everything as geometric/faceted/polygonal. NO real camera or lens terms. NO film grain, bokeh, or anamorphic. Think indie 3D animation or premium game cutscene with charming geometric aesthetic.`
+function getStyleSceneBodyRules(styleName) {
+  // These rules tell the LLM HOW to describe characters, environments, objects, and architecture
+  // in the scene body — so the style DNA is baked into every description, not just the prefix.
+  const rules = {
+    cinematic_realistic: {
+      characters: "Describe characters with photorealistic detail — skin texture, real clothing fabrics, natural hair, realistic body proportions.",
+      environments: "Real-world locations with architectural accuracy, natural materials (wood, stone, glass), weather and atmospheric effects.",
+      objects: "Props with realistic material properties — metal reflections, fabric weave, glass transparency, leather grain.",
+      rendering: "Use cinematic camera language freely — ARRI, anamorphic, bokeh, f-stops, film grain, color LUT."
+    },
+    photorealistic_4k: {
+      characters: "Photograph-quality humans with visible pores, real fabric textures, natural hair strands, authentic expressions.",
+      environments: "Real locations as a photographer would capture them — natural light, real architecture, genuine materials.",
+      objects: "Objects with photographic material accuracy — reflections, textures, wear and patina.",
+      rendering: "DSLR photography language — Canon/Sony, real lens specs, natural lighting, RAW quality."
+    },
+    anime: {
+      characters: "Anime-style characters with large expressive eyes, cel-shaded skin, stylized colorful hair, clean linework, exaggerated expressions.",
+      environments: "Anime background art — painted skies with dramatic clouds, stylized architecture, atmospheric perspective with soft color gradients.",
+      objects: "Objects drawn with clean anime linework, flat color fills with subtle highlight/shadow cel-shading.",
+      rendering: "Describe as anime illustration. Use terms: cel-shaded, linework, color fills, anime eyes, Studio Ghibli style."
+    },
+    cinematic_anime: {
+      characters: "Cinematic anime characters — sharp detailed linework, subtle cel-shading, dramatic lighting on faces, flowing hair with light interaction.",
+      environments: "Makoto Shinkai quality backgrounds — ultra-detailed painted environments, dramatic god rays, atmospheric depth, rich color grading.",
+      objects: "Anime-rendered objects with cinematic lighting — dramatic rim lights, volumetric atmosphere, sharp detail.",
+      rendering: "Cinematic anime language — god rays, volumetric lighting, dramatic color grading, but with anime linework and cel-shading."
+    },
+    cartoon_2d: {
+      characters: "2D cartoon characters with bold black outlines, flat vibrant color fills, exaggerated proportions, big expressive faces, dynamic poses.",
+      environments: "Cartoon backgrounds with bold outlines, flat color fills, playful simplified architecture, bright cheerful colors.",
+      objects: "Cartoon-style objects with clean outlines, flat colors, slightly exaggerated proportions, playful design.",
+      rendering: "Cartoon Network / Disney Channel quality. Bold outlines, flat colors, no photorealistic terms."
+    },
+    picstory_cocomelon: {
+      characters: "Soft rounded 3D characters with big expressive eyes, plastic-smooth skin, pastel clothing, toy-like proportions, cheerful expressions.",
+      environments: "Bright pastel 3D environments — soft rounded architecture, gentle lighting, toy-like world, child-safe wholesome settings.",
+      objects: "Smooth plastic-textured 3D objects, rounded edges, bright pastel colors, toy-like quality.",
+      rendering: "CoComelon/Pixar Junior 3D rendering — soft shadows, warm studio lighting, smooth plastic textures."
+    },
+    cinematic_picstory: {
+      characters: "Pixar/DreamWorks quality 3D characters — expressive stylized faces, realistic proportions, subsurface scattering on skin, detailed clothing.",
+      environments: "Cinematic 3D environments — dramatic studio lighting, rich color grading, volumetric atmosphere, detailed textures.",
+      objects: "High-quality 3D rendered objects with detailed materials, dramatic lighting, depth of field.",
+      rendering: "Pixar/DreamWorks animated feature film quality — dramatic lighting, subsurface scattering, cinematic composition."
+    },
+    oil_painting: {
+      characters: "Characters rendered with visible impasto brushstrokes, rich pigment skin tones, classical portrait technique, painterly soft edges.",
+      environments: "Landscapes and interiors with thick oil paint texture, classical composition, chiaroscuro lighting, canvas grain visible.",
+      objects: "Objects painted with rich pigment layers, visible brush texture, warm varnish glow, classical still-life technique.",
+      rendering: "Fine art oil painting language — impasto, glazing, chiaroscuro, Rembrandt lighting, canvas texture."
+    },
+    watercolor: {
+      characters: "Characters rendered in soft watercolor washes — translucent skin tones, gentle bleeding edges, paper grain showing through.",
+      environments: "Watercolor landscapes — soft color washes, wet-on-wet blending, visible paper texture, delicate atmospheric effects.",
+      objects: "Objects painted with translucent watercolor layers, controlled bleeding edges, subtle granulation.",
+      rendering: "Traditional watercolor technique — translucent washes, paper grain, wet-on-wet blending, luminous transparency."
+    },
+    comic_book: {
+      characters: "Comic book characters with bold black ink outlines, halftone dot shading on skin, vibrant flat colors, dramatic foreshortening, dynamic action poses.",
+      environments: "Comic panel backgrounds — bold outlines, halftone shading, dramatic perspective, vibrant saturated colors.",
+      objects: "Objects with bold ink outlines, halftone dots, Ben-Day dot patterns, dramatic shadows.",
+      rendering: "Marvel/DC Comics quality — bold ink, halftone dots, action lines, dramatic foreshortening."
+    },
+    humpty_dumpty: {
+      characters: "Whimsical storybook characters — rounded friendly shapes, gentle watercolor washes, warm nostalgic feel, fairy tale proportions.",
+      environments: "Enchanted storybook world — hand-drawn quality, soft golden lighting, pastel tones, fairy tale architecture, cozy warmth.",
+      objects: "Storybook objects with delicate cross-hatching, gentle watercolor fills, vintage children's book charm.",
+      rendering: "Maurice Sendak / Beatrix Potter inspired — hand-drawn, watercolor washes, warm nostalgic nursery rhyme feel."
+    },
+    harry_potter: {
+      characters: "Fantasy characters in robes and wizard attire, warm candlelit skin tones, weathered textures, magical glow effects on faces.",
+      environments: "Gothic castle interiors — stone walls, floating candles, jewel-tone stained glass, magical golden particles, mysterious corridors.",
+      objects: "Enchanted artifacts with luminous properties, weathered leather, parchment textures, magical golden glow.",
+      rendering: "Fantasy concept art — warm candlelight, gothic textures, magical particles, jewel-tone color palette."
+    },
+    "3d_whiteboard_cartoon": {
+      characters: "Characters with bold consistent black ink outlines, flat color fills with single-tone cel-shading, friendly exaggerated proportions — larger heads, expressive cartoon eyes, thick eyebrows, simple noses. Clothing rendered as flat color with subtle darker-tone fold shading (plaid flannel shirts, jeans, work boots, hard hats). Skin in warm browns and peach tones.",
+      environments: "Clean isometric/oblique perspective environments — simplified but recognizable settings. Green grass fields with bright yellow-green, gradient blue skies, brick buildings with clean window outlines, indoor rooms with tiled floors and flat-colored walls. Sky blue, steel blue, teal for environments.",
+      objects: "ALL objects rendered with bold black outlines and flat color fills — vending machines, storage units, vehicles, furniture. Clearly identifiable with labeled visual metaphors. Information callout bubbles and thought bubbles as part of the visual language.",
+      rendering: "YouTube explainer / business education cartoon style — approachable, friendly, professional, visually clean. Even ambient lighting, no harsh shadows, only subtle ground shadows and single-tone darker shading."
+    },
+    low_poly_3d_cartoon: {
+      characters: "Low-poly 3D characters built from visible flat-shaded polygon facets — exaggerated proportions with oversized heads, prominent angular protruding noses, deeply expressive large round eyes with white sclera and dark pupils, thick sculpted geometric eyebrows. Hair rendered as chunky geometric strands with visible polygon facets. Skin in warm peach-tan with polygon-edge shading. Hands as simplified blocky forms. Clothing clearly modeled with visible folds and flat polygon faces — knit sweater vests over collared shirts, police uniforms with badges, casual jeans and flannel, purple dresses.",
+      environments: "Low-poly 3D environments — ALL surfaces built from visible flat-shaded triangular polygons. Suburban houses with clapboard siding in blues/grays/greens, modeled porches with white railings, shingled roofs with geometric ridge lines, white picket fences. Green grass as low-poly ground planes with bright saturated green. Trees with chunky faceted canopies of large triangular polygon clusters in rich greens on smooth brown trunks. Sidewalks with visible concrete panels, smooth dark asphalt roads. Indoor: wood-paneled walls, reception desks, modeled computer monitors, bulletin boards, tiled floors.",
+      objects: "ALL objects as low-poly geometric forms — boxy cartoon cars with rounded-rectangular bodies, yellow circular disc headlights, chrome bumpers. Mailboxes on posts, fire hydrants, street lamps with geometric bulbs. Every surface shows visible polygon edges and flat-shaded faces. Matte slightly plastic material quality like clay or vinyl toys.",
+      rendering: "Low-poly 3D rendering — clean polygon edges visible on ALL surfaces, flat-shaded faces with NO smoothing between polygon normals (the signature faceted look). Soft ambient occlusion in crevices, gentle directional shadows, NO outlines or cel-shading. Bright clear gradient sky, fluffy geometric clouds as clusters of white polygon spheres. Vibrant saturated primary colors — rich reds, deep blues, bright greens, warm peach, yellow accents. Overall warm and inviting. Quality matches high-end indie 3D animation with Pixar-level expressiveness combined with geometric stylization."
+    }
   };
 
-  return instructions[styleName] || `Use visual language consistent with "${styleName}" style. Match the positive prompt keywords: ${styleConfig.positive.substring(0, 200)}`;
+  return rules[styleName] || null;
 }
 
 // ══════════════════════════════════════════════════════════════════
