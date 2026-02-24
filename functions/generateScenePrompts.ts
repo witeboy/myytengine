@@ -1,16 +1,21 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // ══════════════════════════════════════════════════════════════════
-// SCENE PROMPT GENERATOR
+// SCENE PROMPT GENERATOR — DIRECTOR NOTES → PRODUCTION PROMPTS
 // ══════════════════════════════════════════════════════════════════
-// Pipeline: Script → Scene Breakdown → [THIS] → Image Gen → Animation
+// Pipeline: Script → Scene Breakdown (deterministic) → [THIS] → Image Gen → Animation
+//
+// The breakdown guarantees EXACTLY the right number of scenes.
+// This function's ONLY job is converting director notes into
+// production-ready image + animation prompts. No compression,
+// no scene deletion, no count changes.
 //
 // Reads director notes from image_prompt field (DIRECTOR_NOTES: prefix)
 // Converts to production-ready image + animation prompts
-// All batches processed in a single call — no cross-call state
 // ══════════════════════════════════════════════════════════════════
 
-const BATCH_SIZE = 12; // Scenes per Gemini call
+const BATCH_SIZE = 12;
+const CLIP_DURATION = 5;
 
 function repairJSON(str) {
   return str
@@ -52,7 +57,6 @@ async function callGemini(prompt, temperature = 0.7, maxTokens = 16384, retries 
       if (!data.candidates?.length) throw new Error("No candidates from Gemini");
       const rawText = data.candidates[0].content.parts[0].text;
 
-      // 3-stage JSON parsing
       try { return JSON.parse(rawText); } catch (_) {}
       try { return JSON.parse(repairJSON(rawText)); } catch (_) {}
 
@@ -64,7 +68,6 @@ async function callGemini(prompt, temperature = 0.7, maxTokens = 16384, retries 
       const objMatch = jsonStr.match(/\{[\s\S]*\}/);
       if (objMatch) { try { return JSON.parse(objMatch[0]); } catch (_) {} }
 
-      // Truncation recovery
       const lastBrace = rawText.lastIndexOf('}');
       if (lastBrace > 0) {
         const trimmed = rawText.substring(0, lastBrace + 1);
@@ -109,75 +112,15 @@ function extractDirectorNotes(imagePrompt) {
 const styleMap = {
   cinematic_realistic: {
     positive: "Cinematic film still shot on ARRI Alexa 65 with anamorphic Panavision lenses, beautiful lens flare and chromatic aberration, shallow depth of field f/1.4 with creamy bokeh, dramatic three-point lighting with hard key light and soft fill, strong rim light separation, color graded with professional teal and orange LUT, subtle Kodak Vision3 film grain texture, volumetric god rays through atmosphere, Hollywood blockbuster cinematography, photorealistic rendering, 8K resolution",
-    reinforcement: "STYLE LOCK: photorealistic cinematic film still, real actors, real lighting, ARRI camera, Kodak film grain",
-    antiStyle: "NOT a cartoon, NOT illustration, NOT anime, NOT painting, NOT 2D, NOT 3D render, NOT CGI. Photorealistic only",
     negative: "cartoon, anime, illustration, painting, drawing, sketch, 3D render, CGI, video game, cel shaded, flat colors, clipart, comic book, manga, stylized, amateur, low quality, blurry, distorted, deformed, oversaturated"
   },
   photorealistic_4k: {
     positive: "Ultra-photorealistic DSLR photograph shot on Canon EOS R5 with RF 85mm f/1.2 L lens, razor-sharp focus, natural ambient lighting, professional color grading, editorial photography for National Geographic, visible skin texture and pores, accurate shadows and highlights, real-world proportions, zero AI artifacts, 8K RAW quality",
-    reinforcement: "STYLE LOCK: ultra-photorealistic DSLR photograph, real people, visible pores, natural light, Canon RAW quality",
-    antiStyle: "NOT a cartoon, NOT illustration, NOT anime, NOT painting, NOT 3D render, NOT CGI. Photograph only",
     negative: "cartoon, anime, CGI, 3D render, painting, digital art, stylized, unrealistic, soft focus, beauty filter, over-processed, HDR overdone"
-  },
-  cinematic_anime: {
-    positive: "Cinematic anime illustration in the signature style of Makoto Shinkai and Ufotable studio, dramatic volumetric god rays with atmospheric scattering, incredibly detailed background art with painted clouds, film-grain overlay texture, anime characters with semi-realistic proportions, dynamic dramatic camera angle with depth, beautiful depth of field bokeh, award-winning anime film quality",
-    reinforcement: "STYLE LOCK: cinematic anime illustration, Makoto Shinkai style, anime proportions, cel-shaded, painted backgrounds, anime film aesthetic",
-    antiStyle: "NOT a photograph, NOT photorealistic, NOT live action, NOT DSLR, NOT a 3D render. Anime illustration only",
-    negative: "photorealistic, live action, photograph, 3D render, western cartoon, rough sketch"
   },
   anime: {
     positive: "High-quality anime illustration, Studio Ghibli meets modern anime, vibrant saturated colors, clean linework, cel-shaded with soft gradients, expressive detailed eyes, detailed hair with natural flow, colorful background art with atmospheric perspective, professional anime production quality",
-    reinforcement: "STYLE LOCK: anime illustration, cel-shaded, clean linework, anime eyes, vibrant anime colors, Ghibli aesthetic",
-    antiStyle: "NOT a photograph, NOT photorealistic, NOT live action, NOT 3D render, NOT oil painting. Anime only",
     negative: "photorealistic, live action, photograph, 3D render, western cartoon, rough sketch, inconsistent style, off-model, chibi, super deformed"
-  },
-  cartoon_2d: {
-    positive: "Professional 2D vector animation style reminiscent of modern Cartoon Network and Disney Television Animation, flat cel-shaded colors with strategic gradients, bold clean outlines with consistent line weight, playful exaggerated proportions, bright cheerful primary color palette, clean gradient backgrounds with atmospheric depth, broadcast television quality",
-    reinforcement: "STYLE LOCK: 2D cartoon animation, flat colors, bold outlines, exaggerated proportions, Cartoon Network style",
-    antiStyle: "NOT a photograph, NOT photorealistic, NOT 3D rendered, NOT anime, NOT oil painting, NOT watercolor. 2D cartoon only",
-    negative: "photorealistic, photograph, 3D render, anime, oil painting, watercolor, realistic proportions"
-  },
-  picstory_cocomelon: {
-    positive: "3D rendered Pixar-quality children's animation with soft subsurface scattering on skin, rounded chunky character design with appeal for young audiences, oversized expressive eyes with detailed reflections, bright candy-colored palette with high saturation, soft ambient occlusion for subtle depth, cheerful warm global illumination with soft shadows, toy-like proportions that feel huggable, smooth plastic-like materials, raytraced rendering quality",
-    reinforcement: "STYLE LOCK: 3D children's animation, Cocomelon/Pixar style, rounded toy-like characters, bright candy colors, soft 3D rendering",
-    antiStyle: "NOT a photograph, NOT photorealistic, NOT 2D, NOT anime, NOT dark or gritty. Children's 3D animation only",
-    negative: "photorealistic, photograph, 2D, anime, dark, gritty, noir, horror, realistic humans"
-  },
-  cinematic_picstory: {
-    positive: "Cinematic 3D CGI render matching Pixar Animation Studios or DreamWorks feature film quality, realistic subsurface scattering for skin and translucent materials, raytraced global illumination with accurate light bounces, volumetric fog and atmospheric effects, dramatic rim lighting for character separation, physically based rendering (PBR) with accurate material properties, detailed fabric and hair simulation, film color grading with rich contrast, IMAX-quality framing",
-    reinforcement: "STYLE LOCK: cinematic 3D CGI, Pixar/DreamWorks film quality, PBR rendering, raytraced lighting, 3D animated characters",
-    antiStyle: "NOT a photograph, NOT photorealistic, NOT 2D, NOT anime, NOT hand-drawn, NOT watercolor. Cinematic 3D CGI only",
-    negative: "photorealistic, photograph, 2D, flat, sketch, watercolor, anime"
-  },
-  oil_painting: {
-    positive: "Classical oil painting on textured linen canvas, visible impasto brushstrokes with thick paint application, chiaroscuro lighting technique with dramatic contrast between light and shadow, Rembrandt-inspired dramatic shadow and highlighted faces, rich warm umber and burnt sienna undertones, warm golden varnish glow, museum-quality fine art worthy of the Louvre, Renaissance composition using golden ratio",
-    reinforcement: "STYLE LOCK: oil painting, visible brushstrokes, canvas texture, impasto technique, warm varnish glow, Rembrandt lighting",
-    antiStyle: "NOT a photograph, NOT photorealistic, NOT 3D rendered, NOT anime, NOT cartoon, NOT digital art. Oil painting on canvas only",
-    negative: "photorealistic, photograph, 3D render, CGI, anime, cartoon, vector, digital art"
-  },
-  watercolor: {
-    positive: "Delicate transparent watercolor painting on cold-pressed Arches paper, visible paper grain texture showing through the paint, soft wet-on-wet color bleeding technique with organic edges, transparent luminous washes layered for atmospheric depth, gentle color gradients that flow naturally, white paper showing through for highlights, loose expressive brushwork, muted pastel palette with occasional vivid accent colors",
-    reinforcement: "STYLE LOCK: watercolor painting, visible paper texture, transparent washes, color bleeding edges, white paper showing through",
-    antiStyle: "NOT a photograph, NOT photorealistic, NOT 3D rendered, NOT anime, NOT cartoon, NOT oil painting. Watercolor on paper only",
-    negative: "photorealistic, photograph, 3D render, CGI, anime, cartoon, vector, oil painting"
-  },
-  comic_book: {
-    positive: "Bold American comic book art style with heavy black ink outlines and dynamic line weight variation, Ben-Day halftone dot shading for texture and tone, dynamic foreshortened perspective with dramatic angles, motion lines and speed lines for kinetic energy, dramatic chiaroscuro inking with deep blacks and bright highlights, saturated CMYK color palette, Jack Kirby-inspired dynamic composition, professional comic book illustration quality",
-    reinforcement: "STYLE LOCK: comic book art, heavy ink outlines, halftone dots, dynamic poses, CMYK colors, Jack Kirby energy",
-    antiStyle: "NOT a photograph, NOT photorealistic, NOT 3D rendered, NOT watercolor, NOT oil painting. Comic book ink art only",
-    negative: "photorealistic, photograph, 3D render, CGI, watercolor, oil painting, pastel"
-  },
-  harry_potter: {
-    positive: "Dark whimsical digital illustration in the 'Harry Potter gothic storybook' style. Semi-realistic stylized characters with slightly oversized heads (not chibi — proportional but exaggerated for expressiveness), large expressive eyes with visible white sclera and dark pupils that convey strong emotion, angular facial features with defined jawlines, thin elongated bodies with Victorian/Gothic clothing (long dark coats, vests, collared shirts, top hats, capes, robes). Messy spiky dark hair is a signature motif. Characters rendered with clean ink-like outlines (medium weight, darker than the fill), smooth digital painting with visible but controlled brushwork on clothing and skin. DOMINANT COLOR PALETTE: deep dark teal (#1A3A4A) and desaturated cyan (#2D6B7A) wash over the ENTIRE image as the atmospheric base — every surface, shadow, and midtone is tinted teal-blue. Deep navy-charcoal (#0D1B2A) for the darkest shadows and vignette edges. Selective warm amber/orange (#D4A043) glow ONLY from specific light sources — lanterns, candles, glowing windows, magical effects — creating dramatic contrast against the teal atmosphere. Characters have blue-grey desaturated skin tones (#8BA4AD). Occasional bright cyan (#4FD1C5) glow for magical/technological elements. Environments are richly detailed Victorian Gothic settings — cluttered rooms with stacks of books and papers, cobblestone streets with old buildings, dark workshops with pipes and cables, atmospheric alleys. Everything is bathed in thick teal atmospheric fog/mist that creates depth through atmospheric perspective (distant objects fade into teal haze). Dramatic single-source warm lighting cutting through the dark blue atmosphere — volumetric light rays, glowing halos around light sources, rim lighting on characters. Painterly textured backgrounds with more graphic/clean character rendering. High contrast compositions with deep darks and selective bright warm highlights. Gothic storytelling atmosphere — mysterious, slightly eerie but charming, like Coraline meets Harry Potter meets Tim Burton editorial illustration.",
-    reinforcement: "STYLE LOCK: Dark whimsical gothic illustration — DOMINANT dark teal (#1A3A4A) atmosphere covering everything, warm amber glow ONLY from light sources, desaturated blue-grey skin tones, ink-like outlines on characters, stylized semi-realistic proportions with large expressive eyes, Victorian Gothic clothing and environments, thick teal atmospheric fog, volumetric warm light rays cutting through darkness, painterly digital art with controlled brushwork. The ENTIRE image must be bathed in the dark teal-cyan color wash — this is NON-NEGOTIABLE. Warm orange/amber appears ONLY as point-light accents (lanterns, windows, candles, magical glow). Characters are stylized but NOT anime, NOT chibi, NOT flat cartoon — they have depth, volume, and expressive faces with visible emotion in their large eyes.",
-    antiStyle: "NOT photorealistic, NOT anime/manga style, NOT flat 2D cartoon, NOT 3D CGI/Pixar, NOT bright saturated colors, NOT pastel, NOT cheerful/sunny, NOT minimalist, NOT watercolor, NOT oil painting. This is dark atmospheric digital illustration with gothic charm — NOT any other style.",
-    negative: "photorealistic, photograph, 3D render, CGI, Pixar, anime, manga, chibi, flat colors, bright colors, saturated colors, pastel palette, sunny, cheerful, white background, clean background, minimal background, watercolor, oil painting, sketch, rough lines, bright lighting, overexposed, high key lighting, neon colors, cartoon network style, disney style, simple shapes, stick figures"
-  },
-  humpty_dumpty: {
-    positive: "Minimalist cartoon illustration in the 'Humpty Dumpty' web animation style. Characters are EXTREMELY simple: large perfect white circle for a head with thick dark-brown (#3D2B1F) outline stroke (3-4px weight), tiny black dot-eyes that are small horizontal dashes or dots placed close together, simple single-line mouth (curved up for happy, curved down for sad, wavy for worried, V-shape smirk for mischievous, small O for surprised, flat line for neutral), NO nose unless just a tiny dot. Bodies are simple rounded bean/egg shapes with flat solid-color fill and the same thick dark-brown outline — NO body detail, NO muscle definition, NO anatomical accuracy. Arms are simple curved lines extending from the body (like noodle arms), legs are two straight stick lines. Clothing is indicated ONLY by flat color fills within the body outline: dark slate-blue (#3D4F5F) for suits/jackets, warm brown (#8B6F47) for casual wear, muted red (#C0392B) for uniforms/robes, cream/beige (#F5DEB3) for shirts, light blue (#87CEEB) for police/official. Characters are distinguished by: clothing color, simple accessories drawn in the same minimal style (flat-brim hats, police caps with yellow badge dot, hair as simple colored shapes on top of the circle head — dark bob, blonde side-sweep, bun on top). Female characters get simple hair shapes (long dark hair as two curved lines framing the head, or a bun circle on top). Background is ALWAYS a solid warm cream (#F5E6D3) or warm beige (#FAEBD7) flat fill — completely flat, no gradient, no texture. When environments are needed, draw them in the SAME ultra-minimal style: buildings are simple colored rectangles with thick brown outlines, windows are small blue squares, doors are dark rectangles, signs are simple rectangles with a small icon inside. Occasionally, one photorealistic object (car, house, building exterior) appears composited next to the drawn characters for comedic juxtaposition — this is a KEY signature of the style. Multiple characters in a scene have slightly different body sizes and clothing colors to distinguish them. Emotional scenes use the character's simple face expression plus body posture (arms raised = celebration, arms on hips = authority, hunched = sad, arms out = surprise). Group shots show 2-6 characters at different sizes, some partially overlapping. Portrait-style composition with characters filling 40-70% of the frame. Clean, crisp vector-like edges despite the hand-drawn feel.",
-    reinforcement: "STYLE LOCK: Humpty Dumpty minimalist cartoon — white circle heads, thick dark-brown outlines, flat solid-color bean bodies, stick arms and legs, tiny dot-eyes, simple line-mouths, solid warm cream background, NO shading, NO gradients, NO textures on characters, NO realistic proportions. This style is deliberately crude and charming — like a well-made web animation. Characters look like they were drawn by a talented artist deliberately choosing extreme simplicity. The humor comes from telling serious/dramatic stories with these absurdly simple characters. EVERY element that is drawn (characters, simple props, simple buildings) uses the same thick dark-brown outline and flat color fill. The ONLY exception is occasional photorealistic objects composited in for comedic contrast. Faces have MAXIMUM 4 elements: two dot-eyes, one line-mouth, and optionally one simple eyebrow line per eye. NO additional facial features.",
-    antiStyle: "NOT photorealistic characters, NOT detailed faces, NOT anime eyes, NOT 3D rendered characters, NOT realistic human proportions, NOT complex shading or lighting on characters, NOT gradient fills on characters, NOT busy or detailed backgrounds, NOT watercolor, NOT oil painting. The characters must look like simple stick figures with circle heads — NOT like any other cartoon style (not Disney, not anime, not Cartoon Network). The backgrounds must be FLAT solid cream — not painted, not textured, not gradient.",
-    negative: "photorealistic people, realistic faces, realistic eyes, detailed anatomy, realistic proportions, anime, manga, 3D render, CGI, complex shading, gradient on characters, textured background, painted background, detailed background, intricate details, complex lighting, volumetric lighting, realistic skin, realistic hair, depth of field, motion blur, shadows on characters, multiple light sources, complex environment, busy composition, ornate, decorative, watercolor wash, oil paint texture, brush strokes on characters"
   }
 };
 
@@ -185,79 +128,58 @@ const styleMap = {
 // PROMPT VALIDATION
 // ══════════════════════════════════════════════════════════════════
 
-function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, sceneNumber, visualStyle) {
+function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, sceneNumber) {
   let enhanced = imagePrompt;
-
-  // Strip pixel dimensions
   enhanced = enhanced.replace(/\b\d{3,4}\s*[x×]\s*\d{3,4}\s*(pixels?|px)?\s*\.?\s*/gi, '');
 
-  const isHumptyDumpty = visualStyle === 'humpty_dumpty';
-  const isHarryPotter = visualStyle === 'harry_potter';
-  const isSpecialStyle = isHumptyDumpty || isHarryPotter;
-
-  // Ensure style prefix
   const styleCheck = styleConfig.positive.substring(0, 30).toLowerCase();
   if (!enhanced.toLowerCase().includes(styleCheck.substring(0, 20))) {
     enhanced = `${styleConfig.positive}. ${enhanced}`;
   }
 
-  // Ensure composition hint
-  if (isSpecialStyle) {
-    const compHint = orientationConfig.format === 'portrait'
-      ? 'vertical 9:16 frame'
-      : 'wide 16:9 frame';
-    if (orientationConfig.format === 'portrait') {
-      if (!/portrait|vertical|9:16/i.test(enhanced)) {
-        enhanced = `${compHint}. ${enhanced}`;
-      }
-    } else {
-      if (!/landscape|widescreen|16:9/i.test(enhanced)) {
-        enhanced = `${compHint}. ${enhanced}`;
-      }
+  const compHint = orientationConfig.format === 'portrait'
+    ? 'vertical 9:16 frame, tall vertical composition'
+    : 'widescreen 16:9 cinematic frame, wide horizontal composition';
+
+  if (orientationConfig.format === 'portrait') {
+    if (!/portrait|vertical|9:16/i.test(enhanced)) {
+      enhanced = enhanced.replace(/landscape|horizontal|widescreen|16:?9/gi, '');
+      enhanced = `${compHint}. ${enhanced}`;
     }
   } else {
-    const compHint = orientationConfig.format === 'portrait'
-      ? 'vertical 9:16 frame, tall vertical composition'
-      : 'widescreen 16:9 cinematic frame, wide horizontal composition';
-
-    if (orientationConfig.format === 'portrait') {
-      if (!/portrait|vertical|9:16/i.test(enhanced)) {
-        enhanced = enhanced.replace(/landscape|horizontal|widescreen|16:?9/gi, '');
-        enhanced = `${compHint}. ${enhanced}`;
-      }
-    } else {
-      if (!/landscape|widescreen|16:9/i.test(enhanced)) {
-        enhanced = enhanced.replace(/portrait|vertical|9:?16/gi, '');
-        enhanced = `${compHint}. ${enhanced}`;
-      }
+    if (!/landscape|widescreen|16:9/i.test(enhanced)) {
+      enhanced = enhanced.replace(/portrait|vertical|9:?16/gi, '');
+      enhanced = `${compHint}. ${enhanced}`;
     }
   }
 
-  // Ensure no-text rule
   if (!/no text/i.test(enhanced)) {
     enhanced += ', ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image';
   }
 
-  // Ensure quality markers (style-appropriate)
-  if (isHumptyDumpty) {
-    if (!/clean|crisp|professional/i.test(enhanced)) {
-      enhanced += ', clean crisp illustration, professional web animation quality, solid warm cream background';
-    }
-  } else if (isHarryPotter) {
-    if (!/atmospheric|teal|gothic/i.test(enhanced)) {
-      enhanced += ', dark teal atmospheric illustration, gothic digital painting, volumetric warm amber lighting through teal fog, professional illustration quality';
-    }
-  } else {
-    if (!/masterpiece|professional|8k|award/i.test(enhanced)) {
-      enhanced += ', masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography';
-    }
+  if (!/masterpiece|professional|8k|award/i.test(enhanced)) {
+    enhanced += ', masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography';
   }
 
   return enhanced;
 }
 
 // ══════════════════════════════════════════════════════════════════
-// MAIN — ALL BATCHES IN ONE CALL
+// ARC-AWARE ANIMATION DYNAMICS
+// ══════════════════════════════════════════════════════════════════
+
+function getArcAnimationGuidance(arcPosition) {
+  const map = {
+    setup: "SLOW, RESTRAINED motion. Wider compositions. Gentle drift or slow pan. Establish atmosphere. Camera breathes.",
+    rising: "BUILDING motion energy. Gradual push-ins, steady tracking. More dynamic than setup. Momentum increasing.",
+    climax: "STRONGEST motion. Tight framing, assertive camera. Quick push-ins, dramatic angles. Peak emotional energy.",
+    resolution: "SOFTENED motion. Pull-back, gentle. Wider, contemplative. The emotional exhale. Calm and resolved."
+  };
+  return map[arcPosition] || map.rising;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MAIN — PROMPT GENERATION (no compression — breakdown is authority)
 // ══════════════════════════════════════════════════════════════════
 
 Deno.serve(async (req) => {
@@ -268,7 +190,6 @@ Deno.serve(async (req) => {
 
     const { project_id } = await req.json();
 
-    // ── Fetch project + scenes (parallel) ──────────────────────────
     const [projects, allScenes] = await Promise.all([
       base44.asServiceRole.entities.Projects.filter({ id: project_id }),
       base44.asServiceRole.entities.Scenes.filter({ project_id })
@@ -277,8 +198,7 @@ Deno.serve(async (req) => {
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-    // ── Find scenes needing prompts ────────────────────────────────
-    const pendingScenes = allScenes
+    let pendingScenes = allScenes
       .filter(s => s.status === 'breakdown_ready')
       .sort((a, b) => a.scene_number - b.scene_number);
 
@@ -290,7 +210,22 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── Style & orientation config ─────────────────────────────────
+    // ══════════════════════════════════════════════════════════════
+    // NO COMPRESSION GATE — Scene count is deterministic from breakdown.
+    // generateSceneBreakdown pre-splits narration into exact clip count.
+    // This function ONLY converts director notes → production prompts.
+    // It NEVER deletes, merges, or changes scene count.
+    // ══════════════════════════════════════════════════════════════
+
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`🎨 PROMPT GENERATION`);
+    console.log(`📊 ${pendingScenes.length} scenes from deterministic breakdown — converting to production prompts`);
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+
+    // ══════════════════════════════════════════════════════════════
+    // PROMPT GENERATION
+    // ══════════════════════════════════════════════════════════════
+
     const visualStyle = project.visual_style || 'cinematic_realistic';
     const styleConfig = styleMap[visualStyle] || styleMap.cinematic_realistic;
     const orientation = project.orientation || 'landscape';
@@ -314,7 +249,6 @@ Deno.serve(async (req) => {
 
     const promptPrefix = `${styleConfig.positive}, ${orientationConfig.directive}`;
 
-    // ── Load characters ────────────────────────────────────────────
     let characters = [];
     if (project.character_descriptions) {
       try { characters = JSON.parse(project.character_descriptions); } catch (_) {}
@@ -323,7 +257,6 @@ Deno.serve(async (req) => {
       ? `**CHARACTERS (embed FULL physical description into every prompt where they appear):**\n${characters.map(c => `• ${c.name}: ${c.visual_description || c.description || ''}`).join('\n')}`
       : '';
 
-    // ── Try to load story analysis (optional — enhances quality) ───
     let storyContext = '';
     try {
       const blueprint = JSON.parse(project.scene_blueprint);
@@ -333,12 +266,9 @@ Deno.serve(async (req) => {
       storyContext = `**STORY:** Topic: "${project.name}" | Niche: ${project.niche || 'general'}`;
     }
 
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`🎨 PROMPT GENERATION — ${pendingScenes.length} scenes`);
+    console.log(`🎨 Generating prompts for ${pendingScenes.length} scenes`);
     console.log(`🖼️ Style: ${visualStyle} | 📐 ${orientation}`);
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
-    // ── Process in batches ──────────────────────────────────────────
     let totalPrompts = 0;
     let totalWarnings = 0;
     const totalBatches = Math.ceil(pendingScenes.length / BATCH_SIZE);
@@ -347,21 +277,7 @@ Deno.serve(async (req) => {
       const batchScenes = pendingScenes.slice(bIdx * BATCH_SIZE, (bIdx + 1) * BATCH_SIZE);
       if (batchScenes.length === 0) break;
 
-      if (bIdx > 0) await new Promise(r => setTimeout(r, 2000)); // Rate limit buffer
-
-      // Build scene directions from director notes stored on each scene
-      // Also include the last scene from the previous batch for cross-batch continuity
-      const prevBatchLastScene = bIdx > 0
-        ? (() => {
-            const prevBatch = pendingScenes.slice((bIdx - 1) * BATCH_SIZE, bIdx * BATCH_SIZE);
-            const last = prevBatch[prevBatch.length - 1];
-            if (last) {
-              const d = extractDirectorNotes(last.image_prompt);
-              return d ? `\n**PREVIOUS BATCH LAST SCENE (for continuity bridge):**\nScene ${last.scene_number}: Visual: ${d.visual_concept} | Continuity to next: ${d.continuity_to_next || d.continuity_bridge || 'N/A'} | Color: ${d.color_palette} | Lighting: ${d.lighting}\n` : '';
-            }
-            return '';
-          })()
-        : '';
+      if (bIdx > 0) await new Promise(r => setTimeout(r, 2000));
 
       const scenesWithNotes = batchScenes.map(scene => {
         const director = extractDirectorNotes(scene.image_prompt);
@@ -369,285 +285,28 @@ Deno.serve(async (req) => {
       });
 
       const sceneDirections = scenesWithNotes.map(s => {
+        const arcAnim = getArcAnimationGuidance(s.director?.arc_position || 'rising');
         if (!s.director) {
-          return `Scene ${s.scene_number}: (No director notes — generate from narration)\n  Narration: "${s.narration_text}"`;
+          return `Scene ${s.scene_number}: (No director notes — generate from narration)\n  Narration: "${s.narration_text}"\n  Arc Animation: ${arcAnim}`;
         }
         return `Scene ${s.scene_number}:
   Narration: "${s.narration_text}"
   Visual Concept: ${s.director.visual_concept}
   Shot Type: ${s.director.shot_type}
   Camera Angle: ${s.director.camera_angle}
-  ★ Camera Movement (CRITICAL for animation): ${s.director.camera_movement}
+  Camera Movement: ${s.director.camera_movement}
   Lighting: ${s.director.lighting}
   Color Palette: ${s.director.color_palette}
   Mood: ${s.director.mood}
   DOF: ${s.director.depth_of_field}
   Niche Element: ${s.director.niche_visual_element || 'N/A'}
-  ★ CONTINUITY FROM PREVIOUS: ${s.director.continuity_from_previous || 'N/A'}
-  ★ CONTINUITY TO NEXT: ${s.director.continuity_to_next || s.director.continuity_bridge || 'N/A'}
-  Emotional Intensity: ${s.director.emotional_intensity || 0.5} (use this to scale animation energy)
-  Phase: ${s.director.phase || 'N/A'}`;
+  Continuity: ${s.director.continuity_bridge || 'N/A'}
+  Intensity: ${s.director.emotional_intensity || 0.5}
+  Arc Position: ${s.director.arc_position || 'rising'}
+  Arc Animation: ${arcAnim}`;
       }).join('\n\n');
 
-      // ── Style-specific prompt override for non-cinematic styles ───
-      const isHumptyDumpty = visualStyle === 'humpty_dumpty';
-      const isHarryPotter = visualStyle === 'harry_potter';
-
-      const harryPotterSystemPrompt = `**SYSTEM ROLE — You are a dark whimsical storybook illustrator specializing in the 'Harry Potter Gothic' digital illustration style.**
-Your job is to translate narrative text into atmospheric, moody, character-driven scene descriptions for AI image generation.
-You think like an illustrator creating frames for a dark animated story series — rich in atmosphere, emotion, and gothic charm. Your work sits at the intersection of Tim Burton, Laika Studios (Coraline), and editorial illustration.
-
----
-
-**THE HARRY POTTER STYLE BIBLE (FOLLOW EXACTLY):**
-
-COLOR RULES (NON-NEGOTIABLE):
-- The ENTIRE image is bathed in DARK TEAL (#1A3A4A to #2D6B7A) — this is the atmospheric base, it tints everything
-- Deepest shadows and vignette edges: navy-charcoal (#0D1B2A)
-- WARM AMBER/ORANGE (#D4A043) appears ONLY from specific light sources: lanterns, candles, glowing windows, magical effects, fire
-- This warm-vs-teal contrast is the SIGNATURE of the style — teal everywhere, warm glow only where there's a light source
-- Skin tones are desaturated blue-grey (#8BA4AD) — NO healthy warm skin tones
-- Occasional bright CYAN GLOW (#4FD1C5) for magical/tech elements (floating screens, enchanted objects, portal energy)
-- NEVER use bright saturated colors, pastels, or warm overall palettes
-
-CHARACTER DESIGN:
-- Semi-realistic proportions: slightly oversized heads for expressiveness but NOT chibi/super-deformed
-- LARGE expressive eyes: visible white sclera, dark defined pupils, eyes show the PRIMARY emotion of the scene
-  - Fear/shock: wide circular eyes with visible whites all around, raised eyebrows
-  - Anger/determination: narrowed eyes, furrowed brows, hard glare
-  - Sadness/loneliness: downcast eyes, slightly closed, lowered brows
-  - Curiosity/wonder: wide eyes looking upward, slightly open mouth
-  - Suspicion/scheming: narrowed eyes, one eyebrow raised, smirk
-  - For VILLAINS/EVIL characters: glowing amber/orange eyes (#D4A043) against the blue-grey skin
-- Angular facial features: defined jawlines, prominent cheekbones, thin faces
-- Thin elongated bodies — characters are lanky, not bulky
-- MESSY SPIKY DARK HAIR is a recurring signature motif — tousled, wind-blown, gravity-defying
-- Clean medium-weight ink-like outlines on characters, slightly darker than the fill colors
-- Smooth digital painting with controlled brushwork on clothing folds and face shading
-
-CLOTHING & PROPS:
-- Victorian/Gothic wardrobe: long dark coats with tails, vests over collared shirts, top hats, capes, robes, gloves
-- Dark desaturated clothing colors: charcoal, dark teal, muted brown, deep burgundy, black
-- Props have steampunk/gothic flavor: brass telescopes, old leather-bound books, ornate lanterns, mechanical devices, scrolls
-- Weapons/tools are oversized for dramatic effect (megaphones, telescopes, wands)
-
-ENVIRONMENTS:
-- CLUTTERED Victorian Gothic interiors: stacks of books, scattered papers, old wooden furniture, desk lamps with warm glow, pipes/cables on walls, dusty bottles, framed pictures
-- Cobblestone streets with leaning medieval/Victorian buildings, warm glowing windows, shop signs, lanterns on iron brackets
-- Dark workshops, libraries, alchemist rooms, castle interiors, foggy alleys
-- EVERYTHING bathed in thick TEAL ATMOSPHERIC FOG — objects in the distance fade into teal haze (atmospheric perspective)
-- Environmental detail is RICH and PAINTERLY — looser brushwork than characters, creating depth contrast
-
-LIGHTING (CRITICAL):
-- PRIMARY: single warm light source (lantern, candle, glowing window, lamp) creating dramatic warm amber pool against the teal darkness
-- Volumetric light rays — visible beams cutting through fog/dust
-- Strong rim lighting on characters (teal-tinged from ambient, warm from light source)
-- Deep contrast: very dark shadows, bright warm highlights where light hits
-- Occasional overhead spotlight/beam for dramatic single-character moments (like a stage light)
-- Glowing magical elements provide secondary cyan light source
-
-COMPOSITION:
-- Characters typically fill 40-70% of the frame
-- Strong foreground/midground/background separation through atmospheric perspective
-- Characters slightly off-center using rule of thirds
-- Environments frame characters — doorways, archways, corridors, between bookshelves
-- Close-up shots for emotional beats (face fills most of frame, large eyes dominate)
-- Wide shots for establishing environments (character small against grand gothic architecture)
-- Low camera angles make characters feel powerful/imposing
-- High angles make characters feel small/vulnerable
-
----
-
-${storyContext}
-
-${characterBlock}
-
-**STYLE:** harry_potter | **ORIENTATION:** ${orientationConfig.format}
-
-**DIRECTOR'S SCENE NOTES:**
-${sceneDirections}
-
-**YOUR TASK — for EACH scene produce:**
-
-1. **narrative_intent** — Your reasoning (2-3 sentences):
-   - What is the emotional core of this moment?
-   - What specific expression should the character(s) have? (describe their EYES especially)
-   - What light source creates the warm/teal contrast in this scene?
-
-2. **image_prompt** — A rich atmospheric description:
-   - MUST begin with: "${promptPrefix}."
-   - Describe CHARACTER(S): body type, messy dark hair, specific eye expression, clothing details, pose/gesture
-   - Describe LIGHTING: where is the warm amber light coming from? How does it cut through the teal atmosphere?
-   - Describe ENVIRONMENT: what cluttered gothic/Victorian details surround the character? What fades into teal fog?
-   - Describe ATMOSPHERE: teal fog density, volumetric light rays, particles in the air
-   - Describe CAMERA: shot type, angle, depth of field
-   - ${orientationConfig.composition}
-   - FORBIDDEN: text, words, letters, numbers, readable content in the image
-   - MUST end with the style reinforcement: "${styleConfig.reinforcement}. ${styleConfig.antiStyle}. ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image."
-   - Prompts should be 400-600 chars — this style needs rich description for the atmosphere
-
-3. **animation_prompt** — Atmospheric cinematic motion:
-   - Format: ${orientationConfig.animation}
-   - Slow, atmospheric camera movements: gentle push-ins, slow pans, subtle crane lifts
-   - ATMOSPHERIC MOTION is key: fog drifting, dust motes floating in light beams, candle flames flickering, papers rustling
-   - Character micro-motion: breathing, hair swaying, eyes shifting, coat settling
-   - Light effects: lantern flicker causing shadow dance, volumetric rays shifting slowly
-   - This is MOODY and SLOW — no fast or jerky movements
-
-**RESPONSE (JSON ONLY):**
-{
-  "prompts": [
-    {
-      "scene_number": 1,
-      "narrative_intent": "[emotional core, character expression with eye detail, light source description]",
-      "image_prompt": "${promptPrefix}. [character with large expressive eyes and messy dark hair in Victorian clothing] + [warm amber light source cutting through dark teal atmosphere] + [cluttered gothic environment fading into teal fog] + [camera angle and composition]. ${styleConfig.reinforcement}. ${styleConfig.antiStyle}. ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image.",
-      "animation_prompt": "[slow atmospheric motion: fog drift, light flicker, character breathing, gentle camera movement]"
-    }
-  ]
-}`;
-
-      const humptyDumptySystemPrompt = `**SYSTEM ROLE — You are a web animation storyboard artist specializing in the 'Humpty Dumpty' minimalist cartoon style.**
-Your job is to translate narrative text into simple, charming cartoon scene descriptions for AI image generation.
-You think like an animator creating a YouTube explainer/storytime animation with deliberately crude but endearing stick-figure characters.
-
----
-
-**THE HUMPTY DUMPTY STYLE BIBLE (FOLLOW EXACTLY):**
-
-CHARACTERS:
-- Large white circle head, thick dark-brown outline (#3D2B1F), 3-4px stroke weight
-- Tiny dot-eyes: small horizontal dashes or dots, placed close together in the center of the face
-- Simple line-mouth: curved up = happy, curved down = sad, wavy = worried, V-smirk = mischievous, small O = surprised, flat = neutral
-- Optional: simple angled line-eyebrows for emotion (angry V-brows, raised brows for surprise)
-- NO nose (or tiny dot at most), NO ears, NO detailed features
-- Bean/egg-shaped body with flat solid-color fill, same thick dark-brown outline
-- Noodle arms (simple curved lines), stick legs (two straight lines)
-- Clothing = flat color fill only: dark slate-blue suits, brown casual wear, muted red robes/uniforms, cream shirts, light blue police
-- Distinguish characters by: clothing color, simple accessories (flat-brim hat, police cap with yellow dot badge, tie as small triangle, hair as simple colored shape)
-- Female characters: hair as simple shapes — long dark curtains framing head, blonde side-sweep, bun circle on top, occasionally a small blue tear-dot for crying
-- Size variation for importance: main character slightly larger, background characters smaller
-
-BACKGROUNDS:
-- DEFAULT: solid warm cream (#F5E6D3) or beige (#FAEBD7) — completely flat, no gradient
-- When a LOCATION is needed: draw it in the SAME minimal style — buildings are colored rectangles with thick brown outlines, windows are small blue squares, doors are dark rectangles
-- Simple props: tables are brown rectangles, chairs are simple shapes, frames on walls are colored squares
-
-MIXED MEDIA (KEY SIGNATURE):
-- Occasionally ONE photorealistic object appears next to the drawn characters (police car, house exterior, real product)
-- This creates the comedic juxtaposition that defines the style
-- Characters are ALWAYS drawn simply, even when next to photorealistic objects
-
-COMPOSITION:
-- Characters fill 40-70% of the frame
-- 1-3 characters per scene (occasionally up to 6 for crowd shots)
-- Simple left-to-right reading: character on left, action/object on right (or centered single character)
-- Portraits show characters from waist-up or full-body
-- Group shots: characters side by side, slightly overlapping, different sizes
-
-EXPRESSIONS THROUGH SIMPLICITY:
-- Angry: V-shaped eyebrows, frown mouth, hands on hips
-- Happy: curved-up mouth, maybe arms raised
-- Sad: curved-down mouth, hunched posture, optional tear dot
-- Scheming/Evil: half-closed eyes (horizontal dashes), smirk
-- Surprised: wide dot-eyes, O-mouth, arms out
-- Authoritative: standing tall, hands on hips, neutral or stern face
-
----
-
-${storyContext}
-
-${characterBlock}
-
-**STYLE:** humpty_dumpty | **ORIENTATION:** ${orientationConfig.format}
-
-**DIRECTOR'S SCENE NOTES:**
-${sceneDirections}
-
-**YOUR TASK — for EACH scene produce:**
-
-1. **narrative_intent** — Your reasoning (2-3 sentences):
-   - What characters are in this scene and what are they doing?
-   - What expression/pose conveys the emotion?
-   - Is there a photorealistic object that would add comedic contrast?
-
-2. **image_prompt** — A description in the Humpty Dumpty style:
-   - MUST begin with: "${promptPrefix}."
-   - Describe the CHARACTER(S): circle head, dot eyes, specific mouth expression, clothing color, any accessories
-   - Describe the POSE/ACTION: what are they doing with their noodle arms and stick legs?
-   - Describe the BACKGROUND: solid cream, or simple drawn environment
-   - If a real-world object is appropriate, describe it as "photorealistic [object] composited next to the drawn character"
-   - Describe COMPOSITION: where characters are positioned, relative sizes
-   - ${orientationConfig.composition}
-   - FORBIDDEN: text, words, letters, numbers, readable content in the image
-   - MUST end with the style reinforcement: "${styleConfig.reinforcement}. ${styleConfig.antiStyle}. ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image."
-   - Keep prompts 200-400 chars — this style is SIMPLE, don't over-describe
-
-3. **animation_prompt** — Simple motion for this cartoon style:
-   - Format: ${orientationConfig.animation}
-   - Humpty Dumpty animations are SIMPLE: slow zoom in/out, gentle pan, slight bounce on characters
-   - NO complex camera movements — this is a web animation, not a movie
-   - Include: subtle character bounce/sway, gentle background drift if any
-
-**RESPONSE (JSON ONLY):**
-{
-  "prompts": [
-    {
-      "scene_number": 1,
-      "narrative_intent": "[reasoning about characters, poses, expressions]",
-      "image_prompt": "${promptPrefix}. [character description with circle head, dot eyes, expression, clothing] + [pose/action] + [background] + [optional photorealistic object]. ${styleConfig.reinforcement}. ${styleConfig.antiStyle}. ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image.",
-      "animation_prompt": "[simple motion: gentle zoom, pan, character bounce]"
-    }
-  ]
-}`;
-
-      const prompt = isHumptyDumpty ? humptyDumptySystemPrompt : isHarryPotter ? harryPotterSystemPrompt : `${prevBatchLastScene}**SYSTEM ROLE — You are an expert storyboard artist and cinematic director.**
-Your job is to translate narrative text into highly visual, dynamic image prompts for AI image generation.
-You think like a cinematographer on set — you see the PHYSICAL REALITY of what the narration describes.
-You do NOT take metaphors literally. You do NOT default to abstract symbols or lab settings when the narration describes a human experience.
-You ALWAYS prioritize the physical action, human anatomy (if applicable), environmental context, and sequential storytelling.
-
----
-
-**PROMPT CONSTRUCTION FORMULA (MANDATORY for every image_prompt):**
-Every image_prompt you write MUST follow this 5-part formula in order:
-
-  [Subject/Anatomy] + [Dynamic Action/Process] + [Environment/Context] + [Camera Angle/Cinematography] + [Lighting & Style]
-
-- **Subject/Anatomy**: WHO or WHAT is the focus? Describe the subject with physical specificity — body parts, objects, creatures, textures.
-- **Dynamic Action/Process**: WHAT is happening? Capture the verb — the motion, the transformation, the journey. If something is being swallowed, show the swallowing. If something is burning, show the flames consuming it. Never reduce an action to a static object.
-- **Environment/Context**: WHERE is this taking place? Interior of a body, underwater, a dark alley, a cosmic void — ground the action in a specific place.
-- **Camera Angle/Cinematography**: HOW are we seeing it? Macro lens inside the throat, aerial drone over a battlefield, Dutch angle in a hallway — be specific about the camera's relationship to the subject.
-- **Lighting & Style**: WHAT is the mood? Specify light sources, color temperature, shadows, and the project's visual style.
-
----
-
-**FEW-SHOT EXAMPLES (study these carefully):**
-
-Example Narration: "The boy accidentally swallowed a shiny quarter."
-❌ BAD prompt (AVOID THIS): "A shiny quarter inside a stomach, realistic, 4k."
-→ This is lazy, static, and misses the narrative action entirely.
-
-✅ GOOD prompt (EMULATE THIS): "Cinematic macro shot inside a human esophagus — a shiny silver coin tumbles downward through the pink muscular walls of the throat, caught mid-descent with motion blur, the esophageal muscles contracting around it. The environment is the warm, glistening interior of the human digestive tract with subtle translucent tissue textures. Extreme close-up medical-cinematic camera angle, shallow depth of field. Warm amber bioluminescent lighting with soft volumetric glow through tissue. ${styleConfig.reinforcement}."
-→ This follows the formula: [coin + human throat anatomy] + [tumbling descent through esophagus] + [interior of digestive tract] + [macro close-up inside body] + [warm bioluminescent medical-cinematic lighting]
-
-Example Narration: "The stock market crashed overnight."
-❌ BAD: "A stock chart going down, red arrows."
-✅ GOOD: "A massive wall of glass stock tickers shattering into thousands of fragments in slow motion — suited traders frozen mid-panic in a grand marble trading floor, papers suspended in mid-air. The environment is a cavernous financial exchange with towering columns. Wide-angle dramatic lens, low camera position looking up at the destruction. Harsh overhead fluorescent lights mixing with red emergency warning glow. ${styleConfig.reinforcement}."
-
-Example Narration: "She felt her heart break."
-❌ BAD: "A broken heart shape, red, sad."
-✅ GOOD: "Extreme close-up of a woman's chest — beneath her skin, rendered in translucent x-ray style, a human heart visibly fractures with hairline cracks spreading across the ventricles, tiny shards of light escaping through each crack. Her hands press against her sternum. The environment is a dim, rain-streaked bedroom with blue-gray tones. Intimate close-up shot with shallow depth of field, macro lens detail on the cracking heart. Cool desaturated lighting with a single warm light source behind her. ${styleConfig.reinforcement}."
-
----
-
-**CHAIN OF THOUGHT — MANDATORY for each scene:**
-Before generating the image_prompt, you MUST first produce a "narrative_intent" field that explains:
-1. What is the PHYSICAL ACTION or PROCESS described in the narration?
-2. What should the viewer SEE happening — not symbolically, but literally/visually?
-3. What is the emotional tone and energy level?
-This grounds your prompt in reality and prevents lazy symbolic outputs.
-
----
+      const prompt = `**MISSION: Convert Director's Notes → Production-Ready Image & Animation Prompts**
 
 ${storyContext}
 
@@ -660,59 +319,39 @@ ${sceneDirections}
 
 **YOUR TASK — for EACH scene produce:**
 
-1. **narrative_intent** — Your chain-of-thought reasoning (2-3 sentences):
-   - What is the PHYSICAL ACTION described in the narration?
-   - What should the viewer literally SEE?
-   - What is the emotional energy?
-
-2. **image_prompt** — Dense technical prompt following the FORMULA: [Subject/Anatomy] + [Dynamic Action/Process] + [Environment/Context] + [Camera Angle/Cinematography] + [Lighting & Style]
+1. **image_prompt** — Dense technical prompt for AI image generation:
    - MUST begin with: "${promptPrefix}."
    - Translate visual concept into SPECIFIC, DETAILED image (300+ chars)
-   - PRIORITIZE the ACTION and PROCESS — show things happening, not static objects
-   - If narration describes something inside a body → show the internal anatomical journey (x-ray, cross-section, macro interior)
-   - If narration describes a metaphor → translate to a PHYSICAL visual metaphor (not literal text/symbols)
-   - If narration describes an emotion → show it through BODY LANGUAGE, ENVIRONMENT, and LIGHTING (not icons or shapes)
    - Embed exact shot type, camera angle, DOF from director notes
    - Embed exact lighting setup
    - Apply color palette as color grading
    - If characters appear → embed FULL physical description (not just name)
-   - **VISUAL CONTINUITY (CRITICAL)**: Check the "CONTINUITY FROM PREVIOUS" and "CONTINUITY TO NEXT" fields.
-     * If a character carries over → use the SAME clothing, hair, features, pose direction
-     * If a background carries over → include the SAME environment elements, just from a different angle
-     * If an object carries over → place it in a consistent position relative to the frame
-     * If lighting carries over → maintain the SAME key light direction and color temperature
-     * Adjacent scenes should look like they belong to the SAME sequence — a viewer should feel continuous visual flow
    - ${orientationConfig.composition}
    - FORBIDDEN: text, words, letters, numbers, charts, graphs, signs, readable content
-   - MUST end with the style reinforcement: "${styleConfig.reinforcement}. ${styleConfig.antiStyle}. ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image. masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography"
-   - The LAST 50 words of every prompt MUST reinforce the visual style
+   - Abstract concepts → PHYSICAL METAPHORS (financial decline → hourglass with last grains)
+   - Documents → ONLY blurred with emotional context
+   - MUST end with: "ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image. masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography"
 
-3. **animation_prompt** — 5-8 second motion direction:
-    - Translate the director's camera_movement into RICH, SPECIFIC animation language
-    - Format: ${orientationConfig.animation}
-    - MUST include ALL of these motion layers:
-      a) PRIMARY CAMERA: exact movement path, speed, and timing (e.g. "Slow dolly push-in from medium to close-up over 5s")
-      b) ATMOSPHERIC MOTION: particles, fog wisps, light rays shifting, dust motes, smoke curls
-      c) SUBJECT MICRO-MOTION: breathing chest rise, hair sway, fabric ripple, eye blinks, hand trembles
-      d) ENVIRONMENTAL MOTION: leaves rustling, water rippling, curtains billowing, shadows shifting
-      e) FOCUS/DOF SHIFTS: "rack focus from background to subject at 3s mark" or "shallow DOF slowly deepening"
-    - Match emotional_intensity: low (0.1-0.3) = glacial, contemplative | mid (0.4-0.6) = steady, purposeful | high (0.7-1.0) = dynamic, urgent, dramatic
-    - Camera movement IS the emotion: push-in = tension/intimacy, pull-back = revelation/isolation, crane up = triumph/scale, handheld = urgency/chaos
-    - NEVER write generic "slow zoom in" — always be SPECIFIC about speed, direction, and what's in frame
+2. **animation_prompt** — ${CLIP_DURATION}-second motion direction:
+   - Translate camera_movement into animation language
+   - **RESPECT ARC POSITION**: Use the Arc Animation guidance for pacing
+   - Format: ${orientationConfig.animation}
+   - Include: camera motion + speed, atmospheric motion (particles, fog, light), subject micro-motion (breathing, hair), DOF changes
+   - Low intensity = slow/subtle, high intensity = dynamic/dramatic
 
-**RESPONSE (JSON ONLY):**
+**RESPONSE:**
 {
   "prompts": [
     {
       "scene_number": 1,
-      "narrative_intent": "[chain-of-thought: what is the physical action, what should the viewer see, what is the emotional energy]",
-      "image_prompt": "${promptPrefix}. [Subject/Anatomy] + [Dynamic Action/Process] + [Environment/Context] + [Camera Angle/Cinematography] + [Lighting & Style]. ${styleConfig.reinforcement}. ${styleConfig.antiStyle}. ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image. masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography",
-      "animation_prompt": "[motion direction with all 5 layers]"
+      "image_prompt": "${promptPrefix}. [detailed prompt]... ABSOLUTELY NO text... masterpiece...",
+      "animation_prompt": "[motion direction respecting arc position]"
     }
   ]
 }
 
-✓ Formula followed? ✓ Narrative intent grounded? ✓ Action/process shown (not static)? ✓ Begins with style prefix? ✓ 300+ chars? ✓ Shot type embedded? ✓ Lighting described? ✓ No text in image? ✓ Ends with STYLE LOCK? ✓ Last 50 words reinforce style?`;
+✓ Begins with style prefix? ✓ 300+ chars? ✓ Shot type embedded? ✓ Lighting described? ✓ No text in image? ✓ Ends with quality markers? ✓ Arc animation respected?`;
+
       console.log(`🎨 Batch ${bIdx + 1}/${totalBatches}: scenes ${batchScenes[0].scene_number}-${batchScenes[batchScenes.length - 1].scene_number}...`);
 
       const result = await callGemini(prompt, 0.7, 16384);
@@ -722,7 +361,6 @@ ${sceneDirections}
         continue;
       }
 
-      // Update scenes with prompts (parallel within batch)
       const updatePromises = scenesWithNotes.map(async (s) => {
         const generated = result.prompts.find(p => p.scene_number === s.scene_number);
 
@@ -730,12 +368,11 @@ ${sceneDirections}
 
         if (generated) {
           imagePrompt = validateAndEnhancePrompt(
-            generated.image_prompt || '', styleConfig, orientationConfig, s.scene_number, visualStyle
+            generated.image_prompt || '', styleConfig, orientationConfig, s.scene_number
           );
           animationPrompt = generated.animation_prompt
-            || "slow deliberate dolly push-in from medium shot to close-up over 5s, atmospheric dust motes floating in golden light, subtle breathing motion on subject, shallow depth of field with gentle focus pull, background slowly going out of focus";
+            || "slow gentle camera movement forward, atmospheric haze, subtle breathing, shallow DOF";
         } else {
-          // Fallback — build from director notes
           console.warn(`⚠️ Scene ${s.scene_number} missing from response — building fallback`);
           totalWarnings++;
 
@@ -745,12 +382,12 @@ ${sceneDirections}
             fallback += `${s.director.lighting}. Color palette: ${s.director.color_palette}. `;
             fallback += `${s.director.depth_of_field}. Mood: ${s.director.mood}. `;
           } else {
-            fallback += `Cinematic scene depicting: ${s.narration_text}. Professional composition. ${styleConfig.reinforcement}. ${styleConfig.antiStyle}. `;
+            fallback += `Cinematic scene depicting: ${s.narration_text}. Professional composition. `;
           }
 
-          imagePrompt = validateAndEnhancePrompt(fallback, styleConfig, orientationConfig, s.scene_number, visualStyle);
+          imagePrompt = validateAndEnhancePrompt(fallback, styleConfig, orientationConfig, s.scene_number);
           animationPrompt = s.director?.camera_movement
-            || "slow deliberate dolly push-in from medium shot to close-up over 5s, atmospheric dust motes floating in golden light, subtle breathing motion on subject, shallow depth of field with gentle focus pull";
+            || "slow gentle camera movement forward, atmospheric haze, subtle breathing, shallow DOF";
         }
 
         try {
@@ -772,7 +409,6 @@ ${sceneDirections}
       console.log(`✓ Batch ${bIdx + 1}: ${batchApplied} prompts applied`);
     }
 
-    // ── Mark complete ──────────────────────────────────────────────
     try {
       await base44.asServiceRole.entities.Projects.update(project_id, {
         status: "content_generation", current_step: 5
@@ -790,7 +426,7 @@ ${sceneDirections}
       prompts_applied: totalPrompts,
       quality_warnings: totalWarnings,
       total_batches: totalBatches,
-      total_scenes: allScenes.length
+      total_scenes: pendingScenes.length
     });
 
   } catch (error) {
