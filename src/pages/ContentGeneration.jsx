@@ -653,6 +653,7 @@ export default function ContentGeneration() {
                     const colors = {
                       done:       'bg-green-100 text-green-700',
                       failed:     'bg-red-100 text-red-700',
+                      upgrading:  'bg-cyan-100 text-cyan-700',
                       polling:    'bg-amber-100 text-amber-700',
                       submitting: 'bg-blue-100 text-blue-700',
                       queued:     'bg-gray-100 text-gray-500',
@@ -660,6 +661,7 @@ export default function ContentGeneration() {
                     const icons = {
                       done:       <CheckCircle2 className="w-3 h-3" />,
                       failed:     <XCircle className="w-3 h-3" />,
+                      upgrading:  <Zap className="w-3 h-3 animate-pulse" />,
                       polling:    <Clock className="w-3 h-3 animate-pulse" />,
                       submitting: <Zap className="w-3 h-3" />,
                       queued:     <Clock className="w-3 h-3 opacity-40" />,
