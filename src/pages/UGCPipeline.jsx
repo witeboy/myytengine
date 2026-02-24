@@ -138,7 +138,12 @@ export default function UGCPipeline() {
     setStatusMsg('');
   };
 
-  // ── Step 3→4: Generate voice script ─────────────────────────
+  // ── Step 3→4: Move to script step ─────────────────────────
+  const handleGoToScript = () => {
+    setStep(4);
+  };
+
+  // ── Step 4: Generate AI script suggestion ─────────────────────────
   const handleGenerateVoiceScript = async () => {
     setLoading(true);
     setStatusMsg('Writing voiceover script...');
@@ -161,16 +166,15 @@ Return ONLY the script text.`,
     setVoiceScript(result);
     setLoading(false);
     setStatusMsg('');
-    setStep(4);
   };
 
-  // ── Step 4→5: Full pipeline — Project + Voiceover + Kling Avatar Video ──
-  const handleGenerateFullPipeline = async () => {
-    setLoading(true);
-    setStep(5);
+  // ── Step 4: Generate voiceover from script + voice ─────────────────
+  const handleGenerateVoiceover = async () => {
+    if (!voiceScript.trim() || !selectedVoiceId) return;
+    setVoiceGenerating(true);
+    setStatusMsg('Generating voiceover...');
 
-    // 1. Create project
-    setPipelineStep('Creating project...');
+    // Create a temp project + script for the voiceover function
     const project = await base44.entities.Projects.create({
       name: `UGC: ${typeLabel}`,
       niche: influencerType,
@@ -181,10 +185,7 @@ Return ONLY the script text.`,
       status: 'script_complete',
       current_step: 4,
     });
-    setProjectId(project.id);
 
-    // 2. Create script record
-    setPipelineStep('Saving script...');
     await base44.entities.Scripts.create({
       project_id: project.id,
       version: 'final_aggregated',
@@ -193,118 +194,95 @@ Return ONLY the script text.`,
       word_count: voiceScript.split(/\s+/).filter(w => w).length,
     });
 
-    // 3. Generate voiceover via Kie Market ElevenLabs TTS
-    setPipelineStep('Generating voiceover (ElevenLabs TTS)...');
-    let generatedVoiceUrl = '';
-    let generatedDuration = 0;
-    try {
-      const voResponse = await base44.functions.invoke('generateVoiceover', {
-        project_id: project.id,
-        voice_name: 'Rachel',
-      });
-      const voResult = voResponse.data || voResponse;
-      generatedVoiceUrl = voResult.voiceover_url || '';
-      generatedDuration = voResult.voiceover_duration_seconds || 0;
-      setVoiceUrl(generatedVoiceUrl);
-      setVoiceDuration(generatedDuration);
-    } catch (err) {
-      console.warn('Voiceover generation failed:', err.message);
-      setPipelineStep('Voiceover failed — continuing with image...');
-    }
-
-    // 4. Create a scene with the influencer image
-    setPipelineStep('Creating scene...');
-    let finalImageUrl = influencerImageUrl;
-
-    // Upload data URI if needed
-    if (finalImageUrl && finalImageUrl.startsWith('data:')) {
-      setPipelineStep('Uploading influencer image...');
-      try {
-        const resp = await fetch(finalImageUrl);
-        const blob = await resp.blob();
-        const file = new File([blob], 'ugc-influencer.png', { type: 'image/png' });
-        const { file_url } = await base44.integrations.Core.UploadFile({ file });
-        finalImageUrl = file_url;
-      } catch (uploadErr) {
-        console.warn('Image upload failed:', uploadErr.message);
-      }
-    }
-
-    const scene = await base44.entities.Scenes.create({
+    const voResponse = await base44.functions.invoke('generateVoiceover', {
       project_id: project.id,
-      scene_number: 1,
-      narration_text: voiceScript,
-      image_prompt: influencerPrompt,
-      image_url: finalImageUrl,
-      duration_seconds: generatedDuration || 30,
-      status: 'image_generated',
+      voice_id: selectedVoiceId,
     });
+    const voResult = voResponse.data || voResponse;
+    setVoiceUrl(voResult.voiceover_url || '');
+    setVoiceDuration(voResult.voiceover_duration_seconds || 0);
 
-    // 5. Generate lip-sync avatar video via Kling AI Avatar
-    if (finalImageUrl && finalImageUrl.startsWith('http') && generatedVoiceUrl) {
-      setPipelineStep('Generating motion description for avatar...');
+    setVoiceGenerating(false);
+    setStatusMsg('');
+  };
 
-      // AI generates a detailed motion prompt for the avatar
-      let motionPrompt = '';
-      try {
-        motionPrompt = await base44.integrations.Core.InvokeLLM({
-          prompt: `You are a video director. Given this scene description, write a SHORT motion description (1-2 sentences) for a talking-head avatar video.
+  // ── Step 5: Generate Kling lip-sync video ──────────────────────────
+  const handleGenerateLipSync = async () => {
+    if (!influencerImageUrl || !voiceUrl) return;
+    setLoading(true);
+    setStep(5);
+
+    // Ensure image is a public URL
+    let finalImageUrl = influencerImageUrl;
+    if (finalImageUrl.startsWith('data:')) {
+      setPipelineStep('Uploading influencer image...');
+      const resp = await fetch(finalImageUrl);
+      const blob = await resp.blob();
+      const file = new File([blob], 'ugc-influencer.png', { type: 'image/png' });
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      finalImageUrl = file_url;
+    }
+
+    // Generate motion prompt
+    setPipelineStep('Generating motion description...');
+    let motionPrompt = '';
+    try {
+      motionPrompt = await base44.integrations.Core.InvokeLLM({
+        prompt: `You are a video director. Write a SHORT motion description (1-2 sentences) for a talking-head avatar video.
 
 The person is: ${typeLabel}
 They are doing: ${influencerAction}
-Script they're reading: "${voiceScript.substring(0, 200)}..."
+Script: "${voiceScript.substring(0, 200)}..."
 
-Describe natural head movements, facial expressions, and hand gestures that match the tone. Keep it under 50 words.
-Example: "Speaks enthusiastically with slight head nods, smiles warmly, gestures with right hand when emphasizing key points."
-
+Describe natural head movements, facial expressions, and hand gestures. Keep under 50 words.
 Return ONLY the motion description.`,
-        });
-      } catch (e) {
-        motionPrompt = 'Natural conversational head movements with slight nods and warm expressions.';
-      }
-
-      setPipelineStep('Submitting to Kling AI Avatar (lip-sync)...');
-      try {
-        const avatarRes = await base44.functions.invoke('generateAvatarVideo', {
-          image_url: finalImageUrl,
-          audio_url: generatedVoiceUrl,
-          prompt: motionPrompt,
-          scene_id: scene.id,
-        });
-        const avatarResult = avatarRes.data || avatarRes;
-
-        if (avatarResult.task_id) {
-          setPipelineStep('Avatar rendering with Kling AI — polling...');
-          let done = false;
-          let polls = 0;
-          while (!done && polls < 60) {
-            await new Promise(r => setTimeout(r, 15000));
-            polls++;
-            setPipelineStep(`Kling Avatar rendering... (poll ${polls})`);
-            try {
-              const pollRes = await base44.functions.invoke('pollAvatarVideo', {
-                task_id: avatarResult.task_id,
-                scene_id: scene.id,
-              });
-              const pollResult = pollRes.data || pollRes;
-              if (pollResult.status === 'COMPLETED') {
-                setVideoUrl(pollResult.video_url || '');
-                done = true;
-              } else if (pollResult.status === 'FAILED') {
-                console.warn('Avatar video failed:', pollResult.error);
-                done = true;
-              }
-            } catch (pollErr) {
-              console.warn('Poll error:', pollErr.message);
-            }
-          }
-        }
-      } catch (vidErr) {
-        console.warn('Avatar video generation failed:', vidErr.message);
-      }
+      });
+    } catch (_) {
+      motionPrompt = 'Natural conversational head movements with slight nods and warm expressions.';
     }
 
-    setPipelineStep('Done!');
+    // Submit to Kling AI Avatar
+    setPipelineStep('Submitting to Kling AI Avatar (lip-sync)...');
+    const avatarRes = await base44.functions.invoke('generateAvatarVideo', {
+      image_url: finalImageUrl,
+      audio_url: voiceUrl,
+      prompt: motionPrompt,
+    });
+    const avatarResult = avatarRes.data || avatarRes;
+
+    if (avatarResult.task_id) {
+      setPipelineStep('Avatar rendering with Kling AI — polling...');
+      let done = false;
+      let polls = 0;
+      while (!done && polls < 60) {
+        await new Promise(r => setTimeout(r, 15000));
+        polls++;
+        setPipelineStep(`Kling Avatar rendering... (poll ${polls})`);
+        try {
+          const pollRes = await base44.functions.invoke('pollAvatarVideo', {
+            task_id: avatarResult.task_id,
+          });
+          const pollResult = pollRes.data || pollRes;
+          if (pollResult.status === 'COMPLETED') {
+            setVideoUrl(pollResult.video_url || '');
+            done = true;
+          } else if (pollResult.status === 'FAILED') {
+            console.warn('Avatar video failed:', pollResult.error);
+            setPipelineStep('Avatar video failed. Try again.');
+            done = true;
+          }
+        } catch (pollErr) {
+          console.warn('Poll error:', pollErr.message);
+        }
+      }
+      if (!done) setPipelineStep('Timed out — check back later.');
+    }
+
+    if (videoUrl || pipelineStep.includes('failed') || pipelineStep.includes('Timed')) {
+      // already set
+    } else {
+      setPipelineStep('Done!');
+    }
     setLoading(false);
   };
 
