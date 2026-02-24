@@ -154,14 +154,24 @@ export default function ContentGeneration() {
     setGeneratingVideos(true);
     pollAbortRef.current = false;
 
-    const ready = scenes.filter(s =>
+    // Re-fetch fresh scene data before filtering
+    const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+    const sortedScenes = freshScenes.sort((a, b) => a.scene_number - b.scene_number);
+
+    // Any scene with a real image_url that doesn't already have a video_url
+    const ready = sortedScenes.filter(s =>
       s.image_url &&
+      s.image_url.length > 10 &&
       !s.image_url.startsWith('data:') &&
-      (s.status === 'image_generated' || s.status === 'prompts_ready')
+      !s.video_url
     );
 
+    console.log(`🎬 Animate All: ${ready.length}/${sortedScenes.length} scenes ready (have image, no video)`);
+
     if (ready.length === 0) {
+      console.log(`⚠️ No scenes to animate. Statuses: ${sortedScenes.map(s => `S${s.scene_number}:${s.status}|img:${!!s.image_url}|vid:${!!s.video_url}`).join(', ')}`);
       setGeneratingVideos(false);
+      alert(`No scenes to animate. ${sortedScenes.filter(s => s.video_url).length} already have videos, ${sortedScenes.filter(s => !s.image_url).length} are missing images.`);
       return;
     }
 
