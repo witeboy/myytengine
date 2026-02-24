@@ -140,12 +140,14 @@ export default function ContentGeneration() {
   // GENERATE & POLL ALL VIDEOS (Veo 3.1 Quality via Kie)
   // ══════════════════════════════════════════════════════════════════
   //
-  // Flow:
-  //   1. Submit all scenes → generateSceneVideo (returns task_id)
-  //   2. Poll all pending scenes every 15s → pollSceneVideo
-  //   3. Each COMPLETED scene gets real video_url written to DB
+  // SPEED OPTIMIZATIONS:
+  //   1. Parallel batch submission (5 at a time via Promise.allSettled)
+  //   2. Parallel polling (ALL pending at once, not sequential)
+  //   3. 10s poll interval (was 15s — Veo tasks resolve in ~60-90s)
+  //   4. 1080p upgrade removed from pollSceneVideo (Veo3 = native 1080p)
   //
-  // All scenes submitted first, then polled in parallel rounds.
+  // Before: 24 scenes × 1.5s submit = 36s + 20 pending × 1s poll = 20s/round
+  // After:  24 scenes / 5 batch × 2s = 10s + all parallel = 2s/round
   // ══════════════════════════════════════════════════════════════════
 
   const handleGenerateVideos = async () => {
@@ -154,7 +156,7 @@ export default function ContentGeneration() {
 
     const ready = scenes.filter(s =>
       s.image_url &&
-      !s.image_url.startsWith('data:') && // Veo needs public URLs
+      !s.image_url.startsWith('data:') &&
       (s.status === 'image_generated' || s.status === 'prompts_ready')
     );
 
@@ -163,7 +165,6 @@ export default function ContentGeneration() {
       return;
     }
 
-    // Initialize per-scene statuses
     const initialStatuses = {};
     ready.forEach(s => { initialStatuses[s.id] = 'queued'; });
 
@@ -173,42 +174,58 @@ export default function ContentGeneration() {
       sceneStatuses: { ...initialStatuses }
     });
 
-    // ── Phase 1: Submit all scenes to Veo ───────────────────────
+    // ── Phase 1: Submit all scenes to Veo (parallel batches of 5) ──
     const pendingPolls = [];
+    const SUBMIT_BATCH = 5;
 
-    for (let i = 0; i < ready.length; i++) {
+    for (let i = 0; i < ready.length; i += SUBMIT_BATCH) {
       if (pollAbortRef.current) break;
-      const scene = ready[i];
+      const batch = ready.slice(i, i + SUBMIT_BATCH);
 
       setVideoProgress(prev => ({
         ...prev,
-        current: i + 1,
-        sceneName: `Submitting Scene ${scene.scene_number}...`,
+        current: Math.min(i + batch.length, ready.length),
+        sceneName: `Submitting scenes ${i + 1}-${Math.min(i + batch.length, ready.length)}...`,
         phase: 'submitting',
-        sceneStatuses: { ...prev.sceneStatuses, [scene.id]: 'submitting' }
+        sceneStatuses: batch.reduce(
+          (acc, s) => ({ ...acc, [s.id]: 'submitting' }),
+          { ...prev.sceneStatuses }
+        )
       }));
 
-      try {
-        const result = await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
-        pendingPolls.push({
-          scene_id: scene.id,
-          task_id: result.task_id,
-          scene_number: scene.scene_number
-        });
-        setVideoProgress(prev => ({
-          ...prev,
-          sceneStatuses: { ...prev.sceneStatuses, [scene.id]: 'polling' }
-        }));
-      } catch (err) {
-        console.warn(`Scene ${scene.scene_number} submit failed:`, err.message);
-        setVideoProgress(prev => ({
-          ...prev,
-          sceneStatuses: { ...prev.sceneStatuses, [scene.id]: 'failed' }
-        }));
+      const batchResults = await Promise.allSettled(
+        batch.map(scene =>
+          base44.functions.invoke('generateSceneVideo', { scene_id: scene.id })
+            .then(result => ({ scene, result, ok: true }))
+            .catch(err => ({ scene, err, ok: false }))
+        )
+      );
+
+      for (const settled of batchResults) {
+        const item = settled.status === 'fulfilled' ? settled.value : settled.reason;
+        if (!item) continue;
+
+        if (item.ok && item.result?.task_id) {
+          pendingPolls.push({
+            scene_id: item.scene.id,
+            task_id: item.result.task_id,
+            scene_number: item.scene.scene_number
+          });
+          setVideoProgress(prev => ({
+            ...prev,
+            sceneStatuses: { ...prev.sceneStatuses, [item.scene.id]: 'polling' }
+          }));
+        } else {
+          console.warn(`Scene ${item.scene?.scene_number} submit failed:`, item.err?.message);
+          setVideoProgress(prev => ({
+            ...prev,
+            sceneStatuses: { ...prev.sceneStatuses, [item.scene?.id]: 'failed' }
+          }));
+        }
       }
     }
 
-    // ── Phase 2: Poll all pending scenes until done ─────────────
+    // ── Phase 2: Poll all pending scenes in parallel rounds ──────
     if (pendingPolls.length > 0) {
       setVideoProgress(prev => ({
         ...prev,
@@ -218,37 +235,50 @@ export default function ContentGeneration() {
 
       let remaining = [...pendingPolls];
       let pollCount = 0;
-      const MAX_POLLS = 60; // 60 × 15s = 15 min max
+      const MAX_POLLS = 90;      // 90 × 10s = 15 min max
+      const POLL_INTERVAL = 10000; // 10 seconds
 
       while (remaining.length > 0 && pollCount < MAX_POLLS && !pollAbortRef.current) {
-        await new Promise(r => setTimeout(r, 15000));
+        await new Promise(r => setTimeout(r, POLL_INTERVAL));
         pollCount++;
+
+        // Poll ALL pending scenes in parallel
+        const pollResults = await Promise.allSettled(
+          remaining.map(item =>
+            base44.functions.invoke('pollSceneVideo', { scene_id: item.scene_id })
+              .then(result => ({ item, result, ok: true }))
+              .catch(err => ({ item, err, ok: false }))
+          )
+        );
 
         const stillPending = [];
 
-        for (const item of remaining) {
-          if (pollAbortRef.current) break;
+        for (const settled of pollResults) {
+          const entry = settled.status === 'fulfilled' ? settled.value : null;
 
-          try {
-            const pollResult = await base44.functions.invoke('pollSceneVideo', {
-              scene_id: item.scene_id
-            });
+          if (!entry || !entry.ok || !entry.result) {
+            // Network error or invocation failure — keep polling
+            const failedItem = settled.status === 'fulfilled'
+              ? entry?.item
+              : (settled.reason?.item || remaining.find(r => true));
+            if (failedItem) stillPending.push(failedItem);
+            continue;
+          }
 
-            if (pollResult.status === 'COMPLETED') {
-              setVideoProgress(prev => ({
-                ...prev,
-                sceneStatuses: { ...prev.sceneStatuses, [item.scene_id]: 'done' }
-              }));
-            } else if (pollResult.status === 'FAILED') {
-              setVideoProgress(prev => ({
-                ...prev,
-                sceneStatuses: { ...prev.sceneStatuses, [item.scene_id]: 'failed' }
-              }));
-            } else {
-              stillPending.push(item);
-            }
-          } catch (err) {
-            console.warn(`Poll error scene ${item.scene_number}:`, err.message);
+          const { item, result } = entry;
+
+          if (result.status === 'COMPLETED') {
+            setVideoProgress(prev => ({
+              ...prev,
+              sceneStatuses: { ...prev.sceneStatuses, [item.scene_id]: 'done' }
+            }));
+          } else if (result.status === 'FAILED') {
+            setVideoProgress(prev => ({
+              ...prev,
+              sceneStatuses: { ...prev.sceneStatuses, [item.scene_id]: 'failed' }
+            }));
+          } else {
+            // PROCESSING or UNKNOWN — keep polling
             stillPending.push(item);
           }
         }
@@ -304,10 +334,6 @@ export default function ContentGeneration() {
   // ══════════════════════════════════════════════════════════════════
   // EXPORT — Download all assets as numbered zip
   // ══════════════════════════════════════════════════════════════════
-  // Files named: S01_setup_image.png, S01_setup_video.mp4, etc.
-  // Sorted by scene_number. Arc position in filename for clarity.
-  // Also includes a manifest.json with all metadata.
-  // ══════════════════════════════════════════════════════════════════
 
   const loadJSZip = async () => {
     if (window.JSZip) return window.JSZip;
@@ -331,7 +357,6 @@ export default function ContentGeneration() {
         if (arc.includes('resolution')) return 'resolution';
       }
     } catch (_) {}
-    // Fallback: guess from scene position
     const pos = scene.scene_number / scenes.length;
     if (pos <= 0.15) return 'setup';
     if (pos <= 0.50) return 'rising';
@@ -368,7 +393,6 @@ export default function ContentGeneration() {
       const zip = new JSZip();
       const folder = zip.folder(`${projectName}_assets`);
 
-      // Count total assets to download
       const totalAssets = scenes.reduce((sum, s) => {
         let count = 0;
         if (s.image_url && !s.image_url.startsWith('data:')) count++;
@@ -384,30 +408,23 @@ export default function ContentGeneration() {
         const arc = getArcLabel(scene);
         const prefix = `S${num}_${arc}`;
 
-        // ── Download image ────────────────────────────────────────
         if (scene.image_url && !scene.image_url.startsWith('data:')) {
           setExportProgress({ current: downloaded, total: totalAssets, label: `${prefix}_image` });
           const ext = getExtension(scene.image_url, 'png');
           const blob = await fetchAsBlob(scene.image_url);
-          if (blob) {
-            folder.file(`${prefix}_image.${ext}`, blob);
-          }
+          if (blob) folder.file(`${prefix}_image.${ext}`, blob);
           downloaded++;
         }
 
-        // ── Download video ────────────────────────────────────────
         if (scene.video_url && !scene.video_url.startsWith('veo_task:') && scene.video_url.startsWith('http')) {
           setExportProgress({ current: downloaded, total: totalAssets, label: `${prefix}_video` });
           const ext = getExtension(scene.video_url, 'mp4');
           const blob = await fetchAsBlob(scene.video_url);
-          if (blob) {
-            folder.file(`${prefix}_video.${ext}`, blob);
-          }
+          if (blob) folder.file(`${prefix}_video.${ext}`, blob);
           downloaded++;
         }
       }
 
-      // ── Add manifest.json ─────────────────────────────────────
       const manifest = scenes.map(s => ({
         scene_number: s.scene_number,
         arc_position: getArcLabel(s),
@@ -420,7 +437,6 @@ export default function ContentGeneration() {
       }));
       folder.file('manifest.json', JSON.stringify(manifest, null, 2));
 
-      // ── Generate and download zip ─────────────────────────────
       setExportProgress({ current: totalAssets, total: totalAssets, label: 'Compressing zip...' });
       const zipBlob = await zip.generateAsync({ type: 'blob' }, (meta) => {
         setExportProgress(prev => ({ ...prev, label: `Compressing... ${Math.round(meta.percent)}%` }));
@@ -435,7 +451,6 @@ export default function ContentGeneration() {
 
     } catch (err) {
       console.error('Export failed:', err);
-      // Fallback: export JSON only
       const exportData = scenes.map(s => ({
         scene_number: s.scene_number,
         arc_position: getArcLabel(s),
@@ -672,7 +687,7 @@ export default function ContentGeneration() {
                   {videoStatusCounts.polling > 0 && ` · ${videoStatusCounts.polling} rendering`}
                   {videoStatusCounts.queued > 0 && ` · ${videoStatusCounts.queued} queued`}
                   {videoStatusCounts.failed > 0 && ` · ${videoStatusCounts.failed} failed`}
-                  {videoProgress.phase === 'polling' && ' · Polling every 15s'}
+                  {videoProgress.phase === 'polling' && ' · Polling every 10s'}
                 </p>
               </div>
             </div>
