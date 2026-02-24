@@ -206,12 +206,11 @@ Write the complete narration script. Return ONLY the script text, no headers or 
     setStep(4);
   };
 
-  // ── Step 4→5: Create project + run full pipeline ──────────────
+  // ── Step 4→5: Create project + save script, then redirect to ContentGeneration ──
   const handleRunPipeline = async () => {
     setLoading(true);
     setStep(5);
 
-    // 1. Create project
     setPipelineStep('Creating project...');
     const project = await base44.entities.Projects.create({
       name: newTitle || analysis.title,
@@ -225,9 +224,8 @@ Write the complete narration script. Return ONLY the script text, no headers or 
     });
     setProjectId(project.id);
 
-    // 2. Create script
     setPipelineStep('Saving script...');
-    const scriptRecord = await base44.entities.Scripts.create({
+    await base44.entities.Scripts.create({
       project_id: project.id,
       version: 'final_aggregated',
       title: newTitle || analysis.title,
@@ -235,163 +233,21 @@ Write the complete narration script. Return ONLY the script text, no headers or 
       word_count: newScript.split(/\s+/).filter(w => w).length,
       estimated_duration_sec: analysis.estimated_duration_seconds || 600,
     });
-    console.log('Script created:', scriptRecord.id);
 
-    // 3. Generate voiceover (with selected voice)
-    setPipelineStep('Generating voiceover...');
-    try {
-      const voPayload = { project_id: project.id };
-      if (selectedVoiceId) voPayload.voice_id = selectedVoiceId;
-      const voResp = await base44.functions.invoke('generateVoiceover', voPayload);
-      console.log('Voiceover result:', voResp.data);
-    } catch (err) {
-      console.warn('Voiceover failed, continuing pipeline:', err.message);
+    // Save voice preference to ProductionSettings so ContentGeneration picks it up
+    if (selectedVoiceId) {
+      await base44.entities.ProductionSettings.create({
+        project_id: project.id,
+        selected_voice_id: selectedVoiceId,
+        voiceover_status: 'pending',
+      });
     }
 
-    // 4. Scene breakdown (deterministic count)
-    setPipelineStep('Breaking down script into cinematic scenes...');
-    try {
-      const breakdownResponse = await base44.functions.invoke('generateSceneBreakdown', { project_id: project.id });
-      const breakdownResult = breakdownResponse.data || breakdownResponse;
-      setSceneCount(breakdownResult.scenes_created || 0);
-      console.log('Scene breakdown result:', breakdownResult);
-    } catch (err) {
-      console.warn('Scene breakdown failed, continuing pipeline:', err.message);
-    }
-
-    // 5. Generate scene prompts
-    setPipelineStep('Converting to visual prompts...');
-    try {
-      const promptsResp = await base44.functions.invoke('generateScenePrompts', { project_id: project.id });
-      console.log('Scene prompts result:', promptsResp.data);
-    } catch (err) {
-      console.warn('Prompt generation failed, continuing pipeline:', err.message);
-    }
-
-    // 6. Generate images for all scenes
-    setPipelineStep('Generating scene images...');
-    try {
-      // Wait a moment for scene data to settle
-      await new Promise(r => setTimeout(r, 2000));
-      const scenes = await base44.entities.Scenes.filter({ project_id: project.id });
-      // Accept both prompts_ready and breakdown_ready scenes (prompts step may update status)
-      const ready = scenes
-        .filter(s => s.status === 'prompts_ready' || s.status === 'breakdown_ready')
-        .sort((a, b) => a.scene_number - b.scene_number);
-      console.log(`Found ${scenes.length} total scenes, ${ready.length} ready for images`);
-      setSceneCount(ready.length);
-
-      for (let i = 0; i < ready.length; i++) {
-        setPipelineStep(`Generating image ${i + 1}/${ready.length}...`);
-        setImagesDone(i + 1);
-        try {
-          await base44.functions.invoke('generateSceneImage', { scene_id: ready[i].id });
-        } catch (imgErr) {
-          console.warn(`Scene ${ready[i].scene_number} image failed:`, imgErr.message);
-        }
-      }
-    } catch (err) {
-      console.warn('Image generation failed:', err.message);
-    }
-
-    // 7. Animate all scenes with Veo 3.1 (parallel batch submit + poll)
-    setPipelineStep('Animating scenes with Veo 3.1...');
-    setVideosDone(0);
-    try {
-      // Re-fetch scenes to get fresh image_url values
-      await new Promise(r => setTimeout(r, 2000));
-      const freshScenes = await base44.entities.Scenes.filter({ project_id: project.id });
-      const animReady = freshScenes
-        .filter(s => s.image_url && !s.image_url.startsWith('data:') && !s.video_url)
-        .sort((a, b) => a.scene_number - b.scene_number);
-
-      console.log(`Found ${freshScenes.length} scenes, ${animReady.length} ready for animation`);
-
-      if (animReady.length > 0) {
-        // ── Submit all scenes in parallel batches of 5 ──────────
-        const SUBMIT_BATCH = 5;
-        const pendingPolls = [];
-
-        for (let i = 0; i < animReady.length; i += SUBMIT_BATCH) {
-          const batch = animReady.slice(i, i + SUBMIT_BATCH);
-          setPipelineStep(`Submitting scenes ${i + 1}-${Math.min(i + batch.length, animReady.length)} to Veo...`);
-
-          const batchResults = await Promise.allSettled(
-            batch.map(scene =>
-              base44.functions.invoke('generateSceneVideo', { scene_id: scene.id })
-                .then(result => ({ scene, result: result.data || result, ok: true }))
-                .catch(err => ({ scene, err, ok: false }))
-            )
-          );
-
-          for (const settled of batchResults) {
-            const item = settled.status === 'fulfilled' ? settled.value : settled.reason;
-            if (!item) continue;
-            if (item.ok && item.result?.task_id) {
-              pendingPolls.push({
-                scene_id: item.scene.id,
-                task_id: item.result.task_id,
-                scene_number: item.scene.scene_number
-              });
-            } else {
-              console.warn(`Scene ${item.scene?.scene_number} submit failed:`, item.err?.message || 'Unknown');
-            }
-          }
-        }
-
-        // ── Poll all pending scenes in parallel rounds ──────────
-        if (pendingPolls.length > 0) {
-          let remaining = [...pendingPolls];
-          let pollCount = 0;
-          const MAX_POLLS = 90;
-          const POLL_INTERVAL = 10000;
-
-          while (remaining.length > 0 && pollCount < MAX_POLLS) {
-            await new Promise(r => setTimeout(r, POLL_INTERVAL));
-            pollCount++;
-
-            setPipelineStep(`Rendering videos... ${pendingPolls.length - remaining.length}/${pendingPolls.length} done (poll ${pollCount})`);
-
-            const pollResults = await Promise.allSettled(
-              remaining.map(item =>
-                base44.functions.invoke('pollSceneVideo', { scene_id: item.scene_id })
-                  .then(result => ({ item, result: result.data || result, ok: true }))
-                  .catch(err => ({ item, err, ok: false }))
-              )
-            );
-
-            const stillPending = [];
-            for (const settled of pollResults) {
-              const entry = settled.status === 'fulfilled' ? settled.value : null;
-              if (!entry || !entry.ok || !entry.result) {
-                const failedItem = settled.status === 'fulfilled' ? entry?.item : null;
-                if (failedItem) stillPending.push(failedItem);
-                continue;
-              }
-
-              const { item, result } = entry;
-              if (result.status === 'COMPLETED') {
-                setVideosDone(prev => prev + 1);
-              } else if (result.status === 'FAILED') {
-                console.warn(`Scene ${item.scene_number} video failed`);
-              } else {
-                stillPending.push(item);
-              }
-            }
-            remaining = stillPending;
-          }
-
-          console.log(`✓ Video animation complete: ${pendingPolls.length - remaining.length}/${pendingPolls.length} done`);
-        }
-      } else {
-        console.warn('No scenes ready for animation (missing public image URLs)');
-      }
-    } catch (err) {
-      console.warn('Video animation failed:', err.message);
-    }
-
-    setPipelineStep('Pipeline complete!');
+    setPipelineStep('Redirecting to Content Generation...');
     setLoading(false);
+
+    // Navigate to ContentGeneration which handles voiceover, scenes, images, videos
+    navigate(createPageUrl(`ContentGeneration?project_id=${project.id}`));
   };
 
   const stepLabels = ['Video URL', 'Analysis', 'Customize', 'Script', 'Pipeline'];
