@@ -185,17 +185,24 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
     // If no URL, generate one via backend
     if (!url) {
       setLoadingPreview(voice.voice_id);
-      const res = await base44.functions.invoke('previewVoice', {
-        voice_id: voice.voice_id,
-        provider: voice.provider || 'minimax',
-      });
-      setLoadingPreview(null);
-      if (res.data?.preview_url) {
-        url = res.data.preview_url;
-        setPreviewCache(prev => ({ ...prev, [voice.voice_id]: url }));
-      } else {
-        return; // failed to generate
+      try {
+        const res = await base44.functions.invoke('previewVoice', {
+          voice_id: voice.voice_id,
+          provider: voice.provider || 'minimax',
+        });
+        if (res.data?.preview_url) {
+          url = res.data.preview_url;
+          setPreviewCache(prev => ({ ...prev, [voice.voice_id]: url }));
+        } else {
+          setLoadingPreview(null);
+          return;
+        }
+      } catch (err) {
+        console.warn('Preview failed:', err?.response?.data?.error || err.message);
+        setLoadingPreview(null);
+        return;
       }
+      setLoadingPreview(null);
     }
 
     const audio = new Audio(url);
