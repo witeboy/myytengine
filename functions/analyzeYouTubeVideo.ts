@@ -251,8 +251,15 @@ Deno.serve(async (req) => {
             body: JSON.stringify({ url: youtubeUrl, downloadMode: "audio", audioFormat: "mp3" })
           });
 
-          const cobaltData = await cobaltRes.json();
-          const audioUrl = cobaltData.url;
+          let cobaltData;
+          try {
+            cobaltData = await cobaltRes.json();
+          } catch (parseErr) {
+            console.log(`[Cobalt] Failed to parse response as JSON (status ${cobaltRes.status})`);
+            throw new Error('Cobalt returned non-JSON response');
+          }
+          console.log(`[Cobalt] Response keys: ${Object.keys(cobaltData).join(', ')}`);
+          const audioUrl = cobaltData.url || cobaltData.audio;
 
           if (!audioUrl) {
             console.log(`[Cobalt] No audio URL returned: ${JSON.stringify(cobaltData).substring(0, 300)}`);
