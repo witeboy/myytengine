@@ -432,6 +432,18 @@ export default function ContentRepurpose() {
                 analysisVoiceStyle={analysis?.voiceover_style}
               />
 
+              {loading && batchProgress.total > 0 && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-medium text-emerald-700">
+                      Writing batch {batchProgress.current}/{batchProgress.total}
+                    </span>
+                    <span className="text-emerald-600">{batchProgress.words.toLocaleString()} words</span>
+                  </div>
+                  <Progress value={(batchProgress.current / batchProgress.total) * 100} className="h-1.5" />
+                </div>
+              )}
+
               <div className="flex gap-3">
                 <Button variant="outline" onClick={() => setStep(2)} className="gap-2"><ArrowLeft className="w-4 h-4" /> Back</Button>
                 <Button onClick={handleGenerateNewScript} disabled={loading || !newTitle.trim()} className="flex-1 bg-emerald-600 hover:bg-emerald-700 gap-2">
