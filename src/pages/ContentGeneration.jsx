@@ -156,7 +156,7 @@ export default function ContentGeneration() {
       s.image_url &&
       s.image_url.startsWith('http') && // Veo needs public URLs
       (s.status === 'image_generated' || s.status === 'prompts_ready') &&
-      (!s.video_url || s.video_url.startsWith('veo_task:'))
+      (!s.video_url || s.video_url.startsWith('grok_vid_task:') || s.video_url.startsWith('veo_task:'))
     );
 
     if (ready.length === 0) {
