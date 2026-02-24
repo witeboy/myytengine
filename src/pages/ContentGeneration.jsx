@@ -681,6 +681,7 @@ export default function ContentGeneration() {
                 <p className="text-xs text-gray-500 mt-2">
                   {videoStatusCounts.done > 0 && `${videoStatusCounts.done} complete`}
                   {videoStatusCounts.polling > 0 && ` · ${videoStatusCounts.polling} rendering`}
+                  {videoStatusCounts.upgrading > 0 && ` · ${videoStatusCounts.upgrading} upgrading to 1080p`}
                   {videoStatusCounts.queued > 0 && ` · ${videoStatusCounts.queued} queued`}
                   {videoStatusCounts.failed > 0 && ` · ${videoStatusCounts.failed} failed`}
                   {videoProgress.phase === 'polling' && ' · Polling every 15s'}
