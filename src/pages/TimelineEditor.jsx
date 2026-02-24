@@ -4,21 +4,23 @@ import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Slider } from '@/components/ui/slider';
 import { createPageUrl } from '@/utils';
 import StageProgress from '@/components/StageProgress';
 import TimelineTrack from '@/components/timeline/TimelineTrack';
 import TimelineRuler from '@/components/timeline/TimelineRuler';
 import ScenePreview from '@/components/timeline/ScenePreview';
-import PlaybackControls from '@/components/timeline/PlaybackControls';
-import TranscriptBar from '@/components/timeline/TranscriptBar';
 import PreviewMonitor from '@/components/timeline/PreviewMonitor';
 import ExportPanel from '@/components/timeline/ExportPanel';
 import VideoExporter from '@/components/timeline/VideoExporter';
 import useVideoExport from '@/components/timeline/useVideoExport';
-import AudioMixerTimeline from '@/components/timeline/AudioMixerTimeline';
 import SceneReorder from '@/components/timeline/SceneReorder';
-import { Loader2, Import, Download, Film, Play, Package, ArrowRight, Upload, SlidersHorizontal, GripVertical } from 'lucide-react';
+import TransitionLibrary from '@/components/timeline/TransitionLibrary';
+import {
+  Loader2, Import, Download, Film, Play, Pause, Package, ArrowRight,
+  SlidersHorizontal, GripVertical, SkipBack, SkipForward, Volume2, VolumeX,
+  Mic, Music, ZoomIn, ZoomOut, Maximize2
+} from 'lucide-react';
 import DownloadAllMedia from '@/components/content/DownloadAllMedia';
 
 export default function TimelineEditor() {
@@ -29,10 +31,15 @@ export default function TimelineEditor() {
   const [pixelsPerSecond, setPixelsPerSecond] = useState(10);
   const [showExportPanel, setShowExportPanel] = useState(false);
   const [showExporter, setShowExporter] = useState(false);
-  const [showMixer, setShowMixer] = useState(false);
   const [showReorder, setShowReorder] = useState(false);
+  const [transitionTarget, setTransitionTarget] = useState(null); // { sceneA, sceneB }
   const exportHook = useVideoExport();
   const timelineRef = useRef(null);
+
+  // Audio mixer state
+  const [voVol, setVoVol] = useState(1.0);
+  const [musicVol, setMusicVol] = useState(0.3);
+  const [sfxMasterVol, setSfxMasterVol] = useState(0.5);
 
   // Playback state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -61,7 +68,6 @@ export default function TimelineEditor() {
     enabled: !!projectId,
   });
 
-  // Fetch voiceover and music
   const { data: prodSettings = [] } = useQuery({
     queryKey: ['prod-settings', projectId],
     queryFn: () => base44.entities.ProductionSettings.filter({ project_id: projectId }),
@@ -77,24 +83,22 @@ export default function TimelineEditor() {
   });
   const selectedMusic = musicTracks.find(t => t.is_selected);
   const musicUrl = selectedMusic?.audio_url;
-  const musicVolume = selectedMusic?.volume ?? 0.3;
+
+  // Sync music volume from DB
+  useEffect(() => {
+    if (selectedMusic?.volume != null) setMusicVol(selectedMusic.volume);
+  }, [selectedMusic?.volume]);
 
   // Calculate cumulative start times
   const scenesWithTiming = scenes.reduce((acc, scene, idx) => {
     const prevEnd = idx > 0 ? acc[idx - 1].start_time + acc[idx - 1].duration_seconds : 0;
-    acc.push({
-      ...scene,
-      start_time: prevEnd,
-      duration_seconds: scene.duration_seconds || 8,
-    });
+    acc.push({ ...scene, start_time: prevEnd, duration_seconds: scene.duration_seconds || 8 });
     return acc;
   }, []);
 
-  // Master duration = voiceover length (if available), otherwise sum of scenes
   const sceneDuration = scenesWithTiming.reduce((sum, s) => sum + s.duration_seconds, 0);
   const totalDuration = voiceoverDuration > 0 ? voiceoverDuration : sceneDuration;
 
-  // Find current scene based on playback time
   const getCurrentScene = useCallback((time) => {
     for (let i = scenesWithTiming.length - 1; i >= 0; i--) {
       if (time >= scenesWithTiming[i].start_time) return scenesWithTiming[i];
@@ -111,10 +115,7 @@ export default function TimelineEditor() {
       playIntervalRef.current = setInterval(() => {
         setCurrentTime(prev => {
           const next = prev + 0.1;
-          if (next >= totalDuration) {
-            setIsPlaying(false);
-            return 0;
-          }
+          if (next >= totalDuration) { setIsPlaying(false); return 0; }
           return next;
         });
       }, 100);
@@ -129,7 +130,7 @@ export default function TimelineEditor() {
     if (!voiceoverUrl) return;
     if (voiceoverRef.current) voiceoverRef.current.pause();
     const a = new Audio(voiceoverUrl);
-    a.volume = volume;
+    a.volume = voVol * volume;
     voiceoverRef.current = a;
   }, [voiceoverUrl]);
 
@@ -139,54 +140,51 @@ export default function TimelineEditor() {
     if (musicRef.current) musicRef.current.pause();
     const a = new Audio(musicUrl);
     a.loop = true;
-    a.volume = musicVolume * volume;
+    a.volume = musicVol * volume;
     musicRef.current = a;
   }, [musicUrl]);
 
-  // Sync audio play/pause with playback state
+  // Sync audio play/pause
   useEffect(() => {
     if (isPlaying) {
       if (voiceoverRef.current) {
         voiceoverRef.current.currentTime = currentTime;
-        voiceoverRef.current.volume = volume;
+        voiceoverRef.current.volume = voVol * volume;
         voiceoverRef.current.play().catch(() => {});
       }
       if (musicRef.current) {
-        musicRef.current.volume = musicVolume * volume;
+        musicRef.current.volume = musicVol * volume;
         musicRef.current.play().catch(() => {});
       }
     } else {
       voiceoverRef.current?.pause();
       musicRef.current?.pause();
-      // Pause all sfx
       Object.values(sfxRefs.current).forEach(a => a?.pause());
     }
   }, [isPlaying]);
 
-  // Sync volume changes live
+  // Sync volume changes
   useEffect(() => {
-    if (voiceoverRef.current) voiceoverRef.current.volume = volume;
-    if (musicRef.current) musicRef.current.volume = musicVolume * volume;
-  }, [volume, musicVolume]);
+    if (voiceoverRef.current) voiceoverRef.current.volume = voVol * volume;
+    if (musicRef.current) musicRef.current.volume = musicVol * volume;
+  }, [volume, musicVol, voVol]);
 
-  // SFX: play scene sound effects at correct times
+  // SFX
   useEffect(() => {
     if (!isPlaying) return;
     const scene = getCurrentScene(currentTime);
     if (!scene?.sound_effect_url) return;
     const timeInScene = currentTime - scene.start_time;
-    // Play SFX at start of scene (within first 0.3s)
     if (timeInScene >= 0 && timeInScene < 0.3) {
       if (!sfxRefs.current[scene.id] || sfxRefs.current[scene.id].paused) {
         const sfx = new Audio(scene.sound_effect_url);
-        sfx.volume = (scene.sfx_volume ?? 0.5) * volume;
+        sfx.volume = (scene.sfx_volume ?? 0.5) * sfxMasterVol * volume;
         sfx.play().catch(() => {});
         sfxRefs.current[scene.id] = sfx;
       }
     }
   }, [currentTime, isPlaying]);
 
-  // Cleanup audio on unmount
   useEffect(() => {
     return () => {
       voiceoverRef.current?.pause();
@@ -195,15 +193,13 @@ export default function TimelineEditor() {
     };
   }, []);
 
-  // Auto-scroll timeline to follow playhead
+  // Auto-scroll
   useEffect(() => {
     if (isPlaying && timelineRef.current) {
-      const playheadX = currentTime * pixelsPerSecond + 96; // 96 = label width
+      const playheadX = currentTime * pixelsPerSecond + 64;
       const container = timelineRef.current;
-      const scrollLeft = container.scrollLeft;
-      const containerWidth = container.clientWidth;
-      if (playheadX > scrollLeft + containerWidth - 100 || playheadX < scrollLeft + 100) {
-        container.scrollLeft = playheadX - containerWidth / 2;
+      if (playheadX > container.scrollLeft + container.clientWidth - 100 || playheadX < container.scrollLeft + 100) {
+        container.scrollLeft = playheadX - container.clientWidth / 2;
       }
     }
   }, [currentTime, isPlaying, pixelsPerSecond]);
@@ -214,7 +210,7 @@ export default function TimelineEditor() {
     const container = timelineRef.current;
     if (!container) return 0;
     const rect = container.getBoundingClientRect();
-    const x = e.clientX - rect.left + container.scrollLeft - 96;
+    const x = e.clientX - rect.left + container.scrollLeft - 64;
     return Math.max(0, Math.min(totalDuration, x / pixelsPerSecond));
   };
 
@@ -245,6 +241,7 @@ export default function TimelineEditor() {
 
   const handleTimelineClick = (e) => {
     if (e.target.closest('[data-scene-block]')) return;
+    if (e.target.closest('button')) return;
     const t = getTimeFromMouseEvent(e);
     setCurrentTime(t);
     if (voiceoverRef.current) voiceoverRef.current.currentTime = t;
@@ -258,7 +255,6 @@ export default function TimelineEditor() {
     const idx = Math.max(0, currentSceneIndex - 1);
     setCurrentTime(scenesWithTiming[idx]?.start_time || 0);
   };
-
   const handleNextScene = () => {
     const idx = Math.min(scenesWithTiming.length - 1, currentSceneIndex + 1);
     setCurrentTime(scenesWithTiming[idx]?.start_time || 0);
@@ -266,10 +262,7 @@ export default function TimelineEditor() {
 
   const handleImport = async () => {
     setImporting(true);
-    await base44.entities.Projects.update(projectId, {
-      status: 'timeline_editing',
-      current_step: 7,
-    });
+    await base44.entities.Projects.update(projectId, { status: 'timeline_editing', current_step: 7 });
     setImporting(false);
   };
 
@@ -278,288 +271,325 @@ export default function TimelineEditor() {
     refetchScenes();
   }, 500), [refetchScenes]);
 
-  // Compile handled by ExportPanel
-
   const zoomIn = () => setPixelsPerSecond(prev => Math.min(prev + 5, 50));
   const zoomOut = () => setPixelsPerSecond(prev => Math.max(prev - 5, 3));
 
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    const f = Math.floor((seconds % 1) * 10);
+    return `${m}:${s.toString().padStart(2, '0')}.${f}`;
+  };
+
+  const handleSaveMixLevels = async () => {
+    if (selectedMusic) {
+      await base44.entities.MusicTracks.update(selectedMusic.id, { volume: musicVol });
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="min-h-screen bg-[#1a1a2e] text-white flex flex-col">
       <StageProgress currentStage={3} />
-      <div className="max-w-full mx-auto px-4 py-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-3xl font-bold">Timeline Editor</h1>
-            <p className="text-gray-600">
-              {scenes.length} scenes • {Math.round(totalDuration)}s total ({Math.round(totalDuration / 60)} min)
-              {voiceoverDuration > 0 && <span className="text-blue-600 ml-1">· VO: {Math.round(voiceoverDuration)}s</span>}
-              {voiceoverDuration > 0 && sceneDuration > 0 && (
-                <span className={`ml-2 font-medium ${sceneDuration >= voiceoverDuration ? 'text-green-600' : 'text-red-600'}`}>
-                  · Coverage: {Math.round((sceneDuration / voiceoverDuration) * 100)}%
-                </span>
-              )}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            {scenes.length === 0 || project?.status === 'content_generation' || project?.status === 'scenes_ready' ? (
-              <Button onClick={handleImport} disabled={importing} className="bg-blue-600 hover:bg-blue-700">
-                {importing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Import className="w-4 h-4 mr-2" />}
-                Import from Content
+
+      {/* Top toolbar */}
+      <div className="bg-[#16213e] border-b border-gray-700 px-4 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <h1 className="text-lg font-semibold">{project?.name || 'Timeline'}</h1>
+          <span className="text-xs text-gray-400">
+            {scenes.length} scenes • {Math.round(totalDuration)}s
+            {voiceoverDuration > 0 && <span className="text-blue-400 ml-1">VO: {Math.round(voiceoverDuration)}s</span>}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          {scenes.length === 0 || project?.status === 'content_generation' || project?.status === 'scenes_ready' ? (
+            <Button onClick={handleImport} disabled={importing} size="sm" className="bg-blue-600 hover:bg-blue-700 text-xs">
+              {importing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Import className="w-3 h-3 mr-1" />}
+              Import
+            </Button>
+          ) : null}
+          {scenes.length > 0 && (
+            <>
+              <Button variant="ghost" size="sm" onClick={() => setShowReorder(p => !p)} className="text-gray-300 hover:text-white text-xs">
+                <GripVertical className="w-3 h-3 mr-1" /> Reorder
               </Button>
-            ) : null}
-            <Button variant="outline" onClick={zoomOut}>−</Button>
-            <Button variant="outline" onClick={zoomIn}>+</Button>
-            {scenes.length > 0 && (
-              <>
-                <Button variant="outline" onClick={() => setShowReorder(p => !p)}>
-                  <GripVertical className="w-4 h-4 mr-1" />
-                  Reorder
-                </Button>
-                <Button variant="outline" onClick={() => setShowMixer(p => !p)}>
-                  <SlidersHorizontal className="w-4 h-4 mr-1" />
-                  Mixer
-                </Button>
-                <Button onClick={() => setShowExporter(true)} className="bg-green-600 hover:bg-green-700">
-                  <Download className="w-4 h-4 mr-2" />
-                  Export MP4
-                </Button>
-                <Button variant="outline" onClick={() => setShowExportPanel(p => !p)}>
-                  <Package className="w-4 h-4 mr-2" />
-                  {showExportPanel ? 'Hide Assets' : 'Export Assets'}
-                </Button>
-                <Button
-                  onClick={async () => {
-                    await base44.entities.Projects.update(projectId, { status: 'post_production', current_step: 11 });
-                    navigate(createPageUrl(`PostProduction?project_id=${projectId}`));
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700 gap-2"
-                >
-                  Next: Post Production <ArrowRight className="w-4 h-4" />
-                </Button>
-              </>
-            )}
-          </div>
+              <Button size="sm" onClick={() => setShowExporter(true)} className="bg-green-600 hover:bg-green-700 text-xs">
+                <Download className="w-3 h-3 mr-1" /> Export
+              </Button>
+              <Button size="sm" onClick={() => setShowExportPanel(p => !p)} variant="ghost" className="text-gray-300 text-xs">
+                <Package className="w-3 h-3 mr-1" /> Assets
+              </Button>
+              <Button
+                size="sm"
+                onClick={async () => {
+                  await base44.entities.Projects.update(projectId, { status: 'post_production', current_step: 11 });
+                  navigate(createPageUrl(`PostProduction?project_id=${projectId}`));
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-xs"
+              >
+                Next <ArrowRight className="w-3 h-3 ml-1" />
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Download media */}
+      {scenes.length > 0 && (
+        <div className="px-4 pt-2">
+          <DownloadAllMedia scenes={scenesWithTiming} voiceoverUrl={voiceoverUrl} musicUrl={musicUrl} projectName={project?.name} />
+        </div>
+      )}
+
+      {/* Reorder panel */}
+      {showReorder && scenes.length > 0 && (
+        <div className="px-4 pt-2">
+          <SceneReorder scenes={scenesWithTiming} onRefetch={refetchScenes} />
+        </div>
+      )}
+
+      {showExportPanel && scenes.length > 0 && (
+        <div className="px-4 pt-2">
+          <ExportPanel
+            project={project} scenesWithTiming={scenesWithTiming} voiceoverUrl={voiceoverUrl}
+            musicUrl={musicUrl} musicVolume={musicVol} totalDuration={totalDuration}
+            onClose={() => setShowExportPanel(false)} onStatusUpdate={refetchProject}
+          />
+        </div>
+      )}
+
+      {/* Main content area: Preview + Scene detail */}
+      <div className="flex-1 flex flex-col lg:flex-row gap-0 min-h-0">
+        {/* Preview monitor */}
+        <div className="flex-1 flex flex-col items-center justify-center p-4 min-h-[300px]">
+          {scenes.length > 0 ? (
+            <PreviewMonitor
+              currentScene={currentScene}
+              currentTime={currentTime}
+              isPlaying={isPlaying}
+              totalScenes={scenes.length}
+              totalDuration={totalDuration}
+            />
+          ) : (
+            <div className="text-center text-gray-500">
+              <Film className="w-16 h-16 mx-auto mb-3 opacity-30" />
+              <p className="text-sm">Import scenes to start editing</p>
+            </div>
+          )}
         </div>
 
-        {/* Download All Media */}
-        {scenes.length > 0 && (
-          <DownloadAllMedia
-            scenes={scenesWithTiming}
-            voiceoverUrl={voiceoverUrl}
-            musicUrl={musicUrl}
-            projectName={project?.name}
-          />
-        )}
-
-        {/* Editing Panels */}
-        {scenes.length > 0 && (showMixer || showReorder) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            {showReorder && (
-              <SceneReorder scenes={scenesWithTiming} onRefetch={refetchScenes} />
-            )}
-            {showMixer && (
-              <AudioMixerTimeline
-                prodSettings={prodSettings[0]}
-                selectedMusic={selectedMusic}
-                scenes={scenesWithTiming}
-                onRefetch={() => { refetchScenes(); }}
-              />
-            )}
-          </div>
-        )}
-
-        {/* Export Assets Panel */}
-        {showExportPanel && scenes.length > 0 && (
-          <ExportPanel
-            project={project}
-            scenesWithTiming={scenesWithTiming}
-            voiceoverUrl={voiceoverUrl}
-            musicUrl={musicUrl}
-            musicVolume={musicVolume}
-            totalDuration={totalDuration}
-            onClose={() => setShowExportPanel(false)}
-            onStatusUpdate={refetchProject}
-          />
-        )}
-
-        {/* Live Preview Monitor */}
-        {scenes.length > 0 && (
-          <PreviewMonitor
-            currentScene={currentScene}
-            currentTime={currentTime}
-            isPlaying={isPlaying}
-            totalScenes={scenes.length}
-            totalDuration={totalDuration}
-          />
-        )}
-
-        {/* Selected Scene Preview */}
+        {/* Scene detail sidebar */}
         {selectedScene && (
-          <ScenePreview
-            scene={scenesWithTiming.find(s => s.id === selectedScene)}
-            onClose={() => setSelectedScene(null)}
-            onUpdateDuration={(dur) => handleUpdateDuration(selectedScene, dur)}
-            onRefetch={refetchScenes}
-          />
-        )}
-
-        {/* Playback Controls */}
-        {scenes.length > 0 && (
-          <div className="mb-3">
-            <PlaybackControls
-              isPlaying={isPlaying}
-              onPlayPause={handlePlayPause}
-              onPrevScene={handlePrevScene}
-              onNextScene={handleNextScene}
-              onSeek={handleSeek}
-              currentTime={currentTime}
-              totalDuration={totalDuration}
-              volume={volume}
-              onVolumeChange={setVolume}
-              currentSceneNumber={currentSceneIndex + 1}
-              totalScenes={scenes.length}
+          <div className="w-full lg:w-80 bg-[#16213e] border-l border-gray-700 overflow-y-auto">
+            <ScenePreview
+              scene={scenesWithTiming.find(s => s.id === selectedScene)}
+              onClose={() => setSelectedScene(null)}
+              onUpdateDuration={(dur) => handleUpdateDuration(selectedScene, dur)}
+              onRefetch={refetchScenes}
             />
           </div>
         )}
+      </div>
 
-        {/* Timeline */}
-        <Card className="overflow-hidden">
-          <CardContent className="p-0">
-            <div className="overflow-x-auto" ref={timelineRef} onClick={handleTimelineClick}>
-              <div style={{ minWidth: Math.max(totalDuration * pixelsPerSecond + 100, 800) }}>
-                {/* Ruler */}
-                <div className="relative">
-                  <TimelineRuler totalDuration={totalDuration} pixelsPerSecond={pixelsPerSecond} />
-                  {/* Playhead on ruler - draggable */}
-                  {scenes.length > 0 && (
+      {/* Bottom panel: Transport + Timeline + Mixer */}
+      <div className="bg-[#0f0f23] border-t border-gray-700">
+        {/* Transport controls */}
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-800">
+          <div className="flex items-center gap-1">
+            <button onClick={handlePrevScene} className="w-7 h-7 rounded hover:bg-white/10 flex items-center justify-center">
+              <SkipBack className="w-3.5 h-3.5 text-gray-300" />
+            </button>
+            <button onClick={handlePlayPause} className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center">
+              {isPlaying ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white ml-0.5" />}
+            </button>
+            <button onClick={handleNextScene} className="w-7 h-7 rounded hover:bg-white/10 flex items-center justify-center">
+              <SkipForward className="w-3.5 h-3.5 text-gray-300" />
+            </button>
+          </div>
+
+          <span className="font-mono text-xs text-blue-400 min-w-[70px]">{formatTime(currentTime)}</span>
+          <span className="text-gray-600 text-xs">/</span>
+          <span className="font-mono text-xs text-gray-400 min-w-[70px]">{formatTime(totalDuration)}</span>
+
+          <span className="text-[10px] text-gray-500 ml-2">S{currentSceneIndex + 1}/{scenes.length}</span>
+
+          <div className="flex-1" />
+
+          {/* Audio mixer inline */}
+          <div className="flex items-center gap-3 text-[10px]">
+            <div className="flex items-center gap-1">
+              <Mic className="w-3 h-3 text-blue-400" />
+              <Slider value={[voVol]} onValueChange={([v]) => setVoVol(v)} min={0} max={1} step={0.05} className="w-14" />
+              <span className="text-gray-500 w-6">{Math.round(voVol * 100)}%</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Music className="w-3 h-3 text-green-400" />
+              <Slider value={[musicVol]} onValueChange={([v]) => { setMusicVol(v); }} min={0} max={1} step={0.05} className="w-14" />
+              <span className="text-gray-500 w-6">{Math.round(musicVol * 100)}%</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-amber-400">🔊</span>
+              <Slider value={[sfxMasterVol]} onValueChange={([v]) => setSfxMasterVol(v)} min={0} max={1} step={0.05} className="w-14" />
+              <span className="text-gray-500 w-6">{Math.round(sfxMasterVol * 100)}%</span>
+            </div>
+            <button onClick={() => setVolume(volume > 0 ? 0 : 0.8)} className="hover:opacity-80">
+              {volume === 0 ? <VolumeX className="w-3.5 h-3.5 text-gray-500" /> : <Volume2 className="w-3.5 h-3.5 text-gray-300" />}
+            </button>
+            <Button size="sm" variant="ghost" className="text-[10px] text-gray-400 h-6 px-2" onClick={handleSaveMixLevels}>
+              Save Mix
+            </Button>
+          </div>
+
+          {/* Zoom controls */}
+          <div className="flex items-center gap-1 ml-2 border-l border-gray-700 pl-2">
+            <button onClick={zoomOut} className="w-6 h-6 rounded hover:bg-white/10 flex items-center justify-center">
+              <ZoomOut className="w-3 h-3 text-gray-400" />
+            </button>
+            <span className="text-[10px] text-gray-500 w-6 text-center">{pixelsPerSecond}</span>
+            <button onClick={zoomIn} className="w-6 h-6 rounded hover:bg-white/10 flex items-center justify-center">
+              <ZoomIn className="w-3 h-3 text-gray-400" />
+            </button>
+          </div>
+        </div>
+
+        {/* Timeline tracks */}
+        <div className="overflow-x-auto max-h-[220px]" ref={timelineRef} onClick={handleTimelineClick}>
+          <div style={{ minWidth: Math.max(totalDuration * pixelsPerSecond + 100, 800) }}>
+            {/* Ruler */}
+            <div className="relative">
+              <TimelineRuler totalDuration={totalDuration} pixelsPerSecond={pixelsPerSecond} />
+              {scenes.length > 0 && (
+                <div className="absolute top-0 bottom-0 z-30" style={{ left: currentTime * pixelsPerSecond + 64 - 6 }}>
+                  <div className="w-3 h-full flex flex-col items-center cursor-col-resize" onMouseDown={handlePlayheadMouseDown}>
+                    <div className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[6px] border-l-transparent border-r-transparent border-t-red-500" />
+                    <div className="w-0.5 flex-1 bg-red-500" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Video Track */}
+            <div className="border-t border-gray-800 relative">
+              <div className="flex items-center">
+                <div className="w-16 flex-shrink-0 px-2 py-1.5 bg-[#1a1a2e] border-r border-gray-800 text-[10px] font-medium text-gray-400 flex items-center gap-1">
+                  <Film className="w-3 h-3" /> Video
+                </div>
+                <div className="flex-1 relative" style={{ minWidth: totalDuration * pixelsPerSecond }}>
+                  <TimelineTrack
+                    scenes={scenesWithTiming}
+                    pixelsPerSecond={pixelsPerSecond}
+                    selectedScene={selectedScene}
+                    onSelectScene={setSelectedScene}
+                    onUpdateDuration={handleUpdateDuration}
+                    onTransitionClick={(sceneA, sceneB) => setTransitionTarget({ sceneA, sceneB })}
+                  />
+                  {voiceoverDuration > 0 && sceneDuration < voiceoverDuration && (
                     <div
-                      className="absolute top-0 bottom-0 z-30"
-                      style={{ left: currentTime * pixelsPerSecond + 96 - 6 }}
+                      className="absolute top-0 bottom-0 bg-red-900/20 border-l border-red-500/50 border-dashed flex items-center justify-center"
+                      style={{ left: sceneDuration * pixelsPerSecond, width: (voiceoverDuration - sceneDuration) * pixelsPerSecond }}
                     >
-                      <div
-                        className="w-3 h-full flex flex-col items-center cursor-col-resize"
-                        onMouseDown={handlePlayheadMouseDown}
-                      >
-                        <div className="w-3 h-3 bg-red-500 rounded-full mt-0.5 shadow-md hover:scale-125 transition-transform" />
-                        <div className="w-0.5 flex-1 bg-red-500" />
-                      </div>
+                      <span className="text-[9px] text-red-400 whitespace-nowrap px-1">⚠ Gap ({Math.round(voiceoverDuration - sceneDuration)}s)</span>
                     </div>
-                  )}
-                </div>
-
-                {/* Video Track */}
-                <div className="border-t relative">
-                  <div className="flex items-center">
-                    <div className="w-24 flex-shrink-0 px-3 py-2 bg-gray-900 border-r border-gray-700 text-xs font-medium text-gray-300 flex items-center gap-1">
-                      <Film className="w-3 h-3" /> Video
-                    </div>
-                    <div className="flex-1 relative" style={{ minWidth: totalDuration * pixelsPerSecond }}>
-                      <TimelineTrack
-                        scenes={scenesWithTiming}
-                        pixelsPerSecond={pixelsPerSecond}
-                        selectedScene={selectedScene}
-                        onSelectScene={setSelectedScene}
-                        onUpdateDuration={handleUpdateDuration}
-                      />
-                      {/* Gap indicator: shows red zone where voiceover has no media */}
-                      {voiceoverDuration > 0 && sceneDuration < voiceoverDuration && (
-                        <div
-                          className="absolute top-0 bottom-0 bg-red-900/30 border-l-2 border-red-500 border-dashed flex items-center justify-center"
-                          style={{
-                            left: sceneDuration * pixelsPerSecond,
-                            width: (voiceoverDuration - sceneDuration) * pixelsPerSecond
-                          }}
-                        >
-                          <span className="text-[10px] text-red-400 font-medium whitespace-nowrap px-2">
-                            ⚠ No media ({Math.round(voiceoverDuration - sceneDuration)}s gap)
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {/* Playhead line on video track */}
-                  {scenes.length > 0 && (
-                    <div
-                      className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 cursor-col-resize"
-                      style={{ left: currentTime * pixelsPerSecond + 96 }}
-                      onMouseDown={handlePlayheadMouseDown}
-                    />
-                  )}
-                </div>
-
-                {/* Audio Track — Voiceover (master timeline) */}
-                <div className="border-t border-gray-700 relative">
-                  <div className="flex items-center">
-                    <div className="w-24 flex-shrink-0 px-3 py-2 bg-gray-900 border-r border-gray-700 text-xs font-medium text-gray-300 flex items-center gap-1">
-                      <Play className="w-3 h-3" /> Audio
-                    </div>
-                    <div className="flex-1 h-16 bg-gray-900 flex items-center px-4">
-                      {voiceoverDuration > 0 ? (
-                        <div
-                          className="h-8 bg-blue-300 rounded flex items-center px-3 text-xs text-blue-800 font-medium border border-blue-400"
-                          style={{ width: voiceoverDuration * pixelsPerSecond }}
-                        >
-                          🎙 Voiceover (Master) • {Math.round(voiceoverDuration)}s
-                        </div>
-                      ) : totalDuration > 0 ? (
-                        <div
-                          className="h-8 bg-blue-200 rounded flex items-center px-3 text-xs text-blue-700"
-                          style={{ width: totalDuration * pixelsPerSecond }}
-                        >
-                          Audio • {Math.round(totalDuration)}s
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                  {/* Playhead line on audio track */}
-                  {scenes.length > 0 && (
-                    <div
-                      className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 cursor-col-resize"
-                      style={{ left: currentTime * pixelsPerSecond + 96 }}
-                      onMouseDown={handlePlayheadMouseDown}
-                    />
-                  )}
-                </div>
-
-                {/* SFX Track */}
-                <div className="border-t border-gray-700 relative">
-                  <div className="flex items-center">
-                    <div className="w-24 flex-shrink-0 px-3 py-2 bg-gray-900 border-r border-gray-700 text-xs font-medium text-gray-300 flex items-center gap-1">
-                      🔊 SFX
-                    </div>
-                    <div className="flex-1 h-12 bg-gray-900 relative">
-                      {scenesWithTiming.filter(s => s.sound_effect_url).map(scene => (
-                        <div
-                          key={scene.id}
-                          className="absolute top-1 bottom-1 bg-amber-200 border border-amber-400 rounded text-[9px] text-amber-800 px-1 flex items-center truncate"
-                          style={{
-                            left: scene.start_time * pixelsPerSecond,
-                            width: Math.max(scene.duration_seconds * pixelsPerSecond, 20),
-                          }}
-                        >
-                          S{scene.scene_number} SFX
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  {scenes.length > 0 && (
-                    <div
-                      className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 cursor-col-resize"
-                      style={{ left: currentTime * pixelsPerSecond + 96 }}
-                      onMouseDown={handlePlayheadMouseDown}
-                    />
                   )}
                 </div>
               </div>
+              {scenes.length > 0 && (
+                <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20" style={{ left: currentTime * pixelsPerSecond + 64 }} />
+              )}
             </div>
-          </CardContent>
-        </Card>
 
-        {/* Transcript Bar */}
-        {scenes.length > 0 && (
-          <TranscriptBar currentScene={currentScene} currentTime={currentTime} projectId={projectId} />
-        )}
+            {/* Voiceover Track */}
+            <div className="border-t border-gray-800 relative">
+              <div className="flex items-center">
+                <div className="w-16 flex-shrink-0 px-2 py-1 bg-[#1a1a2e] border-r border-gray-800 text-[10px] font-medium text-blue-400 flex items-center gap-1">
+                  <Mic className="w-3 h-3" /> VO
+                </div>
+                <div className="flex-1 h-10 bg-[#0a0a1a] relative">
+                  {voiceoverDuration > 0 && (
+                    <div
+                      className="absolute top-1 bottom-1 bg-blue-500/20 border border-blue-500/40 rounded flex items-center px-2"
+                      style={{ width: voiceoverDuration * pixelsPerSecond }}
+                    >
+                      <div className="flex items-center gap-1">
+                        <div className="w-1 h-3 bg-blue-400 rounded-full" />
+                        <div className="w-1 h-5 bg-blue-400 rounded-full" />
+                        <div className="w-1 h-2 bg-blue-400 rounded-full" />
+                        <div className="w-1 h-4 bg-blue-400 rounded-full" />
+                        <div className="w-1 h-3 bg-blue-400 rounded-full" />
+                      </div>
+                      <span className="text-[9px] text-blue-300 ml-2">Voiceover • {Math.round(voiceoverDuration)}s</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {scenes.length > 0 && (
+                <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20" style={{ left: currentTime * pixelsPerSecond + 64 }} />
+              )}
+            </div>
+
+            {/* Music Track */}
+            <div className="border-t border-gray-800 relative">
+              <div className="flex items-center">
+                <div className="w-16 flex-shrink-0 px-2 py-1 bg-[#1a1a2e] border-r border-gray-800 text-[10px] font-medium text-green-400 flex items-center gap-1">
+                  <Music className="w-3 h-3" /> Music
+                </div>
+                <div className="flex-1 h-10 bg-[#0a0a1a] relative">
+                  {musicUrl && (
+                    <div
+                      className="absolute top-1 bottom-1 bg-green-500/20 border border-green-500/40 rounded flex items-center px-2"
+                      style={{ width: totalDuration * pixelsPerSecond }}
+                    >
+                      <div className="flex items-center gap-0.5">
+                        {Array.from({ length: 8 }).map((_, i) => (
+                          <div key={i} className="w-0.5 bg-green-400 rounded-full" style={{ height: 4 + Math.random() * 12 }} />
+                        ))}
+                      </div>
+                      <span className="text-[9px] text-green-300 ml-2">{selectedMusic?.title || 'Music'}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {scenes.length > 0 && (
+                <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20" style={{ left: currentTime * pixelsPerSecond + 64 }} />
+              )}
+            </div>
+
+            {/* SFX Track */}
+            <div className="border-t border-gray-800 relative">
+              <div className="flex items-center">
+                <div className="w-16 flex-shrink-0 px-2 py-1 bg-[#1a1a2e] border-r border-gray-800 text-[10px] font-medium text-amber-400 flex items-center gap-1">
+                  🔊 SFX
+                </div>
+                <div className="flex-1 h-8 bg-[#0a0a1a] relative">
+                  {scenesWithTiming.filter(s => s.sound_effect_url).map(scene => (
+                    <div
+                      key={scene.id}
+                      className="absolute top-1 bottom-1 bg-amber-500/20 border border-amber-500/40 rounded text-[8px] text-amber-300 px-1 flex items-center truncate"
+                      style={{
+                        left: scene.start_time * pixelsPerSecond,
+                        width: Math.max(scene.duration_seconds * pixelsPerSecond, 20),
+                      }}
+                    >
+                      {scene.sound_effect || `S${scene.scene_number}`}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {scenes.length > 0 && (
+                <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20" style={{ left: currentTime * pixelsPerSecond + 64 }} />
+              )}
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* Transition Library Modal */}
+      <TransitionLibrary
+        open={!!transitionTarget}
+        onClose={() => setTransitionTarget(null)}
+        sceneA={transitionTarget?.sceneA}
+        sceneB={transitionTarget?.sceneB}
+        onApply={refetchScenes}
+      />
 
       {/* Video Export Modal */}
       <VideoExporter
@@ -569,7 +599,7 @@ export default function TimelineEditor() {
         orientation={project?.orientation || 'landscape'}
         voiceoverUrl={voiceoverUrl}
         musicUrl={musicUrl}
-        musicVolume={musicVolume}
+        musicVolume={musicVol}
         projectName={project?.name}
         exportHook={exportHook}
       />
