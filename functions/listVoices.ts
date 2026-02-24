@@ -189,7 +189,12 @@ Deno.serve(async (req) => {
       return true;
     });
 
-    console.log(`VOICE_TOTAL: ${unique.length} (primary=${primaryProvider})`);
+    // Log counts by category
+    const categoryCounts = {};
+    for (const v of unique) {
+      categoryCounts[v.category] = (categoryCounts[v.category] || 0) + 1;
+    }
+    console.log(`VOICE_TOTAL: ${unique.length} (primary=${primaryProvider}) categories: ${JSON.stringify(categoryCounts)}`);
 
     return Response.json({
       success: true,
