@@ -1,15 +1,14 @@
 import React from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Clock, Users } from 'lucide-react';
-import { createPageUrl } from '@/utils';
+import { Clock, Users } from 'lucide-react';
 
 export default function OngoingUGCProjects() {
-  const navigate = useNavigate();
 
   const { data: projects = [] } = useQuery({
     queryKey: ['ugc-projects'],
