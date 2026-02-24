@@ -11,13 +11,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { createPageUrl } from '@/utils';
 import {
   Loader2, ArrowLeft, ArrowRight, Users, Wand2, ImageIcon,
-  Mic, Video, Download, CheckCircle2, Sparkles, Volume2, Save
+  Mic, Video, Download, CheckCircle2, Sparkles, Volume2, Save, Play, Pause, RefreshCw
 } from 'lucide-react';
 import UGCTemplates from '@/components/templates/UGCTemplates';
 import InfluencerPromptBuilder, { buildUGCPrompt } from '@/components/ugc/InfluencerPromptBuilder';
 import SaveInfluencerTemplate from '@/components/ugc/SaveInfluencerTemplate';
 import InfluencerTemplatesPicker from '@/components/ugc/InfluencerTemplatesPicker';
 import ProductUploader from '@/components/ugc/ProductUploader';
+import VoicePicker from '@/components/repurpose/VoicePicker';
 
 const INFLUENCER_TYPES = [
   { value: 'beauty_guru', label: 'Beauty / Skincare Guru' },
