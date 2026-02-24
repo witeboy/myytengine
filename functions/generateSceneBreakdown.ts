@@ -19,7 +19,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 const CLIP_DURATION = 5;
 const MIN_CLIPS = 5;
-const MAX_CLIPS = 40;
+const MAX_CLIPS = 200;
 
 function repairJSON(str) {
   return str
