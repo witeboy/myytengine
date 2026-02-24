@@ -119,83 +119,81 @@ export default function ContentRepurpose() {
     }
   };
 
-  // ── Step 3→4: Generate new script via Gemini ──────────────────
+  // Batch generation state
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, words: 0 });
+
+  // ── Step 3→4: Generate new script via batch-based generation ──
   const handleGenerateNewScript = async () => {
     setLoading(true);
-    setStatusMsg('Writing new script in original style...');
-
     const hasOriginalScript = analysis.original_script && analysis.original_script.length > 200;
-    const originalWordCount = hasOriginalScript
-      ? analysis.original_script.split(/\s+/).filter(w => w).length
-      : (analysis.estimated_word_count || 1500);
-    const scriptReference = hasOriginalScript
-      ? `\n\nORIGINAL FULL SCRIPT (${originalWordCount} words — your new script MUST match this length EXACTLY):\n"""\n${analysis.original_script.substring(0, 40000)}\n"""`
-      : '';
+    const originalScript = hasOriginalScript ? analysis.original_script : '';
 
-    const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `You are a professional YouTube scriptwriter specializing in content repurposing. Your job is to take an original video's FULL transcript and REWRITE it for a NEW topic/title — while preserving the EXACT same dynamics, flow, beats, pulsating rhythm, delivery style, AND LENGTH.
+    if (!originalScript) {
+      // Fallback: no transcript, use single LLM call
+      setStatusMsg('Writing new script...');
+      const originalWordCount = analysis.estimated_word_count || 1500;
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `Write a ${originalWordCount}-word YouTube narration script about "${newTitle}" in a ${analysis.script_style || 'dramatic'} style. ${tweakNotes || ''}\nReturn ONLY the narration text, no headers.`,
+      });
+      setNewScript(result);
+      setLoading(false);
+      setStatusMsg('');
+      setStep(4);
+      return;
+    }
 
-ORIGINAL VIDEO ANALYSIS:
-- Title: ${analysis.title}
-- Niche: ${analysis.niche}
-- Script Style: ${analysis.script_style}
-- Voiceover Style: ${analysis.voiceover_style}
-- Pacing: ${analysis.pacing}
-- Hook Technique: ${analysis.hook_technique}
-- Content Structure: ${analysis.content_structure}
-- Tone: ${analysis.tone_description}
-- Estimated Duration: ${analysis.estimated_duration_seconds}s
-- Original Outline: ${analysis.reconstructed_outline}
-- ORIGINAL WORD COUNT: ${originalWordCount} words
-${scriptReference}
-
-NEW TITLE: "${newTitle}"
-USER NOTES: ${tweakNotes || 'None — keep as close to original style as possible'}
-
-ABSOLUTE LENGTH REQUIREMENT — THIS IS NON-NEGOTIABLE:
-The original script is EXACTLY ${originalWordCount} words. Your new script MUST be between ${Math.floor(originalWordCount * 0.95)} and ${Math.ceil(originalWordCount * 1.05)} words (within 5% of original). 
-DO NOT summarize. DO NOT condense. DO NOT shorten. If the original is ${originalWordCount} words, yours must be ~${originalWordCount} words.
-Count your words carefully. If your draft is shorter, EXPAND sections with additional detail, examples, or elaboration until you hit the target.
-
-ORIGINALITY & ANTI-PLAGIARISM — CRITICAL:
-You are NOT copying or paraphrasing the original. You are CHANNELING its soul into a completely new script.
-- STRIP OUT all specific names of people, brands, companies, locations, channel names, or any identifiable references from the original video
-- NEVER carry over direct quotes, catchphrases, or signature lines from the original creator
-- REPLACE every specific example, anecdote, and case study with COMPLETELY NEW ones relevant to "${newTitle}"
-- If the original says "John discovered something shocking in 1987" — you invent a BRAND NEW scenario with different people, dates, places
-- The new script must be UNTRACEABLE back to the original — no one should be able to Google a sentence and find the source
-- Think of it as: you absorbed the ESSENCE (emotion, rhythm, storytelling DNA, tension arcs, rhetorical power) and are now creating something ORIGINAL that happens to have the same heartbeat
-
-WHAT TO PRESERVE (the soul):
-- The emotional journey and arc — every peak, valley, tension build, and release
-- The storytelling techniques — foreshadowing, callbacks, cliffhangers, reveals at the same beats
-- The pacing DNA — short punchy sentences stay short, flowing ones stay flowing
-- The rhetorical devices — questions, repetition patterns, dramatic pauses, power phrases
-- The energy signature — if it starts explosive, calms, then crescendos, yours must follow the SAME rhythm
-- The ideological depth — the PURPOSE, the WHY, the deeper message beneath the surface
-- The nuance and subtlety — the way it makes the audience FEEL, not just what it says
-
-WHAT TO MAKE COMPLETELY NEW:
-- All names, people, characters, real-world references
-- All specific examples, statistics, dates, locations
-- All anecdotes and stories — invent fresh ones that serve the same emotional purpose
-- The surface-level content — while the deep structure mirrors the original, every word on the page is YOURS
-
-STYLE INSTRUCTIONS:
-${hasOriginalScript ? `You have the FULL original transcript above. This is your SOUL BLUEPRINT (not a copy source). You must:
-1. ABSORB the emotional architecture, then REBUILD it entirely for "${newTitle}" with all-new content
-2. PRESERVE the EXACT same structure — if the original has a shocking hook, yours must too. If it builds tension in paragraph 3, yours must too.
-3. MATCH sentence length patterns — short punchy sentences stay short, long flowing ones stay long
-4. KEEP the same rhetorical devices — questions, callbacks, cliffhangers, reveals at the same beats
-5. RETAIN the same energy arc — if the original starts intense, calms, then peaks, yours must follow the SAME rhythm
-6. MATCH paragraph-for-paragraph — for every paragraph in the original, write an equivalent paragraph of SIMILAR length with COMPLETELY DIFFERENT specific content
-7. The voice should feel like a KINDRED SPIRIT — same energy, different person, different story
-8. If someone read both scripts side by side, they should feel the same EMOTIONS but see ZERO overlapping content
-9. YOUR OUTPUT MUST BE ${originalWordCount} WORDS (±5%). This is the #1 priority after style matching.` : `No full transcript available. Write a new script based on the detected style analysis above. TARGET LENGTH: ${originalWordCount} words.`}
-Write the complete narration script. Return ONLY the script text, no headers or meta-commentary. NO word count annotations.`,
+    // Step 1: Create a temporary project for batches
+    setStatusMsg('Analyzing script structure...');
+    const tempProject = await base44.entities.Projects.create({
+      name: `_repurpose_temp_${Date.now()}`,
+      niche: analysis.niche || 'general',
+      tone: analysis.script_style || 'dramatic',
+      status: 'scripting',
+      archived: true, // hide from dashboard
     });
 
-    setNewScript(result);
+    // Step 2: Initialize batches
+    const initResp = await base44.functions.invoke('initializeRepurposeBatches', {
+      project_id: tempProject.id,
+      original_script: originalScript,
+      new_title: newTitle,
+      analysis,
+      tweak_notes: tweakNotes,
+    });
+    const initResult = initResp.data;
+    const totalBatches = initResult.batches_created || 0;
+    setBatchProgress({ current: 0, total: totalBatches, words: 0 });
+
+    // Step 3: Generate each batch sequentially
+    let previousEnding = '';
+    let totalWords = 0;
+
+    const batchRecords = initResult.batches || [];
+    for (let i = 0; i < batchRecords.length; i++) {
+      setStatusMsg(`Writing batch ${i + 1}/${totalBatches}...`);
+      setBatchProgress(p => ({ ...p, current: i + 1 }));
+
+      const batchResp = await base44.functions.invoke('generateRepurposeBatch', {
+        batch_id: batchRecords[i].id,
+        previous_ending: previousEnding,
+      });
+      const batchResult = batchResp.data;
+      previousEnding = batchResult.ending || '';
+      totalWords += batchResult.word_count || 0;
+      setBatchProgress(p => ({ ...p, words: totalWords }));
+    }
+
+    // Step 4: Merge all batches
+    setStatusMsg('Merging batches...');
+    const completedBatches = await base44.entities.ScriptBatches.filter({ project_id: tempProject.id });
+    const sorted = completedBatches
+      .filter(b => b.status === 'completed' && b.content)
+      .sort((a, b) => a.batch_number - b.batch_number);
+    const fullScript = sorted.map(b => b.content).join('\n\n').trim();
+
+    setNewScript(fullScript);
+
+    // Cleanup temp project batches (leave project archived)
     setLoading(false);
     setStatusMsg('');
     setStep(4);
