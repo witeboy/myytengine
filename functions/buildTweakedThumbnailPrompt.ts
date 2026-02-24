@@ -14,10 +14,11 @@ Deno.serve(async (req) => {
     const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
 
     // Build a structured tweak summary
-    const textSection = (tweaks.textChanges || []).map((t, i) => {
+    const textChanges = tweaks.textChanges || [];
+    const textSection = textChanges.map((t, i) => {
       const parts = [];
       if (t.original && t.newText && t.original !== t.newText) {
-        parts.push(`Change text "${t.original}" → "${t.newText}"`);
+        parts.push(`Change text "${t.original}" to "${t.newText}"`);
       } else if (t.newText) {
         parts.push(`Text: "${t.newText}"`);
       }
@@ -109,21 +110,28 @@ Return ONLY a JSON object:
     // Call Gemini
     const parts = [{ text: prompt }];
 
-    // If we have the thumbnail URL, include it as an image reference
+    // If we have the thumbnail URL, try to include it as an image reference
     if (thumbnail_url) {
       try {
+        console.log('[TweakedPrompt] Fetching reference thumbnail...');
         const imgResp = await fetch(thumbnail_url);
         if (imgResp.ok) {
           const imgBuf = await imgResp.arrayBuffer();
           const bytes = new Uint8Array(imgBuf);
-          let b64 = '';
-          const chunkSize = 32768;
-          for (let i = 0; i < bytes.length; i += chunkSize) {
-            b64 += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+          // Only attach if small enough to avoid memory issues
+          if (bytes.length < 4 * 1024 * 1024) {
+            let b64 = '';
+            const chunkSize = 32768;
+            for (let idx = 0; idx < bytes.length; idx += chunkSize) {
+              b64 += String.fromCharCode.apply(null, bytes.subarray(idx, idx + chunkSize));
+            }
+            b64 = btoa(b64);
+            const mimeType = imgResp.headers.get('content-type') || 'image/jpeg';
+            parts.push({ inlineData: { mimeType, data: b64 } });
+            console.log(`[TweakedPrompt] Attached ${(bytes.length / 1024).toFixed(0)}KB image`);
+          } else {
+            console.log(`[TweakedPrompt] Image too large (${(bytes.length / 1024 / 1024).toFixed(1)}MB), skipping`);
           }
-          b64 = btoa(b64);
-          const mimeType = imgResp.headers.get('content-type') || 'image/jpeg';
-          parts.push({ inlineData: { mimeType, data: b64 } });
         }
       } catch (e) {
         console.warn('Could not attach thumbnail image:', e.message);
