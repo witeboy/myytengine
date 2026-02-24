@@ -222,6 +222,16 @@ Deno.serve(async (req) => {
       console.log(`[Analyze] Transcript from captions: ${transcript.length} chars`);
     }
 
+    // Tier 1.5: Free InnerTube captions (no API key needed)
+    if (!transcript || transcript.length < 50) {
+      console.log('[Analyze] Trying free InnerTube transcript fallback...');
+      transcript = await getYouTubeTranscriptFree(videoId);
+      if (transcript && transcript.length >= 50) {
+        transcriptSource = 'youtube_innertube';
+        console.log(`[Analyze] Transcript from InnerTube: ${transcript.length} chars`);
+      }
+    }
+
     // Tier 2: Cobalt (extract audio) → AssemblyAI (speech-to-text)
     if (!transcript || transcript.length < 50) {
       console.log('[Analyze] No captions found, falling back to Cobalt + AssemblyAI...');
