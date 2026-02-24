@@ -64,6 +64,7 @@ export default function ContentRepurpose() {
   const [pipelineStep, setPipelineStep] = useState('');
   const [sceneCount, setSceneCount] = useState(0);
   const [imagesDone, setImagesDone] = useState(0);
+  const [videosDone, setVideosDone] = useState(0);
 
   // ── Step 1→2: Analyze video via YouTube API + Gemini ──────────
   const [analyzeError, setAnalyzeError] = useState('');
@@ -189,7 +190,7 @@ Write the complete narration script. Return ONLY the script text, no headers or 
     });
     console.log('Script created:', scriptRecord.id);
 
-    // 3. Generate voiceover (same ai33.pro backend)
+    // 3. Generate voiceover
     setPipelineStep('Generating voiceover (ai33.pro TTS)...');
     try {
       const voResp = await base44.functions.invoke('generateVoiceover', { project_id: project.id });
@@ -198,7 +199,7 @@ Write the complete narration script. Return ONLY the script text, no headers or 
       console.warn('Voiceover failed:', err.message);
     }
 
-    // 4. Scene breakdown (same Gemini backend)
+    // 4. Scene breakdown (deterministic count)
     setPipelineStep('Breaking down script into cinematic scenes...');
     try {
       const breakdownResponse = await base44.functions.invoke('generateSceneBreakdown', { project_id: project.id });
@@ -208,7 +209,7 @@ Write the complete narration script. Return ONLY the script text, no headers or 
       console.warn('Scene breakdown failed:', err.message);
     }
 
-    // 5. Generate scene prompts (same Gemini backend)
+    // 5. Generate scene prompts
     setPipelineStep('Converting to visual prompts...');
     try {
       const promptsResp = await base44.functions.invoke('generateScenePrompts', { project_id: project.id });
@@ -217,25 +218,121 @@ Write the complete narration script. Return ONLY the script text, no headers or 
       console.warn('Prompt generation failed:', err.message);
     }
 
-    // 6. Generate images for all scenes (same Kie backend)
+    // 6. Generate images for all scenes (Grok Imagine — returns public URLs)
     setPipelineStep('Generating scene images...');
+    let imageScenes = [];
     try {
       const scenes = await base44.entities.Scenes.filter({ project_id: project.id });
       const ready = scenes.filter(s => s.status === 'prompts_ready').sort((a, b) => a.scene_number - b.scene_number);
       setSceneCount(ready.length);
+      imageScenes = ready;
 
       for (let i = 0; i < ready.length; i++) {
         setPipelineStep(`Generating image ${i + 1}/${ready.length}...`);
         setImagesDone(i + 1);
         try {
-          const imgResp = await base44.functions.invoke('generateSceneImage', { scene_id: ready[i].id });
-          console.log(`Scene ${ready[i].scene_number} image:`, imgResp.data?.model_used);
+          await base44.functions.invoke('generateSceneImage', { scene_id: ready[i].id });
         } catch (imgErr) {
           console.warn(`Scene ${ready[i].scene_number} image failed:`, imgErr.message);
         }
       }
     } catch (err) {
       console.warn('Image generation failed:', err.message);
+    }
+
+    // 7. Animate all scenes with Veo 3.1 (parallel batch submit + poll)
+    setPipelineStep('Animating scenes with Veo 3.1...');
+    setVideosDone(0);
+    try {
+      // Re-fetch scenes to get fresh image_url values
+      const freshScenes = await base44.entities.Scenes.filter({ project_id: project.id });
+      const animReady = freshScenes
+        .filter(s => s.image_url && !s.image_url.startsWith('data:') && !s.video_url)
+        .sort((a, b) => a.scene_number - b.scene_number);
+
+      if (animReady.length > 0) {
+        console.log(`🎬 Animating ${animReady.length} scenes...`);
+
+        // ── Submit all scenes in parallel batches of 5 ──────────
+        const SUBMIT_BATCH = 5;
+        const pendingPolls = [];
+
+        for (let i = 0; i < animReady.length; i += SUBMIT_BATCH) {
+          const batch = animReady.slice(i, i + SUBMIT_BATCH);
+          setPipelineStep(`Submitting scenes ${i + 1}-${Math.min(i + batch.length, animReady.length)} to Veo...`);
+
+          const batchResults = await Promise.allSettled(
+            batch.map(scene =>
+              base44.functions.invoke('generateSceneVideo', { scene_id: scene.id })
+                .then(result => ({ scene, result: result.data || result, ok: true }))
+                .catch(err => ({ scene, err, ok: false }))
+            )
+          );
+
+          for (const settled of batchResults) {
+            const item = settled.status === 'fulfilled' ? settled.value : settled.reason;
+            if (!item) continue;
+            if (item.ok && item.result?.task_id) {
+              pendingPolls.push({
+                scene_id: item.scene.id,
+                task_id: item.result.task_id,
+                scene_number: item.scene.scene_number
+              });
+            } else {
+              console.warn(`Scene ${item.scene?.scene_number} submit failed:`, item.err?.message || 'Unknown');
+            }
+          }
+        }
+
+        // ── Poll all pending scenes in parallel rounds ──────────
+        if (pendingPolls.length > 0) {
+          let remaining = [...pendingPolls];
+          let pollCount = 0;
+          const MAX_POLLS = 90;
+          const POLL_INTERVAL = 10000;
+
+          while (remaining.length > 0 && pollCount < MAX_POLLS) {
+            await new Promise(r => setTimeout(r, POLL_INTERVAL));
+            pollCount++;
+
+            setPipelineStep(`Rendering videos... ${pendingPolls.length - remaining.length}/${pendingPolls.length} done (poll ${pollCount})`);
+
+            const pollResults = await Promise.allSettled(
+              remaining.map(item =>
+                base44.functions.invoke('pollSceneVideo', { scene_id: item.scene_id })
+                  .then(result => ({ item, result: result.data || result, ok: true }))
+                  .catch(err => ({ item, err, ok: false }))
+              )
+            );
+
+            const stillPending = [];
+            for (const settled of pollResults) {
+              const entry = settled.status === 'fulfilled' ? settled.value : null;
+              if (!entry || !entry.ok || !entry.result) {
+                const failedItem = settled.status === 'fulfilled' ? entry?.item : null;
+                if (failedItem) stillPending.push(failedItem);
+                continue;
+              }
+
+              const { item, result } = entry;
+              if (result.status === 'COMPLETED') {
+                setVideosDone(prev => prev + 1);
+              } else if (result.status === 'FAILED') {
+                console.warn(`Scene ${item.scene_number} video failed`);
+              } else {
+                stillPending.push(item);
+              }
+            }
+            remaining = stillPending;
+          }
+
+          console.log(`✓ Video animation complete: ${pendingPolls.length - remaining.length}/${pendingPolls.length} done`);
+        }
+      } else {
+        console.warn('No scenes ready for animation (missing public image URLs)');
+      }
+    } catch (err) {
+      console.warn('Video animation failed:', err.message);
     }
 
     setPipelineStep('Pipeline complete!');
@@ -452,7 +549,7 @@ Write the complete narration script. Return ONLY the script text, no headers or 
                   Run Full Pipeline
                 </Button>
               </div>
-              <p className="text-xs text-gray-400 text-center">Creates project → voiceover → scene breakdown → prompts → images (same APIs as faceless pipeline)</p>
+              <p className="text-xs text-gray-400 text-center">Creates project → voiceover → scenes → prompts → images → videos (full automation)</p>
             </CardContent>
           </Card>
         )}
@@ -478,6 +575,7 @@ Write the complete narration script. Return ONLY the script text, no headers or 
                   { key: 'breakdown', label: 'Scene Breakdown', icon: '🎬' },
                   { key: 'prompts', label: 'Visual Prompts', icon: '🖌️' },
                   { key: 'images', label: 'Generate Images', icon: '🖼️' },
+                  { key: 'videos', label: 'Animate Videos (Veo 3.1)', icon: '🎥' },
                 ].map((s, i) => {
                   const currentIdx =
                     pipelineStep.includes('Creating') ? 0 :
@@ -486,7 +584,8 @@ Write the complete narration script. Return ONLY the script text, no headers or 
                     pipelineStep.includes('Breaking') ? 3 :
                     pipelineStep.includes('visual prompts') || pipelineStep.includes('Converting') ? 4 :
                     pipelineStep.includes('image') || pipelineStep.includes('Generating image') ? 5 :
-                    pipelineStep.includes('complete') ? 6 : -1;
+                    pipelineStep.includes('Animating') || pipelineStep.includes('Submitting') || pipelineStep.includes('Rendering') ? 6 :
+                    pipelineStep.includes('complete') ? 7 : -1;
 
                   const isDone = i < currentIdx || (!loading && pipelineStep.includes('complete'));
                   const isActive = i === currentIdx && loading;
@@ -508,6 +607,9 @@ Write the complete narration script. Return ONLY the script text, no headers or 
                       {isActive && s.key === 'images' && sceneCount > 0 && (
                         <span className="ml-auto text-xs">{imagesDone}/{sceneCount}</span>
                       )}
+                      {isActive && s.key === 'videos' && (
+                        <span className="ml-auto text-xs">{videosDone} done</span>
+                      )}
                     </div>
                   );
                 })}
@@ -515,13 +617,15 @@ Write the complete narration script. Return ONLY the script text, no headers or 
 
               {loading && (
                 <Progress value={
-                  pipelineStep.includes('Creating') ? 5 :
-                  pipelineStep.includes('Saving') ? 10 :
-                  pipelineStep.includes('voiceover') ? 20 :
-                  pipelineStep.includes('Breaking') ? 35 :
-                  pipelineStep.includes('visual prompts') || pipelineStep.includes('Converting') ? 50 :
-                  pipelineStep.includes('image') ? 50 + (imagesDone / Math.max(sceneCount, 1)) * 45 :
-                  pipelineStep.includes('complete') ? 100 : 30
+                  pipelineStep.includes('Creating') ? 3 :
+                  pipelineStep.includes('Saving') ? 7 :
+                  pipelineStep.includes('voiceover') ? 15 :
+                  pipelineStep.includes('Breaking') ? 25 :
+                  pipelineStep.includes('visual prompts') || pipelineStep.includes('Converting') ? 35 :
+                  pipelineStep.includes('image') || pipelineStep.includes('Generating image') ? 35 + (imagesDone / Math.max(sceneCount, 1)) * 30 :
+                  pipelineStep.includes('Animating') || pipelineStep.includes('Submitting') ? 68 :
+                  pipelineStep.includes('Rendering') ? 70 + (videosDone / Math.max(sceneCount, 1)) * 25 :
+                  pipelineStep.includes('complete') ? 100 : 20
                 } className="h-2" />
               )}
 
@@ -530,7 +634,7 @@ Write the complete narration script. Return ONLY the script text, no headers or 
                   <CheckCircle2 className="w-8 h-8 text-green-600 mx-auto mb-2" />
                   <p className="font-medium text-green-800">Pipeline Complete!</p>
                   <p className="text-xs text-green-600 mt-1">
-                    {sceneCount} scenes created with images. Open the full editor to continue.
+                    {sceneCount} scenes with images + {videosDone} animated videos. Open the editor to review.
                   </p>
                 </div>
               )}
