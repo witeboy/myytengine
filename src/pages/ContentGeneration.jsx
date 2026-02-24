@@ -247,6 +247,12 @@ export default function ContentGeneration() {
                 ...prev,
                 sceneStatuses: { ...prev.sceneStatuses, [item.scene_id]: 'failed' }
               }));
+            } else if (pollResult.status === 'UPGRADING_1080P') {
+              setVideoProgress(prev => ({
+                ...prev,
+                sceneStatuses: { ...prev.sceneStatuses, [item.scene_id]: 'upgrading' }
+              }));
+              stillPending.push(item);
             } else {
               stillPending.push(item);
             }
