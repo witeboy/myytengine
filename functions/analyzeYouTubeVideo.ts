@@ -32,7 +32,7 @@ async function getYouTubeTranscript(videoId) {
   }
 
   try {
-    console.log(`[Transcript] Fetching captions for ${videoId}...`);
+    console.log(`[Transcript T1] Fetching captions for ${videoId}...`);
     const response = await fetch('https://youtubetranscript.dev/api/v2/batch', {
       method: 'POST',
       headers: {
@@ -43,13 +43,20 @@ async function getYouTubeTranscript(videoId) {
     });
 
     if (!response.ok) {
-      console.log(`[Transcript] API returned ${response.status}`);
+      console.log(`[Transcript T1] API returned ${response.status}`);
       return null;
     }
 
     const data = await response.json();
+    console.log(`[Transcript T1] Response status: ${data.results?.[0]?.status || 'no result'}`);
+
     if (!data.results?.[0] || data.results[0].status !== 'completed') {
-      console.log('[Transcript] No completed result');
+      // Try extracting from raw data in case it's in a different format
+      const rawData = data.results?.[0]?.data;
+      if (rawData) {
+        console.log(`[Transcript T1] Raw data keys: ${Object.keys(rawData).join(', ')}`);
+      }
+      console.log('[Transcript T1] No completed result');
       return null;
     }
 
@@ -61,15 +68,97 @@ async function getYouTubeTranscript(videoId) {
       transcript = transcriptData.text;
     } else if (Array.isArray(transcriptData?.segments)) {
       transcript = transcriptData.segments.map(seg => seg.text || seg.utf8 || '').join(' ').replace(/\s+/g, ' ').trim();
+    } else if (Array.isArray(transcriptData)) {
+      // Handle array of {text, start, duration} objects
+      transcript = transcriptData.map(seg => seg.text || '').join(' ').replace(/\s+/g, ' ').trim();
+    }
+
+    // Also check data.results[0].data directly for transcript text
+    if ((!transcript || transcript.length < 50) && data.results[0].data?.text) {
+      transcript = data.results[0].data.text;
     }
 
     if (transcript && transcript.length > 50) {
-      console.log(`[Transcript] Got ${transcript.length} chars from captions`);
+      console.log(`[Transcript T1] Got ${transcript.length} chars from captions`);
       return transcript;
     }
+    console.log(`[Transcript T1] Transcript too short: ${transcript?.length || 0} chars`);
     return null;
   } catch (error) {
-    console.log(`[Transcript] Error: ${error.message}`);
+    console.log(`[Transcript T1] Error: ${error.message}`);
+    return null;
+  }
+}
+
+// ===================================================================
+// TIER 1.5: Free YouTube Transcript via InnerTube API (no key needed)
+// ===================================================================
+async function getYouTubeTranscriptFree(videoId) {
+  try {
+    console.log(`[Transcript T1.5] Fetching via InnerTube for ${videoId}...`);
+    
+    // Fetch the video page to get captions
+    const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+    });
+    const html = await pageRes.text();
+    
+    // Extract captions URL from the page
+    const captionMatch = html.match(/"captionTracks":\s*(\[.*?\])/);
+    if (!captionMatch) {
+      console.log('[Transcript T1.5] No captionTracks found in page');
+      return null;
+    }
+    
+    let captionTracks;
+    try {
+      captionTracks = JSON.parse(captionMatch[1]);
+    } catch (e) {
+      console.log('[Transcript T1.5] Failed to parse captionTracks');
+      return null;
+    }
+    
+    // Prefer English, fall back to any language
+    const enTrack = captionTracks.find(t => t.languageCode === 'en') || 
+                    captionTracks.find(t => t.languageCode?.startsWith('en')) ||
+                    captionTracks[0];
+    
+    if (!enTrack?.baseUrl) {
+      console.log('[Transcript T1.5] No caption track URL found');
+      return null;
+    }
+    
+    // Fetch the caption XML
+    const captionRes = await fetch(enTrack.baseUrl);
+    const captionXml = await captionRes.text();
+    
+    // Parse XML to extract text
+    const textParts = [];
+    const textRegex = /<text[^>]*>(.*?)<\/text>/gs;
+    let match;
+    while ((match = textRegex.exec(captionXml)) !== null) {
+      let text = match[1]
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/<[^>]+>/g, '')
+        .trim();
+      if (text) textParts.push(text);
+    }
+    
+    const transcript = textParts.join(' ').replace(/\s+/g, ' ').trim();
+    
+    if (transcript.length > 50) {
+      console.log(`[Transcript T1.5] Got ${transcript.length} chars from InnerTube captions`);
+      return transcript;
+    }
+    
+    console.log(`[Transcript T1.5] Transcript too short: ${transcript.length} chars`);
+    return null;
+  } catch (error) {
+    console.log(`[Transcript T1.5] Error: ${error.message}`);
     return null;
   }
 }
