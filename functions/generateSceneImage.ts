@@ -116,46 +116,88 @@ Deno.serve(async (req) => {
     const orientation = detectOrientation(finalPrompt, project?.orientation);
     const aspectRatio = orientation === 'portrait' ? '9:16' : '16:9';
 
-    // 1. Generate the image
-    let imageUrl = await generateWithGrokImagine(KIE_API_KEY, finalPrompt, aspectRatio);
+    // 1️⃣ Generate the image
+    let imageUrl = await generateWithGrokImagine(
+      KIE_API_KEY,
+      finalPrompt,
+      aspectRatio
+    );
 
-    // 2. GUARANTEE PUBLIC URL: Convert Base64 if necessary
-    if (imageUrl.startsWith('data:')) {
-      console.log("⚠️ Base64 detected. Uploading to public storage for Veo compatibility...");
-      
-      const base64Data = imageUrl.split(',')[1];
-      const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-      const blob = new Blob([binaryData], { type: 'image/png' });
-      
-      const filename = `scene_${scene_id}_${Date.now()}.png`;
-      // Use the Base44 SDK assets upload to get a public URL
-      const uploadResult = await base44.asServiceRole.assets.upload(filename, blob);
-      
-      if (!uploadResult?.url) {
-        throw new Error("Failed to upload base64 image to public storage.");
-      }
-      
-      imageUrl = uploadResult.url;
-      console.log(`✓ Successfully converted to public URL: ${imageUrl}`);
+    // 🔒 GUARANTEE PUBLIC URL
+    if (!imageUrl) {
+      throw new Error("No image returned from generator.");
     }
 
-    // 3. Update the database
+    // Detect base64 or suspicious inline string
+    const isBase64 =
+      typeof imageUrl === "string" &&
+      (imageUrl.startsWith("data:") || imageUrl.length > 5000);
+
+    if (isBase64) {
+      console.log("⚠️ Base64 or inline image detected. Uploading to storage...");
+
+      try { // ✅ One { closing try
+        // Extract base64 portion
+        const base64Data = imageUrl.includes(",")
+          ? imageUrl.split(",")[1]
+          : imageUrl;
+
+        if (!base64Data) {
+          throw new Error("Invalid base64 image format.");
+        }
+
+        // Decode base64 to binary
+        const binaryData = Uint8Array.from(
+          atob(base64Data),
+          (c) => c.charCodeAt(0)
+        );
+
+        const blob = new Blob([binaryData], { type: "image/png" });
+        const filename = `scene_${scene_id}_${Date.now()}.png`;
+
+        // Upload to Base44 assets to get a public URL
+        const uploadResult = await base44.asServiceRole.assets.upload(
+          filename,
+          blob
+        );
+
+        if (!uploadResult?.url) {
+          throw new Error("Failed to upload image to public storage.");
+        }
+
+        imageUrl = uploadResult.url;
+
+        console.log("✅ Converted to public URL:", imageUrl);
+      } catch (uploadError) { // ✅ Closing catch for base64 upload
+        console.error("Base64 conversion failed:", uploadError);
+        throw new Error("Failed to convert base64 image to public URL.");
+      }
+    }
+
+    // 🔥 FINAL SAFETY CHECK
+    if (typeof imageUrl !== "string" || !imageUrl.startsWith("http")) {
+      throw new Error("Image is not a valid public URL.");
+    }
+
+    // 3️⃣ Update the scene in the database
     await base44.asServiceRole.entities.Scenes.update(scene_id, {
       image_url: imageUrl,
-      status: "image_generated"
+      status: "image_generated",
     });
 
     return Response.json({
       success: true,
       image_url: imageUrl,
-      scene_number: scene.scene_number
+      scene_id,
     });
 
-  } catch (error) {
+  } catch (error) { // ✅ Closing try/catch
     console.error(`❌ generateSceneImage error: ${error.message}`);
     if (scene_id && base44) {
-      await base44.asServiceRole.entities.Scenes.update(scene_id, { status: "failed" });
+      await base44.asServiceRole.entities.Scenes.update(scene_id, {
+        status: "failed",
+      });
     }
     return Response.json({ error: error.message }, { status: 500 });
   }
-});
+}); // ✅ final }); closing Deno.serve
