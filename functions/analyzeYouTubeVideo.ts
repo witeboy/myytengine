@@ -154,7 +154,11 @@ async function getYouTubeTranscriptFree(videoId) {
     
     // Fetch the video page to get captions
     const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+      headers: { 
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept': 'text/html,application/xhtml+xml'
+      }
     });
     const html = await pageRes.text();
     
