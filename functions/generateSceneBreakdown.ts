@@ -1,26 +1,25 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // ══════════════════════════════════════════════════════════════════
-// CINEMATIC SCENE BREAKDOWN ENGINE — CLIP-BUDGET AWARE
+// CINEMATIC SCENE BREAKDOWN ENGINE — DETERMINISTIC CLIP COUNT
 // ══════════════════════════════════════════════════════════════════
-// Pipeline: Script → [THIS] → Compression Gate → Scene Prompts → Image Gen → Animation
 //
-// KEY PRINCIPLE: Voiceover duration is the HOLY GRAIL.
-// Total clips = floor(voiceover_seconds / CLIP_DURATION).
+// KEY INSIGHT: The LLM CANNOT be trusted to return the correct
+// number of scenes. No amount of prompt engineering fixes this.
 //
-// TWO PATHS:
-//   Short scripts (≤300 words): Single LLM call with full script
-//     → Prevents phase splitting from giving LLM 1-2 sentences per chunk
-//   Long scripts (>300 words): Multi-phase approach
-//     → Prevents context window issues, phase-by-phase continuity
+// SOLUTION: Code controls scene count, LLM provides visuals only.
+//   1. Calculate clip budget from voiceover duration
+//   2. PRE-SPLIT narration into exactly N beats (by word count)
+//   3. Send beats to LLM: "describe what to SHOW for each beat"
+//   4. Create scenes from OUR pre-split array (not LLM output)
+//   5. LLM visuals are applied where available, defaults where not
 //
-// Director notes stored as JSON in image_prompt field on each Scene.
+// This GUARANTEES exactly maxClips scenes every single time.
 // ══════════════════════════════════════════════════════════════════
 
 const CLIP_DURATION = 5;
 const MIN_CLIPS = 5;
 const MAX_CLIPS = 40;
-const SHORT_SCRIPT_THRESHOLD = 750; // words (~5 min at 150 wpm)
 
 function repairJSON(str) {
   return str
@@ -79,7 +78,7 @@ async function callGemini(prompt, temperature = 0.7, maxTokens = 16384, retries 
         for (const suffix of [']}', '}]}', '']) {
           try {
             const parsed = JSON.parse(trimmed + suffix);
-            if (parsed.scenes || parsed.story_analysis) return parsed;
+            if (parsed.scenes || parsed.story_analysis || parsed.visuals) return parsed;
           } catch (_) {}
         }
       }
@@ -166,6 +165,73 @@ async function calculateClipBudget(base44, project, wordCount) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// DETERMINISTIC NARRATION SPLITTER
+// ══════════════════════════════════════════════════════════════════
+// Splits script text into exactly N chunks by word count.
+// Uses sentence boundaries when possible, falls back to word splits.
+// Each chunk becomes one scene's narration — guaranteed N scenes.
+// ══════════════════════════════════════════════════════════════════
+
+function splitNarrationIntoBeats(script, numBeats) {
+  // Split into sentences
+  const sentences = script.match(/[^.!?]+[.!?]+[\s]*/g) || [script];
+  const words = script.split(/\s+/).filter(w => w.length > 0);
+  const totalWords = words.length;
+  const wordsPerBeat = Math.max(1, Math.floor(totalWords / numBeats));
+
+  // If we have more sentences than beats, group sentences
+  // If we have fewer sentences than beats, split sentences by word count
+  const beats = [];
+
+  if (sentences.length >= numBeats) {
+    // GROUP sentences into numBeats chunks
+    const sentencesPerBeat = sentences.length / numBeats;
+    for (let i = 0; i < numBeats; i++) {
+      const startIdx = Math.round(i * sentencesPerBeat);
+      const endIdx = Math.round((i + 1) * sentencesPerBeat);
+      const chunk = sentences.slice(startIdx, endIdx).join('').trim();
+      beats.push(chunk || sentences[startIdx] || '');
+    }
+  } else {
+    // SPLIT by word count — we have fewer sentences than beats
+    let wordCursor = 0;
+    for (let i = 0; i < numBeats; i++) {
+      const isLast = i === numBeats - 1;
+      const endCursor = isLast ? totalWords : Math.min(wordCursor + wordsPerBeat, totalWords);
+      const chunk = words.slice(wordCursor, endCursor).join(' ');
+      beats.push(chunk || '');
+      wordCursor = endCursor;
+    }
+  }
+
+  // Ensure exactly numBeats (pad with last content if needed)
+  while (beats.length < numBeats) {
+    beats.push(beats[beats.length - 1] || '');
+  }
+
+  // Ensure no empty beats — fill from neighbors
+  for (let i = 0; i < beats.length; i++) {
+    if (!beats[i] || beats[i].trim().length === 0) {
+      beats[i] = beats[Math.max(0, i - 1)] || words.slice(-3).join(' ');
+    }
+  }
+
+  return beats.slice(0, numBeats);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// ARC POSITION CALCULATOR
+// ══════════════════════════════════════════════════════════════════
+
+function getArcPosition(beatIndex, totalBeats) {
+  const pct = beatIndex / totalBeats;
+  if (pct < 0.10) return { arc: 'setup', phase: 'cold_open' };
+  if (pct < 0.35) return { arc: 'rising', phase: 'rising_tension' };
+  if (pct < 0.75) return { arc: 'climax', phase: 'emotional_core' };
+  return { arc: 'resolution', phase: 'resolution' };
+}
+
+// ══════════════════════════════════════════════════════════════════
 // NICHE DIRECTOR PROFILES
 // ══════════════════════════════════════════════════════════════════
 
@@ -174,186 +240,90 @@ function getNicheDirectorProfile(niche) {
     finance: {
       visual_world: "Corporate glass towers vs intimate kitchen tables, Wall Street grandeur vs suburban vulnerability",
       signature_shots: "Overhead God's-eye documents, tight CU hands gripping objects, silhouettes against windows",
-      metaphor_language: "Weight/lightness, containers overflowing/empty, bridges and chasms, seeds and harvest",
       emotional_palette: "Cool blues/grays shifting to warm ambers/golds, deep shadows, golden hour resolution",
-      pacing_style: "Measured, deliberate — documentary gravitas with emotional swells",
       avoid: "Literal cash flying, generic stock offices, calculator close-ups"
     },
     retirement: {
-      visual_world: "Golden-hour suburbs, well-worn family homes, generational gatherings, objects holding decades of memory",
+      visual_world: "Golden-hour suburbs, well-worn family homes, generational gatherings",
       signature_shots: "Slow pans across photo mantles, weathered hands detail, depth through doorways",
-      metaphor_language: "Seasons, paths and horizons, light through windows, roots and branches",
-      emotional_palette: "Warm amber/honey, golden hour, earth tones, morning mist blues, sunset golds",
-      pacing_style: "Gentle but purposeful — meaningful conversation over coffee",
+      emotional_palette: "Warm amber/honey, golden hour, earth tones, morning mist blues",
       avoid: "Lonely elderly stereotypes, clinical settings, generic beach sunsets"
     },
     motivation: {
       visual_world: "Mountain peaks/valleys, training spaces, pre-dawn cities, sweat made beautiful",
       signature_shots: "Low-angle hero shots, tracking forward motion, silhouettes against epic backdrops",
-      metaphor_language: "Elevation/ascent, fire/forge, dawn breaking, chains breaking, doors opening",
       emotional_palette: "Dark blues/blacks building to fiery oranges and triumphant golds",
-      pacing_style: "Building momentum — steady climb with explosive peaks",
       avoid: "Cheesy flexing, generic mountaintop arms raised, lion/wolf imagery"
     },
     horror: {
-      visual_world: "Liminal spaces, barely-lit corridors, familiar places made wrong, uncanny valley",
+      visual_world: "Liminal spaces, barely-lit corridors, familiar places made wrong",
       signature_shots: "Dutch angles, long corridor depth, POV approach, static wide with something wrong",
-      metaphor_language: "Decay, doors that shouldn't be open, reflections that don't match",
-      emotional_palette: "Sickly greens, desaturated blues, deep blacks, crimson accents, fog",
-      pacing_style: "Slow dread with sharp punctuation",
+      emotional_palette: "Sickly greens, desaturated blues, deep blacks, crimson accents",
       avoid: "Over-the-top gore, cheap jump scares, cliche haunted house"
     },
     technology: {
-      visual_world: "Clean labs and messy maker spaces, circuit patterns echoing nature, human meets digital",
+      visual_world: "Clean labs and messy maker spaces, circuit patterns echoing nature",
       signature_shots: "Macro components, rack focus human/machine, reflections in screens",
-      metaphor_language: "Networks, light through fiber, emergence/evolution, spark of creation",
       emotional_palette: "Cool blues/whites precision, warm ambers human moments, neon innovation",
-      pacing_style: "Precise, rhythmic — elegance of systems with wonder at discovery",
       avoid: "Matrix code rain, cliche robots, hologram interfaces"
     },
     health: {
-      visual_world: "Body as landscape, kitchens as labs, nature as pharmacy, self-care intimacy",
+      visual_world: "Body as landscape, kitchens as labs, nature as pharmacy",
       signature_shots: "Macro food beauty, mindful human moments, nature parallels",
-      metaphor_language: "Growth/cultivation, water/nourishment, dawn renewal, body as garden",
-      emotional_palette: "Fresh greens, clean whites, warm skin tones, sunrise golds, cool blues",
-      pacing_style: "Breathing rhythm — expansion/contraction, energy/rest",
+      emotional_palette: "Fresh greens, clean whites, warm skin tones, sunrise golds",
       avoid: "Clinical imagery, shame shots, unrealistic body standards"
     },
     crime: {
-      visual_world: "Rain-slicked streets, interrogation rooms, evidence boards, moral gray zones",
-      signature_shots: "Noir low-key lighting, over-shoulder reveals, bird's-eye evidence, half-shadow profiles",
-      metaphor_language: "Masks/mirrors, threads/webs, predator/prey, weight of truth",
-      emotional_palette: "Deep noir blues/blacks, sodium oranges, forensic whites, blood red accents",
-      pacing_style: "Tension ratcheting — each scene tightens the screw",
+      visual_world: "Rain-slicked streets, interrogation rooms, evidence boards",
+      signature_shots: "Noir low-key lighting, over-shoulder reveals, half-shadow profiles",
+      emotional_palette: "Deep noir blues/blacks, sodium oranges, forensic whites",
       avoid: "Gratuitous violence, sensationalized victims, cop show cliches"
     },
     history: {
       visual_world: "Weathered textures, vast landscapes dwarfing figures, artifacts as time portals",
-      signature_shots: "Epic wides, slow zoom period details, then/now juxtaposition, artifact close-ups",
-      metaphor_language: "Layers/excavation, rivers of time, monuments rising/crumbling",
-      emotional_palette: "Sepia nostalgia, stone grays authority, jewel tones power, golden glory",
-      pacing_style: "Epic sweep with intimate punctuation",
+      signature_shots: "Epic wides, slow zoom period details, artifact close-ups",
+      emotional_palette: "Sepia nostalgia, stone grays authority, jewel tones power",
       avoid: "Cartoonish period stereotypes, too-clean historical settings"
     },
     education: {
-      visual_world: "Light-filled spaces, the understanding moment, abstract made tangible, discovery joy",
-      signature_shots: "Revealing wides, diagram compositions, POV discovery, teaching warmth",
-      metaphor_language: "Illumination, puzzle pieces connecting, seeds of knowledge, lenses focusing",
-      emotional_palette: "Bright clear colors, warm yellows aha-moments, cool blues contemplation",
-      pacing_style: "Building understanding — each scene adds a layer",
+      visual_world: "Light-filled spaces, abstract made tangible, discovery joy",
+      signature_shots: "Revealing wides, diagram compositions, POV discovery",
+      emotional_palette: "Bright clear colors, warm yellows, cool blues contemplation",
       avoid: "Boring classrooms, lecturing framing, academic dryness"
     },
     travel: {
       visual_world: "Golden hour landscapes, local markets, contemplative foreign moments",
-      signature_shots: "Sweeping drone establishing, street-level handheld, food macro, archway depth",
-      metaphor_language: "Horizons/thresholds, cultural bridges, paths less traveled",
+      signature_shots: "Sweeping drone establishing, street-level handheld, food macro",
       emotional_palette: "Rich saturated local palettes, golden travel light, azure skies",
-      pacing_style: "Wandering but purposeful — exploration with awe moments",
       avoid: "Brochure cliches, over-filtered Instagram, cultural stereotypes"
     },
     relationship: {
-      visual_world: "Intimate shared spaces, geometry of two people, hands/gestures, environment as emotion",
-      signature_shots: "Two-shots with negative space, OTS intimacy, hand details, distance/closeness wides",
-      metaphor_language: "Bridges/walls, weather as mood, growing/wilting, light finding its way in",
-      emotional_palette: "Warm amber connection, cool blues distance, soft rose intimacy, golden reconciliation",
-      pacing_style: "Emotionally honest — ebbs and flows like real conversation",
+      visual_world: "Intimate shared spaces, geometry of two people, environment as emotion",
+      signature_shots: "Two-shots with negative space, OTS intimacy, hand details",
+      emotional_palette: "Warm amber connection, cool blues distance, soft rose intimacy",
       avoid: "Cheesy romance, toxic glorification, superficial beauty shots"
     }
   };
 
   return profiles[niche?.toLowerCase()] || {
-    visual_world: "Environments reflecting narrative emotion, contrast between open/enclosed spaces",
+    visual_world: "Environments reflecting narrative emotion, open vs enclosed spaces",
     signature_shots: "Establishing wides, medium connection shots, close-up emotion, macro details",
-    metaphor_language: "Light/shadow, doors opening/closing, rising/falling, seeds growing",
-    emotional_palette: "Cool/muted for tension, warm/saturated for resolution, high contrast conflict",
-    pacing_style: "Follows natural emotional rhythm of the story",
-    avoid: "Generic stock aesthetics, repetitive compositions, literal abstract representations"
+    emotional_palette: "Cool/muted for tension, warm/saturated for resolution",
+    avoid: "Generic stock aesthetics, repetitive compositions"
   };
 }
 
 // ══════════════════════════════════════════════════════════════════
-// PHASE STRUCTURE (for long scripts only)
+// DEFAULT SHOT TYPES — cycled to ensure variety
 // ══════════════════════════════════════════════════════════════════
 
-function calculatePhaseAllocation(maxClips) {
-  const phaseWeights = [
-    { name: "cold_open", weight: 0.10, purpose: "Hook — visceral, immediate, intriguing." },
-    { name: "rising_tension", weight: 0.25, purpose: "Build the world and problem — escalate stakes." },
-    { name: "emotional_core", weight: 0.40, purpose: "Heart of story — maximum impact, key revelations." },
-    { name: "resolution", weight: 0.25, purpose: "Payoff — resolution, transformation, call to action." }
-  ];
-
-  let remaining = maxClips;
-  return phaseWeights.map((phase, index) => {
-    if (index === phaseWeights.length - 1) return { ...phase, scenes: Math.max(1, remaining) };
-    const scenes = Math.max(1, Math.round(maxClips * phase.weight));
-    remaining -= scenes;
-    return { ...phase, scenes };
-  });
-}
-
-function splitScriptByPhase(script, phases) {
-  const sentences = script.match(/[^.!?]+[.!?]+[\s]*/g) || [script];
-  const totalSentences = sentences.length;
-  const totalPhaseScenes = phases.reduce((a, b) => a + b.scenes, 0);
-  let cursor = 0;
-  const chunks = [];
-
-  for (let i = 0; i < phases.length; i++) {
-    const phase = phases[i];
-    const proportion = phase.scenes / totalPhaseScenes;
-    const sentenceCount = Math.max(1, Math.round(totalSentences * proportion));
-    const isLast = i === phases.length - 1;
-    const endCursor = isLast ? totalSentences : Math.min(cursor + sentenceCount, totalSentences);
-    const segment = sentences.slice(cursor, endCursor).join("").trim();
-    if (segment.length > 0) {
-      chunks.push({ phase: phase.name, purpose: phase.purpose, scenes: phase.scenes, text: segment });
-    }
-    cursor = endCursor;
-  }
-  return chunks;
-}
-
-// ══════════════════════════════════════════════════════════════════
-// SCENE SAVE HELPER
-// ══════════════════════════════════════════════════════════════════
-
-async function saveScene(base44, project_id, scene, sceneNum, arcPos, phaseName, allScenes) {
-  const cleanedNarration = cleanNarrationText(scene.narration_text);
-
-  const directorNotes = {
-    visual_concept: scene.visual_concept,
-    shot_type: scene.shot_type,
-    camera_angle: scene.camera_angle,
-    camera_movement: scene.camera_movement,
-    lighting: scene.lighting,
-    color_palette: scene.color_palette,
-    mood: scene.mood,
-    depth_of_field: scene.depth_of_field,
-    niche_visual_element: scene.niche_visual_element,
-    continuity_bridge: scene.continuity_bridge,
-    emotional_intensity: scene.emotional_intensity || 0.5,
-    arc_position: arcPos,
-    phase: phaseName
-  };
-
-  try {
-    await base44.asServiceRole.entities.Scenes.create({
-      project_id,
-      scene_number: sceneNum,
-      narration_text: cleanedNarration,
-      image_prompt: `DIRECTOR_NOTES:${JSON.stringify(directorNotes)}`,
-      animation_prompt: scene.camera_movement || "",
-      duration_seconds: CLIP_DURATION,
-      status: "breakdown_ready"
-    });
-    allScenes.push({ scene_number: sceneNum, ...directorNotes });
-    return true;
-  } catch (err) {
-    console.error(`Failed to save scene ${sceneNum}:`, err.message);
-    return false;
-  }
-}
+const SHOT_CYCLE = [
+  'WS — Wide Shot', 'MS — Medium Shot', 'CU — Close-Up',
+  'MCU — Medium Close-Up', 'EWS — Extreme Wide Shot',
+  'OTS — Over The Shoulder', 'LOW ANGLE', 'HIGH ANGLE',
+  'INSERT — Detail Shot', 'ECU — Extreme Close-Up',
+  'MWS — Medium Wide Shot', 'DUTCH ANGLE', 'POV'
+];
 
 // ══════════════════════════════════════════════════════════════════
 // MAIN
@@ -396,25 +366,36 @@ Deno.serve(async (req) => {
     const budget = await calculateClipBudget(base44, project, wordCount);
     const maxClips = budget.maxClips;
     const estimatedSeconds = budget.estimatedSeconds;
-    const usesSingleCall = wordCount <= SHORT_SCRIPT_THRESHOLD;
+
+    // ══════════════════════════════════════════════════════════════
+    // DETERMINISTIC NARRATION SPLIT
+    // ══════════════════════════════════════════════════════════════
+    // THIS is where scene count is enforced. Code splits narration
+    // into exactly maxClips chunks. The LLM has no say in count.
+    // ══════════════════════════════════════════════════════════════
+    const narrationBeats = splitNarrationIntoBeats(finalScript, maxClips);
+
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`🎬 SCENE BREAKDOWN — DETERMINISTIC COUNT`);
+    console.log(`📖 ${wordCount} words | ~${estimatedSeconds}s | 🎬 ${maxClips} clips (${budget.source})`);
+    console.log(`✂️ Narration pre-split into EXACTLY ${narrationBeats.length} beats`);
+    console.log(`📊 Avg words/beat: ${Math.round(wordCount / maxClips)}`);
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     // ── Delete existing scenes ─────────────────────────────────────
     try {
       const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
       await Promise.all(oldScenes.map(s => base44.asServiceRole.entities.Scenes.delete(s.id)));
-    } catch (_) {}
+      console.log(`🗑️ Deleted ${oldScenes.length} old scenes`);
+    } catch (e) {
+      console.warn(`Scene deletion warning: ${e.message}`);
+    }
 
     try {
       await base44.asServiceRole.entities.Projects.update(project_id, {
         status: "scene_breakdown", current_step: 5
       });
     } catch (_) {}
-
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`🎬 SCENE BREAKDOWN — CLIP-BUDGET AWARE`);
-    console.log(`📖 ${wordCount} words | ~${estimatedSeconds}s | 🎬 ${maxClips} clips (${budget.source})`);
-    console.log(`📊 Strategy: ${usesSingleCall ? 'SINGLE-CALL (short script)' : 'MULTI-PHASE (long script)'}`);
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // PASS 1: STORY ANALYSIS
@@ -425,7 +406,7 @@ Deno.serve(async (req) => {
 **FULL SCRIPT:**
 ${finalScript}
 
-**NICHE:** ${niche} | **TOPIC:** ${project.name} | **RUNTIME:** ~${estimatedSeconds}s | **CLIP BUDGET:** ${maxClips} visual beats
+**NICHE:** ${niche} | **TOPIC:** ${project.name} | **RUNTIME:** ~${estimatedSeconds}s | **CLIPS:** ${maxClips}
 
 Respond with JSON:
 {
@@ -434,20 +415,20 @@ Respond with JSON:
     "narrative_arc_summary": "2-3 sentence emotional journey",
     "emotional_trajectory": ["curiosity", "concern", "empathy", "hope"],
     "key_turning_points": ["Emotional shift 1", "Stakes escalation", "Climax"],
-    "visual_world": "SPECIFIC sensory description — textures, environments, lighting",
+    "visual_world": "SPECIFIC sensory description",
     "recurring_visual_motifs": ["Motif 1", "Motif 2", "Motif 3"],
     "color_arc": "How palette shifts across the video",
     "characters": [
       {
         "name": "Character name/archetype",
-        "visual_description": "EXACT: age, gender, ethnicity, build, hair, clothing, features",
+        "visual_description": "EXACT: age, gender, ethnicity, build, hair, clothing",
         "emotional_arc": "How they change"
       }
     ]
   }
 }
 
-NICHE (${niche}): Visual World: ${nicheProfile.visual_world} | Palette: ${nicheProfile.emotional_palette} | AVOID: ${nicheProfile.avoid}`;
+NICHE (${niche}): ${nicheProfile.visual_world} | Palette: ${nicheProfile.emotional_palette} | AVOID: ${nicheProfile.avoid}`;
 
     console.log(`🎬 Pass 1: Story Analysis...`);
     const analysisResult = await callGemini(analysisPrompt, 0.6, 8192);
@@ -465,266 +446,196 @@ NICHE (${niche}): Visual World: ${nicheProfile.visual_world} | Palette: ${nicheP
     } catch (_) {}
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    // PASS 2: SCENE BREAKDOWN
+    // PASS 2: VISUAL DIRECTION FOR PRE-SPLIT BEATS
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-    const allScenes = [];
-    let totalScenesCreated = 0;
+    // We send the pre-split narration beats and ask ONLY for visuals.
+    // The LLM's output length doesn't control scene count — our
+    // pre-split array does. Missing visuals get defaults.
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     const characters = storyAnalysis.characters || [];
     const characterBlock = characters.length > 0
-      ? `**CHARACTERS (EXACT descriptions for consistency):**\n${characters.map(c => `• ${c.name}: ${c.visual_description || ''}`).join('\n')}`
+      ? `**CHARACTERS:**\n${characters.map(c => `• ${c.name}: ${c.visual_description || ''}`).join('\n')}`
       : '';
 
-    if (usesSingleCall) {
-      // ════════════════════════════════════════════════════════════
-      // SHORT SCRIPT: One LLM call, full script, all beats at once
-      // ════════════════════════════════════════════════════════════
-      // For <=300 word scripts, phase splitting gives each chunk only
-      // 1-2 sentences. The LLM sees "create 5 beats from 30 words"
-      // and correctly refuses — it can't find 5 emotional shifts
-      // in 2 sentences. Fix: give it the WHOLE script + WHOLE budget.
+    // Build numbered beat list for the prompt
+    const beatList = narrationBeats.map((text, i) => {
+      const { arc } = getArcPosition(i, maxClips);
+      return `BEAT ${i + 1} [${arc.toUpperCase()}]: "${text}"`;
+    }).join('\n');
 
-      const arcDist = {
-        setup: Math.max(1, Math.round(maxClips * 0.10)),
-        rising: Math.max(1, Math.round(maxClips * 0.25)),
-        climax: Math.max(1, Math.round(maxClips * 0.40)),
-        resolution: 0
+    // Process in batches of 12 to avoid output truncation
+    const VISUAL_BATCH = 12;
+    const visualsMap = {}; // { beatNumber: { visual_concept, shot_type, ... } }
+
+    for (let bStart = 0; bStart < maxClips; bStart += VISUAL_BATCH) {
+      const bEnd = Math.min(bStart + VISUAL_BATCH, maxClips);
+      const batchBeats = narrationBeats.slice(bStart, bEnd);
+      const batchBeatList = batchBeats.map((text, i) => {
+        const beatNum = bStart + i + 1;
+        const { arc } = getArcPosition(bStart + i, maxClips);
+        return `BEAT ${beatNum} [${arc.toUpperCase()}]: "${text}"`;
+      }).join('\n');
+
+      const visualPrompt = `You are an award-winning film director with 30 years of experience. You feel stories through images.
+Every frame must carry EMOTIONAL WEIGHT — you don't just "show" narration, you INTERPRET it cinematically.
+A director calls CUT when the FEELING changes, not when a sentence ends.
+
+I have ${maxClips} pre-defined narration beats for a ${estimatedSeconds}-second video.
+Direct the visual language for beats ${bStart + 1} through ${bEnd}.
+
+**THE SOUL OF THIS STORY:**
+Theme: ${storyAnalysis.central_theme}
+Arc: ${storyAnalysis.narrative_arc_summary}
+Visual World: ${storyAnalysis.visual_world}
+Color Arc: ${storyAnalysis.color_arc}
+Motifs: ${JSON.stringify(storyAnalysis.recurring_visual_motifs)}
+${characterBlock}
+
+**NARRATION BEATS TO DIRECT:**
+${batchBeatList}
+
+**YOUR CINEMATOGRAPHIC RULES:**
+1. Each beat = one ${CLIP_DURATION}-second EMOTIONAL MOMENT. What would this frame feel like as a photograph that makes someone stop scrolling?
+2. Visual concept must be a SPECIFIC frozen moment (2-4 rich sentences) — textures, body language, environment details, light quality.
+3. Abstract ideas → CONCRETE physical metaphors (financial decline → a receipt curling off a counter; loneliness → a single chair at a long table).
+4. EMOTIONAL ESCALATION within the sequence. Each beat should feel MORE intense than the last (even subtly).
+5. Adjacent beats share ONE visual continuity thread (a color, an object, a gesture) that creates FLOW.
+6. Shot variety is sacred — NEVER two consecutive identical shot types: ECU, CU, MCU, MS, MWS, WS, EWS, OTS, INSERT, LOW ANGLE, HIGH ANGLE, DUTCH, POV
+7. Camera movement tells emotion: STILLNESS = dread/reverence, PUSH-IN = intimacy/revelation, PULL-BACK = isolation/scope, TRACKING = journey/progression, HANDHELD = urgency/chaos
+8. Lighting is character: HARD LIGHT = truth/confrontation, SOFT LIGHT = memory/tenderness, RIM LIGHT = separation/mystery, UNDER-LIGHT = menace
+
+**ARC PACING (adapt intensity to position):**
+- SETUP: Wider compositions, restrained camera, establish the visual world. The audience should BREATHE here — curious, intrigued.
+- RISING: Gradually tighter framing, increased movement energy. Push-ins, tracking shots. Each beat raises the emotional floor.
+- CLIMAX: Tightest framing, strongest motion, most dynamic compositions. This is the emotional PEAK — every frame must HIT HARD.
+- RESOLUTION: Pull back, soften movement, wider shots. The emotional exhale. Gentle camera, contemplative compositions.
+
+Niche (${niche}): ${nicheProfile.visual_world} | Signature: ${nicheProfile.signature_shots} | AVOID: ${nicheProfile.avoid}
+
+**RESPOND with JSON — one object per beat, ${batchBeats.length} objects:**
+{
+  "visuals": [
+    {
+      "beat_number": ${bStart + 1},
+      "visual_concept": "Rich 2-4 sentence cinematic frozen moment — textures, body language, environment, light quality. What makes this frame UNFORGETTABLE?",
+      "shot_type": "e.g. 'ECU — Extreme Close-Up' or 'WS — Wide Shot'",
+      "camera_angle": "e.g. 'Low angle, 15 degrees, left of center' or 'Bird's eye, directly overhead'",
+      "camera_movement": "e.g. 'Slow push-in over 5s, MS to MCU' or 'Static with subtle breathing drift'",
+      "lighting": "e.g. 'Single warm key left, deep shadow fill right, golden rim light from window behind'",
+      "color_palette": "e.g. 'Warm amber #D4A574, shadow brown #2C1810, cream highlight #F5F0E8'",
+      "mood": "2-3 visceral words (not just 'sad' — try 'aching stillness' or 'quiet defiance')",
+      "depth_of_field": "e.g. 'Shallow f/1.4, subject razor-sharp, background dissolved to bokeh'",
+      "niche_visual_element": "One specific metaphor grounded in the niche (not generic)",
+      "continuity_bridge": "The ONE visual thread connecting this beat to the NEXT (a color, object, gesture, light quality)",
+      "emotional_intensity": 0.5
+    }
+  ]
+}
+
+${batchBeats.length} objects for beats ${bStart + 1}-${bEnd}. NEVER include text, charts, or UI in visuals.`;
+
+      console.log(`🎬 Pass 2: Visuals for beats ${bStart + 1}-${bEnd}...`);
+
+      try {
+        const visualResult = await callGemini(visualPrompt, 0.7, 16384);
+        const visuals = visualResult.visuals || visualResult.scenes || [];
+
+        for (const v of visuals) {
+          const num = v.beat_number || v.scene_number;
+          if (num >= 1 && num <= maxClips) {
+            visualsMap[num] = v;
+          }
+        }
+
+        // Also map by array index if beat_number is missing
+        if (visuals.length > 0 && !visuals[0].beat_number && !visuals[0].scene_number) {
+          visuals.forEach((v, i) => {
+            const num = bStart + i + 1;
+            if (!visualsMap[num]) visualsMap[num] = v;
+          });
+        }
+
+        console.log(`✓ Got visuals for ${visuals.length} beats (expected ${batchBeats.length})`);
+      } catch (err) {
+        console.warn(`⚠️ Visual batch ${bStart + 1}-${bEnd} failed: ${err.message}`);
+        // Scenes will still be created with defaults
+      }
+
+      if (bEnd < maxClips) await new Promise(r => setTimeout(r, 1500));
+    }
+
+    console.log(`📊 Visual coverage: ${Object.keys(visualsMap).length}/${maxClips} beats have LLM visuals`);
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // PASS 3: CREATE EXACTLY maxClips SCENES
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // Scene creation is driven by OUR narrationBeats array.
+    // LLM visuals are applied where available, defaults where not.
+    // This GUARANTEES exactly maxClips scenes.
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    const allScenes = [];
+    let created = 0;
+    let withVisuals = 0;
+    let withDefaults = 0;
+
+    const savePromises = narrationBeats.map(async (narrationText, i) => {
+      const sceneNum = i + 1;
+      const { arc, phase } = getArcPosition(i, maxClips);
+      const visual = visualsMap[sceneNum];
+      const cleanedNarration = cleanNarrationText(narrationText);
+
+      // Use LLM visual if available, otherwise generate arc-aware cinematic defaults
+      const arcDefaults = {
+        setup:      { movement: 'Slow drift right, establishing', angle: 'Eye level, slightly wide', dof: 'Deep f/5.6, environment in focus', intensity: 0.3 },
+        rising:     { movement: 'Steady push-in, building', angle: 'Slightly low, 10 degrees', dof: 'Medium f/2.8, subject emerging', intensity: 0.55 },
+        climax:     { movement: 'Assertive push-in, tight', angle: 'Low angle, 20 degrees, heroic', dof: 'Shallow f/1.4, razor-sharp subject', intensity: 0.85 },
+        resolution: { movement: 'Gentle pull-back, releasing', angle: 'Eye level, centered, calm', dof: 'Moderate f/4, softening edges', intensity: 0.4 }
       };
-      arcDist.resolution = Math.max(1, maxClips - arcDist.setup - arcDist.rising - arcDist.climax);
+      const arcDef = arcDefaults[arc] || arcDefaults.rising;
 
-      const singleCallPrompt = `You are a film director blocking EXACTLY ${maxClips} visual beats for a short-form video.
+      const directorNotes = {
+        visual_concept: visual?.visual_concept || `Cinematic moment capturing the essence of: ${cleanedNarration.substring(0, 120)}`,
+        shot_type: visual?.shot_type || SHOT_CYCLE[i % SHOT_CYCLE.length],
+        camera_angle: visual?.camera_angle || arcDef.angle,
+        camera_movement: visual?.camera_movement || arcDef.movement,
+        lighting: visual?.lighting || (arc === 'climax' ? 'Hard key light with dramatic shadows' : 'Natural ambient, soft fill'),
+        color_palette: visual?.color_palette || nicheProfile.emotional_palette?.split(',')[0] || 'Warm neutral tones',
+        mood: visual?.mood || (arc === 'setup' ? 'quiet anticipation' : arc === 'rising' ? 'building tension' : arc === 'climax' ? 'raw intensity' : 'gentle resolve'),
+        depth_of_field: visual?.depth_of_field || arcDef.dof,
+        niche_visual_element: visual?.niche_visual_element || '',
+        continuity_bridge: visual?.continuity_bridge || '',
+        emotional_intensity: visual?.emotional_intensity || arcDef.intensity,
+        arc_position: arc,
+        phase: phase,
+        _has_llm_visual: !!visual
+      };
 
-**ABSOLUTE REQUIREMENT: Return EXACTLY ${maxClips} scenes in your JSON array. Not fewer, not more.**
-If you return fewer than ${maxClips}, the video will have empty gaps. Count your scenes before responding.
-
-Each beat = one ~${CLIP_DURATION}-second video clip. Total video = ~${estimatedSeconds} seconds.
-A beat = a CAMERA CUT showing a new visual angle, composition, or emotional shift.
-Think like a music video or commercial: RAPID VISUAL STORYTELLING with MANY camera angles.
-
-**BEAT does NOT equal SENTENCE.** This is critical:
-- A single sentence of narration might play across 2-3 visual beats showing different angles of the same moment
-- Two short sentences might share 1 beat if emotionally identical
-- You have ${maxClips} camera positions to fill — FILL EVERY ONE with a unique visual
-
-**STORY:** Theme: ${storyAnalysis.central_theme} | Arc: ${storyAnalysis.narrative_arc_summary}
-Visual World: ${storyAnalysis.visual_world} | Color Arc: ${storyAnalysis.color_arc}
-Motifs: ${JSON.stringify(storyAnalysis.recurring_visual_motifs)}
-
-${characterBlock}
-
-**FULL SCRIPT (distribute ALL words across ${maxClips} beats):**
-${finalScript}
-
-**ARC STRUCTURE for your ${maxClips} beats:**
-- SETUP (beats 1-${arcDist.setup}): ~${arcDist.setup} beats — Hook, establish. Wider shots, slower.
-- RISING (beats ${arcDist.setup + 1}-${arcDist.setup + arcDist.rising}): ~${arcDist.rising} beats — Build tension. Tighter framing.
-- CLIMAX (beats ${arcDist.setup + arcDist.rising + 1}-${arcDist.setup + arcDist.rising + arcDist.climax}): ~${arcDist.climax} beats — Peak emotion. Tightest, most dynamic.
-- RESOLUTION (beats ${arcDist.setup + arcDist.rising + arcDist.climax + 1}-${maxClips}): ~${arcDist.resolution} beats — Payoff. Pull back, soften.
-
-**RULES:**
-1. EXACTLY ${maxClips} scenes in your response. COUNT THEM.
-2. Each beat gets a UNIQUE shot type — NEVER two consecutive identical: ECU, CU, MCU, MS, MWS, WS, EWS, OTS, INSERT, LOW ANGLE, HIGH ANGLE, DUTCH, POV
-3. Visual concept = SPECIFIC frozen moment (2-4 sentences, like a photograph)
-4. Beats CAN share narration text — same words, different visual angle (this is how real films work)
-5. Beats CAN split one sentence — first half over one visual, second half over another
-6. EVERY word of the script must appear in at least one beat's narration_text
-7. Abstract concepts must become CONCRETE physical metaphors
-8. Niche (${niche}): ${nicheProfile.visual_world} | Shots: ${nicheProfile.signature_shots} | AVOID: ${nicheProfile.avoid}
-
-**RESPONSE — EXACTLY ${maxClips} objects in the scenes array:**
-{
-  "scenes": [
-    {
-      "scene_number": 1,
-      "narration_text": "Script words that play during this visual beat",
-      "visual_concept": "Rich 2-4 sentence cinematic frozen moment",
-      "shot_type": "e.g. 'WS — Wide Shot'",
-      "camera_angle": "e.g. 'Eye level, centered'",
-      "camera_movement": "e.g. 'Slow push-in 5s'",
-      "lighting": "e.g. 'Natural window light, soft shadows'",
-      "color_palette": "e.g. 'Warm amber #D4A574, cream #F5F0E8'",
-      "mood": "2-3 words",
-      "depth_of_field": "e.g. 'Shallow f/1.4, subject sharp'",
-      "niche_visual_element": "One niche metaphor element",
-      "continuity_bridge": "Visual thread to NEXT beat",
-      "emotional_intensity": 0.5,
-      "arc_position": "setup|rising|climax|resolution"
-    }
-  ]
-}
-
-FINAL CHECK: Does your scenes array contain EXACTLY ${maxClips} objects? If not, add or remove until it does.`;
-
-      console.log(`🎬 Pass 2 (single call): requesting ${maxClips} beats from ${wordCount} words...`);
-      let returnedScenes = [];
-      const MIN_ACCEPTABLE = Math.max(MIN_CLIPS, Math.floor(maxClips * 0.75));
-
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const promptToUse = attempt === 0 ? singleCallPrompt
-          : `${singleCallPrompt}\n\n**YOU PREVIOUSLY RETURNED ONLY ${returnedScenes.length} SCENES. THIS IS WRONG.**\nThe video is ${estimatedSeconds} seconds long. At ${CLIP_DURATION}s per beat, that is ${maxClips} beats.\nI need EXACTLY ${maxClips} scenes in the JSON array. Split narration across multiple camera angles to fill all ${maxClips} slots.\nDo NOT group multiple moments into one beat — each beat should be a SINGLE camera angle lasting ${CLIP_DURATION} seconds.\nReturn ${maxClips} objects in the scenes array. COUNT THEM.`;
-
-        const result = await callGemini(promptToUse, 0.7, 32768);
-
-        if (!result.scenes || !Array.isArray(result.scenes)) {
-          console.warn(`Attempt ${attempt + 1}: no scenes array returned`);
-          continue;
-        }
-
-        returnedScenes = result.scenes.slice(0, maxClips);
-        console.log(`✓ Attempt ${attempt + 1}: LLM returned ${result.scenes.length} beats (need ${maxClips}, min ${MIN_ACCEPTABLE})`);
-
-        if (returnedScenes.length >= MIN_ACCEPTABLE) break;
-
-        if (attempt < 2) {
-          console.warn(`⚠️ Only ${returnedScenes.length}/${maxClips} — retrying with stronger enforcement...`);
-          await new Promise(r => setTimeout(r, 2000));
-        }
-      }
-
-      if (returnedScenes.length === 0) {
-        throw new Error('Failed to generate any scenes after 3 attempts');
-      }
-
-      if (returnedScenes.length < MIN_ACCEPTABLE) {
-        console.warn(`⚠️ Final count ${returnedScenes.length} < min ${MIN_ACCEPTABLE} — proceeding with what we have`);
-      }
-
-      const savePromises = returnedScenes.map(async (scene, i) => {
-        const sceneNum = i + 1;
-        const arcPos = scene.arc_position || (
-          sceneNum <= arcDist.setup ? 'setup'
-          : sceneNum <= arcDist.setup + arcDist.rising ? 'rising'
-          : sceneNum <= arcDist.setup + arcDist.rising + arcDist.climax ? 'climax'
-          : 'resolution'
-        );
-        const phaseName = arcPos === 'setup' ? 'cold_open'
-          : arcPos === 'rising' ? 'rising_tension'
-          : arcPos === 'climax' ? 'emotional_core'
-          : 'resolution';
-
-        return saveScene(base44, project_id, scene, sceneNum, arcPos, phaseName, allScenes);
-      });
-
-      const results = await Promise.all(savePromises);
-      totalScenesCreated = results.filter(Boolean).length;
-      console.log(`✓ Single-call complete: ${totalScenesCreated}/${maxClips} beats saved`);
-
-    } else {
-      // ════════════════════════════════════════════════════════════
-      // LONG SCRIPT: Multi-phase approach
-      // ════════════════════════════════════════════════════════════
-
-      const phases = calculatePhaseAllocation(maxClips);
-      const scriptChunks = splitScriptByPhase(finalScript, phases);
-      console.log(`📊 Phases: ${scriptChunks.map(c => `${c.phase}:${c.scenes}`).join(' -> ')}`);
-
-      for (let batchIdx = 0; batchIdx < scriptChunks.length; batchIdx++) {
-        const chunk = scriptChunks[batchIdx];
-        const sceneOffset = totalScenesCreated;
-
-        const prev = allScenes.slice(-3);
-        const continuityCtx = prev.length > 0
-          ? `**LAST ${prev.length} SCENES (continuity):**\n${prev.map(s => `Scene ${s.scene_number}: [${s.shot_type}] ${s.visual_concept} | Mood: ${s.mood}`).join('\n')}`
-          : '**OPENING — establish the visual world with a strong first impression.**';
-
-        if (batchIdx > 0) await new Promise(r => setTimeout(r, 2000));
-
-        const arcGuidance = {
-          cold_open: "SETUP pacing: wider shots, slower movements, establish the visual world.",
-          rising_tension: "RISING pacing: gradually tighter framing, increased movement energy.",
-          emotional_core: "CLIMAX pacing: tightest framing, strongest motion, most dynamic.",
-          resolution: "RESOLUTION pacing: pull back, soften movement, widen shots."
-        };
-
-        const arcPosMap = {
-          cold_open: 'setup', rising_tension: 'rising',
-          emotional_core: 'climax', resolution: 'resolution'
-        };
-
-        const breakdownPrompt = `You are a film director blocking EMOTIONAL BEATS, not sentences.
-
-**CRITICAL CONSTRAINT: You have EXACTLY ${chunk.scenes} visual beats for this phase.**
-Each beat = one ~${CLIP_DURATION}-second video clip. A beat = an EMOTIONAL SHIFT, not a single line of narration.
-Multiple narration sentences can play over a single visual beat.
-The TOTAL video is ~${estimatedSeconds} seconds with ${maxClips} beats total.
-
-**STORY:** Theme: ${storyAnalysis.central_theme} | Arc: ${storyAnalysis.narrative_arc_summary}
-Visual World: ${storyAnalysis.visual_world} | Color Arc: ${storyAnalysis.color_arc}
-Motifs: ${JSON.stringify(storyAnalysis.recurring_visual_motifs)}
-
-${characterBlock}
-${continuityCtx}
-
-**PHASE: ${chunk.phase.toUpperCase()}** — ${chunk.purpose}
-${arcGuidance[chunk.phase] || ''}
-Create EXACTLY ${chunk.scenes} beats (numbers ${sceneOffset + 1} to ${sceneOffset + chunk.scenes})
-
-**SCRIPT FOR THIS PHASE:**
-${chunk.text}
-
-**RULES:**
-1. Beats = EMOTIONAL SHIFTS, not sentences. CUT when the FEELING changes.
-2. Multiple narration lines CAN map to a single beat if same emotional energy.
-3. Visual concept = SPECIFIC frozen moment (2-4 sentences).
-4. Shot variety — NEVER consecutive duplicates: ECU, CU, MCU, MS, MWS, WS, EWS, OTS, INSERT, LOW ANGLE, HIGH ANGLE, DUTCH, POV
-5. Emotional escalation within the phase.
-6. Adjacent beats share ONE visual continuity thread.
-7. Abstract = CONCRETE physical metaphors.
-8. Niche (${niche}): ${nicheProfile.visual_world} | Shots: ${nicheProfile.signature_shots} | AVOID: ${nicheProfile.avoid}
-9. DISTRIBUTE ALL script text. Every word assigned. No narration left behind.
-
-**RESPONSE:**
-{
-  "scenes": [
-    {
-      "scene_number": ${sceneOffset + 1},
-      "narration_text": "ALL script words for this beat",
-      "visual_concept": "Rich 2-4 sentence cinematic frozen moment",
-      "shot_type": "e.g. 'ECU — Extreme Close-Up'",
-      "camera_angle": "e.g. 'Low angle, 15 degrees'",
-      "camera_movement": "e.g. 'Slow push-in 5s'",
-      "lighting": "e.g. 'Warm lamp left, deep shadows right'",
-      "color_palette": "e.g. 'Amber #D4A574, brown #2C1810'",
-      "mood": "2-3 words",
-      "depth_of_field": "e.g. 'Shallow f/1.4'",
-      "niche_visual_element": "One niche metaphor",
-      "continuity_bridge": "Visual thread to NEXT beat",
-      "emotional_intensity": 0.5,
-      "arc_position": "${arcPosMap[chunk.phase] || 'rising'}"
-    }
-  ]
-}
-
-EXACTLY ${chunk.scenes} beats. No text/charts in visuals.`;
-
-        console.log(`🎬 Pass 2.${batchIdx + 1}: ${chunk.phase} (beats ${sceneOffset + 1}-${sceneOffset + chunk.scenes})...`);
-        const batchResult = await callGemini(breakdownPrompt, 0.7, 16384);
-
-        if (!batchResult.scenes || !Array.isArray(batchResult.scenes)) {
-          console.error(`Phase ${chunk.phase} returned no scenes`);
-          continue;
-        }
-
-        const clampedScenes = batchResult.scenes.slice(0, chunk.scenes);
-        if (batchResult.scenes.length > chunk.scenes) {
-          console.warn(`⚠️ LLM returned ${batchResult.scenes.length} but budget is ${chunk.scenes} — clamped`);
-        }
-
-        const savePromises = clampedScenes.map(async (scene, i) => {
-          const sceneNum = sceneOffset + i + 1;
-          const arcPos = scene.arc_position || arcPosMap[chunk.phase] || 'rising';
-          return saveScene(base44, project_id, scene, sceneNum, arcPos, chunk.phase, allScenes);
+      try {
+        await base44.asServiceRole.entities.Scenes.create({
+          project_id,
+          scene_number: sceneNum,
+          narration_text: cleanedNarration,
+          image_prompt: `DIRECTOR_NOTES:${JSON.stringify(directorNotes)}`,
+          animation_prompt: directorNotes.camera_movement,
+          duration_seconds: CLIP_DURATION,
+          status: "breakdown_ready"
         });
-
-        const results = await Promise.all(savePromises);
-        const created = results.filter(Boolean).length;
-        totalScenesCreated += created;
-        console.log(`✓ ${chunk.phase}: ${created} beats (total: ${totalScenesCreated}/${maxClips})`);
+        allScenes.push({ scene_number: sceneNum, ...directorNotes });
+        return { ok: true, visual: !!visual };
+      } catch (err) {
+        console.error(`Failed to save scene ${sceneNum}:`, err.message);
+        return { ok: false, visual: false };
       }
-    }
+    });
 
-    // ── Save blueprint + budget metadata ────────────────────────────
+    const results = await Promise.all(savePromises);
+    created = results.filter(r => r.ok).length;
+    withVisuals = results.filter(r => r.ok && r.visual).length;
+    withDefaults = results.filter(r => r.ok && !r.visual).length;
+
+    // ── Save blueprint ──────────────────────────────────────────────
     try {
       await base44.asServiceRole.entities.Projects.update(project_id, {
         scene_blueprint: JSON.stringify({
@@ -734,8 +645,10 @@ EXACTLY ${chunk.scenes} beats. No text/charts in visuals.`;
             max_clips: maxClips,
             clip_duration: CLIP_DURATION,
             source: budget.source,
-            strategy: usesSingleCall ? 'single_call' : 'multi_phase',
-            scenes_created: totalScenesCreated
+            strategy: 'deterministic_split',
+            scenes_created: created,
+            with_llm_visuals: withVisuals,
+            with_defaults: withDefaults
           },
           scenes: allScenes
         })
@@ -749,8 +662,10 @@ EXACTLY ${chunk.scenes} beats. No text/charts in visuals.`;
     } catch (_) {}
 
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`🎉 BREAKDOWN COMPLETE — ${totalScenesCreated} beats for ${estimatedSeconds}s runtime`);
-    console.log(`📊 Budget: ${totalScenesCreated}/${maxClips} clips (${usesSingleCall ? 'single-call' : 'multi-phase'})`);
+    console.log(`🎉 BREAKDOWN COMPLETE — DETERMINISTIC`);
+    console.log(`📊 ${created}/${maxClips} scenes created`);
+    console.log(`🎨 ${withVisuals} with LLM visuals · ${withDefaults} with defaults`);
+    console.log(`⏱️ ${estimatedSeconds}s runtime · ${CLIP_DURATION}s per clip`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     return Response.json({
@@ -766,10 +681,12 @@ EXACTLY ${chunk.scenes} beats. No text/charts in visuals.`;
         max_clips: maxClips,
         clip_duration: CLIP_DURATION,
         source: budget.source,
-        strategy: usesSingleCall ? 'single_call' : 'multi_phase'
+        strategy: 'deterministic_split'
       },
-      scenes_created: totalScenesCreated,
-      total_target: maxClips
+      scenes_created: created,
+      total_target: maxClips,
+      with_llm_visuals: withVisuals,
+      with_defaults: withDefaults
     });
 
   } catch (error) {
