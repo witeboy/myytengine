@@ -515,10 +515,10 @@ Return ONLY the motion description.`,
           </div>
         )}
 
-        {/* Step 5: Pipeline Running / Results */}
+        {/* Step 5: Lip-Sync Video Generation / Results */}
         {step === 5 && (
           <Card>
-            <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Video className="w-5 h-5 text-pink-600" /> UGC Pipeline</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Video className="w-5 h-5 text-pink-600" /> Lip-Sync Video</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               {loading && (
                 <div className="bg-pink-50 border border-pink-200 rounded-lg p-4">
@@ -527,13 +527,10 @@ Return ONLY the motion description.`,
                     <p className="text-sm font-medium text-pink-800">{pipelineStep}</p>
                   </div>
                   <Progress value={
-                    pipelineStep.includes('project') ? 10 :
-                    pipelineStep.includes('script') ? 20 :
-                    pipelineStep.includes('voiceover') || pipelineStep.includes('TTS') ? 35 :
-                    pipelineStep.includes('scene') ? 50 :
-                    pipelineStep.includes('motion') ? 55 :
-                    pipelineStep.includes('Submitting') ? 60 :
-                    pipelineStep.includes('Avatar rendering') || pipelineStep.includes('Kling') ? 75 :
+                    pipelineStep.includes('Uploading') ? 15 :
+                    pipelineStep.includes('motion') ? 25 :
+                    pipelineStep.includes('Submitting') ? 40 :
+                    pipelineStep.includes('rendering') || pipelineStep.includes('poll') ? 65 :
                     pipelineStep.includes('Done') ? 100 : 50
                   } className="h-2" />
                 </div>
@@ -546,48 +543,50 @@ Return ONLY the motion description.`,
                     <img src={influencerImageUrl} alt="Influencer" className="w-full rounded-lg border" />
                   </div>
                 )}
-                <div>
-                  <p className="text-xs font-medium text-gray-500 mb-1">Voice Script</p>
-                  <div className="bg-gray-50 p-3 rounded-lg border text-xs text-gray-700 max-h-[200px] overflow-y-auto">{voiceScript}</div>
+                <div className="space-y-2">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-1">Voiceover</p>
+                    <audio controls src={voiceUrl} className="w-full h-10" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 mb-1">Script</p>
+                    <div className="bg-gray-50 p-3 rounded-lg border text-xs text-gray-700 max-h-[150px] overflow-y-auto">{voiceScript}</div>
+                  </div>
                 </div>
               </div>
 
-              {/* Results */}
-              <div className="space-y-2">
-                {voiceUrl && (
-                  <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg p-3">
-                    <Volume2 className="w-4 h-4 text-green-600" />
-                    <span className="text-sm flex-1">Voiceover ready ({voiceDuration}s)</span>
-                    <audio controls src={voiceUrl} className="h-8" />
-                    <Button size="sm" variant="outline" onClick={() => { const a = document.createElement('a'); a.href = voiceUrl; a.download = 'ugc-voiceover.mp3'; a.target = '_blank'; a.click(); }}>
-                      <Download className="w-3 h-3" />
-                    </Button>
+              {/* Video Result */}
+              {videoUrl && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle2 className="w-4 h-4 text-green-600" />
+                    <span className="text-sm font-medium">Lip-sync Video Ready!</span>
+                    <Badge className="bg-purple-100 text-purple-700 text-xs">Kling AI Avatar</Badge>
                   </div>
-                )}
-                {videoUrl && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Video className="w-4 h-4 text-green-600" />
-                      <span className="text-sm font-medium">Lip-sync Video Generated!</span>
-                      <Badge className="bg-purple-100 text-purple-700 text-xs">Kling AI Avatar</Badge>
-                    </div>
-                    <video controls src={videoUrl} className="w-full rounded-lg border" />
-                    <Button size="sm" variant="outline" className="mt-2 w-full gap-2" onClick={() => { const a = document.createElement('a'); a.href = videoUrl; a.download = 'ugc-video.mp4'; a.target = '_blank'; a.click(); }}>
+                  <video controls src={videoUrl} className="w-full rounded-lg border" />
+                  <div className="flex gap-2 mt-2">
+                    <Button size="sm" variant="outline" className="flex-1 gap-2" onClick={() => { const a = document.createElement('a'); a.href = videoUrl; a.download = 'ugc-video.mp4'; a.target = '_blank'; a.click(); }}>
                       <Download className="w-4 h-4" /> Download Video
                     </Button>
+                    <Button size="sm" variant="outline" className="gap-2" onClick={() => { const a = document.createElement('a'); a.href = influencerImageUrl; a.download = 'ugc-influencer.png'; a.target = '_blank'; a.click(); }}>
+                      <Download className="w-4 h-4" /> Image
+                    </Button>
+                    <Button size="sm" variant="outline" className="gap-2" onClick={() => { const a = document.createElement('a'); a.href = voiceUrl; a.download = 'ugc-voiceover.mp3'; a.target = '_blank'; a.click(); }}>
+                      <Download className="w-4 h-4" /> Audio
+                    </Button>
                   </div>
-                )}
-              </div>
-
-              {!loading && influencerImageUrl && (
-                <Button variant="outline" className="w-full gap-2" onClick={() => { const a = document.createElement('a'); a.href = influencerImageUrl; a.download = 'ugc-influencer.png'; a.target = '_blank'; a.click(); }}>
-                  <Download className="w-4 h-4" /> Download Image
-                </Button>
+                </div>
               )}
 
-              {!loading && projectId && (
-                <Button onClick={() => navigate(createPageUrl(`ContentGeneration?project_id=${projectId}`))} className="w-full bg-pink-600 hover:bg-pink-700 gap-2">
-                  Open in Full Pipeline <ArrowRight className="w-4 h-4" />
+              {/* Retry / Back */}
+              {!loading && !videoUrl && (
+                <Button onClick={handleGenerateLipSync} className="w-full bg-pink-600 hover:bg-pink-700 gap-2">
+                  <RefreshCw className="w-4 h-4" /> Retry Lip-Sync Generation
+                </Button>
+              )}
+              {!loading && (
+                <Button variant="outline" onClick={() => setStep(4)} className="w-full gap-2">
+                  <ArrowLeft className="w-4 h-4" /> Back to Voiceover
                 </Button>
               )}
             </CardContent>
