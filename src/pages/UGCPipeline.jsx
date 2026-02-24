@@ -418,9 +418,8 @@ Return ONLY the motion description.`,
                     <Button onClick={() => setShowSaveTemplate(true)} variant="outline" className="gap-2">
                       <Save className="w-4 h-4" /> Save as Template
                     </Button>
-                    <Button onClick={handleGenerateVoiceScript} disabled={loading} className="flex-1 bg-pink-600 hover:bg-pink-700 gap-2">
-                      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
-                      {loading ? statusMsg : 'Generate Voice Script'}
+                    <Button onClick={handleGoToScript} className="flex-1 bg-pink-600 hover:bg-pink-700 gap-2">
+                      <Mic className="w-4 h-4" /> Next: Voiceover
                     </Button>
                   </div>
                 </div>
