@@ -33,8 +33,8 @@ function getStage(status) {
 }
 
 function getRoute(project) {
-  // UGC projects stay in the UGC pipeline (self-contained flow)
-  if (isUgcProject(project)) return `UGCPipeline?project_id=${project.id}`;
+  // UGC projects are self-contained (local state), just open the pipeline page
+  if (isUgcProject(project)) return 'UGCPipeline';
   
   // Repurpose projects go to ContentGeneration (they skip repurpose flow once created)
   if (isRepurposeProject(project)) {

@@ -8,10 +8,6 @@ import { Button } from '@/components/ui/button';
 import { ArrowRight, Clock, Users } from 'lucide-react';
 import { createPageUrl } from '@/utils';
 
-function getUGCRoute(project) {
-  return `UGCPipeline?project_id=${project.id}`;
-}
-
 export default function OngoingUGCProjects() {
   const navigate = useNavigate();
 
@@ -37,11 +33,11 @@ export default function OngoingUGCProjects() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
+        <p className="text-xs text-gray-500 mb-1">UGC projects are self-contained — start a new one anytime.</p>
         {projects.map(p => (
           <div
             key={p.id}
-            onClick={() => navigate(createPageUrl(getUGCRoute(p)))}
-            className="flex items-center justify-between bg-white rounded-lg border border-pink-100 px-3 py-2 cursor-pointer hover:border-pink-300 transition-colors"
+            className="flex items-center justify-between bg-white rounded-lg border border-pink-100 px-3 py-2"
           >
             <div className="flex items-center gap-2 min-w-0">
               <Users className="w-4 h-4 text-pink-500 shrink-0" />
@@ -50,7 +46,7 @@ export default function OngoingUGCProjects() {
                 {p.status?.replace(/_/g, ' ')}
               </Badge>
             </div>
-            <ArrowRight className="w-4 h-4 text-gray-400 shrink-0" />
+            <span className="text-[10px] text-gray-400 shrink-0">{new Date(p.created_date).toLocaleDateString()}</span>
           </div>
         ))}
       </CardContent>
