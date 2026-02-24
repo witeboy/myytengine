@@ -14,7 +14,6 @@ import {
   Edit, Sparkles, CheckCircle2, Play, Film
 } from 'lucide-react';
 import RepurposeTemplates from '@/components/templates/RepurposeTemplates';
-import VoicePicker from '@/components/repurpose/VoicePicker';
 import ScriptComparison from '@/components/repurpose/ScriptComparison';
 import HookVariants from '@/components/repurpose/HookVariants';
 
@@ -55,9 +54,6 @@ export default function ContentRepurpose() {
 
   // Step 4: New script
   const [newScript, setNewScript] = useState('');
-
-  // Voice selection
-  const [selectedVoiceId, setSelectedVoiceId] = useState('');
 
   // Hook selection
   const [selectedHook, setSelectedHook] = useState(null);
@@ -226,15 +222,6 @@ export default function ContentRepurpose() {
       word_count: newScript.split(/\s+/).filter(w => w).length,
       estimated_duration_sec: analysis.estimated_duration_seconds || 600,
     });
-
-    // Save voice preference to ProductionSettings so ContentGeneration picks it up
-    if (selectedVoiceId) {
-      await base44.entities.ProductionSettings.create({
-        project_id: project.id,
-        selected_voice_id: selectedVoiceId,
-        voiceover_status: 'pending',
-      });
-    }
 
     setPipelineStep('Redirecting to Content Generation...');
     setLoading(false);
@@ -435,13 +422,6 @@ export default function ContentRepurpose() {
                 <Textarea value={tweakNotes} onChange={e => setTweakNotes(e.target.value)} placeholder="e.g. More dramatic, personal story angle..." className="min-h-[100px]" />
               </div>
 
-              {/* Voice Picker */}
-              <VoicePicker
-                selectedVoiceId={selectedVoiceId}
-                onSelectVoice={setSelectedVoiceId}
-                analysisVoiceStyle={analysis?.voiceover_style}
-              />
-
               {loading && batchProgress.total > 0 && (
                 <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 space-y-2">
                   <div className="flex items-center justify-between text-xs">
@@ -475,7 +455,7 @@ export default function ContentRepurpose() {
                   <Badge className="bg-emerald-100 text-emerald-800">{newTitle}</Badge>
                   <Badge variant="outline">{newScript.split(/\s+/).filter(w => w).length} words</Badge>
                   <Badge variant="outline">{selectedStyle.replace(/_/g, ' ')}</Badge>
-                  {selectedVoiceId && <Badge variant="outline" className="text-[10px]">🎙️ Voice set</Badge>}
+  
                 </div>
 
                 {/* Hook Variants */}
