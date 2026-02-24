@@ -533,6 +533,14 @@ Write the complete narration script. Return ONLY the script text, no headers or 
                 <label className="text-sm font-medium text-gray-700 mb-1 block">What to change?</label>
                 <Textarea value={tweakNotes} onChange={e => setTweakNotes(e.target.value)} placeholder="e.g. More dramatic, personal story angle..." className="min-h-[100px]" />
               </div>
+
+              {/* Voice Picker */}
+              <VoicePicker
+                selectedVoiceId={selectedVoiceId}
+                onSelectVoice={setSelectedVoiceId}
+                analysisVoiceStyle={analysis?.voiceover_style}
+              />
+
               <div className="flex gap-3">
                 <Button variant="outline" onClick={() => setStep(2)} className="gap-2"><ArrowLeft className="w-4 h-4" /> Back</Button>
                 <Button onClick={handleGenerateNewScript} disabled={loading || !newTitle.trim()} className="flex-1 bg-emerald-600 hover:bg-emerald-700 gap-2">
@@ -546,25 +554,52 @@ Write the complete narration script. Return ONLY the script text, no headers or 
 
         {/* Step 4: Script */}
         {step === 4 && (
-          <Card>
-            <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Film className="w-5 h-5 text-emerald-600" /> New Script</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Badge className="bg-emerald-100 text-emerald-800">{newTitle}</Badge>
-                <Badge variant="outline">{newScript.split(/\s+/).filter(w => w).length} words</Badge>
-                <Badge variant="outline">{selectedStyle.replace(/_/g, ' ')}</Badge>
-              </div>
-              <Textarea value={newScript} onChange={e => setNewScript(e.target.value)} className="min-h-[350px] text-sm font-mono" />
-              <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setStep(3)} className="gap-2"><ArrowLeft className="w-4 h-4" /> Back</Button>
-                <Button onClick={handleRunPipeline} disabled={loading || !newScript.trim()} className="flex-1 bg-emerald-600 hover:bg-emerald-700 gap-2" size="lg">
-                  {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
-                  Run Full Pipeline
-                </Button>
-              </div>
-              <p className="text-xs text-gray-400 text-center">Creates project → voiceover → scenes → prompts → images → videos (full automation)</p>
-            </CardContent>
-          </Card>
+          <div className="space-y-4">
+            <Card>
+              <CardHeader><CardTitle className="text-lg flex items-center gap-2"><Film className="w-5 h-5 text-emerald-600" /> New Script</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge className="bg-emerald-100 text-emerald-800">{newTitle}</Badge>
+                  <Badge variant="outline">{newScript.split(/\s+/).filter(w => w).length} words</Badge>
+                  <Badge variant="outline">{selectedStyle.replace(/_/g, ' ')}</Badge>
+                  {selectedVoiceId && <Badge variant="outline" className="text-[10px]">🎙️ Voice set</Badge>}
+                </div>
+
+                {/* Hook Variants */}
+                <HookVariants
+                  analysis={analysis}
+                  newTitle={newTitle}
+                  onSelectHook={(hook) => {
+                    setSelectedHook(hook);
+                    // Prepend hook to script if not already there
+                    if (hook?.text && !newScript.startsWith(hook.text.substring(0, 30))) {
+                      const firstPeriod = newScript.indexOf('. ');
+                      const cutPoint = firstPeriod > 0 && firstPeriod < 300 ? firstPeriod + 2 : 0;
+                      setNewScript(hook.text + '\n\n' + newScript.substring(cutPoint));
+                    }
+                  }}
+                />
+
+                {/* Script Comparison */}
+                <ScriptComparison
+                  originalScript={analysis?.original_script}
+                  newScript={newScript}
+                  originalTitle={analysis?.title}
+                  newTitle={newTitle}
+                />
+
+                <Textarea value={newScript} onChange={e => setNewScript(e.target.value)} className="min-h-[300px] text-sm font-mono" />
+                <div className="flex gap-3">
+                  <Button variant="outline" onClick={() => setStep(3)} className="gap-2"><ArrowLeft className="w-4 h-4" /> Back</Button>
+                  <Button onClick={handleRunPipeline} disabled={loading || !newScript.trim()} className="flex-1 bg-emerald-600 hover:bg-emerald-700 gap-2" size="lg">
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Play className="w-5 h-5" />}
+                    Run Full Pipeline
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-400 text-center">Creates project → voiceover → scenes → prompts → images → videos (full automation)</p>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* Step 5: Pipeline Running */}
