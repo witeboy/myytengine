@@ -242,7 +242,7 @@ export default function ContentGeneration() {
                 ...prev,
                 sceneStatuses: { ...prev.sceneStatuses, [item.scene_id]: 'done' }
               }));
-            } else if (pollResult.status === 'FAILED') {
+            } else if (pollResult.status === 'FAILED' || pollResult.error) {
               setVideoProgress(prev => ({
                 ...prev,
                 sceneStatuses: { ...prev.sceneStatuses, [item.scene_id]: 'failed' }
