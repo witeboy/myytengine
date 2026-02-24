@@ -91,10 +91,11 @@ Deno.serve(async (req) => {
     console.log(`Kling Avatar submit: HTTP ${res.status} → code=${data.code} message=${data.message}`);
 
     if (data.code !== 0) {
+      const httpStatus = data.code === 402 ? 402 : 400;
       return Response.json({
-        error: `Kling Avatar API error: code=${data.code} message=${data.message}`,
+        error: `Kling Avatar API error: ${data.message || 'Unknown error'} (code ${data.code})`,
         raw: data,
-      }, { status: 500 });
+      }, { status: httpStatus });
     }
 
     const taskId = data.data?.task_id;
