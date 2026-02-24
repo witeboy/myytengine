@@ -14,6 +14,7 @@ export default function PreviewPanel({ currentScene, currentTime, isPlaying, tot
 
   const hasVideo = currentScene?.video_url?.startsWith('http');
   const hasImage = currentScene?.image_url?.startsWith('http');
+  const isPendingVideo = currentScene?.video_url?.startsWith('grok_vid_task:') || currentScene?.video_url?.startsWith('veo_task:');
   const isPortrait = orientation === 'portrait';
 
   useEffect(() => {
@@ -115,7 +116,20 @@ export default function PreviewPanel({ currentScene, currentTime, isPlaying, tot
             onError={() => setVideoError(true)}
           />
         ) : hasImage ? (
-          <img src={currentScene.image_url} alt={`Scene ${currentScene.scene_number}`} className="w-full h-full object-contain" />
+          <div className="relative w-full h-full">
+            <img src={currentScene.image_url} alt={`Scene ${currentScene.scene_number}`} className="w-full h-full object-contain" />
+            {isPendingVideo && (
+              <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center">
+                <div className="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin mb-1" />
+                <p className="text-[9px] text-amber-300 font-medium">Animating...</p>
+              </div>
+            )}
+            {!hasVideo && !isPendingVideo && (
+              <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-sm text-gray-300 text-[9px] px-2 py-0.5 rounded font-medium">
+                Image Only
+              </div>
+            )}
+          </div>
         ) : (
           <div className="text-center text-gray-600 p-6">
             <Film className="w-8 h-8 mx-auto mb-2 opacity-20" />
