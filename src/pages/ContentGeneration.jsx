@@ -154,8 +154,9 @@ export default function ContentGeneration() {
 
     const ready = scenes.filter(s =>
       s.image_url &&
-      !s.image_url.startsWith('data:') && // Veo needs public URLs
-      (s.status === 'image_generated' || s.status === 'prompts_ready')
+      s.image_url.startsWith('http') && // Veo needs public URLs
+      (s.status === 'image_generated' || s.status === 'prompts_ready') &&
+      (!s.video_url || s.video_url.startsWith('veo_task:'))
     );
 
     if (ready.length === 0) {
