@@ -11,8 +11,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 // and sends it to the best available image model.
 //
 // MODEL CHAIN:
-//   1. Grok Imagine (imageGrok 4.0) via Kie — $0.02/6 images, great quality
-//   2. Gemini Direct API (gemini-2.0-flash-exp-image-generation) — fallback
+//   Grok Imagine (imageGrok 4.0) via Kie — returns public URLs, Veo-compatible
 //
 // WHAT THIS FUNCTION DOES NOT DO (by design):
 //   ✗ No style sandwich wrapping
@@ -88,63 +87,14 @@ async function kiePollResult(apiKey, taskId, maxWaitMs = 120000) {
 // ══════════════════════════════════════════════════════════════════
 
 // PRIMARY: Grok Imagine via Kie — $0.02/6 images, great quality
-async function generateWithGrokImagine(apiKey, prompt, aspectRatio, referenceImageUrl) {
-  console.log(`[Grok Imagine] imageGrok 4.0 | aspect: ${aspectRatio}${referenceImageUrl ? ' | with ref image' : ''}`);
-  const input = {
+async function generateWithGrokImagine(apiKey, prompt, aspectRatio) {
+  console.log(`[Grok Imagine] imageGrok 4.0 | aspect: ${aspectRatio}`);
+  const taskId = await kieCreateTask(apiKey, "grok-imagine", {
     prompt,
     aspect_ratio: aspectRatio,
     output_format: "png"
-  };
-  if (referenceImageUrl) {
-    input.image_url = referenceImageUrl;
-  }
-  const taskId = await kieCreateTask(apiKey, "grok-imagine", input);
+  });
   return await kiePollResult(apiKey, taskId);
-}
-
-// FALLBACK: Gemini Direct API — uses GEMINI_API_KEY, returns base64 → data URI
-async function generateWithGeminiDirect(prompt) {
-  const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
-  if (!geminiApiKey) throw new Error("GEMINI_API_KEY not configured");
-
-  console.log(`[Gemini Direct] gemini-2.0-flash-exp-image-generation`);
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent`,
-    {
-      method: "POST",
-      headers: {
-        "x-goog-api-key": geminiApiKey,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseModalities: ["TEXT", "IMAGE"]
-        }
-      })
-    }
-  );
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(`Gemini ${response.status}: ${err.error?.message || "Unknown"}`);
-  }
-
-  const data = await response.json();
-  if (!data.candidates?.length) throw new Error("No candidates from Gemini image gen");
-
-  // Extract image from response parts
-  const parts = data.candidates[0].content?.parts || [];
-  for (const part of parts) {
-    if (part.inlineData?.data) {
-      const mimeType = part.inlineData.mimeType || "image/png";
-      // Return as data URI — works in browsers, storable in DB
-      return `data:${mimeType};base64,${part.inlineData.data}`;
-    }
-  }
-
-  throw new Error("Gemini returned no image data in response parts");
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -256,40 +206,15 @@ Deno.serve(async (req) => {
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`🖼️ Scene ${scene.scene_number} | ${dimensions} (${aspectRatio})`);
     console.log(`📐 Prompt: ${finalPrompt.length} chars | Passthrough mode`);
-    console.log(`🔗 Chain: Grok Imagine → Gemini Direct`);
+    console.log(`🔗 Model: Grok Imagine via Kie`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     // ══════════════════════════════════════════════════════════════
-    // IMAGE GENERATION CASCADE
+    // IMAGE GENERATION — Grok Imagine via Kie (returns public URL)
     // ══════════════════════════════════════════════════════════════
-    let imageUrl;
-    let usedModel = '';
-    const errors = [];
-
-    // For stylized styles, use reference image from scene 1 for consistency
-    const usesReferenceImage = ['humpty_dumpty', 'harry_potter'].includes(project.visual_style);
-    const referenceUrl = (usesReferenceImage && scene.scene_number > 1 && project.reference_image_url)
-      ? project.reference_image_url : null;
-
-    // ── Attempt 1: Grok Imagine via Kie ──────────────────────────
-    try {
-      imageUrl = await generateWithGrokImagine(KIE_API_KEY, finalPrompt, aspectRatio, referenceUrl);
-      usedModel = 'grok-imagine';
-      console.log(`✓ Scene ${scene.scene_number} generated with Grok Imagine`);
-    } catch (err1) {
-      errors.push(`GrokImagine: ${err1.message}`);
-      console.warn(`✗ Grok Imagine failed: ${err1.message}`);
-
-      // ── Attempt 2: Gemini Direct API ────────────────────────────
-      try {
-        imageUrl = await generateWithGeminiDirect(finalPrompt);
-        usedModel = 'gemini-direct';
-        console.log(`✓ Scene ${scene.scene_number} generated with Gemini Direct API`);
-      } catch (err2) {
-        errors.push(`GeminiDirect: ${err2.message}`);
-        throw new Error(`All generation attempts failed:\n  ${errors.join('\n  ')}`);
-      }
-    }
+    const imageUrl = await generateWithGrokImagine(KIE_API_KEY, finalPrompt, aspectRatio);
+    const usedModel = 'grok-imagine';
+    console.log(`✓ Scene ${scene.scene_number} generated with Grok Imagine`);
 
     // ══════════════════════════════════════════════════════════════
     // SAVE RESULTS
