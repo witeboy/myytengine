@@ -158,7 +158,7 @@ export default function ContentGeneration() {
     const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
     const sortedScenes = freshScenes.sort((a, b) => a.scene_number - b.scene_number);
 
-    // Any scene with a real image_url that doesn't already have a video_url
+    // Any scene with a real image_url (not base64) that doesn't already have a video_url
     const ready = sortedScenes.filter(s =>
       s.image_url &&
       s.image_url.length > 10 &&
@@ -166,10 +166,43 @@ export default function ContentGeneration() {
       !s.video_url
     );
 
-    console.log(`🎬 Animate All: ${ready.length}/${sortedScenes.length} scenes ready (have image, no video)`);
+    // Check for base64 scenes that need re-generation
+    const base64Scenes = sortedScenes.filter(s =>
+      s.image_url && s.image_url.startsWith('data:') && !s.video_url
+    );
+
+    console.log(`🎬 Animate All: ${ready.length} ready, ${base64Scenes.length} have base64 images (need re-gen)`);
+
+    if (ready.length === 0 && base64Scenes.length > 0) {
+      setGeneratingVideos(false);
+      const reGen = confirm(
+        `${base64Scenes.length} scene(s) have base64 images that Veo can't animate.\n\n` +
+        `Click OK to re-generate these images with Grok Imagine (produces real URLs).\n` +
+        `Click Cancel to skip.`
+      );
+      if (reGen) {
+        // Re-generate base64 scenes
+        setGeneratingImages(true);
+        setImageProgress({ current: 0, total: base64Scenes.length, sceneName: 'Re-generating base64 images...' });
+        for (let i = 0; i < base64Scenes.length; i++) {
+          const scene = base64Scenes[i];
+          setImageProgress({ current: i + 1, total: base64Scenes.length, sceneName: `Scene ${scene.scene_number} (re-gen)` });
+          try {
+            await base44.functions.invoke('generateSceneImage', { scene_id: scene.id });
+          } catch (err) {
+            console.warn(`Scene ${scene.scene_number} re-gen failed:`, err.message);
+          }
+        }
+        setGeneratingImages(false);
+        setImageProgress({ current: 0, total: 0, sceneName: '' });
+        await refetchScenes();
+        alert('Images re-generated! Click "Animate All Scenes" again to start video generation.');
+      }
+      return;
+    }
 
     if (ready.length === 0) {
-      console.log(`⚠️ No scenes to animate. Statuses: ${sortedScenes.map(s => `S${s.scene_number}:${s.status}|img:${!!s.image_url}|vid:${!!s.video_url}`).join(', ')}`);
+      console.log(`⚠️ No scenes to animate. Statuses: ${sortedScenes.map(s => `S${s.scene_number}:img=${!!s.image_url}|vid=${!!s.video_url}`).join(', ')}`);
       setGeneratingVideos(false);
       alert(`No scenes to animate. ${sortedScenes.filter(s => s.video_url).length} already have videos, ${sortedScenes.filter(s => !s.image_url).length} are missing images.`);
       return;
