@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { createPageUrl } from '@/utils';
 import StageProgress from '@/components/StageProgress';
-import { Loader2, Star, TrendingUp, Heart } from 'lucide-react';
+import { Loader2, Star, TrendingUp, Heart, ArrowRight } from 'lucide-react';
 
 export default function StoryTopics() {
   const navigate = useNavigate();
