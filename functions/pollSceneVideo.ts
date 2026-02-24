@@ -113,37 +113,71 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── Completed — Veo3 renders at native 1080p ────────────────────
+    // ── Completed — now request 1080p upgrade ───────────────────────
     if (successFlag === 1) {
-      const response = record?.response || {};
-      let finalUrl = response.resultUrls?.[0] || response.originUrls?.[0]
-        || response.url || response.video_url || response.output_url;
+      console.log(`✓ Veo task ${taskId}: generation complete, requesting 1080p upgrade...`);
 
-      console.log(`✓ Veo task ${taskId}: complete | resolution: ${response.resolution}`);
-
-      if (!finalUrl) {
-        console.warn(`⚠️ Task ${taskId} completed but no URL found — will retry next poll`);
+      // Check if we already have a 1080p URL saved (avoid re-upgrading)
+      if (scene.video_url && scene.video_url.startsWith('http')) {
         return Response.json({
           success: true,
-          status: 'PROCESSING',
-          message: 'Completed but URL not ready yet',
-          task_id: taskId
+          status: 'COMPLETED',
+          video_url: scene.video_url,
+          resolution: '1080p',
+          task_id: taskId,
+          scene_number: scene.scene_number
         });
       }
 
-      // ── Save final video URL ──────────────────────────────────────
+      // ── Request 1080p version ─────────────────────────────────────
+      const upgradeRes = await fetch(`${VEO_BASE}/get-1080p-video?taskId=${taskId}`, {
+        headers: { "Authorization": `Bearer ${KIE_API_KEY}` }
+      });
+
+      const upgradeText = await upgradeRes.text();
+      console.log(`1080p response (${upgradeRes.status}): ${upgradeText.substring(0, 300)}`);
+
+      let upgradeData;
+      try {
+        upgradeData = JSON.parse(upgradeText);
+      } catch (e) {
+        console.warn(`1080p returned non-JSON, will retry next poll`);
+        return Response.json({
+          success: true,
+          status: 'UPGRADING_1080P',
+          message: '1080p upgrade in progress, will retry',
+          task_id: taskId,
+          scene_number: scene.scene_number
+        });
+      }
+
+      // If 1080p is not ready yet (non-200 code), return upgrading status
+      if (upgradeData.code !== 200 || !upgradeData.data?.resultUrl) {
+        console.log(`⏳ 1080p not ready yet for task ${taskId}: code=${upgradeData.code}, msg=${upgradeData.msg}`);
+        return Response.json({
+          success: true,
+          status: 'UPGRADING_1080P',
+          message: upgradeData.msg || '1080p upgrade processing, retry in 20-30s',
+          task_id: taskId,
+          scene_number: scene.scene_number
+        });
+      }
+
+      // ── 1080p ready — save final URL ──────────────────────────────
+      const finalUrl = upgradeData.data.resultUrl;
+
       await base44.asServiceRole.entities.Scenes.update(scene_id, {
         video_url: finalUrl,
         status: 'video_ready'
       });
 
-      console.log(`✓ Scene ${scene.scene_number} video saved: ${finalUrl.substring(0, 80)}...`);
+      console.log(`✓ Scene ${scene.scene_number} 1080p video saved: ${finalUrl.substring(0, 80)}...`);
 
       return Response.json({
         success: true,
         status: 'COMPLETED',
         video_url: finalUrl,
-        resolution: response.resolution || '1080p',
+        resolution: '1080p',
         task_id: taskId,
         scene_number: scene.scene_number
       });
