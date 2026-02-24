@@ -445,7 +445,7 @@ Write the complete narration script. Return ONLY the script text, no headers or 
                   <div className="flex items-center justify-between mb-1">
                     <p className="text-gray-500 text-xs font-medium">Original Script</p>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="text-[10px]">{analysis.transcript_source === 'youtube_captions' ? '📝 Captions' : analysis.transcript_source === 'assemblyai' ? '🎤 Audio Transcription' : 'Metadata'}</Badge>
+                      <Badge variant="outline" className="text-[10px]">{analysis.transcript_source === 'youtube_captions' ? '📝 Captions' : analysis.transcript_source === 'youtube_innertube' ? '📝 InnerTube' : analysis.transcript_source === 'cobalt_assemblyai' ? '🎤 Audio Transcription' : '📊 Metadata'}</Badge>
                       <Badge variant="outline" className="text-[10px]">{analysis.original_script.split(/\s+/).length} words</Badge>
                     </div>
                   </div>
@@ -473,7 +473,7 @@ Write the complete narration script. Return ONLY the script text, no headers or 
                   {analysis.original_script && analysis.original_script.length > 50 && (
                     <div className="flex items-center gap-1.5">
                       <Badge variant="outline" className="text-[10px]">
-                        {analysis.transcript_source === 'youtube_captions' ? '📝 Captions' : analysis.transcript_source === 'assemblyai' ? '🎤 Audio' : '📊 Metadata'}
+                        {analysis.transcript_source === 'youtube_captions' ? '📝 Captions' : analysis.transcript_source === 'youtube_innertube' ? '📝 InnerTube' : analysis.transcript_source === 'cobalt_assemblyai' ? '🎤 Audio' : '📊 Metadata'}
                       </Badge>
                       <Badge variant="outline" className="text-[10px]">{analysis.original_script.split(/\s+/).length} words</Badge>
                     </div>
