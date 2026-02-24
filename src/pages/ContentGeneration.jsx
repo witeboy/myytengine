@@ -490,10 +490,11 @@ export default function ContentGeneration() {
         queued: Object.values(videoProgress.sceneStatuses).filter(s => s === 'queued').length,
         submitting: Object.values(videoProgress.sceneStatuses).filter(s => s === 'submitting').length,
         polling: Object.values(videoProgress.sceneStatuses).filter(s => s === 'polling').length,
+        upgrading: Object.values(videoProgress.sceneStatuses).filter(s => s === 'upgrading').length,
         done: Object.values(videoProgress.sceneStatuses).filter(s => s === 'done').length,
         failed: Object.values(videoProgress.sceneStatuses).filter(s => s === 'failed').length,
       }
-    : { queued: 0, submitting: 0, polling: 0, done: 0, failed: 0 };
+    : { queued: 0, submitting: 0, polling: 0, upgrading: 0, done: 0, failed: 0 };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
