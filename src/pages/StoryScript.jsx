@@ -7,7 +7,7 @@ import { createPageUrl } from '@/utils';
 import StageProgress from '@/components/StageProgress';
 import BatchCard from '@/components/script/BatchCard';
 import ScriptEditor from '@/components/script/ScriptEditor';
-import { Loader2, RefreshCw, Download, ArrowRight, FileText } from 'lucide-react';
+import { Loader2, RefreshCw, Download, ArrowRight, ArrowLeft, FileText } from 'lucide-react';
 
 export default function StoryScript() {
   const navigate = useNavigate();
