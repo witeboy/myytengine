@@ -197,18 +197,31 @@ function getStyleSpecificInstructions(styleName, styleConfig) {
 // PROMPT VALIDATION
 // ══════════════════════════════════════════════════════════════════
 
-function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, sceneNumber) {
+function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, sceneNumber, visualStyle) {
   let enhanced = imagePrompt;
   enhanced = enhanced.replace(/\b\d{3,4}\s*[x×]\s*\d{3,4}\s*(pixels?|px)?\s*\.?\s*/gi, '');
 
+  // Ensure style prefix is present
   const styleCheck = styleConfig.positive.substring(0, 30).toLowerCase();
   if (!enhanced.toLowerCase().includes(styleCheck.substring(0, 20))) {
     enhanced = `${styleConfig.positive}. ${enhanced}`;
   }
 
+  // For non-photorealistic styles, strip any photorealistic camera language that may have leaked in
+  const isPhotoStyle = ['cinematic_realistic', 'photorealistic_4k'].includes(visualStyle);
+  if (!isPhotoStyle) {
+    // Remove real camera/lens references that contradict non-photo styles
+    enhanced = enhanced.replace(/\b(shot on|ARRI|Alexa|Canon|Sony|Nikon|Panavision|anamorphic|DSLR|RAW)\b/gi, '');
+    enhanced = enhanced.replace(/\b(Kodak|Vision3|film grain texture|chromatic aberration)\b/gi, '');
+    enhanced = enhanced.replace(/\bf\/\d+\.?\d*\b/g, ''); // Remove f-stop numbers
+    enhanced = enhanced.replace(/\b(bokeh|lens flare)\b/gi, '');
+    enhanced = enhanced.replace(/\s{2,}/g, ' ').replace(/,\s*,/g, ',');
+  }
+
+  // Orientation
   const compHint = orientationConfig.format === 'portrait'
     ? 'vertical 9:16 frame, tall vertical composition'
-    : 'widescreen 16:9 cinematic frame, wide horizontal composition';
+    : 'widescreen 16:9 frame, wide horizontal composition';
 
   if (orientationConfig.format === 'portrait') {
     if (!/portrait|vertical|9:16/i.test(enhanced)) {
@@ -222,12 +235,18 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
     }
   }
 
+  // No text rule
   if (!/no text/i.test(enhanced)) {
     enhanced += ', ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image';
   }
 
-  if (!/masterpiece|professional|8k|award/i.test(enhanced)) {
-    enhanced += ', masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography';
+  // Quality suffix — style-appropriate
+  if (!/masterpiece|professional|high quality/i.test(enhanced)) {
+    if (isPhotoStyle) {
+      enhanced += ', masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography';
+    } else {
+      enhanced += ', masterpiece quality, highly detailed, professional composition, best quality';
+    }
   }
 
   return enhanced;
