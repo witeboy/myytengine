@@ -1,27 +1,17 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // ══════════════════════════════════════════════════════════════════
-// VOICEOVER GENERATOR — AI33 TTS API (ElevenLabs via ai33.pro)
+// VOICEOVER GENERATOR — MiniMax T2A primary, AI33 fallback
 // ══════════════════════════════════════════════════════════════════
 //
-// Uses AI33 API for ElevenLabs TTS.
-// Endpoint: POST https://api.ai33.pro/v1/text-to-speech/$voice_id
-// Returns task_id → poll GET /v1/task/$task_id → audio_url
+// MiniMax T2A v2 is synchronous — returns hex-encoded audio directly.
+// No polling needed. Falls back to AI33 (async with polling) if MiniMax fails.
 //
-// Flow:
-//   1. Fetch final_aggregated script
-//   2. Clean narration text
-//   3. Split into chunks if needed
-//   4. Submit each chunk to AI33 TTS → get task_id
-//   5. Poll each task until done → get audio_url
-//   6. Download, concatenate, upload to Base44
-//   7. Store voiceover_url + duration
+// MiniMax limit: 10,000 chars per request → chunk if longer.
 // ══════════════════════════════════════════════════════════════════
-
-const AI33_BASE = 'https://api.ai33.pro';
 
 // ── Split text into chunks ─────────────────────────────────────────
-function splitTextIntoChunks(text, maxChars = 4000) {
+function splitTextIntoChunks(text, maxChars = 9000) {
   const sentences = text.split(/(?<=[.!?])\s+/);
   const chunks = [];
   let current = '';
@@ -36,11 +26,70 @@ function splitTextIntoChunks(text, maxChars = 4000) {
   return chunks;
 }
 
-// ── Submit TTS task to AI33 ────────────────────────────────────────
-async function submitTtsTask(apiKey, text, voiceId = '21m00Tcm4TlvDq8ikWAM') {
-  const url = `${AI33_BASE}/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`;
+// ── Hex string to Uint8Array ───────────────────────────────────────
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
+}
 
-  const res = await fetch(url, {
+// ── MiniMax TTS call ───────────────────────────────────────────────
+async function generateWithMinimax(apiKey, text, voiceId) {
+  const res = await fetch('https://api.minimax.io/v1/t2a_v2', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'speech-2.8-hd',
+      text,
+      stream: false,
+      voice_setting: {
+        voice_id: voiceId,
+        speed: 1,
+        vol: 1,
+        pitch: 0,
+      },
+      audio_setting: {
+        sample_rate: 32000,
+        bitrate: 128000,
+        format: 'mp3',
+        channel: 1,
+      },
+      language_boost: 'auto',
+      output_format: 'hex',
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`MiniMax TTS HTTP ${res.status}: ${errText.substring(0, 200)}`);
+  }
+
+  const data = await res.json();
+
+  if (data.base_resp?.status_code !== 0) {
+    throw new Error(`MiniMax TTS error: ${data.base_resp?.status_msg || 'Unknown'}`);
+  }
+
+  if (!data.data?.audio) {
+    throw new Error('MiniMax TTS: no audio data returned');
+  }
+
+  const audioBytes = hexToBytes(data.data.audio);
+  const durationMs = data.extra_info?.audio_length || 0;
+  const durationSec = durationMs / 1000;
+
+  return { audioBytes, durationSec };
+}
+
+// ── AI33 TTS call (async with polling) ─────────────────────────────
+async function generateWithAi33(apiKey, text, voiceId) {
+  // Submit task
+  const submitRes = await fetch(`https://api.ai33.pro/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -52,56 +101,62 @@ async function submitTtsTask(apiKey, text, voiceId = '21m00Tcm4TlvDq8ikWAM') {
     }),
   });
 
-  const data = await res.json();
-  console.log(`TTS submit: ${res.status} → success=${data.success}`);
-
-  if (!data.success || !data.task_id) {
-    throw new Error(`TTS submit failed: ${JSON.stringify(data)}`);
+  const submitData = await submitRes.json();
+  if (!submitData.success || !submitData.task_id) {
+    throw new Error(`AI33 TTS submit failed: ${JSON.stringify(submitData)}`);
   }
 
-  return data.task_id;
-}
+  const taskId = submitData.task_id;
+  console.log(`AI33 TTS task: ${taskId}`);
 
-// ── Poll AI33 task until done ─────────────────────────────────────
-async function pollAi33Task(apiKey, taskId, maxAttempts = 60, intervalMs = 5000) {
-  for (let i = 0; i < maxAttempts; i++) {
-    if (i > 0) await new Promise(r => setTimeout(r, intervalMs));
+  // Poll until done
+  for (let i = 0; i < 60; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, 5000));
 
-    const res = await fetch(`${AI33_BASE}/v1/task/${taskId}`, {
+    const pollRes = await fetch(`https://api.ai33.pro/v1/task/${taskId}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        'xi-api-key': apiKey,
-      },
+      headers: { 'Content-Type': 'application/json', 'xi-api-key': apiKey },
     });
 
-    if (!res.ok) {
-      console.warn(`Poll ${i + 1}: HTTP ${res.status}`);
-      continue;
+    if (!pollRes.ok) continue;
+    const pollData = await pollRes.json();
+
+    if (pollData.status === 'done') {
+      const audioUrl = pollData.metadata?.audio_url;
+      if (!audioUrl) throw new Error('AI33 TTS done but no audio URL');
+
+      // Download the audio
+      const audioRes = await fetch(audioUrl);
+      const audioBytes = new Uint8Array(await audioRes.arrayBuffer());
+      // Estimate duration from file size (128kbps = 16000 bytes/sec)
+      const durationSec = audioBytes.length / 16000;
+      return { audioBytes, durationSec };
     }
 
-    const data = await res.json();
-    console.log(`Poll ${i + 1}: status=${data.status}`);
-
-    if (data.status === 'done') {
-      return {
-        audio_url: data.metadata?.audio_url || null,
-        srt_url: data.metadata?.srt_url || null,
-      };
+    if (pollData.status === 'failed' || pollData.status === 'error') {
+      throw new Error(`AI33 TTS failed: ${pollData.error_message || 'Unknown'}`);
     }
-
-    if (data.status === 'failed' || data.status === 'error') {
-      throw new Error(`TTS task failed: ${data.error_message || 'Unknown error'}`);
-    }
-    // pending/processing → keep polling
   }
 
-  throw new Error(`TTS task ${taskId} timed out after ${maxAttempts} polls`);
+  throw new Error('AI33 TTS timed out');
 }
 
-// ── Calculate MP3 duration from file size (128kbps) ───────────────
+// ── Clean script text for TTS ──────────────────────────────────────
+function cleanScript(text) {
+  return text
+    .replace(/\[[^\]]*\]/gi, '')
+    .replace(/^(VOICEOVER|NARRATOR|VO|SOUND|MUSIC|SFX|SCENE)\s*:\s*/gim, '')
+    .replace(/\*\*[^*]+\*\*:?\s*/g, '')
+    .replace(/\([^)]*(?:voiceover|pause|beat|whisper|dramatic)[^)]*\)/gi, '')
+    .replace(/\(?\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\)?/g, '')
+    .replace(/#{1,6}\s+/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+// ── Estimate MP3 duration from bytes (128kbps) ────────────────────
 function estimateMp3Duration(byteLength) {
-  return byteLength / 16000; // 128kbps = 16,000 bytes/sec
+  return byteLength / 16000;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -115,47 +170,31 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { project_id, script_id, voice_id } = await req.json();
+    if (!project_id) return Response.json({ error: 'Missing project_id' }, { status: 400 });
 
-    if (!project_id) {
-      return Response.json({ error: 'Missing project_id' }, { status: 400 });
+    const MINIMAX_KEY = Deno.env.get('MINIMAX_API_KEY');
+    const AI33_KEY = Deno.env.get('AI33_API_KEY');
+
+    if (!MINIMAX_KEY && !AI33_KEY) {
+      return Response.json({ error: 'No TTS API keys configured (MINIMAX_API_KEY or AI33_API_KEY)' }, { status: 500 });
     }
 
-    const API_KEY = Deno.env.get('AI33_API_KEY');
-    if (!API_KEY) {
-      return Response.json({ error: 'AI33_API_KEY not configured' }, { status: 500 });
-    }
-
-    // ── Fetch project ─────────────────────────────────────────────
+    // ── Fetch project & script ─────────────────────────────────────
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-    // ── Get final aggregated script ────────────────────────────────
     const allScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
     const script = allScripts.find(s => s.version === 'final_aggregated');
-
     if (!script?.full_script) {
-      return Response.json({
-        error: 'No final_aggregated script found. Please generate the full script first (Final Script step).'
-      }, { status: 400 });
+      return Response.json({ error: 'No final_aggregated script found. Generate the full script first.' }, { status: 400 });
     }
 
-    // ── Clean narration text ───────────────────────────────────────
-    const cleanedText = script.full_script
-      .replace(/\[[^\]]*\]/gi, '')
-      .replace(/^(VOICEOVER|NARRATOR|VO|SOUND|MUSIC|SFX|SCENE)\s*:\s*/gim, '')
-      .replace(/\*\*[^*]+\*\*:?\s*/g, '')
-      .replace(/\([^)]*(?:voiceover|pause|beat|whisper|dramatic)[^)]*\)/gi, '')
-      .replace(/\(?\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\)?/g, '')
-      .replace(/#{1,6}\s+/g, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-
+    const cleanedText = cleanScript(script.full_script);
     const wordCount = cleanedText.split(/\s+/).filter(w => w.length > 0).length;
-    console.log(`🎙 Voiceover: ${wordCount} words from final_aggregated script`);
+    console.log(`🎙 Voiceover: ${wordCount} words, ${cleanedText.length} chars`);
 
-    // ── Default voice ID if none selected ──────────────────────────
-    const selectedVoiceId = voice_id || '21m00Tcm4TlvDq8ikWAM'; // Rachel default
+    const selectedVoiceId = voice_id || 'English_expressive_narrator';
 
     // ── Update status to generating ────────────────────────────────
     const existingSettings = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
@@ -163,62 +202,93 @@ Deno.serve(async (req) => {
     if (settings) {
       await base44.asServiceRole.entities.ProductionSettings.update(settings.id, {
         voiceover_status: 'generating',
+        selected_voice_id: selectedVoiceId,
       });
     }
 
-    // ── Split into chunks if text is too long (>4000 chars) ───────
-    const chunks = splitTextIntoChunks(cleanedText, 4000);
-    console.log(`🎙 Split into ${chunks.length} chunk(s) for TTS`);
+    // ── Determine provider from voice_id ───────────────────────────
+    // MiniMax voices don't have ElevenLabs-style IDs (which are 20-char alphanumeric)
+    const isAi33Voice = AI33_KEY && /^[a-zA-Z0-9]{20,}$/.test(selectedVoiceId);
+    const useMinimax = MINIMAX_KEY && !isAi33Voice;
 
-    const audioChunkUrls = [];
-    for (let i = 0; i < chunks.length; i++) {
-      console.log(`🎙 Submitting chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars, voice: ${selectedVoiceId})...`);
-      const taskId = await submitTtsTask(API_KEY, chunks[i], selectedVoiceId);
-      console.log(`🎙 TTS task ${i + 1}: ${taskId}`);
+    // ── Split text into chunks ─────────────────────────────────────
+    const chunkLimit = useMinimax ? 9000 : 4000;
+    const chunks = splitTextIntoChunks(cleanedText, chunkLimit);
+    console.log(`🎙 ${chunks.length} chunk(s), provider=${useMinimax ? 'minimax' : 'ai33'}, voice=${selectedVoiceId}`);
 
-      const result = await pollAi33Task(API_KEY, taskId);
-      if (!result.audio_url) throw new Error(`Chunk ${i + 1}: TTS completed but no audio URL`);
-      console.log(`🎙 Chunk ${i + 1} ready: ${result.audio_url.substring(0, 60)}...`);
-      audioChunkUrls.push(result.audio_url);
+    let allAudioBytes = [];
+    let totalDuration = 0;
+    let usedProvider = 'none';
+
+    // ── TRY MINIMAX ────────────────────────────────────────────────
+    if (useMinimax) {
+      try {
+        for (let i = 0; i < chunks.length; i++) {
+          console.log(`🎙 MiniMax chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)...`);
+          const result = await generateWithMinimax(MINIMAX_KEY, chunks[i], selectedVoiceId);
+          allAudioBytes.push(result.audioBytes);
+          totalDuration += result.durationSec;
+          console.log(`✓ MiniMax chunk ${i + 1}: ${result.audioBytes.length} bytes, ${result.durationSec.toFixed(1)}s`);
+        }
+        usedProvider = 'minimax';
+      } catch (mmErr) {
+        console.warn(`⚠️ MiniMax TTS failed: ${mmErr.message}`);
+        allAudioBytes = [];
+        totalDuration = 0;
+      }
     }
 
-    // ── Download all chunks and concatenate ────────────────────────
-    const allChunkBytes = [];
-    for (let i = 0; i < audioChunkUrls.length; i++) {
-      const audioRes = await fetch(audioChunkUrls[i]);
-      const buf = await audioRes.arrayBuffer();
-      allChunkBytes.push(new Uint8Array(buf));
-      console.log(`🎙 Downloaded chunk ${i + 1}: ${buf.byteLength} bytes`);
+    // ── FALLBACK TO AI33 ───────────────────────────────────────────
+    if (usedProvider === 'none' && AI33_KEY) {
+      console.log('🎙 Falling back to AI33 (ElevenLabs)...');
+      const ai33VoiceId = isAi33Voice ? selectedVoiceId : '21m00Tcm4TlvDq8ikWAM'; // Rachel default
+      const ai33Chunks = splitTextIntoChunks(cleanedText, 4000);
+
+      for (let i = 0; i < ai33Chunks.length; i++) {
+        console.log(`🎙 AI33 chunk ${i + 1}/${ai33Chunks.length} (${ai33Chunks[i].length} chars)...`);
+        const result = await generateWithAi33(AI33_KEY, ai33Chunks[i], ai33VoiceId);
+        allAudioBytes.push(result.audioBytes);
+        totalDuration += result.durationSec;
+        console.log(`✓ AI33 chunk ${i + 1}: ${result.audioBytes.length} bytes, ${result.durationSec.toFixed(1)}s`);
+      }
+      usedProvider = 'ai33';
     }
 
-    const totalLength = allChunkBytes.reduce((sum, c) => sum + c.length, 0);
+    if (usedProvider === 'none') {
+      throw new Error('All TTS providers failed');
+    }
+
+    // ── Concatenate audio chunks ───────────────────────────────────
+    const totalLength = allAudioBytes.reduce((sum, c) => sum + c.length, 0);
     const audioBytes = new Uint8Array(totalLength);
     let offset = 0;
-    for (const chunk of allChunkBytes) {
+    for (const chunk of allAudioBytes) {
       audioBytes.set(chunk, offset);
       offset += chunk.length;
     }
-    console.log(`🎙 Combined audio: ${audioBytes.length} bytes`);
+    console.log(`🎙 Combined: ${audioBytes.length} bytes`);
 
+    // ── Upload to Base44 ───────────────────────────────────────────
     const audioBlob = new Blob([audioBytes], { type: 'audio/mpeg' });
     const uploadResult = await base44.asServiceRole.integrations.Core.UploadFile({
-      file: new File([audioBlob], 'voiceover.mp3', { type: 'audio/mpeg' })
+      file: new File([audioBlob], 'voiceover.mp3', { type: 'audio/mpeg' }),
     });
     const audioUrl = uploadResult.file_url;
-    console.log(`✓ Audio uploaded: ${audioUrl}`);
+    console.log(`✓ Uploaded: ${audioUrl}`);
 
-    // ── Calculate duration ─────────────────────────────────────────
-    let voiceoverDuration = estimateMp3Duration(audioBytes.length);
-    voiceoverDuration = Math.round(voiceoverDuration * 10) / 10;
-    console.log(`🎙 Duration: ${voiceoverDuration}s`);
+    // ── If MiniMax gave us exact duration, use it; otherwise estimate ─
+    if (usedProvider !== 'minimax' || totalDuration < 1) {
+      totalDuration = estimateMp3Duration(audioBytes.length);
+    }
+    totalDuration = Math.round(totalDuration * 10) / 10;
 
-    // ── Store as MASTER TIMING AUTHORITY ────────────────────────────
+    // ── Save to ProductionSettings ─────────────────────────────────
     const settingsPayload = {
       project_id,
       selected_voice_id: selectedVoiceId,
       voiceover_status: 'ready',
       voiceover_url: audioUrl,
-      total_duration_seconds: voiceoverDuration,
+      total_duration_seconds: totalDuration,
     };
 
     if (settings) {
@@ -227,20 +297,18 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.ProductionSettings.create(settingsPayload);
     }
 
-    // ── Update project status ──────────────────────────────────────
-    await base44.asServiceRole.entities.Projects.update(project_id, {
-      status: 'voiceover_ready'
-    });
+    await base44.asServiceRole.entities.Projects.update(project_id, { status: 'voiceover_ready' });
 
-    console.log(`✓ Voiceover complete: ${voiceoverDuration}s`);
+    console.log(`✓ Voiceover complete: ${totalDuration}s via ${usedProvider}`);
 
     return Response.json({
       success: true,
       voiceover_url: audioUrl,
-      voiceover_duration_seconds: voiceoverDuration,
+      voiceover_duration_seconds: totalDuration,
       word_count: wordCount,
       voice_id: selectedVoiceId,
       chunks_count: chunks.length,
+      provider: usedProvider,
     });
 
   } catch (error) {
