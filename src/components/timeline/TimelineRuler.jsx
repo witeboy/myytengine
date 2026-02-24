@@ -15,8 +15,8 @@ export default function TimelineRuler({ totalDuration, pixelsPerSecond }) {
   };
 
   return (
-    <div className="flex items-end h-8 bg-gray-50 border-b relative">
-      <div className="w-24 flex-shrink-0 border-r" />
+    <div className="flex items-end h-6 bg-[#1a1a2e] border-b border-gray-800 relative">
+      <div className="w-16 flex-shrink-0 border-r border-gray-800" />
       <div className="flex-1 relative">
         {markers.map(t => (
           <div
@@ -24,8 +24,8 @@ export default function TimelineRuler({ totalDuration, pixelsPerSecond }) {
             className="absolute bottom-0 flex flex-col items-center"
             style={{ left: t * pixelsPerSecond }}
           >
-            <span className="text-[10px] text-gray-400 mb-0.5">{formatTime(t)}</span>
-            <div className="w-px h-2 bg-gray-300" />
+            <span className="text-[9px] text-gray-500 mb-0.5">{formatTime(t)}</span>
+            <div className="w-px h-2 bg-gray-600" />
           </div>
         ))}
       </div>
