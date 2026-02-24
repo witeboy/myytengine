@@ -493,7 +493,7 @@ CRITICAL STYLE CHECK before outputting each prompt:
             fallback += `Cinematic scene depicting: ${s.narration_text}. Professional composition. `;
           }
 
-          imagePrompt = validateAndEnhancePrompt(fallback, styleConfig, orientationConfig, s.scene_number);
+          imagePrompt = validateAndEnhancePrompt(fallback, styleConfig, orientationConfig, s.scene_number, visualStyle);
           animationPrompt = s.director?.camera_movement
             || "slow gentle camera movement forward, atmospheric haze, subtle breathing, shallow DOF";
         }
