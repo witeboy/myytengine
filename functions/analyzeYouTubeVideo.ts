@@ -326,8 +326,6 @@ CRITICAL: The "original_script" field must contain the ENTIRE original transcrip
     analysis.title = snippet.title;
     analysis.estimated_duration_seconds = durationSec;
     analysis.is_short = isShort;
-    analysis.transcript_source = transcriptSource;
-    analysis.transcript_length = transcript ? transcript.length : 0;
 
     // ALWAYS use the raw transcript as original_script — never trust Gemini to echo it back fully
     if (transcript && transcript.length > 50) {
