@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 
-export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, onSelectScene, onUpdateDuration }) {
+export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, onSelectScene, onUpdateDuration, onTransitionClick }) {
   const [resizing, setResizing] = useState(null);
   const startXRef = useRef(0);
   const startDurRef = useRef(0);
@@ -29,8 +29,16 @@ export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, 
     document.addEventListener('mouseup', handleUp);
   };
 
+  const TRANSITION_ICONS = {
+    fade: '🌑',
+    dissolve: '💫',
+    zoom: '🔍',
+    wipe: '➡️',
+    slide: '📱',
+  };
+
   return (
-    <div className="flex-1 h-24 relative bg-gray-950">
+    <div className="flex-1 h-20 relative bg-gray-950">
       {scenes.map((scene, idx) => {
         const width = scene.duration_seconds * pixelsPerSecond;
         const left = scene.start_time * pixelsPerSecond;
@@ -41,63 +49,61 @@ export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, 
         const transition = scene.transition_type;
         const isResizing = resizing === scene.id;
 
-        let borderColor = 'border-gray-600';
-        if (hasVideo) borderColor = 'border-purple-500';
-        else if (hasImage) borderColor = 'border-emerald-500';
-
         return (
           <React.Fragment key={scene.id}>
             <div
               data-scene-block
-              className={`absolute top-1 bottom-1 rounded-md cursor-pointer border transition-all overflow-hidden group ${borderColor} ${isSelected ? 'ring-2 ring-blue-400 z-10 border-blue-400' : ''} ${isResizing ? 'z-20 ring-2 ring-yellow-400' : ''}`}
+              className={`absolute top-1 bottom-1 rounded cursor-pointer transition-all overflow-hidden group ${
+                isSelected ? 'ring-2 ring-white z-10' : ''
+              } ${isResizing ? 'z-20 ring-2 ring-yellow-400' : ''}`}
               style={{ left, width: Math.max(width, 24) }}
               onClick={() => onSelectScene(scene.id)}
             >
-              {/* Full-bleed media background */}
               {mediaSrc ? (
-                <img
-                  src={mediaSrc}
-                  className="absolute inset-0 w-full h-full object-cover"
-                  alt=""
-                  draggable={false}
-                />
+                <img src={mediaSrc} className="absolute inset-0 w-full h-full object-cover" alt="" draggable={false} />
               ) : (
                 <div className="absolute inset-0 bg-gradient-to-br from-gray-700 to-gray-800" />
               )}
-
-              {/* Gradient overlay for text readability */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-
-              {/* Scene info overlay */}
-              <div className="absolute bottom-0 left-0 right-0 px-1.5 pb-1 pt-3">
-                <p className="text-[10px] font-bold text-white drop-shadow-lg truncate">S{scene.scene_number}</p>
-                <p className="text-[9px] text-gray-300 drop-shadow">{scene.duration_seconds}s</p>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+              <div className="absolute bottom-0 left-0 right-0 px-1.5 pb-0.5">
+                <p className="text-[9px] font-bold text-white drop-shadow-lg truncate">S{scene.scene_number}</p>
+                <p className="text-[8px] text-gray-300">{scene.duration_seconds}s</p>
               </div>
-
-              {/* Media type indicator dot */}
-              <div className="absolute top-1 left-1">
+              {/* Status dot */}
+              <div className="absolute top-0.5 left-0.5">
                 <div className={`w-1.5 h-1.5 rounded-full ${hasVideo ? 'bg-purple-400' : hasImage ? 'bg-emerald-400' : 'bg-gray-500'}`} />
               </div>
-
-              {/* Resize handle — visible grip on right edge */}
+              {/* Resize handle */}
               <div
-                className={`absolute right-0 top-0 bottom-0 w-3 cursor-ew-resize flex items-center justify-center transition-colors ${isResizing ? 'bg-yellow-400/40' : 'bg-black/0 hover:bg-white/30 group-hover:bg-white/10'}`}
+                className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize bg-transparent hover:bg-white/20"
                 onMouseDown={(e) => handleResizeStart(e, scene)}
-              >
-                <div className="flex flex-col gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="w-0.5 h-2 bg-white/70 rounded-full" />
-                  <div className="w-0.5 h-2 bg-white/70 rounded-full" />
-                </div>
-              </div>
+              />
             </div>
-            {/* Transition indicator */}
-            {transition && transition !== 'cut' && idx < scenes.length - 1 && (
-              <div
-                className="absolute top-0 flex items-center justify-center z-5"
-                style={{ left: left + width - 4, width: 8 }}
+            {/* Transition diamond between scenes */}
+            {idx < scenes.length - 1 && (
+              <button
+                className={`absolute z-10 flex items-center justify-center transition-all hover:scale-125 ${
+                  transition && transition !== 'cut'
+                    ? 'w-5 h-5 bg-blue-600 rounded-full border border-blue-400 shadow-lg shadow-blue-500/30'
+                    : 'w-4 h-4 bg-gray-700 rounded-full border border-gray-500 hover:bg-gray-600 opacity-50 hover:opacity-100'
+                }`}
+                style={{
+                  left: left + width - 2,
+                  top: '50%',
+                  transform: 'translate(-50%, -50%)',
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTransitionClick?.(scene, scenes[idx + 1]);
+                }}
+                title={transition && transition !== 'cut' ? `${transition} ${scene.transition_duration || 0.5}s` : 'Add transition'}
               >
-                <div className="w-2 h-2 rounded-full bg-purple-500 border border-white shadow" title={`${transition} ${scene.transition_duration || 0.5}s`} />
-              </div>
+                {transition && transition !== 'cut' ? (
+                  <span className="text-[8px]">{TRANSITION_ICONS[transition] || '✨'}</span>
+                ) : (
+                  <span className="text-[7px] text-gray-400">+</span>
+                )}
+              </button>
             )}
           </React.Fragment>
         );
