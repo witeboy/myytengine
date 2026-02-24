@@ -144,7 +144,9 @@ Deno.serve(async (req) => {
           // Step A: Extract audio via Cobalt
           console.log('[Cobalt] Requesting audio extraction...');
           const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
-          const cobaltRes = await fetch(`${cobaltUrl}/`, {
+          // Normalize Cobalt URL — remove trailing slash, ensure correct endpoint
+          const cobaltEndpoint = cobaltUrl.replace(/\/+$/, '');
+          const cobaltRes = await fetch(cobaltEndpoint, {
             method: "POST",
             headers: { "Content-Type": "application/json", "Accept": "application/json" },
             body: JSON.stringify({ url: youtubeUrl, downloadMode: "audio", audioFormat: "mp3" })
