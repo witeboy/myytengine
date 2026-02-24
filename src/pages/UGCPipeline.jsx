@@ -243,12 +243,20 @@ Return ONLY the motion description.`,
 
     // Submit to Kling AI Avatar
     setPipelineStep('Submitting to Kling AI Avatar (lip-sync)...');
-    const avatarRes = await base44.functions.invoke('generateAvatarVideo', {
-      image_url: finalImageUrl,
-      audio_url: voiceUrl,
-      prompt: motionPrompt,
-    });
-    const avatarResult = avatarRes.data || avatarRes;
+    let avatarResult;
+    try {
+      const avatarRes = await base44.functions.invoke('generateAvatarVideo', {
+        image_url: finalImageUrl,
+        audio_url: voiceUrl,
+        prompt: motionPrompt,
+      });
+      avatarResult = avatarRes.data || avatarRes;
+    } catch (err) {
+      const errMsg = err?.response?.data?.error || err.message || 'Unknown error';
+      setPipelineStep(`Kling API error: ${errMsg}`);
+      setLoading(false);
+      return;
+    }
 
     if (avatarResult.task_id) {
       setPipelineStep('Avatar rendering with Kling AI — polling...');
@@ -267,8 +275,7 @@ Return ONLY the motion description.`,
             setVideoUrl(pollResult.video_url || '');
             done = true;
           } else if (pollResult.status === 'FAILED') {
-            console.warn('Avatar video failed:', pollResult.error);
-            setPipelineStep('Avatar video failed. Try again.');
+            setPipelineStep(`Avatar video failed: ${pollResult.error || 'Unknown error'}`);
             done = true;
           }
         } catch (pollErr) {
@@ -276,13 +283,13 @@ Return ONLY the motion description.`,
         }
       }
       if (!done) setPipelineStep('Timed out — check back later.');
+    } else {
+      setPipelineStep(`Kling error: ${avatarResult.error || 'No task created'}`);
+      setLoading(false);
+      return;
     }
 
-    if (videoUrl || pipelineStep.includes('failed') || pipelineStep.includes('Timed')) {
-      // already set
-    } else {
-      setPipelineStep('Done!');
-    }
+    setPipelineStep('Done!');
     setLoading(false);
   };
 
