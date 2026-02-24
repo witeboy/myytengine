@@ -117,6 +117,11 @@ The user has a specific video topic they want to create. Your job is to REFINE a
 USER'S TOPIC: "${exact_topic}"
 TONE: "${effectiveTone}" — the topic title, description, and all angles must match this tone.${audienceContext}
 
+CRITICAL RULES:
+- The topic MUST stay directly about "${exact_topic}" — do NOT drift to a different subject
+- Only refine the title and angle, keep the core subject matter identical
+- The final topic should be immediately recognizable as the user's original idea
+
 Return a JSON object with this exact structure:
 {
   "niche_analysis": "Brief understanding of viral potential for this topic",
@@ -146,17 +151,23 @@ Return a JSON object with this exact structure:
 IMPORTANT: Generate exactly 1 topic — the refined version of the user's idea. Keep the core concept intact. Do NOT use special characters, line breaks, or unescaped quotes inside string values.`
       : `You are an elite YouTube strategist specializing in faceless documentary channels.
 
-NICHE: "${niche}"
-TONE: "${effectiveTone}" — all topic titles and descriptions must match this tone (e.g. if humorous, be witty and playful; if educational, be informative and clear; if dramatic, be intense and high-stakes).${audienceContext}
+The user wants video topics DIRECTLY about: "${niche}"
+TONE: "${effectiveTone}" — all topic titles and descriptions must match this tone.${audienceContext}
+
+CRITICAL: Every topic MUST be directly and specifically about "${niche}". 
+- Do NOT suggest tangential or loosely related topics
+- Each topic title must contain the core subject "${niche}" or its direct synonyms
+- Topics should explore different ANGLES of "${niche}" — not different subjects
+- Think: what are 5 different fascinating aspects, stories, or deep-dives specifically within "${niche}"?
 
 Generate 5 viral video topics that are:
-- Surgical deep-dives into "${niche}" mechanics/psychology
-- Counterintuitive truths that contradict common beliefs
-- Emotionally compelling with clear stakes (money lost, years wasted)
+- Direct deep-dives into "${niche}" — different angles of the SAME subject
+- Counterintuitive truths about "${niche}" that contradict common beliefs
+- Emotionally compelling with clear stakes
 - Specific and actionable (NOT generic listicles)
 
 Each topic must:
-- Have a villain (system/institution working against viewer)
+- Be unmistakably about "${niche}" — a viewer should immediately know the video is about this subject
 - Create curiosity gap (unanswered question)
 - Be executable with research only (no on-camera presenter)
 - Score 8+ on viral potential
@@ -168,7 +179,7 @@ Return a JSON object with this exact structure:
   "topics": [
     {
       "rank": 1,
-      "title": "Viral, specific, curiosity-driven title",
+      "title": "Viral, specific, curiosity-driven title DIRECTLY about ${niche}",
       "description": "2-3 sentences explaining stakes and why viewers NEED this",
       "viral_angle": "hidden_truth",
       "villain": "The system working against viewers",
