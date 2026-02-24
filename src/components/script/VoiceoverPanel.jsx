@@ -23,6 +23,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [genderFilter, setGenderFilter] = useState('all');
   const [ageFilter, setAgeFilter] = useState('all');
+  const [voiceTab, setVoiceTab] = useState('all'); // 'all', 'cloned'
 
   useEffect(() => {
     const fetchData = async () => {
@@ -41,8 +42,12 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
     if (project?.id) fetchData();
   }, [project?.id]);
 
+  const clonedVoices = useMemo(() => voices.filter(v => v.category === 'minimax_cloned' || v.category === 'cloned'), [voices]);
+  const standardVoices = useMemo(() => voices.filter(v => v.category !== 'minimax_cloned' && v.category !== 'cloned'), [voices]);
+
   const filteredVoices = useMemo(() => {
-    return voices.filter(v => {
+    const source = voiceTab === 'cloned' ? clonedVoices : standardVoices;
+    return source.filter(v => {
       const q = searchQuery.toLowerCase();
       if (q) {
         const name = (v.name || '').toLowerCase();
@@ -60,7 +65,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       }
       return true;
     });
-  }, [voices, searchQuery, genderFilter, ageFilter]);
+  }, [voices, searchQuery, genderFilter, ageFilter, voiceTab, clonedVoices, standardVoices]);
 
   const handleGenerate = async () => {
     if (!script?.id || !selectedVoice) return;
@@ -245,6 +250,22 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
                   <Badge className="bg-purple-100 text-purple-700 text-[10px] flex-shrink-0">Selected</Badge>
                 </div>
               )}
+
+              {/* Voice Tabs */}
+              <div className="flex gap-1 mb-2 bg-gray-100 p-0.5 rounded-lg">
+                <button
+                  onClick={() => setVoiceTab('all')}
+                  className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'all' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  All Voices ({standardVoices.length})
+                </button>
+                <button
+                  onClick={() => setVoiceTab('cloned')}
+                  className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'cloned' ? 'bg-white shadow text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  My Cloned ({clonedVoices.length})
+                </button>
+              </div>
 
               {/* Search & Filters */}
               <div className="space-y-2 mb-2">
