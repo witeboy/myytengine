@@ -169,6 +169,31 @@ const styleMap = {
 };
 
 // ══════════════════════════════════════════════════════════════════
+// STYLE-SPECIFIC INSTRUCTIONS FOR LLM
+// ══════════════════════════════════════════════════════════════════
+
+function getStyleSpecificInstructions(styleName, styleConfig) {
+  const instructions = {
+    cinematic_realistic: `PHOTOREALISTIC CINEMATIC: Use real-world camera language — ARRI Alexa, anamorphic lenses, f/1.4 bokeh, film grain, three-point lighting, color LUT grading. Images should look like frames from a Hollywood movie.`,
+    photorealistic_4k: `PHOTOREALISTIC PHOTOGRAPHY: Use DSLR camera language — Canon/Sony, real lens specs, natural lighting, RAW photo quality. Images should look like professional editorial photographs.`,
+    anime: `ANIME ILLUSTRATION: Use anime art language — cel-shading, clean linework, vibrant colors, expressive eyes, Studio Ghibli quality. NO camera or lens terms. NO photorealistic language. Describe scenes as anime illustrations, not photographs.`,
+    cinematic_anime: `CINEMATIC ANIME: Use cinematic anime language — Makoto Shinkai quality, dramatic lighting with god rays, ultra-detailed anime backgrounds, sharp linework, vibrant color grading. Blend anime art with cinematic composition. NO real camera/lens terms.`,
+    cartoon_2d: `2D CARTOON: Use cartoon art language — bold outlines, flat vibrant colors, expressive character design, dynamic poses, Cartoon Network quality. NO photorealistic language at all. Describe as cartoon illustrations.`,
+    picstory_cocomelon: `3D CHILDREN'S ANIMATION: Use CoComelon/Pixar Junior language — soft rounded 3D characters, big expressive eyes, pastel colors, plastic-like textures, warm cheerful lighting. NO photorealistic camera terms.`,
+    cinematic_picstory: `CINEMATIC 3D ANIMATION: Use Pixar/DreamWorks language — high-quality 3D rendering, stylized characters, dramatic lighting, subsurface scattering, depth of field. Describe as animated film frames, not photographs.`,
+    oil_painting: `OIL PAINTING: Use fine art language — impasto brushstrokes, pigment texture, chiaroscuro, Rembrandt lighting, canvas texture, classical composition, glazing technique. NO camera or digital terms.`,
+    watercolor: `WATERCOLOR PAINTING: Use watercolor art language — translucent washes, paper grain, wet-on-wet blending, bleeding edges, granulation, luminous transparency. NO camera or digital terms.`,
+    comic_book: `COMIC BOOK ART: Use comic art language — bold ink outlines, halftone dots, vibrant colors, dynamic action lines, dramatic foreshortening, Marvel/DC quality. NO photorealistic camera terms.`,
+    humpty_dumpty: `STORYBOOK ILLUSTRATION: Use children's book art language — whimsical hand-drawn quality, watercolor washes, rounded friendly characters, fairy tale aesthetic, warm nostalgic nursery rhyme feel. NO camera terms.`,
+    harry_potter: `MAGICAL FANTASY: Use fantasy concept art language — warm candlelight, gothic stone textures, floating candles, jewel-tone colors, ethereal glow, parchment textures, magical particles. Can use cinematic composition but focus on magical atmosphere.`,
+    "3d_whiteboard_cartoon": `WHITEBOARD CARTOON: Use explainer cartoon language — clean black outlines, flat color fills, friendly exaggerated proportions, isometric perspective, bright cheerful colors, YouTube explainer style. NO photorealistic terms at all.`,
+    low_poly_3d_cartoon: `LOW-POLY 3D CARTOON: Use low-poly 3D language — visible flat-shaded polygon facets, geometric triangular surfaces, chunky stylized characters with oversized heads, angular noses, big expressive eyes, matte plastic-like materials, bright saturated primary colors, soft ambient occlusion, NO smooth rendering. Describe everything as geometric/faceted/polygonal. NO real camera or lens terms. NO film grain, bokeh, or anamorphic. Think indie 3D animation or premium game cutscene with charming geometric aesthetic.`
+  };
+
+  return instructions[styleName] || `Use visual language consistent with "${styleName}" style. Match the positive prompt keywords: ${styleConfig.positive.substring(0, 200)}`;
+}
+
+// ══════════════════════════════════════════════════════════════════
 // PROMPT VALIDATION
 // ══════════════════════════════════════════════════════════════════
 
