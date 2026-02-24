@@ -46,26 +46,31 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
   const standardVoices = useMemo(() => voices.filter(v => v.category !== 'minimax_cloned' && v.category !== 'cloned'), [voices]);
 
   const filteredVoices = useMemo(() => {
-    const source = voiceTab === 'cloned' ? clonedVoices : standardVoices;
+    const source = voiceTab === 'cloned' ? clonedVoices : voices;
     return source.filter(v => {
       const q = searchQuery.toLowerCase();
       if (q) {
         const name = (v.name || '').toLowerCase();
         const desc = (v.description || '').toLowerCase();
         const accent = (v.labels?.accent || '').toLowerCase();
-        if (!name.includes(q) && !desc.includes(q) && !accent.includes(q)) return false;
+        const vid = (v.voice_id || '').toLowerCase();
+        if (!name.includes(q) && !desc.includes(q) && !accent.includes(q) && !vid.includes(q)) return false;
       }
-      if (genderFilter !== 'all') {
-        const g = (v.labels?.gender || '').toLowerCase();
-        if (g !== genderFilter) return false;
-      }
-      if (ageFilter !== 'all') {
-        const a = (v.labels?.age || '').toLowerCase().replace(/\s+/g, '_');
-        if (a !== ageFilter) return false;
+      // Skip gender/age filters for cloned voices since they don't have labels
+      const isCloned = v.category === 'minimax_cloned' || v.category === 'cloned' || v.labels?.use_case === 'cloned';
+      if (!isCloned) {
+        if (genderFilter !== 'all') {
+          const g = (v.labels?.gender || '').toLowerCase();
+          if (g !== genderFilter) return false;
+        }
+        if (ageFilter !== 'all') {
+          const a = (v.labels?.age || '').toLowerCase().replace(/\s+/g, '_');
+          if (a !== ageFilter) return false;
+        }
       }
       return true;
     });
-  }, [voices, searchQuery, genderFilter, ageFilter, voiceTab, clonedVoices, standardVoices]);
+  }, [voices, searchQuery, genderFilter, ageFilter, voiceTab, clonedVoices]);
 
   const handleGenerate = async () => {
     if (!script?.id || !selectedVoice) return;
