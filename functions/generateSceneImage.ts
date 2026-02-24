@@ -88,11 +88,10 @@ async function kiePollResult(apiKey, taskId, maxWaitMs = 120000) {
 
 // PRIMARY: Grok Imagine via Kie — $0.02/6 images, great quality
 async function generateWithGrokImagine(apiKey, prompt, aspectRatio) {
-  console.log(`[Grok Imagine] imageGrok 4.0 | aspect: ${aspectRatio}`);
-  const taskId = await kieCreateTask(apiKey, "grok-imagine", {
+  console.log(`[Grok Imagine] text-to-image | aspect: ${aspectRatio}`);
+  const taskId = await kieCreateTask(apiKey, "grok-imagine/text-to-image", {
     prompt,
-    aspect_ratio: aspectRatio,
-    output_format: "png"
+    aspect_ratio: aspectRatio
   });
   return await kiePollResult(apiKey, taskId);
 }
