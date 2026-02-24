@@ -436,10 +436,11 @@ Deno.serve(async (req) => {
     }
 
     // ── 3. Deep analysis with Gemini (using real transcript) ─────
-    const maxTranscriptLen = 50000;
+    // Cap transcript sent to Gemini to avoid timeouts (keep full for original_script)
+    const maxTranscriptLen = 30000;
     const truncatedTranscript = transcript
       ? (transcript.length > maxTranscriptLen
-          ? transcript.substring(0, maxTranscriptLen) + '... [truncated]'
+          ? transcript.substring(0, maxTranscriptLen) + '... [truncated from ' + transcript.length + ' chars]'
           : transcript)
       : null;
 
