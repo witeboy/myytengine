@@ -34,6 +34,7 @@ export default function TimelineEditor() {
   const [showExporter, setShowExporter] = useState(false);
   const [showReorder, setShowReorder] = useState(false);
   const [transitionTarget, setTransitionTarget] = useState(null);
+  const [previewOrientation, setPreviewOrientation] = useState(null);
   const exportHook = useVideoExport();
   const timelineRef = useRef(null);
 
@@ -377,7 +378,9 @@ export default function TimelineEditor() {
               isPlaying={isPlaying}
               totalScenes={scenes.length}
               totalDuration={totalDuration}
-              orientation={project?.orientation || 'landscape'}
+              orientation={previewOrientation || project?.orientation || 'landscape'}
+              projectId={projectId}
+              onOrientationChange={(o) => { setPreviewOrientation(o); refetchProject(); }}
             />
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-gray-600 bg-[#0d0d1a]">
