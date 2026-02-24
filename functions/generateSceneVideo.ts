@@ -1,16 +1,15 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // ══════════════════════════════════════════════════════════════════
-// SCENE VIDEO GENERATOR — Google Veo 3.1 via Kie API
+// SCENE VIDEO GENERATOR — Grok Imagine image-to-video via Kie API
 // ══════════════════════════════════════════════════════════════════
-// Generates animated video from scene still image using Veo 3.1.
-// Image-to-video: scene image becomes the opening frame.
+// Generates animated video from scene still image using Grok Imagine.
+// 480p, 6s clips. ~$0.10 per 6s video.
 //
-// REQUIRES: Scene must have a public HTTP image_url (not base64/data URI).
-// generateSceneImage already returns public URLs from Grok Imagine via Kie.
+// REQUIRES: Scene must have a public HTTP image_url.
 // ══════════════════════════════════════════════════════════════════
 
-const VEO_BASE = "https://api.kie.ai/api/v1/veo";
+const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
 
 Deno.serve(async (req) => {
   let base44;
@@ -35,10 +34,9 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Scene image must be generated first' }, { status: 400 });
     }
 
-    // Reject data URIs — Veo needs a publicly accessible URL
     if (scene.image_url.startsWith('data:')) {
       return Response.json({
-        error: 'Scene image is a data URI. Veo requires a public URL. Re-generate the scene image with Grok Imagine.',
+        error: 'Scene image is a data URI. Requires a public URL. Re-generate the scene image.',
         scene_id
       }, { status: 400 });
     }
@@ -47,58 +45,57 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Scene image must be a public HTTP URL' }, { status: 400 });
     }
 
-    const projects = await base44.asServiceRole.entities.Projects.filter({ id: scene.project_id });
-    const project = projects[0];
-    const aspectRatio = project?.orientation === 'portrait' ? '9:16' : '16:9';
-
     // Build animation prompt
-    let prompt = scene.animation_prompt || "Subtle cinematic motion, slow camera movement";
+    const prompt = scene.animation_prompt || "Subtle cinematic motion, slow camera movement";
 
-    console.log(`🎬 Scene ${scene.scene_number} | Veo 3.1 | ${aspectRatio}`);
+    console.log(`🎬 Scene ${scene.scene_number} | Grok Imagine image-to-video | 480p`);
     console.log(`🖼️ Image: ${scene.image_url.substring(0, 80)}...`);
     console.log(`🎥 Prompt: ${prompt.substring(0, 120)}...`);
 
     // ══════════════════════════════════════════════════════════════
-    // SUBMIT TO VEO 3.1 VIA KIE
+    // SUBMIT TO GROK IMAGINE IMAGE-TO-VIDEO VIA KIE
     // ══════════════════════════════════════════════════════════════
 
-    const veoResponse = await fetch(`${VEO_BASE}/generate`, {
+    const response = await fetch(`${KIE_BASE}/createTask`, {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${KIE_API_KEY}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        prompt,
-        imageUrls: [scene.image_url],
-        model: "veo3_fast",
-        aspect_ratio: aspectRatio,
-        generationType: "FIRST_AND_LAST_FRAMES_2_VIDEO"
+        model: "grok-imagine/image-to-video",
+        input: {
+          image_urls: [scene.image_url],
+          prompt,
+          mode: "normal",
+          duration: "6",
+          resolution: "480p"
+        }
       })
     });
 
-    const veoText = await veoResponse.text();
-    console.log(`Veo response (${veoResponse.status}): ${veoText.substring(0, 300)}`);
+    const resText = await response.text();
+    console.log(`Kie response (${response.status}): ${resText.substring(0, 300)}`);
 
-    let veoData;
+    let resData;
     try {
-      veoData = JSON.parse(veoText);
+      resData = JSON.parse(resText);
     } catch (e) {
-      throw new Error("Veo returned non-JSON: " + veoText.substring(0, 200));
+      throw new Error("Kie returned non-JSON: " + resText.substring(0, 200));
     }
 
-    if (!veoResponse.ok || veoData.code !== 200) {
-      throw new Error(`Veo API error: ${veoData.msg || veoText.substring(0, 200)}`);
+    if (!response.ok || resData.code !== 200) {
+      throw new Error(`Kie API error: ${resData.message || resData.msg || resText.substring(0, 200)}`);
     }
 
-    const taskId = veoData.data?.taskId;
-    if (!taskId) throw new Error("No taskId returned from Veo API");
+    const taskId = resData.data?.taskId;
+    if (!taskId) throw new Error("No taskId returned from Kie API");
 
-    console.log(`✓ Veo task created: ${taskId}`);
+    console.log(`✓ Grok video task created: ${taskId}`);
 
-    // Store task reference on scene
+    // Store task reference on scene (grok_vid_task prefix to distinguish)
     await base44.asServiceRole.entities.Scenes.update(scene_id, {
-      video_url: `veo_task:${taskId}`,
+      video_url: `grok_vid_task:${taskId}`,
       status: "pending"
     });
 
@@ -106,7 +103,7 @@ Deno.serve(async (req) => {
       success: true,
       task_id: taskId,
       scene_number: scene.scene_number,
-      provider: "veo3_fast",
+      provider: "grok-imagine/image-to-video",
       status: "CREATED"
     });
 
