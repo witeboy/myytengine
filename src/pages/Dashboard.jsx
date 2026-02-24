@@ -33,13 +33,8 @@ function getStage(status) {
 }
 
 function getRoute(project) {
-  // UGC projects go to the appropriate downstream page based on status
-  if (isUgcProject(project)) {
-    const s = project.status;
-    if (['timeline_editing', 'compiled'].includes(s)) return `TimelineEditor?project_id=${project.id}`;
-    if (['post_production', 'published'].includes(s)) return `PostProduction?project_id=${project.id}`;
-    return `ContentGeneration?project_id=${project.id}`;
-  }
+  // UGC projects stay in the UGC pipeline (self-contained flow)
+  if (isUgcProject(project)) return `UGCPipeline?project_id=${project.id}`;
   
   // Repurpose projects go to ContentGeneration (they skip repurpose flow once created)
   if (isRepurposeProject(project)) {
