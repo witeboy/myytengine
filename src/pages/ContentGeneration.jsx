@@ -231,9 +231,10 @@ export default function ContentGeneration() {
           if (pollAbortRef.current) break;
 
           try {
-            const pollResult = await base44.functions.invoke('pollSceneVideo', {
+            const pollResponse = await base44.functions.invoke('pollSceneVideo', {
               scene_id: item.scene_id
             });
+            const pollResult = pollResponse.data || pollResponse;
 
             if (pollResult.status === 'COMPLETED') {
               setVideoProgress(prev => ({
