@@ -14,6 +14,11 @@ import {
   Edit, Sparkles, CheckCircle2, Play, Film, Wand2, ImageIcon
 } from 'lucide-react';
 import RepurposeTemplates from '@/components/templates/RepurposeTemplates';
+import VoicePicker from '@/components/repurpose/VoicePicker';
+import ScriptComparison from '@/components/repurpose/ScriptComparison';
+import HookVariants from '@/components/repurpose/HookVariants';
+import ThumbnailRecreator from '@/components/repurpose/ThumbnailRecreator';
+import MusicMatcher from '@/components/repurpose/MusicMatcher';
 
 const VISUAL_STYLES = [
   { value: 'cinematic_realistic', label: 'Cinematic Realistic' },
@@ -52,6 +57,12 @@ export default function ContentRepurpose() {
 
   // Step 4: New script
   const [newScript, setNewScript] = useState('');
+
+  // Voice selection
+  const [selectedVoiceId, setSelectedVoiceId] = useState('');
+
+  // Hook selection
+  const [selectedHook, setSelectedHook] = useState(null);
 
   const handleRepurposeTemplate = (t) => {
     if (t.sampleUrl && t.sampleUrl.length > 30) {
