@@ -12,7 +12,6 @@ export default function HookVariants({ analysis, newTitle, onSelectHook }) {
 
   const handleGenerate = async () => {
     setLoading(true);
-
     const result = await base44.integrations.Core.InvokeLLM({
       prompt: `You are a viral YouTube hook expert. Generate 3 different hook variants (the first 10-15 seconds of narration) for a video titled "${newTitle}".
 
@@ -47,7 +46,6 @@ Each hook should be 2-4 sentences, ready to read as voiceover narration. Match t
         }
       }
     });
-
     setHooks(result.hooks || []);
     setLoading(false);
   };
@@ -93,12 +91,11 @@ Each hook should be 2-4 sentences, ready to read as voiceover narration. Match t
                 </div>
                 <p className="text-xs text-gray-700 leading-relaxed">{hook.text}</p>
                 {hook.why_it_works && (
-                  <p className="text-[10px] text-gray-400 mt-1.5 italic">💡 {hook.why_it_works}</p>
+                  <p className="text-[10px] text-gray-400 mt-1.5 italic">{hook.why_it_works}</p>
                 )}
               </CardContent>
             </Card>
           ))}
-
           <Button onClick={handleGenerate} variant="ghost" size="sm" className="w-full gap-1 text-[10px] text-gray-400">
             <Zap className="w-3 h-3" /> Regenerate
           </Button>

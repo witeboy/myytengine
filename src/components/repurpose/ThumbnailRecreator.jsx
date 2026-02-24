@@ -7,19 +7,12 @@ import { Loader2, ImageIcon, RefreshCw, Download, ChevronDown, ChevronUp } from 
 import ThumbnailTweakEditor from '@/components/postprod/ThumbnailTweakEditor';
 
 export default function ThumbnailRecreator({ videoUrl, newTitle, projectId }) {
-  const [step, setStep] = useState('idle'); // idle | analyzing | tweaking | building | generating | done
+  const [step, setStep] = useState('idle');
   const [thumbnailAnalysis, setThumbnailAnalysis] = useState(null);
   const [originalThumbUrl, setOriginalThumbUrl] = useState('');
   const [generatedThumbUrl, setGeneratedThumbUrl] = useState('');
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(false);
-
-  const extractVideoId = (url) => {
-    const m = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/) ||
-              url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/) ||
-              url.match(/\/shorts\/([a-zA-Z0-9_-]{11})/);
-    return m ? m[1] : null;
-  };
 
   const handleAnalyze = async () => {
     setStep('analyzing');
@@ -39,8 +32,6 @@ export default function ThumbnailRecreator({ videoUrl, newTitle, projectId }) {
 
   const handleBuildAndGenerate = async (tweaks) => {
     setStep('building');
-
-    // Build prompt
     const promptResp = await base44.functions.invoke('buildTweakedThumbnailPrompt', {
       original_analysis: thumbnailAnalysis,
       tweaks: {
@@ -49,25 +40,17 @@ export default function ThumbnailRecreator({ videoUrl, newTitle, projectId }) {
       },
       thumbnail_url: originalThumbUrl,
     });
-
     const promptData = promptResp.data;
     if (!promptData.success || !promptData.prompt) {
       setError('Failed to build prompt');
       setStep('tweaking');
       return;
     }
-
-    // Generate image
     setStep('generating');
-    const imgResp = await base44.functions.invoke('generateTweakedThumbnailImage', {
-      prompt: promptData.prompt,
-    });
-
+    const imgResp = await base44.functions.invoke('generateTweakedThumbnailImage', { prompt: promptData.prompt });
     const imgData = imgResp.data;
     if (imgData.success && imgData.image_url) {
       setGeneratedThumbUrl(imgData.image_url);
-
-      // Save as thumbnail concept if project exists
       if (projectId) {
         await base44.entities.ThumbnailConcepts.create({
           project_id: projectId,
@@ -88,13 +71,10 @@ export default function ThumbnailRecreator({ videoUrl, newTitle, projectId }) {
   const handleQuickRecreate = async () => {
     if (!thumbnailAnalysis?.recreate_prompt) return;
     setStep('generating');
-
-    // Enhance prompt with new title
     let prompt = thumbnailAnalysis.recreate_prompt;
     if (newTitle) {
       prompt = prompt.replace(/["'][^"']{3,}["']/g, `"${newTitle}"`);
     }
-
     const imgResp = await base44.functions.invoke('generateTweakedThumbnailImage', { prompt });
     const imgData = imgResp.data;
     if (imgData.success && imgData.image_url) {
@@ -143,11 +123,9 @@ export default function ThumbnailRecreator({ videoUrl, newTitle, projectId }) {
 
             {step === 'tweaking' && thumbnailAnalysis && (
               <div className="space-y-3">
-                <div className="flex gap-2">
-                  <Button onClick={handleQuickRecreate} variant="outline" size="sm" className="flex-1 gap-1 text-xs">
-                    <RefreshCw className="w-3 h-3" /> Quick Recreate (No Changes)
-                  </Button>
-                </div>
+                <Button onClick={handleQuickRecreate} variant="outline" size="sm" className="w-full gap-1 text-xs">
+                  <RefreshCw className="w-3 h-3" /> Quick Recreate (No Changes)
+                </Button>
                 <ThumbnailTweakEditor
                   analysis={thumbnailAnalysis}
                   thumbnailUrl={originalThumbUrl}
