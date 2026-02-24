@@ -25,8 +25,8 @@ function isRepurposeProject(project) {
 }
 
 function getStage(status) {
-  if (['created', 'topics_ready', 'topic_selected', 'outline_ready', 'hooks_ready', 'scripting', 'script_complete', 'voiceover_ready'].includes(status)) return 1;
-  if (['scene_breakdown', 'breakdown_complete', 'content_generation', 'scenes_ready'].includes(status)) return 2;
+  if (['created', 'topics_ready', 'topic_selected', 'outline_ready', 'hooks_ready', 'scripting', 'script_complete'].includes(status)) return 1;
+  if (['voiceover_ready', 'scene_breakdown', 'breakdown_complete', 'content_generation', 'scenes_ready'].includes(status)) return 2;
   if (['timeline_editing', 'compiled'].includes(status)) return 3;
   if (['post_production', 'published'].includes(status)) return 4;
   return 1;
