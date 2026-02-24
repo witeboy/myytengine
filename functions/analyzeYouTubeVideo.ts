@@ -330,9 +330,13 @@ CRITICAL: The "original_script" field must contain the ENTIRE original transcrip
     analysis.transcript_length = transcript ? transcript.length : 0;
 
     // ALWAYS use the raw transcript as original_script — never trust Gemini to echo it back fully
-    if (transcript && transcript.length > 100) {
+    if (transcript && transcript.length > 50) {
       console.log(`[Analyze] Using raw transcript (${transcript.length} chars) as original_script instead of Gemini output (${(analysis.original_script || '').length} chars)`);
       analysis.original_script = transcript;
+      analysis.transcript_source = transcriptSource;
+    } else if (!analysis.original_script || analysis.original_script.length < 50) {
+      analysis.original_script = '';
+      analysis.transcript_source = 'none';
     }
 
     analysis.youtube_stats = {

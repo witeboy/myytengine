@@ -28,6 +28,8 @@ const VISUAL_STYLES = [
   { value: 'comic_book', label: 'Comic Book' },
   { value: 'humpty_dumpty', label: 'Humpty Dumpty' },
   { value: 'harry_potter', label: 'Harry Potter' },
+  { value: '3d_whiteboard_cartoon', label: '3D Whiteboard Cartoon' },
+  { value: 'low_poly_3d_cartoon', label: 'Low Poly 3D Cartoon' },
 ];
 
 export default function ContentRepurpose() {
