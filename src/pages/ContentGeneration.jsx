@@ -68,20 +68,21 @@ export default function ContentGeneration() {
   }, []);
 
   // ── REPAIR LOGIC: Fix Base64 Images ─────────────────────────
-  // This is the specific fix for the Veo animation error.
   const handleFixImages = async () => {
     setFixingImages(true);
     try {
       const result = await base44.functions.invoke('fix_base64_images', { project_id: projectId });
-      if (result.success) {
+      
+      if (result && result.success) {
         await refetchScenes();
-        // Custom message instead of browser alert for better UX
-        console.log(`Successfully fixed ${result.summary.fixed} images.`);
+        console.log(`Successfully fixed ${result.summary?.fixed || 0} images.`);
       } else {
-        console.error("Repair failed:", result.error);
+        console.error("Repair Function Error:", result?.error || "Unknown error");
+        alert("The repair script ran but encountered an issue: " + (result?.error || "Unknown"));
       }
     } catch (err) {
       console.error('Repair failed:', err);
+      alert("Repair failed with a server error. Please check your function logs in the dashboard.");
     } finally {
       setFixingImages(false);
     }
@@ -140,7 +141,6 @@ export default function ContentGeneration() {
   const handleGenerateVideos = async () => {
     const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
     
-    // Safety check for Base64 (Broken) images before animating
     const broken = freshScenes.filter(s => s.image_url?.startsWith('data:') && !s.video_url);
     if (broken.length > 0) {
       const fix = window.confirm(
@@ -241,7 +241,7 @@ export default function ContentGeneration() {
           </div>
         </div>
 
-        {/* 🚨 REPAIR BANNER - For fixing Base64 images */}
+        {/* 🚨 REPAIR BANNER */}
         {base64Count > 0 && (
           <div className="bg-rose-50 border border-rose-200 rounded-2xl p-6 mb-8 flex flex-col md:flex-row items-center gap-6 shadow-sm">
             <div className="bg-rose-100 p-4 rounded-full text-rose-600">
