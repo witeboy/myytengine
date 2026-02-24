@@ -73,9 +73,6 @@ export default function ContentRepurpose() {
   // Step 5: Pipeline
   const [projectId, setProjectId] = useState(null);
   const [pipelineStep, setPipelineStep] = useState('');
-  const [sceneCount, setSceneCount] = useState(0);
-  const [imagesDone, setImagesDone] = useState(0);
-  const [videosDone, setVideosDone] = useState(0);
 
   // ── Step 1→2: Analyze video via YouTube API + Gemini ──────────
   const [analyzeError, setAnalyzeError] = useState('');
