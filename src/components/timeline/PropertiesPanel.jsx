@@ -1,22 +1,47 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   X, Clock, Loader2, ImageIcon, Film,
-  Layers, Camera, Wand2, Volume2, ChevronDown, ChevronRight
+  Layers, Camera, Wand2, Volume2, ChevronDown, ChevronRight,
+  RefreshCw, Play, CheckCircle2, XCircle, AlertTriangle
 } from 'lucide-react';
 
 export default function PropertiesPanel({ scene, onClose, onUpdateDuration, onRefetch }) {
   const [duration, setDuration] = useState(scene?.duration_seconds || 8);
   const [regeneratingImage, setRegeneratingImage] = useState(false);
-  const [regeneratingVideo, setRegeneratingVideo] = useState(false);
+  const [generatingVideo, setGeneratingVideo] = useState(false);
+  const [pollingVideo, setPollingVideo] = useState(false);
   const [expanded, setExpanded] = useState({ basic: true, media: true, audio: false, prompt: false, transition: false });
+  const pollRef = useRef(null);
 
   useEffect(() => {
     if (scene) setDuration(scene.duration_seconds || 8);
   }, [scene?.id]);
+
+  // Auto-poll pending video tasks
+  const hasPendingTask = scene?.video_url?.startsWith('grok_vid_task:') ||
+    scene?.video_url?.startsWith('veo_task:');
+
+  useEffect(() => {
+    if (hasPendingTask && !pollingVideo) {
+      setPollingVideo(true);
+      setGeneratingVideo(true);
+      pollRef.current = setInterval(async () => {
+        const res = await base44.functions.invoke('pollSceneVideo', { scene_id: scene.id });
+        const status = res.data?.status;
+        if (status === 'COMPLETED' || status === 'FAILED') {
+          clearInterval(pollRef.current);
+          setPollingVideo(false);
+          setGeneratingVideo(false);
+          onRefetch?.();
+        }
+      }, 12000);
+    }
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [scene?.video_url, scene?.id]);
 
   if (!scene) {
     return (
@@ -29,12 +54,50 @@ export default function PropertiesPanel({ scene, onClose, onUpdateDuration, onRe
 
   const toggle = (key) => setExpanded(p => ({ ...p, [key]: !p[key] }));
 
-  const handleRegenImage = async () => { setRegeneratingImage(true); await base44.functions.invoke('generateSceneImage', { scene_id: scene.id }); onRefetch?.(); setRegeneratingImage(false); };
-  const handleRegenVideo = async () => { setRegeneratingVideo(true); await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id }); onRefetch?.(); setRegeneratingVideo(false); };
+  // Generate or regenerate image using generateSceneImage (same as ContentGeneration)
+  const handleGenerateImage = async () => {
+    setRegeneratingImage(true);
+    await base44.functions.invoke('generateSceneImage', { scene_id: scene.id });
+    onRefetch?.();
+    setRegeneratingImage(false);
+  };
+
+  // Animate image to video using generateSceneVideo (same as ContentGeneration)
+  const handleAnimateVideo = async () => {
+    setGeneratingVideo(true);
+    const res = await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
+    onRefetch?.();
+    // Start polling
+    const taskId = res.data?.task_id;
+    if (taskId) {
+      setPollingVideo(true);
+      pollRef.current = setInterval(async () => {
+        const pollRes = await base44.functions.invoke('pollSceneVideo', { scene_id: scene.id });
+        const status = pollRes.data?.status;
+        if (status === 'COMPLETED' || status === 'FAILED') {
+          clearInterval(pollRef.current);
+          setPollingVideo(false);
+          setGeneratingVideo(false);
+          onRefetch?.();
+        }
+      }, 12000);
+    } else {
+      setGeneratingVideo(false);
+    }
+  };
 
   const hasVideo = scene.video_url?.startsWith('http');
   const hasImage = scene.image_url?.startsWith('http');
-  const statusColor = hasVideo ? 'text-purple-400 bg-purple-500/10' : hasImage ? 'text-emerald-400 bg-emerald-500/10' : 'text-gray-500 bg-gray-500/10';
+  const isPendingVideo = hasPendingTask;
+  const isFailed = scene.status === 'failed' || scene.status === 'video_failed';
+
+  const statusLabel = isPendingVideo ? 'animating' : scene.status?.replace(/_/g, ' ');
+  const statusColor = isPendingVideo
+    ? 'text-amber-400 bg-amber-500/10'
+    : hasVideo ? 'text-purple-400 bg-purple-500/10'
+    : hasImage ? 'text-emerald-400 bg-emerald-500/10'
+    : isFailed ? 'text-red-400 bg-red-500/10'
+    : 'text-gray-500 bg-gray-500/10';
 
   const Section = ({ label, icon: Icon, sKey, children }) => (
     <div className="border-b border-gray-700/30">
@@ -53,8 +116,9 @@ export default function PropertiesPanel({ scene, onClose, onUpdateDuration, onRe
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-700/40 flex-shrink-0">
         <div className="flex items-center gap-1.5">
           <span className="text-[11px] font-bold text-white">Scene {scene.scene_number}</span>
-          <span className={`text-[8px] px-1.5 py-0.5 rounded ${statusColor} font-medium`}>
-            {scene.status?.replace(/_/g, ' ')}
+          <span className={`text-[8px] px-1.5 py-0.5 rounded ${statusColor} font-medium flex items-center gap-0.5`}>
+            {isPendingVideo && <Loader2 className="w-2 h-2 animate-spin" />}
+            {statusLabel}
           </span>
         </div>
         <button onClick={onClose} className="text-gray-600 hover:text-white transition-colors p-0.5">
@@ -94,30 +158,68 @@ export default function PropertiesPanel({ scene, onClose, onUpdateDuration, onRe
           </div>
         </Section>
 
-        {/* Media */}
+        {/* Media — Image + Video generation */}
         <Section label="Media" icon={Film} sKey="media">
-          <div className="aspect-video bg-black rounded overflow-hidden">
+          {/* Preview */}
+          <div className="aspect-video bg-black rounded overflow-hidden relative">
             {hasVideo ? (
               <video src={scene.video_url} className="w-full h-full object-cover" controls />
             ) : hasImage ? (
               <img src={scene.image_url} className="w-full h-full object-cover" alt="" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-700"><Film className="w-5 h-5" /></div>
+              <div className="w-full h-full flex items-center justify-center text-gray-700">
+                <ImageIcon className="w-5 h-5" />
+              </div>
+            )}
+            {isPendingVideo && (
+              <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center">
+                <Loader2 className="w-5 h-5 text-amber-400 animate-spin mb-1" />
+                <p className="text-[9px] text-amber-300 font-medium">Animating...</p>
+                <p className="text-[8px] text-gray-400">Polling every 12s</p>
+              </div>
+            )}
+            {isFailed && !hasVideo && !isPendingVideo && (
+              <div className="absolute top-1 right-1 bg-red-500/80 rounded p-0.5">
+                <AlertTriangle className="w-3 h-3 text-white" />
+              </div>
             )}
           </div>
-          <div className="flex gap-1">
-            <Button size="sm" variant="outline" onClick={handleRegenImage} disabled={regeneratingImage}
-              className="flex-1 text-[8px] h-6 gap-0.5 border-gray-700/40 text-gray-400 hover:text-white hover:bg-white/10">
-              {regeneratingImage ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <ImageIcon className="w-2.5 h-2.5" />}
-              Image
+
+          {/* Generate Image button */}
+          <Button size="sm" variant="outline" onClick={handleGenerateImage} disabled={regeneratingImage}
+            className="w-full text-[9px] h-7 gap-1 border-gray-700/40 text-gray-300 hover:text-white hover:bg-emerald-500/10 hover:border-emerald-500/30">
+            {regeneratingImage ? <Loader2 className="w-3 h-3 animate-spin" /> : <ImageIcon className="w-3 h-3" />}
+            {hasImage ? 'Regenerate Image' : 'Generate Image'}
+          </Button>
+
+          {/* Animate to Video button */}
+          {hasImage && (
+            <Button size="sm" variant="outline" onClick={handleAnimateVideo} disabled={generatingVideo || isPendingVideo}
+              className="w-full text-[9px] h-7 gap-1 border-gray-700/40 text-gray-300 hover:text-white hover:bg-purple-500/10 hover:border-purple-500/30">
+              {generatingVideo ? (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  {pollingVideo ? 'Rendering...' : 'Submitting...'}
+                </>
+              ) : (
+                <>
+                  <Play className="w-3 h-3" />
+                  {hasVideo ? 'Re-Animate Video' : 'Animate to Video'}
+                </>
+              )}
             </Button>
-            {hasImage && (
-              <Button size="sm" variant="outline" onClick={handleRegenVideo} disabled={regeneratingVideo}
-                className="flex-1 text-[8px] h-6 gap-0.5 border-gray-700/40 text-gray-400 hover:text-white hover:bg-white/10">
-                {regeneratingVideo ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Film className="w-2.5 h-2.5" />}
-                Video
-              </Button>
-            )}
+          )}
+
+          {/* Status row */}
+          <div className="flex items-center gap-2 text-[8px]">
+            <span className="flex items-center gap-0.5 text-gray-500">
+              <ImageIcon className="w-2.5 h-2.5" />
+              {hasImage ? <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" /> : <XCircle className="w-2.5 h-2.5 text-gray-600" />}
+            </span>
+            <span className="flex items-center gap-0.5 text-gray-500">
+              <Film className="w-2.5 h-2.5" />
+              {hasVideo ? <CheckCircle2 className="w-2.5 h-2.5 text-purple-400" /> : isPendingVideo ? <Loader2 className="w-2.5 h-2.5 text-amber-400 animate-spin" /> : <XCircle className="w-2.5 h-2.5 text-gray-600" />}
+            </span>
           </div>
         </Section>
 
@@ -171,6 +273,12 @@ export default function PropertiesPanel({ scene, onClose, onUpdateDuration, onRe
             <label className="text-[8px] text-gray-500 font-medium block mb-0.5">Image Prompt</label>
             <p className="text-[9px] text-gray-300 bg-[#0f0f23] rounded p-1.5 max-h-16 overflow-y-auto leading-snug">
               {scene.image_prompt || '—'}
+            </p>
+          </div>
+          <div>
+            <label className="text-[8px] text-gray-500 font-medium block mb-0.5">Animation Prompt</label>
+            <p className="text-[9px] text-gray-300 bg-[#0f0f23] rounded p-1.5 max-h-16 overflow-y-auto leading-snug">
+              {scene.animation_prompt || '—'}
             </p>
           </div>
         </Section>
