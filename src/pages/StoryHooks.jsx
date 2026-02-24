@@ -84,7 +84,19 @@ export default function StoryHooks() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <StageProgress currentStage={1} projectStatus={project?.status} />
       <div className="max-w-5xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-2">Select an Opening Hook</h1>
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-3xl font-bold">Select an Opening Hook</h1>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => navigate(createPageUrl(`StoryDuration?project_id=${projectId}`))} className="gap-2">
+              <ArrowLeft className="w-4 h-4" /> Duration
+            </Button>
+            {project && ['hooks_ready','scripting','script_complete','voiceover_ready','scene_breakdown','breakdown_complete','content_generation','scenes_ready'].includes(project.status) && (
+              <Button onClick={() => navigate(createPageUrl(`StoryScript?project_id=${projectId}`))} className="bg-blue-600 hover:bg-blue-700 gap-2">
+                Continue <ArrowRight className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+        </div>
         <p className="text-gray-600 mb-8">
           Topic: <span className="font-semibold">{topic?.title || 'Loading...'}</span>
         </p>
