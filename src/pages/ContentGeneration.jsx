@@ -215,7 +215,7 @@ export default function ContentGeneration() {
       setVideoProgress(prev => ({
         ...prev,
         phase: 'polling',
-        sceneName: `${pendingPolls.length} scenes rendering with Veo 3.1...`
+        sceneName: `${pendingPolls.length} scenes rendering with Grok Imagine...`
       }));
 
       let remaining = [...pendingPolls];
