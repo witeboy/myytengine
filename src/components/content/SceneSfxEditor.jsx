@@ -13,14 +13,31 @@ export default function SceneSfxEditor({ scene, onUpdate }) {
   const handleSuggest = async () => {
     setGenerating(true);
     const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `Suggest a brief sound effect description for this video scene narration: "${scene.narration_text}". 
-Return just the sound effect description, like "thunder rumble", "crowd murmur", "door creaking". Keep it under 8 words. Return JSON: { "sfx": "description" }`,
+      prompt: `You are an expert foley artist. Given this scene narration, suggest the single BEST minimal sound effect that would make this scene feel real and immersive.
+
+NARRATION: "${scene.narration_text}"
+
+RULES:
+- Only suggest a sound effect if it would genuinely enhance the scene. If the scene is purely dialogue/narration with no physical action, return "none"
+- Be SPECIFIC and REALISTIC: "pen writing on paper", "phone notification ding", "wooden door creaking open", "knife chopping vegetables", "gentle breeze through leaves", "bed frame squeaking", "coffee being poured into mug"
+- Keep it under 6 words
+- Focus on the single most impactful sound, not multiple
+- Think about what sound the VIEWER would expect to hear in this moment
+
+Return JSON: { "sfx": "description", "needed": true/false }`,
       response_json_schema: {
         type: "object",
-        properties: { sfx: { type: "string" } }
+        properties: { 
+          sfx: { type: "string" },
+          needed: { type: "boolean" }
+        }
       }
     });
-    if (result?.sfx) setSfx(result.sfx);
+    if (result?.needed && result?.sfx && result.sfx !== 'none') {
+      setSfx(result.sfx);
+    } else {
+      setSfx('');
+    }
     setGenerating(false);
   };
 
