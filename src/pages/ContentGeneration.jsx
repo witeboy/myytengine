@@ -685,7 +685,7 @@ export default function ContentGeneration() {
                   {videoStatusCounts.upgrading > 0 && ` · ${videoStatusCounts.upgrading} upgrading to 1080p`}
                   {videoStatusCounts.queued > 0 && ` · ${videoStatusCounts.queued} queued`}
                   {videoStatusCounts.failed > 0 && ` · ${videoStatusCounts.failed} failed`}
-                  {videoProgress.phase === 'polling' && ' · Polling every 15s'}
+                  {videoProgress.phase === 'polling' && ' · Polling every 20s'}
                 </p>
               </div>
             </div>
