@@ -17,6 +17,8 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
   const audioRef = useRef(null);
   const previewAudioRef = useRef(null);
   const [previewingVoice, setPreviewingVoice] = useState(null);
+  const [loadingPreview, setLoadingPreview] = useState(null); // voice_id currently loading
+  const [previewCache, setPreviewCache] = useState({}); // voice_id -> preview_url
   const [settings, setSettings] = useState(null);
 
   // Filters
