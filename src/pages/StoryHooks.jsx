@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { createPageUrl } from '@/utils';
 import StageProgress from '@/components/StageProgress';
-import { Loader2, Zap, Check } from 'lucide-react';
+import { Loader2, Zap, Check, ArrowLeft, ArrowRight } from 'lucide-react';
 
 export default function StoryHooks() {
   const navigate = useNavigate();
