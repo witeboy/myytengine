@@ -49,7 +49,14 @@ export default function StoryTopics() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <StageProgress currentStage={1} projectStatus={project?.status} />
       <div className="max-w-5xl mx-auto px-4 py-8">
-        <h1 className="text-3xl font-bold mb-2">Select a Topic</h1>
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-3xl font-bold">Select a Topic</h1>
+          {project && ['topic_selected','outline_ready','hooks_ready','scripting','script_complete','voiceover_ready','scene_breakdown','breakdown_complete','content_generation','scenes_ready','timeline_editing','compiled','post_production','published'].includes(project.status) && (
+            <Button onClick={() => navigate(createPageUrl(`StoryDuration?project_id=${projectId}`))} className="bg-blue-600 hover:bg-blue-700 gap-2">
+              Continue <ArrowRight className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
         <p className="text-gray-600 mb-8">Choose the best topic for your video ({topics.length} generated)</p>
 
         {isLoading ? (
