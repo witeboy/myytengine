@@ -423,7 +423,7 @@ export default function ContentGeneration() {
         narration: s.narration_text,
         duration: s.duration_seconds,
         image_file: s.image_url ? `S${String(s.scene_number).padStart(2, '0')}_${getArcLabel(s)}_image.${getExtension(s.image_url, 'png')}` : null,
-        video_file: (s.video_url && !s.video_url.startsWith('veo_task:') && s.video_url.startsWith('http'))
+        video_file: (s.video_url && !s.video_url.startsWith('veo_task:') && !s.video_url.startsWith('grok_vid_task:') && s.video_url.startsWith('http'))
           ? `S${String(s.scene_number).padStart(2, '0')}_${getArcLabel(s)}_video.${getExtension(s.video_url, 'mp4')}`
           : null,
       }));
