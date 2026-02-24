@@ -480,7 +480,7 @@ export default function ContentGeneration() {
   // ── Computed counts ───────────────────────────────────────────
   const imageCount = scenes.filter(s => s.image_url).length;
   const videoCount = scenes.filter(s => s.video_url && s.video_url.startsWith('http')).length;
-  const animatingCount = scenes.filter(s => s.video_url?.startsWith('veo_task:') || s.status === 'pending').length;
+  const animatingCount = scenes.filter(s => s.video_url?.startsWith('grok_vid_task:') || s.video_url?.startsWith('veo_task:') || s.status === 'pending').length;
   const breakdownReadyCount = scenes.filter(s => s.status === 'breakdown_ready').length;
   const promptsReadyCount = scenes.filter(s => s.status === 'prompts_ready').length;
   const directorNotesCount = scenes.filter(s => s.image_prompt?.startsWith('DIRECTOR_NOTES:')).length;
