@@ -500,116 +500,13 @@ Write the complete narration script. Return ONLY the script text, no headers or 
           </div>
         )}
 
-        {/* Step 5: Pipeline Running */}
+        {/* Step 5: Redirecting */}
         {step === 5 && (
           <Card>
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2"><Wand2 className="w-5 h-5 text-emerald-600" /> Pipeline</CardTitle>
-              <div className="flex flex-wrap gap-2 mt-2">
-                <Badge variant="outline" className="text-[11px]">{selectedStyle.replace(/_/g, ' ')}</Badge>
-                <Badge variant="outline" className="text-[11px]">{selectedOrientation === 'portrait' ? '📱 Portrait' : '🖥️ Landscape'}</Badge>
-                <Badge variant="outline" className="text-[11px]">{newTitle || analysis?.title}</Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Pipeline Steps Tracker */}
-              <div className="space-y-2">
-                {[
-                  { key: 'project', label: 'Create Project', icon: '📁' },
-                  { key: 'script', label: 'Save Script', icon: '📝' },
-                  { key: 'voiceover', label: 'Generate Voiceover', icon: '🎙️' },
-                  { key: 'breakdown', label: 'Scene Breakdown', icon: '🎬' },
-                  { key: 'prompts', label: 'Visual Prompts', icon: '🖌️' },
-                  { key: 'images', label: 'Generate Images', icon: '🖼️' },
-                  { key: 'videos', label: 'Animate Videos (Veo 3.1)', icon: '🎥' },
-                ].map((s, i) => {
-                  const currentIdx =
-                    pipelineStep.includes('Creating') ? 0 :
-                    pipelineStep.includes('Saving') ? 1 :
-                    pipelineStep.includes('voiceover') ? 2 :
-                    pipelineStep.includes('Breaking') ? 3 :
-                    pipelineStep.includes('visual prompts') || pipelineStep.includes('Converting') ? 4 :
-                    pipelineStep.includes('image') || pipelineStep.includes('Generating image') ? 5 :
-                    pipelineStep.includes('Animating') || pipelineStep.includes('Submitting') || pipelineStep.includes('Rendering') ? 6 :
-                    pipelineStep.includes('complete') ? 7 : -1;
-
-                  const isDone = i < currentIdx || (!loading && pipelineStep.includes('complete'));
-                  const isActive = i === currentIdx && loading;
-
-                  return (
-                    <div key={s.key} className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all ${
-                      isDone ? 'bg-green-50 text-green-700' :
-                      isActive ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' :
-                      'bg-gray-50 text-gray-400'
-                    }`}>
-                      {isDone ? (
-                        <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />
-                      ) : isActive ? (
-                        <Loader2 className="w-4 h-4 animate-spin text-emerald-600 flex-shrink-0" />
-                      ) : (
-                        <span className="w-4 h-4 flex-shrink-0 text-center text-xs">{s.icon}</span>
-                      )}
-                      <span className="font-medium">{s.label}</span>
-                      {isActive && s.key === 'images' && sceneCount > 0 && (
-                        <span className="ml-auto text-xs">{imagesDone}/{sceneCount}</span>
-                      )}
-                      {isActive && s.key === 'videos' && (
-                        <span className="ml-auto text-xs">{videosDone} done</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {loading && (
-                <Progress value={
-                  pipelineStep.includes('Creating') ? 3 :
-                  pipelineStep.includes('Saving') ? 7 :
-                  pipelineStep.includes('voiceover') ? 15 :
-                  pipelineStep.includes('Breaking') ? 25 :
-                  pipelineStep.includes('visual prompts') || pipelineStep.includes('Converting') ? 35 :
-                  pipelineStep.includes('image') || pipelineStep.includes('Generating image') ? 35 + (imagesDone / Math.max(sceneCount, 1)) * 30 :
-                  pipelineStep.includes('Animating') || pipelineStep.includes('Submitting') ? 68 :
-                  pipelineStep.includes('Rendering') ? 70 + (videosDone / Math.max(sceneCount, 1)) * 25 :
-                  pipelineStep.includes('complete') ? 100 : 20
-                } className="h-2" />
-              )}
-
-              {!loading && pipelineStep.includes('complete') && (
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-                  <CheckCircle2 className="w-8 h-8 text-green-600 mx-auto mb-2" />
-                  <p className="font-medium text-green-800">Pipeline Complete!</p>
-                  <p className="text-xs text-green-600 mt-1">
-                    {sceneCount} scenes with images + {videosDone} animated videos. Open the editor to review.
-                  </p>
-                </div>
-              )}
-
-              {projectId && !loading && (
-                <div className="space-y-4">
-                  {/* Thumbnail Recreation */}
-                  <ThumbnailRecreator
-                    videoUrl={videoUrl}
-                    newTitle={newTitle}
-                    projectId={projectId}
-                  />
-
-                  {/* Music Matching */}
-                  <MusicMatcher
-                    analysis={analysis}
-                    projectId={projectId}
-                  />
-
-                  <div className="flex gap-3">
-                    <Button onClick={() => navigate(createPageUrl(`ContentGeneration?project_id=${projectId}`))} className="flex-1 bg-emerald-600 hover:bg-emerald-700 gap-2">
-                      <ImageIcon className="w-4 h-4" /> Content Editor
-                    </Button>
-                    <Button variant="outline" onClick={() => navigate(createPageUrl(`TimelineEditor?project_id=${projectId}`))} className="flex-1 gap-2">
-                      <Film className="w-4 h-4" /> Timeline
-                    </Button>
-                  </div>
-                </div>
-              )}
+            <CardContent className="py-12 text-center space-y-4">
+              <Loader2 className="w-8 h-8 animate-spin text-emerald-600 mx-auto" />
+              <p className="font-medium text-gray-700">{pipelineStep || 'Setting up project...'}</p>
+              <p className="text-xs text-gray-400">Creating project and saving script, then redirecting to Content Generation...</p>
             </CardContent>
           </Card>
         )}
