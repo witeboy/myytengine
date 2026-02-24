@@ -297,14 +297,20 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
                       }`}
                       onClick={() => setSelectedVoice(v.voice_id)}
                     >
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handlePreviewVoice(v); }}
-                        className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
-                          isPreviewing ? 'bg-purple-600 text-white' : 'bg-gray-100 hover:bg-purple-100 text-gray-600 hover:text-purple-700'
-                        }`}
-                      >
-                        {isPreviewing ? <Square className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
-                      </button>
+                      {v.preview_url ? (
+                       <button
+                         onClick={(e) => { e.stopPropagation(); handlePreviewVoice(v); }}
+                         className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                           isPreviewing ? 'bg-purple-600 text-white' : 'bg-gray-100 hover:bg-purple-100 text-gray-600 hover:text-purple-700'
+                         }`}
+                       >
+                         {isPreviewing ? <Square className="w-3 h-3" /> : <Play className="w-3 h-3 ml-0.5" />}
+                       </button>
+                      ) : (
+                       <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-50 flex items-center justify-center">
+                         <Mic className="w-3 h-3 text-gray-300" />
+                       </div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <p className="font-medium truncate">{v.name}</p>
                         <p className="text-xs text-gray-500 truncate">
