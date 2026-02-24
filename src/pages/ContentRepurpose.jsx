@@ -11,14 +11,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { createPageUrl } from '@/utils';
 import {
   Loader2, ArrowLeft, ArrowRight, RefreshCw, Search, FileText,
-  Edit, Sparkles, CheckCircle2, Play, Film, Wand2, ImageIcon
+  Edit, Sparkles, CheckCircle2, Play, Film
 } from 'lucide-react';
 import RepurposeTemplates from '@/components/templates/RepurposeTemplates';
 import VoicePicker from '@/components/repurpose/VoicePicker';
 import ScriptComparison from '@/components/repurpose/ScriptComparison';
 import HookVariants from '@/components/repurpose/HookVariants';
-import ThumbnailRecreator from '@/components/repurpose/ThumbnailRecreator';
-import MusicMatcher from '@/components/repurpose/MusicMatcher';
 
 const VISUAL_STYLES = [
   { value: 'cinematic_realistic', label: 'Cinematic Realistic' },
