@@ -43,7 +43,6 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
 
   const filteredVoices = useMemo(() => {
     return voices.filter(v => {
-      if (!v.preview_url) return false;
       const q = searchQuery.toLowerCase();
       if (q) {
         const name = (v.name || '').toLowerCase();
