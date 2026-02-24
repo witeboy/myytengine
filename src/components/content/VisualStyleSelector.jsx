@@ -17,6 +17,7 @@ const STYLES = [
   { id: 'humpty_dumpty', label: 'Humpty Dumpty', desc: 'Minimalist stick-figure cartoon with circle heads & flat colors', emoji: '🥚' },
   { id: 'harry_potter', label: 'Harry Potter', desc: 'Dark whimsical illustration with teal atmosphere & gothic charm', emoji: '🧙' },
   { id: '3d_whiteboard_cartoon', label: '3D Whiteboard Cartoon', desc: 'Clean cartoon outlines, bright flat colors, isometric depth, explainer style', emoji: '🖊️' },
+  { id: 'low_poly_3d_cartoon', label: 'Low-Poly 3D Cartoon', desc: 'Faceted geometric 3D characters, vibrant suburban worlds, Pixar-meets-polygon charm', emoji: '🔷' },
 ];
 
 export default function VisualStyleSelector({ selectedStyle, onSelect }) {
