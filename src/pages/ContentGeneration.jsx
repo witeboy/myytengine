@@ -405,7 +405,7 @@ export default function ContentGeneration() {
         }
 
         // ── Download video ────────────────────────────────────────
-        if (scene.video_url && !scene.video_url.startsWith('veo_task:') && scene.video_url.startsWith('http')) {
+        if (scene.video_url && !scene.video_url.startsWith('veo_task:') && !scene.video_url.startsWith('grok_vid_task:') && scene.video_url.startsWith('http')) {
           setExportProgress({ current: downloaded, total: totalAssets, label: `${prefix}_video` });
           const ext = getExtension(scene.video_url, 'mp4');
           const blob = await fetchAsBlob(scene.video_url);
