@@ -9,19 +9,20 @@ import { createPageUrl } from '@/utils';
 import StageProgress from '@/components/StageProgress';
 import TimelineTrack from '@/components/timeline/TimelineTrack';
 import TimelineRuler from '@/components/timeline/TimelineRuler';
-import ScenePreview from '@/components/timeline/ScenePreview';
-import PreviewMonitor from '@/components/timeline/PreviewMonitor';
+import PreviewPanel from '@/components/timeline/PreviewPanel';
+import PropertiesPanel from '@/components/timeline/PropertiesPanel';
+import MediaBrowser from '@/components/timeline/MediaBrowser';
 import ExportPanel from '@/components/timeline/ExportPanel';
 import VideoExporter from '@/components/timeline/VideoExporter';
 import useVideoExport from '@/components/timeline/useVideoExport';
 import SceneReorder from '@/components/timeline/SceneReorder';
 import TransitionLibrary from '@/components/timeline/TransitionLibrary';
+import DownloadAllMedia from '@/components/content/DownloadAllMedia';
 import {
   Loader2, Import, Download, Film, Play, Pause, Package, ArrowRight,
-  SlidersHorizontal, GripVertical, SkipBack, SkipForward, Volume2, VolumeX,
-  Mic, Music, ZoomIn, ZoomOut, Maximize2
+  SkipBack, SkipForward, Volume2, VolumeX, Mic, Music, ZoomIn, ZoomOut,
+  GripVertical, Undo2, Redo2, Scissors, Copy, Trash2, Monitor
 } from 'lucide-react';
-import DownloadAllMedia from '@/components/content/DownloadAllMedia';
 
 export default function TimelineEditor() {
   const navigate = useNavigate();
@@ -32,7 +33,7 @@ export default function TimelineEditor() {
   const [showExportPanel, setShowExportPanel] = useState(false);
   const [showExporter, setShowExporter] = useState(false);
   const [showReorder, setShowReorder] = useState(false);
-  const [transitionTarget, setTransitionTarget] = useState(null); // { sceneA, sceneB }
+  const [transitionTarget, setTransitionTarget] = useState(null);
   const exportHook = useVideoExport();
   const timelineRef = useRef(null);
 
@@ -84,7 +85,6 @@ export default function TimelineEditor() {
   const selectedMusic = musicTracks.find(t => t.is_selected);
   const musicUrl = selectedMusic?.audio_url;
 
-  // Sync music volume from DB
   useEffect(() => {
     if (selectedMusic?.volume != null) setMusicVol(selectedMusic.volume);
   }, [selectedMusic?.volume]);
@@ -249,7 +249,6 @@ export default function TimelineEditor() {
   };
 
   const handlePlayPause = () => setIsPlaying(prev => !prev);
-  const handleSeek = (time) => setCurrentTime(Math.max(0, Math.min(totalDuration, time)));
 
   const handlePrevScene = () => {
     const idx = Math.max(0, currentSceneIndex - 1);
@@ -288,35 +287,32 @@ export default function TimelineEditor() {
   };
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] text-white flex flex-col">
-      <StageProgress currentStage={3} />
-
-      {/* Top toolbar */}
-      <div className="bg-[#16213e] border-b border-gray-700 px-4 py-2 flex items-center justify-between">
+    <div className="h-screen flex flex-col bg-[#0d0d1a] text-white overflow-hidden">
+      {/* Top Navigation Bar */}
+      <div className="bg-[#16213e] border-b border-gray-700/50 px-3 py-1.5 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
-          <h1 className="text-lg font-semibold">{project?.name || 'Timeline'}</h1>
-          <span className="text-xs text-gray-400">
+          <StageProgress currentStage={3} />
+          <div className="w-px h-5 bg-gray-700" />
+          <h1 className="text-sm font-semibold text-white truncate max-w-[200px]">{project?.name || 'Timeline Editor'}</h1>
+          <span className="text-[10px] text-gray-500">
             {scenes.length} scenes • {Math.round(totalDuration)}s
-            {voiceoverDuration > 0 && <span className="text-blue-400 ml-1">VO: {Math.round(voiceoverDuration)}s</span>}
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          {scenes.length === 0 || project?.status === 'content_generation' || project?.status === 'scenes_ready' ? (
-            <Button onClick={handleImport} disabled={importing} size="sm" className="bg-blue-600 hover:bg-blue-700 text-xs">
-              {importing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Import className="w-3 h-3 mr-1" />}
+        <div className="flex items-center gap-1.5">
+          {(scenes.length === 0 || project?.status === 'content_generation' || project?.status === 'scenes_ready') && (
+            <Button onClick={handleImport} disabled={importing} size="sm" className="bg-blue-600 hover:bg-blue-700 text-[10px] h-7 gap-1">
+              {importing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Import className="w-3 h-3" />}
               Import
             </Button>
-          ) : null}
+          )}
           {scenes.length > 0 && (
             <>
-              <Button variant="ghost" size="sm" onClick={() => setShowReorder(p => !p)} className="text-gray-300 hover:text-white text-xs">
-                <GripVertical className="w-3 h-3 mr-1" /> Reorder
+              <Button variant="ghost" size="sm" onClick={() => setShowReorder(p => !p)} className="text-gray-400 hover:text-white text-[10px] h-7 gap-1">
+                <GripVertical className="w-3 h-3" /> Reorder
               </Button>
-              <Button size="sm" onClick={() => setShowExporter(true)} className="bg-green-600 hover:bg-green-700 text-xs">
-                <Download className="w-3 h-3 mr-1" /> Export
-              </Button>
-              <Button size="sm" onClick={() => setShowExportPanel(p => !p)} variant="ghost" className="text-gray-300 text-xs">
-                <Package className="w-3 h-3 mr-1" /> Assets
+              <DownloadAllMedia scenes={scenesWithTiming} voiceoverUrl={voiceoverUrl} musicUrl={musicUrl} projectName={project?.name} />
+              <Button size="sm" onClick={() => setShowExporter(true)} className="bg-green-600 hover:bg-green-700 text-[10px] h-7 gap-1">
+                <Download className="w-3 h-3" /> Export
               </Button>
               <Button
                 size="sm"
@@ -324,31 +320,23 @@ export default function TimelineEditor() {
                   await base44.entities.Projects.update(projectId, { status: 'post_production', current_step: 11 });
                   navigate(createPageUrl(`PostProduction?project_id=${projectId}`));
                 }}
-                className="bg-blue-600 hover:bg-blue-700 text-xs"
+                className="bg-blue-600 hover:bg-blue-700 text-[10px] h-7 gap-1"
               >
-                Next <ArrowRight className="w-3 h-3 ml-1" />
+                Next <ArrowRight className="w-3 h-3" />
               </Button>
             </>
           )}
         </div>
       </div>
 
-      {/* Download media */}
-      {scenes.length > 0 && (
-        <div className="px-4 pt-2">
-          <DownloadAllMedia scenes={scenesWithTiming} voiceoverUrl={voiceoverUrl} musicUrl={musicUrl} projectName={project?.name} />
-        </div>
-      )}
-
-      {/* Reorder panel */}
+      {/* Reorder & Export Panels */}
       {showReorder && scenes.length > 0 && (
-        <div className="px-4 pt-2">
+        <div className="px-3 py-2 border-b border-gray-700/50 bg-[#16213e]">
           <SceneReorder scenes={scenesWithTiming} onRefetch={refetchScenes} />
         </div>
       )}
-
       {showExportPanel && scenes.length > 0 && (
-        <div className="px-4 pt-2">
+        <div className="px-3 py-2 border-b border-gray-700/50 bg-[#16213e]">
           <ExportPanel
             project={project} scenesWithTiming={scenesWithTiming} voiceoverUrl={voiceoverUrl}
             musicUrl={musicUrl} musicVolume={musicVol} totalDuration={totalDuration}
@@ -357,60 +345,74 @@ export default function TimelineEditor() {
         </div>
       )}
 
-      {/* Main content area: Preview + Scene detail */}
-      <div className="flex-1 flex flex-col lg:flex-row gap-0 min-h-0">
-        {/* Preview monitor */}
-        <div className="flex-1 flex flex-col items-center justify-center p-4 min-h-[300px]">
+      {/* ═══════ MAIN EDITOR AREA: 3-Panel Layout ═══════ */}
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        {/* LEFT: Media Browser */}
+        <div className="w-56 flex-shrink-0 overflow-hidden">
+          <MediaBrowser
+            scenes={scenesWithTiming}
+            selectedScene={selectedScene}
+            onSelectScene={setSelectedScene}
+            voiceoverUrl={voiceoverUrl}
+            musicUrl={musicUrl}
+          />
+        </div>
+
+        {/* CENTER: Properties Panel */}
+        <div className="w-64 flex-shrink-0 overflow-hidden">
+          <PropertiesPanel
+            scene={scenesWithTiming.find(s => s.id === selectedScene)}
+            onClose={() => setSelectedScene(null)}
+            onUpdateDuration={(dur) => handleUpdateDuration(selectedScene, dur)}
+            onRefetch={refetchScenes}
+          />
+        </div>
+
+        {/* RIGHT: Preview Monitor */}
+        <div className="flex-1 min-w-0 overflow-hidden">
           {scenes.length > 0 ? (
-            <PreviewMonitor
+            <PreviewPanel
               currentScene={currentScene}
               currentTime={currentTime}
               isPlaying={isPlaying}
               totalScenes={scenes.length}
               totalDuration={totalDuration}
+              orientation={project?.orientation || 'landscape'}
             />
           ) : (
-            <div className="text-center text-gray-500">
-              <Film className="w-16 h-16 mx-auto mb-3 opacity-30" />
+            <div className="h-full flex flex-col items-center justify-center text-gray-600 bg-[#0d0d1a]">
+              <Monitor className="w-16 h-16 mb-3 opacity-20" />
               <p className="text-sm">Import scenes to start editing</p>
             </div>
           )}
         </div>
-
-        {/* Scene detail sidebar */}
-        {selectedScene && (
-          <div className="w-full lg:w-80 bg-[#16213e] border-l border-gray-700 overflow-y-auto">
-            <ScenePreview
-              scene={scenesWithTiming.find(s => s.id === selectedScene)}
-              onClose={() => setSelectedScene(null)}
-              onUpdateDuration={(dur) => handleUpdateDuration(selectedScene, dur)}
-              onRefetch={refetchScenes}
-            />
-          </div>
-        )}
       </div>
 
-      {/* Bottom panel: Transport + Timeline + Mixer */}
-      <div className="bg-[#0f0f23] border-t border-gray-700">
-        {/* Transport controls */}
-        <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-800">
-          <div className="flex items-center gap-1">
+      {/* ═══════ BOTTOM: Transport + Timeline ═══════ */}
+      <div className="flex-shrink-0 bg-[#0f0f23] border-t border-gray-700/50">
+        {/* Transport bar */}
+        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-800/50">
+          {/* Playback controls */}
+          <div className="flex items-center gap-0.5">
             <button onClick={handlePrevScene} className="w-7 h-7 rounded hover:bg-white/10 flex items-center justify-center">
-              <SkipBack className="w-3.5 h-3.5 text-gray-300" />
+              <SkipBack className="w-3.5 h-3.5 text-gray-400" />
             </button>
-            <button onClick={handlePlayPause} className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center">
+            <button onClick={handlePlayPause} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center">
               {isPlaying ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white ml-0.5" />}
             </button>
             <button onClick={handleNextScene} className="w-7 h-7 rounded hover:bg-white/10 flex items-center justify-center">
-              <SkipForward className="w-3.5 h-3.5 text-gray-300" />
+              <SkipForward className="w-3.5 h-3.5 text-gray-400" />
             </button>
           </div>
 
-          <span className="font-mono text-xs text-blue-400 min-w-[70px]">{formatTime(currentTime)}</span>
-          <span className="text-gray-600 text-xs">/</span>
-          <span className="font-mono text-xs text-gray-400 min-w-[70px]">{formatTime(totalDuration)}</span>
+          {/* Timecode */}
+          <div className="flex items-center gap-1 font-mono">
+            <span className="text-[11px] text-blue-400 min-w-[60px]">{formatTime(currentTime)}</span>
+            <span className="text-gray-600 text-[10px]">/</span>
+            <span className="text-[11px] text-gray-500 min-w-[60px]">{formatTime(totalDuration)}</span>
+          </div>
 
-          <span className="text-[10px] text-gray-500 ml-2">S{currentSceneIndex + 1}/{scenes.length}</span>
+          <span className="text-[10px] text-gray-600 ml-1">S{currentSceneIndex + 1}/{scenes.length}</span>
 
           <div className="flex-1" />
 
@@ -418,33 +420,35 @@ export default function TimelineEditor() {
           <div className="flex items-center gap-3 text-[10px]">
             <div className="flex items-center gap-1">
               <Mic className="w-3 h-3 text-blue-400" />
-              <Slider value={[voVol]} onValueChange={([v]) => setVoVol(v)} min={0} max={1} step={0.05} className="w-14" />
-              <span className="text-gray-500 w-6">{Math.round(voVol * 100)}%</span>
+              <Slider value={[voVol]} onValueChange={([v]) => setVoVol(v)} min={0} max={1} step={0.05} className="w-12" />
+              <span className="text-gray-600 w-5">{Math.round(voVol * 100)}</span>
             </div>
             <div className="flex items-center gap-1">
               <Music className="w-3 h-3 text-green-400" />
-              <Slider value={[musicVol]} onValueChange={([v]) => { setMusicVol(v); }} min={0} max={1} step={0.05} className="w-14" />
-              <span className="text-gray-500 w-6">{Math.round(musicVol * 100)}%</span>
+              <Slider value={[musicVol]} onValueChange={([v]) => setMusicVol(v)} min={0} max={1} step={0.05} className="w-12" />
+              <span className="text-gray-600 w-5">{Math.round(musicVol * 100)}</span>
             </div>
             <div className="flex items-center gap-1">
-              <span className="text-amber-400">🔊</span>
-              <Slider value={[sfxMasterVol]} onValueChange={([v]) => setSfxMasterVol(v)} min={0} max={1} step={0.05} className="w-14" />
-              <span className="text-gray-500 w-6">{Math.round(sfxMasterVol * 100)}%</span>
+              <span className="text-amber-400 text-[10px]">SFX</span>
+              <Slider value={[sfxMasterVol]} onValueChange={([v]) => setSfxMasterVol(v)} min={0} max={1} step={0.05} className="w-12" />
+              <span className="text-gray-600 w-5">{Math.round(sfxMasterVol * 100)}</span>
             </div>
             <button onClick={() => setVolume(volume > 0 ? 0 : 0.8)} className="hover:opacity-80">
               {volume === 0 ? <VolumeX className="w-3.5 h-3.5 text-gray-500" /> : <Volume2 className="w-3.5 h-3.5 text-gray-300" />}
             </button>
-            <Button size="sm" variant="ghost" className="text-[10px] text-gray-400 h-6 px-2" onClick={handleSaveMixLevels}>
-              Save Mix
+            <Button size="sm" variant="ghost" className="text-[9px] text-gray-500 h-5 px-1.5" onClick={handleSaveMixLevels}>
+              Save
             </Button>
           </div>
 
+          <div className="w-px h-4 bg-gray-700 mx-1" />
+
           {/* Zoom controls */}
-          <div className="flex items-center gap-1 ml-2 border-l border-gray-700 pl-2">
+          <div className="flex items-center gap-0.5">
             <button onClick={zoomOut} className="w-6 h-6 rounded hover:bg-white/10 flex items-center justify-center">
               <ZoomOut className="w-3 h-3 text-gray-400" />
             </button>
-            <span className="text-[10px] text-gray-500 w-6 text-center">{pixelsPerSecond}</span>
+            <span className="text-[9px] text-gray-500 w-5 text-center">{pixelsPerSecond}</span>
             <button onClick={zoomIn} className="w-6 h-6 rounded hover:bg-white/10 flex items-center justify-center">
               <ZoomIn className="w-3 h-3 text-gray-400" />
             </button>
@@ -452,7 +456,7 @@ export default function TimelineEditor() {
         </div>
 
         {/* Timeline tracks */}
-        <div className="overflow-x-auto max-h-[220px]" ref={timelineRef} onClick={handleTimelineClick}>
+        <div className="overflow-x-auto max-h-[200px]" ref={timelineRef} onClick={handleTimelineClick}>
           <div style={{ minWidth: Math.max(totalDuration * pixelsPerSecond + 100, 800) }}>
             {/* Ruler */}
             <div className="relative">
@@ -468,9 +472,9 @@ export default function TimelineEditor() {
             </div>
 
             {/* Video Track */}
-            <div className="border-t border-gray-800 relative">
+            <div className="border-t border-gray-800/50 relative">
               <div className="flex items-center">
-                <div className="w-16 flex-shrink-0 px-2 py-1.5 bg-[#1a1a2e] border-r border-gray-800 text-[10px] font-medium text-gray-400 flex items-center gap-1">
+                <div className="w-16 flex-shrink-0 px-2 py-1.5 bg-[#1a1a2e] border-r border-gray-800/50 text-[10px] font-medium text-gray-400 flex items-center gap-1">
                   <Film className="w-3 h-3" /> Video
                 </div>
                 <div className="flex-1 relative" style={{ minWidth: totalDuration * pixelsPerSecond }}>
@@ -487,7 +491,7 @@ export default function TimelineEditor() {
                       className="absolute top-0 bottom-0 bg-red-900/20 border-l border-red-500/50 border-dashed flex items-center justify-center"
                       style={{ left: sceneDuration * pixelsPerSecond, width: (voiceoverDuration - sceneDuration) * pixelsPerSecond }}
                     >
-                      <span className="text-[9px] text-red-400 whitespace-nowrap px-1">⚠ Gap ({Math.round(voiceoverDuration - sceneDuration)}s)</span>
+                      <span className="text-[9px] text-red-400 whitespace-nowrap px-1">Gap ({Math.round(voiceoverDuration - sceneDuration)}s)</span>
                     </div>
                   )}
                 </div>
@@ -498,25 +502,25 @@ export default function TimelineEditor() {
             </div>
 
             {/* Voiceover Track */}
-            <div className="border-t border-gray-800 relative">
+            <div className="border-t border-gray-800/50 relative">
               <div className="flex items-center">
-                <div className="w-16 flex-shrink-0 px-2 py-1 bg-[#1a1a2e] border-r border-gray-800 text-[10px] font-medium text-blue-400 flex items-center gap-1">
+                <div className="w-16 flex-shrink-0 px-2 py-1 bg-[#1a1a2e] border-r border-gray-800/50 text-[10px] font-medium text-blue-400 flex items-center gap-1">
                   <Mic className="w-3 h-3" /> VO
                 </div>
-                <div className="flex-1 h-10 bg-[#0a0a1a] relative">
+                <div className="flex-1 h-8 bg-[#0a0a1a] relative">
                   {voiceoverDuration > 0 && (
                     <div
-                      className="absolute top-1 bottom-1 bg-blue-500/20 border border-blue-500/40 rounded flex items-center px-2"
+                      className="absolute top-0.5 bottom-0.5 bg-blue-500/15 border border-blue-500/30 rounded flex items-center px-2"
                       style={{ width: voiceoverDuration * pixelsPerSecond }}
                     >
-                      <div className="flex items-center gap-1">
-                        <div className="w-1 h-3 bg-blue-400 rounded-full" />
-                        <div className="w-1 h-5 bg-blue-400 rounded-full" />
-                        <div className="w-1 h-2 bg-blue-400 rounded-full" />
-                        <div className="w-1 h-4 bg-blue-400 rounded-full" />
-                        <div className="w-1 h-3 bg-blue-400 rounded-full" />
+                      <div className="flex items-center gap-0.5">
+                        <div className="w-0.5 h-2 bg-blue-400/60 rounded-full" />
+                        <div className="w-0.5 h-3 bg-blue-400/60 rounded-full" />
+                        <div className="w-0.5 h-1.5 bg-blue-400/60 rounded-full" />
+                        <div className="w-0.5 h-2.5 bg-blue-400/60 rounded-full" />
+                        <div className="w-0.5 h-2 bg-blue-400/60 rounded-full" />
                       </div>
-                      <span className="text-[9px] text-blue-300 ml-2">Voiceover • {Math.round(voiceoverDuration)}s</span>
+                      <span className="text-[8px] text-blue-400/70 ml-1.5">VO • {Math.round(voiceoverDuration)}s</span>
                     </div>
                   )}
                 </div>
@@ -527,23 +531,23 @@ export default function TimelineEditor() {
             </div>
 
             {/* Music Track */}
-            <div className="border-t border-gray-800 relative">
+            <div className="border-t border-gray-800/50 relative">
               <div className="flex items-center">
-                <div className="w-16 flex-shrink-0 px-2 py-1 bg-[#1a1a2e] border-r border-gray-800 text-[10px] font-medium text-green-400 flex items-center gap-1">
+                <div className="w-16 flex-shrink-0 px-2 py-1 bg-[#1a1a2e] border-r border-gray-800/50 text-[10px] font-medium text-green-400 flex items-center gap-1">
                   <Music className="w-3 h-3" /> Music
                 </div>
-                <div className="flex-1 h-10 bg-[#0a0a1a] relative">
+                <div className="flex-1 h-8 bg-[#0a0a1a] relative">
                   {musicUrl && (
                     <div
-                      className="absolute top-1 bottom-1 bg-green-500/20 border border-green-500/40 rounded flex items-center px-2"
+                      className="absolute top-0.5 bottom-0.5 bg-green-500/15 border border-green-500/30 rounded flex items-center px-2"
                       style={{ width: totalDuration * pixelsPerSecond }}
                     >
                       <div className="flex items-center gap-0.5">
                         {Array.from({ length: 8 }).map((_, i) => (
-                          <div key={i} className="w-0.5 bg-green-400 rounded-full" style={{ height: 4 + Math.random() * 12 }} />
+                          <div key={i} className="w-0.5 bg-green-400/60 rounded-full" style={{ height: 3 + Math.random() * 10 }} />
                         ))}
                       </div>
-                      <span className="text-[9px] text-green-300 ml-2">{selectedMusic?.title || 'Music'}</span>
+                      <span className="text-[8px] text-green-400/70 ml-1.5">{selectedMusic?.title || 'Music'}</span>
                     </div>
                   )}
                 </div>
@@ -554,16 +558,16 @@ export default function TimelineEditor() {
             </div>
 
             {/* SFX Track */}
-            <div className="border-t border-gray-800 relative">
+            <div className="border-t border-gray-800/50 relative">
               <div className="flex items-center">
-                <div className="w-16 flex-shrink-0 px-2 py-1 bg-[#1a1a2e] border-r border-gray-800 text-[10px] font-medium text-amber-400 flex items-center gap-1">
-                  🔊 SFX
+                <div className="w-16 flex-shrink-0 px-2 py-1 bg-[#1a1a2e] border-r border-gray-800/50 text-[10px] font-medium text-amber-400 flex items-center gap-1">
+                  <Volume2 className="w-3 h-3" /> SFX
                 </div>
-                <div className="flex-1 h-8 bg-[#0a0a1a] relative">
+                <div className="flex-1 h-7 bg-[#0a0a1a] relative">
                   {scenesWithTiming.filter(s => s.sound_effect_url).map(scene => (
                     <div
                       key={scene.id}
-                      className="absolute top-1 bottom-1 bg-amber-500/20 border border-amber-500/40 rounded text-[8px] text-amber-300 px-1 flex items-center truncate"
+                      className="absolute top-0.5 bottom-0.5 bg-amber-500/15 border border-amber-500/30 rounded text-[7px] text-amber-400/70 px-1 flex items-center truncate"
                       style={{
                         left: scene.start_time * pixelsPerSecond,
                         width: Math.max(scene.duration_seconds * pixelsPerSecond, 20),
@@ -582,7 +586,7 @@ export default function TimelineEditor() {
         </div>
       </div>
 
-      {/* Transition Library Modal */}
+      {/* Modals */}
       <TransitionLibrary
         open={!!transitionTarget}
         onClose={() => setTransitionTarget(null)}
@@ -590,8 +594,6 @@ export default function TimelineEditor() {
         sceneB={transitionTarget?.sceneB}
         onApply={refetchScenes}
       />
-
-      {/* Video Export Modal */}
       <VideoExporter
         open={showExporter}
         onClose={() => setShowExporter(false)}
