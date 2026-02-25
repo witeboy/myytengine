@@ -56,13 +56,17 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
     setGenerateError(null);
     try {
       const finalPrompt = buildFinalPrompt(thumb.image_prompt, thumb.text_overlay);
-      const { url } = await base44.integrations.Core.GenerateImage({
+      // Use the same Ideogram V3 pipeline as initial generation for consistent results
+      const res = await base44.functions.invoke('generateTweakedThumbnailImage', {
         prompt: finalPrompt,
+        project_id: projectId,
       });
-      await base44.entities.ThumbnailConcepts.update(thumb.id, { image_url: url });
+      const imageUrl = res.data?.image_url;
+      if (!imageUrl) throw new Error(res.data?.error || 'No image generated');
+      await base44.entities.ThumbnailConcepts.update(thumb.id, { image_url: imageUrl });
       onRefetch();
     } catch (err) {
-      const msg = err?.message || 'Unknown error';
+      const msg = err?.response?.data?.error || err?.message || 'Unknown error';
       if (msg.includes('refused')) {
         setGenerateError({ thumbId: thumb.id, message: `Thumbnail #${thumb.rank}: Image refused — prompt may reference real people or copyrighted content.` });
       } else {
