@@ -420,6 +420,20 @@ export default function TimelineEditor() {
 
           <div className="w-px h-4 bg-gray-700 mx-1" />
 
+          {/* Audio Editor toggle */}
+          {voiceoverUrl && (
+            <button
+              onClick={() => setShowAudioEditor(prev => !prev)}
+              className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                showAudioEditor ? 'bg-cyan-500/20 text-cyan-400' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+              }`}
+            >
+              <Scissors className="w-3 h-3" /> Audio Edit
+            </button>
+          )}
+
+          <div className="w-px h-4 bg-gray-700 mx-1" />
+
           {/* Zoom controls */}
           <div className="flex items-center gap-0.5">
             <button onClick={zoomOut} className="w-6 h-6 rounded hover:bg-white/10 flex items-center justify-center">
