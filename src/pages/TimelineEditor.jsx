@@ -21,6 +21,8 @@ import EffectsLibrary from '@/components/timeline/EffectsLibrary';
 import TimelineToolbar from '@/components/timeline/TimelineToolbar';
 import SfxGenerateDialog from '@/components/timeline/SfxGenerateDialog';
 import InlineWaveform from '@/components/timeline/InlineWaveform';
+import AutoSyncButton from '@/components/timeline/AutoSyncButton';
+import useTimelineHistory from '@/components/timeline/useTimelineHistory';
 import {
   Loader2, Film, Play, Pause, SkipBack, SkipForward,
   Volume2, VolumeX, Mic, Music, Monitor,
@@ -388,6 +390,42 @@ export default function TimelineEditor() {
     setEditingTrack(null);
   };
 
+  // Undo/Redo history
+  const history = useTimelineHistory(refetchScenes);
+
+  // Keyboard shortcuts for undo/redo and delete
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.target.closest('input, textarea, [contenteditable]')) return;
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        history.undo();
+      }
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        history.redo();
+      }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && activeTrack === 'video' && selectedScene) {
+        e.preventDefault();
+        const scene = scenesWithTiming.find(s => s.id === selectedScene);
+        if (scene) handleDeleteSceneMedia(scene);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [activeTrack, selectedScene, scenesWithTiming]);
+
+  // Delete scene media handler
+  const handleDeleteSceneMedia = (scene) => {
+    const hasVideo = scene.video_url && scene.video_url.startsWith('http');
+    const hasImage = scene.image_url && scene.image_url.startsWith('http');
+    if (hasVideo) {
+      history.deleteSceneMedia(scene, 'video');
+    } else if (hasImage) {
+      history.deleteSceneMedia(scene, 'image');
+    }
+  };
+
   const trackHeight = { expanded: 'h-20', collapsed: 'h-5' };
 
   return (
@@ -627,9 +665,16 @@ export default function TimelineEditor() {
             if (activeTrack === 'voiceover' && voiceoverUrl) setEditingTrack('voiceover');
             else if (activeTrack === 'music' && musicUrl) setEditingTrack('music');
           }}
-          onDelete={() => {}}
-          onUndo={() => {}}
-          canUndo={false}
+          onDelete={() => {
+            if (activeTrack === 'video' && selectedScene) {
+              const scene = scenesWithTiming.find(s => s.id === selectedScene);
+              if (scene) handleDeleteSceneMedia(scene);
+            }
+          }}
+          onUndo={() => history.undo()}
+          onRedo={() => history.redo()}
+          canUndo={history.canUndo}
+          canRedo={history.canRedo}
           onDetectSilence={() => {
             if (voiceoverUrl) setEditingTrack('voiceover');
           }}
@@ -652,6 +697,11 @@ export default function TimelineEditor() {
           >
             <Zap className="w-3 h-3" /> Effects
           </button>
+          <AutoSyncButton
+            projectId={projectId}
+            voiceoverUrl={voiceoverUrl}
+            onSynced={refetchScenes}
+          />
           {/* Re-attach buttons for detached panels */}
           {Object.entries(detachedPanels).filter(([, v]) => v).map(([key]) => (
             <button
@@ -704,6 +754,7 @@ export default function TimelineEditor() {
                         onSelectScene={setSelectedScene}
                         onUpdateDuration={handleUpdateDuration}
                         onTransitionClick={(sceneA, sceneB) => setTransitionTarget({ sceneA, sceneB })}
+                        onDeleteMedia={handleDeleteSceneMedia}
                       />
                       {voiceoverDuration > 0 && sceneDuration < voiceoverDuration && (
                         <div
