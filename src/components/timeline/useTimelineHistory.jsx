@@ -78,6 +78,10 @@ export default function useTimelineHistory(refetchScenes) {
 
   // Helper: delete a scene entirely and close the gap by renumbering remaining scenes
   const deleteScene = useCallback(async (scene, allScenes) => {
+    // Prevent double-delete of the same scene
+    if (deletingRef.current.has(scene.id)) return;
+    deletingRef.current.add(scene.id);
+
     pushUndo({
       type: 'delete_scene',
       sceneId: scene.id,
@@ -88,6 +92,7 @@ export default function useTimelineHistory(refetchScenes) {
     try {
       await base44.entities.Scenes.delete(scene.id);
     } catch (e) {
+      deletingRef.current.delete(scene.id);
       if (e.message?.includes('not found')) {
         await refetchScenes();
         return;
