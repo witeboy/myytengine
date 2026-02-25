@@ -261,18 +261,15 @@ export default function TimelineEditor() {
   };
 
   const handleTimelineClick = (e) => {
-    // Allow clicks on inline waveform edit to be handled by the waveform
+    // Allow clicks on inline waveform editing areas
     if (e.target.closest('[data-inline-edit]')) return;
+    // Don't interfere with buttons
     if (e.target.closest('button')) return;
+    // Move playhead to clicked position
     const t = getTimeFromMouseEvent(e);
     setCurrentTime(t);
     if (voiceoverRef.current) voiceoverRef.current.currentTime = t;
     sfxRefs.current = {};
-    // Also select scene if clicking a scene block
-    const sceneBlock = e.target.closest('[data-scene-block]');
-    if (sceneBlock) {
-      // scene selection is handled by the scene block click handler
-    }
   };
 
   const handlePlayPause = () => setIsPlaying(prev => !prev);
