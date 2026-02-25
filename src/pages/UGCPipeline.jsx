@@ -122,6 +122,8 @@ export default function UGCPipeline() {
     // Pre-fill audience from rich template data
     if (template.target_audience) setTargetAudience(template.target_audience);
     if (template.monetization_fit) setTargetMarket(template.monetization_fit);
+    // Pre-fill action from content_structure or archetype
+    if (template.content_structure) setInfluencerAction(template.content_structure);
   };
 
   // ── Step 3: Generate image ──────────────────────────────────
