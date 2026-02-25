@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 
-export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, onSelectScene, onUpdateDuration, onTransitionClick }) {
+export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, onSelectScene, onUpdateDuration, onTransitionClick, onSeekToScene }) {
   const [resizing, setResizing] = useState(null);
   const startXRef = useRef(0);
   const startDurRef = useRef(0);
@@ -59,7 +59,7 @@ export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, 
                 isSelected ? 'ring-2 ring-white z-10' : ''
               } ${isResizing ? 'z-20 ring-2 ring-yellow-400' : ''}`}
               style={{ left, width: Math.max(width, 24) }}
-              onClick={() => onSelectScene(scene.id)}
+              onClick={() => { onSelectScene(scene.id); onSeekToScene?.(scene.start_time); }}
             >
               {/* Background: image or video thumbnail or gradient */}
               {mediaSrc ? (
