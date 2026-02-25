@@ -87,7 +87,7 @@ export default function StageProgress({ currentStage = 1, projectStatus }) {
           </Button>
           <div className="flex items-center gap-2 flex-1">
             {stages.map((stage, idx) => (
-              <React.Fragment key={stage.num}>
+              <div key={stage.num} className="contents">
                 <button
                   onClick={() => handleStageClick(stage)}
                   disabled={!isStageClickable(stage.num)}
@@ -100,7 +100,7 @@ export default function StageProgress({ currentStage = 1, projectStatus }) {
                 {idx < stages.length - 1 && (
                   <div className={`flex-1 h-0.5 ${getLineClass(stage.num)}`} />
                 )}
-              </React.Fragment>
+              </div>
             ))}
           </div>
         </div>
