@@ -547,9 +547,9 @@ export default function TimelineEditor() {
       </div>
 
       {/* ═══════ BOTTOM: Transport + Toolbar + Timeline ═══════ */}
-      <div className="flex-shrink-0 bg-[#0f0f23] border-t border-gray-700/50" style={{ height: timelineHeight }}>
+      <div className="flex-shrink-0 bg-[#0f0f23] border-t border-gray-700/50 flex flex-col" style={{ height: timelineHeight }}>
         {/* Transport bar */}
-        <div className="flex items-center gap-2 px-3 py-1 border-b border-gray-800/50">
+        <div className="flex items-center gap-2 px-3 py-1 border-b border-gray-800/50 flex-shrink-0">
           {/* Playback controls */}
           <div className="flex items-center gap-0.5">
             <button onClick={handlePrevScene} className="w-7 h-7 rounded hover:bg-white/10 flex items-center justify-center">
