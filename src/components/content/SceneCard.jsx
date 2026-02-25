@@ -25,9 +25,7 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
   const pollRef = useRef(null);
 
   const hasPendingTask = scene.video_url?.startsWith('grok_vid_task:') ||
-    scene.video_url?.startsWith('veo_task:') ||
-    scene.video_url?.startsWith('runway_task:') ||
-    scene.video_url?.startsWith('freepik_task:');
+    scene.video_url?.startsWith('veo_task:');
 
   useEffect(() => {
     if (hasPendingTask && !polling) {
