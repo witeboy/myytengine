@@ -100,11 +100,21 @@ export default function useTimelineHistory(refetchScenes) {
       throw e;
     }
 
-    // Renumber remaining scenes to close the gap — sequentially to avoid rate limits
-    const remaining = allScenes
-      .filter(s => s.id !== scene.id)
-      .sort((a, b) => a.scene_number - b.scene_number);
+    // Fetch fresh scene list instead of relying on potentially stale allScenes
+    let remaining;
+    try {
+      const freshScenes = await base44.entities.Scenes.filter({ project_id: scene.project_id });
+      remaining = freshScenes
+        .filter(s => s.id !== scene.id)
+        .sort((a, b) => a.scene_number - b.scene_number);
+    } catch {
+      // Fallback to passed allScenes if fetch fails
+      remaining = allScenes
+        .filter(s => s.id !== scene.id)
+        .sort((a, b) => a.scene_number - b.scene_number);
+    }
 
+    // Renumber remaining scenes to close the gap — sequentially to avoid rate limits
     for (let i = 0; i < remaining.length; i++) {
       const correctNumber = i + 1;
       if (remaining[i].scene_number !== correctNumber) {
