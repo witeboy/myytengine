@@ -658,30 +658,42 @@ export default function TimelineEditor() {
                 >
                   <Volume2 className="w-3 h-3" /> SFX
                 </div>
-                <div className={`flex-1 bg-[#0a0a1a] relative transition-all ${collapsedTracks.sfx ? 'h-5' : 'h-8'}`}>
+                <div
+                  data-inline-edit={editingTrack?.startsWith('sfx-') ? 'true' : undefined}
+                  className={`flex-1 bg-[#0a0a1a] relative transition-all ${collapsedTracks.sfx ? 'h-5' : editingTrack?.startsWith('sfx-') ? 'h-16' : 'h-8'}`}
+                  style={{ minHeight: editingTrack?.startsWith('sfx-') ? 64 : undefined }}
+                >
                   {!collapsedTracks.sfx ? (
                     <>
-                      {scenesWithTiming.filter(s => s.sound_effect_url).map(scene => (
-                        <div
-                          key={scene.id}
-                          className="absolute top-0.5 bottom-0.5 bg-amber-500/15 border border-amber-500/30 rounded text-[7px] text-amber-400/70 px-1 flex items-center truncate cursor-pointer hover:bg-amber-500/25 transition-colors"
-                          style={{
-                            left: scene.start_time * pixelsPerSecond,
-                            width: Math.max(scene.duration_seconds * pixelsPerSecond, 30),
-                          }}
-                          onDoubleClick={() => openAudioEdit(`sfx-${scene.id}`)}
-                          title={`${scene.sound_effect || 'SFX'} — Double-click to edit`}
-                        >
-                          <span className="truncate flex-1">{scene.sound_effect || `S${scene.scene_number}`}</span>
-                          <button
-                            className="text-[7px] text-amber-300 bg-amber-500/20 px-0.5 rounded hover:bg-amber-500/40 ml-0.5 flex-shrink-0"
-                            onClick={(e) => { e.stopPropagation(); openAudioEdit(`sfx-${scene.id}`); }}
+                      {scenesWithTiming.filter(s => s.sound_effect_url).map(scene => {
+                        const sfxKey = `sfx-${scene.id}`;
+                        const isEditingSfx = editingTrack === sfxKey;
+                        return (
+                          <div
+                            key={scene.id}
+                            className="absolute top-0 bottom-0"
+                            style={{
+                              left: scene.start_time * pixelsPerSecond,
+                              width: Math.max(scene.duration_seconds * pixelsPerSecond, 30),
+                            }}
                           >
-                            <Scissors className="w-2 h-2 inline" />
-                          </button>
-                        </div>
-                      ))}
-                      {/* Show empty SFX slots for scenes without effects */}
+                            <InlineWaveform
+                              audioUrl={scene.sound_effect_url}
+                              trackColor="amber"
+                              pixelsPerSecond={pixelsPerSecond}
+                              totalTimelineDuration={totalDuration}
+                              currentTime={currentTime - scene.start_time}
+                              onSeek={(t) => { setCurrentTime(scene.start_time + t); }}
+                              isEditing={isEditingSfx}
+                              onStartEdit={() => setEditingTrack(sfxKey)}
+                              onStopEdit={() => setEditingTrack(null)}
+                              onSave={(blob, dur) => handleInlineAudioSave(sfxKey, blob, dur)}
+                              label={scene.sound_effect || `S${scene.scene_number}`}
+                              trackDuration={scene.duration_seconds}
+                            />
+                          </div>
+                        );
+                      })}
                       {scenesWithTiming.filter(s => !s.sound_effect_url).map(scene => (
                         <div
                           key={`empty-${scene.id}`}
