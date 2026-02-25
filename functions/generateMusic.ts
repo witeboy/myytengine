@@ -64,6 +64,10 @@ Deno.serve(async (req) => {
     console.log(`Generating music via AI33 MiniMax: style=${styleId}, mood=${moodId}`);
     console.log('Idea:', idea);
 
+    // Try AI33 first
+    let ai33Success = false;
+    let taskId = null;
+
     const response = await fetch('https://api.ai33.pro/v1m/task/music-generation', {
       method: 'POST',
       headers: {
@@ -81,31 +85,90 @@ Deno.serve(async (req) => {
       }),
     });
 
-    if (!response.ok) {
+    if (response.ok) {
+      const data = await response.json();
+      console.log('AI33 music response:', JSON.stringify(data));
+      if (data.success && data.task_id) {
+        ai33Success = true;
+        taskId = data.task_id;
+      } else {
+        console.warn('AI33 returned unexpected response:', JSON.stringify(data));
+      }
+    } else {
       const errText = await response.text();
-      console.error('AI33 music generation error:', errText);
+      console.warn('AI33 music generation failed, trying MiniMax direct fallback:', errText);
+    }
+
+    if (ai33Success) {
+      return Response.json({ success: true, status: 'pending', task_id: taskId });
+    }
+
+    // Fallback: MiniMax direct API (music_generation endpoint)
+    const minimaxKey = Deno.env.get('MINIMAX_API_KEY');
+    if (!minimaxKey) {
+      console.error('AI33 failed and no MINIMAX_API_KEY for fallback');
       if (track_id) {
         await base44.asServiceRole.entities.MusicTracks.update(track_id, { status: 'failed' });
       }
-      return Response.json({ error: `Music generation error: ${errText}` }, { status: 500 });
+      return Response.json({ error: 'Music generation unavailable (AI33 down, no MiniMax key)' }, { status: 500 });
     }
 
-    const data = await response.json();
-    console.log('AI33 music response:', JSON.stringify(data));
+    console.log('Trying MiniMax direct music_generation API...');
+    const mmResponse = await fetch('https://api.minimax.io/v1/music_generation', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${minimaxKey}`,
+      },
+      body: JSON.stringify({
+        model: 'music-2.5',
+        prompt: idea,
+        lyrics: "[Inst]\n[Outro]",
+        output_format: 'hex',
+        audio_setting: {
+          sample_rate: 44100,
+          bitrate: 128000,
+          format: 'mp3',
+        },
+      }),
+    });
 
-    if (data.success && data.task_id) {
+    const mmData = await mmResponse.json();
+    console.log('MiniMax direct response:', JSON.stringify(mmData.base_resp || {}));
+
+    if (mmData.base_resp?.status_code === 0 && mmData.data?.audio) {
+      // Decode hex audio and upload
+      const audioHex = mmData.data.audio;
+      const bytes = new Uint8Array(audioHex.length / 2);
+      for (let i = 0; i < audioHex.length; i += 2) {
+        bytes[i / 2] = parseInt(audioHex.substr(i, 2), 16);
+      }
+      const file = new File([bytes], `music_${Date.now()}.mp3`, { type: 'audio/mpeg' });
+      const uploaded = await base44.asServiceRole.integrations.Core.UploadFile({ file });
+
+      if (track_id) {
+        await base44.asServiceRole.entities.MusicTracks.update(track_id, {
+          audio_url: uploaded.file_url,
+          status: 'completed',
+          duration_seconds: 30,
+        });
+      }
+
+      // Return as completed directly (no polling needed)
       return Response.json({
         success: true,
-        status: 'pending',
-        task_id: data.task_id,
+        status: 'completed',
+        audio_url: uploaded.file_url,
+        provider: 'minimax_direct',
       });
     }
 
-    console.error('Unexpected AI33 response:', JSON.stringify(data));
+    const errMsg = mmData.base_resp?.status_msg || 'Unknown MiniMax error';
+    console.error('MiniMax direct also failed:', errMsg);
     if (track_id) {
       await base44.asServiceRole.entities.MusicTracks.update(track_id, { status: 'failed' });
     }
-    return Response.json({ error: 'Unexpected response from music API', data }, { status: 500 });
+    return Response.json({ error: `Music generation failed: ${errMsg}` }, { status: 500 });
   } catch (error) {
     console.error('generateMusic error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
