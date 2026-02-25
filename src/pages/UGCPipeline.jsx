@@ -89,7 +89,10 @@ export default function UGCPipeline() {
   const [loadedTemplateArchetype, setLoadedTemplateArchetype] = useState('');
   const [loadedTemplateBasePrompt, setLoadedTemplateBasePrompt] = useState('');
 
-  const typeLabel = INFLUENCER_TYPES.find(t => t.value === influencerType)?.label || influencerType;
+  // typeLabel: prefer the template name/archetype over generic INFLUENCER_TYPES label
+  const typeLabel = loadedTemplateName
+    ? `${loadedTemplateName}${loadedTemplateArchetype ? ` (${loadedTemplateArchetype})` : ''}`
+    : (INFLUENCER_TYPES.find(t => t.value === influencerType)?.label || influencerType);
 
   const handleTemplateSelect = (t) => {
     setTargetAudience(t.audience);
