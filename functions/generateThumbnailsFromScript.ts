@@ -115,7 +115,7 @@ Deno.serve(async (req) => {
 
 Analyze this video script and extract the CORE ELEMENTS that will drive the highest possible CTR thumbnail.
 
-VIDEO: "${topic.title}" TITLE: "${script.title}" NICHE: "${project.niche}"${titleCtx}
+VIDEO: "${topicTitle}" TITLE: "${script.title}" NICHE: "${project.niche}"${titleCtx}
 
 SCRIPT:
 ${essenceScript}
@@ -175,7 +175,7 @@ Stick to 2-3 colors TOTAL to avoid visual noise.
 - Best positions: upper-left, upper-center, center-left
 - Leave negative space around text — don't crowd it
 
-VIDEO: "${topic.title}" TITLE: "${script.title}" NICHE: "${project.niche}"${titleCtx}
+VIDEO: "${topicTitle}" TITLE: "${script.title}" NICHE: "${project.niche}"${titleCtx}
 SCRIPT ESSENCE: ${JSON.stringify(script_essence)}
 
 Extract: villain_object, victim_object, trap_symbol, shock_data (specific number from script), contrast_pair (illusion vs reality), niche_objects (3-5 items).
@@ -223,7 +223,7 @@ SUBJECT SEPARATION: Subject MUST pop — use light/dark separation, drop shadows
 - 2-3 colors total maximum
 - Avoid pure red alone, avoid similar-temperature adjacent colors
 
-VIDEO: "${topic.title}" TITLE: "${script.title}" STYLE: "${style}"${nicheCtx}
+VIDEO: "${topicTitle}" TITLE: "${script.title}" STYLE: "${style}"${nicheCtx}
 ANCHORS: ${JSON.stringify(anchors)}
 WINNING TEXTS: ${JSON.stringify(winners)}
 SCRIPT ESSENCE: ${JSON.stringify(script_essence)}
