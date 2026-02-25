@@ -316,7 +316,14 @@ Return ONLY the motion description.`,
       avatarResult = avatarRes.data || avatarRes;
     } catch (err) {
       const errMsg = err?.response?.data?.error || err.message || 'Unknown error';
-      setPipelineStep(`Kling API error: ${errMsg}`);
+      setPipelineStep(`❌ ${errMsg}`);
+      setLoading(false);
+      return;
+    }
+
+    // Check if Kling returned an error (success: false)
+    if (avatarResult.success === false || avatarResult.error) {
+      setPipelineStep(`❌ ${avatarResult.error || 'Kling API returned an error'}`);
       setLoading(false);
       return;
     }
@@ -328,7 +335,7 @@ Return ONLY the motion description.`,
       while (!done && polls < 60) {
         await new Promise(r => setTimeout(r, 15000));
         polls++;
-        setPipelineStep(`Kling Avatar rendering... (poll ${polls})`);
+        setPipelineStep(`Kling Avatar rendering... (poll ${polls}/60)`);
         try {
           const pollRes = await base44.functions.invoke('pollAvatarVideo', {
             task_id: avatarResult.task_id,
@@ -338,16 +345,16 @@ Return ONLY the motion description.`,
             setVideoUrl(pollResult.video_url || '');
             done = true;
           } else if (pollResult.status === 'FAILED') {
-            setPipelineStep(`Avatar video failed: ${pollResult.error || 'Unknown error'}`);
+            setPipelineStep(`❌ Avatar video failed: ${pollResult.error || 'Unknown error'}`);
             done = true;
           }
         } catch (pollErr) {
           console.warn('Poll error:', pollErr.message);
         }
       }
-      if (!done) setPipelineStep('Timed out — check back later.');
+      if (!done) setPipelineStep('⏱ Timed out — check back later.');
     } else {
-      setPipelineStep(`Kling error: ${avatarResult.error || 'No task created'}`);
+      setPipelineStep(`❌ ${avatarResult.error || 'No task created by Kling'}`);
       setLoading(false);
       return;
     }
