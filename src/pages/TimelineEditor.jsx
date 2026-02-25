@@ -507,8 +507,8 @@ export default function TimelineEditor() {
           onZoomOut={zoomOut}
         />
 
-        {/* Timeline tracks */}
-        <div className="overflow-x-auto max-h-[240px] overflow-y-auto" ref={timelineRef} onClick={handleTimelineClick}>
+        {/* Timeline tracks — click anywhere to move playhead */}
+        <div className="overflow-x-auto max-h-[280px] overflow-y-auto" ref={timelineRef} onClick={handleTimelineClick}>
           <div style={{ minWidth: Math.max(totalDuration * pixelsPerSecond + 100, 800) }}>
             {/* Ruler */}
             <div className="relative">
