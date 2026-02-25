@@ -304,14 +304,15 @@ Return ONLY the motion description.`,
       motionPrompt = 'Natural conversational head movements with slight nods and warm expressions.';
     }
 
-    // Submit to Kling AI Avatar
-    setPipelineStep('Submitting to Kling AI Avatar (lip-sync)...');
+    // Submit to Avatar API (KIE primary, Kling direct fallback)
+    setPipelineStep('Submitting to avatar API (lip-sync)...');
     let avatarResult;
     try {
       const avatarRes = await base44.functions.invoke('generateAvatarVideo', {
         image_url: finalImageUrl,
         audio_url: voiceUrl,
         prompt: motionPrompt,
+        mode: 'std',
       });
       avatarResult = avatarRes.data || avatarRes;
     } catch (err) {
@@ -321,24 +322,25 @@ Return ONLY the motion description.`,
       return;
     }
 
-    // Check if Kling returned an error (success: false)
     if (avatarResult.success === false || avatarResult.error) {
-      setPipelineStep(`❌ ${avatarResult.error || 'Kling API returned an error'}`);
+      setPipelineStep(`❌ ${avatarResult.error || 'Avatar API returned an error'}`);
       setLoading(false);
       return;
     }
 
     if (avatarResult.task_id) {
-      setPipelineStep('Avatar rendering with Kling AI — polling...');
+      const provider = avatarResult.provider || 'kie';
+      setPipelineStep(`Avatar rendering (${provider}) — polling...`);
       let done = false;
       let polls = 0;
       while (!done && polls < 60) {
         await new Promise(r => setTimeout(r, 15000));
         polls++;
-        setPipelineStep(`Kling Avatar rendering... (poll ${polls}/60)`);
+        setPipelineStep(`Avatar rendering (${provider})... (poll ${polls}/60)`);
         try {
           const pollRes = await base44.functions.invoke('pollAvatarVideo', {
             task_id: avatarResult.task_id,
+            provider,
           });
           const pollResult = pollRes.data || pollRes;
           if (pollResult.status === 'COMPLETED') {
@@ -354,7 +356,7 @@ Return ONLY the motion description.`,
       }
       if (!done) setPipelineStep('⏱ Timed out — check back later.');
     } else {
-      setPipelineStep(`❌ ${avatarResult.error || 'No task created by Kling'}`);
+      setPipelineStep(`❌ ${avatarResult.error || 'No task created'}`);
       setLoading(false);
       return;
     }
