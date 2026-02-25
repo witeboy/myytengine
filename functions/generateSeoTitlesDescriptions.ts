@@ -148,8 +148,8 @@ Deno.serve(async (req) => {
 
 Generate COMPLETE, PREMIUM upload metadata that maximizes CTR, retention, and algorithmic distribution.
 
-VIDEO TOPIC: "${topic.title}"
-CURRENT WORKING TITLE: "${script.title}"
+VIDEO TOPIC: "${topicTitle}"
+CURRENT WORKING TITLE: "${script.title || topicTitle}"
 NICHE: "${project.niche}"
 CHANNEL TYPE: Faceless documentary/educational
 
