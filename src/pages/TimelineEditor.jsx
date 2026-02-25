@@ -26,6 +26,7 @@ import {
 
 export default function TimelineEditor() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const projectId = new URLSearchParams(window.location.search).get('project_id');
   const [importing, setImporting] = useState(false);
   const [selectedScene, setSelectedScene] = useState(null);
