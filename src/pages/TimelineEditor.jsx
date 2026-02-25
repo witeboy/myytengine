@@ -618,29 +618,26 @@ export default function TimelineEditor() {
                 >
                   <Music className="w-3 h-3" /> Music
                 </div>
-                <div className={`flex-1 bg-[#0a0a1a] relative transition-all ${collapsedTracks.music ? 'h-5' : 'h-8'}`}>
+                <div
+                  data-inline-edit={editingTrack === 'music' ? 'true' : undefined}
+                  className={`flex-1 bg-[#0a0a1a] relative transition-all ${collapsedTracks.music ? 'h-5' : editingTrack === 'music' ? 'h-16' : 'h-8'}`}
+                  style={{ minHeight: editingTrack === 'music' ? 64 : undefined }}
+                >
                   {musicUrl && (
-                    <div
-                      className="absolute top-0.5 bottom-0.5 bg-green-500/15 border border-green-500/30 rounded flex items-center px-2 cursor-pointer hover:bg-green-500/25 transition-colors"
-                      style={{ width: totalDuration * pixelsPerSecond }}
-                      onDoubleClick={() => openAudioEdit('music')}
-                      title="Double-click to edit"
-                    >
-                      {!collapsedTracks.music && (
-                        <div className="flex items-center gap-0.5">
-                          {Array.from({ length: 8 }).map((_, i) => (
-                            <div key={i} className="w-0.5 bg-green-400/60 rounded-full" style={{ height: 3 + Math.random() * 10 }} />
-                          ))}
-                        </div>
-                      )}
-                      <span className="text-[8px] text-green-400/70 ml-1.5">{selectedMusic?.title || 'Music'}</span>
-                      <button
-                        className="ml-auto text-[8px] text-green-300 bg-green-500/20 px-1 rounded hover:bg-green-500/40"
-                        onClick={(e) => { e.stopPropagation(); openAudioEdit('music'); }}
-                      >
-                        <Scissors className="w-2.5 h-2.5 inline" /> Edit
-                      </button>
-                    </div>
+                    <InlineWaveform
+                      audioUrl={musicUrl}
+                      trackColor="green"
+                      pixelsPerSecond={pixelsPerSecond}
+                      totalTimelineDuration={totalDuration}
+                      currentTime={currentTime}
+                      onSeek={(t) => { setCurrentTime(t); }}
+                      isEditing={editingTrack === 'music'}
+                      onStartEdit={() => setEditingTrack('music')}
+                      onStopEdit={() => setEditingTrack(null)}
+                      onSave={(blob, dur) => handleInlineAudioSave('music', blob, dur)}
+                      label={selectedMusic?.title || 'Music'}
+                      trackDuration={selectedMusic?.duration_seconds || totalDuration}
+                    />
                   )}
                 </div>
               </div>
