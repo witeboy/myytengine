@@ -95,6 +95,7 @@ ${tweaksSummary}
 
 ═══ PROMPT RULES ═══
 1. MUST start with: "A high-detail 4K YouTube thumbnail in 16:9 aspect ratio (1920x1080), widescreen landscape format, graphic design composition."
+1b. PHOTOREALISM: If the original prompt describes REAL PEOPLE (not cartoons/illustrations), you MUST add "photorealistic photograph, DSLR camera shot, real human skin with visible pores and texture, professional portrait photography, NOT illustration, NOT cartoon, NOT 3D render, NOT anime" right after the opening line. Every person must be described as "a real photograph of..." to force the AI to generate actual photorealistic humans, not illustrated ones.
 2. 400+ words — hyper-detailed. Your prompt should be AT LEAST as long as the original recreate_prompt.
 3. SURGICAL TWEAKS ONLY: Apply ONLY the user's requested changes. Everything else MUST remain identical to the original recreate_prompt.
 4. Keep ALL original details: exact person descriptions (archetype, skin tone, hair, facial hair, clothing colors, logos, expression muscles), exact lighting setup (rim lights, key lights, color casts), exact background (blur level, atmosphere, colors), exact composition and spatial arrangement.

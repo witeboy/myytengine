@@ -73,6 +73,27 @@ Deno.serve(async (req) => {
       textPatterns.push(dq.slice(1, -1));
     }
 
+    // === PHOTOREALISM ENFORCEMENT ===
+    // If the prompt describes real people, ensure photorealism keywords are present
+    const photorealismKeywords = ['real human', 'photorealistic photograph', 'DSLR', 'real photograph of'];
+    const hasPhotorealCues = /\b(person|man|woman|guy|girl|face|skin tone|expression|beard|hair)\b/i.test(processedPrompt);
+    const alreadyPhotorealistic = photorealismKeywords.some(kw => processedPrompt.toLowerCase().includes(kw.toLowerCase()));
+    
+    if (hasPhotorealCues && !alreadyPhotorealistic) {
+      // Insert photorealism enforcement after the opening line
+      const insertAfter = 'graphic design composition.';
+      if (processedPrompt.includes(insertAfter)) {
+        processedPrompt = processedPrompt.replace(
+          insertAfter,
+          insertAfter + ' Photorealistic photograph, DSLR camera shot, real human skin with visible pores and texture, professional portrait photography, NOT illustration, NOT cartoon, NOT 3D render, NOT anime.'
+        );
+      } else {
+        // Prepend if no standard opening found
+        processedPrompt = 'Photorealistic photograph, DSLR camera shot, real human skin with visible pores and texture, professional portrait photography, NOT illustration, NOT cartoon, NOT 3D render, NOT anime. ' + processedPrompt;
+      }
+      console.log('[PhotorealEnforce] Added photorealism keywords to prompt');
+    }
+
     // Add a TEXT RENDERING BLOCK at the end to reinforce text generation
     if (textPatterns.length > 0) {
       const uniqueTexts = [...new Set(textPatterns)].filter(t => t.length > 1 && t.length <= 40);

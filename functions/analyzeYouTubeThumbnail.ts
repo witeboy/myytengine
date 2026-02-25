@@ -228,6 +228,8 @@ The recreate_prompt is what an AI IMAGE GENERATOR will use. It must follow these
 
 MANDATORY: The recreate_prompt MUST explicitly start with "A high-detail 4K YouTube thumbnail in 16:9 aspect ratio (1280x720), widescreen landscape format, graphic design composition". All YouTube thumbnails are 16:9 wide format. NEVER generate square or portrait format prompts.
 
+- PHOTOREALISM RULE: If the original thumbnail contains REAL PEOPLE (photographs, not illustrations/cartoons/anime), the recreate_prompt MUST include these exact photorealism enforcement phrases near the beginning: "photorealistic photograph, DSLR camera shot, real human skin with visible pores and texture, professional portrait photography, NOT illustration, NOT cartoon, NOT 3D render, NOT anime". Every person must be described as "a real photograph of a [archetype]" not just "a [archetype]". This is CRITICAL — without these phrases the AI will generate illustrated/cartoon people instead of photorealistic ones.
+
 === WORLD-CLASS THUMBNAIL QUALITY CHECKLIST ===
 Apply these principles to make the recreate_prompt produce a VIRAL, not educational, thumbnail:
 1. CHARACTERS IN ACTION: Describe subjects DOING something (holding, protecting, confronting), not just standing
