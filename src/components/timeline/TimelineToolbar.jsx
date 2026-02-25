@@ -75,7 +75,7 @@ export default function TimelineToolbar({
         disabled={!activeTrack}
         title="Split at playhead"
       >
-        <SplitSquareHorizontal className="w-3 h-3" /> Split
+        <Columns className="w-3 h-3" /> Split
       </Button>
       <Button
         size="sm" variant="ghost"
