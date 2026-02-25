@@ -91,18 +91,22 @@ Deno.serve(async (req) => {
     console.log(`Kling Avatar submit: HTTP ${res.status} → code=${data.code} message=${data.message}`);
 
     if (data.code !== 0) {
-      const httpStatus = data.code === 402 ? 402 : 400;
+      // Return error with 200 status so frontend can read the body properly
+      // (axios throws on non-2xx and may lose response body)
       return Response.json({
-        error: `Kling Avatar API error: ${data.message || 'Unknown error'} (code ${data.code})`,
-        raw: data,
-      }, { status: httpStatus });
+        success: false,
+        error: data.code === 402
+          ? 'Kling AI credits insufficient. Please top up your Kling account at https://klingai.com to continue generating lip-sync videos.'
+          : `Kling Avatar API error: ${data.message || 'Unknown error'} (code ${data.code})`,
+        error_code: data.code,
+      });
     }
 
     const taskId = data.data?.task_id;
     const taskStatus = data.data?.task_status;
 
     if (!taskId) {
-      return Response.json({ error: 'No task_id returned', raw: data }, { status: 500 });
+      return Response.json({ success: false, error: 'No task_id returned from Kling API', raw: data });
     }
 
     console.log(`Kling Avatar task created: ${taskId} (status: ${taskStatus})`);
