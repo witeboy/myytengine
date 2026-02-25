@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import {
   Scissors, Trash2,
-  Undo2, ScanSearch, ChevronDown, ChevronUp,
+  Undo2, Redo2, ScanSearch, ChevronDown, ChevronUp,
   Film, Mic, Music, Volume2, Wand2, ZoomIn, ZoomOut, ArrowRightLeft
 } from 'lucide-react';
 
@@ -21,7 +21,9 @@ export default function TimelineToolbar({
   onSplit,
   onDelete,
   onUndo,
+  onRedo,
   canUndo,
+  canRedo,
   onDetectSilence,
   onGenerateSfx,
   collapsedTracks,
@@ -118,8 +120,18 @@ export default function TimelineToolbar({
         className="text-gray-400 hover:bg-white/10 gap-1 text-[10px] h-6 px-2"
         onClick={onUndo}
         disabled={!canUndo}
+        title="Undo (Ctrl+Z)"
       >
         <Undo2 className="w-3 h-3" /> Undo
+      </Button>
+      <Button
+        size="sm" variant="ghost"
+        className="text-gray-400 hover:bg-white/10 gap-1 text-[10px] h-6 px-2"
+        onClick={onRedo}
+        disabled={!canRedo}
+        title="Redo (Ctrl+Y)"
+      >
+        <Redo2 className="w-3 h-3" /> Redo
       </Button>
 
       <div className="flex-1" />

@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { Loader2, Zap } from 'lucide-react';
+import { Loader2, Zap, Trash2 } from 'lucide-react';
 
-export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, onSelectScene, onUpdateDuration, onTransitionClick }) {
+export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, onSelectScene, onUpdateDuration, onTransitionClick, onDeleteMedia }) {
   const [resizing, setResizing] = useState(null);
   const startXRef = useRef(0);
   const startDurRef = useRef(0);
@@ -109,6 +109,20 @@ export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, 
                     {hasVideo ? 'VID' : 'IMG'}
                   </span>
                 </div>
+              )}
+
+              {/* Delete media button — visible on hover when scene has media */}
+              {(hasVideo || hasImage) && isSelected && (
+                <button
+                  className="absolute bottom-0.5 right-3 w-5 h-5 rounded bg-red-600/80 hover:bg-red-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteMedia?.(scene);
+                  }}
+                  title={`Delete ${hasVideo ? 'video' : 'image'}`}
+                >
+                  <Trash2 className="w-2.5 h-2.5 text-white" />
+                </button>
               )}
 
               {/* Resize handle */}
