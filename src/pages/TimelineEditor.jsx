@@ -329,10 +329,13 @@ export default function TimelineEditor() {
     setImporting(false);
   };
 
+  const refetchScenesRef = useRef(refetchScenes);
+  refetchScenesRef.current = refetchScenes;
+
   const handleUpdateDuration = useMemo(() => debounce(async (sceneId, newDuration) => {
     await base44.entities.Scenes.update(sceneId, { duration_seconds: Math.max(2, newDuration) });
-    refetchScenes();
-  }, 500), [refetchScenes]);
+    refetchScenesRef.current();
+  }, 500), []);
 
   const zoomIn = () => setPixelsPerSecond(prev => Math.min(prev + 5, 50));
   const zoomOut = () => setPixelsPerSecond(prev => Math.max(prev - 5, 3));
