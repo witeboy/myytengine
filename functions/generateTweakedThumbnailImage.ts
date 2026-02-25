@@ -109,7 +109,7 @@ Deno.serve(async (req) => {
       try {
         console.log('[Ideogram V3 Balanced] Fallback...');
         const taskId = await kieCreateTask(KIE_API_KEY, "ideogram/v3-text-to-image", {
-          prompt: `${prompt.substring(0, 800)}. 1920x1080 Full HD, professional YouTube thumbnail.`,
+          prompt: `${processedPrompt.substring(0, 1200)}. 1920x1080 Full HD, professional YouTube thumbnail.`,
           image_size: "landscape_16_9",
           style: "DESIGN",
           rendering_speed: "BALANCED",
@@ -128,7 +128,7 @@ Deno.serve(async (req) => {
       try {
         console.log('[Flux 2 Pro] Fallback...');
         const taskId = await kieCreateTask(KIE_API_KEY, "flux-2/pro-text-to-image", {
-          prompt: `${prompt}. Ultra high resolution 1920x1080 Full HD.`,
+          prompt: `${processedPrompt}. Ultra high resolution 1920x1080 Full HD.`,
           aspect_ratio: "16:9",
           resolution: "2K"
         });
