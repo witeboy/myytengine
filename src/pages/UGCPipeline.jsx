@@ -389,9 +389,29 @@ Return ONLY the motion description.`,
               <CardContent className="space-y-4">
                 <div>
                   <label className="text-sm font-medium text-gray-700 mb-1 block">Influencer Type</label>
-                  <Select value={influencerType} onValueChange={setInfluencerType}>
+                  <Select value={influencerType} onValueChange={(val) => {
+                    // Check if val is a template ID (starts with "tpl_")
+                    if (val.startsWith('tpl_')) {
+                      const tplId = val.replace('tpl_', '');
+                      const tpl = savedTemplates.find(t => t.id === tplId);
+                      if (tpl) handleLoadTemplate(tpl);
+                    } else {
+                      setInfluencerType(val);
+                    }
+                  }}>
                     <SelectTrigger><SelectValue placeholder="Select type..." /></SelectTrigger>
                     <SelectContent>
+                      {savedTemplates.length > 0 && (
+                        <>
+                          <div className="px-2 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Saved Templates</div>
+                          {savedTemplates.map(t => (
+                            <SelectItem key={`tpl_${t.id}`} value={`tpl_${t.id}`}>
+                              {t.name} {t.is_favorite ? '⭐' : ''}
+                            </SelectItem>
+                          ))}
+                          <div className="px-2 py-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider border-t mt-1 pt-1.5">Generic Types</div>
+                        </>
+                      )}
                       {INFLUENCER_TYPES.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
