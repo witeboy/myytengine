@@ -17,8 +17,9 @@ import VideoExporter from '@/components/timeline/VideoExporter';
 import useVideoExport from '@/components/timeline/useVideoExport';
 import SceneReorder from '@/components/timeline/SceneReorder';
 import TransitionLibrary from '@/components/timeline/TransitionLibrary';
-// DownloadAllMedia moved to EditorTopBar
 import AudioEditor from '@/components/timeline/AudioEditor';
+import TimelineToolbar from '@/components/timeline/TimelineToolbar';
+import SfxGenerateDialog from '@/components/timeline/SfxGenerateDialog';
 import {
   Loader2, Film, Play, Pause, SkipBack, SkipForward,
   Volume2, VolumeX, Mic, Music, ZoomIn, ZoomOut, Monitor, Scissors
@@ -37,8 +38,14 @@ export default function TimelineEditor() {
   const [transitionTarget, setTransitionTarget] = useState(null);
   const [previewOrientation, setPreviewOrientation] = useState(null);
   const [showAudioEditor, setShowAudioEditor] = useState(false);
+  const [audioEditTarget, setAudioEditTarget] = useState(null); // 'voiceover' | 'music' | 'sfx-{sceneId}'
   const exportHook = useVideoExport();
   const timelineRef = useRef(null);
+
+  // Track states
+  const [activeTrack, setActiveTrack] = useState(null);
+  const [collapsedTracks, setCollapsedTracks] = useState({});
+  const [showSfxDialog, setShowSfxDialog] = useState(false);
 
   // Audio mixer state
   const [voVol, setVoVol] = useState(1.0);
@@ -111,6 +118,18 @@ export default function TimelineEditor() {
 
   const currentScene = getCurrentScene(currentTime);
   const currentSceneIndex = currentScene ? scenesWithTiming.findIndex(s => s.id === currentScene.id) : 0;
+
+  // Spacebar play/pause
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.code === 'Space' && !e.target.closest('input, textarea, [contenteditable]')) {
+        e.preventDefault();
+        setIsPlaying(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Playback engine
   useEffect(() => {
@@ -289,8 +308,58 @@ export default function TimelineEditor() {
     }
   };
 
+  const toggleTrackCollapse = (track) => {
+    setCollapsedTracks(prev => ({ ...prev, [track]: !prev[track] }));
+  };
+
+  // Open audio editor for a specific track
+  const openAudioEdit = (target) => {
+    setAudioEditTarget(target);
+    setShowAudioEditor(true);
+  };
+
+  const getAudioEditUrl = () => {
+    if (audioEditTarget === 'voiceover') return voiceoverUrl;
+    if (audioEditTarget === 'music') return musicUrl;
+    if (audioEditTarget?.startsWith('sfx-')) {
+      const sceneId = audioEditTarget.replace('sfx-', '');
+      const sc = scenes.find(s => s.id === sceneId);
+      return sc?.sound_effect_url;
+    }
+    return null;
+  };
+
+  const handleAudioEditSave = async (wavBlob, newDuration) => {
+    const file = new File([wavBlob], 'edited_audio.wav', { type: 'audio/wav' });
+    const { file_url } = await base44.integrations.Core.UploadFile({ file });
+
+    if (audioEditTarget === 'voiceover') {
+      const ps = prodSettings[0];
+      if (ps) {
+        await base44.entities.ProductionSettings.update(ps.id, {
+          voiceover_url: file_url,
+          total_duration_seconds: Math.round(newDuration * 10) / 10,
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ['prod-settings', projectId] });
+    } else if (audioEditTarget === 'music') {
+      if (selectedMusic) {
+        await base44.entities.MusicTracks.update(selectedMusic.id, { audio_url: file_url });
+      }
+      queryClient.invalidateQueries({ queryKey: ['music-timeline', projectId] });
+    } else if (audioEditTarget?.startsWith('sfx-')) {
+      const sceneId = audioEditTarget.replace('sfx-', '');
+      await base44.entities.Scenes.update(sceneId, { sound_effect_url: file_url });
+      refetchScenes();
+    }
+    setShowAudioEditor(false);
+    setAudioEditTarget(null);
+  };
+
+  const trackHeight = { expanded: 'h-20', collapsed: 'h-5' };
+
   return (
-    <div className="h-screen flex flex-col bg-[#0d0d1a] text-white overflow-hidden">
+    <div className="h-screen flex flex-col bg-[#0d0d1a] text-white overflow-hidden" tabIndex={-1}>
       {/* Top Navigation Bar */}
       <EditorTopBar
         project={project}
@@ -366,36 +435,21 @@ export default function TimelineEditor() {
         </div>
       </div>
 
-      {/* ═══════ AUDIO EDITOR ═══════ */}
-      {showAudioEditor && voiceoverUrl && (
-        <div className="flex-shrink-0 border-t border-gray-700/50 max-h-[280px] overflow-auto">
+      {/* ═══════ AUDIO EDITOR PANEL ═══════ */}
+      {showAudioEditor && getAudioEditUrl() && (
+        <div className="flex-shrink-0 border-t border-gray-700/50 max-h-[260px] overflow-auto">
           <AudioEditor
-            audioUrl={voiceoverUrl}
-            onSave={async (wavBlob, newDuration) => {
-              // Upload edited audio
-              const file = new File([wavBlob], 'voiceover_edited.wav', { type: 'audio/wav' });
-              const { file_url } = await base44.integrations.Core.UploadFile({ file });
-              // Update production settings
-              const ps = prodSettings[0];
-              if (ps) {
-                await base44.entities.ProductionSettings.update(ps.id, {
-                  voiceover_url: file_url,
-                  total_duration_seconds: Math.round(newDuration * 10) / 10,
-                });
-              }
-              // Refresh
-              queryClient.invalidateQueries({ queryKey: ['prod-settings', projectId] });
-              setShowAudioEditor(false);
-            }}
-            onClose={() => setShowAudioEditor(false)}
+            audioUrl={getAudioEditUrl()}
+            onSave={handleAudioEditSave}
+            onClose={() => { setShowAudioEditor(false); setAudioEditTarget(null); }}
           />
         </div>
       )}
 
-      {/* ═══════ BOTTOM: Transport + Timeline ═══════ */}
+      {/* ═══════ BOTTOM: Transport + Toolbar + Timeline ═══════ */}
       <div className="flex-shrink-0 bg-[#0f0f23] border-t border-gray-700/50">
         {/* Transport bar */}
-        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-800/50">
+        <div className="flex items-center gap-2 px-3 py-1 border-b border-gray-800/50">
           {/* Playback controls */}
           <div className="flex items-center gap-0.5">
             <button onClick={handlePrevScene} className="w-7 h-7 rounded hover:bg-white/10 flex items-center justify-center">
@@ -415,8 +469,8 @@ export default function TimelineEditor() {
             <span className="text-gray-600 text-[10px]">/</span>
             <span className="text-[11px] text-gray-500 min-w-[60px]">{formatTime(totalDuration)}</span>
           </div>
-
           <span className="text-[10px] text-gray-600 ml-1">S{currentSceneIndex + 1}/{scenes.length}</span>
+          <span className="text-[9px] text-gray-700 ml-1">Space=Play</span>
 
           <div className="flex-1" />
 
@@ -444,37 +498,44 @@ export default function TimelineEditor() {
               Save
             </Button>
           </div>
-
-          <div className="w-px h-4 bg-gray-700 mx-1" />
-
-          {/* Audio Editor toggle */}
-          {voiceoverUrl && (
-            <button
-              onClick={() => setShowAudioEditor(prev => !prev)}
-              className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium transition-colors ${
-                showAudioEditor ? 'bg-cyan-500/20 text-cyan-400' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
-              }`}
-            >
-              <Scissors className="w-3 h-3" /> Audio Edit
-            </button>
-          )}
-
-          <div className="w-px h-4 bg-gray-700 mx-1" />
-
-          {/* Zoom controls */}
-          <div className="flex items-center gap-0.5">
-            <button onClick={zoomOut} className="w-6 h-6 rounded hover:bg-white/10 flex items-center justify-center">
-              <ZoomOut className="w-3 h-3 text-gray-400" />
-            </button>
-            <span className="text-[9px] text-gray-500 w-5 text-center">{pixelsPerSecond}</span>
-            <button onClick={zoomIn} className="w-6 h-6 rounded hover:bg-white/10 flex items-center justify-center">
-              <ZoomIn className="w-3 h-3 text-gray-400" />
-            </button>
-          </div>
         </div>
 
+        {/* Timeline Edit Toolbar */}
+        <TimelineToolbar
+          activeTrack={activeTrack}
+          hasSelection={false}
+          onCut={() => {
+            if (activeTrack === 'voiceover' && voiceoverUrl) openAudioEdit('voiceover');
+            else if (activeTrack === 'music' && musicUrl) openAudioEdit('music');
+            else if (activeTrack === 'sfx') {
+              const sc = getCurrentScene(currentTime);
+              if (sc?.sound_effect_url) openAudioEdit(`sfx-${sc.id}`);
+            }
+          }}
+          onTrim={() => {
+            if (activeTrack === 'voiceover' && voiceoverUrl) openAudioEdit('voiceover');
+            else if (activeTrack === 'music' && musicUrl) openAudioEdit('music');
+          }}
+          onSplit={() => {
+            if (activeTrack === 'voiceover' && voiceoverUrl) openAudioEdit('voiceover');
+            else if (activeTrack === 'music' && musicUrl) openAudioEdit('music');
+          }}
+          onDelete={() => {}}
+          onUndo={() => {}}
+          canUndo={false}
+          onDetectSilence={() => {
+            if (voiceoverUrl) openAudioEdit('voiceover');
+          }}
+          onGenerateSfx={() => setShowSfxDialog(true)}
+          collapsedTracks={collapsedTracks}
+          onToggleCollapse={toggleTrackCollapse}
+          pixelsPerSecond={pixelsPerSecond}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+        />
+
         {/* Timeline tracks */}
-        <div className="overflow-x-auto max-h-[200px]" ref={timelineRef} onClick={handleTimelineClick}>
+        <div className="overflow-x-auto max-h-[240px] overflow-y-auto" ref={timelineRef} onClick={handleTimelineClick}>
           <div style={{ minWidth: Math.max(totalDuration * pixelsPerSecond + 100, 800) }}>
             {/* Ruler */}
             <div className="relative">
@@ -490,118 +551,218 @@ export default function TimelineEditor() {
             </div>
 
             {/* Video Track */}
-            <div className="border-t border-gray-800/50 relative">
+            <div
+              className={`border-t border-gray-800/50 relative cursor-pointer transition-all ${activeTrack === 'video' ? 'ring-1 ring-inset ring-purple-500/40' : ''}`}
+              onClick={(e) => { e.stopPropagation(); setActiveTrack('video'); }}
+            >
               <div className="flex items-center">
-                <div className="w-16 flex-shrink-0 px-2 py-1.5 bg-[#1a1a2e] border-r border-gray-800/50 text-[10px] font-medium text-gray-400 flex items-center gap-1">
+                <div
+                  className="w-16 flex-shrink-0 px-2 py-1.5 bg-[#1a1a2e] border-r border-gray-800/50 text-[10px] font-medium text-purple-400 flex items-center gap-1 cursor-pointer select-none"
+                  onClick={(e) => { e.stopPropagation(); toggleTrackCollapse('video'); }}
+                >
                   <Film className="w-3 h-3" /> Video
                 </div>
-                <div className="flex-1 relative" style={{ minWidth: totalDuration * pixelsPerSecond }}>
-                  <TimelineTrack
-                    scenes={scenesWithTiming}
-                    pixelsPerSecond={pixelsPerSecond}
-                    selectedScene={selectedScene}
-                    onSelectScene={setSelectedScene}
-                    onUpdateDuration={handleUpdateDuration}
-                    onTransitionClick={(sceneA, sceneB) => setTransitionTarget({ sceneA, sceneB })}
-                  />
-                  {voiceoverDuration > 0 && sceneDuration < voiceoverDuration && (
-                    <div
-                      className="absolute top-0 bottom-0 bg-red-900/20 border-l border-red-500/50 border-dashed flex items-center justify-center"
-                      style={{ left: sceneDuration * pixelsPerSecond, width: (voiceoverDuration - sceneDuration) * pixelsPerSecond }}
-                    >
-                      <span className="text-[9px] text-red-400 whitespace-nowrap px-1">Gap ({Math.round(voiceoverDuration - sceneDuration)}s)</span>
+                <div className={`flex-1 relative transition-all ${collapsedTracks.video ? 'h-5' : ''}`} style={{ minWidth: totalDuration * pixelsPerSecond }}>
+                  {!collapsedTracks.video ? (
+                    <>
+                      <TimelineTrack
+                        scenes={scenesWithTiming}
+                        pixelsPerSecond={pixelsPerSecond}
+                        selectedScene={selectedScene}
+                        onSelectScene={setSelectedScene}
+                        onUpdateDuration={handleUpdateDuration}
+                        onTransitionClick={(sceneA, sceneB) => setTransitionTarget({ sceneA, sceneB })}
+                      />
+                      {voiceoverDuration > 0 && sceneDuration < voiceoverDuration && (
+                        <div
+                          className="absolute top-0 bottom-0 bg-red-900/20 border-l border-red-500/50 border-dashed flex items-center justify-center"
+                          style={{ left: sceneDuration * pixelsPerSecond, width: (voiceoverDuration - sceneDuration) * pixelsPerSecond }}
+                        >
+                          <span className="text-[9px] text-red-400 whitespace-nowrap px-1">Gap ({Math.round(voiceoverDuration - sceneDuration)}s)</span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="h-5 bg-[#0a0a1a] flex items-center px-2">
+                      <span className="text-[8px] text-purple-400/50">{scenes.length} scenes · {Math.round(sceneDuration)}s</span>
                     </div>
                   )}
                 </div>
               </div>
               {scenes.length > 0 && (
-                <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20" style={{ left: currentTime * pixelsPerSecond + 64 }} />
+                <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none" style={{ left: currentTime * pixelsPerSecond + 64 }} />
               )}
             </div>
 
             {/* Voiceover Track */}
-            <div className="border-t border-gray-800/50 relative">
+            <div
+              className={`border-t border-gray-800/50 relative cursor-pointer transition-all ${activeTrack === 'voiceover' ? 'ring-1 ring-inset ring-blue-500/40' : ''}`}
+              onClick={(e) => { e.stopPropagation(); setActiveTrack('voiceover'); }}
+            >
               <div className="flex items-center">
-                <div className="w-16 flex-shrink-0 px-2 py-1 bg-[#1a1a2e] border-r border-gray-800/50 text-[10px] font-medium text-blue-400 flex items-center gap-1">
+                <div
+                  className="w-16 flex-shrink-0 px-2 py-1 bg-[#1a1a2e] border-r border-gray-800/50 text-[10px] font-medium text-blue-400 flex items-center gap-1 cursor-pointer select-none"
+                  onClick={(e) => { e.stopPropagation(); toggleTrackCollapse('voiceover'); }}
+                >
                   <Mic className="w-3 h-3" /> VO
                 </div>
-                <div className="flex-1 h-8 bg-[#0a0a1a] relative">
+                <div className={`flex-1 bg-[#0a0a1a] relative transition-all ${collapsedTracks.voiceover ? 'h-5' : 'h-8'}`}>
                   {voiceoverDuration > 0 && (
                     <div
-                      className="absolute top-0.5 bottom-0.5 bg-blue-500/15 border border-blue-500/30 rounded flex items-center px-2"
+                      className={`absolute top-0.5 bottom-0.5 bg-blue-500/15 border border-blue-500/30 rounded flex items-center px-2 cursor-pointer hover:bg-blue-500/25 transition-colors`}
                       style={{ width: voiceoverDuration * pixelsPerSecond }}
+                      onDoubleClick={() => voiceoverUrl && openAudioEdit('voiceover')}
+                      title="Double-click to edit"
                     >
-                      <div className="flex items-center gap-0.5">
-                        <div className="w-0.5 h-2 bg-blue-400/60 rounded-full" />
-                        <div className="w-0.5 h-3 bg-blue-400/60 rounded-full" />
-                        <div className="w-0.5 h-1.5 bg-blue-400/60 rounded-full" />
-                        <div className="w-0.5 h-2.5 bg-blue-400/60 rounded-full" />
-                        <div className="w-0.5 h-2 bg-blue-400/60 rounded-full" />
-                      </div>
+                      {!collapsedTracks.voiceover && (
+                        <div className="flex items-center gap-0.5">
+                          <div className="w-0.5 h-2 bg-blue-400/60 rounded-full" />
+                          <div className="w-0.5 h-3 bg-blue-400/60 rounded-full" />
+                          <div className="w-0.5 h-1.5 bg-blue-400/60 rounded-full" />
+                          <div className="w-0.5 h-2.5 bg-blue-400/60 rounded-full" />
+                          <div className="w-0.5 h-2 bg-blue-400/60 rounded-full" />
+                        </div>
+                      )}
                       <span className="text-[8px] text-blue-400/70 ml-1.5">VO • {Math.round(voiceoverDuration)}s</span>
+                      {voiceoverUrl && (
+                        <button
+                          className="ml-auto text-[8px] text-blue-300 bg-blue-500/20 px-1 rounded hover:bg-blue-500/40"
+                          onClick={(e) => { e.stopPropagation(); openAudioEdit('voiceover'); }}
+                        >
+                          <Scissors className="w-2.5 h-2.5 inline" /> Edit
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
               </div>
               {scenes.length > 0 && (
-                <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20" style={{ left: currentTime * pixelsPerSecond + 64 }} />
+                <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none" style={{ left: currentTime * pixelsPerSecond + 64 }} />
               )}
             </div>
 
             {/* Music Track */}
-            <div className="border-t border-gray-800/50 relative">
+            <div
+              className={`border-t border-gray-800/50 relative cursor-pointer transition-all ${activeTrack === 'music' ? 'ring-1 ring-inset ring-green-500/40' : ''}`}
+              onClick={(e) => { e.stopPropagation(); setActiveTrack('music'); }}
+            >
               <div className="flex items-center">
-                <div className="w-16 flex-shrink-0 px-2 py-1 bg-[#1a1a2e] border-r border-gray-800/50 text-[10px] font-medium text-green-400 flex items-center gap-1">
+                <div
+                  className="w-16 flex-shrink-0 px-2 py-1 bg-[#1a1a2e] border-r border-gray-800/50 text-[10px] font-medium text-green-400 flex items-center gap-1 cursor-pointer select-none"
+                  onClick={(e) => { e.stopPropagation(); toggleTrackCollapse('music'); }}
+                >
                   <Music className="w-3 h-3" /> Music
                 </div>
-                <div className="flex-1 h-8 bg-[#0a0a1a] relative">
+                <div className={`flex-1 bg-[#0a0a1a] relative transition-all ${collapsedTracks.music ? 'h-5' : 'h-8'}`}>
                   {musicUrl && (
                     <div
-                      className="absolute top-0.5 bottom-0.5 bg-green-500/15 border border-green-500/30 rounded flex items-center px-2"
+                      className="absolute top-0.5 bottom-0.5 bg-green-500/15 border border-green-500/30 rounded flex items-center px-2 cursor-pointer hover:bg-green-500/25 transition-colors"
                       style={{ width: totalDuration * pixelsPerSecond }}
+                      onDoubleClick={() => openAudioEdit('music')}
+                      title="Double-click to edit"
                     >
-                      <div className="flex items-center gap-0.5">
-                        {Array.from({ length: 8 }).map((_, i) => (
-                          <div key={i} className="w-0.5 bg-green-400/60 rounded-full" style={{ height: 3 + Math.random() * 10 }} />
-                        ))}
-                      </div>
+                      {!collapsedTracks.music && (
+                        <div className="flex items-center gap-0.5">
+                          {Array.from({ length: 8 }).map((_, i) => (
+                            <div key={i} className="w-0.5 bg-green-400/60 rounded-full" style={{ height: 3 + Math.random() * 10 }} />
+                          ))}
+                        </div>
+                      )}
                       <span className="text-[8px] text-green-400/70 ml-1.5">{selectedMusic?.title || 'Music'}</span>
+                      <button
+                        className="ml-auto text-[8px] text-green-300 bg-green-500/20 px-1 rounded hover:bg-green-500/40"
+                        onClick={(e) => { e.stopPropagation(); openAudioEdit('music'); }}
+                      >
+                        <Scissors className="w-2.5 h-2.5 inline" /> Edit
+                      </button>
                     </div>
                   )}
                 </div>
               </div>
               {scenes.length > 0 && (
-                <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20" style={{ left: currentTime * pixelsPerSecond + 64 }} />
+                <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none" style={{ left: currentTime * pixelsPerSecond + 64 }} />
               )}
             </div>
 
             {/* SFX Track */}
-            <div className="border-t border-gray-800/50 relative">
+            <div
+              className={`border-t border-gray-800/50 relative cursor-pointer transition-all ${activeTrack === 'sfx' ? 'ring-1 ring-inset ring-amber-500/40' : ''}`}
+              onClick={(e) => { e.stopPropagation(); setActiveTrack('sfx'); }}
+            >
               <div className="flex items-center">
-                <div className="w-16 flex-shrink-0 px-2 py-1 bg-[#1a1a2e] border-r border-gray-800/50 text-[10px] font-medium text-amber-400 flex items-center gap-1">
+                <div
+                  className="w-16 flex-shrink-0 px-2 py-1 bg-[#1a1a2e] border-r border-gray-800/50 text-[10px] font-medium text-amber-400 flex items-center gap-1 cursor-pointer select-none"
+                  onClick={(e) => { e.stopPropagation(); toggleTrackCollapse('sfx'); }}
+                >
                   <Volume2 className="w-3 h-3" /> SFX
                 </div>
-                <div className="flex-1 h-7 bg-[#0a0a1a] relative">
-                  {scenesWithTiming.filter(s => s.sound_effect_url).map(scene => (
-                    <div
-                      key={scene.id}
-                      className="absolute top-0.5 bottom-0.5 bg-amber-500/15 border border-amber-500/30 rounded text-[7px] text-amber-400/70 px-1 flex items-center truncate"
-                      style={{
-                        left: scene.start_time * pixelsPerSecond,
-                        width: Math.max(scene.duration_seconds * pixelsPerSecond, 20),
-                      }}
-                    >
-                      {scene.sound_effect || `S${scene.scene_number}`}
+                <div className={`flex-1 bg-[#0a0a1a] relative transition-all ${collapsedTracks.sfx ? 'h-5' : 'h-8'}`}>
+                  {!collapsedTracks.sfx ? (
+                    <>
+                      {scenesWithTiming.filter(s => s.sound_effect_url).map(scene => (
+                        <div
+                          key={scene.id}
+                          className="absolute top-0.5 bottom-0.5 bg-amber-500/15 border border-amber-500/30 rounded text-[7px] text-amber-400/70 px-1 flex items-center truncate cursor-pointer hover:bg-amber-500/25 transition-colors"
+                          style={{
+                            left: scene.start_time * pixelsPerSecond,
+                            width: Math.max(scene.duration_seconds * pixelsPerSecond, 30),
+                          }}
+                          onDoubleClick={() => openAudioEdit(`sfx-${scene.id}`)}
+                          title={`${scene.sound_effect || 'SFX'} — Double-click to edit`}
+                        >
+                          <span className="truncate flex-1">{scene.sound_effect || `S${scene.scene_number}`}</span>
+                          <button
+                            className="text-[7px] text-amber-300 bg-amber-500/20 px-0.5 rounded hover:bg-amber-500/40 ml-0.5 flex-shrink-0"
+                            onClick={(e) => { e.stopPropagation(); openAudioEdit(`sfx-${scene.id}`); }}
+                          >
+                            <Scissors className="w-2 h-2 inline" />
+                          </button>
+                        </div>
+                      ))}
+                      {/* Show empty SFX slots for scenes without effects */}
+                      {scenesWithTiming.filter(s => !s.sound_effect_url).map(scene => (
+                        <div
+                          key={`empty-${scene.id}`}
+                          className="absolute top-0.5 bottom-0.5 border border-dashed border-amber-500/20 rounded text-[7px] text-amber-400/30 px-1 flex items-center cursor-pointer hover:border-amber-500/40 hover:text-amber-400/50 transition-colors"
+                          style={{
+                            left: scene.start_time * pixelsPerSecond,
+                            width: Math.max(scene.duration_seconds * pixelsPerSecond, 30),
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedScene(scene.id);
+                            setShowSfxDialog(scene.id);
+                          }}
+                          title="Click to add SFX"
+                        >
+                          + S{scene.scene_number}
+                        </div>
+                      ))}
+                    </>
+                  ) : (
+                    <div className="h-5 flex items-center px-2">
+                      <span className="text-[8px] text-amber-400/50">{scenesWithTiming.filter(s => s.sound_effect_url).length} effects</span>
                     </div>
-                  ))}
+                  )}
                 </div>
               </div>
               {scenes.length > 0 && (
-                <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20" style={{ left: currentTime * pixelsPerSecond + 64 }} />
+                <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20 pointer-events-none" style={{ left: currentTime * pixelsPerSecond + 64 }} />
               )}
             </div>
           </div>
         </div>
+
+        {/* SFX Generate Dialog */}
+        {showSfxDialog && currentScene && (
+          <div className="relative">
+            <SfxGenerateDialog
+              scene={scenesWithTiming.find(s => s.id === (showSfxDialog === true ? currentScene.id : showSfxDialog)) || currentScene}
+              onGenerated={() => { refetchScenes(); setShowSfxDialog(false); }}
+              onClose={() => setShowSfxDialog(false)}
+            />
+          </div>
+        )}
       </div>
 
       {/* Modals */}
