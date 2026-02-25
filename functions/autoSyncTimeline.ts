@@ -117,23 +117,37 @@ Distribute ${totalVoDuration}s across ${scenes.length} scenes. Rules:
       sceneDurations[longestIdx].duration_seconds = Math.round((sceneDurations[longestIdx].duration_seconds + diff) * 10) / 10;
     }
 
-    // Update scenes in database sequentially with small batches to avoid rate limits
-    const BATCH_SIZE = 5;
-    for (let i = 0; i < sceneDurations.length; i += BATCH_SIZE) {
-      const batch = sceneDurations.slice(i, i + BATCH_SIZE);
-      await Promise.all(batch.map(sd => {
-        const scene = scenes.find(s => s.scene_number === sd.scene_number);
-        if (scene) {
-          return base44.asServiceRole.entities.Scenes.update(scene.id, { 
+    // Update scenes sequentially to avoid rate limits (150 scenes = many API calls)
+    let updated = 0;
+    for (let i = 0; i < sceneDurations.length; i++) {
+      const sd = sceneDurations[i];
+      const scene = scenes.find(s => s.scene_number === sd.scene_number);
+      if (!scene) continue;
+      
+      // Retry with backoff on rate limit
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await base44.asServiceRole.entities.Scenes.update(scene.id, { 
             duration_seconds: sd.duration_seconds 
           });
+          updated++;
+          break;
+        } catch (err) {
+          if (err.message?.includes('Rate limit') && attempt < 2) {
+            await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          } else {
+            throw err;
+          }
         }
-      }).filter(Boolean));
-      // Small delay between batches to stay within rate limits
-      if (i + BATCH_SIZE < sceneDurations.length) {
-        await new Promise(r => setTimeout(r, 300));
+      }
+      
+      // Throttle: pause every 3 updates
+      if ((i + 1) % 3 === 0 && i < sceneDurations.length - 1) {
+        await new Promise(r => setTimeout(r, 200));
       }
     }
+    
+    console.log(`Updated ${updated} scenes`);
 
     console.log('Auto-sync complete. Durations:', sceneDurations.map(s => `S${s.scene_number}:${s.duration_seconds}s`).join(', '));
 
