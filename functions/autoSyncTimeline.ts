@@ -117,59 +117,23 @@ Distribute ${totalVoDuration}s across ${scenes.length} scenes. Rules:
       sceneDurations[longestIdx].duration_seconds = Math.round((sceneDurations[longestIdx].duration_seconds + diff) * 10) / 10;
     }
 
-    // Batch update scenes to handle up to 500+ scenes efficiently
-    // Group into batches of 10, with pauses between batches
-    const BATCH_SIZE = 10;
-    let updated = 0;
-    
-    for (let batchStart = 0; batchStart < sceneDurations.length; batchStart += BATCH_SIZE) {
-      const batch = sceneDurations.slice(batchStart, batchStart + BATCH_SIZE);
-      
-      // Fire all updates in this batch concurrently
-      const batchPromises = batch.map(sd => {
-        const scene = scenes.find(s => s.scene_number === sd.scene_number);
-        if (!scene) return Promise.resolve();
-        return (async () => {
-          for (let attempt = 0; attempt < 5; attempt++) {
-            try {
-              await base44.asServiceRole.entities.Scenes.update(scene.id, { 
-                duration_seconds: sd.duration_seconds 
-              });
-              updated++;
-              return;
-            } catch (err) {
-              if ((err.message?.includes('Rate limit') || err.message?.includes('429')) && attempt < 4) {
-                const wait = 2000 * Math.pow(2, attempt);
-                console.log(`Rate limited on scene ${sd.scene_number}, waiting ${wait}ms (attempt ${attempt + 1})`);
-                await new Promise(r => setTimeout(r, wait));
-              } else {
-                throw err;
-              }
-            }
-          }
-        })();
-      });
-      
-      await Promise.all(batchPromises);
-      
-      // Pause between batches to respect rate limits
-      if (batchStart + BATCH_SIZE < sceneDurations.length) {
-        await new Promise(r => setTimeout(r, 2000));
-      }
-      
-      if ((batchStart + BATCH_SIZE) % 100 === 0) {
-        console.log(`Progress: ${Math.min(batchStart + BATCH_SIZE, sceneDurations.length)}/${sceneDurations.length} scenes updated`);
-      }
-    }
-    
-    console.log(`Updated ${updated} scenes`);
+    // Map scene IDs for the frontend to apply updates
+    const durationsWithIds = sceneDurations.map(sd => {
+      const scene = scenes.find(s => s.scene_number === sd.scene_number);
+      return {
+        scene_id: scene?.id,
+        scene_number: sd.scene_number,
+        duration_seconds: sd.duration_seconds,
+      };
+    }).filter(d => d.scene_id);
 
-    console.log('Auto-sync complete. Durations:', sceneDurations.map(s => `S${s.scene_number}:${s.duration_seconds}s`).join(', '));
+    console.log(`Auto-sync computed ${durationsWithIds.length} scene durations. Returning to frontend for incremental apply.`);
 
     return Response.json({
       success: true,
       total_duration: totalVoDuration,
-      scene_durations: sceneDurations,
+      scene_durations: durationsWithIds,
+      apply_mode: 'frontend', // Signal frontend to apply updates incrementally
     });
 
   } catch (error) {
