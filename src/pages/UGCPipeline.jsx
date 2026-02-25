@@ -88,6 +88,57 @@ export default function UGCPipeline() {
   const [loadedTemplateName, setLoadedTemplateName] = useState('');
   const [loadedTemplateArchetype, setLoadedTemplateArchetype] = useState('');
   const [loadedTemplateBasePrompt, setLoadedTemplateBasePrompt] = useState('');
+  const [resumedProjectId, setResumedProjectId] = useState('');
+
+  // ── Resume from ongoing project via ?project_id=... ─────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const pid = params.get('project_id');
+    if (!pid) return;
+
+    (async () => {
+      setStatusMsg('Loading project...');
+      setLoading(true);
+      try {
+        const projects = await base44.entities.Projects.filter({ id: pid });
+        const project = projects[0];
+        if (!project) { setLoading(false); return; }
+
+        setResumedProjectId(project.id);
+        setLoadedTemplateName(project.name || '');
+        setInfluencerType(project.niche || '');
+
+        // Fetch associated script
+        const scripts = await base44.entities.Scripts.filter({ project_id: project.id, version: 'final_aggregated' });
+        const script = scripts[0];
+        if (script?.full_script) setVoiceScript(script.full_script);
+
+        // Fetch production settings (voiceover)
+        const settings = await base44.entities.ProductionSettings.filter({ project_id: project.id });
+        const prod = settings[0];
+        if (prod?.voiceover_url) {
+          setVoiceUrl(prod.voiceover_url);
+          setVoiceDuration(prod.total_duration_seconds || 0);
+          if (prod.selected_voice_id) setSelectedVoiceId(prod.selected_voice_id);
+        }
+
+        // Determine which step to jump to based on project status
+        const status = project.status;
+        if (status === 'voiceover_ready' || status === 'scene_breakdown') {
+          // Has voiceover, go to step 4 (voice) or 5 (lip-sync)
+          setStep(4);
+        } else if (status === 'script_complete') {
+          setStep(4);
+        } else {
+          setStep(4); // Default to voice step for UGC projects
+        }
+      } catch (e) {
+        console.error('Resume error:', e);
+      }
+      setLoading(false);
+      setStatusMsg('');
+    })();
+  }, []);
 
   // typeLabel: prefer the template name/archetype over generic INFLUENCER_TYPES label
   const typeLabel = loadedTemplateName
