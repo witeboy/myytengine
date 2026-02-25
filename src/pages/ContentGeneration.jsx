@@ -99,6 +99,19 @@ export default function ContentGeneration() {
 
   const handleImport = async () => {
     setImporting(true);
+
+    // Estimate word count from script for progress estimation
+    try {
+      const scriptsList = await base44.entities.Scripts.filter({ project_id: projectId });
+      const script = scriptsList.find(s => s.version === 'final_aggregated');
+      if (script?.full_script) {
+        const wc = script.full_script.split(/\s+/).filter(w => w.length > 0).length;
+        setEstimatedWordCount(wc);
+        const expectedClips = Math.max(5, Math.min(1000, Math.floor((wc / 150) * 60 / 5)));
+        setTotalExpectedScenes(expectedClips);
+      }
+    } catch (_) {}
+
     try {
       // ── Phase 1: Scene Breakdown ────────────────────────────────
       setImportPhase('breakdown');
@@ -106,26 +119,29 @@ export default function ContentGeneration() {
 
       await invokeWithTimeout('generateSceneBreakdown', { project_id: projectId });
 
-      // Poll until scenes exist with breakdown_ready status (meaning the breakdown function wrote them)
-      let breakdownDone = false;
+      // Poll until scenes exist with breakdown_ready status
       await pollForCompletion(async () => {
         const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
         const sorted = freshScenes.sort((a, b) => a.scene_number - b.scene_number);
         queryClient.setQueryData(['scenes', projectId], sorted);
-        
+
         const breakdownReady = freshScenes.filter(s => s.status === 'breakdown_ready');
         const anyReady = freshScenes.filter(s => s.status === 'breakdown_ready' || s.status === 'prompts_ready');
-        
+
         if (freshScenes.length > 0) {
-          setImportProgress(`Analyzing script... ${freshScenes.length} scenes created (${breakdownReady.length} ready for prompts)`);
+          setTotalExpectedScenes(prev => prev > 0 ? prev : freshScenes.length);
+          setImportProgress(`Breaking down script... ${freshScenes.length} scenes created (${breakdownReady.length} ready for prompts)`);
         } else {
-          setImportProgress('Analyzing script & breaking down into cinematic scenes...');
+          setImportProgress('AI is analyzing story structure, characters & themes...');
         }
-        
-        // Done when we have scenes with breakdown_ready or prompts_ready status
-        breakdownDone = anyReady.length > 0 && anyReady.length === freshScenes.length;
-        return breakdownDone;
-      }, 180, 5000); // 180 polls × 5s = 15 minutes max wait
+
+        // Check project status too — in case all scenes saved and status updated
+        const freshProjects = await base44.entities.Projects.filter({ id: projectId });
+        const proj = freshProjects[0];
+        const statusDone = proj?.status === 'breakdown_complete' || proj?.status === 'content_generation';
+
+        return (anyReady.length > 0 && anyReady.length === freshScenes.length) || statusDone;
+      }, 360, 5000); // 360 polls × 5s = 30 minutes max wait for 10k word scripts
 
       await refetchScenes();
 
@@ -141,9 +157,9 @@ export default function ContentGeneration() {
         queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
         const pending = freshScenes.filter(s => s.status === 'breakdown_ready');
         const ready = freshScenes.filter(s => s.status === 'prompts_ready');
-        setImportProgress(`Converting prompts... ${ready.length}/${freshScenes.length} ready (${pending.length} pending)`);
+        setImportProgress(`Generating production prompts... ${ready.length}/${freshScenes.length} ready`);
         return pending.length === 0 && ready.length > 0;
-      }, 120, 4000);
+      }, 360, 5000); // 30 min max for prompts too
 
       await refetchScenes();
     } catch (err) {
@@ -154,6 +170,8 @@ export default function ContentGeneration() {
       setImporting(false);
       setImportPhase('');
       setImportProgress('');
+      setEstimatedWordCount(0);
+      setTotalExpectedScenes(0);
     }
   };
 
