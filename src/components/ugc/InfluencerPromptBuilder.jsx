@@ -160,7 +160,7 @@ Expression conveys trust and subtle excitement, like ${pronoun} just discovered 
 
 ${extraNotes ? `Additional Notes: ${extraNotes}` : ""}
 
-Negative Prompts: No plastic skin, no hyper-symmetry, no perfect teeth glow, no overly smooth forehead, no unrealistically sharp jawline, no fashion editorial lighting, no 3D render look, no doll-like skin, no exaggerated eyelashes, no artificial blur, no landscape/horizontal format.`;
+Negative Prompts: No plastic skin, no hyper-symmetry, no perfect teeth glow, no overly smooth forehead, no unrealistically sharp jawline, no fashion editorial lighting, no 3D render look, no doll-like skin, no exaggerated eyelashes, no artificial blur, no landscape/horizontal format, no passive product holding, no stiff posed grip, no disconnected body language, no commercial-style product placement, no product floating in air, no mannequin hands.`;
 }
 
 export default function InfluencerPromptBuilder({ config, onChange }) {
