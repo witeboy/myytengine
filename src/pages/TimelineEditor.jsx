@@ -365,6 +365,32 @@ export default function TimelineEditor() {
         </div>
       </div>
 
+      {/* ═══════ AUDIO EDITOR ═══════ */}
+      {showAudioEditor && voiceoverUrl && (
+        <div className="flex-shrink-0 border-t border-gray-700/50 max-h-[280px] overflow-auto">
+          <AudioEditor
+            audioUrl={voiceoverUrl}
+            onSave={async (wavBlob, newDuration) => {
+              // Upload edited audio
+              const file = new File([wavBlob], 'voiceover_edited.wav', { type: 'audio/wav' });
+              const { file_url } = await base44.integrations.Core.UploadFile({ file });
+              // Update production settings
+              const ps = prodSettings[0];
+              if (ps) {
+                await base44.entities.ProductionSettings.update(ps.id, {
+                  voiceover_url: file_url,
+                  total_duration_seconds: Math.round(newDuration * 10) / 10,
+                });
+              }
+              // Refresh
+              queryClient.invalidateQueries({ queryKey: ['prod-settings', projectId] });
+              setShowAudioEditor(false);
+            }}
+            onClose={() => setShowAudioEditor(false)}
+          />
+        </div>
+      )}
+
       {/* ═══════ BOTTOM: Transport + Timeline ═══════ */}
       <div className="flex-shrink-0 bg-[#0f0f23] border-t border-gray-700/50">
         {/* Transport bar */}
