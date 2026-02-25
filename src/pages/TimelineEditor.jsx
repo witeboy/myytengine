@@ -415,50 +415,128 @@ export default function TimelineEditor() {
         </div>
       )}
 
-      {/* ═══════ MAIN EDITOR AREA: 3-Panel Layout ═══════ */}
+      {/* ═══════ MAIN EDITOR AREA: Flexible Panel Layout ═══════ */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
-        {/* LEFT: Media Browser */}
-        <div className="w-56 flex-shrink-0 overflow-hidden">
-          <MediaBrowser
-            scenes={scenesWithTiming}
-            selectedScene={selectedScene}
-            onSelectScene={setSelectedScene}
-            voiceoverUrl={voiceoverUrl}
-            musicUrl={musicUrl}
-          />
-        </div>
-
-        {/* CENTER: Properties Panel */}
-        <div className="w-64 flex-shrink-0 overflow-hidden">
-          <PropertiesPanel
-            scene={scenesWithTiming.find(s => s.id === selectedScene)}
-            onClose={() => setSelectedScene(null)}
-            onUpdateDuration={(dur) => handleUpdateDuration(selectedScene, dur)}
-            onRefetch={refetchScenes}
-          />
-        </div>
-
-        {/* RIGHT: Preview Monitor */}
-        <div className="flex-1 min-w-0 overflow-hidden">
-          {scenes.length > 0 ? (
-            <PreviewPanel
-              currentScene={currentScene}
-              currentTime={currentTime}
-              isPlaying={isPlaying}
-              totalScenes={scenes.length}
-              totalDuration={totalDuration}
-              orientation={previewOrientation || project?.orientation || 'landscape'}
-              projectId={projectId}
-              onOrientationChange={(o) => { setPreviewOrientation(o); refetchProject(); }}
-            />
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-gray-600 bg-[#0d0d1a]">
-              <Monitor className="w-16 h-16 mb-3 opacity-20" />
-              <p className="text-sm">Import scenes to start editing</p>
+        {/* LEFT: Media Browser (collapsible/detachable) */}
+        {!detachedPanels.media && (
+          <div className="flex-shrink-0 overflow-hidden border-r border-gray-700/30 relative" style={{ width: panelSizes.media }}>
+            <div className="absolute top-0 right-0 z-10 flex gap-px p-0.5">
+              <button
+                onClick={() => toggleDetachPanel('media')}
+                className="p-1 rounded bg-black/40 hover:bg-black/70 text-gray-500 hover:text-white transition-colors"
+                title="Detach panel"
+              >
+                <ExternalLink className="w-2.5 h-2.5" />
+              </button>
             </div>
-          )}
-        </div>
+            <MediaBrowser
+              scenes={scenesWithTiming}
+              selectedScene={selectedScene}
+              onSelectScene={setSelectedScene}
+              voiceoverUrl={voiceoverUrl}
+              musicUrl={musicUrl}
+            />
+          </div>
+        )}
+
+        {/* CENTER: Properties Panel (collapsible/detachable) */}
+        {!detachedPanels.properties && (
+          <div className="flex-shrink-0 overflow-hidden border-r border-gray-700/30 relative" style={{ width: panelSizes.properties }}>
+            <div className="absolute top-0 right-0 z-10 flex gap-px p-0.5">
+              <button
+                onClick={() => toggleDetachPanel('properties')}
+                className="p-1 rounded bg-black/40 hover:bg-black/70 text-gray-500 hover:text-white transition-colors"
+                title="Detach panel"
+              >
+                <ExternalLink className="w-2.5 h-2.5" />
+              </button>
+            </div>
+            <PropertiesPanel
+              scene={scenesWithTiming.find(s => s.id === selectedScene)}
+              onClose={() => setSelectedScene(null)}
+              onUpdateDuration={(dur) => handleUpdateDuration(selectedScene, dur)}
+              onRefetch={refetchScenes}
+            />
+          </div>
+        )}
+
+        {/* RIGHT: Preview Monitor (detachable) */}
+        {!detachedPanels.preview ? (
+          <div className="flex-1 min-w-0 overflow-hidden relative">
+            <div className="absolute top-0 right-8 z-10 flex gap-px p-0.5">
+              <button
+                onClick={() => toggleDetachPanel('preview')}
+                className="p-1 rounded bg-black/40 hover:bg-black/70 text-gray-500 hover:text-white transition-colors"
+                title="Detach preview to separate window"
+              >
+                <ExternalLink className="w-2.5 h-2.5" />
+              </button>
+            </div>
+            {scenes.length > 0 ? (
+              <PreviewPanel
+                currentScene={currentScene}
+                currentTime={currentTime}
+                isPlaying={isPlaying}
+                totalScenes={scenes.length}
+                totalDuration={totalDuration}
+                orientation={previewOrientation || project?.orientation || 'landscape'}
+                projectId={projectId}
+                onOrientationChange={(o) => { setPreviewOrientation(o); refetchProject(); }}
+              />
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-gray-600 bg-[#0d0d1a]">
+                <Monitor className="w-16 h-16 mb-3 opacity-20" />
+                <p className="text-sm">Import scenes to start editing</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex-1 min-w-0 flex items-center justify-center bg-[#0d0d1a]">
+            <div className="text-center">
+              <Monitor className="w-10 h-10 mx-auto mb-2 text-gray-700" />
+              <p className="text-[11px] text-gray-600">Preview detached</p>
+              <button onClick={() => toggleDetachPanel('preview')} className="text-[10px] text-blue-400 hover:text-blue-300 mt-1">
+                Re-attach
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Detached panel floating windows */}
+      {detachedPanels.media && (
+        <div className="fixed top-16 left-4 z-[60] w-64 h-[60vh] bg-[#1a1a2e] rounded-xl border border-gray-600/40 shadow-2xl overflow-hidden flex flex-col" style={{ cursor: 'default' }}>
+          <div className="flex items-center justify-between px-2 py-1 bg-[#0f0f23] border-b border-gray-700/40 cursor-move">
+            <span className="text-[10px] font-medium text-gray-400 flex items-center gap-1"><GripVertical className="w-3 h-3" /> Media Browser</span>
+            <button onClick={() => toggleDetachPanel('media')} className="text-gray-500 hover:text-white text-[10px]">Dock</button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <MediaBrowser scenes={scenesWithTiming} selectedScene={selectedScene} onSelectScene={setSelectedScene} voiceoverUrl={voiceoverUrl} musicUrl={musicUrl} />
+          </div>
+        </div>
+      )}
+      {detachedPanels.properties && (
+        <div className="fixed top-16 right-4 z-[60] w-72 h-[60vh] bg-[#16213e] rounded-xl border border-gray-600/40 shadow-2xl overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-2 py-1 bg-[#0f0f23] border-b border-gray-700/40 cursor-move">
+            <span className="text-[10px] font-medium text-gray-400 flex items-center gap-1"><GripVertical className="w-3 h-3" /> Properties</span>
+            <button onClick={() => toggleDetachPanel('properties')} className="text-gray-500 hover:text-white text-[10px]">Dock</button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <PropertiesPanel scene={scenesWithTiming.find(s => s.id === selectedScene)} onClose={() => setSelectedScene(null)} onUpdateDuration={(dur) => handleUpdateDuration(selectedScene, dur)} onRefetch={refetchScenes} />
+          </div>
+        </div>
+      )}
+      {detachedPanels.preview && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] w-[50vw] h-[45vh] bg-[#0d0d1a] rounded-xl border border-gray-600/40 shadow-2xl overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-2 py-1 bg-[#0f0f23] border-b border-gray-700/40 cursor-move">
+            <span className="text-[10px] font-medium text-gray-400 flex items-center gap-1"><GripVertical className="w-3 h-3" /> Preview Monitor</span>
+            <button onClick={() => toggleDetachPanel('preview')} className="text-gray-500 hover:text-white text-[10px]">Dock</button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <PreviewPanel currentScene={currentScene} currentTime={currentTime} isPlaying={isPlaying} totalScenes={scenes.length} totalDuration={totalDuration} orientation={previewOrientation || project?.orientation || 'landscape'} projectId={projectId} onOrientationChange={(o) => { setPreviewOrientation(o); refetchProject(); }} />
+          </div>
+        </div>
+      )}
 
       {/* ═══════ BOTTOM: Transport + Toolbar + Timeline ═══════ */}
       <div className="flex-shrink-0 bg-[#0f0f23] border-t border-gray-700/50">
