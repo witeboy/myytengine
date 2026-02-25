@@ -969,7 +969,7 @@ export default function UGCPipeline() {
           </div>
         )}
 
-        {/* STEP 5 */}
+      {/* STEP 5 */}
         {step === 5 && (
           <Card>
             <CardHeader>
