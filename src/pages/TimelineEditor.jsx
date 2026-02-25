@@ -578,33 +578,26 @@ export default function TimelineEditor() {
                 >
                   <Mic className="w-3 h-3" /> VO
                 </div>
-                <div className={`flex-1 bg-[#0a0a1a] relative transition-all ${collapsedTracks.voiceover ? 'h-5' : 'h-8'}`}>
-                  {voiceoverDuration > 0 && (
-                    <div
-                      className={`absolute top-0.5 bottom-0.5 bg-blue-500/15 border border-blue-500/30 rounded flex items-center px-2 cursor-pointer hover:bg-blue-500/25 transition-colors`}
-                      style={{ width: voiceoverDuration * pixelsPerSecond }}
-                      onDoubleClick={() => voiceoverUrl && openAudioEdit('voiceover')}
-                      title="Double-click to edit"
-                    >
-                      {!collapsedTracks.voiceover && (
-                        <div className="flex items-center gap-0.5">
-                          <div className="w-0.5 h-2 bg-blue-400/60 rounded-full" />
-                          <div className="w-0.5 h-3 bg-blue-400/60 rounded-full" />
-                          <div className="w-0.5 h-1.5 bg-blue-400/60 rounded-full" />
-                          <div className="w-0.5 h-2.5 bg-blue-400/60 rounded-full" />
-                          <div className="w-0.5 h-2 bg-blue-400/60 rounded-full" />
-                        </div>
-                      )}
-                      <span className="text-[8px] text-blue-400/70 ml-1.5">VO • {Math.round(voiceoverDuration)}s</span>
-                      {voiceoverUrl && (
-                        <button
-                          className="ml-auto text-[8px] text-blue-300 bg-blue-500/20 px-1 rounded hover:bg-blue-500/40"
-                          onClick={(e) => { e.stopPropagation(); openAudioEdit('voiceover'); }}
-                        >
-                          <Scissors className="w-2.5 h-2.5 inline" /> Edit
-                        </button>
-                      )}
-                    </div>
+                <div
+                  data-inline-edit={editingTrack === 'voiceover' ? 'true' : undefined}
+                  className={`flex-1 bg-[#0a0a1a] relative transition-all ${collapsedTracks.voiceover ? 'h-5' : editingTrack === 'voiceover' ? 'h-16' : 'h-8'}`}
+                  style={{ minHeight: editingTrack === 'voiceover' ? 64 : undefined }}
+                >
+                  {voiceoverDuration > 0 && voiceoverUrl && (
+                    <InlineWaveform
+                      audioUrl={voiceoverUrl}
+                      trackColor="blue"
+                      pixelsPerSecond={pixelsPerSecond}
+                      totalTimelineDuration={totalDuration}
+                      currentTime={currentTime}
+                      onSeek={(t) => { setCurrentTime(t); if (voiceoverRef.current) voiceoverRef.current.currentTime = t; }}
+                      isEditing={editingTrack === 'voiceover'}
+                      onStartEdit={() => setEditingTrack('voiceover')}
+                      onStopEdit={() => setEditingTrack(null)}
+                      onSave={(blob, dur) => handleInlineAudioSave('voiceover', blob, dur)}
+                      label={`VO • ${Math.round(voiceoverDuration)}s`}
+                      trackDuration={voiceoverDuration}
+                    />
                   )}
                 </div>
               </div>
