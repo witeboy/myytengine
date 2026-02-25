@@ -65,24 +65,44 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Image must be a public URL, not a data URI' }, { status: 400 });
     }
 
-    console.log(`🎬 Kling Avatar: image=${image_url.substring(0, 120)}...`);
-    console.log(`🎬 Audio: ${audio_url.substring(0, 120)}...`);
+    console.log(`🎬 Kling Avatar: image=${image_url.substring(0, 150)}`);
+    console.log(`🎬 Audio: ${audio_url.substring(0, 150)}`);
     console.log(`🎬 Prompt: ${prompt.substring(0, 100)}`);
     console.log(`🎬 Mode: ${mode}`);
 
-    // Pre-validate: check audio URL is accessible and get file size
+    // ── Ensure URLs are publicly accessible from Kling's servers ──────
+    // Kling returns misleading "402 credits insufficient" when it can't
+    // fetch the image or audio. Re-download and re-upload via Base44
+    // public storage to guarantee accessibility.
+    let finalImageUrl = image_url;
+    let finalAudioUrl = audio_url;
+
+    // Re-upload image if it's from supabase or internal storage
     try {
-      const audioCheck = await fetch(audio_url, { method: 'HEAD' });
-      const audioContentType = audioCheck.headers.get('content-type') || 'unknown';
-      const audioContentLength = audioCheck.headers.get('content-length') || 'unknown';
-      console.log(`🎬 Audio check: status=${audioCheck.status} type=${audioContentType} size=${audioContentLength} bytes`);
-      
-      const imageCheck = await fetch(image_url, { method: 'HEAD' });
-      const imageContentType = imageCheck.headers.get('content-type') || 'unknown';
-      const imageContentLength = imageCheck.headers.get('content-length') || 'unknown';
-      console.log(`🎬 Image check: status=${imageCheck.status} type=${imageContentType} size=${imageContentLength} bytes`);
-    } catch (checkErr) {
-      console.log(`🎬 Pre-check warning: ${checkErr.message}`);
+      console.log('🎬 Re-uploading image for public accessibility...');
+      const imgResp = await fetch(image_url);
+      if (!imgResp.ok) throw new Error(`Image fetch failed: ${imgResp.status}`);
+      const imgBlob = await imgResp.blob();
+      const imgFile = new File([imgBlob], 'avatar-input.png', { type: imgBlob.type || 'image/png' });
+      const imgUpload = await base44.asServiceRole.integrations.Core.UploadFile({ file: imgFile });
+      finalImageUrl = imgUpload.file_url;
+      console.log(`🎬 Image re-uploaded: ${finalImageUrl.substring(0, 100)}`);
+    } catch (imgErr) {
+      console.log(`🎬 Image re-upload failed, using original: ${imgErr.message}`);
+    }
+
+    // Re-upload audio
+    try {
+      console.log('🎬 Re-uploading audio for public accessibility...');
+      const audResp = await fetch(audio_url);
+      if (!audResp.ok) throw new Error(`Audio fetch failed: ${audResp.status}`);
+      const audBlob = await audResp.blob();
+      const audFile = new File([audBlob], 'avatar-audio.mp3', { type: audBlob.type || 'audio/mpeg' });
+      const audUpload = await base44.asServiceRole.integrations.Core.UploadFile({ file: audFile });
+      finalAudioUrl = audUpload.file_url;
+      console.log(`🎬 Audio re-uploaded: ${finalAudioUrl.substring(0, 100)}`);
+    } catch (audErr) {
+      console.log(`🎬 Audio re-upload failed, using original: ${audErr.message}`);
     }
 
     // Generate JWT for Kling API
@@ -90,12 +110,13 @@ Deno.serve(async (req) => {
 
     const requestBody = {
       model_name: 'kling-v1-6',
-      image: image_url,
-      sound_file: audio_url,
+      image: finalImageUrl,
+      sound_file: finalAudioUrl,
       prompt: prompt || undefined,
       mode, // 'std' or 'pro'
     };
-    console.log(`🎬 Request body keys: ${Object.keys(requestBody).join(', ')}`);
+    console.log(`🎬 Final image URL: ${finalImageUrl.substring(0, 150)}`);
+    console.log(`🎬 Final audio URL: ${finalAudioUrl.substring(0, 150)}`);
 
     // Submit to Kling AI Avatar endpoint
     const res = await fetch(`${KLING_API_BASE}/v1/videos/avatar/image2video`, {
