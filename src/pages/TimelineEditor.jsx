@@ -634,8 +634,33 @@ export default function TimelineEditor() {
           onZoomOut={zoomOut}
         />
 
+        {/* Effects button bar */}
+        <div className="flex items-center gap-1 px-3 py-0.5 border-b border-gray-800/30">
+          <button
+            onClick={() => {
+              const sc = scenesWithTiming.find(s => s.id === selectedScene) || currentScene;
+              if (sc) setEffectsTarget(sc);
+            }}
+            className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 transition-colors"
+          >
+            <Zap className="w-3 h-3" /> Effects
+          </button>
+          {/* Re-attach buttons for detached panels */}
+          {Object.entries(detachedPanels).filter(([, v]) => v).map(([key]) => (
+            <button
+              key={key}
+              onClick={() => toggleDetachPanel(key)}
+              className="flex items-center gap-1 px-2 py-1 rounded text-[9px] font-medium text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 transition-colors"
+            >
+              <PanelTop className="w-3 h-3" /> Dock {key}
+            </button>
+          ))}
+          <div className="flex-1" />
+          <span className="text-[8px] text-gray-600">Drag divider ↑ to expand timeline</span>
+        </div>
+
         {/* Timeline tracks — click anywhere to move playhead */}
-        <div className="overflow-x-auto max-h-[280px] overflow-y-auto" ref={timelineRef} onClick={handleTimelineClick}>
+        <div className="overflow-x-auto flex-1 overflow-y-auto" ref={timelineRef} onClick={handleTimelineClick}>
           <div style={{ minWidth: Math.max(totalDuration * pixelsPerSecond + 100, 800) }}>
             {/* Ruler — click to seek */}
             <div className="relative cursor-pointer">
