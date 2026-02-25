@@ -112,7 +112,7 @@ export default function UGCPipeline() {
     if (loadedTemplateBasePrompt) {
       setStatusMsg('Adapting template prompt to your product...');
       const mergedPrompt = await base44.integrations.Core.InvokeLLM({
-        prompt: `You are a UGC image prompt expert. I have an existing hyper-detailed image generation prompt for a specific influencer persona. I need you to adapt it to include a specific product/action context while keeping the EXACT persona identity (appearance, personality, setting, clothing, etc.) intact.
+        prompt: `You are a UGC image prompt expert specializing in BELIEVABLE PRODUCT INTERACTION. I have an existing hyper-detailed image generation prompt for a specific influencer persona. I need you to adapt it to include a specific product/action context while keeping the EXACT persona identity intact.
 
 EXISTING PERSONA PROMPT:
 ${loadedTemplateBasePrompt}
@@ -122,18 +122,20 @@ PRODUCT/ACTION CONTEXT TO INTEGRATE:
 - Product Description: ${productDescription || 'a product'}
 - Influencer Action: ${influencerAction}
 
-RULES:
+CRITICAL RULES — PRODUCT INTERACTION IS THE #1 PRIORITY:
 1. Keep ALL persona-specific appearance details (ethnicity, hair, eyes, skin, build, clothing style, age, setting) from the existing prompt.
-2. Replace or add the product interaction based on the hold mode:
-   - "phone_app": Creator holding smartphone showing ${productDescription || 'an app'} to camera
-   - "product_review": Creator casually holding ${productDescription || 'a product'} at chest height
-   - "product_unbox": Creator mid-unbox with ${productDescription || 'a product'}
-   - "product_table": Product on desk, creator pointing at it
-   - "none": No product, just speaking to camera
-3. Keep the prompt in the same detailed UGC-style format.
-4. Make sure the action/energy matches what the influencer should be doing: "${influencerAction}"
-5. Ensure PORTRAIT 9:16 format is specified.
-6. Return ONLY the final prompt text, no explanations.`,
+2. The PRODUCT INTERACTION must be the HERO ELEMENT of the image. The creator must be PHYSICALLY, VISIBLY, and BELIEVABLY interacting with the product. This is not a passive hold — it's an active, mid-gesture, freeze-frame moment of real engagement.
+3. Based on hold mode, write DETAILED interaction instructions:
+   - "phone_app": Creator holding smartphone toward camera with one hand, OTHER hand's finger actively touching/tapping the screen. Phone screen BRIGHT and visible showing ${productDescription || 'an app'}. Screen glow illuminates chin. Eyes locked on screen with fascination. Body leaned forward. This is mid-app-demo energy — "let me show you this feature."
+   - "product_review": Creator holding ${productDescription || 'a product'} at chest height with one hand, OTHER hand pointing at a feature or making an enthusiastic gesture. Fingers show real grip pressure. Eyes on camera with conviction. Mid-sentence "and the best part is..." energy.
+   - "product_unbox": Both hands engaged — one pulling product out of box, other steadying packaging. Product 60% revealed with tissue paper. Eyes looking DOWN at product with genuine surprise. Packaging debris visible. Peak discovery moment.
+   - "product_table": Product on desk surface, creator gesturing toward it with open palm. Other hand animated (chin touch, counting features). Eyes on camera with confident "trust me" expression. Desk has realistic items around product.
+   - "none": No product, just speaking to camera with animated hand gestures.
+4. Add a section called "INTERACTION ENERGY" that describes the emotional conviction: what is the creator's body language saying? What moment are we freezing? What would the viewer feel?
+5. Ensure the action matches: "${influencerAction}"
+6. Add to negative prompts: "No passive product holding, no stiff posed grip, no commercial-style product placement, no disconnected body language."
+7. Ensure PORTRAIT 9:16 format is specified.
+8. Return ONLY the final prompt text, no explanations.`,
       });
       setInfluencerPrompt(mergedPrompt);
     } else {
