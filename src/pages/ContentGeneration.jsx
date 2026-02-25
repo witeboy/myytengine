@@ -34,6 +34,8 @@ export default function ContentGeneration() {
   const [enhancingAll, setEnhancingAll] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState({ current: 0, total: 0, label: '' });
+  const [estimatedWordCount, setEstimatedWordCount] = useState(0);
+  const [totalExpectedScenes, setTotalExpectedScenes] = useState(0);
 
   // ── Per-scene generation tracking ─────────────────────────────
   const [imageProgress, setImageProgress] = useState({ current: 0, total: 0, sceneName: '' });
