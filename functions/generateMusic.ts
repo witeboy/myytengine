@@ -88,15 +88,15 @@ Deno.serve(async (req) => {
     if (response.ok) {
       const data = await response.json();
       console.log('AI33 music response:', JSON.stringify(data));
-      if (data.success && data.task_id) {
+      if (data.success === true && data.task_id) {
         ai33Success = true;
         taskId = data.task_id;
       } else {
-        console.warn('AI33 returned unexpected response:', JSON.stringify(data));
+        console.warn('AI33 returned non-success or no task_id, falling back. Response:', JSON.stringify(data));
       }
     } else {
       const errText = await response.text();
-      console.warn('AI33 music generation failed, trying MiniMax direct fallback:', errText);
+      console.warn('AI33 HTTP error, falling back:', errText);
     }
 
     if (ai33Success) {
