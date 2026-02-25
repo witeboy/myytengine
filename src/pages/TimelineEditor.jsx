@@ -415,14 +415,12 @@ export default function TimelineEditor() {
     return () => window.removeEventListener('keydown', handleKey);
   }, [activeTrack, selectedScene, scenesWithTiming]);
 
-  // Delete scene media handler
+  // Delete scene media handler — removes the scene entirely and closes the gap
   const handleDeleteSceneMedia = (scene) => {
     const hasVideo = scene.video_url && scene.video_url.startsWith('http');
     const hasImage = scene.image_url && scene.image_url.startsWith('http');
-    if (hasVideo) {
-      history.deleteSceneMedia(scene, 'video');
-    } else if (hasImage) {
-      history.deleteSceneMedia(scene, 'image');
+    if (hasVideo || hasImage) {
+      history.deleteScene(scene, scenes);
     }
   };
 
