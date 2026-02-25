@@ -222,6 +222,9 @@ The recreate_prompt is what an AI IMAGE GENERATOR will use. It must follow these
 - Describe text+container as ONE design unit: "a red pill-shaped badge containing white text 'LIVE'"
 - MAX 2-3 text elements in the prompt. Consolidate where possible.
 - Include "graphic design composition" to force flat 2D text overlays
+- CRITICAL TEXT RENDERING RULE: ALL text overlays MUST be wrapped in "DOUBLE QUOTATION MARKS" in the prompt. Ideogram V3 ONLY renders text that appears in quotation marks. Write the text EXACTLY as it should appear, e.g. "7 SIDE HUSTLES" not just 7 SIDE HUSTLES.
+- EVERY text element must be described with its EXACT visual treatment: font weight, color, background shape/color, outline, shadow, size relative to frame.
+- At the END of the recreate_prompt, add a dedicated TEXT BLOCK listing all text overlays again in quotes for reinforcement.
 
 MANDATORY: The recreate_prompt MUST explicitly start with "A high-detail 4K YouTube thumbnail in 16:9 aspect ratio (1280x720), widescreen landscape format, graphic design composition". All YouTube thumbnails are 16:9 wide format. NEVER generate square or portrait format prompts.
 
