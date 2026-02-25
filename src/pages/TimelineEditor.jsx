@@ -900,6 +900,12 @@ export default function TimelineEditor() {
         sceneB={transitionTarget?.sceneB}
         onApply={refetchScenes}
       />
+      <EffectsLibrary
+        open={!!effectsTarget}
+        onClose={() => setEffectsTarget(null)}
+        scene={effectsTarget}
+        onApply={refetchScenes}
+      />
       <VideoExporter
         open={showExporter}
         onClose={() => setShowExporter(false)}
