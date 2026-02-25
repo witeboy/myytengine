@@ -96,7 +96,10 @@ The ENTIRE composition communicates: "I've been using this for weeks and I genui
     interactionDirective = `INTERACTION ENERGY: Peak recommendation moment — ${pronoun} is mid-sentence explaining why this product is worth it, holding it up with genuine pride and enthusiasm. Every element of body language (grip, gesture, expression, posture) reinforces authentic product belief and conviction.`;
   }
 
-  return `Create a hyper-realistic UGC-style image of a real human creator casually recording a ${holdMode === "phone_app" ? "app review" : "product review"} at home. PORTRAIT FORMAT 9:16 aspect ratio (vertical, like a TikTok/Reel).
+  return `Create a hyper-realistic UGC-style image of a real human creator ACTIVELY ${holdMode === "phone_app" ? "demonstrating an app on their phone" : holdMode === "product_unbox" ? "unboxing a product" : holdMode === "product_table" ? "presenting a product on their desk" : holdMode === "none" ? "speaking to camera" : "reviewing and interacting with a product"} while recording at home. PORTRAIT FORMAT 9:16 aspect ratio (vertical, like a TikTok/Reel).
+
+CRITICAL DIRECTION: The product/app interaction must be the HERO ELEMENT of this image. The creator must be PHYSICALLY, VISIBLY, and BELIEVABLY interacting with the product — hands engaged, body language leaning in, expression showing genuine conviction. This must look like a freeze-frame from a real video where someone is passionately showing their audience something they truly believe in. Every element (hands, eyes, expression, posture) must reinforce authentic product engagement.
+${interactionDirective}
 
 Subject:
 A real human ${genderWord} ${ethnicity || ""} ${influencerType || "lifestyle content creator"}, age ${ageRange || "mid-20s to early-30s"}, natural facial asymmetry, subtle under-eye texture, visible skin pores, natural lip lines, faint blemishes and micro skin imperfections (no airbrushing). Teeth slightly imperfect, not overly white. Eyes moist with natural light reflection. ${pronoun} is ${action || "casually recording a product review, speaking naturally to the camera"}.
