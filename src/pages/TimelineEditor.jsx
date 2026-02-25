@@ -417,17 +417,6 @@ export default function TimelineEditor() {
         </div>
       </div>
 
-      {/* ═══════ AUDIO EDITOR PANEL ═══════ */}
-      {showAudioEditor && getAudioEditUrl() && (
-        <div className="flex-shrink-0 border-t border-gray-700/50 max-h-[260px] overflow-auto">
-          <AudioEditor
-            audioUrl={getAudioEditUrl()}
-            onSave={handleAudioEditSave}
-            onClose={() => { setShowAudioEditor(false); setAudioEditTarget(null); }}
-          />
-        </div>
-      )}
-
       {/* ═══════ BOTTOM: Transport + Toolbar + Timeline ═══════ */}
       <div className="flex-shrink-0 bg-[#0f0f23] border-t border-gray-700/50">
         {/* Transport bar */}
