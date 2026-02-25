@@ -49,13 +49,47 @@ Deno.serve(async (req) => {
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
     if (!KIE_API_KEY) return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
 
+    // === TEXT OVERLAY ENFORCEMENT ===
+    // Ideogram V3 only renders text that appears inside "QUOTATION MARKS" in the prompt.
+    // Extract text elements and ensure they are properly quoted at the END of the prompt
+    // so they get maximum rendering priority.
+    let processedPrompt = prompt;
+
+    // Find text patterns like: text "SOMETHING" or containing white text 'SOMETHING'
+    // Also find unquoted text after keywords like "the text", "text overlay", "bold text"
+    const textPatterns = [];
+    
+    // Extract all quoted strings (both single and double quotes)
+    const doubleQuoted = processedPrompt.match(/"([^"]{1,50})"/g) || [];
+    const singleQuoted = processedPrompt.match(/'([^']{1,50})'/g) || [];
+    
+    // Normalize single quotes to double quotes for Ideogram
+    for (const sq of singleQuoted) {
+      const inner = sq.slice(1, -1);
+      processedPrompt = processedPrompt.replace(sq, `"${inner}"`);
+      textPatterns.push(inner);
+    }
+    for (const dq of doubleQuoted) {
+      textPatterns.push(dq.slice(1, -1));
+    }
+
+    // Add a TEXT RENDERING BLOCK at the end to reinforce text generation
+    if (textPatterns.length > 0) {
+      const uniqueTexts = [...new Set(textPatterns)].filter(t => t.length > 1 && t.length <= 40);
+      if (uniqueTexts.length > 0) {
+        const textBlock = uniqueTexts.map(t => `"${t}"`).join(', ');
+        processedPrompt += `. CRITICAL TEXT OVERLAYS that MUST appear clearly and legibly on the thumbnail: ${textBlock}. Each text element must be rendered in large, bold, highly visible font with sharp edges and high contrast against its background.`;
+        console.log(`[TextEnforce] Reinforced ${uniqueTexts.length} text elements: ${textBlock}`);
+      }
+    }
+
     // Attempt 1: Ideogram V3 QUALITY
     let imageUrl = null;
     let model = 'none';
 
     try {
       console.log('[Ideogram V3] Generating tweaked thumbnail...');
-      const enhancedPrompt = `${prompt}. Ultra high resolution 1920x1080 Full HD, crisp sharp details, professional quality.`;
+      const enhancedPrompt = `${processedPrompt}. Ultra high resolution 1920x1080 Full HD, crisp sharp details, professional quality.`;
       const taskId = await kieCreateTask(KIE_API_KEY, "ideogram/v3-text-to-image", {
         prompt: enhancedPrompt,
         image_size: "landscape_16_9",
