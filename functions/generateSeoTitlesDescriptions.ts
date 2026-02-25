@@ -130,7 +130,8 @@ Deno.serve(async (req) => {
     if (!script) return Response.json({ error: 'No script found' }, { status: 404 });
 
     const topic = allTopics.find(t => t.is_selected === true) || allTopics[0];
-    if (!topic) return Response.json({ error: 'No topic found' }, { status: 404 });
+    // In repurpose mode there may be no topic — fall back to script title or project name
+    const topicTitle = topic?.title || script.title || project.name || 'Untitled';
 
     const scriptContent = script.full_script ||
       [script.cold_open, script.act_1, script.act_2, script.act_3, script.outro]
@@ -139,7 +140,7 @@ Deno.serve(async (req) => {
 
     console.log('══════════════════════════════════════════════════════');
     console.log('GENERATING SEO METADATA (OpenAI GPT-4o)');
-    console.log(`Topic: ${topic.title}`);
+    console.log(`Topic: ${topicTitle}`);
     console.log(`Niche: ${project.niche}`);
     console.log('══════════════════════════════════════════════════════');
 
