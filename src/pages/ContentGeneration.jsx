@@ -69,19 +69,69 @@ export default function ContentGeneration() {
   // ══════════════════════════════════════════════════════════════════
   // TWO-PHASE IMPORT: Scene Breakdown → Prompt Generation
   // ══════════════════════════════════════════════════════════════════
+  // Fire-and-forget helper that tolerates 504 timeouts
+  const invokeWithTimeout = async (fnName, payload) => {
+    try {
+      await base44.functions.invoke(fnName, payload);
+    } catch (err) {
+      // 504 = gateway timeout — function is still running in the background
+      const status = err?.response?.status || err?.status;
+      if (status === 504) {
+        console.log(`${fnName} returned 504 (timeout) — function still running, will poll for results`);
+        return; // not an error, just slow
+      }
+      throw err; // re-throw real errors
+    }
+  };
+
+  // Poll until scenes appear or project status changes
+  const pollForCompletion = async (checkFn, maxPolls = 60, intervalMs = 5000) => {
+    for (let i = 0; i < maxPolls; i++) {
+      await new Promise(r => setTimeout(r, intervalMs));
+      const done = await checkFn();
+      if (done) return true;
+    }
+    return false;
+  };
+
   const handleImport = async () => {
     setImporting(true);
     try {
+      // ── Phase 1: Scene Breakdown ────────────────────────────────
       setImportPhase('breakdown');
       setImportProgress('Analyzing script & breaking down into cinematic scenes...');
 
-      await base44.functions.invoke('generateSceneBreakdown', { project_id: projectId });
+      await invokeWithTimeout('generateSceneBreakdown', { project_id: projectId });
+
+      // Poll until scenes exist and project status moves past scene_breakdown
+      await pollForCompletion(async () => {
+        const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+        const freshProjects = await base44.entities.Projects.filter({ id: projectId });
+        const proj = freshProjects[0];
+        queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+        setImportProgress(`Analyzing script... ${freshScenes.length} scenes created so far`);
+        // Done when project moves to breakdown_complete or beyond
+        return freshScenes.length > 0 && proj?.status && proj.status !== 'scene_breakdown' && proj.status !== 'scripting' && proj.status !== 'script_complete';
+      }, 120, 4000);
+
       await refetchScenes();
 
+      // ── Phase 2: Prompt Generation ──────────────────────────────
       setImportPhase('prompts');
       setImportProgress('Converting director notes into visual prompts...');
 
-      await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
+      await invokeWithTimeout('generateScenePrompts', { project_id: projectId });
+
+      // Poll until scenes move to prompts_ready
+      await pollForCompletion(async () => {
+        const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+        queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+        const pending = freshScenes.filter(s => s.status === 'breakdown_ready');
+        const ready = freshScenes.filter(s => s.status === 'prompts_ready');
+        setImportProgress(`Converting prompts... ${ready.length}/${freshScenes.length} ready (${pending.length} pending)`);
+        return pending.length === 0 && ready.length > 0;
+      }, 120, 4000);
+
       await refetchScenes();
     } catch (err) {
       console.error('Scene generation error:', err);
