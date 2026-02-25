@@ -146,7 +146,7 @@ Deno.serve(async (req) => {
       success: true,
       task_id: taskId,
       task_status: taskStatus || 'submitted',
-      provider: 'kling_avatar_direct',
+      provider: `kling_avatar_v1_${mode}`,
       status: 'CREATED',
     });
 
