@@ -107,13 +107,14 @@ Deno.serve(async (req) => {
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-    const selectedTopic = allTopics.find(t => t.is_selected === true);
-    if (!selectedTopic) return Response.json({ error: 'No selected topic found' }, { status: 400 });
+    const selectedTopic = allTopics.find(t => t.is_selected === true) || allTopics[0];
 
     const finalScript = allScripts.find(s => s.version === 'final_aggregated') || allScripts[0];
     if (!finalScript) return Response.json({ error: 'No final script found' }, { status: 400 });
 
-    const videoTitle = project.name || selectedTopic.title;
+    // In repurpose mode there may be no topic — fall back to script title or project name
+    const topicTitle = selectedTopic?.title || finalScript.title || project.name || 'Untitled';
+    const videoTitle = project.name || topicTitle;
     const scriptContent = finalScript.full_script ||
       [finalScript.cold_open, finalScript.act_1, finalScript.act_2, finalScript.act_3, finalScript.outro]
         .filter(Boolean).join('\n\n');
