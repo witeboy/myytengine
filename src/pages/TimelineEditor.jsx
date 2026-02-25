@@ -17,12 +17,14 @@ import VideoExporter from '@/components/timeline/VideoExporter';
 import useVideoExport from '@/components/timeline/useVideoExport';
 import SceneReorder from '@/components/timeline/SceneReorder';
 import TransitionLibrary from '@/components/timeline/TransitionLibrary';
+import EffectsLibrary from '@/components/timeline/EffectsLibrary';
 import TimelineToolbar from '@/components/timeline/TimelineToolbar';
 import SfxGenerateDialog from '@/components/timeline/SfxGenerateDialog';
 import InlineWaveform from '@/components/timeline/InlineWaveform';
 import {
   Loader2, Film, Play, Pause, SkipBack, SkipForward,
-  Volume2, VolumeX, Mic, Music, Monitor
+  Volume2, VolumeX, Mic, Music, Monitor,
+  PanelTop, PanelBottom, ExternalLink, GripVertical, Zap
 } from 'lucide-react';
 
 export default function TimelineEditor() {
