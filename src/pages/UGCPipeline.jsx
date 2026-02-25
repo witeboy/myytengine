@@ -690,6 +690,18 @@ Return ONLY the motion description.`,
                 </div>
               )}
 
+              {/* Error message */}
+              {!loading && !videoUrl && pipelineStep && pipelineStep.startsWith('❌') && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <p className="text-sm font-medium text-red-800">{pipelineStep.replace('❌ ', '')}</p>
+                  {pipelineStep.includes('credits') && (
+                    <a href="https://klingai.com" target="_blank" rel="noopener noreferrer" className="text-xs text-red-600 underline mt-1 inline-block">
+                      Top up your Kling AI credits →
+                    </a>
+                  )}
+                </div>
+              )}
+
               {/* Retry / Back */}
               {!loading && !videoUrl && (
                 <Button onClick={handleGenerateLipSync} className="w-full bg-pink-600 hover:bg-pink-700 gap-2">
