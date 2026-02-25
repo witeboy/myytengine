@@ -16,6 +16,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 const BATCH_SIZE = 12;
 const CLIP_DURATION = 5;
+const PARALLEL_PROMPT_BATCHES = 3; // Run 3 Gemini prompt calls concurrently
 
 function repairJSON(str) {
   return str
