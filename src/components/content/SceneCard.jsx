@@ -28,30 +28,49 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
     scene.video_url?.startsWith('veo_task:');
 
   useEffect(() => {
-    if (hasPendingTask && !polling) {
-      setPolling(true);
-      setLoadingVideo(true);
-      pollRef.current = setInterval(async () => {
-        try {
-          const res = await base44.functions.invoke('pollSceneVideo', {
-            scene_id: scene.id,
-          });
-          const status = res.data?.status;
-          if (status === 'COMPLETED' || status === 'FAILED') {
-            clearInterval(pollRef.current);
-            setPolling(false);
-            setLoadingVideo(false);
-            onSceneUpdated?.();
-          }
-        } catch (err) {
-          console.warn(`Poll error for scene ${scene.scene_number}:`, err?.response?.data?.error || err.message);
+    // Clear any existing poll first
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+
+    // Only start polling if there's actually a pending task prefix right now
+    if (!hasPendingTask) {
+      setPolling(false);
+      setLoadingVideo(false);
+      return;
+    }
+
+    setPolling(true);
+    setLoadingVideo(true);
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await base44.functions.invoke('pollSceneVideo', {
+          scene_id: scene.id,
+        });
+        const status = res.data?.status;
+        if (status === 'COMPLETED' || status === 'FAILED') {
           clearInterval(pollRef.current);
+          pollRef.current = null;
           setPolling(false);
           setLoadingVideo(false);
+          onSceneUpdated?.();
         }
-      }, 12000);
-    }
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+      } catch (err) {
+        console.warn(`Poll error for scene ${scene.scene_number}:`, err?.response?.data?.error || err.message);
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+        setPolling(false);
+        setLoadingVideo(false);
+      }
+    }, 12000);
+
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
   }, [scene.video_url]);
 
   const handleImage = async () => {
