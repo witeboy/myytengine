@@ -92,14 +92,17 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
     await base44.entities.ThumbnailConcepts.update(thumb.id, { image_prompt: editingPrompt.trim() });
     try {
       const editFinalPrompt = buildFinalPrompt(editingPrompt.trim(), thumb.text_overlay);
-      const { url } = await base44.integrations.Core.GenerateImage({
+      const res = await base44.functions.invoke('generateTweakedThumbnailImage', {
         prompt: editFinalPrompt,
+        project_id: projectId,
       });
-      await base44.entities.ThumbnailConcepts.update(thumb.id, { image_url: url });
+      const imageUrl = res.data?.image_url;
+      if (!imageUrl) throw new Error(res.data?.error || 'No image generated');
+      await base44.entities.ThumbnailConcepts.update(thumb.id, { image_url: imageUrl });
       onRefetch();
       setExpandedPrompt(null);
     } catch (err) {
-      const msg = err?.message || 'Unknown error';
+      const msg = err?.response?.data?.error || err?.message || 'Unknown error';
       if (msg.includes('refused')) {
         setGenerateError({ thumbId: thumb.id, message: `Still refused — try rephrasing further or editing manually.` });
       } else {
