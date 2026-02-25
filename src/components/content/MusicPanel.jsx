@@ -90,7 +90,7 @@ Return JSON:
     setGenerating(false);
   };
 
-  // Step 2: Generate actual audio for a track via AI33 MiniMax
+  // Step 2: Generate actual audio for a track via KIE Suno API
   const handleGenerateAudio = async (track) => {
     setGeneratingTrackId(track.id);
     const res = await base44.functions.invoke('generateMusic', {
@@ -102,7 +102,6 @@ Return JSON:
     const taskId = res.data?.task_id;
     const status = res.data?.status;
 
-    // If completed directly (MiniMax fallback), no polling needed
     if (status === 'completed') {
       setGeneratingTrackId(null);
       refetch();
@@ -111,6 +110,7 @@ Return JSON:
 
     if (taskId) {
       let failCount = 0;
+      // Suno generation takes longer — poll every 15s
       const poll = setInterval(async () => {
         try {
           const statusRes = await base44.functions.invoke('checkMusicStatus', {
@@ -127,13 +127,13 @@ Return JSON:
         } catch (err) {
           failCount++;
           console.warn('Music status check failed:', err.message);
-          if (failCount >= 3) {
+          if (failCount >= 5) {
             clearInterval(poll);
             setGeneratingTrackId(null);
             refetch();
           }
         }
-      }, 6000);
+      }, 15000);
     } else {
       setGeneratingTrackId(null);
       refetch();
