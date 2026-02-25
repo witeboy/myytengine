@@ -41,6 +41,13 @@ export default function UGCPipeline() {
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
 
+  // Fetch saved influencer templates for the dropdown
+  const { data: savedTemplates = [] } = useQuery({
+    queryKey: ['influencer-templates-dropdown'],
+    queryFn: () => base44.entities.InfluencerTemplates.list('-created_date', 50),
+    initialData: [],
+  });
+
   // Step 1
   const [targetAudience, setTargetAudience] = useState('');
   const [targetDemography, setTargetDemography] = useState('');
