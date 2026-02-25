@@ -511,13 +511,13 @@ export default function TimelineEditor() {
         {/* Timeline tracks — click anywhere to move playhead */}
         <div className="overflow-x-auto max-h-[280px] overflow-y-auto" ref={timelineRef} onClick={handleTimelineClick}>
           <div style={{ minWidth: Math.max(totalDuration * pixelsPerSecond + 100, 800) }}>
-            {/* Ruler */}
-            <div className="relative">
+            {/* Ruler — click to seek */}
+            <div className="relative cursor-pointer">
               <TimelineRuler totalDuration={totalDuration} pixelsPerSecond={pixelsPerSecond} />
               {scenes.length > 0 && (
-                <div className="absolute top-0 bottom-0 z-30" style={{ left: currentTime * pixelsPerSecond + 64 - 6 }}>
-                  <div className="w-3 h-full flex flex-col items-center cursor-col-resize" onMouseDown={handlePlayheadMouseDown}>
-                    <div className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[6px] border-l-transparent border-r-transparent border-t-red-500" />
+                <div className="absolute top-0 z-30 pointer-events-auto" style={{ left: currentTime * pixelsPerSecond + 64 - 6, bottom: '-500px' }}>
+                  <div className="w-3 flex flex-col items-center cursor-col-resize" onMouseDown={handlePlayheadMouseDown} style={{ height: '100vh' }}>
+                    <div className="w-0 h-0 border-l-[5px] border-r-[5px] border-t-[6px] border-l-transparent border-r-transparent border-t-red-500 flex-shrink-0" />
                     <div className="w-0.5 flex-1 bg-red-500" />
                   </div>
                 </div>
