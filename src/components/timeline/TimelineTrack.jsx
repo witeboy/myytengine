@@ -118,16 +118,16 @@ export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, 
               />
             </div>
 
-            {/* Transition button between scenes */}
+            {/* Transition button between scenes — improved visibility */}
             {idx < scenes.length - 1 && (
               <button
                 className={`absolute z-10 flex items-center justify-center transition-all hover:scale-125 ${
                   transition && transition !== 'cut'
-                    ? 'w-5 h-5 bg-blue-600 rounded-full border border-blue-400 shadow-lg shadow-blue-500/30'
-                    : 'w-4 h-4 bg-gray-700 rounded-full border border-gray-500 hover:bg-gray-600 opacity-50 hover:opacity-100'
+                    ? 'w-6 h-6 bg-blue-600 rounded-full border-2 border-blue-300 shadow-lg shadow-blue-500/40'
+                    : 'w-5 h-5 bg-gray-700/80 rounded-full border border-gray-500 hover:bg-blue-600 hover:border-blue-400 opacity-60 hover:opacity-100'
                 }`}
                 style={{
-                  left: left + width - 2,
+                  left: left + width - 3,
                   top: '50%',
                   transform: 'translate(-50%, -50%)',
                 }}
@@ -135,12 +135,12 @@ export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, 
                   e.stopPropagation();
                   onTransitionClick?.(scene, scenes[idx + 1]);
                 }}
-                title={transition && transition !== 'cut' ? `${transition} ${scene.transition_duration || 0.5}s` : 'Add transition'}
+                title={transition && transition !== 'cut' ? `${transition} ${scene.transition_duration || 0.5}s` : 'Click to add transition'}
               >
                 {transition && transition !== 'cut' ? (
-                  <span className="text-[8px]">{TRANSITION_ICONS[transition] || '✨'}</span>
+                  <span className="text-[9px]">{TRANSITION_ICONS[transition] || '✨'}</span>
                 ) : (
-                  <span className="text-[7px] text-gray-400">+</span>
+                  <span className="text-[9px] text-gray-300 font-bold">+</span>
                 )}
               </button>
             )}
