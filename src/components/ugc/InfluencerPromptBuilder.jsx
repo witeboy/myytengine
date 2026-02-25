@@ -140,8 +140,8 @@ Ultra-detailed skin pores. Fine facial hair. Flyaway hairs. Micro-wrinkles aroun
 Color & Tone:
 Neutral color grading. Slight warmth. Not overly saturated. Feels native to TikTok/Reels. No heavy cinematic look. True-to-life skin tones, no oversaturated AI look, natural white balance.
 
-Energy:
-Feels like a spontaneous ${holdMode === "phone_app" ? "app recommendation" : "product recommendation"}. Not a commercial. Not staged. Authentic. Trustworthy. Relatable. Monetizable niche creator vibe.
+Energy & Conviction:
+Feels like a freeze-frame from a REAL ${holdMode === "phone_app" ? "app demo" : holdMode === "product_unbox" ? "unboxing" : "product review"} video. The creator is MID-ACTION — hands are busy, body language is engaged and leaned-in, face shows genuine belief in what ${pronoun} is showcasing. Every physical element (hand grip, finger position, eye direction, posture, expression) tells the same story: "${pronoun} genuinely uses and loves this ${holdMode === "phone_app" ? "app" : "product"}." NOT a commercial. NOT staged. NOT a passive hold. ACTIVE, DYNAMIC, BELIEVABLE interaction that could be animated into a talking-head video with natural motion. Authentic. Trustworthy. Relatable. Monetizable niche creator vibe.
 
 Quality:
 High resolution but not artificially enhanced. Natural grain. No AI smoothness. No CGI look. PORTRAIT 9:16 vertical format.
