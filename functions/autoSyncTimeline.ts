@@ -117,15 +117,15 @@ Distribute ${totalVoDuration}s across ${scenes.length} scenes. Rules:
       sceneDurations[longestIdx].duration_seconds = Math.round((sceneDurations[longestIdx].duration_seconds + diff) * 10) / 10;
     }
 
-    // Update scenes sequentially to avoid rate limits (150 scenes = many API calls)
+    // Update scenes sequentially to avoid rate limits
     let updated = 0;
     for (let i = 0; i < sceneDurations.length; i++) {
       const sd = sceneDurations[i];
       const scene = scenes.find(s => s.scene_number === sd.scene_number);
       if (!scene) continue;
       
-      // Retry with backoff on rate limit
-      for (let attempt = 0; attempt < 4; attempt++) {
+      // Retry with exponential backoff on rate limit
+      for (let attempt = 0; attempt < 5; attempt++) {
         try {
           await base44.asServiceRole.entities.Scenes.update(scene.id, { 
             duration_seconds: sd.duration_seconds 
@@ -133,8 +133,8 @@ Distribute ${totalVoDuration}s across ${scenes.length} scenes. Rules:
           updated++;
           break;
         } catch (err) {
-          if (err.message?.includes('Rate limit') && attempt < 3) {
-            const wait = 2000 * (attempt + 1);
+          if ((err.message?.includes('Rate limit') || err.message?.includes('429')) && attempt < 4) {
+            const wait = 3000 * Math.pow(2, attempt); // 3s, 6s, 12s, 24s
             console.log(`Rate limited on scene ${sd.scene_number}, waiting ${wait}ms (attempt ${attempt + 1})`);
             await new Promise(r => setTimeout(r, wait));
           } else {
@@ -143,10 +143,8 @@ Distribute ${totalVoDuration}s across ${scenes.length} scenes. Rules:
         }
       }
       
-      // Throttle: pause every 2 updates
-      if ((i + 1) % 2 === 0 && i < sceneDurations.length - 1) {
-        await new Promise(r => setTimeout(r, 500));
-      }
+      // Throttle: pause after every single update to stay well under rate limits
+      await new Promise(r => setTimeout(r, 1000));
     }
     
     console.log(`Updated ${updated} scenes`);
