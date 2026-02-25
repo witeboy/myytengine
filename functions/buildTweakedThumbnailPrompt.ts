@@ -64,45 +64,51 @@ ${objectSection ? `\nOBJECT CHANGES:\n${objectSection}` : ''}
 ${tweaks.globalNotes ? `\nADDITIONAL INSTRUCTIONS:\n${tweaks.globalNotes}` : ''}
 ═══════════════════════════════════════════` : '\n(No tweaks — recreate as-is)\n';
 
+    const originalPrompt = original_analysis.recreate_prompt || '';
+    const detailedDesc = original_analysis.detailed_description || '';
+
     const prompt = `You are the world's best AI image prompt engineer specializing in YouTube thumbnails. You have an ORIGINAL ANALYSIS of a YouTube thumbnail from forensic AI vision, plus USER TWEAKS the user wants applied.
 
-Your job: merge the original analysis with the user's tweaks to produce a PERFECT Ideogram V3 prompt that recreates the original thumbnail BUT with the requested changes applied.
+Your job: START from the original recreate_prompt as your BASE, then surgically apply ONLY the user's requested tweaks. The result must look 95% identical to the original — only the tweaked elements should differ.
 
-═══ ORIGINAL THUMBNAIL ANALYSIS ═══
+═══ CRITICAL: USE THIS AS YOUR STARTING BASE ═══
+The following is the original recreate_prompt — it was carefully crafted from forensic pixel-by-pixel analysis. Your output MUST preserve ALL of its details (people descriptions, lighting, background, composition, colors, clothing, expressions) EXCEPT where the user explicitly requested changes.
+
+ORIGINAL RECREATE PROMPT:
+${originalPrompt}
+
+═══ DETAILED FORENSIC DESCRIPTION (for reference) ═══
+${detailedDesc}
+
+═══ FULL LAYER ANALYSIS (for reference) ═══
 Layout: ${original_analysis.layout_breakdown || original_analysis.layout_type || 'unknown'}
 Style: ${original_analysis.style_category || 'cinematic'}
 Emotional hook: ${original_analysis.emotional_hook || ''}
-Description: ${original_analysis.detailed_description || ''}
-
-Layers:
 - Background: ${JSON.stringify(original_analysis.layers?.background || {})}
 - Midground: ${JSON.stringify(original_analysis.layers?.midground || {})}  
 - Foreground: ${JSON.stringify(original_analysis.layers?.foreground || {})}
 - Text & Graphics: ${JSON.stringify(original_analysis.layers?.text_and_graphics || {})}
-
 Styling: ${JSON.stringify(original_analysis.styling || {})}
 Color palette: ${(original_analysis.color_palette || []).join(', ')}
-Original recreate prompt: ${original_analysis.recreate_prompt || '(none)'}
 
 ${tweaksSummary}
 
 ═══ PROMPT RULES ═══
 1. MUST start with: "A high-detail 4K YouTube thumbnail in 16:9 aspect ratio (1920x1080), widescreen landscape format, graphic design composition."
-2. 400+ words — hyper-detailed
-3. Apply ALL user tweaks — changed text, colors, subjects, objects
-4. Keep EVERYTHING from the original that the user DIDN'T change
+2. 400+ words — hyper-detailed. Your prompt should be AT LEAST as long as the original recreate_prompt.
+3. SURGICAL TWEAKS ONLY: Apply ONLY the user's requested changes. Everything else MUST remain identical to the original recreate_prompt.
+4. Keep ALL original details: exact person descriptions (archetype, skin tone, hair, facial hair, clothing colors, logos, expression muscles), exact lighting setup (rim lights, key lights, color casts), exact background (blur level, atmosphere, colors), exact composition and spatial arrangement.
 5. Any text overlay MUST be in "QUOTATION MARKS" (Ideogram renders text in quotes)
 6. Use NAMED COLORS not hex codes
 7. Use SPATIAL language not pixel values
-8. Include all forensic details: lighting, rim light, blur, atmosphere, expressions, clothing
-9. If user changed a person's archetype, describe the NEW person in full detail preserving the same pose/position/lighting
-10. If user changed text, use the NEW text in quotes at the specified position
-11. If user added objects, integrate them naturally into the composition
-12. If user removed objects, exclude them completely and fill the space appropriately
+8. If user changed a person's archetype, describe the NEW person in full detail but PRESERVE the same pose, position, lighting, crop, and scale from the original.
+9. If user changed text, use the NEW text in quotes at the SAME position with the SAME styling as the original.
+10. If NO tweaks were requested, reproduce the original recreate_prompt nearly verbatim (just ensure it starts with the correct prefix).
+11. DO NOT simplify, summarize, or lose detail from the original prompt. The output must be equally or more detailed.
 
 Return ONLY a JSON object:
 {
-  "prompt": "The full 400+ word Ideogram prompt with all tweaks applied",
+  "prompt": "The full 400+ word Ideogram prompt — based on the original recreate_prompt with surgical tweaks applied",
   "negative_prompt": "blurry, low quality, pixelated, watermark, distorted text, misspelled text, illegible text, small text, jpeg artifacts",
   "changes_applied": ["list", "of", "changes", "that", "were", "applied"]
 }`;
