@@ -132,6 +132,10 @@ export default function UGCPipeline() {
     if (template.monetization_fit) setTargetMarket(template.monetization_fit);
     // Pre-fill action from content_structure or archetype
     if (template.content_structure) setInfluencerAction(template.content_structure);
+    // Store the template's rich identity for prompt building
+    setLoadedTemplateName(template.name || '');
+    setLoadedTemplateArchetype(template.archetype || '');
+    setLoadedTemplateBasePrompt(template.base_prompt || '');
   };
 
   // ── Step 3: Generate image ──────────────────────────────────
