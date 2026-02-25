@@ -107,6 +107,11 @@ export default function EffectsLibrary({ open, onClose, scene, onApply }) {
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Reset selection when modal opens/closes
+  React.useEffect(() => {
+    if (!open) { setSelected(null); setSearch(''); setCategory('all'); }
+  }, [open]);
+
   if (!open) return null;
 
   const filtered = EFFECTS.filter(e => {

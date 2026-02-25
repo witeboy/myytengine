@@ -189,20 +189,24 @@ export default function TimelineEditor() {
   // Audio: voiceover
   useEffect(() => {
     if (!voiceoverUrl) return;
-    if (voiceoverRef.current) voiceoverRef.current.pause();
+    const prev = voiceoverRef.current;
+    if (prev) { prev.pause(); prev.src = ''; }
     const a = new Audio(voiceoverUrl);
     a.volume = voVol * volume;
     voiceoverRef.current = a;
+    return () => { a.pause(); a.src = ''; };
   }, [voiceoverUrl]);
 
   // Audio: background music
   useEffect(() => {
     if (!musicUrl) return;
-    if (musicRef.current) musicRef.current.pause();
+    const prev = musicRef.current;
+    if (prev) { prev.pause(); prev.src = ''; }
     const a = new Audio(musicUrl);
     a.loop = true;
     a.volume = musicVol * volume;
     musicRef.current = a;
+    return () => { a.pause(); a.src = ''; };
   }, [musicUrl]);
 
   // Sync audio play/pause
@@ -884,10 +888,10 @@ export default function TimelineEditor() {
         </div>
 
         {/* SFX Generate Dialog */}
-        {showSfxDialog && currentScene && (
+        {showSfxDialog && (
           <div className="relative">
             <SfxGenerateDialog
-              scene={scenesWithTiming.find(s => s.id === (showSfxDialog === true ? currentScene.id : showSfxDialog)) || currentScene}
+              scene={scenesWithTiming.find(s => s.id === (showSfxDialog === true ? currentScene?.id : showSfxDialog)) || currentScene}
               onGenerated={() => { refetchScenes(); setShowSfxDialog(false); }}
               onClose={() => setShowSfxDialog(false)}
             />
