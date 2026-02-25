@@ -33,9 +33,13 @@ Deno.serve(async (req) => {
     const isDone = taskStatus === 'done' || taskStatus === 'completed' || taskStatus === 'succeeded';
     const isFailed = taskStatus === 'failed' || taskStatus === 'error';
 
-    // Audio URL can be at top-level or inside metadata
-    const audioUrl = data.metadata?.audio_url || data.audio_url || data.result_url || 
-                     data.url || data.output_url;
+    // Audio URL can be a string or an array (MiniMax music returns array)
+    let audioUrl = data.metadata?.audio_url || data.audio_url || data.result_url || 
+                   data.url || data.output_url;
+    // If it's an array, take the first one
+    if (Array.isArray(audioUrl)) {
+      audioUrl = audioUrl[0];
+    }
 
     if (isDone && audioUrl) {
       if (track_id) {

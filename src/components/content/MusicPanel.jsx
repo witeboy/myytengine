@@ -90,13 +90,14 @@ Return JSON:
     setGenerating(false);
   };
 
-  // Step 2: Generate actual audio for a track via AI33
+  // Step 2: Generate actual audio for a track via AI33 MiniMax
   const handleGenerateAudio = async (track) => {
     setGeneratingTrackId(track.id);
     const res = await base44.functions.invoke('generateMusic', {
       track_id: track.id,
       prompt: track.prompt,
-      duration_seconds: 30,
+      genre: track.genre,
+      mood: track.mood,
     });
     const taskId = res.data?.task_id;
     if (taskId) {
