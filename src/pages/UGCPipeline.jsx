@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -37,6 +37,9 @@ const INFLUENCER_TYPES = [
 
 export default function UGCPipeline() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const projectIdParam = searchParams.get('project_id');
+  
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState('');
@@ -90,58 +93,70 @@ export default function UGCPipeline() {
   const [loadedTemplateBasePrompt, setLoadedTemplateBasePrompt] = useState('');
   const [resumedProjectId, setResumedProjectId] = useState('');
 
-  // ── Resume from ongoing project via ?project_id=... ─────────
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const pid = params.get('project_id');
-    if (!pid) return;
-
-    (async () => {
-      setStatusMsg('Loading project...');
-      setLoading(true);
-      try {
-        const projects = await base44.entities.Projects.filter({ id: pid });
-        const project = projects[0];
-        if (!project) { setLoading(false); return; }
-
-        setResumedProjectId(project.id);
-        setLoadedTemplateName(project.name || '');
-        setInfluencerType(project.niche || '');
-        if (project.reference_image_url) {
-          setInfluencerImageUrl(project.reference_image_url);
-        }
-
-        // Fetch associated script
-        const scripts = await base44.entities.Scripts.filter({ project_id: project.id });
-        const finalScript = scripts.find(s => s.version === 'final_aggregated') || scripts[0];
-        if (finalScript?.full_script) setVoiceScript(finalScript.full_script);
-
-        // Fetch production settings (voiceover)
-        const settings = await base44.entities.ProductionSettings.filter({ project_id: project.id });
-        const prod = settings[0];
-        if (prod?.voiceover_url) {
-          setVoiceUrl(prod.voiceover_url);
-          setVoiceDuration(prod.total_duration_seconds || 0);
-          if (prod.selected_voice_id) setSelectedVoiceId(prod.selected_voice_id);
-        }
-
-        // Determine which step to jump to based on available data
-        if (prod?.voiceover_url) {
-          setStep(4); // Has voiceover, show voice step (can generate lip-sync)
-        } else if (finalScript?.full_script) {
-          setStep(4); // Has script, go to voice step
-        } else if (project.reference_image_url) {
-          setStep(3); // Has image, go to image step
-        } else {
-          setStep(1); // Start from beginning
-        }
-      } catch (e) {
-        console.error('Resume error:', e);
+  // ── Resume project function (used by both URL param and callback) ─────────
+  const loadProjectData = async (projectId) => {
+    setStatusMsg('Loading project...');
+    setLoading(true);
+    try {
+      const projects = await base44.entities.Projects.filter({ id: projectId });
+      const project = projects[0];
+      if (!project) { 
+        setLoading(false); 
+        setStatusMsg('');
+        return; 
       }
-      setLoading(false);
-      setStatusMsg('');
-    })();
-  }, []);
+
+      setResumedProjectId(project.id);
+      setLoadedTemplateName(project.name || '');
+      setInfluencerType(project.niche || '');
+      if (project.reference_image_url) {
+        setInfluencerImageUrl(project.reference_image_url);
+      }
+
+      // Fetch associated script
+      const scripts = await base44.entities.Scripts.filter({ project_id: project.id });
+      const finalScript = scripts.find(s => s.version === 'final_aggregated') || scripts[0];
+      if (finalScript?.full_script) setVoiceScript(finalScript.full_script);
+
+      // Fetch production settings (voiceover)
+      const settings = await base44.entities.ProductionSettings.filter({ project_id: project.id });
+      const prod = settings[0];
+      if (prod?.voiceover_url) {
+        setVoiceUrl(prod.voiceover_url);
+        setVoiceDuration(prod.total_duration_seconds || 0);
+        if (prod.selected_voice_id) setSelectedVoiceId(prod.selected_voice_id);
+      }
+
+      // Determine which step to jump to based on available data
+      if (prod?.voiceover_url) {
+        setStep(4); // Has voiceover, show voice step (can generate lip-sync)
+      } else if (finalScript?.full_script) {
+        setStep(4); // Has script, go to voice step
+      } else if (project.reference_image_url) {
+        setStep(3); // Has image, go to image step
+      } else {
+        setStep(1); // Start from beginning
+      }
+    } catch (e) {
+      console.error('Resume error:', e);
+    }
+    setLoading(false);
+    setStatusMsg('');
+  };
+
+  // ── Resume from ongoing project via ?project_id=... (URL param) ─────────
+  useEffect(() => {
+    if (!projectIdParam) return;
+    loadProjectData(projectIdParam);
+  }, [projectIdParam]);
+
+  // ── Resume from ongoing project via callback (direct click) ─────────
+  const handleResumeProject = (project) => {
+    // Update URL to reflect the project (optional, for shareable links)
+    navigate(`${createPageUrl('UGCPipeline')}?project_id=${project.id}`, { replace: true });
+    // Load the project data directly
+    loadProjectData(project.id);
+  };
 
   // typeLabel: prefer the template name/archetype over generic INFLUENCER_TYPES label
   const typeLabel = loadedTemplateName
@@ -227,7 +242,7 @@ CRITICAL RULES — PRODUCT INTERACTION IS THE #1 PRIORITY:
     // Pre-fill audience from rich template data
     if (template.target_audience) setTargetAudience(template.target_audience);
     if (template.monetization_fit) setTargetMarket(template.monetization_fit);
-    // Build a meaningful action from template data (don't use content_structure directly — it's a flow outline, not an action)
+    // Build a meaningful action from template data
     if (template.archetype || template.voice_style) {
       const actionParts = [];
       if (template.archetype) actionParts.push(template.archetype);
@@ -291,28 +306,46 @@ Return ONLY the script text.`,
     setVoiceGenerating(true);
     setStatusMsg('Generating voiceover...');
 
-    // Create a temp project + script for the voiceover function
-    const project = await base44.entities.Projects.create({
-      name: `UGC: ${typeLabel}`,
-      niche: influencerType,
-      tone: 'conversational',
-      visual_style: 'photorealistic_4k',
-      orientation: 'portrait',
-      video_duration_minutes: 1,
-      status: 'script_complete',
-      current_step: 4,
-    });
+    // Create or use existing project
+    let projectId = resumedProjectId;
+    
+    if (!projectId) {
+      const project = await base44.entities.Projects.create({
+        name: `UGC: ${typeLabel}`,
+        niche: influencerType,
+        tone: 'conversational',
+        visual_style: 'photorealistic_4k',
+        orientation: 'portrait',
+        video_duration_minutes: 1,
+        status: 'script_complete',
+        current_step: 4,
+        reference_image_url: influencerImageUrl || null,
+      });
+      projectId = project.id;
+      setResumedProjectId(project.id);
+    }
 
-    await base44.entities.Scripts.create({
-      project_id: project.id,
-      version: 'final_aggregated',
-      title: `UGC: ${typeLabel}`,
-      full_script: voiceScript,
-      word_count: voiceScript.split(/\s+/).filter(w => w).length,
-    });
+    // Check if script already exists, update or create
+    const existingScripts = await base44.entities.Scripts.filter({ project_id: projectId });
+    const existingScript = existingScripts.find(s => s.version === 'final_aggregated');
+    
+    if (existingScript) {
+      await base44.entities.Scripts.update(existingScript.id, {
+        full_script: voiceScript,
+        word_count: voiceScript.split(/\s+/).filter(w => w).length,
+      });
+    } else {
+      await base44.entities.Scripts.create({
+        project_id: projectId,
+        version: 'final_aggregated',
+        title: `UGC: ${typeLabel}`,
+        full_script: voiceScript,
+        word_count: voiceScript.split(/\s+/).filter(w => w).length,
+      });
+    }
 
     const voResponse = await base44.functions.invoke('generateVoiceover', {
-      project_id: project.id,
+      project_id: projectId,
       voice_id: selectedVoiceId,
     });
     const voResult = voResponse.data || voResponse;
@@ -466,7 +499,7 @@ Return ONLY the motion description.`,
         {/* Step 1: Audience + Templates */}
         {step === 1 && (
           <div className="space-y-6">
-            <OngoingUGCProjects />
+            <OngoingUGCProjects onSelectProject={handleResumeProject} />
             <UGCTemplates onSelectTemplate={handleTemplateSelect} />
             <div className="relative">
               <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
