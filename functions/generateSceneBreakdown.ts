@@ -15,7 +15,7 @@ const CLIP_DURATION = 5;
 const MIN_CLIPS = 5;
 const MAX_CLIPS = 1000;
 const VISUAL_BATCH = 12;
-const PARALLEL_VISUAL_BATCHES = 3; // Run 3 Gemini visual calls concurrently
+const PARALLEL_VISUAL_BATCHES = 4; // Run 4 Gemini visual calls concurrently
 
 function repairJSON(str) {
   return str
