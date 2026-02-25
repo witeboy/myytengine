@@ -76,54 +76,63 @@ export default function useTimelineHistory(refetchScenes) {
     await refetchScenes();
   }, [pushUndo, refetchScenes]);
 
+  // Track ongoing delete promises so concurrent callers can await the same operation
+  const deletePromisesRef = useRef({});
+
   // Helper: delete a scene entirely and close the gap by renumbering remaining scenes
-  const deleteScene = useCallback(async (scene, allScenes) => {
-    // Prevent double-delete of the same scene
-    if (deletingRef.current.has(scene.id)) return;
-    deletingRef.current.add(scene.id);
+  const deleteScene = useCallback((scene, allScenes) => {
+    // If already deleting this scene, return the existing promise
+    if (deletePromisesRef.current[scene.id]) {
+      return deletePromisesRef.current[scene.id];
+    }
 
-    pushUndo({
-      type: 'delete_scene',
-      sceneId: scene.id,
-      before: { ...scene },
+    const doDelete = async () => {
+      pushUndo({
+        type: 'delete_scene',
+        sceneId: scene.id,
+        before: { ...scene },
+      });
+
+      // Delete the scene (ignore if already deleted)
+      try {
+        await base44.entities.Scenes.delete(scene.id);
+      } catch (e) {
+        if (e.message?.includes('not found')) {
+          await refetchScenes();
+          return;
+        }
+        throw e;
+      }
+
+      // Fetch fresh scene list instead of relying on potentially stale allScenes
+      let remaining;
+      try {
+        const freshScenes = await base44.entities.Scenes.filter({ project_id: scene.project_id });
+        remaining = freshScenes
+          .filter(s => s.id !== scene.id)
+          .sort((a, b) => a.scene_number - b.scene_number);
+      } catch {
+        remaining = allScenes
+          .filter(s => s.id !== scene.id)
+          .sort((a, b) => a.scene_number - b.scene_number);
+      }
+
+      // Renumber remaining scenes to close the gap — sequentially to avoid rate limits
+      for (let i = 0; i < remaining.length; i++) {
+        const correctNumber = i + 1;
+        if (remaining[i].scene_number !== correctNumber) {
+          await base44.entities.Scenes.update(remaining[i].id, { scene_number: correctNumber });
+        }
+      }
+
+      await refetchScenes();
+    };
+
+    const promise = doDelete().finally(() => {
+      delete deletePromisesRef.current[scene.id];
     });
-
-    // Delete the scene (ignore if already deleted)
-    try {
-      await base44.entities.Scenes.delete(scene.id);
-    } catch (e) {
-      deletingRef.current.delete(scene.id);
-      if (e.message?.includes('not found')) {
-        await refetchScenes();
-        return;
-      }
-      throw e;
-    }
-
-    // Fetch fresh scene list instead of relying on potentially stale allScenes
-    let remaining;
-    try {
-      const freshScenes = await base44.entities.Scenes.filter({ project_id: scene.project_id });
-      remaining = freshScenes
-        .filter(s => s.id !== scene.id)
-        .sort((a, b) => a.scene_number - b.scene_number);
-    } catch {
-      // Fallback to passed allScenes if fetch fails
-      remaining = allScenes
-        .filter(s => s.id !== scene.id)
-        .sort((a, b) => a.scene_number - b.scene_number);
-    }
-
-    // Renumber remaining scenes to close the gap — sequentially to avoid rate limits
-    for (let i = 0; i < remaining.length; i++) {
-      const correctNumber = i + 1;
-      if (remaining[i].scene_number !== correctNumber) {
-        await base44.entities.Scenes.update(remaining[i].id, { scene_number: correctNumber });
-      }
-    }
-
-    deletingRef.current.delete(scene.id);
-    await refetchScenes();
+    deletePromisesRef.current[scene.id] = promise;
+    return promise;
   }, [pushUndo, refetchScenes]);
 
   return {
