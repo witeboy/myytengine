@@ -785,7 +785,15 @@ export default function ContentGeneration() {
                   setImportPhase('prompts');
                   setImportProgress('Converting director notes into visual prompts...');
                   try {
-                    await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
+                    await invokeWithTimeout('generateScenePrompts', { project_id: projectId });
+                    await pollForCompletion(async () => {
+                      const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+                      queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+                      const pending = freshScenes.filter(s => s.status === 'breakdown_ready');
+                      const ready = freshScenes.filter(s => s.status === 'prompts_ready');
+                      setImportProgress(`Converting prompts... ${ready.length}/${freshScenes.length} ready`);
+                      return pending.length === 0 && ready.length > 0;
+                    }, 120, 4000);
                     await refetchScenes();
                   } catch (err) {
                     console.error('Prompt generation failed:', err);
