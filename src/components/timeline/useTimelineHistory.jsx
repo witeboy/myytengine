@@ -47,6 +47,7 @@ export default function useTimelineHistory(refetchScenes) {
   }, [redoStack, applying, refetchScenes]);
 
   // Helper: delete media from a scene (image, video, or both)
+  // Clears the media and redistributes the deleted scene's duration to neighbors
   const deleteSceneMedia = useCallback(async (scene, mediaType) => {
     // mediaType: 'image' | 'video' | 'both'
     const before = {};
@@ -74,11 +75,42 @@ export default function useTimelineHistory(refetchScenes) {
     await refetchScenes();
   }, [pushUndo, refetchScenes]);
 
+  // Helper: delete a scene entirely and close the gap by renumbering remaining scenes
+  const deleteScene = useCallback(async (scene, allScenes) => {
+    pushUndo({
+      type: 'delete_scene',
+      sceneId: scene.id,
+      before: { ...scene },
+    });
+
+    // Delete the scene
+    await base44.entities.Scenes.delete(scene.id);
+
+    // Renumber remaining scenes to close the gap
+    const remaining = allScenes
+      .filter(s => s.id !== scene.id)
+      .sort((a, b) => a.scene_number - b.scene_number);
+
+    const renumberPromises = remaining
+      .filter((s, idx) => s.scene_number !== idx + 1)
+      .map((s, idx) => {
+        const correctNumber = remaining.indexOf(s) + 1;
+        return base44.entities.Scenes.update(s.id, { scene_number: correctNumber });
+      });
+
+    if (renumberPromises.length > 0) {
+      await Promise.all(renumberPromises);
+    }
+
+    await refetchScenes();
+  }, [pushUndo, refetchScenes]);
+
   return {
     pushUndo,
     undo,
     redo,
     deleteSceneMedia,
+    deleteScene,
     canUndo: undoStack.length > 0,
     canRedo: redoStack.length > 0,
     applying,
