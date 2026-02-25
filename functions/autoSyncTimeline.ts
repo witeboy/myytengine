@@ -117,8 +117,8 @@ Distribute ${totalVoDuration}s across ${scenes.length} scenes. Rules:
       sceneDurations[longestIdx].duration_seconds = Math.round((sceneDurations[longestIdx].duration_seconds + diff) * 10) / 10;
     }
 
-    // Update scenes in database (batch in chunks of 20 to avoid rate limits)
-    const BATCH_SIZE = 20;
+    // Update scenes in database sequentially with small batches to avoid rate limits
+    const BATCH_SIZE = 5;
     for (let i = 0; i < sceneDurations.length; i += BATCH_SIZE) {
       const batch = sceneDurations.slice(i, i + BATCH_SIZE);
       await Promise.all(batch.map(sd => {
@@ -129,6 +129,10 @@ Distribute ${totalVoDuration}s across ${scenes.length} scenes. Rules:
           });
         }
       }).filter(Boolean));
+      // Small delay between batches to stay within rate limits
+      if (i + BATCH_SIZE < sceneDurations.length) {
+        await new Promise(r => setTimeout(r, 300));
+      }
     }
 
     console.log('Auto-sync complete. Durations:', sceneDurations.map(s => `S${s.scene_number}:${s.duration_seconds}s`).join(', '));
