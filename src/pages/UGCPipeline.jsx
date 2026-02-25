@@ -442,6 +442,10 @@ Return ONLY the motion description.`,
                       if (tpl) handleLoadTemplate(tpl);
                     } else {
                       setInfluencerType(val);
+                      // Clear loaded template state when picking a generic type
+                      setLoadedTemplateName('');
+                      setLoadedTemplateArchetype('');
+                      setLoadedTemplateBasePrompt('');
                     }
                   }}>
                     <SelectTrigger><SelectValue placeholder="Select type..." /></SelectTrigger>
