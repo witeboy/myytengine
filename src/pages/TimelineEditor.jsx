@@ -719,7 +719,7 @@ export default function TimelineEditor() {
           <div style={{ minWidth: Math.max(totalDuration * pixelsPerSecond + 100, 800) }}>
             {/* Ruler — click to seek */}
             <div className="relative cursor-pointer">
-              <TimelineRuler totalDuration={totalDuration} pixelsPerSecond={pixelsPerSecond} />
+              <TimelineRuler totalDuration={totalDuration} pixelsPerSecond={pixelsPerSecond} onSeek={(t) => { setCurrentTime(t); if (voiceoverRef.current) voiceoverRef.current.currentTime = t; sfxRefs.current = {}; }} />
               {scenes.length > 0 && (
                 <div className="absolute top-0 bottom-0 z-30" style={{ left: currentTime * pixelsPerSecond + 64 - 6 }}>
                   <div className="w-3 h-full flex flex-col items-center cursor-col-resize" onMouseDown={handlePlayheadMouseDown}>
