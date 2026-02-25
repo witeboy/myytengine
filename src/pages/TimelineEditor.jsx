@@ -40,8 +40,46 @@ export default function TimelineEditor() {
   const [transitionTarget, setTransitionTarget] = useState(null);
   const [previewOrientation, setPreviewOrientation] = useState(null);
   const [editingTrack, setEditingTrack] = useState(null); // 'voiceover' | 'music' | 'sfx-{sceneId}'
+  const [effectsTarget, setEffectsTarget] = useState(null); // scene for effects library
   const exportHook = useVideoExport();
   const timelineRef = useRef(null);
+
+  // Resizable timeline height (drag up to expand)
+  const [timelineHeight, setTimelineHeight] = useState(320);
+  const isDraggingDivider = useRef(false);
+
+  // Detachable panel state
+  const [detachedPanels, setDetachedPanels] = useState({ media: false, preview: false, properties: false });
+  const [panelSizes, setPanelSizes] = useState({ media: 224, properties: 256 }); // px widths
+
+  const handleDividerMouseDown = (e) => {
+    e.preventDefault();
+    isDraggingDivider.current = true;
+    const startY = e.clientY;
+    const startHeight = timelineHeight;
+    const onMove = (ev) => {
+      if (!isDraggingDivider.current) return;
+      const dy = startY - ev.clientY;
+      setTimelineHeight(Math.max(150, Math.min(window.innerHeight - 200, startHeight + dy)));
+    };
+    const onUp = () => {
+      isDraggingDivider.current = false;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  const toggleDetachPanel = (panel) => {
+    if (detachedPanels[panel]) {
+      // Re-attach
+      setDetachedPanels(prev => ({ ...prev, [panel]: false }));
+    } else {
+      // Detach into new window
+      setDetachedPanels(prev => ({ ...prev, [panel]: true }));
+    }
+  };
 
   // Track states
   const [activeTrack, setActiveTrack] = useState(null);
