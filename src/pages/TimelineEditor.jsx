@@ -477,26 +477,26 @@ export default function TimelineEditor() {
           activeTrack={activeTrack}
           hasSelection={false}
           onCut={() => {
-            if (activeTrack === 'voiceover' && voiceoverUrl) openAudioEdit('voiceover');
-            else if (activeTrack === 'music' && musicUrl) openAudioEdit('music');
+            if (activeTrack === 'voiceover' && voiceoverUrl) setEditingTrack('voiceover');
+            else if (activeTrack === 'music' && musicUrl) setEditingTrack('music');
             else if (activeTrack === 'sfx') {
               const sc = getCurrentScene(currentTime);
-              if (sc?.sound_effect_url) openAudioEdit(`sfx-${sc.id}`);
+              if (sc?.sound_effect_url) setEditingTrack(`sfx-${sc.id}`);
             }
           }}
           onTrim={() => {
-            if (activeTrack === 'voiceover' && voiceoverUrl) openAudioEdit('voiceover');
-            else if (activeTrack === 'music' && musicUrl) openAudioEdit('music');
+            if (activeTrack === 'voiceover' && voiceoverUrl) setEditingTrack('voiceover');
+            else if (activeTrack === 'music' && musicUrl) setEditingTrack('music');
           }}
           onSplit={() => {
-            if (activeTrack === 'voiceover' && voiceoverUrl) openAudioEdit('voiceover');
-            else if (activeTrack === 'music' && musicUrl) openAudioEdit('music');
+            if (activeTrack === 'voiceover' && voiceoverUrl) setEditingTrack('voiceover');
+            else if (activeTrack === 'music' && musicUrl) setEditingTrack('music');
           }}
           onDelete={() => {}}
           onUndo={() => {}}
           canUndo={false}
           onDetectSilence={() => {
-            if (voiceoverUrl) openAudioEdit('voiceover');
+            if (voiceoverUrl) setEditingTrack('voiceover');
           }}
           onGenerateSfx={() => setShowSfxDialog(true)}
           collapsedTracks={collapsedTracks}
