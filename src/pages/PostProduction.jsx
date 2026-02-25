@@ -23,6 +23,7 @@ export default function PostProduction() {
   const projectId = new URLSearchParams(window.location.search).get('project_id');
   const [generatingThumbs, setGeneratingThumbs] = useState(false);
   const [generatingSeo, setGeneratingSeo] = useState(false);
+  const [thumbError, setThumbError] = useState(null);
 
   // Extended SEO data (from the new function)
   const [seoTitles, setSeoTitles] = useState(null);
@@ -85,16 +86,16 @@ export default function PostProduction() {
   // Generate thumbnails from script (with selected titles + niche DNA baked in)
   const handleGenerateFromScript = async () => {
     setGeneratingThumbs(true);
-    try {
-      await base44.functions.invoke('generateThumbnailsFromScript', {
-        project_id: projectId,
-        reference_style: referenceStyle || undefined,
-        niche_dna: selectedNiche?.synthesized_dna || undefined,
-        niche_name: selectedNiche?.name || undefined,
-        selected_title: selectedTitles.length > 0 ? selectedTitles.map(t => t.title).join(' | ') : undefined,
-      });
-    } catch (e) {
-      console.error('Thumbnail generation failed:', e);
+    setThumbError(null);
+    const res = await base44.functions.invoke('generateThumbnailsFromScript', {
+      project_id: projectId,
+      reference_style: referenceStyle || undefined,
+      niche_dna: selectedNiche?.synthesized_dna || undefined,
+      niche_name: selectedNiche?.name || undefined,
+      selected_title: selectedTitles.length > 0 ? selectedTitles.map(t => t.title).join(' | ') : undefined,
+    });
+    if (res.data?.error) {
+      setThumbError(res.data.error);
     }
     refetchThumbs();
     setGeneratingThumbs(false);
@@ -310,6 +311,16 @@ export default function PostProduction() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Error state */}
+            {thumbError && (
+              <Card className="border-red-200 bg-red-50">
+                <CardContent className="py-4 text-center">
+                  <p className="text-red-600 font-medium text-sm">{thumbError}</p>
+                  <p className="text-xs text-red-400 mt-1">Make sure you have a selected topic and a final script before generating thumbnails.</p>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Loading state */}
             {generatingThumbs && (
