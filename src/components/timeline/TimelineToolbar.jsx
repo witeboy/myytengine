@@ -54,8 +54,8 @@ export default function TimelineToolbar({
         size="sm" variant="ghost"
         className="text-red-400 hover:bg-red-500/10 gap-1 text-[10px] h-6 px-2"
         onClick={onCut}
-        disabled={!hasSelection}
-        title="Cut selection (remove)"
+        disabled={!activeTrack}
+        title="Cut — opens audio editor"
       >
         <Scissors className="w-3 h-3" /> Cut
       </Button>
