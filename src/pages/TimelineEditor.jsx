@@ -18,9 +18,10 @@ import useVideoExport from '@/components/timeline/useVideoExport';
 import SceneReorder from '@/components/timeline/SceneReorder';
 import TransitionLibrary from '@/components/timeline/TransitionLibrary';
 // DownloadAllMedia moved to EditorTopBar
+import AudioEditor from '@/components/timeline/AudioEditor';
 import {
   Loader2, Film, Play, Pause, SkipBack, SkipForward,
-  Volume2, VolumeX, Mic, Music, ZoomIn, ZoomOut, Monitor
+  Volume2, VolumeX, Mic, Music, ZoomIn, ZoomOut, Monitor, Scissors
 } from 'lucide-react';
 
 export default function TimelineEditor() {
