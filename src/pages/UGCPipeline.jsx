@@ -107,11 +107,14 @@ export default function UGCPipeline() {
         setResumedProjectId(project.id);
         setLoadedTemplateName(project.name || '');
         setInfluencerType(project.niche || '');
+        if (project.reference_image_url) {
+          setInfluencerImageUrl(project.reference_image_url);
+        }
 
         // Fetch associated script
-        const scripts = await base44.entities.Scripts.filter({ project_id: project.id, version: 'final_aggregated' });
-        const script = scripts[0];
-        if (script?.full_script) setVoiceScript(script.full_script);
+        const scripts = await base44.entities.Scripts.filter({ project_id: project.id });
+        const finalScript = scripts.find(s => s.version === 'final_aggregated') || scripts[0];
+        if (finalScript?.full_script) setVoiceScript(finalScript.full_script);
 
         // Fetch production settings (voiceover)
         const settings = await base44.entities.ProductionSettings.filter({ project_id: project.id });
@@ -122,15 +125,15 @@ export default function UGCPipeline() {
           if (prod.selected_voice_id) setSelectedVoiceId(prod.selected_voice_id);
         }
 
-        // Determine which step to jump to based on project status
-        const status = project.status;
-        if (status === 'voiceover_ready' || status === 'scene_breakdown') {
-          // Has voiceover, go to step 4 (voice) or 5 (lip-sync)
-          setStep(4);
-        } else if (status === 'script_complete') {
-          setStep(4);
+        // Determine which step to jump to based on available data
+        if (prod?.voiceover_url) {
+          setStep(4); // Has voiceover, show voice step (can generate lip-sync)
+        } else if (finalScript?.full_script) {
+          setStep(4); // Has script, go to voice step
+        } else if (project.reference_image_url) {
+          setStep(3); // Has image, go to image step
         } else {
-          setStep(4); // Default to voice step for UGC projects
+          setStep(1); // Start from beginning
         }
       } catch (e) {
         console.error('Resume error:', e);
