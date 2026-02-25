@@ -46,6 +46,7 @@ Deno.serve(async (req) => {
         style: style,
         title: title,
         negativeTags: negativeTags,
+        callBackUrl: 'https://example.com/noop-callback',
       }),
     });
 
