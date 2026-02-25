@@ -613,12 +613,17 @@ ${batchBeats.length} objects for beats ${bStart + 1}-${bEnd}. NEVER include text
       };
 
       try {
+        // Build a richer initial animation prompt from director notes (will be refined in prompt generation pass)
+        const arcIntensityMap = { setup: 'gentle, observant', rising: 'building, purposeful', climax: 'dynamic, emotionally charged', resolution: 'softening, contemplative' };
+        const arcMotionQuality = arcIntensityMap[arc] || 'measured, cinematic';
+        const initAnimPrompt = `${directorNotes.camera_movement} over ${CLIP_DURATION} seconds. The motion quality is ${arcMotionQuality}. ${directorNotes.lighting ? `Light: ${directorNotes.lighting}.` : ''} Mood: ${directorNotes.mood || 'cinematic tension'}. Subtle atmospheric particles drift through the frame. Subject micro-motion — breathing, fabric settling, hair shifting.`;
+
         await base44.asServiceRole.entities.Scenes.create({
           project_id,
           scene_number: sceneNum,
           narration_text: cleanedNarration,
           image_prompt: `DIRECTOR_NOTES:${JSON.stringify(directorNotes)}`,
-          animation_prompt: directorNotes.camera_movement,
+          animation_prompt: initAnimPrompt,
           duration_seconds: CLIP_DURATION,
           status: "breakdown_ready"
         });
