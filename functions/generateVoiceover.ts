@@ -3,12 +3,26 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 // ══════════════════════════════════════════════════════════════════
 // VOICEOVER GENERATOR — MiniMax T2A primary, AI33 fallback
 // ══════════════════════════════════════════════════════════════════
-//
-// MiniMax T2A v2 is synchronous — returns hex-encoded audio directly.
-// No polling needed. Falls back to AI33 (async with polling) if MiniMax fails.
-//
-// MiniMax limit: 10,000 chars per request → chunk if longer.
-// ══════════════════════════════════════════════════════════════════
+
+const FETCH_TIMEOUT_MS = 30000; // 30 seconds per API call
+const AI33_POLL_INTERVAL_MS = 3000; // 3 seconds between polls
+const AI33_MAX_POLLS = 20; // Max 60 seconds of polling
+
+// ── Fetch with timeout ─────────────────────────────────────────────
+async function fetchWithTimeout(url, options, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 // ── Split text into chunks ─────────────────────────────────────────
 function splitTextIntoChunks(text, maxChars = 9000) {
@@ -37,7 +51,7 @@ function hexToBytes(hex) {
 
 // ── MiniMax TTS call ───────────────────────────────────────────────
 async function generateWithMinimax(apiKey, text, voiceId) {
-  const res = await fetch('https://api.minimax.io/v1/t2a_v2', {
+  const res = await fetchWithTimeout('https://api.minimax.io/v1/t2a_v2', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
@@ -62,7 +76,7 @@ async function generateWithMinimax(apiKey, text, voiceId) {
       language_boost: 'auto',
       output_format: 'hex',
     }),
-  });
+  }, 45000); // 45 second timeout for MiniMax
 
   if (!res.ok) {
     const errText = await res.text();
@@ -89,17 +103,21 @@ async function generateWithMinimax(apiKey, text, voiceId) {
 // ── AI33 TTS call (async with polling) ─────────────────────────────
 async function generateWithAi33(apiKey, text, voiceId) {
   // Submit task
-  const submitRes = await fetch(`https://api.ai33.pro/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'xi-api-key': apiKey,
+  const submitRes = await fetchWithTimeout(
+    `https://api.ai33.pro/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_multilingual_v2',
+      }),
     },
-    body: JSON.stringify({
-      text,
-      model_id: 'eleven_multilingual_v2',
-    }),
-  });
+    20000 // 20 second timeout for submit
+  );
 
   const submitData = await submitRes.json();
   if (!submitData.success || !submitData.task_id) {
@@ -109,36 +127,50 @@ async function generateWithAi33(apiKey, text, voiceId) {
   const taskId = submitData.task_id;
   console.log(`AI33 TTS task: ${taskId}`);
 
-  // Poll until done
-  for (let i = 0; i < 60; i++) {
-    if (i > 0) await new Promise(r => setTimeout(r, 5000));
+  // Poll until done (max 60 seconds)
+  for (let i = 0; i < AI33_MAX_POLLS; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, AI33_POLL_INTERVAL_MS));
 
-    const pollRes = await fetch(`https://api.ai33.pro/v1/task/${taskId}`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json', 'xi-api-key': apiKey },
-    });
+    try {
+      const pollRes = await fetchWithTimeout(
+        `https://api.ai33.pro/v1/task/${taskId}`,
+        {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json', 'xi-api-key': apiKey },
+        },
+        10000 // 10 second timeout for poll
+      );
 
-    if (!pollRes.ok) continue;
-    const pollData = await pollRes.json();
+      if (!pollRes.ok) continue;
+      const pollData = await pollRes.json();
 
-    if (pollData.status === 'done') {
-      const audioUrl = pollData.metadata?.audio_url;
-      if (!audioUrl) throw new Error('AI33 TTS done but no audio URL');
+      if (pollData.status === 'done') {
+        const audioUrl = pollData.metadata?.audio_url;
+        if (!audioUrl) throw new Error('AI33 TTS done but no audio URL');
 
-      // Download the audio
-      const audioRes = await fetch(audioUrl);
-      const audioBytes = new Uint8Array(await audioRes.arrayBuffer());
-      // Estimate duration from file size (128kbps = 16000 bytes/sec)
-      const durationSec = audioBytes.length / 16000;
-      return { audioBytes, durationSec };
-    }
+        // Download the audio with timeout
+        const audioRes = await fetchWithTimeout(audioUrl, {}, 30000);
+        const audioBytes = new Uint8Array(await audioRes.arrayBuffer());
+        // Estimate duration from file size (128kbps = 16000 bytes/sec)
+        const durationSec = audioBytes.length / 16000;
+        return { audioBytes, durationSec };
+      }
 
-    if (pollData.status === 'failed' || pollData.status === 'error') {
-      throw new Error(`AI33 TTS failed: ${pollData.error_message || 'Unknown'}`);
+      if (pollData.status === 'failed' || pollData.status === 'error') {
+        throw new Error(`AI33 TTS failed: ${pollData.error_message || 'Unknown'}`);
+      }
+      
+      console.log(`AI33 poll ${i + 1}/${AI33_MAX_POLLS}: status=${pollData.status}`);
+    } catch (pollErr) {
+      if (pollErr.name === 'AbortError') {
+        console.warn(`AI33 poll ${i + 1} timed out, retrying...`);
+      } else {
+        throw pollErr;
+      }
     }
   }
 
-  throw new Error('AI33 TTS timed out');
+  throw new Error('AI33 TTS timed out after 60 seconds');
 }
 
 // ── Clean script text for TTS ──────────────────────────────────────
@@ -164,6 +196,8 @@ function estimateMp3Duration(byteLength) {
 // ══════════════════════════════════════════════════════════════════
 
 Deno.serve(async (req) => {
+  const startTime = Date.now();
+  
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
@@ -195,6 +229,15 @@ Deno.serve(async (req) => {
 
     const cleanedText = cleanScript(script.full_script);
     const wordCount = cleanedText.split(/\s+/).filter(w => w.length > 0).length;
+    
+    // ── Check script length - limit to ~500 words for safety ───────
+    if (wordCount > 600) {
+      return Response.json({ 
+        error: `Script too long (${wordCount} words). Please reduce to under 500 words for reliable generation.`,
+        word_count: wordCount,
+      }, { status: 400 });
+    }
+    
     console.log(`🎙 Voiceover: ${wordCount} words, ${cleanedText.length} chars`);
 
     const selectedVoiceId = voice_id || 'English_expressive_narrator';
@@ -214,9 +257,19 @@ Deno.serve(async (req) => {
     const isAi33Voice = AI33_KEY && /^[a-zA-Z0-9]{20,}$/.test(selectedVoiceId);
     const useMinimax = !forceAi33 && MINIMAX_KEY && !isAi33Voice;
 
-    // ── Split text into chunks ─────────────────────────────────────
-    const chunkLimit = useMinimax ? 9000 : 4000;
+    // ── Split text into chunks (smaller chunks for faster processing) ─
+    const chunkLimit = useMinimax ? 4500 : 2500; // Reduced chunk sizes
     const chunks = splitTextIntoChunks(cleanedText, chunkLimit);
+    
+    // ── Limit chunks to prevent timeout ────────────────────────────
+    if (chunks.length > 3) {
+      return Response.json({ 
+        error: `Script too long (${chunks.length} chunks needed). Please reduce script length.`,
+        word_count: wordCount,
+        chunks_needed: chunks.length,
+      }, { status: 400 });
+    }
+    
     console.log(`🎙 ${chunks.length} chunk(s), provider=${useMinimax ? 'minimax' : 'ai33'}, voice=${selectedVoiceId}`);
 
     let allAudioBytes = [];
@@ -227,6 +280,12 @@ Deno.serve(async (req) => {
     if (useMinimax) {
       try {
         for (let i = 0; i < chunks.length; i++) {
+          // Check if we're running out of time (leave 15s buffer)
+          const elapsed = Date.now() - startTime;
+          if (elapsed > 75000) {
+            throw new Error('Running out of time, aborting MiniMax');
+          }
+          
           console.log(`🎙 MiniMax chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)...`);
           const result = await generateWithMinimax(MINIMAX_KEY, chunks[i], selectedVoiceId);
           allAudioBytes.push(result.audioBytes);
@@ -243,13 +302,28 @@ Deno.serve(async (req) => {
 
     // ── FALLBACK TO AI33 ───────────────────────────────────────────
     if (usedProvider === 'none' && AI33_KEY) {
+      // Check remaining time before attempting AI33
+      const elapsed = Date.now() - startTime;
+      if (elapsed > 30000) {
+        return Response.json({ 
+          error: 'MiniMax failed and not enough time for AI33 fallback. Please try again.',
+          elapsed_ms: elapsed,
+        }, { status: 500 });
+      }
+      
       console.log('🎙 Falling back to AI33 (ElevenLabs)...');
       const ai33VoiceId = isAi33Voice ? selectedVoiceId : '21m00Tcm4TlvDq8ikWAM'; // Rachel default
-      const ai33Chunks = splitTextIntoChunks(cleanedText, 4000);
+      const ai33Chunks = splitTextIntoChunks(cleanedText, 2500);
+      
+      // Only process first chunk if multiple to avoid timeout
+      const chunksToProcess = ai33Chunks.slice(0, 1);
+      if (ai33Chunks.length > 1) {
+        console.warn(`⚠️ AI33: Only processing first chunk to avoid timeout (${ai33Chunks.length} total)`);
+      }
 
-      for (let i = 0; i < ai33Chunks.length; i++) {
-        console.log(`🎙 AI33 chunk ${i + 1}/${ai33Chunks.length} (${ai33Chunks[i].length} chars)...`);
-        const result = await generateWithAi33(AI33_KEY, ai33Chunks[i], ai33VoiceId);
+      for (let i = 0; i < chunksToProcess.length; i++) {
+        console.log(`🎙 AI33 chunk ${i + 1}/${chunksToProcess.length} (${chunksToProcess[i].length} chars)...`);
+        const result = await generateWithAi33(AI33_KEY, chunksToProcess[i], ai33VoiceId);
         allAudioBytes.push(result.audioBytes);
         totalDuration += result.durationSec;
         console.log(`✓ AI33 chunk ${i + 1}: ${result.audioBytes.length} bytes, ${result.durationSec.toFixed(1)}s`);
@@ -258,7 +332,7 @@ Deno.serve(async (req) => {
     }
 
     if (usedProvider === 'none') {
-      throw new Error('All TTS providers failed');
+      return Response.json({ error: 'All TTS providers failed' }, { status: 500 });
     }
 
     // ── Concatenate audio chunks ───────────────────────────────────
@@ -302,7 +376,8 @@ Deno.serve(async (req) => {
 
     await base44.asServiceRole.entities.Projects.update(project_id, { status: 'voiceover_ready' });
 
-    console.log(`✓ Voiceover complete: ${totalDuration}s via ${usedProvider}`);
+    const totalTime = Date.now() - startTime;
+    console.log(`✓ Voiceover complete: ${totalDuration}s via ${usedProvider} (took ${totalTime}ms)`);
 
     return Response.json({
       success: true,
@@ -312,10 +387,25 @@ Deno.serve(async (req) => {
       voice_id: selectedVoiceId,
       chunks_count: chunks.length,
       provider: usedProvider,
+      processing_time_ms: totalTime,
     });
 
   } catch (error) {
-    console.error(`❌ generateVoiceover error: ${error.message}`);
-    return Response.json({ error: error.message }, { status: 500 });
+    const totalTime = Date.now() - startTime;
+    console.error(`❌ generateVoiceover error (${totalTime}ms): ${error.message}`);
+    
+    // Provide more helpful error messages
+    let userMessage = error.message;
+    if (error.name === 'AbortError') {
+      userMessage = 'Voice generation timed out. Try with a shorter script.';
+    } else if (error.message.includes('fetch')) {
+      userMessage = 'Could not connect to voice API. Please try again.';
+    }
+    
+    return Response.json({ 
+      error: userMessage,
+      details: error.message,
+      processing_time_ms: totalTime,
+    }, { status: 500 });
   }
 });
