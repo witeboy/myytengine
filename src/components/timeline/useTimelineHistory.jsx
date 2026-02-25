@@ -83,8 +83,16 @@ export default function useTimelineHistory(refetchScenes) {
       before: { ...scene },
     });
 
-    // Delete the scene
-    await base44.entities.Scenes.delete(scene.id);
+    // Delete the scene (ignore if already deleted)
+    try {
+      await base44.entities.Scenes.delete(scene.id);
+    } catch (e) {
+      if (e.message?.includes('not found')) {
+        await refetchScenes();
+        return;
+      }
+      throw e;
+    }
 
     // Renumber remaining scenes to close the gap — sequentially to avoid rate limits
     const remaining = allScenes
