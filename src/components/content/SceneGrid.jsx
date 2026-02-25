@@ -60,7 +60,11 @@ export default function SceneGrid({ scenes, onRefetch }) {
 
   const sceneCallbacks = (scene) => ({
     onRegenerateImage: async () => {
-      await base44.functions.invoke('generateSceneImage', { scene_id: scene.id });
+      try {
+        await base44.functions.invoke('generateSceneImage', { scene_id: scene.id });
+      } catch (err) {
+        console.warn(`Scene ${scene.scene_number} image failed:`, err?.response?.data?.error || err.message);
+      }
       onRefetch();
     },
     onAnimateScene: async () => {
