@@ -1,9 +1,9 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import {
-  Scissors, Trash2,
+  Scissors, Trash2, ScissorsLineDashed,
   Undo2, ScanSearch, ChevronDown, ChevronUp,
-  Film, Mic, Music, Volume2, Wand2, ZoomIn, ZoomOut, Split
+  Film, Mic, Music, Volume2, Wand2, ZoomIn, ZoomOut
 } from 'lucide-react';
 
 const TRACK_INFO = {
