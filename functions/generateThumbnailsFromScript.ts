@@ -181,6 +181,7 @@ SCRIPT ESSENCE: ${JSON.stringify(script_essence)}
 Extract: villain_object, victim_object, trap_symbol, shock_data (specific number from script), contrast_pair (illusion vs reality), niche_objects (3-5 items).
 
 Generate 10 text options: 4 curiosity gap, 3 forbidden knowledge, 3 shock/contradiction. For each specify all fields below. Pick top 3 with highest CTR potential.
+IMPORTANT: At least ONE of the top 3 winners MUST have a maximum of 4 words (short punchy text). This is mandatory.
 
 JSON: {"script_anchors":{"villain_object":"","victim_object":"","trap_symbol":"","shock_data":"","contrast_pair":{"illusion":"","reality":""},"niche_objects":[]},"script_climax":"","curiosity_gap_identified":"","text_options":[{"rank":1,"text":"","category":"","text_color_name":"","text_hex":"","background_color_name":"","background_hex":"","contrast_pair_name":"e.g. Yellow & Black","outline":"thick black outline","shadow":"heavy drop shadow","container":"raw or box","position":"upper-left","size":"massive","font_style":"Impact","subject_hook_type":"","subject_hook_description":"","anchor_object_in_subject":"","mobile_readable":true,"total_ctr_score":9}],"top_3_winners":[1,2,3]}`, 0.95, 4096);
 
