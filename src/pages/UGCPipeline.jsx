@@ -616,7 +616,7 @@ Return ONLY the motion description.`,
                       className="w-full bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 gap-2"
                     >
                       {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
-                      Generate Lip-Sync Video (Kling AI)
+                      Generate Lip-Sync Video
                     </Button>
                   </div>
                 )}
@@ -675,7 +675,7 @@ Return ONLY the motion description.`,
                   <div className="flex items-center gap-2 mb-2">
                     <CheckCircle2 className="w-4 h-4 text-green-600" />
                     <span className="text-sm font-medium">Lip-sync Video Ready!</span>
-                    <Badge className="bg-purple-100 text-purple-700 text-xs">Kling AI Avatar</Badge>
+                    <Badge className="bg-purple-100 text-purple-700 text-xs">AI Avatar</Badge>
                   </div>
                   <video controls src={videoUrl} className="w-full rounded-lg border" />
                   <div className="flex gap-2 mt-2">
