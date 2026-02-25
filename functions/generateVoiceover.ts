@@ -169,7 +169,7 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, script_id, voice_id } = await req.json();
+    const { project_id, script_id, voice_id, provider } = await req.json();
     if (!project_id) return Response.json({ error: 'Missing project_id' }, { status: 400 });
 
     const MINIMAX_KEY = Deno.env.get('MINIMAX_API_KEY');
@@ -178,6 +178,9 @@ Deno.serve(async (req) => {
     if (!MINIMAX_KEY && !AI33_KEY) {
       return Response.json({ error: 'No TTS API keys configured (MINIMAX_API_KEY or AI33_API_KEY)' }, { status: 500 });
     }
+
+    // If provider is explicitly set, respect it
+    const forceAi33 = provider === 'ai33' || provider === 'elevenlabs';
 
     // ── Fetch project & script ─────────────────────────────────────
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
