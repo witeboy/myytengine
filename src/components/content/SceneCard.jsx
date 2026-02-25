@@ -34,15 +34,22 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
       setPolling(true);
       setLoadingVideo(true);
       pollRef.current = setInterval(async () => {
-        const res = await base44.functions.invoke('pollSceneVideo', {
-          scene_id: scene.id,
-        });
-        const status = res.data?.status;
-        if (status === 'COMPLETED' || status === 'FAILED') {
+        try {
+          const res = await base44.functions.invoke('pollSceneVideo', {
+            scene_id: scene.id,
+          });
+          const status = res.data?.status;
+          if (status === 'COMPLETED' || status === 'FAILED') {
+            clearInterval(pollRef.current);
+            setPolling(false);
+            setLoadingVideo(false);
+            onSceneUpdated?.();
+          }
+        } catch (err) {
+          console.warn(`Poll error for scene ${scene.scene_number}:`, err?.response?.data?.error || err.message);
           clearInterval(pollRef.current);
           setPolling(false);
           setLoadingVideo(false);
-          onSceneUpdated?.();
         }
       }, 12000);
     }
