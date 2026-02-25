@@ -630,38 +630,18 @@ export default function ContentGeneration() {
         )}
 
         {/* ═══════════════════════════════════════════════════════════
-            IMPORT PROGRESS BANNER
+            IMPORT PROGRESS — ProcessingNotifier
             ═══════════════════════════════════════════════════════════ */}
-        {importing && (
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <div className="flex items-center gap-3">
-              <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  {importPhase === 'breakdown' ? (
-                    <Badge className="bg-blue-100 text-blue-800 text-xs">
-                      <Clapperboard className="w-3 h-3 mr-1" />
-                      Phase 1: Director's Breakdown
-                    </Badge>
-                  ) : (
-                    <Badge className="bg-purple-100 text-purple-800 text-xs">
-                      <Wand2 className="w-3 h-3 mr-1" />
-                      Phase 2: Visual Prompts
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-sm text-gray-700">{importProgress}</p>
-                {scenes.length > 0 && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    {scenes.length} scenes created
-                    {breakdownReadyCount > 0 && ` · ${breakdownReadyCount} awaiting prompts`}
-                    {promptsReadyCount > 0 && ` · ${promptsReadyCount} ready for images`}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+        <ProcessingNotifier
+          active={importing}
+          phase={importPhase}
+          progressText={importProgress}
+          scenesCreated={scenes.length}
+          totalExpected={totalExpectedScenes}
+          breakdownReady={breakdownReadyCount}
+          promptsReady={promptsReadyCount}
+          wordCount={estimatedWordCount}
+        />
 
         {/* ═══════════════════════════════════════════════════════════
             IMAGE GENERATION PROGRESS
