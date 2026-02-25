@@ -6,6 +6,7 @@ export default function useTimelineHistory(refetchScenes) {
   const [undoStack, setUndoStack] = useState([]);
   const [redoStack, setRedoStack] = useState([]);
   const [applying, setApplying] = useState(false);
+  const deletingRef = useRef(new Set());
 
   // Save a snapshot before making a change
   const pushUndo = useCallback((action) => {
