@@ -34,9 +34,10 @@ export default function OngoingUGCProjects() {
       <CardContent className="space-y-2">
         <p className="text-xs text-gray-500 mb-1">UGC projects are self-contained — start a new one anytime.</p>
         {projects.map(p => (
-          <div
+          <Link
             key={p.id}
-            className="flex items-center justify-between bg-white rounded-lg border border-pink-100 px-3 py-2"
+            to={createPageUrl('UGCPipeline') + '?project_id=' + p.id}
+            className="flex items-center justify-between bg-white rounded-lg border border-pink-100 px-3 py-2 hover:bg-pink-50 hover:border-pink-300 transition-colors cursor-pointer group"
           >
             <div className="flex items-center gap-2 min-w-0">
               <Users className="w-4 h-4 text-pink-500 shrink-0" />
@@ -45,8 +46,11 @@ export default function OngoingUGCProjects() {
                 {p.status?.replace(/_/g, ' ')}
               </Badge>
             </div>
-            <span className="text-[10px] text-gray-400 shrink-0">{new Date(p.created_date).toLocaleDateString()}</span>
-          </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-[10px] text-gray-400">{new Date(p.created_date).toLocaleDateString()}</span>
+              <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-pink-500 transition-colors" />
+            </div>
+          </Link>
         ))}
       </CardContent>
     </Card>
