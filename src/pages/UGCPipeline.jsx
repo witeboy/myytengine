@@ -84,6 +84,11 @@ export default function UGCPipeline() {
   const [pipelineStep, setPipelineStep] = useState('');
   const [videoUrl, setVideoUrl] = useState('');
 
+  // Loaded template identity
+  const [loadedTemplateName, setLoadedTemplateName] = useState('');
+  const [loadedTemplateArchetype, setLoadedTemplateArchetype] = useState('');
+  const [loadedTemplateBasePrompt, setLoadedTemplateBasePrompt] = useState('');
+
   const typeLabel = INFLUENCER_TYPES.find(t => t.value === influencerType)?.label || influencerType;
 
   const handleTemplateSelect = (t) => {
