@@ -102,22 +102,30 @@ export default function PostProduction() {
   };
 
   // Generate full SEO package
+  const [seoError, setSeoError] = useState(null);
   const handleGenerateSeo = async () => {
     setGeneratingSeo(true);
+    setSeoError(null);
     try {
       const res = await base44.functions.invoke('generateSeoTitlesDescriptions', {
         project_id: projectId,
       });
       const d = res.data;
-      setSeoTitles(d.titles || []);
-      setSeoDescriptions(d.descriptions || []);
-      setSeoAnalysis(d.seo_analysis || null);
-      setTagsBreakdown(d.tags_breakdown || null);
-      setHashtags(d.metadata?.hashtags?.split(' ').filter(Boolean) || []);
-      setPinnedComment(d.metadata?.pinned_comment || '');
-      refetchMeta();
+      if (d.error) {
+        setSeoError(d.error);
+      } else {
+        setSeoTitles(d.titles || []);
+        setSeoDescriptions(d.descriptions || []);
+        setSeoAnalysis(d.seo_analysis || null);
+        setTagsBreakdown(d.tags_breakdown || null);
+        setHashtags(d.metadata_extra?.hashtags?.split(' ').filter(Boolean) || d.hashtags || []);
+        setPinnedComment(d.metadata_extra?.pinned_comment || d.pinned_comment || '');
+        refetchMeta();
+      }
     } catch (e) {
       console.error('SEO generation failed:', e);
+      const msg = e?.response?.data?.error || e.message || 'SEO generation failed';
+      setSeoError(msg);
     }
     setGeneratingSeo(false);
   };
