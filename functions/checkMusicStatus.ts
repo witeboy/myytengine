@@ -34,11 +34,12 @@ Deno.serve(async (req) => {
     const status = taskData?.status;
 
     // KIE statuses: PENDING, TEXT_SUCCESS, FIRST_SUCCESS, SUCCESS, CREATE_TASK_FAILED, GENERATE_AUDIO_FAILED, etc.
-    const isSuccess = status === 'SUCCESS' || status === 'FIRST_SUCCESS';
+    const isSuccess = status === 'SUCCESS';
+    const isFirstSuccess = status === 'FIRST_SUCCESS';
     const isFailed = status === 'CREATE_TASK_FAILED' || status === 'GENERATE_AUDIO_FAILED' || 
                      status === 'CALLBACK_EXCEPTION' || status === 'SENSITIVE_WORD_ERROR';
 
-    if (isSuccess) {
+    if (isSuccess || isFirstSuccess) {
       // Extract audio from sunoData array
       const sunoData = taskData?.response?.sunoData;
       if (!sunoData || sunoData.length === 0) {
