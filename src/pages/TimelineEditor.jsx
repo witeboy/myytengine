@@ -35,6 +35,7 @@ export default function TimelineEditor() {
   const [showReorder, setShowReorder] = useState(false);
   const [transitionTarget, setTransitionTarget] = useState(null);
   const [previewOrientation, setPreviewOrientation] = useState(null);
+  const [showAudioEditor, setShowAudioEditor] = useState(false);
   const exportHook = useVideoExport();
   const timelineRef = useRef(null);
 
