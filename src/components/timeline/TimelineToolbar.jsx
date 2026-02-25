@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
 import {
-  Scissors, CropIcon, SplitSquareHorizontal, Merge, Trash2,
+  Scissors, Crop, SplitSquareHorizontal, Merge, Trash2,
   Undo2, ScanSearch, ChevronDown, ChevronUp,
   Film, Mic, Music, Volume2, Wand2, ZoomIn, ZoomOut
 } from 'lucide-react';
