@@ -240,6 +240,34 @@ export default function PropertiesPanel({ scene, onClose, onUpdateDuration, onRe
           )}
         </Section>
 
+        {/* Effects */}
+        <Section label="Effects" icon={Zap} sKey="effects">
+          {(() => {
+            let effects = [];
+            try { effects = JSON.parse(scene.visual_effects || '[]'); } catch (_) {}
+            if (effects.length === 0) return <p className="text-[9px] text-gray-600">No effects applied</p>;
+            return (
+              <div className="space-y-1">
+                {effects.map(eid => (
+                  <div key={eid} className="flex items-center justify-between bg-[#0f0f23] rounded px-2 py-1">
+                    <span className="text-[9px] text-amber-400 font-medium">{eid.replace(/_/g, ' ')}</span>
+                    <button
+                      onClick={async () => {
+                        const updated = effects.filter(e => e !== eid);
+                        await base44.entities.Scenes.update(scene.id, { visual_effects: JSON.stringify(updated) });
+                        onRefetch?.();
+                      }}
+                      className="text-gray-600 hover:text-red-400 transition-colors"
+                    >
+                      <Trash2 className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </Section>
+
         {/* Transition */}
         <Section label="Transition" icon={Layers} sKey="transition">
           <Select value={scene.transition_type || 'cut'} onValueChange={async (v) => { await base44.entities.Scenes.update(scene.id, { transition_type: v }); onRefetch?.(); }}>
