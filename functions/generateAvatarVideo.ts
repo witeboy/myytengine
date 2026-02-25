@@ -2,7 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 import { create, getNumericDate } from 'npm:djwt@3.0.2';
 
 // ══════════════════════════════════════════════════════════════════
-// AVATAR VIDEO — KIE API primary, Kling direct API fallback
+// AVATAR VIDEO v2 — KIE API primary, Kling direct API fallback
 // ══════════════════════════════════════════════════════════════════
 //
 // Primary: KIE API (api.kie.ai) — kling/ai-avatar-standard
