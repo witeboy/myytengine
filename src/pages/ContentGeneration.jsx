@@ -14,6 +14,7 @@ import VisualStyleSelector from '@/components/content/VisualStyleSelector';
 import OrientationSelector from '@/components/content/OrientationSelector';
 import MusicPanel from '@/components/content/MusicPanel';
 import AudioMixerPanel from '@/components/content/AudioMixerPanel';
+import ProcessingNotifier from '@/components/content/ProcessingNotifier';
 import {
   Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film,
   Palette, Sparkles, Monitor, Clapperboard, Wand2, CheckCircle2,
