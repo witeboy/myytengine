@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Zap } from 'lucide-react';
 
 export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, onSelectScene, onUpdateDuration, onTransitionClick }) {
   const [resizing, setResizing] = useState(null);
