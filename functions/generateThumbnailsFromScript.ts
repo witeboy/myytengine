@@ -96,10 +96,11 @@ Deno.serve(async (req) => {
     ]);
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
-    const script = scripts.find(s => s.version === 'final_aggregated');
-    if (!script) return Response.json({ error: 'No final script' }, { status: 400 });
+    const script = scripts.find(s => s.version === 'final_aggregated') || scripts.find(s => s.version === 'final') || scripts[0];
+    if (!script) return Response.json({ error: 'No script found' }, { status: 400 });
     const topic = topics.find(t => t.is_selected);
-    if (!topic) return Response.json({ error: 'No topic' }, { status: 400 });
+    // For repurpose projects that have no topic, use the script title / project name as the topic
+    const topicTitle = topic?.title || script.title || project.name || 'Untitled Video';
 
     const fullScript = script.full_script || [script.cold_open, script.act_1, script.act_2, script.act_3, script.outro].filter(Boolean).join('\n\n');
     const trunc = fullScript.substring(0, 3000);
