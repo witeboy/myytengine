@@ -171,8 +171,13 @@ RULES:
     // Pre-fill audience from rich template data
     if (template.target_audience) setTargetAudience(template.target_audience);
     if (template.monetization_fit) setTargetMarket(template.monetization_fit);
-    // Pre-fill action from content_structure or archetype
-    if (template.content_structure) setInfluencerAction(template.content_structure);
+    // Build a meaningful action from template data (don't use content_structure directly — it's a flow outline, not an action)
+    if (template.archetype || template.voice_style) {
+      const actionParts = [];
+      if (template.archetype) actionParts.push(template.archetype);
+      if (template.energy) actionParts.push(`Energy: ${template.energy.split('.')[0]}`);
+      setInfluencerAction(`Speaking to camera as ${template.name || 'this influencer'}, reviewing and recommending a product/app to their audience. ${actionParts.join('. ')}.`);
+    }
     // Store the template's rich identity for prompt building
     setLoadedTemplateName(template.name || '');
     setLoadedTemplateArchetype(template.archetype || '');
