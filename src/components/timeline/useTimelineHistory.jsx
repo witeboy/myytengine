@@ -86,20 +86,16 @@ export default function useTimelineHistory(refetchScenes) {
     // Delete the scene
     await base44.entities.Scenes.delete(scene.id);
 
-    // Renumber remaining scenes to close the gap
+    // Renumber remaining scenes to close the gap — sequentially to avoid rate limits
     const remaining = allScenes
       .filter(s => s.id !== scene.id)
       .sort((a, b) => a.scene_number - b.scene_number);
 
-    const renumberPromises = remaining
-      .filter((s, idx) => s.scene_number !== idx + 1)
-      .map((s, idx) => {
-        const correctNumber = remaining.indexOf(s) + 1;
-        return base44.entities.Scenes.update(s.id, { scene_number: correctNumber });
-      });
-
-    if (renumberPromises.length > 0) {
-      await Promise.all(renumberPromises);
+    for (let i = 0; i < remaining.length; i++) {
+      const correctNumber = i + 1;
+      if (remaining[i].scene_number !== correctNumber) {
+        await base44.entities.Scenes.update(remaining[i].id, { scene_number: correctNumber });
+      }
     }
 
     await refetchScenes();
