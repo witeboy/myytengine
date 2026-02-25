@@ -212,7 +212,7 @@ Deno.serve(async (req) => {
     // ── Determine provider from voice_id ───────────────────────────
     // MiniMax voices don't have ElevenLabs-style IDs (which are 20-char alphanumeric)
     const isAi33Voice = AI33_KEY && /^[a-zA-Z0-9]{20,}$/.test(selectedVoiceId);
-    const useMinimax = MINIMAX_KEY && !isAi33Voice;
+    const useMinimax = !forceAi33 && MINIMAX_KEY && !isAi33Voice;
 
     // ── Split text into chunks ─────────────────────────────────────
     const chunkLimit = useMinimax ? 9000 : 4000;
