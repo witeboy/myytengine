@@ -100,6 +100,15 @@ Return JSON:
       mood: track.mood,
     });
     const taskId = res.data?.task_id;
+    const status = res.data?.status;
+
+    // If completed directly (MiniMax fallback), no polling needed
+    if (status === 'completed') {
+      setGeneratingTrackId(null);
+      refetch();
+      return;
+    }
+
     if (taskId) {
       let failCount = 0;
       const poll = setInterval(async () => {
@@ -125,6 +134,9 @@ Return JSON:
           }
         }
       }, 6000);
+    } else {
+      setGeneratingTrackId(null);
+      refetch();
     }
   };
 
