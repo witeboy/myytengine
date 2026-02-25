@@ -49,9 +49,11 @@ Deno.serve(async (req) => {
         return Response.json({ status: 'FAILED', error: 'No audio data in response' });
       }
 
-      // Take the first track
+      // Take the first track - prefer audioUrl, fall back to streamAudioUrl
       const track = sunoData[0];
-      const audioUrl = track.audioUrl || track.streamAudioUrl;
+      const audioUrl = (track.audioUrl && track.audioUrl.startsWith('http') ? track.audioUrl : null) 
+                    || (track.streamAudioUrl && track.streamAudioUrl.startsWith('http') ? track.streamAudioUrl : null)
+                    || (track.sourceAudioUrl && track.sourceAudioUrl.startsWith('http') ? track.sourceAudioUrl : null);
       const duration = track.duration || 0;
 
       if (!audioUrl) {
