@@ -111,7 +111,7 @@ export default function StageProgress({ currentStage = 1, projectStatus }) {
               const reachable = getSubStepReachable(sub);
               const isCurrent = sub.statuses.includes(projectStatus);
               return (
-                <React.Fragment key={sub.label}>
+                <div key={sub.label} className="contents">
                   <button
                     onClick={() => projectId && navigate(createPageUrl(`${sub.page}?project_id=${projectId}`))}
                     className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
@@ -125,7 +125,7 @@ export default function StageProgress({ currentStage = 1, projectStatus }) {
                   {idx < storySubSteps.length - 1 && (
                     <div className={`w-3 h-0.5 ${reachable ? 'bg-blue-300' : 'bg-gray-200'}`} />
                   )}
-                </React.Fragment>
+                </div>
               );
             })}
           </div>
