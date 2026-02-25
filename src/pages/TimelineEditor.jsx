@@ -22,7 +22,7 @@ import TimelineToolbar from '@/components/timeline/TimelineToolbar';
 import SfxGenerateDialog from '@/components/timeline/SfxGenerateDialog';
 import {
   Loader2, Film, Play, Pause, SkipBack, SkipForward,
-  Volume2, VolumeX, Mic, Music, ZoomIn, ZoomOut, Monitor, Scissors
+  Volume2, VolumeX, Mic, Music, Monitor, Scissors
 } from 'lucide-react';
 
 export default function TimelineEditor() {
