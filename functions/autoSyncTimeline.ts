@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
 
     console.log(`Auto-sync: ${scenes.length} scenes, VO duration: ${totalVoDuration}s`);
 
-    // Use LLM to analyze narration texts and estimate relative durations
+    // Analyze narration texts for word counts
     const narrationTexts = scenes.map(s => ({
       scene_number: s.scene_number,
       narration: s.narration_text || '',
@@ -39,33 +39,23 @@ Deno.serve(async (req) => {
     }));
 
     const totalWords = narrationTexts.reduce((sum, s) => sum + s.word_count, 0);
-
-    // If we have narration texts, use word count proportional distribution
-    // with LLM refinement for pauses and emphasis
     let sceneDurations;
 
-    if (totalWords > 0) {
-      // Use LLM to intelligently distribute timing based on narration content
+    if (totalWords > 0 && scenes.length <= 40) {
+      // For smaller projects, use LLM for intelligent distribution
       const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
-        prompt: `You are a professional video editor analyzing narration timing for a video.
+        prompt: `You are a professional video editor analyzing narration timing.
 
 Total voiceover duration: ${totalVoDuration} seconds
 Total scenes: ${scenes.length}
 
-Here are the scenes with their narration text:
-${narrationTexts.map(s => `Scene ${s.scene_number} (${s.word_count} words): "${s.narration.substring(0, 200)}"`).join('\n')}
+Scenes:
+${narrationTexts.map(s => `S${s.scene_number} (${s.word_count} words): "${s.narration.substring(0, 150)}"`).join('\n')}
 
-Distribute the total ${totalVoDuration} seconds across these ${scenes.length} scenes.
-
-Rules:
-- Each scene must be at least 3 seconds
-- Scenes with more words should generally be longer
-- Dramatic/emotional scenes need slightly more time for pauses
-- Opening hooks and closing scenes may need extra beat time
-- All durations must add up to exactly ${totalVoDuration} seconds (rounded to 1 decimal)
-- Consider natural speech pauses between scenes (~0.5-1s buffer per scene transition)
-
-Return JSON with the durations.`,
+Distribute ${totalVoDuration}s across ${scenes.length} scenes. Rules:
+- Min 3s per scene
+- More words = longer duration
+- Sum must equal ${totalVoDuration}s (rounded to 0.1)`,
         response_json_schema: {
           type: "object",
           properties: {
@@ -76,7 +66,6 @@ Return JSON with the durations.`,
                 properties: {
                   scene_number: { type: "number" },
                   duration_seconds: { type: "number" },
-                  reason: { type: "string" },
                 }
               }
             }
@@ -87,21 +76,28 @@ Return JSON with the durations.`,
       if (result?.scenes && result.scenes.length === scenes.length) {
         sceneDurations = result.scenes;
       } else {
-        // Fallback: proportional word count distribution
+        sceneDurations = null; // fall through to proportional
+      }
+    }
+
+    // Proportional word-count distribution (for large projects or LLM fallback)
+    if (!sceneDurations) {
+      if (totalWords > 0) {
+        const minDuration = 3;
+        const reservedTime = minDuration * scenes.length;
+        const distributableTime = Math.max(0, totalVoDuration - reservedTime);
+
         sceneDurations = narrationTexts.map(s => ({
           scene_number: s.scene_number,
-          duration_seconds: totalWords > 0 
-            ? Math.max(3, Math.round((s.word_count / totalWords) * totalVoDuration * 10) / 10)
-            : totalVoDuration / scenes.length,
+          duration_seconds: Math.round((minDuration + (s.word_count / totalWords) * distributableTime) * 10) / 10,
+        }));
+      } else {
+        const perScene = Math.round((totalVoDuration / scenes.length) * 10) / 10;
+        sceneDurations = scenes.map(s => ({
+          scene_number: s.scene_number,
+          duration_seconds: perScene,
         }));
       }
-    } else {
-      // No narration — distribute evenly
-      const perScene = Math.round((totalVoDuration / scenes.length) * 10) / 10;
-      sceneDurations = scenes.map(s => ({
-        scene_number: s.scene_number,
-        duration_seconds: perScene,
-      }));
     }
 
     // Normalize durations to match total VO duration exactly
@@ -121,19 +117,19 @@ Return JSON with the durations.`,
       sceneDurations[longestIdx].duration_seconds = Math.round((sceneDurations[longestIdx].duration_seconds + diff) * 10) / 10;
     }
 
-    // Update scenes in database
-    const updates = [];
-    for (const sd of sceneDurations) {
-      const scene = scenes.find(s => s.scene_number === sd.scene_number);
-      if (scene) {
-        updates.push(
-          base44.asServiceRole.entities.Scenes.update(scene.id, { 
+    // Update scenes in database (batch in chunks of 20 to avoid rate limits)
+    const BATCH_SIZE = 20;
+    for (let i = 0; i < sceneDurations.length; i += BATCH_SIZE) {
+      const batch = sceneDurations.slice(i, i + BATCH_SIZE);
+      await Promise.all(batch.map(sd => {
+        const scene = scenes.find(s => s.scene_number === sd.scene_number);
+        if (scene) {
+          return base44.asServiceRole.entities.Scenes.update(scene.id, { 
             duration_seconds: sd.duration_seconds 
-          })
-        );
-      }
+          });
+        }
+      }).filter(Boolean));
     }
-    await Promise.all(updates);
 
     console.log('Auto-sync complete. Durations:', sceneDurations.map(s => `S${s.scene_number}:${s.duration_seconds}s`).join(', '));
 
