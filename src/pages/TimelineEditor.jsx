@@ -538,8 +538,16 @@ export default function TimelineEditor() {
         </div>
       )}
 
+      {/* ═══════ RESIZABLE DIVIDER — drag up to expand timeline ═══════ */}
+      <div
+        className="flex-shrink-0 h-1.5 bg-gray-800/50 hover:bg-blue-500/40 cursor-row-resize flex items-center justify-center group transition-colors"
+        onMouseDown={handleDividerMouseDown}
+      >
+        <div className="w-8 h-0.5 rounded-full bg-gray-600 group-hover:bg-blue-400 transition-colors" />
+      </div>
+
       {/* ═══════ BOTTOM: Transport + Toolbar + Timeline ═══════ */}
-      <div className="flex-shrink-0 bg-[#0f0f23] border-t border-gray-700/50">
+      <div className="flex-shrink-0 bg-[#0f0f23] border-t border-gray-700/50" style={{ height: timelineHeight }}>
         {/* Transport bar */}
         <div className="flex items-center gap-2 px-3 py-1 border-b border-gray-800/50">
           {/* Playback controls */}
