@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
 
     console.log('══════════════════════════════════════════════════════');
     console.log('GENERATING SEO METADATA (GPT-4o)');
-    console.log(`Topic: ${selectedTopic.title}`);
+    console.log(`Topic: ${topicTitle}`);
     console.log(`Niche: ${project.niche}`);
     console.log('══════════════════════════════════════════════════════');
 
@@ -132,8 +132,8 @@ Deno.serve(async (req) => {
 
     const prompt = `Generate COMPLETE, PREMIUM YouTube upload metadata that maximizes CTR, retention, and algorithmic distribution.
 
-VIDEO TOPIC: "${selectedTopic.title}"
-TOPIC DESCRIPTION: ${selectedTopic.description || ''}
+VIDEO TOPIC: "${topicTitle}"
+TOPIC DESCRIPTION: ${selectedTopic?.description || ''}
 CURRENT TITLE: "${videoTitle}"
 NICHE: "${project.niche}"
 CHANNEL TYPE: Faceless documentary/educational
@@ -419,7 +419,7 @@ Generate the complete premium SEO package now. Respond ONLY with the JSON object
       success: true,
       metadata,
       video_title: videoTitle,
-      topic_title: selectedTopic.title,
+      topic_title: topicTitle,
       titles: d.titles,
       descriptions: d.descriptions,
       seo_analysis: d.seo_analysis,
