@@ -81,8 +81,8 @@ export default function TimelineToolbar({
         size="sm" variant="ghost"
         className="text-gray-400 hover:bg-white/10 gap-1 text-[10px] h-6 px-2"
         onClick={onDelete}
-        disabled={!hasSelection}
-        title="Delete selection"
+        disabled={!activeTrack}
+        title="Delete"
       >
         <Trash2 className="w-3 h-3" /> Delete
       </Button>
