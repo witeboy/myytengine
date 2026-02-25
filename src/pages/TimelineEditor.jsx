@@ -22,7 +22,7 @@ import SfxGenerateDialog from '@/components/timeline/SfxGenerateDialog';
 import InlineWaveform from '@/components/timeline/InlineWaveform';
 import {
   Loader2, Film, Play, Pause, SkipBack, SkipForward,
-  Volume2, VolumeX, Mic, Music, Monitor, Scissors
+  Volume2, VolumeX, Mic, Music, Monitor
 } from 'lucide-react';
 
 export default function TimelineEditor() {
