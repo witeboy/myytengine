@@ -340,6 +340,11 @@ JSON: {"thumbnails":[{"rank":1,"template_type":"","concept_description":"","text
     console.log("Phase 3 returned " + thumbs.length + " thumbnails");
     const saved = await Promise.all(thumbs.map(async (t, i) => {
       let ip = t.image_prompt || '';
+      const textToOverlay = t.text_overlay || '';
+      // Force overlay text into prompt with quotation marks for Ideogram text rendering
+      if (textToOverlay && !ip.includes(`"${textToOverlay}"`)) {
+        ip = `"${textToOverlay}" in massive bold Impact font with thick black outline and heavy drop shadow, positioned upper-left. ` + ip;
+      }
       if (!ip.includes('1920x1080')) ip = "1920x1080 Full HD 16:9 landscape YouTube thumbnail. " + ip;
       const sr = (t.style_reference || 'cinema').split('/')[0].trim().toLowerCase();
       const vs = ['cinema', 'minimal', 'documentary'].includes(sr) ? sr : 'cinema';
