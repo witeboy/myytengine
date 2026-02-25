@@ -65,12 +65,22 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Image must be a public URL, not a data URI' }, { status: 400 });
     }
 
-    console.log(`Kling Avatar: image=${image_url.substring(0, 80)}`);
-    console.log(`Audio: ${audio_url.substring(0, 80)}`);
-    console.log(`Prompt: ${prompt.substring(0, 100)}`);
+    console.log(`🎬 Kling Avatar: image=${image_url.substring(0, 80)}...`);
+    console.log(`🎬 Audio: ${audio_url.substring(0, 80)}...`);
+    console.log(`🎬 Prompt: ${prompt.substring(0, 100)}`);
+    console.log(`🎬 Mode: ${mode}`);
 
     // Generate JWT for Kling API
     const jwtToken = await generateKlingJwt();
+
+    const requestBody = {
+      model_name: 'kling-v1-6',
+      image: image_url,
+      sound_file: audio_url,
+      prompt: prompt || undefined,
+      mode, // 'std' or 'pro'
+    };
+    console.log(`🎬 Request body keys: ${Object.keys(requestBody).join(', ')}`);
 
     // Submit to Kling AI Avatar endpoint
     const res = await fetch(`${KLING_API_BASE}/v1/videos/avatar/image2video`, {
@@ -79,16 +89,14 @@ Deno.serve(async (req) => {
         'Authorization': `Bearer ${jwtToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        image: image_url,
-        sound_file: audio_url,
-        prompt: prompt || undefined,
-        mode, // 'std' or 'pro'
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     const data = await res.json();
-    console.log(`Kling Avatar submit: HTTP ${res.status} → code=${data.code} message=${data.message}`);
+    console.log(`Kling Avatar submit: ${res.status} → code=${data.code} msg=${data.message}`);
+    if (data.code !== 0) {
+      console.log(`Full error response: ${JSON.stringify(data).substring(0, 500)}`);
+    }
 
     if (data.code !== 0) {
       // Return error with 200 status so frontend can read the body properly
