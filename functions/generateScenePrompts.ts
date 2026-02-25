@@ -508,12 +508,22 @@ ${sceneDirections}
    - Abstract concepts → PHYSICAL METAPHORS
    - End with: "ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image"
 
-2. **animation_prompt** — ${CLIP_DURATION}-second motion direction:
-   - Translate camera_movement into animation language
-   - **RESPECT ARC POSITION**: Use the Arc Animation guidance for pacing
-   - Format: ${orientationConfig.animation}
-   - Include: camera motion + speed, atmospheric motion, subject micro-motion
-   - Low intensity = slow/subtle, high intensity = dynamic/dramatic
+2. **animation_prompt** — RICH, CINEMATIC ${CLIP_DURATION}-second motion direction that captures the SOUL of the scene:
+   - This is NOT a simple camera instruction. It's a FULL MOTION POEM describing everything that moves and breathes in the frame over ${CLIP_DURATION} seconds.
+   - **STRUCTURE your animation prompt with ALL of these layers:**
+     a) **PRIMARY CAMERA MOTION**: Specific camera movement with exact speed, direction, and framing change (e.g. "Slow, deliberate push-in from medium shot to close-up over 5 seconds, slightly left of center")
+     b) **ATMOSPHERIC MOTION**: What the environment is doing — dust motes floating, fog drifting, light shifting, shadows crawling, rain streaking, leaves tumbling, fabric rippling in breeze, steam rising, candlelight flickering
+     c) **SUBJECT MICRO-MOTION**: Subtle human/character movement — breathing rhythm, hair shifting, fingers tightening, eyes darting, chest rising, lips parting, shoulders dropping, fabric settling on body
+     d) **LIGHT DYNAMICS**: How light evolves — golden hour rays slowly creeping across a surface, neon signs pulsing, firelight dancing on walls, cloud shadows drifting across landscape, headlights sweeping
+     e) **DEPTH & FOCUS SHIFTS**: Rack focus from foreground to background, shallow DOF breathing, bokeh orbs drifting, focus pull revealing hidden detail
+     f) **EMOTIONAL QUALITY**: The FEELING of the motion — "heavy and reluctant" vs "urgent and searching" vs "tender and hesitant" vs "triumphant and soaring"
+   - **RESPECT ARC POSITION**: ${orientationConfig.animation}
+     • SETUP scenes: Slow, contemplative, breathing. Camera observes with patience. Atmosphere settles.
+     • RISING scenes: Building momentum. Camera grows bolder. Environment responds with increasing energy.
+     • CLIMAX scenes: Peak intensity. Dynamic camera. Every element in the frame vibrates with emotional force.
+     • RESOLUTION scenes: Exhale. Camera pulls back gently. Motion softens. Peace settles.
+   - **MINIMUM 3-4 rich sentences** describing the complete motion tapestry
+   - NEVER write generic prompts like "slow pan right" or "subtle movement" — every animation prompt must be SPECIFIC to THIS scene's emotional content
 
 **RESPONSE:**
 {
@@ -544,8 +554,14 @@ ${sceneDirections}
           imagePrompt = validateAndEnhancePrompt(
             generated.image_prompt || '', styleConfig, orientationConfig, s.scene_number, visualStyle
           );
-          animationPrompt = generated.animation_prompt
-            || "slow gentle camera movement forward, atmospheric haze, subtle breathing, shallow DOF";
+          animationPrompt = generated.animation_prompt || '';
+          // Ensure animation prompt is rich enough (minimum 80 chars for a proper motion description)
+          if (animationPrompt.length < 80) {
+            const arc = s.director?.arc_position || 'rising';
+            const mood = s.director?.mood || 'contemplative';
+            const movement = s.director?.camera_movement || 'slow drift forward';
+            animationPrompt = `${movement} over ${CLIP_DURATION} seconds. ${getArcAnimationGuidance(arc)} Atmospheric particles drift lazily through the frame. Subtle breathing motion on subject. Light shifts gradually, casting evolving shadows. The mood is ${mood} — every micro-movement reflects this emotional weight.`;
+          }
         } else {
           console.warn(`⚠️ Scene ${s.scene_number} missing from response — building fallback`);
           totalWarnings++;
@@ -560,8 +576,10 @@ ${sceneDirections}
           }
 
           imagePrompt = validateAndEnhancePrompt(fallback, styleConfig, orientationConfig, s.scene_number, visualStyle);
-          animationPrompt = s.director?.camera_movement
-            || "slow gentle camera movement forward, atmospheric haze, subtle breathing, shallow DOF";
+          const arc = s.director?.arc_position || 'rising';
+          const mood = s.director?.mood || 'contemplative';
+          const movement = s.director?.camera_movement || 'slow drift forward';
+          animationPrompt = `${movement} over ${CLIP_DURATION} seconds. ${getArcAnimationGuidance(arc)} Fine dust particles float through volumetric light beams, drifting with invisible air currents. Subject exhibits subtle breathing rhythm — chest rises and falls gently, fabric settles. Light evolves slowly across the frame, warm tones shifting and shadows deepening. The emotional quality is ${mood} — motion feels weighted with this energy. Shallow depth of field breathes subtly, bokeh orbs pulse with ambient light.`;
         }
 
         try {
