@@ -49,6 +49,25 @@ Deno.serve(async (req) => {
     fullScript = fullScript.replace(/^\*\*[^*]+\*\*:?\s*$/gim, '');
     // Clean up extra blank lines
     fullScript = fullScript.replace(/\n{3,}/g, '\n\n').trim();
+
+    // ── DEDUPLICATION: Remove repeated sentences ──
+    const sentences = fullScript.match(/[^.!?]+[.!?]+/g) || [];
+    const seen = new Set();
+    const uniqueSentences = [];
+    for (const sentence of sentences) {
+      const normalized = sentence.trim().toLowerCase().replace(/\s+/g, ' ');
+      if (normalized.length < 15) { // keep very short sentences even if "duplicated"
+        uniqueSentences.push(sentence);
+        continue;
+      }
+      if (!seen.has(normalized)) {
+        seen.add(normalized);
+        uniqueSentences.push(sentence);
+      } else {
+        console.log('Removed duplicate sentence:', normalized.substring(0, 60) + '...');
+      }
+    }
+    fullScript = uniqueSentences.join(' ').replace(/\n{3,}/g, '\n\n').trim();
     const totalWords = fullScript.split(/\s+/).filter(w => w.length > 0).length;
     const estimatedDuration = Math.round((totalWords / 150) * 60);
 
