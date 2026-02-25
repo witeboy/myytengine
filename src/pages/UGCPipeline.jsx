@@ -104,14 +104,47 @@ export default function UGCPipeline() {
   const handleGeneratePrompt = async () => {
     setLoading(true);
     setStatusMsg('Building hyper-realistic prompt...');
-    const prompt = buildUGCPrompt({
-      ...appearanceConfig,
-      influencerType: typeLabel,
-      action: influencerAction,
-      holdMode,
-      productDescription,
-    });
-    setInfluencerPrompt(prompt);
+
+    // If a template has a base_prompt, use AI to merge it with the product/action context
+    if (loadedTemplateBasePrompt) {
+      setStatusMsg('Adapting template prompt to your product...');
+      const mergedPrompt = await base44.integrations.Core.InvokeLLM({
+        prompt: `You are a UGC image prompt expert. I have an existing hyper-detailed image generation prompt for a specific influencer persona. I need you to adapt it to include a specific product/action context while keeping the EXACT persona identity (appearance, personality, setting, clothing, etc.) intact.
+
+EXISTING PERSONA PROMPT:
+${loadedTemplateBasePrompt}
+
+PRODUCT/ACTION CONTEXT TO INTEGRATE:
+- Hold Mode: ${holdMode}
+- Product Description: ${productDescription || 'a product'}
+- Influencer Action: ${influencerAction}
+
+RULES:
+1. Keep ALL persona-specific appearance details (ethnicity, hair, eyes, skin, build, clothing style, age, setting) from the existing prompt.
+2. Replace or add the product interaction based on the hold mode:
+   - "phone_app": Creator holding smartphone showing ${productDescription || 'an app'} to camera
+   - "product_review": Creator casually holding ${productDescription || 'a product'} at chest height
+   - "product_unbox": Creator mid-unbox with ${productDescription || 'a product'}
+   - "product_table": Product on desk, creator pointing at it
+   - "none": No product, just speaking to camera
+3. Keep the prompt in the same detailed UGC-style format.
+4. Make sure the action/energy matches what the influencer should be doing: "${influencerAction}"
+5. Ensure PORTRAIT 9:16 format is specified.
+6. Return ONLY the final prompt text, no explanations.`,
+      });
+      setInfluencerPrompt(mergedPrompt);
+    } else {
+      // No template — use the generic prompt builder
+      const prompt = buildUGCPrompt({
+        ...appearanceConfig,
+        influencerType: typeLabel,
+        action: influencerAction,
+        holdMode,
+        productDescription,
+      });
+      setInfluencerPrompt(prompt);
+    }
+
     setLoading(false);
     setStatusMsg('');
     setStep(3);
