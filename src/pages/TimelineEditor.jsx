@@ -261,7 +261,8 @@ export default function TimelineEditor() {
   };
 
   const handleTimelineClick = (e) => {
-    if (e.target.closest('[data-scene-block]')) return;
+    // Allow clicks on inline waveform edit to be handled by the waveform
+    if (e.target.closest('[data-inline-edit]')) return;
     if (e.target.closest('button')) return;
     const t = getTimeFromMouseEvent(e);
     setCurrentTime(t);
