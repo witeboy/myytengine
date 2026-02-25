@@ -112,6 +112,7 @@ export default function useTimelineHistory(refetchScenes) {
       }
     }
 
+    deletingRef.current.delete(scene.id);
     await refetchScenes();
   }, [pushUndo, refetchScenes]);
 
