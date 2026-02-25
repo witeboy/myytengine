@@ -53,27 +53,47 @@ export function buildUGCPrompt({ gender, ageRange, skinTone, ethnicity, influenc
 
   const settingDesc = setting || "Real home workspace — slightly messy desk, laptop open in background, headphones casually placed, keyboard slightly out of focus, posters on wall but not perfectly aligned, natural lived-in vibe";
 
-  // Product / phone section based on holdMode
+  // Product / phone section based on holdMode — CRITICAL for believable interaction
   let productSection = "";
+  let interactionDirective = "";
   const prodDesc = productDescription || "a product";
 
   if (holdMode === "phone_app") {
     productSection = `
-Product (Phone with App):
-Creator holding a smartphone toward the camera with ${possessive} hand, screen clearly visible and facing the viewer showing ${prodDesc}. Phone held at a natural selfie-review angle, slightly tilted. Grip is casual and imperfect — thumb on edge, fingers wrapped naturally around the back of the phone. Tiny natural hand creases visible, slight finger pressure indentations. The phone screen is bright, clearly readable, and shows the app UI naturally integrated. Phone reflection catches ambient light realistically. NOT a stock photo pose — feels like ${pronoun} is showing a friend something cool on ${possessive} phone.`;
+PRODUCT INTERACTION — Phone with App (CRITICAL ELEMENT):
+Creator is ACTIVELY interacting with ${prodDesc} on ${possessive} phone. ${pronoun} is mid-gesture: one hand holding the phone at a natural selfie-review angle tilted toward camera, the OTHER hand's index finger is visibly touching or about to tap the phone screen — frozen mid-interaction. The phone screen is BRIGHT, clearly readable, facing the viewer, showing the app UI of ${prodDesc}. Screen glow illuminates ${possessive} chin and fingers with a subtle cool-white light bounce.
+${pronoun} is looking at the phone screen with genuine fascination — eyes locked on it, eyebrows slightly raised in a "look at this!" expression, mouth slightly open mid-sentence as if explaining a feature to a friend over FaceTime. Body is naturally leaned slightly forward toward the phone, creating authentic engagement body language.
+Grip details: thumb on the left edge of the phone, fingers curled naturally around the back — NOT a posed commercial grip. Knuckle creases visible, slight nail imperfections, natural finger pressure dents on phone edge. Phone case shows micro-wear and tiny scratches (lived-in feel). Screen reflection catches a faint window light glare on one corner.
+The ENTIRE composition communicates: "I use this app every day and I genuinely want you to try it." This is the hero interaction of the image — phone and hand interaction must be the focal point at chest height, clearly visible, with the face providing emotional context above.`;
+    interactionDirective = `INTERACTION ENERGY: ${pronoun} is mid-demo of the app — body language says "let me show you this one feature" with leaned-in enthusiasm. The phone screen and ${possessive} interaction with it is the ANCHOR of the image. Eyes and finger both point toward the screen creating a natural visual triangle (face → finger → screen).`;
   } else if (holdMode === "product_unbox") {
     productSection = `
-Product (Unboxing):
-Creator mid-unbox, ${prodDesc} partially pulled out of packaging. Box or packaging visible, slightly torn or opened edges. ${pronoun} holds the product with genuine excitement, grip slightly imperfect. Product angled naturally, catching side light. Tiny natural hand creases visible. Packaging material (tissue paper, foam, plastic wrap) partially visible. Feels like a genuine unboxing moment, NOT staged for a commercial.`;
+PRODUCT INTERACTION — Unboxing (CRITICAL ELEMENT):
+Creator is ACTIVELY mid-unbox of ${prodDesc} — this is a frozen moment of genuine discovery. Both hands are engaged: one hand pulling the product UP and OUT of the box, the other hand steadying the packaging. The product is 60% revealed, partially wrapped in tissue paper or protective film that ${pronoun} is peeling away.
+Face shows GENUINE surprise and delight — eyes wide, mouth in an excited "oh!" shape, eyebrows lifted high. ${pronoun} is looking DOWN at the product (not at camera) in this authentic moment of discovery. Body language: shoulders slightly hunched forward in eager anticipation, chest leaned over the box.
+Box/packaging details: branded box on ${possessive} lap or on desk, lid flipped open at an angle, tissue paper crumpled and partially pulled out, maybe a small card or instruction leaflet visible poking out. Box shows real shipping wear — slight corner dent, tape residue. This is NOT a clean product shot — it's a real unboxing moment with packaging debris.
+Hands show real interaction: fingers gripping the product with slight tension, knuckles engaged, one fingernail maybe snagging the protective film. Natural hand creases deepened from grip pressure. The product catches side light as it emerges, creating a subtle reveal drama.
+The ENTIRE composition communicates: "I literally JUST opened this and I'm already obsessed." Raw, unfiltered first-impression energy.`;
+    interactionDirective = `INTERACTION ENERGY: Frozen at the peak moment of unboxing — the product is half-revealed and ${possessive} face shows that split-second of genuine excitement. Both hands are busy, packaging is messy, energy is chaotic-authentic. This frame should feel like a screenshot from a real unboxing video.`;
   } else if (holdMode === "product_table") {
     productSection = `
-Product (On Table):
-${prodDesc} placed on the desk/table in front of the creator. Creator is pointing at it or gesturing toward it with one hand. Product positioned naturally, slightly off-center. Natural desk surface texture visible. Product catches ambient light realistically. Creator's hand gesture is casual — open palm pointing or index finger indicating. NOT a product photo setup — casual desk placement with other items around it.`;
+PRODUCT INTERACTION — Product on Table (CRITICAL ELEMENT):
+${prodDesc} is placed on the desk/table surface in front of the creator, slightly off-center. Creator is ACTIVELY gesturing toward it — not just pointing, but mid-explanatory gesture: one hand with fingers spread open, palm facing up beside the product in a "look at this" presentation gesture, as if ${pronoun} just placed it down and is inviting the viewer to examine it.
+${possessive} other hand is animated too — maybe touching ${possessive} chin thoughtfully, or fingers counting off features, or palm pressed flat on the desk leaning forward. Body is angled toward the product, torso twisted slightly, creating dynamic "I'm telling you about this thing" body language.
+Face is looking at CAMERA (not the product) with a knowing, confident expression — slight smirk, one eyebrow slightly raised, as if saying "trust me on this one." Eyes make direct contact with the viewer.
+Product details: ${prodDesc} sits naturally on a real surface with other desk items around it (coffee cup, pen, phone, random papers) — NOT isolated on a clean surface. Natural shadows fall from the product. Desk surface texture visible — wood grain, scratches, ring stains from cups.
+The ENTIRE composition creates a visual flow: viewer's eye goes from ${possessive} face → ${possessive} presenting hand → the product, creating a clear storytelling path.`;
+    interactionDirective = `INTERACTION ENERGY: ${pronoun} is mid-pitch, presenting the product with enthusiastic hand gestures and confident eye contact. Body language is open, inviting, and persuasive. The product on the table is the subject of ${possessive} passionate explanation — every gesture leads the viewer's eye to it.`;
   } else if (holdMode !== "none") {
     // Default: product_review — holding product
     productSection = `
-Product:
-Creator holding ${prodDesc} naturally in one hand (not posed like an ad). Grip slightly imperfect — fingers wrapped casually, not perfectly positioned for branding. Product slightly angled, catching natural side light. Tiny natural hand creases visible, slight finger pressure on product surface. Product texture and details visible but not over-lit. ${pronoun} holds it at chest-to-chin height as if showing it to the camera during a casual review. Feels like a spontaneous product recommendation, NOT a commercial. NOT staged. Authentic. Trustworthy.`;
+PRODUCT INTERACTION — Holding Product Review (CRITICAL ELEMENT):
+Creator is ACTIVELY engaging with ${prodDesc} — not just holding it passively, but mid-interaction: ${possessive} fingers are demonstrating a feature, turning it to show a detail, pressing a button, or squeezing/testing the texture. The product is held at chest-to-chin height with ONE hand, angled naturally toward camera so the viewer can see it clearly.
+The OTHER hand is mid-gesture — pointing at a specific feature on the product, OR fingers in a "chef's kiss" gesture, OR thumb-up beside it, OR hand touching ${possessive} chest in a "this changed my life" gesture. This second hand adds storytelling energy to the frame.
+Face shows authentic conviction: eyes slightly squinted in a genuine smile, slight head nod frozen mid-motion, mouth open mid-word as if saying "and the BEST part is..." — this is peak recommendation energy. ${pronoun} is looking at CAMERA with direct, trustworthy eye contact while holding the product up for inspection.
+Hand details on product: natural grip with visible finger pressure — not a delicate model hold. Knuckle creases deepened, slight white pressure points on fingertips where ${pronoun} grips. Product texture interacts realistically with skin — slight shadow between fingers and product surface. If the product has a button or feature, ${possessive} thumb is near it as if ${pronoun} just demonstrated something.
+The ENTIRE composition communicates: "I've been using this for weeks and I genuinely recommend it." The product is the CO-STAR of the image alongside the creator's authentic enthusiasm.`;
+    interactionDirective = `INTERACTION ENERGY: Peak recommendation moment — ${pronoun} is mid-sentence explaining why this product is worth it, holding it up with genuine pride and enthusiasm. Every element of body language (grip, gesture, expression, posture) reinforces authentic product belief and conviction.`;
   }
 
   return `Create a hyper-realistic UGC-style image of a real human creator casually recording a ${holdMode === "phone_app" ? "app review" : "product review"} at home. PORTRAIT FORMAT 9:16 aspect ratio (vertical, like a TikTok/Reel).
