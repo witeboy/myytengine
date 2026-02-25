@@ -66,7 +66,7 @@ export default function TimelineToolbar({
         disabled={!hasSelection}
         title="Trim to selection (keep only selected)"
       >
-        <Crop className="w-3 h-3" /> Trim
+        <Scissors className="w-3 h-3 rotate-90" /> Trim
       </Button>
       <Button
         size="sm" variant="ghost"
