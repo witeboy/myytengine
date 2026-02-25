@@ -17,9 +17,9 @@ import VideoExporter from '@/components/timeline/VideoExporter';
 import useVideoExport from '@/components/timeline/useVideoExport';
 import SceneReorder from '@/components/timeline/SceneReorder';
 import TransitionLibrary from '@/components/timeline/TransitionLibrary';
-import AudioEditor from '@/components/timeline/AudioEditor';
 import TimelineToolbar from '@/components/timeline/TimelineToolbar';
 import SfxGenerateDialog from '@/components/timeline/SfxGenerateDialog';
+import InlineWaveform from '@/components/timeline/InlineWaveform';
 import {
   Loader2, Film, Play, Pause, SkipBack, SkipForward,
   Volume2, VolumeX, Mic, Music, Monitor, Scissors
@@ -37,8 +37,7 @@ export default function TimelineEditor() {
   const [showReorder, setShowReorder] = useState(false);
   const [transitionTarget, setTransitionTarget] = useState(null);
   const [previewOrientation, setPreviewOrientation] = useState(null);
-  const [showAudioEditor, setShowAudioEditor] = useState(false);
-  const [audioEditTarget, setAudioEditTarget] = useState(null); // 'voiceover' | 'music' | 'sfx-{sceneId}'
+  const [editingTrack, setEditingTrack] = useState(null); // 'voiceover' | 'music' | 'sfx-{sceneId}'
   const exportHook = useVideoExport();
   const timelineRef = useRef(null);
 
@@ -312,28 +311,12 @@ export default function TimelineEditor() {
     setCollapsedTracks(prev => ({ ...prev, [track]: !prev[track] }));
   };
 
-  // Open audio editor for a specific track
-  const openAudioEdit = (target) => {
-    setAudioEditTarget(target);
-    setShowAudioEditor(true);
-  };
-
-  const getAudioEditUrl = () => {
-    if (audioEditTarget === 'voiceover') return voiceoverUrl;
-    if (audioEditTarget === 'music') return musicUrl;
-    if (audioEditTarget?.startsWith('sfx-')) {
-      const sceneId = audioEditTarget.replace('sfx-', '');
-      const sc = scenes.find(s => s.id === sceneId);
-      return sc?.sound_effect_url;
-    }
-    return null;
-  };
-
-  const handleAudioEditSave = async (wavBlob, newDuration) => {
+  // Inline audio edit save handler
+  const handleInlineAudioSave = async (trackTarget, wavBlob, newDuration) => {
     const file = new File([wavBlob], 'edited_audio.wav', { type: 'audio/wav' });
     const { file_url } = await base44.integrations.Core.UploadFile({ file });
 
-    if (audioEditTarget === 'voiceover') {
+    if (trackTarget === 'voiceover') {
       const ps = prodSettings[0];
       if (ps) {
         await base44.entities.ProductionSettings.update(ps.id, {
@@ -342,18 +325,17 @@ export default function TimelineEditor() {
         });
       }
       queryClient.invalidateQueries({ queryKey: ['prod-settings', projectId] });
-    } else if (audioEditTarget === 'music') {
+    } else if (trackTarget === 'music') {
       if (selectedMusic) {
         await base44.entities.MusicTracks.update(selectedMusic.id, { audio_url: file_url });
       }
       queryClient.invalidateQueries({ queryKey: ['music-timeline', projectId] });
-    } else if (audioEditTarget?.startsWith('sfx-')) {
-      const sceneId = audioEditTarget.replace('sfx-', '');
+    } else if (trackTarget?.startsWith('sfx-')) {
+      const sceneId = trackTarget.replace('sfx-', '');
       await base44.entities.Scenes.update(sceneId, { sound_effect_url: file_url });
       refetchScenes();
     }
-    setShowAudioEditor(false);
-    setAudioEditTarget(null);
+    setEditingTrack(null);
   };
 
   const trackHeight = { expanded: 'h-20', collapsed: 'h-5' };
