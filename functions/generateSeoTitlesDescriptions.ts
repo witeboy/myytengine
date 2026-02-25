@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+
 // ══════════════════════════════════════════════════════════════════
 // OPENAI HELPER (GPT-4o — best for SEO, keyword strategy, creative)
 // ══════════════════════════════════════════════════════════════════
