@@ -63,8 +63,8 @@ export default function TimelineToolbar({
         size="sm" variant="ghost"
         className="text-amber-400 hover:bg-amber-500/10 gap-1 text-[10px] h-6 px-2"
         onClick={onTrim}
-        disabled={!hasSelection}
-        title="Trim to selection (keep only selected)"
+        disabled={!activeTrack}
+        title="Trim — opens audio editor"
       >
         <Scissors className="w-3 h-3 rotate-90" /> Trim
       </Button>
