@@ -105,6 +105,8 @@ ${tweaksSummary}
 9. If user changed text, use the NEW text in quotes at the SAME position with the SAME styling as the original.
 10. If NO tweaks were requested, reproduce the original recreate_prompt nearly verbatim (just ensure it starts with the correct prefix).
 11. DO NOT simplify, summarize, or lose detail from the original prompt. The output must be equally or more detailed.
+12. CRITICAL TEXT RENDERING: ALL text overlays MUST be wrapped in "DOUBLE QUOTATION MARKS". Ideogram V3 ONLY renders text inside quotes. Write text EXACTLY as it should appear: "7 SIDE HUSTLES" not 7 SIDE HUSTLES.
+13. At the very END of the prompt, add a dedicated text reinforcement line: 'Text overlays that must appear on the thumbnail: "TEXT1", "TEXT2"' listing every text element again in quotes.
 
 Return ONLY a JSON object:
 {
