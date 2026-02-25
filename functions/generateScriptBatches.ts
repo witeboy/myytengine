@@ -144,7 +144,13 @@ This hook MUST appear naturally in the very first paragraph to grab viewers inst
       if (previousBatchEnding) {
         continuityInstruction = `\n**CONTINUITY — the previous batch ended with these exact words**:
 "...${previousBatchEnding}"
-You MUST continue seamlessly from this point. Do NOT repeat or paraphrase the ending above. Pick up the narrative naturally as if it's one continuous script flowing forward.`;
+
+CRITICAL ANTI-REPETITION RULES:
+1. Do NOT repeat, rephrase, summarize, or echo ANY sentence or idea from the ending above.
+2. Do NOT re-introduce characters, concepts, or facts already established — the audience already heard them.
+3. Start your narration with a BRAND NEW thought, fact, or narrative beat that moves the story FORWARD.
+4. If the ending mentions a person/event/concept, do NOT re-explain it — reference it briefly and advance.
+5. Imagine the ending above is the last sentence the audience just heard — your FIRST sentence must be the logical NEXT thought, not a recap.`;
       }
 
       let nextBatchHint = '';
@@ -233,6 +239,13 @@ ${retryBlock}
 ${batch.batch_number === 1 ? '- Open STRONG — the first 2 sentences must hook the viewer immediately' : '- Continue naturally from where the previous batch left off'}
 ${batch.batch_number === totalBatches ? '- End with a powerful conclusion and call to action (like, subscribe, comment)' : '- End with a hook or cliffhanger leading into the next segment'}
 - Keep character/subject references consistent throughout
+
+**ANTI-REPETITION**:
+- NEVER repeat a sentence, phrase, or idea that appeared earlier in your own output.
+- NEVER use the same opening structure for consecutive paragraphs.
+- If you catch yourself restating something, DELETE it and write something new.
+- Each paragraph must introduce at least ONE new fact, angle, or narrative development.
+- Vary your paragraph openings: alternate between statements, questions, anecdotes, and descriptions.
 
 **REMEMBER: You MUST write at least ${minimumWords} words. Write deep, rich, detailed narration. Do NOT rush through the synopsis — explore every beat thoroughly.**`;
       };
