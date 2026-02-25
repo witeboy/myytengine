@@ -103,16 +103,26 @@ export default function ContentGeneration() {
 
       await invokeWithTimeout('generateSceneBreakdown', { project_id: projectId });
 
-      // Poll until scenes exist and project status moves past scene_breakdown
+      // Poll until scenes exist with breakdown_ready status (meaning the breakdown function wrote them)
+      let breakdownDone = false;
       await pollForCompletion(async () => {
         const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
-        const freshProjects = await base44.entities.Projects.filter({ id: projectId });
-        const proj = freshProjects[0];
-        queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
-        setImportProgress(`Analyzing script... ${freshScenes.length} scenes created so far`);
-        // Done when project moves to breakdown_complete or beyond
-        return freshScenes.length > 0 && proj?.status && proj.status !== 'scene_breakdown' && proj.status !== 'scripting' && proj.status !== 'script_complete';
-      }, 120, 4000);
+        const sorted = freshScenes.sort((a, b) => a.scene_number - b.scene_number);
+        queryClient.setQueryData(['scenes', projectId], sorted);
+        
+        const breakdownReady = freshScenes.filter(s => s.status === 'breakdown_ready');
+        const anyReady = freshScenes.filter(s => s.status === 'breakdown_ready' || s.status === 'prompts_ready');
+        
+        if (freshScenes.length > 0) {
+          setImportProgress(`Analyzing script... ${freshScenes.length} scenes created (${breakdownReady.length} ready for prompts)`);
+        } else {
+          setImportProgress('Analyzing script & breaking down into cinematic scenes...');
+        }
+        
+        // Done when we have scenes with breakdown_ready or prompts_ready status
+        breakdownDone = anyReady.length > 0 && anyReady.length === freshScenes.length;
+        return breakdownDone;
+      }, 180, 5000); // 180 polls × 5s = 15 minutes max wait
 
       await refetchScenes();
 
