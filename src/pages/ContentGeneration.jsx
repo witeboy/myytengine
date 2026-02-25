@@ -839,21 +839,30 @@ export default function ContentGeneration() {
 
         {/* Audio Section */}
         {project && (
-          <div className="mb-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="mb-8 space-y-4">
             {latestScript && (
-              <VoiceoverPanel
-                project={project}
-                script={latestScript}
-                onUpdate={() => refetchProject()}
-              />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <VoiceoverPanel
+                  project={project}
+                  script={latestScript}
+                  onUpdate={() => refetchProject()}
+                />
+                <ElevenLabsVoiceoverPanel
+                  project={project}
+                  script={latestScript}
+                  onUpdate={() => refetchProject()}
+                />
+              </div>
             )}
-            <MusicPanel project={project} />
-            <AudioMixerPanel
-              narrationVolume={audioLevels.narration}
-              musicVolume={audioLevels.music}
-              sfxVolume={audioLevels.sfx}
-              onChange={(update) => setAudioLevels(prev => ({ ...prev, ...update }))}
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <MusicPanel project={project} />
+              <AudioMixerPanel
+                narrationVolume={audioLevels.narration}
+                musicVolume={audioLevels.music}
+                sfxVolume={audioLevels.sfx}
+                onChange={(update) => setAudioLevels(prev => ({ ...prev, ...update }))}
+              />
+            </div>
           </div>
         )}
       </div>
