@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   X, Clock, Loader2, ImageIcon, Film,
   Layers, Camera, Wand2, Volume2, ChevronDown, ChevronRight,
-  RefreshCw, Play, CheckCircle2, XCircle, AlertTriangle
+  RefreshCw, Play, CheckCircle2, XCircle, AlertTriangle, Zap, Trash2
 } from 'lucide-react';
 
 export default function PropertiesPanel({ scene, onClose, onUpdateDuration, onRefetch }) {
