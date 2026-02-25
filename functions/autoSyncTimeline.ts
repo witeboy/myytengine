@@ -125,7 +125,7 @@ Distribute ${totalVoDuration}s across ${scenes.length} scenes. Rules:
       if (!scene) continue;
       
       // Retry with backoff on rate limit
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; attempt < 4; attempt++) {
         try {
           await base44.asServiceRole.entities.Scenes.update(scene.id, { 
             duration_seconds: sd.duration_seconds 
@@ -133,17 +133,19 @@ Distribute ${totalVoDuration}s across ${scenes.length} scenes. Rules:
           updated++;
           break;
         } catch (err) {
-          if (err.message?.includes('Rate limit') && attempt < 2) {
-            await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          if (err.message?.includes('Rate limit') && attempt < 3) {
+            const wait = 2000 * (attempt + 1);
+            console.log(`Rate limited on scene ${sd.scene_number}, waiting ${wait}ms (attempt ${attempt + 1})`);
+            await new Promise(r => setTimeout(r, wait));
           } else {
             throw err;
           }
         }
       }
       
-      // Throttle: pause every 3 updates
-      if ((i + 1) % 3 === 0 && i < sceneDurations.length - 1) {
-        await new Promise(r => setTimeout(r, 200));
+      // Throttle: pause every 2 updates
+      if ((i + 1) % 2 === 0 && i < sceneDurations.length - 1) {
+        await new Promise(r => setTimeout(r, 500));
       }
     }
     
