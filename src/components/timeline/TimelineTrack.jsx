@@ -79,7 +79,7 @@ export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, 
                 <p className="text-[8px] text-gray-300">{scene.duration_seconds}s</p>
               </div>
 
-              {/* Status indicator */}
+              {/* Status indicator + effects badge */}
               <div className="absolute top-0.5 left-0.5 flex items-center gap-0.5">
                 {isPendingVideo ? (
                   <Loader2 className="w-2.5 h-2.5 text-amber-400 animate-spin" />
@@ -88,6 +88,16 @@ export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, 
                     hasVideo ? 'bg-purple-400' : hasImage ? 'bg-emerald-400' : 'bg-gray-500'
                   }`} />
                 )}
+                {(() => {
+                  let fx = [];
+                  try { fx = JSON.parse(scene.visual_effects || '[]'); } catch (_) {}
+                  if (fx.length === 0) return null;
+                  return (
+                    <span className="text-[6px] bg-amber-500/60 text-white rounded px-0.5 flex items-center gap-px">
+                      <Zap className="w-2 h-2" />{fx.length}
+                    </span>
+                  );
+                })()}
               </div>
 
               {/* Media type badge */}
