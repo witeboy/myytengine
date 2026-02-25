@@ -65,10 +65,25 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Image must be a public URL, not a data URI' }, { status: 400 });
     }
 
-    console.log(`🎬 Kling Avatar: image=${image_url.substring(0, 80)}...`);
-    console.log(`🎬 Audio: ${audio_url.substring(0, 80)}...`);
+    console.log(`🎬 Kling Avatar: image=${image_url.substring(0, 120)}...`);
+    console.log(`🎬 Audio: ${audio_url.substring(0, 120)}...`);
     console.log(`🎬 Prompt: ${prompt.substring(0, 100)}`);
     console.log(`🎬 Mode: ${mode}`);
+
+    // Pre-validate: check audio URL is accessible and get file size
+    try {
+      const audioCheck = await fetch(audio_url, { method: 'HEAD' });
+      const audioContentType = audioCheck.headers.get('content-type') || 'unknown';
+      const audioContentLength = audioCheck.headers.get('content-length') || 'unknown';
+      console.log(`🎬 Audio check: status=${audioCheck.status} type=${audioContentType} size=${audioContentLength} bytes`);
+      
+      const imageCheck = await fetch(image_url, { method: 'HEAD' });
+      const imageContentType = imageCheck.headers.get('content-type') || 'unknown';
+      const imageContentLength = imageCheck.headers.get('content-length') || 'unknown';
+      console.log(`🎬 Image check: status=${imageCheck.status} type=${imageContentType} size=${imageContentLength} bytes`);
+    } catch (checkErr) {
+      console.log(`🎬 Pre-check warning: ${checkErr.message}`);
+    }
 
     // Generate JWT for Kling API
     const jwtToken = await generateKlingJwt();
