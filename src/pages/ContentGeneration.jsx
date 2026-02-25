@@ -804,7 +804,7 @@ export default function ContentGeneration() {
                       const ready = freshScenes.filter(s => s.status === 'prompts_ready');
                       setImportProgress(`Converting prompts... ${ready.length}/${freshScenes.length} ready`);
                       return pending.length === 0 && ready.length > 0;
-                    }, 120, 4000);
+                    }, 360, 5000);
                     await refetchScenes();
                   } catch (err) {
                     console.error('Prompt generation failed:', err);
