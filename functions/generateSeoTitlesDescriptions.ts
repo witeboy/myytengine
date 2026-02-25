@@ -1,6 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-
 // ══════════════════════════════════════════════════════════════════
 // OPENAI HELPER (GPT-4o — best for SEO, keyword strategy, creative)
 // ══════════════════════════════════════════════════════════════════
@@ -143,10 +142,6 @@ Deno.serve(async (req) => {
     console.log(`Topic: ${topic.title}`);
     console.log(`Niche: ${project.niche}`);
     console.log('══════════════════════════════════════════════════════');
-
-    // ╔═══════════════════════════════════════════════════════════════╗
-    // ║  OPENAI GPT-4o — YouTube SEO Grandmaster Prompt              ║
-    // ╚═══════════════════════════════════════════════════════════════╝
 
     const prompt = `You are a YouTube SEO grandmaster who has grown 20+ channels from zero to 1M+ subscribers. You combine algorithmic mastery with psychological copywriting to dominate both search and recommendations.
 
@@ -435,6 +430,10 @@ Generate the complete premium SEO package now. Respond ONLY with the JSON object
         long: result.data.tags_long,
         all: allTags
       },
+      metadata_extra: {
+        hashtags: (result.data.hashtags || []).join(' '),
+        pinned_comment: result.data.pinned_comment || ''
+      },
       meta: {
         model: "gpt-4o",
         quality_warnings: qualityWarnings,
@@ -444,7 +443,7 @@ Generate the complete premium SEO package now. Respond ONLY with the JSON object
     });
 
   } catch (error) {
-    console.error('generateUploadMetadata error:', error.message);
+    console.error('generateSeoTitlesDescriptions error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
