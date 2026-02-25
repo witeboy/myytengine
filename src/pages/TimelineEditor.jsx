@@ -549,6 +549,7 @@ export default function TimelineEditor() {
                         onSelectScene={setSelectedScene}
                         onUpdateDuration={handleUpdateDuration}
                         onTransitionClick={(sceneA, sceneB) => setTransitionTarget({ sceneA, sceneB })}
+                        onSeekToScene={(t) => { setCurrentTime(t); if (voiceoverRef.current) voiceoverRef.current.currentTime = t; sfxRefs.current = {}; }}
                       />
                       {voiceoverDuration > 0 && sceneDuration < voiceoverDuration && (
                         <div
