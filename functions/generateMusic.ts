@@ -114,30 +114,66 @@ Deno.serve(async (req) => {
     }
 
     console.log('Trying MiniMax direct music_generation API...');
-    const mmResponse = await fetch('https://api.minimax.io/v1/music_generation', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${minimaxKey}`,
-      },
-      body: JSON.stringify({
-        model: 'music-2.5',
-        prompt: idea,
-        lyrics: "[Inst]\n[Outro]",
-        output_format: 'hex',
-        audio_setting: {
-          sample_rate: 44100,
-          bitrate: 128000,
-          format: 'mp3',
+
+    // Use AbortController with 80s timeout to avoid serverless timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 80000);
+
+    let mmResponse;
+    try {
+      mmResponse = await fetch('https://api.minimax.io/v1/music_generation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${minimaxKey}`,
         },
-      }),
-    });
+        body: JSON.stringify({
+          model: 'music-2.5',
+          prompt: idea,
+          lyrics: "[Inst]\n[Outro]",
+          output_format: 'url',
+          audio_setting: {
+            sample_rate: 44100,
+            bitrate: 128000,
+            format: 'mp3',
+          },
+        }),
+        signal: controller.signal,
+      });
+    } catch (fetchErr) {
+      clearTimeout(timeout);
+      console.error('MiniMax fetch error (likely timeout):', fetchErr.message);
+      if (track_id) {
+        await base44.asServiceRole.entities.MusicTracks.update(track_id, { status: 'failed' });
+      }
+      return Response.json({ error: 'Music generation timed out. Both AI33 and MiniMax unavailable.' }, { status: 500 });
+    }
+    clearTimeout(timeout);
 
     const mmData = await mmResponse.json();
     console.log('MiniMax direct response:', JSON.stringify(mmData.base_resp || {}));
 
-    if (mmData.base_resp?.status_code === 0 && mmData.data?.audio) {
-      // Decode hex audio and upload
+    // Check for URL-based response first
+    const audioUrl = mmData.data?.audio_url || mmData.data?.audio;
+    if (mmData.base_resp?.status_code === 0 && audioUrl && typeof audioUrl === 'string' && audioUrl.startsWith('http')) {
+      // URL response - download and re-upload
+      const audioResp = await fetch(audioUrl);
+      const audioBlob = await audioResp.blob();
+      const file = new File([audioBlob], `music_${Date.now()}.mp3`, { type: 'audio/mpeg' });
+      const uploaded = await base44.asServiceRole.integrations.Core.UploadFile({ file });
+
+      if (track_id) {
+        await base44.asServiceRole.entities.MusicTracks.update(track_id, {
+          audio_url: uploaded.file_url,
+          status: 'completed',
+          duration_seconds: 30,
+        });
+      }
+      return Response.json({ success: true, status: 'completed', audio_url: uploaded.file_url, provider: 'minimax_direct' });
+    }
+
+    // Check for hex-based response
+    if (mmData.base_resp?.status_code === 0 && mmData.data?.audio && typeof mmData.data.audio === 'string') {
       const audioHex = mmData.data.audio;
       const bytes = new Uint8Array(audioHex.length / 2);
       for (let i = 0; i < audioHex.length; i += 2) {
@@ -153,14 +189,7 @@ Deno.serve(async (req) => {
           duration_seconds: 30,
         });
       }
-
-      // Return as completed directly (no polling needed)
-      return Response.json({
-        success: true,
-        status: 'completed',
-        audio_url: uploaded.file_url,
-        provider: 'minimax_direct',
-      });
+      return Response.json({ success: true, status: 'completed', audio_url: uploaded.file_url, provider: 'minimax_direct' });
     }
 
     const errMsg = mmData.base_resp?.status_msg || 'Unknown MiniMax error';
