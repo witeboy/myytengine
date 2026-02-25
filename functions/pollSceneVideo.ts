@@ -31,6 +31,8 @@ Deno.serve(async (req) => {
     const scene = scenes[0];
     if (!scene) return Response.json({ error: 'Scene not found' }, { status: 404 });
 
+    console.log(`[DEBUG] Scene ${scene_id} video_url:`, JSON.stringify(scene.video_url), `status:`, scene.status);
+
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
     if (!KIE_API_KEY) {
       return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
