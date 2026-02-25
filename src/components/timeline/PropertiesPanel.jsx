@@ -14,7 +14,7 @@ export default function PropertiesPanel({ scene, onClose, onUpdateDuration, onRe
   const [regeneratingImage, setRegeneratingImage] = useState(false);
   const [generatingVideo, setGeneratingVideo] = useState(false);
   const [pollingVideo, setPollingVideo] = useState(false);
-  const [expanded, setExpanded] = useState({ basic: true, media: true, audio: false, prompt: false, transition: false });
+  const [expanded, setExpanded] = useState({ basic: true, media: true, audio: false, effects: false, prompt: false, transition: false });
   const pollRef = useRef(null);
 
   useEffect(() => {
