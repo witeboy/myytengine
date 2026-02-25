@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function TimelineRuler({ totalDuration, pixelsPerSecond }) {
+export default function TimelineRuler({ totalDuration, pixelsPerSecond, onSeek }) {
   const markers = [];
   const interval = pixelsPerSecond >= 15 ? 5 : pixelsPerSecond >= 8 ? 10 : 30;
 
@@ -15,9 +15,18 @@ export default function TimelineRuler({ totalDuration, pixelsPerSecond }) {
   };
 
   return (
-    <div className="flex items-end h-6 bg-[#1a1a2e] border-b border-gray-800 relative">
+    <div
+      className="flex items-end h-6 bg-[#1a1a2e] border-b border-gray-800 relative cursor-pointer"
+      onClick={(e) => {
+        if (!onSeek) return;
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = e.clientX - rect.left - 64; // subtract label width
+        const t = Math.max(0, Math.min(totalDuration, x / pixelsPerSecond));
+        onSeek(t);
+      }}
+    >
       <div className="w-16 flex-shrink-0 border-r border-gray-800" />
-      <div className="flex-1 relative">
+      <div className="flex-1 relative pointer-events-none">
         {markers.map(t => (
           <div
             key={t}
