@@ -202,6 +202,15 @@ export default function PostProduction() {
               </div>
             </div>
 
+            {seoError && !generatingSeo && (
+              <Card className="border-red-200 bg-red-50">
+                <CardContent className="py-4 text-center">
+                  <p className="text-red-600 font-medium text-sm">{seoError}</p>
+                  <p className="text-xs text-red-400 mt-1">Make sure you have a selected topic and a final script before generating SEO.</p>
+                </CardContent>
+              </Card>
+            )}
+
             {generatingSeo && (
               <Card>
                 <CardContent className="py-12 text-center">
