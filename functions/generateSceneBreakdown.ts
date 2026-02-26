@@ -87,6 +87,27 @@ function cleanNarrationText(text) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// VISUAL STYLE NORMALIZER
+// ══════════════════════════════════════════════════════════════════
+
+function normalizeStyleKey(raw) {
+  if (!raw) return '';
+  const normalized = raw.trim().toLowerCase().replace(/[\s\-]+/g, '_');
+  const knownStyles = [
+    'cinematic_realistic', 'photorealistic_4k', 'anime', 'cinematic_anime',
+    'cartoon_2d', 'picstory_cocomelon', 'cinematic_picstory', 'oil_painting',
+    'watercolor', 'comic_book', 'humpty_dumpty', 'harry_potter',
+    '3d_whiteboard_cartoon', 'low_poly_3d_cartoon', 'skeleton_protagonist'
+  ];
+  if (knownStyles.includes(normalized)) return normalized;
+  for (const key of knownStyles) {
+    if (normalized.includes(key) || key.includes(normalized)) return key;
+  }
+  console.warn(`⚠️ Unknown visual_style "${raw}" → normalized: "${normalized}"`);
+  return normalized;
+}
+
+// ══════════════════════════════════════════════════════════════════
 // VISUAL STYLE CHARACTER DIRECTIVES
 // ══════════════════════════════════════════════════════════════════
 // Certain visual styles inject a mandatory character override so
@@ -324,8 +345,10 @@ Deno.serve(async (req) => {
     const niche = project.niche || 'general';
 
     // ── Style character directive (e.g. skeleton protagonist) ──────
-    const visualStyle = project.visual_style || '';
+    const rawStyle = project.visual_style || '';
+    const visualStyle = normalizeStyleKey(rawStyle);
     const styleDirective = getStyleCharacterDirective(visualStyle);
+    console.log(`🎨 Style: raw="${rawStyle}" → resolved="${visualStyle}"`);
     if (styleDirective) {
       console.log(`🦴 Style directive active: ${visualStyle}`);
     }
