@@ -103,12 +103,15 @@ function extractDirectorNotes(imagePrompt) {
 
 function normalizeStyleKey(raw) {
   if (!raw) return 'cinematic_realistic';
-  const normalized = raw.trim().toLowerCase().replace(/[\s\-]+/g, '_');
-  if (styleMap[normalized]) return normalized;
+  console.log(`🔍 RAW visual_style value: "${raw}" (type: ${typeof raw}, length: ${raw.length}, charCodes: ${[...raw].slice(0,30).map(c=>c.charCodeAt(0)).join(',')})`);
+  const normalized = raw.trim().toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+  console.log(`🔍 Normalized to: "${normalized}"`);
+  if (styleMap[normalized]) { console.log(`✅ Direct match: ${normalized}`); return normalized; }
   for (const key of Object.keys(styleMap)) {
-    if (normalized.includes(key) || key.includes(normalized)) return key;
+    if (normalized.includes(key) || key.includes(normalized)) { console.log(`✅ Fuzzy match: ${key}`); return key; }
   }
-  console.warn(`⚠️ Unknown visual_style "${raw}" → "${normalized}"`);
+  if (normalized.includes('skeleton')) { console.log(`✅ Keyword match: skeleton_protagonist`); return 'skeleton_protagonist'; }
+  console.warn(`❌ No match for "${raw}" → "${normalized}"`);
   return 'cinematic_realistic';
 }
 
