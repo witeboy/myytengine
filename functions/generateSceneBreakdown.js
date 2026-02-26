@@ -87,6 +87,27 @@ function cleanNarrationText(text) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// VISUAL STYLE NORMALIZER
+// ══════════════════════════════════════════════════════════════════
+
+function normalizeStyleKey(raw) {
+  if (!raw) return '';
+  const normalized = raw.trim().toLowerCase().replace(/[\s\-]+/g, '_');
+  const knownStyles = [
+    'cinematic_realistic', 'photorealistic_4k', 'anime', 'cinematic_anime',
+    'cartoon_2d', 'picstory_cocomelon', 'cinematic_picstory', 'oil_painting',
+    'watercolor', 'comic_book', 'humpty_dumpty', 'harry_potter',
+    '3d_whiteboard_cartoon', 'low_poly_3d_cartoon', 'skeleton_protagonist'
+  ];
+  if (knownStyles.includes(normalized)) return normalized;
+  for (const key of knownStyles) {
+    if (normalized.includes(key) || key.includes(normalized)) return key;
+  }
+  console.warn(`⚠️ Unknown visual_style "${raw}" → normalized: "${normalized}"`);
+  return normalized;
+}
+
+// ══════════════════════════════════════════════════════════════════
 // VISUAL STYLE CHARACTER DIRECTIVES
 // ══════════════════════════════════════════════════════════════════
 // Certain visual styles inject a mandatory character override so
@@ -97,22 +118,30 @@ function cleanNarrationText(text) {
 function getStyleCharacterDirective(visualStyle) {
   const directives = {
     skeleton_protagonist: `
-**🦴 MANDATORY CHARACTER OVERRIDE — SKELETON PROTAGONIST STYLE:**
-The MAIN CHARACTER in EVERY scene is a photorealistic transparent skeleton with:
-- A clear glass-like semi-transparent humanoid body shell (like a resin mannequin with a skeleton inside)
-- Glossy ivory bones visible through the translucent torso — ribcage, spine, pelvis all visible
-- Big round expressive brown/amber EYEBALLS sitting in the skull eye sockets (NOT empty dark sockets — real expressive eyes)
-- Consistent adult male skeletal proportions across all scenes
-- Context-appropriate clothing that changes per scene (ancient robes, military gear, modern clothes, etc.)
-- The skeleton interacts NATURALLY with real photorealistic humans and environments — nobody treats him as unusual
+**🦴 MANDATORY — SKELETON PROTAGONIST STYLE:**
 
-CRITICAL RULES FOR EVERY SCENE:
-- In your visual_concept, the skeleton protagonist MUST be described as the central figure
-- Replace any generic "person/man/woman/character" references with the skeleton protagonist
-- The skeleton is NOT scary or horror — he is the relatable HERO expressed through gesture, posture, and expressive eyes
-- Other characters in scenes should be photorealistic normal humans
-- Environments must be photorealistic with real-world textures (stone, cloth, metal, wood)
-- Lighting should favor warm cinematic golden hour, volumetric light rays, dust particles, warm amber grading
+CHARACTER IDENTITY (consistent across ALL scenes):
+- A photorealistic transparent glass-like humanoid body shell with glossy ivory skeleton visible inside (ribcage, spine, pelvis, all bones)
+- Big round expressive brown/amber EYEBALLS in the skull sockets (NOT empty dark sockets)
+- Adult male proportions, context-appropriate clothing per scene (robes, gear, suits, etc.)
+- NOT scary or horror — he is the relatable HERO of the story
+
+**🎬 CRITICAL FRAMING RULES — READ CAREFULLY:**
+
+1. **FULL BODY HEAD-TO-TOE**: The skeleton must be shown as a FULL HUMAN-SIZED figure in MOST scenes. Frame him head to feet — like a real person standing, sitting, kneeling, walking, running. Show his FULL body interacting with the world. NEVER default to torso-only or bust shots. Close-ups of face/hands are allowed ONLY for 1-2 key emotional beats, not as the default.
+
+2. **ENVIRONMENT FIRST**: Every scene is a WORLD, not a portrait. Describe the environment in detail BEFORE the character — the room, landscape, weather, crowd, props, textures, architecture. The skeleton lives INSIDE a rich, detailed, photorealistic world. Blurred backgrounds are BANNED for this style.
+
+3. **INTERACTION AND ACTION**: The skeleton must be DOING something — holding objects, gesturing to people, walking through crowds, sitting at tables, kneeling in rivers, climbing, reaching, pointing. Static standing poses facing camera are LAZY. Show him mid-action in a story moment.
+
+4. **OTHER PEOPLE IN FRAME**: Include photorealistic normal humans interacting with or near the skeleton in MOST scenes — crowds, companions, onlookers, workers. He exists in a populated world, not alone in empty space.
+
+5. **SCENE FLOW**: Every visual_concept must contain a CONTINUITY ELEMENT that bridges to the next scene — a prop that reappears, a color that shifts, a gesture that echoes, a location that transforms. Scenes are NOT isolated portraits — they are frames in a continuous film.
+
+6. **PERSPECTIVE VARIETY**: Use the full director's toolkit — low angles looking up at the skeleton against sky, overhead God's-eye views of him in a crowd, over-shoulder shots from behind him looking at what he sees, wide establishing shots showing him small in a vast landscape, medium shots of him with companions.
+
+BAD visual_concept: "The transparent skeleton protagonist stands with expressive amber eyes, glass body reflecting light, ribcage visible through translucent torso."
+GOOD visual_concept: "Full-body view of the skeleton protagonist kneeling knee-deep in a rushing river, muddy water swirling around his transparent legs, both hands lifting a massive gold nugget above the surface. Behind him, dozens of miners in worn 1849-era clothing pan for gold among sun-bleached boulders. Golden hour light catches the water droplets on his glass skin. A coiled rope and shovel rest on the rocky bank in the foreground."
 `
   };
   return directives[visualStyle] || '';
@@ -291,7 +320,7 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { project_id, batch_index, selected_hook } = await req.json();
-    const currentBatch = batch_index || 0;
+    const startBatch = batch_index || 0;
 
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
     const project = projects[0];
@@ -316,23 +345,26 @@ Deno.serve(async (req) => {
     const niche = project.niche || 'general';
 
     // ── Style character directive (e.g. skeleton protagonist) ──────
-    const visualStyle = project.visual_style || '';
+    const rawStyle = project.visual_style || '';
+    const visualStyle = normalizeStyleKey(rawStyle);
     const styleDirective = getStyleCharacterDirective(visualStyle);
+    console.log(`🎨 Style: raw="${rawStyle}" → resolved="${visualStyle}"`);
     if (styleDirective) {
       console.log(`🦴 Style directive active: ${visualStyle}`);
     }
 
-    const MAX_SCENE_SECONDS = 8;
+    // ═══ FIX A: 5-second scenes instead of 8 ═══
+    const MAX_SCENE_SECONDS = 5;
     const totalTargetScenes = Math.max(8, Math.round((durationMinutes * 60) / MAX_SCENE_SECONDS));
     const phases = calculatePhaseAllocation(totalTargetScenes);
     const scriptChunks = splitScriptByPhase(finalScript, phases);
     const numBatches = scriptChunks.length;
 
-    // ── Build or retrieve blueprint ─────────────────────────────
+    // ═══ FIX B: In-memory blueprint for batch 0 (race condition fix) ═══
     let blueprint;
-    let freshProject = project; // default to what we already have
+    let freshProject = project;
 
-    if (currentBatch === 0) {
+    if (startBatch === 0) {
       const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
       for (const s of oldScenes) {
         await base44.asServiceRole.entities.Scenes.delete(s.id);
@@ -403,7 +435,7 @@ ${finalScript}
 
       const storyAnalysis = analysis.story_analysis || analysis;
 
-      // Build blueprint in memory — NO re-read needed
+      // Keep blueprint in memory — avoids stale re-read after update
       blueprint = {
         story_analysis: storyAnalysis,
         phases: phases.map(p => ({ name: p.name, purpose: p.purpose, scene_count: p.scenes })),
@@ -421,7 +453,6 @@ ${finalScript}
           : project.character_descriptions
       });
 
-      // Update freshProject with character data we just saved
       freshProject = {
         ...project,
         character_descriptions: storyAnalysis.characters
@@ -434,7 +465,7 @@ ${finalScript}
       console.log(`  Characters: ${storyAnalysis.characters?.map(c => c.name).join(', ') || 'None identified'}`);
       console.log(`  Motifs: ${storyAnalysis.recurring_visual_motifs?.join(', ') || 'N/A'}`);
     } else {
-      // Subsequent batch calls — read blueprint from DB
+      // Subsequent batches — data has propagated, safe to read from DB
       freshProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
       try {
         blueprint = JSON.parse(freshProject.scene_blueprint);
@@ -446,36 +477,31 @@ ${finalScript}
     const storyAnalysis = blueprint.story_analysis;
     const nicheProfile = blueprint.niche_profile;
 
-    if (currentBatch >= scriptChunks.length) {
-      return Response.json({
-        success: true,
-        done: true,
-        scene_count: blueprint.scenes.length,
-        total_batches: numBatches
-      });
-    }
-
-    const existingScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-    const sceneOffset = existingScenes.length;
-
-    const currentChunk = scriptChunks[currentBatch];
-    const scenesForBatch = currentChunk.scenes;
-
     let characters = [];
     if (freshProject.character_descriptions) {
       try { characters = JSON.parse(freshProject.character_descriptions); } catch (_) {}
     }
 
-    const previousScenes = blueprint.scenes.slice(-3);
-    const continuityContext = previousScenes.length > 0
-      ? `**LAST ${previousScenes.length} SCENES (for visual continuity):**\n${previousScenes.map(s => `  Scene ${s.scene_number}: [${s.shot_type}] ${s.visual_concept} | Mood: ${s.mood} | Palette: ${s.color_palette}`).join('\n')}`
-      : '**This is the OPENING — establish the visual world with a strong first impression.**';
-
     const characterBlock = characters.length > 0
       ? `**ESTABLISHED CHARACTERS (use these EXACT descriptions for consistency):**\n${characters.map(c => `  • ${c.name}: ${c.visual_description || c.description}`).join('\n')}`
       : '';
 
-    const breakdownPrompt = `
+    // ═══ FIX C: Loop ALL phases in one call ═══
+    let grandTotalCreated = 0;
+
+    for (let batchIdx = startBatch; batchIdx < scriptChunks.length; batchIdx++) {
+      const existingScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
+      const sceneOffset = existingScenes.length;
+
+      const currentChunk = scriptChunks[batchIdx];
+      const scenesForBatch = currentChunk.scenes;
+
+      const previousScenes = blueprint.scenes.slice(-3);
+      const continuityContext = previousScenes.length > 0
+        ? `**LAST ${previousScenes.length} SCENES (for visual continuity):**\n${previousScenes.map(s => `  Scene ${s.scene_number}: [${s.shot_type}] ${s.visual_concept} | Mood: ${s.mood} | Palette: ${s.color_palette}`).join('\n')}`
+        : '**This is the OPENING — establish the visual world with a strong first impression.**';
+
+      const breakdownPrompt = `
 You are a world-class film director blocking out scenes for a visual narrative.
 ${styleDirective}
 
@@ -509,11 +535,13 @@ A scene changes when the VISUAL needs to change — not at every period.
 
 🎬 **RULE 2: EVERY SCENE HAS A VISUAL CONCEPT, NOT JUST A DESCRIPTION**
 WRONG: "A person looking worried about money"
-RIGHT: "Extreme close-up of weathered hands slowly closing around a faded family photograph, the edges worn soft from years of handling. Single warm lamp light from the left creates deep shadows across the knuckles. Shallow depth of field dissolves the cluttered kitchen table behind into warm bokeh circles."
+WRONG: "The skeleton protagonist stands with expressive eyes and visible ribcage"
+RIGHT: "Full-body wide shot of a man sitting alone at a cluttered kitchen table at 2 AM, head in hands, surrounded by scattered bills and a cold cup of coffee. A single overhead lamp casts harsh downward light, leaving the corners of the small apartment in deep shadow. Through the window behind him, city lights blur into bokeh. A framed family photo on the fridge catches a sliver of light."
 
 🎬 **RULE 3: SHOT VARIETY IS NON-NEGOTIABLE**
 Never use the same shot type consecutively. Cycle through:
-ECU, CU, MCU, MS, MWS, WS, EWS, OTS, INSERT/DETAIL, LOW ANGLE, HIGH ANGLE/OVERHEAD, DUTCH ANGLE, POV
+WS, EWS, MWS, MS, LOW ANGLE, HIGH ANGLE/OVERHEAD, OTS, MCU, CU, POV, INSERT/DETAIL, DUTCH ANGLE, ECU
+Favor wider shots (WS, EWS, MWS, MS) that show full body and environment. Use close-ups (CU, ECU) sparingly for key emotional beats only.
 
 🎬 **RULE 4: EMOTIONAL ESCALATION WITHIN THE PHASE**
 Even within a single phase, scenes should ESCALATE emotionally.
@@ -537,10 +565,10 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
     {
       "scene_number": ${sceneOffset + 1},
       "narration_text": "EXACT words from the script segment that play during this scene.",
-      "visual_concept": "A rich, specific, CINEMATIC description of what we SEE. 2-4 sentences.",
+      "visual_concept": "A rich, specific, CINEMATIC description of what we SEE. 2-4 sentences. MUST describe: (1) the FULL environment/location with specific details, (2) the character shown FULL BODY head-to-toe doing a specific ACTION, (3) other people or elements in the scene, (4) atmospheric details like weather/light/props. Think like a DP describing a film frame.",
       "shot_type": "e.g. 'ECU — Extreme Close-Up'",
       "camera_angle": "e.g. 'Low angle, 15 degrees, slightly left of center'",
-      "camera_movement": "e.g. 'Slow push-in over 8 seconds, from MS to MCU'",
+      "camera_movement": "e.g. 'Slow push-in over 5 seconds, from MS to MCU'",
       "lighting": "e.g. 'Single warm practical light from desk lamp, camera left.'",
       "color_palette": "e.g. 'Warm amber #D4A574, deep shadow brown #2C1810, cream highlight #F5F0E8'",
       "mood": "2-3 words (e.g. 'quiet desperation', 'fragile hope')",
@@ -548,7 +576,7 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
       "niche_visual_element": "One specific visual element from niche metaphor language",
       "continuity_bridge": "Visual thread connecting this to the NEXT scene",
       "emotional_intensity": 0.0 to 1.0,
-      "duration_seconds": 8
+      "duration_seconds": 5
     }
   ]
 }
@@ -559,91 +587,93 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
 - EVERY word of the script segment must appear in exactly one scene's narration_text
 - NO added narration — use ONLY the provided script words
 - visual_concept must NEVER describe text, charts, graphs, or readable content on screen
+- visual_concept must describe the FULL SCENE: environment FIRST, then full-body character action, then other people, then atmosphere
+- Characters must be shown FULL BODY (head to feet) in most scenes — torso-only crops are BANNED unless specifically an ECU emotional beat
+- Every scene must contain a CONTINUITY ELEMENT that visually bridges to the next scene (shared prop, color shift, gesture echo, location transform)
 - Adjacent scenes MUST use different shot types
 - emotional_intensity should generally escalate through the phase
+- NEVER describe the character in isolation against a blank/blurred background — always place them IN a detailed world
 `;
 
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`🎬 SCENE BREAKDOWN — Phase: ${currentChunk.phase} (Batch ${currentBatch + 1}/${numBatches})`);
-    console.log(`📍 Generating scenes ${sceneOffset + 1}-${sceneOffset + scenesForBatch}`);
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`🎬 SCENE BREAKDOWN — Phase: ${currentChunk.phase} (Batch ${batchIdx + 1}/${numBatches})`);
+      console.log(`📍 Generating scenes ${sceneOffset + 1}-${sceneOffset + scenesForBatch}`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
-    const result = await callGemini(breakdownPrompt, 0.7);
+      const result = await callGemini(breakdownPrompt, 0.7);
 
-    let scenesCreated = 0;
-    const newBlueprintScenes = [];
+      let scenesCreated = 0;
+      const newBlueprintScenes = [];
 
-    if (result.scenes && Array.isArray(result.scenes)) {
-      for (let i = 1; i < result.scenes.length; i++) {
-        if (result.scenes[i].shot_type === result.scenes[i - 1].shot_type) {
-          console.warn(`⚠️ Consecutive duplicate shot type at scene ${result.scenes[i].scene_number}: ${result.scenes[i].shot_type}`);
+      if (result.scenes && Array.isArray(result.scenes)) {
+        for (let i = 1; i < result.scenes.length; i++) {
+          if (result.scenes[i].shot_type === result.scenes[i - 1].shot_type) {
+            console.warn(`⚠️ Consecutive duplicate shot type at scene ${result.scenes[i].scene_number}: ${result.scenes[i].shot_type}`);
+          }
+        }
+
+        for (const scene of result.scenes) {
+          const sceneNum = sceneOffset + scenesCreated + 1;
+          const cleanedNarration = cleanNarrationText(scene.narration_text);
+
+          await base44.asServiceRole.entities.Scenes.create({
+            project_id,
+            scene_number: sceneNum,
+            narration_text: cleanedNarration,
+            image_prompt: "",
+            animation_prompt: "",
+            duration_seconds: scene.duration_seconds || 5,
+            status: "breakdown_ready"
+          });
+
+          newBlueprintScenes.push({
+            scene_number: sceneNum,
+            phase: currentChunk.phase,
+            visual_concept: scene.visual_concept,
+            shot_type: scene.shot_type,
+            camera_angle: scene.camera_angle,
+            camera_movement: scene.camera_movement,
+            lighting: scene.lighting,
+            color_palette: scene.color_palette,
+            mood: scene.mood,
+            depth_of_field: scene.depth_of_field,
+            niche_visual_element: scene.niche_visual_element,
+            continuity_bridge: scene.continuity_bridge,
+            emotional_intensity: scene.emotional_intensity || 0.5,
+            duration_seconds: scene.duration_seconds || 5
+          });
+
+          scenesCreated++;
         }
       }
 
-      for (const scene of result.scenes) {
-        const sceneNum = sceneOffset + scenesCreated + 1;
-        const cleanedNarration = cleanNarrationText(scene.narration_text);
+      blueprint.scenes = [...blueprint.scenes, ...newBlueprintScenes];
+      grandTotalCreated += scenesCreated;
 
-        await base44.asServiceRole.entities.Scenes.create({
-          project_id,
-          scene_number: sceneNum,
-          narration_text: cleanedNarration,
-          image_prompt: "",
-          animation_prompt: "",
-          duration_seconds: scene.duration_seconds || 8,
-          status: "breakdown_ready"
-        });
+      // Save after each phase — progress persists even if later phase times out
+      await base44.asServiceRole.entities.Projects.update(project_id, {
+        scene_blueprint: JSON.stringify(blueprint)
+      });
 
-        newBlueprintScenes.push({
-          scene_number: sceneNum,
-          phase: currentChunk.phase,
-          visual_concept: scene.visual_concept,
-          shot_type: scene.shot_type,
-          camera_angle: scene.camera_angle,
-          camera_movement: scene.camera_movement,
-          lighting: scene.lighting,
-          color_palette: scene.color_palette,
-          mood: scene.mood,
-          depth_of_field: scene.depth_of_field,
-          niche_visual_element: scene.niche_visual_element,
-          continuity_bridge: scene.continuity_bridge,
-          emotional_intensity: scene.emotional_intensity || 0.5,
-          duration_seconds: scene.duration_seconds || 8
-        });
+      console.log(`✓ Phase ${currentChunk.phase} complete — ${scenesCreated} scenes | Running total: ${grandTotalCreated}/${totalTargetScenes}`);
 
-        scenesCreated++;
-      }
-    }
+    } // end phase loop
 
-    blueprint.scenes = [...blueprint.scenes, ...newBlueprintScenes];
-
+    // All phases done
     await base44.asServiceRole.entities.Projects.update(project_id, {
-      scene_blueprint: JSON.stringify(blueprint)
+      status: "breakdown_complete",
+      current_step: 5
     });
 
-    const totalScenesNow = sceneOffset + scenesCreated;
-    const isDone = (currentBatch + 1) >= numBatches;
-
-    if (isDone) {
-      await base44.asServiceRole.entities.Projects.update(project_id, {
-        status: "breakdown_complete",
-        current_step: 5
-      });
-    }
-
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`✓ Phase ${currentChunk.phase} complete`);
-    console.log(`📊 Created: ${scenesCreated} scenes | Total: ${totalScenesNow}/${totalTargetScenes}`);
-    console.log(`${isDone ? '🎉 FULL BREAKDOWN COMPLETE — Ready for prompt generation' : '⏭️ More phases remaining'}`);
+    console.log(`🎉 FULL BREAKDOWN COMPLETE — ${grandTotalCreated} scenes ready for prompt generation`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     return Response.json({
       success: true,
-      done: isDone,
-      batch_completed: currentBatch,
-      phase_completed: currentChunk.phase,
-      scenes_created: scenesCreated,
-      total_scenes: totalScenesNow,
+      done: true,
+      scenes_created: grandTotalCreated,
+      total_scenes: grandTotalCreated,
       total_target: totalTargetScenes,
       total_batches: numBatches
     });
