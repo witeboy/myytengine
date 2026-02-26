@@ -2,16 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // ══════════════════════════════════════════════════════════════════
 // SCENE PROMPT GENERATOR — DIRECTOR NOTES → PRODUCTION PROMPTS
-// ══════════════════════════════════════════════════════════════════
-// Pipeline: Script → Scene Breakdown (deterministic) → [THIS] → Image Gen → Animation
-//
-// The breakdown guarantees EXACTLY the right number of scenes.
-// This function's ONLY job is converting director notes into
-// production-ready image + animation prompts. No compression,
-// no scene deletion, no count changes.
-//
-// Reads director notes from image_prompt field (DIRECTOR_NOTES: prefix)
-// Converts to production-ready image + animation prompts
+// Pipeline: Script → Breakdown → [THIS] → Image Gen → Animation
 // ══════════════════════════════════════════════════════════════════
 
 const BATCH_SIZE = 12;
@@ -107,6 +98,21 @@ function extractDirectorNotes(imagePrompt) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// STYLE NORMALIZER — handles "Skeleton Protagonist" → "skeleton_protagonist"
+// ══════════════════════════════════════════════════════════════════
+
+function normalizeStyleKey(raw) {
+  if (!raw) return 'cinematic_realistic';
+  const normalized = raw.trim().toLowerCase().replace(/[\s\-]+/g, '_');
+  if (styleMap[normalized]) return normalized;
+  for (const key of Object.keys(styleMap)) {
+    if (normalized.includes(key) || key.includes(normalized)) return key;
+  }
+  console.warn(`⚠️ Unknown visual_style "${raw}" → "${normalized}"`);
+  return 'cinematic_realistic';
+}
+
+// ══════════════════════════════════════════════════════════════════
 // VISUAL STYLE MAP
 // ══════════════════════════════════════════════════════════════════
 
@@ -173,10 +179,8 @@ const styleMap = {
   }
 };
 
-// ══════════════════════════════════════════════════════════════════
-// UNIVERSAL ANTI-CROP NEGATIVE (appended to ALL styles)
-// ══════════════════════════════════════════════════════════════════
-const UNIVERSAL_NEGATIVE_SUFFIX = ", torso only, bust shot, head and shoulders only, cropped at waist, isolated character on blank background, portrait crop, blurred empty background, character floating in void";
+// Universal anti-crop negative (appended to ALL styles)
+const UNIVERSAL_NEGATIVE_SUFFIX = ", torso only, bust shot, cropped at waist, isolated character on blank background, portrait crop, blurred empty background";
 
 // ══════════════════════════════════════════════════════════════════
 // STYLE-SPECIFIC INSTRUCTIONS FOR LLM
@@ -418,8 +422,10 @@ Deno.serve(async (req) => {
     console.log(`📊 ${pendingScenes.length} scenes from deterministic breakdown — converting to production prompts`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
-    const visualStyle = project.visual_style || 'cinematic_realistic';
-    const styleConfig = styleMap[visualStyle] || styleMap.cinematic_realistic;
+    const rawStyle = project.visual_style || 'cinematic_realistic';
+    const visualStyle = normalizeStyleKey(rawStyle);
+    const styleConfig = styleMap[visualStyle];
+    console.log(`🎨 Style: raw="${rawStyle}" → resolved="${visualStyle}"`);
 
     // ═══ UNIVERSAL: Append anti-crop negatives to ALL styles ═══
     const effectiveNegative = (styleConfig.negative || '') + UNIVERSAL_NEGATIVE_SUFFIX;
