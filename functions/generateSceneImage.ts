@@ -195,7 +195,9 @@ Deno.serve(async (req) => {
     // PROMPT: Pass through as-is (safety sanitize only)
     // ══════════════════════════════════════════════════════════════
     const rawPrompt = scene.image_prompt;
-    const finalPrompt = safetySanitize(rawPrompt);
+    const sanitized = safetySanitize(rawPrompt);
+    const framingSuffix = ", full body shot head to feet, wide scene showing complete environment, do not crop at torso or chest, show full legs and feet on ground";
+    const finalPrompt = sanitized + framingSuffix;
 
     // Detect orientation from prompt content or project setting
     const orientation = detectOrientation(finalPrompt, project.orientation);
