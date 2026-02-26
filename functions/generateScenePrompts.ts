@@ -166,6 +166,10 @@ const styleMap = {
   low_poly_3d_cartoon: {
     positive: "Stylized low-poly 3D cartoon animation, all geometry built from visible flat-shaded polygons and triangular facets creating a charming geometric aesthetic throughout the entire scene. CHARACTERS: exaggerated stylized proportions with oversized heads relative to bodies, prominent angular noses that protrude significantly from the face, deeply expressive large round eyes with visible white sclera and dark pupils, thick sculpted eyebrows that convey strong emotion, hair and beards rendered as chunky geometric strands with visible polygon facets in saturated colors (blue-gray hair for elderly characters, brown for younger), skin has warm peach-tan tones with subtle polygon-edge shading, hands are simplified blocky forms with distinct fingers, clothing is clearly modeled with visible folds — knit sweater vests with visible weave texture over collared shirts, police uniforms with badges and belt details, casual suburban attire like jeans and flannel, purple dresses with matching hats for elderly women, all fabric rendered with flat polygon faces and gentle ambient occlusion in creases. ENVIRONMENTS: quintessential American suburban neighborhood with rows of wooden clapboard houses in blues grays greens and warm tans, each house has clearly modeled porches with white railings, front steps, screen doors, shingled roofs with geometric ridge lines, attached garages, white picket fences and lattice work under porches, mailboxes on posts (orange and blue USPS style), fire hydrants, street lamps with geometric bulbs, sidewalks with visible concrete panel lines, smooth dark asphalt roads with subtle gray variation, green grass lawns rendered as low-poly ground planes with bright saturated green and occasional grass blade geometry. TREES AND FOLIAGE: trees have chunky faceted canopies made of large triangular polygon clusters in rich greens (olive, forest, lime) sitting atop smooth brown cylindrical trunks, hedges are blocky rectangular green masses with visible facet edges, bushes are rounded polygon clusters. VEHICLES: simplified boxy cartoon cars with rounded-rectangular bodies, clearly modeled headlights as yellow circular discs, chrome-style bumpers and grille details, visible side mirrors, windshield wipers, door handles, interiors show tan-brown dashboards with circular gauge clusters, steering wheels, gear shifts, and fabric seats all in low-poly style, a signature yellow sunflower in a small vase on the dashboard as a recurring motif. SKY AND ATMOSPHERE: bright clear gradient sky from vivid cerulean blue at top to lighter horizon blue, fluffy geometric clouds rendered as clusters of white polygon spheres, distant low-poly mountain silhouettes in pale blue-white, warm natural sunlight creating soft directional shadows on the ground, overall lighting is bright cheerful and evenly distributed with gentle ambient occlusion in corners and under objects. INDOOR SCENES: office and institutional interiors with wood-paneled walls, reception desks with clearly modeled computer monitors keyboards and desk items, bulletin boards with pinned papers, overhead fluorescent panel lighting casting even warm-cool light, tiled or carpeted floors with visible texture pattern, potted plants as geometric green shapes, wall clocks, framed certificates and badges on walls. COLOR PALETTE: vibrant saturated primary and secondary colors — rich reds and oranges for vehicles and mailboxes, deep blues and teals for houses and sky, warm browns and tans for wood and interiors, bright greens for foliage and lawns, warm peach for skin tones, purple and lavender for clothing accents, yellow for sunflowers and headlights, overall warm and inviting tone. RENDERING STYLE: clean polygon edges visible on all surfaces, flat-shaded faces with no smoothing between polygon normals creating the signature faceted look, soft ambient occlusion in crevices, gentle directional shadows, no outlines or cel-shading, materials have a matte slightly plastic quality similar to clay or vinyl toys, subsurface scattering hint on skin for warmth, the overall quality matches high-end indie 3D animation or a premium mobile game cutscene with Pixar-level character expressiveness combined with geometric stylization",
     negative: "photorealistic, photograph, live action, smooth high-poly rendering, hyperrealistic skin, film grain, lens flare, bokeh, motion blur, chromatic aberration, anime, cel-shaded, 2D flat, hand-drawn, sketch, watercolor, oil painting, painterly, dark gritty horror, neon cyberpunk, sci-fi futuristic, abstract, impressionist, pixel art, voxel art, wireframe, untextured, gray, monochrome, desaturated, complex PBR materials, ray-traced reflections, realistic hair strands, photogrammetry"
+  },
+  skeleton_protagonist: {
+    positive: "Ultra-cinematic scene, the main character is a photorealistic transparent skeleton protagonist with a clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through the translucent torso including ribcage spine and pelvis, big round expressive brown amber eyeballs sitting in the skull eye sockets, consistent adult male skeletal proportions, wearing context-appropriate attire and gear, the skeleton interacts naturally and physically with photorealistic humans and real-world environments, dramatic cinematic volumetric lighting with golden hour sunlight and high contrast shadows, strong rim lighting on bone edges separating character from environment, subtle bloom and atmospheric haze with dust particles floating in light rays, photorealistic background with authentic real-world material textures of stone cloth metal and wood, crowd and background elements in soft warm bokeh depth of field, shot on HDR cinematic lens with shallow depth of field, 4K ultra-realistic detail, high dynamic range, warm amber color grading, high-end 3D render character in photorealistic world, the skeleton protagonist is always the central focus of the frame",
+    negative: "cartoon skeleton, halloween decoration, flat 2D, anime, comic style, x-ray medical scan, horror gore, neon colors, plastic toy, low quality, blurry, abstract, minimalist, sketch, painting, unrealistic proportions, chibi, cute cartoon bones, dia de los muertos sugar skull, empty dark eye sockets, bare bones without transparent body, scary horror skeleton"
   }
 };
 
@@ -174,8 +178,6 @@ const styleMap = {
 // ══════════════════════════════════════════════════════════════════
 
 function getStyleSceneBodyRules(styleName) {
-  // These rules tell the LLM HOW to describe characters, environments, objects, and architecture
-  // in the scene body — so the style DNA is baked into every description, not just the prefix.
   const rules = {
     cinematic_realistic: {
       characters: "Describe characters with photorealistic detail — skin texture, real clothing fabrics, natural hair, realistic body proportions.",
@@ -260,10 +262,39 @@ function getStyleSceneBodyRules(styleName) {
       environments: "Low-poly 3D environments — ALL surfaces built from visible flat-shaded triangular polygons. Suburban houses with clapboard siding in blues/grays/greens, modeled porches with white railings, shingled roofs with geometric ridge lines, white picket fences. Green grass as low-poly ground planes with bright saturated green. Trees with chunky faceted canopies of large triangular polygon clusters in rich greens on smooth brown trunks. Sidewalks with visible concrete panels, smooth dark asphalt roads. Indoor: wood-paneled walls, reception desks, modeled computer monitors, bulletin boards, tiled floors.",
       objects: "ALL objects as low-poly geometric forms — boxy cartoon cars with rounded-rectangular bodies, yellow circular disc headlights, chrome bumpers. Mailboxes on posts, fire hydrants, street lamps with geometric bulbs. Every surface shows visible polygon edges and flat-shaded faces. Matte slightly plastic material quality like clay or vinyl toys.",
       rendering: "Low-poly 3D rendering — clean polygon edges visible on ALL surfaces, flat-shaded faces with NO smoothing between polygon normals (the signature faceted look). Soft ambient occlusion in crevices, gentle directional shadows, NO outlines or cel-shading. Bright clear gradient sky, fluffy geometric clouds as clusters of white polygon spheres. Vibrant saturated primary colors — rich reds, deep blues, bright greens, warm peach, yellow accents. Overall warm and inviting. Quality matches high-end indie 3D animation with Pixar-level expressiveness combined with geometric stylization."
+    },
+    skeleton_protagonist: {
+      characters: "The protagonist in EVERY scene is a photorealistic transparent skeleton with a clear glass-like semi-transparent humanoid body shell (like a resin mannequin with a skeleton inside), glossy ivory bones visible through the translucent torso including ribcage spine and pelvis, big round expressive brown/amber EYEBALLS sitting in the skull eye sockets (NOT empty dark sockets — real expressive eyes that convey emotion), consistent adult male skeletal proportions. The skeleton wears context-appropriate clothing described in the visual concept (ancient robes, military gear, modern clothes, etc.). Other characters are photorealistic normal humans with real skin, hair, and clothing. The skeleton is NOT scary or horror — he is the relatable HERO expressed through gesture, posture, and expressive eyes.",
+      environments: "Photorealistic real-world environments with authentic material textures — stone, cloth, metal, wood, glass. Cinematic golden hour lighting with volumetric light rays and floating dust particles. Warm bokeh backgrounds. Real-world locations: arenas, marketplaces, city streets, homes, battlefields. The skeleton protagonist exists naturally in these photorealistic spaces.",
+      objects: "Props and objects with photorealistic material properties — metal weapons, leather gear, wooden furniture, cloth fabrics. Context-appropriate items the skeleton interacts with. Strong rim lighting on bone edges separating the skeleton from environment.",
+      rendering: "High-end 3D render character in photorealistic world. HDR cinematic lens, shallow depth of field, warm amber color grading, dramatic volumetric lighting, golden hour sunlight, high contrast shadows, subtle bloom and atmospheric haze. The skeleton is always the CENTRAL FOCUS of the frame."
     }
   };
 
   return rules[styleName] || null;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// STYLE-SPECIFIC LLM REINFORCEMENT INSTRUCTIONS
+// ══════════════════════════════════════════════════════════════════
+// For styles that require extra guidance beyond the prefix and
+// body rules (e.g. character override styles like skeleton_protagonist)
+// ══════════════════════════════════════════════════════════════════
+
+function getStyleReinforcementInstruction(visualStyle) {
+  const instructions = {
+    skeleton_protagonist: `
+**🦴 SKELETON PROTAGONIST STYLE — CRITICAL:**
+The protagonist in EVERY image prompt must be described as: "a photorealistic transparent skeleton with a clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through the translucent torso, big round expressive brown amber eyeballs in the skull sockets"
+- The skeleton wears context-appropriate clothing described in the visual concept
+- Other characters are photorealistic normal humans
+- The skeleton is ALWAYS the central figure, never in the background
+- NOT horror, NOT scary — the skeleton is the relatable hero with expressive eyes and body language
+- Environment is always photorealistic with real-world textures
+- Lighting: golden hour, volumetric rays, warm amber grading, strong rim light on bone edges
+- NEVER describe the skeleton with empty dark eye sockets — always BIG ROUND EXPRESSIVE BROWN/AMBER EYEBALLS`
+  };
+  return instructions[visualStyle] || '';
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -281,12 +312,11 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
   }
 
   // For non-photorealistic styles, strip any photorealistic camera language that may have leaked in
-  const isPhotoStyle = ['cinematic_realistic', 'photorealistic_4k'].includes(visualStyle);
+  const isPhotoStyle = ['cinematic_realistic', 'photorealistic_4k', 'skeleton_protagonist'].includes(visualStyle);
   if (!isPhotoStyle) {
-    // Remove real camera/lens references that contradict non-photo styles
     enhanced = enhanced.replace(/\b(shot on|ARRI|Alexa|Canon|Sony|Nikon|Panavision|anamorphic|DSLR|RAW)\b/gi, '');
     enhanced = enhanced.replace(/\b(Kodak|Vision3|film grain texture|chromatic aberration)\b/gi, '');
-    enhanced = enhanced.replace(/\bf\/\d+\.?\d*\b/g, ''); // Remove f-stop numbers
+    enhanced = enhanced.replace(/\bf\/\d+\.?\d*\b/g, '');
     enhanced = enhanced.replace(/\b(bokeh|lens flare)\b/gi, '');
     enhanced = enhanced.replace(/\s{2,}/g, ' ').replace(/,\s*,/g, ',');
   }
@@ -371,25 +401,20 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // NO COMPRESSION GATE — Scene count is deterministic from breakdown.
-    // generateSceneBreakdown pre-splits narration into exact clip count.
-    // This function ONLY converts director notes → production prompts.
-    // It NEVER deletes, merges, or changes scene count.
-    // ══════════════════════════════════════════════════════════════
-
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`🎨 PROMPT GENERATION`);
     console.log(`📊 ${pendingScenes.length} scenes from deterministic breakdown — converting to production prompts`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
-    // ══════════════════════════════════════════════════════════════
-    // PROMPT GENERATION
-    // ══════════════════════════════════════════════════════════════
-
     const visualStyle = project.visual_style || 'cinematic_realistic';
     const styleConfig = styleMap[visualStyle] || styleMap.cinematic_realistic;
     const orientation = project.orientation || 'landscape';
+
+    // ── Style-specific LLM reinforcement (e.g. skeleton protagonist) ──
+    const styleReinforcement = getStyleReinforcementInstruction(visualStyle);
+    if (styleReinforcement) {
+      console.log(`🦴 Style reinforcement active: ${visualStyle}`);
+    }
 
     let orientationConfig;
     if (orientation === 'portrait') {
@@ -467,7 +492,6 @@ Deno.serve(async (req) => {
   Arc Animation: ${arcAnim}`;
       }).join('\n\n');
 
-      // Build style-specific scene body rules so the LLM describes characters/environments/objects in the right style
       const styleBodyRules = getStyleSceneBodyRules(visualStyle);
       const styleBodyBlock = styleBodyRules ? `
 **═══════════════════════════════════════════════════════════════**
@@ -483,6 +507,7 @@ Deno.serve(async (req) => {
 ${storyContext}
 
 ${characterBlock}
+${styleReinforcement}
 
 **VISUAL STYLE: "${visualStyle}"**
 **ORIENTATION:** ${orientationConfig.format}
@@ -556,7 +581,6 @@ ${sceneDirections}
             generated.image_prompt || '', styleConfig, orientationConfig, s.scene_number, visualStyle
           );
           animationPrompt = generated.animation_prompt || '';
-          // Ensure animation prompt is rich enough (minimum 80 chars for a proper motion description)
           if (animationPrompt.length < 80) {
             const arc = s.director?.arc_position || 'rising';
             const mood = s.director?.mood || 'contemplative';
