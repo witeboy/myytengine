@@ -177,8 +177,8 @@ const styleMap = {
     negative: "photorealistic, photograph, smooth high-poly, hyperrealistic, film grain, lens flare, bokeh, anime, cel-shaded, 2D flat, hand-drawn, sketch, watercolor, oil painting, dark horror, neon cyberpunk, abstract, pixel art, voxel art, wireframe, monochrome, desaturated, ray-traced, photogrammetry"
   },
   skeleton_protagonist: {
-   positive: "Full body wide shot showing complete scene from head to feet, photorealistic detailed environment with sharp background, multiple people in frame, cinematic establishing shot composition, the main character is a transparent glass-bodied skeleton with ivory bones and expressive brown amber eyeballs, character shown full body standing in a richly detailed real-world location interacting with photorealistic humans, golden hour volumetric lighting, HDR cinematic lens, 4K detail, warm amber grading",
-   negative: "cartoon skeleton, halloween decoration, flat 2D, anime, comic, x-ray medical, horror gore, neon, plastic toy, low quality, blurry, abstract, minimalist, sketch, painting, chibi, dia de los muertos, empty dark eye sockets, bare bones without transparent body, scary horror skeleton, torso only, bust shot, head and shoulders only, cropped at waist, isolated character on blank background, portrait crop, close-up, macro, extreme close-up, chest detail, upper body only, dark background, black background"
+    positive: "Full body wide shot showing complete scene from head to feet, photorealistic detailed environment with sharp background, multiple people in frame, cinematic establishing shot composition, richly detailed real-world location, highly detailed cinematic lighting, HDR cinematic lens, 4K detail",
+    negative: "cartoon skeleton, halloween decoration, flat 2D, anime, comic, x-ray medical, horror gore, neon, plastic toy, low quality, blurry, abstract, minimalist, sketch, painting, chibi, dia de los muertos, empty dark eye sockets, bare bones without transparent body, scary horror skeleton, torso only, bust shot, head and shoulders only, cropped at waist, isolated character on blank background, portrait crop, close-up, macro, extreme close-up, chest detail, upper body only, dark background, black background"
   }
 };
 
@@ -299,17 +299,15 @@ function getStyleReinforcementInstruction(visualStyle) {
   const instructions = {
     skeleton_protagonist: `
 **🦴 SKELETON PROTAGONIST STYLE — CRITICAL FRAMING RULES:**
-The protagonist in EVERY image prompt must be described as: "a photorealistic transparent skeleton with a clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through the translucent torso, big round expressive brown amber eyeballs in the skull sockets"
+The protagonist in EVERY image prompt must be described EXACTLY like this, inserting the clothing right in the middle: "a photorealistic transparent skeleton with a clear glass-like semi-transparent humanoid body shell, [INSERT SPECIFIC CLOTHING HERE], glossy ivory bones visible through the translucent torso, big round expressive brown amber eyeballs in the skull sockets"
 
 MANDATORY FRAMING:
 - Show the skeleton FULL BODY (head to feet) in MOST scenes — NOT torso-only, NOT bust shots
 - Describe the ENVIRONMENT in detail FIRST (location, props, weather, textures) THEN place the skeleton within it
-- The skeleton must be DOING an action — holding, reaching, kneeling, walking — NOT standing static
-- Include other photorealistic humans in most scenes — crowds, companions, onlookers
+- The skeleton must be DOING an action — holding, reaching, kneeling, walking
+- Include other photorealistic humans in most scenes
 - Backgrounds must be SHARP and DETAILED — NOT blurred bokeh
-- Each scene must contain a visual CONTINUITY element connecting to the next scene
-- The skeleton wears context-appropriate clothing per scene
-- Lighting: golden hour, volumetric rays, warm amber grading, rim light on bone edges
+- Each scene must contain a visual CONTINUITY element
 - NEVER empty dark eye sockets — always BIG ROUND EXPRESSIVE BROWN/AMBER EYEBALLS
 - NEVER torso-only portrait against blurred background`
   };
@@ -458,10 +456,10 @@ Deno.serve(async (req) => {
       };
     }
 
-    const framingPrefix = "Full body wide shot showing complete scene from head to feet, detailed sharp environment with visible props and architecture, character mid-action in a populated world";
-const promptPrefix = `${framingPrefix}, ${styleConfig.positive}, ${orientationConfig.directive}`;
+    const promptPrefix = `${styleConfig.positive}, ${orientationConfig.directive}`;
 
     let characters = [];
+
     if (project.character_descriptions) {
       try { characters = JSON.parse(project.character_descriptions); } catch (_) {}
     }
