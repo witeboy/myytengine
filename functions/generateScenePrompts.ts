@@ -177,7 +177,7 @@ const styleMap = {
     negative: "photorealistic, photograph, smooth high-poly, hyperrealistic, film grain, lens flare, bokeh, anime, cel-shaded, 2D flat, hand-drawn, sketch, watercolor, oil painting, dark horror, neon cyberpunk, abstract, pixel art, voxel art, wireframe, monochrome, desaturated, ray-traced, photogrammetry"
   },
   skeleton_protagonist: {
-   positive: "Full body wide shot showing complete scene from head to feet, photorealistic detailed environment with sharp background, multiple people in frame, cinematic establishing shot composition, the main character is a transparent glass-bodied skeleton with ivory bones and expressive brown amber eyeballs, character has full body in a richly detailed real-world location interacting with photorealistic humans, golden hour volumetric lighting, HDR cinematic lens, 4K detail, warm amber grading",
+   positive: "Full body wide shot showing complete scene from head to feet, photorealistic detailed environment with sharp background, multiple people in frame, cinematic establishing shot composition, the main character is a transparent glass-bodied skeleton with ivory bones and expressive brown amber eyeballs, character shown full body standing in a richly detailed real-world location interacting with photorealistic humans, golden hour volumetric lighting, HDR cinematic lens, 4K detail, warm amber grading",
    negative: "cartoon skeleton, halloween decoration, flat 2D, anime, comic, x-ray medical, horror gore, neon, plastic toy, low quality, blurry, abstract, minimalist, sketch, painting, chibi, dia de los muertos, empty dark eye sockets, bare bones without transparent body, scary horror skeleton, torso only, bust shot, head and shoulders only, cropped at waist, isolated character on blank background, portrait crop, close-up, macro, extreme close-up, chest detail, upper body only, dark background, black background"
   }
 };
@@ -330,7 +330,16 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
     enhanced = `${styleConfig.positive}. ${enhanced}`;
   }
 
- 
+  // For non-photorealistic styles, strip any photorealistic camera language that may have leaked in
+  const isPhotoStyle = ['cinematic_realistic', 'photorealistic_4k', 'skeleton_protagonist'].includes(visualStyle);
+  if (!isPhotoStyle) {
+    enhanced = enhanced.replace(/\b(shot on|ARRI|Alexa|Canon|Sony|Nikon|Panavision|anamorphic|DSLR|RAW)\b/gi, '');
+    enhanced = enhanced.replace(/\b(Kodak|Vision3|film grain texture|chromatic aberration)\b/gi, '');
+    enhanced = enhanced.replace(/\bf\/\d+\.?\d*\b/g, '');
+    enhanced = enhanced.replace(/\b(bokeh|lens flare)\b/gi, '');
+    enhanced = enhanced.replace(/\s{2,}/g, ' ').replace(/,\s*,/g, ',');
+  }
+
   // Orientation
   const compHint = orientationConfig.format === 'portrait'
     ? 'vertical 9:16 frame, tall vertical composition'
@@ -426,7 +435,12 @@ Deno.serve(async (req) => {
 
     const orientation = project.orientation || 'landscape';
 
-    
+    // ── Style-specific LLM reinforcement (e.g. skeleton protagonist) ──
+    const styleReinforcement = getStyleReinforcementInstruction(visualStyle);
+    if (styleReinforcement) {
+      console.log(`🦴 Style reinforcement active: ${visualStyle}`);
+    }
+
     let orientationConfig;
     if (orientation === 'portrait') {
       orientationConfig = {
