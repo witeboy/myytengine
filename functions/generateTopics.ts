@@ -119,8 +119,17 @@ TONE: "${effectiveTone}" — the topic title, description, and all angles must m
 
 CRITICAL RULES:
 - The topic MUST stay directly about "${exact_topic}" — do NOT drift to a different subject
-- Only refine the title and angle, keep the core subject matter identical
+- Keep the core subject matter IDENTICAL to what the user typed
 - The final topic should be immediately recognizable as the user's original idea
+- The title MUST contain the user's key phrase or a very close synonym — do NOT replace it with a dramatic rewrite
+- Use SEO-friendly title formats that people actually SEARCH for:
+  • "How [topic] Actually Works" / "How to [topic]"
+  • "Why [topic] Is [surprising truth]"  
+  • "What Nobody Tells You About [topic]"
+  • "[Topic]: The Complete Truth" / "[Topic] Explained"
+  • "Here's Why [topic] [claim]"
+- Do NOT make every title sound like a conspiracy or scandal — match the "${effectiveTone}" tone
+- The title should work as a YouTube SEARCH RESULT, not just a clickbait thumbnail
 
 Return a JSON object with this exact structure:
 {
@@ -162,9 +171,13 @@ CRITICAL: Every topic MUST be directly and specifically about "${niche}".
 
 Generate 5 viral video topics that are:
 - Direct deep-dives into "${niche}" — different angles of the SAME subject
-- Counterintuitive truths about "${niche}" that contradict common beliefs
-- Emotionally compelling with clear stakes
+- A MIX of title styles (NOT all dramatic/controversial). Include:
+  • 1-2 educational/SEO titles: "How to...", "Why...", "[Topic] Explained", "What Is..."
+  • 1-2 curiosity/story titles: "The Hidden Truth About...", "What Nobody Tells You About..."
+  • 1 bold claim title: "Why [common belief] Is Wrong" or "Here's Why [surprising take]"
 - Specific and actionable (NOT generic listicles)
+- Titles that people would actually TYPE into YouTube search — not just clickbait
+- Match the "${effectiveTone}" tone — if tone is "educational", do NOT make titles sound like conspiracy documentaries
 
 Each topic must:
 - Be unmistakably about "${niche}" — a viewer should immediately know the video is about this subject
