@@ -196,8 +196,15 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════════════
     const rawPrompt = scene.image_prompt;
     const sanitized = safetySanitize(rawPrompt);
-    const framingSuffix = ", full body shot head to feet, wide scene showing complete environment, do not crop at torso or chest, show full legs and feet on ground";
-    const finalPrompt = sanitized + framingSuffix;
+
+    // ── Strip close-up language that fights full-body framing ──
+    let cleaned = sanitized
+      .replace(/\b(extreme close[- ]?up|ECU|macro shot|tight on face|head shot|bust shot|chest[- ]up)\b/gi, 'medium wide shot')
+      .replace(/\b(shallow depth of field|shallow DOF|f\/1\.\d|creamy bokeh)\b/gi, 'deep depth of field sharp background');
+
+    const framingPrefix = "Full body wide shot from head to feet showing complete figure and detailed environment, characters shown at full human scale within the scene";
+    const framingSuffix = "full body visible head to toe, feet touching ground, wide framing showing full environment, do not crop at torso or waist";
+    const finalPrompt = `${framingPrefix}, ${cleaned}, ${framingSuffix}`;
 
     // Detect orientation from prompt content or project setting
     const orientation = detectOrientation(finalPrompt, project.orientation);
@@ -206,7 +213,8 @@ Deno.serve(async (req) => {
 
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`🖼️ Scene ${scene.scene_number} | ${dimensions} (${aspectRatio})`);
-    console.log(`📐 Prompt: ${finalPrompt.length} chars | Passthrough mode`);
+    const wasStripped = sanitized !== cleaned;
+    console.log(`📐 Prompt: ${finalPrompt.length} chars | Passthrough mode${wasStripped ? ' | ⚠️ Close-up language stripped' : ''}`);
     console.log(`🔗 Model: Grok Imagine via Kie`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
