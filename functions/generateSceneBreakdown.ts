@@ -34,10 +34,7 @@ async function callGemini(prompt, temperature = 0.7) {
 
   const data = await response.json();
   if (!data.candidates?.length) throw new Error("No candidates from Gemini");
-  let rawText = data.candidates[0].content.parts[0].text;
-  
-  // Clean markdown backticks just in case Gemini wraps the JSON
-  rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+  const rawText = data.candidates[0].content.parts[0].text;
 
   try {
     return JSON.parse(rawText);
@@ -92,6 +89,10 @@ function cleanNarrationText(text) {
 // ══════════════════════════════════════════════════════════════════
 // VISUAL STYLE CHARACTER DIRECTIVES
 // ══════════════════════════════════════════════════════════════════
+// Certain visual styles inject a mandatory character override so
+// the LLM always features a specific protagonist. Add new styles here.
+// Returns empty string for styles that don't need character override.
+// ══════════════════════════════════════════════════════════════════
 
 function getStyleCharacterDirective(visualStyle) {
   const directives = {
@@ -119,6 +120,9 @@ CRITICAL RULES FOR EVERY SCENE:
 
 // ══════════════════════════════════════════════════════════════════
 // NICHE DIRECTOR PROFILES
+// ══════════════════════════════════════════════════════════════════
+// Instead of hardcoded motifs, these are DIRECTORIAL SENSIBILITIES
+// that guide the AI to think visually for each niche.
 // ══════════════════════════════════════════════════════════════════
 
 function getNicheDirectorProfile(niche) {
@@ -430,20 +434,12 @@ ${finalScript}
       console.log(`  Characters: ${storyAnalysis.characters?.map(c => c.name).join(', ') || 'None identified'}`);
       console.log(`  Motifs: ${storyAnalysis.recurring_visual_motifs?.join(', ') || 'N/A'}`);
     } else {
-      // Subsequent batch calls — Read blueprint with a safety retry to prevent 400 errors
-      let fetchRetries = 0;
-      while (fetchRetries < 3) {
-        freshProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
-        if (freshProject?.scene_blueprint) {
-          blueprint = JSON.parse(freshProject.scene_blueprint);
-          break;
-        }
-        await new Promise(r => setTimeout(r, 1000));
-        fetchRetries++;
-      }
-      
-      if (!blueprint) {
-        return Response.json({ error: 'Scene blueprint not found. Please wait a moment or run batch 0 again.' }, { status: 400 });
+      // Subsequent batch calls — read blueprint from DB
+      freshProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
+      try {
+        blueprint = JSON.parse(freshProject.scene_blueprint);
+      } catch (e) {
+        return Response.json({ error: 'Scene blueprint not found. Run batch 0 first.' }, { status: 400 });
       }
     }
 
@@ -498,7 +494,7 @@ ${continuityContext}
 
 **CURRENT PHASE: ${currentChunk.phase.toUpperCase()}**
 Phase Purpose: ${currentChunk.purpose}
-Scenes to create in this batch: ${scenesForBatch}
+Scenes to create: ${scenesForBatch}
 Scene numbers: ${sceneOffset + 1} through ${sceneOffset + scenesForBatch}
 
 **SCRIPT SEGMENT FOR THIS PHASE:**
@@ -536,9 +532,6 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
 - AVOID: ${nicheProfile.avoid}
 
 **━━━━ RESPONSE FORMAT ━━━━**
-
-CRITICAL INSTRUCTION: You MUST output an array containing EXACTLY ${scenesForBatch} scene objects. Do not stop after 1 scene! Break the script segment above into EXACTLY ${scenesForBatch} cinematic beats.
-
 {
   "scenes": [
     {
@@ -556,34 +549,18 @@ CRITICAL INSTRUCTION: You MUST output an array containing EXACTLY ${scenesForBat
       "continuity_bridge": "Visual thread connecting this to the NEXT scene",
       "emotional_intensity": 0.0 to 1.0,
       "duration_seconds": 8
-    },
-    {
-      "scene_number": ${sceneOffset + 2},
-      "narration_text": "...",
-      "visual_concept": "...",
-      "shot_type": "...",
-      "camera_angle": "...",
-      "camera_movement": "...",
-      "lighting": "...",
-      "color_palette": "...",
-      "mood": "...",
-      "depth_of_field": "...",
-      "niche_visual_element": "...",
-      "continuity_bridge": "...",
-      "emotional_intensity": 0.5,
-      "duration_seconds": 8
     }
-    // ... CONTINUE GENERATING OBJECTS UNTIL YOU REACH SCENE ${sceneOffset + scenesForBatch}
   ]
 }
 
 **CRITICAL REMINDERS:**
-- Generate EXACTLY ${scenesForBatch} scenes for this batch.
-- Scene numbers start at ${sceneOffset + 1} and MUST end at ${sceneOffset + scenesForBatch}.
+- Generate EXACTLY ${scenesForBatch} scenes
+- Scene numbers start at ${sceneOffset + 1}
 - EVERY word of the script segment must appear in exactly one scene's narration_text
 - NO added narration — use ONLY the provided script words
 - visual_concept must NEVER describe text, charts, graphs, or readable content on screen
 - Adjacent scenes MUST use different shot types
+- emotional_intensity should generally escalate through the phase
 `;
 
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
