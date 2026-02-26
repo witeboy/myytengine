@@ -315,7 +315,7 @@ Deno.serve(async (req) => {
       console.log(`🦴 Style directive active: ${visualStyle}`);
     }
 
-    const MAX_SCENE_SECONDS = 8;
+    const MAX_SCENE_SECONDS = 5;
     const totalTargetScenes = Math.max(8, Math.round((durationMinutes * 60) / MAX_SCENE_SECONDS));
     const phases = calculatePhaseAllocation(totalTargetScenes);
     const scriptChunks = splitScriptByPhase(finalScript, phases);
@@ -541,7 +541,7 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
       "niche_visual_element": "One specific visual element from niche metaphor language",
       "continuity_bridge": "Visual thread connecting this to the NEXT scene",
       "emotional_intensity": 0.0 to 1.0,
-      "duration_seconds": 8
+      "duration_seconds": 5
     }
   ]
 }
@@ -583,7 +583,7 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
             narration_text: cleanedNarration,
             image_prompt: "",
             animation_prompt: "",
-            duration_seconds: scene.duration_seconds || 8,
+            duration_seconds: scene.duration_seconds || 5,
             status: "breakdown_ready"
           });
 
@@ -601,7 +601,7 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
             niche_visual_element: scene.niche_visual_element,
             continuity_bridge: scene.continuity_bridge,
             emotional_intensity: scene.emotional_intensity || 0.5,
-            duration_seconds: scene.duration_seconds || 8
+            duration_seconds: scene.duration_seconds || 5
           });
 
           scenesCreated++;
