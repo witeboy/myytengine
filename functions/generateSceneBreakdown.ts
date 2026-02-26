@@ -328,6 +328,10 @@ Deno.serve(async (req) => {
     const scriptChunks = splitScriptByPhase(finalScript, phases);
     const numBatches = scriptChunks.length;
 
+    // ── Build or retrieve blueprint ─────────────────────────────
+    let blueprint;
+    let freshProject = project; // default to what we already have
+
     if (currentBatch === 0) {
       const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
       for (const s of oldScenes) {
@@ -398,33 +402,45 @@ ${finalScript}
       const analysis = await callGemini(analysisPrompt, 0.6);
 
       const storyAnalysis = analysis.story_analysis || analysis;
+
+      // Build blueprint in memory — NO re-read needed
+      blueprint = {
+        story_analysis: storyAnalysis,
+        phases: phases.map(p => ({ name: p.name, purpose: p.purpose, scene_count: p.scenes })),
+        total_target_scenes: totalTargetScenes,
+        niche_profile: nicheProfile,
+        scenes: []
+      };
+
       await base44.asServiceRole.entities.Projects.update(project_id, {
         status: "scene_breakdown",
         current_step: 5,
-        scene_blueprint: JSON.stringify({
-          story_analysis: storyAnalysis,
-          phases: phases.map(p => ({ name: p.name, purpose: p.purpose, scene_count: p.scenes })),
-          total_target_scenes: totalTargetScenes,
-          niche_profile: getNicheDirectorProfile(niche),
-          scenes: []
-        }),
+        scene_blueprint: JSON.stringify(blueprint),
         character_descriptions: storyAnalysis.characters
           ? JSON.stringify(storyAnalysis.characters)
           : project.character_descriptions
       });
 
+      // Update freshProject with character data we just saved
+      freshProject = {
+        ...project,
+        character_descriptions: storyAnalysis.characters
+          ? JSON.stringify(storyAnalysis.characters)
+          : project.character_descriptions
+      };
+
       console.log(`✓ Story analysis complete`);
       console.log(`  Theme: ${storyAnalysis.central_theme}`);
       console.log(`  Characters: ${storyAnalysis.characters?.map(c => c.name).join(', ') || 'None identified'}`);
       console.log(`  Motifs: ${storyAnalysis.recurring_visual_motifs?.join(', ') || 'N/A'}`);
-    }
-
-    const freshProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
-    let blueprint;
-    try {
-      blueprint = JSON.parse(freshProject.scene_blueprint);
-    } catch (e) {
-      return Response.json({ error: 'Scene blueprint not found. Run batch 0 first.' }, { status: 400 });
+    } else {
+      // Subsequent batch calls — read blueprint from DB
+      freshProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
+      try {
+        blueprint = JSON.parse(freshProject.scene_blueprint);
+      } catch (e) {
+        return Response.json({ error: 'Scene blueprint not found. Run batch 0 first.' }, { status: 400 });
+      }
     }
 
     const storyAnalysis = blueprint.story_analysis;
