@@ -9,10 +9,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
  */
 async function callGemini(prompt, temperature = 0.7) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
-  
-  // Implementation of exponential backoff for reliability
   let retries = 0;
-  const maxRetries = 5;
+  const maxRetries = 3; // Reduced for faster failure feedback
   
   while (retries < maxRetries) {
     try {
@@ -33,16 +31,31 @@ async function callGemini(prompt, temperature = 0.7) {
       );
 
       if (!response.ok) {
-        throw new Error(`Gemini status: ${response.status}`);
+        const errBody = await response.text();
+        throw new Error(`Gemini status: ${response.status} - ${errBody}`);
       }
 
       const data = await response.json();
-      const rawText = data.candidates[0].content.parts[0].text;
-      return JSON.parse(rawText);
+      if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+        throw new Error("Gemini returned an empty response.");
+      }
+
+      let rawText = data.candidates[0].content.parts[0].text;
+      
+      // JSON RECOVERY: Remove markdown code blocks if present
+      rawText = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
+
+      try {
+        return JSON.parse(rawText);
+      } catch (parseErr) {
+        console.error("JSON Parse failed. Raw text snippet:", rawText.substring(0, 100));
+        throw new Error("AI returned invalid JSON format.");
+      }
     } catch (e) {
       retries++;
+      console.warn(`⚠️ Gemini attempt ${retries} failed: ${e.message}`);
       if (retries === maxRetries) throw e;
-      await new Promise(r => setTimeout(r, Math.pow(2, retries) * 1000));
+      await new Promise(r => setTimeout(r, 2000)); // Fixed 2s wait for retries
     }
   }
 }
@@ -52,19 +65,17 @@ async function callGemini(prompt, temperature = 0.7) {
 function cleanScriptText(text) {
   if (!text) return "";
   return text
-    .replace(/\[[^\]]*\]/gi, '') // Remove brackets
+    .replace(/\[[^\]]*\]/gi, '') 
     .replace(/^(VOICEOVER|NARRATOR|VO|SOUND|MUSIC|SFX|SCENE|V\.?O\.?)\s*:\s*/gim, '')
-    .replace(/\([^)]*\)/gi, '') // Remove parentheses (directorial notes)
-    .replace(/\*/g, '') // Remove markdown bold/italic
+    .replace(/\([^)]*\)/gi, '') 
+    .replace(/\*/g, '') 
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
 function cleanNarrationText(text) {
   if (!text) return "";
-  return text
-    .replace(/\s+/g, ' ') // Collapse multiple spaces
-    .trim();
+  return text.replace(/\s+/g, ' ').trim();
 }
 
 // ── Visual Style Overrides ────────────────────────────────────────
@@ -72,12 +83,8 @@ function cleanNarrationText(text) {
 function getStyleCharacterDirective(visualStyle) {
   const directives = {
     skeleton_protagonist: `
-**🦴 MANDATORY CHARACTER OVERRIDE — SKELETON PROTAGONIST STYLE:**
-The MAIN CHARACTER in EVERY scene is a photorealistic transparent skeleton with:
-- A clear glass-like semi-transparent humanoid body shell.
-- Glossy ivory bones visible through the torso.
-- Big round expressive amber eyes in the skull sockets.
-- The skeleton is the RELATABLE HERO, not scary or horror.
+**MANDATORY STYLE OVERRIDE:**
+The protagonist is a photorealistic transparent skeleton with glossy ivory bones inside a glass-like humanoid shell and expressive amber eyes.
 `
   };
   return directives[visualStyle] || '';
@@ -144,7 +151,6 @@ Deno.serve(async (req) => {
     const { project_id, batch_index, selected_hook } = await req.json();
     const currentBatch = batch_index || 0;
 
-    // Fetch project and script
     const [project] = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
@@ -152,32 +158,49 @@ Deno.serve(async (req) => {
     const script = allScripts.find(s => s.version === 'final_aggregated');
     if (!script?.full_script) return Response.json({ error: 'No script found' }, { status: 400 });
 
-    const finalScript = selected_hook ? `${selected_hook}. ${cleanScriptText(script.full_script).replace(selected_hook, "")}` : cleanScriptText(script.full_script);
+    const cleanedScript = cleanScriptText(script.full_script);
+    const finalScript = selected_hook ? `${selected_hook}. ${cleanedScript.replace(selected_hook, "")}` : cleanedScript;
     
-    // Setup calculations
     const totalTargetScenes = Math.max(8, Math.round(((project.video_duration_minutes || 1) * 60) / 8));
     const phases = calculatePhaseAllocation(totalTargetScenes);
     const scriptChunks = splitScriptByPhase(finalScript, phases);
 
     // ── BATCH 0: STORY ANALYSIS (The Brain) ───────────────────────
     if (currentBatch === 0) {
-      console.log("🎬 STARTING: Analyzing Story...");
-      
-      // Cleanup old scenes
+      console.log("🎬 STEP 1: Cleaning up previous scenes...");
       const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-      for (const s of oldScenes) await base44.asServiceRole.entities.Scenes.delete(s.id);
+      if (oldScenes.length > 0) {
+        console.log(`🗑️ Deleting ${oldScenes.length} existing scenes...`);
+        for (const s of oldScenes) await base44.asServiceRole.entities.Scenes.delete(s.id);
+      }
 
+      console.log("🎬 STEP 2: Requesting Story Analysis from Gemini...");
       const nicheProfile = getNicheDirectorProfile(project.niche);
       const styleDirective = getStyleCharacterDirective(project.visual_style);
 
-      const analysisPrompt = `Analyze this script for a film director: ${finalScript}. Niche: ${project.niche}. 
-      Respond with JSON: { "story_analysis": { "central_theme": "...", "characters": [{"name": "...", "visual_description": "..."}], "visual_world": "...", "recurring_visual_motifs": [], "color_arc": "..." } }`;
+      const analysisPrompt = `
+        You are a film director. Analyze this script: "${finalScript}".
+        Niche: ${project.niche}. 
+        Niche Style: ${nicheProfile.visual_world}.
+        ${styleDirective}
+
+        Respond ONLY with a JSON object:
+        { 
+          "story_analysis": { 
+            "central_theme": "The core truth", 
+            "characters": [{"name": "name", "visual_description": "detailed look"}], 
+            "visual_world": "textures and lighting", 
+            "recurring_visual_motifs": ["motif1"], 
+            "color_arc": "how colors change" 
+          } 
+        }
+      `;
 
       const analysis = await callGemini(analysisPrompt, 0.6);
-      const storyAnalysis = analysis.story_analysis || analysis;
+      console.log("🎬 STEP 3: Analysis received, saving blueprint...");
 
       const blueprint = {
-        story_analysis: storyAnalysis,
+        story_analysis: analysis.story_analysis || analysis,
         phases: phases,
         total_target_scenes: totalTargetScenes,
         niche_profile: nicheProfile,
@@ -187,42 +210,48 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.Projects.update(project_id, {
         status: "scene_breakdown",
         scene_blueprint: JSON.stringify(blueprint),
-        character_descriptions: JSON.stringify(storyAnalysis.characters || [])
+        character_descriptions: JSON.stringify(blueprint.story_analysis.characters || [])
       });
 
+      console.log("✅ Batch 0 complete.");
       return Response.json({ success: true, next_batch: 1, total_batches: scriptChunks.length });
     }
 
     // ── BATCH 1+: SCENE BUILDING (The Execution) ──────────────────
+    console.log(`🎬 BATCH ${currentBatch}: Loading blueprint...`);
     
-    // FIX: Retry logic to handle the "Blueprint not found" error
     let blueprint;
-    let retries = 0;
-    while (retries < 3) {
-      const [latestProject] = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
-      if (latestProject?.scene_blueprint) {
-        blueprint = JSON.parse(latestProject.scene_blueprint);
+    let fetchRetries = 0;
+    while (fetchRetries < 5) {
+      const [latest] = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
+      if (latest?.scene_blueprint) {
+        blueprint = JSON.parse(latest.scene_blueprint);
         break;
       }
-      console.log("⏳ Blueprint not ready, waiting 1 second...");
-      await new Promise(r => setTimeout(r, 1000));
-      retries++;
+      console.log(`⏳ Blueprint not ready (attempt ${fetchRetries + 1}), waiting...`);
+      await new Promise(r => setTimeout(r, 1500));
+      fetchRetries++;
     }
 
-    if (!blueprint) throw new Error("Scene blueprint still missing after retries. Try waiting a moment.");
+    if (!blueprint) throw new Error("Database sync error: Scene blueprint not found.");
 
     const currentChunk = scriptChunks[currentBatch];
-    if (!currentChunk) return Response.json({ success: true, done: true });
-
     const sceneOffset = (await base44.asServiceRole.entities.Scenes.filter({ project_id })).length;
     
-    const breakdownPrompt = `Create exactly ${currentChunk.scenes} cinematic scenes for: "${currentChunk.text}". 
-    Theme: ${blueprint.story_analysis.central_theme}. World: ${blueprint.story_analysis.visual_world}. 
-    Respond with JSON: { "scenes": [{ "scene_number": ${sceneOffset + 1}, "narration_text": "...", "visual_concept": "...", "shot_type": "...", "mood": "..." }] }`;
+    console.log(`🎬 BATCH ${currentBatch}: Generating ${currentChunk.scenes} scenes...`);
+
+    const breakdownPrompt = `
+      Create exactly ${currentChunk.scenes} cinematic scenes for this script segment: "${currentChunk.text}".
+      Director Analysis: ${blueprint.story_analysis.central_theme}.
+      Visual World: ${blueprint.story_analysis.visual_world}.
+      
+      Return JSON: { "scenes": [{ "scene_number": ${sceneOffset + 1}, "narration_text": "text from segment", "visual_concept": "detailed cinematic view", "shot_type": "CU/MCU/WS", "mood": "feeling" }] }
+    `;
 
     const result = await callGemini(breakdownPrompt, 0.7);
 
     if (result.scenes) {
+      console.log(`🎬 BATCH ${currentBatch}: Saving ${result.scenes.length} scenes to database...`);
       for (const scene of result.scenes) {
         await base44.asServiceRole.entities.Scenes.create({
           project_id,
@@ -235,17 +264,17 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Save progress back to blueprint
     const isDone = currentBatch >= scriptChunks.length - 1;
     await base44.asServiceRole.entities.Projects.update(project_id, {
       scene_blueprint: JSON.stringify(blueprint),
       status: isDone ? "breakdown_complete" : "scene_breakdown"
     });
 
+    console.log(`✅ Batch ${currentBatch} complete.`);
     return Response.json({ success: true, done: isDone, current_batch: currentBatch });
 
   } catch (error) {
-    console.error("❌ Error:", error.message);
+    console.error("❌ Fatal Error:", error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
