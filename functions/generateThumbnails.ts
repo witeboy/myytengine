@@ -187,11 +187,19 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════════════
     // LOAD DATA (parallel) — now includes script for anchors
     // ══════════════════════════════════════════════════════════════
-    const [brandResult, topicResult, scriptResult] = await Promise.allSettled([
+    const [brandResult, topicResult, scriptResult, projectResult] = await Promise.allSettled([
       base44.entities.BrandIdentities.list(),
       base44.entities.Topics.filter({ project_id }),
-      base44.entities.Scripts.filter({ project_id })
+      base44.entities.Scripts.filter({ project_id }),
+      base44.asServiceRole.entities.Projects.filter({ id: project_id })
     ]);
+
+    let visualStyle = 'cinematic_realistic';
+    let projectNiche = '';
+    if (projectResult.status === 'fulfilled' && projectResult.value[0]) {
+      visualStyle = projectResult.value[0].visual_style || 'cinematic_realistic';
+      projectNiche = projectResult.value[0].niche || '';
+    }
 
     let thumbTone = 'cinematic documentary';
     let brandColors = '';
@@ -243,240 +251,286 @@ SCRIPT CONTENT (extract anchors from this):
 ${scriptContext}`
       : '';
 
-    const prompt = `You are the world's #1 YouTube thumbnail psychologist, visual architect, and script analyst. You design using the THREE-ELEMENT COMPOSITION RULE used by MrBeast, Veritasium, and top creators. Every thumbnail you create is VISUALLY ANCHORED to the script's actual content.
+    const prompt = `You are the world's #1 YouTube thumbnail designer. You study what makes thumbnails generate millions of clicks by analyzing top creators like MrBeast, Veritasium, The Futur, and niche-specific channels.
 
 VIDEO TITLE: "${video_title}"
+VIDEO NICHE: ${projectNiche || 'general'}
+VISUAL STYLE: ${visualStyle}
 BRAND TONE: ${thumbTone}
 ${brandColors ? `BRAND COLORS: ${brandColors}` : ''}
-${brandStyle ? `BRAND STYLE: ${brandStyle}` : ''}
 ${topicContext ? `VIDEO CONTEXT: ${topicContext}` : ''}
 ${scriptSection}
 
-CHANNEL TYPE: Faceless documentary/educational (no on-camera presenter)
+CHANNEL TYPE: Faceless documentary/educational — uses "${visualStyle}" visual style for videos
 IMAGE MODEL: Ideogram V3 (renders text natively — put text in "quotation marks")
 DIMENSIONS: 1920x1080 Full HD, 16:9 widescreen landscape
 
 ═══════════════════════════════════════
-STEP 0: SCRIPT ANCHOR EXTRACTION
+STEP 1: UNDERSTAND THE VIDEO
 ═══════════════════════════════════════
-Before designing ANY thumbnail, extract visual anchors from the title${scriptContext ? ', context, and script' : ' and context'}:
+Before designing anything, extract from the title${scriptContext ? ', context, and script' : ' and context'}:
 
-1. VILLAIN OBJECT: Physical thing causing harm (bank building, mortgage contract, credit card, algorithm, corporation, insurance denial, hidden fee, processed food, pharmaceutical company, etc.)
-2. VICTIM OBJECT: Physical thing being harmed (family home, savings jar, paycheck, small business, retirement fund, health, neighborhood, childhood dream, etc.)
-3. TRAP SYMBOL: Visual metaphor for the core trap (chains around house, cage around family, mousetrap with bait, sinking ship, cracking foundation, puppet strings, ticking time bomb, spider web, quicksand, etc.)
-4. SHOCK DATA: Specific number/percentage/timeline that creates visceral reaction ("30 years", "crashed 40%", "$0 equity", "2008", "$500K interest", etc.) — extract from script if available, estimate from title if not
-5. CONTRAST PAIR: Illusion vs reality (dream home vs foreclosure, safe investment vs crash, freedom vs 30 years debt, healthy label vs toxic ingredients, etc.)
-6. NICHE OBJECTS: 3-5 physical items this niche's viewers immediately recognize (for finance: house keys, mortgage papers, bank vault, APPROVED/DENIED stamps, dollar bills; for health: pills, hospital bed, test results; for tech: phone screen, server rack, broken lock, etc.)
-
-MANDATORY: At least ONE anchor object must be visible in EVERY thumbnail concept.
-"Shocked face + THEY LIED" = generic outrage = 6% CTR.
-"Shocked face gripping crumbling house deed + YOU OWN NOTHING" = specific fear = 12% CTR.
+1. CORE SUBJECT: What is this video actually about in 5 words?
+2. KEY VISUAL MOMENT: The single most visually powerful scene or concept from the script
+3. EMOTIONAL CORE: What should the viewer FEEL? (curiosity, fear, excitement, wonder, urgency, hope)
+4. NICHE OBJECTS: 3-5 physical items viewers of this niche immediately recognize
+5. TITLE KEYWORDS: The 2-3 most important words from the video title that MUST appear or be reflected in the thumbnail
 
 ═══════════════════════════════════════
-THE THREE-ELEMENT COMPOSITION RULE
+THUMBNAIL FORMAT TYPES (use variety)
 ═══════════════════════════════════════
-Every thumbnail has EXACTLY 3 elements. More = cognitive overload = scroll past.
-- ELEMENT 1 — SUBJECT: The image hook — MUST contain a script anchor object
-- ELEMENT 2 — TEXT: The cognitive itch (1-3 scroll-stopping words, topic-specific)
-- ELEMENT 3 — BACKGROUND: The visual separation layer (psychologically designed)
+Study these real formats from top-performing channels:
 
-═══════════════════════════════════════
-ELEMENT 2 — TEXT RULES (TOPIC-SPECIFIC)
-═══════════════════════════════════════
+FORMAT A — BOLD TEXT + OBJECT (like Veritasium "Asbestos", "White Gold", "$400,000,000"):
+- ONE powerful word or number dominates 40-60% of frame
+- Relevant object/scene fills background
+- Minimal design, maximum impact
+- Text IS the thumbnail
 
-PSYCHOLOGICAL CATEGORIES (use variety across 10 concepts):
+FORMAT B — BEFORE/AFTER CONTRAST (split screen, then vs now):
+- Left side: before state. Right side: after state
+- Arrow or divider between them
+- Bold contrasting colors (red vs green, dark vs bright)
+- Works for transformation stories, comparisons, reveals
 
-A — ANCHOR-SPECIFIC CURIOSITY GAP (4 of 10):
-Reference the villain_object or victim_object without fully explaining.
-- GOOD for mortgage: "YOU OWN NOTHING", "BANK'S HOUSE", "NOT YOURS"
-- GOOD for health: "YOUR DOCTOR KNEW", "PILL TRAP", "WRONG DOSE"
-- BAD (generic): "THEY LIED", "THEY KNEW", "IT'S OVER"
+FORMAT C — CHARACTER + BOLD OVERLAY (like The Futur "PACKAGE IT RIGHT", "NO MORE MAYBES"):
+- Character/person prominently placed (use the video's visual style character — ${visualStyle === 'skeleton_protagonist' ? 'the transparent glass skeleton' : visualStyle.includes('cartoon') || visualStyle.includes('low_poly') ? 'the cartoon/animated character' : 'a relevant person or figure'})
+- 2-4 word bold text overlay that captures the video's main point
+- Simple solid or gradient background
+- Text relates directly to the video title
 
-B — ANCHOR-SPECIFIC FORBIDDEN KNOWLEDGE (3 of 10):
-Reference the trap_symbol or shock_data.
-- GOOD for mortgage: "30 YEAR TRAP", "FAKE EQUITY", "$0 YOURS"
-- GOOD for diet: "POISON LABEL", "FDA LIED", "NOT FOOD"
-- BAD (generic): "STOP WATCHING", "I WAS WRONG"
+FORMAT D — DATA/NUMBER SHOCK (like "$50,000 RULE", "100K TO 1M", "50K TO 100K"):
+- A specific number, dollar amount, or statistic dominates
+- Supporting visual (chart, money, object) provides context
+- Works for finance, science, business content
+- Number extracted from script or title
 
-C — ANCHOR-SPECIFIC SHOCK / CONTRADICTION (3 of 10):
-State the illusion from the contrast_pair to create dissonance.
-- GOOD for mortgage: "DREAM HOME?", "SAFE INVESTMENT?"
-- BAD (generic): "IT'S FAKE", "THEY AGREED"
+FORMAT E — QUESTION/CHALLENGE (like "WHY BUY?", "Am I Retiring?"):
+- A provocative question from the title or script
+- Character looking puzzled, thinking, or reacting
+- Clean background, text is large and readable
+- Creates immediate curiosity
 
-HARD RULES:
-1. MAX 3 WORDS (ideal: 2). Never exceed 4.
-2. ALL CAPS always
-3. Never reveal the full answer
-4. BANNED: "AMAZING", "INCREDIBLE", "YOU WON'T BELIEVE", "SHOCKING TRUTH"
-5. Power verbs: STOP, HIDE, BROKE, LIED, KNEW, LEFT, GONE, CAUGHT, LEAKED, EXPOSED, TRAP, OWN, STOLE, FAKE
-6. Pronouns > names EXCEPT when the entity IS the hook: "THE BANK LIED" > "THEY LIED" for finance
-7. Positive topic? FLIP negative
-8. Must hint at specific topic even without context
-9. TOPIC ANCHOR RULE: At least 6 of 10 text options MUST contain a word from the video's specific subject matter. Pure emotion-only text limited to MAX 4 of 10.
-10. SPECIFICITY TEST: "Would this work on 50 different videos?" If YES → too generic → rewrite.
+FORMAT F — SCENE SNAPSHOT (key moment from the story):
+- The single most dramatic visual moment from the script
+- Rendered in the video's visual style (${visualStyle})
+- Minimal or no text — the scene tells the story
+- Cinematic composition, movie-poster quality
 
-TEXT COLOR + BACKGROUND COLOR PAIR (mandatory):
-| Text Color | Background MUST Be | Never As BG |
-|---|---|---|
-| Vivid crimson red | Deep teal / dark cyan | YouTube red, black |
-| Electric neon yellow | Deep purple / violet | White, grey |
-| Pure white | Rich teal / deep navy | YouTube white/grey |
-| Hot amber orange | Deep indigo / cobalt | Red, grey |
-| Neon lime green | Deep magenta / dark berry | Black |
+FORMAT G — SYMBOLIC OBJECT (like the glowing key, the mousetrap, the cracking foundation):
+- One powerful symbolic object fills the frame
+- Dramatic lighting, shallow depth of field
+- 1-2 words of text if needed
+- Object represents the video's core concept
 
-TEXT DESIGN: color, outline (very thick black / dark navy), shadow (heavy drop shadow / colored glow), container (raw/banner/stamp/badge/glow), position (upper-left/upper-center/bottom-center/across-center), size (massive/large), font (Impact/Bebas Neue/bold condensed)
-
-═══════════════════════════════════════
-ELEMENT 1 — SUBJECT RULES (WITH ANCHOR)
-═══════════════════════════════════════
-
-SUBJECT HOOK TYPES (MUST include script anchor object):
-
-- exaggerated_emotion_WITH_ANCHOR: Extreme close-up face WITH script-relevant object visible — holding it, reflected in eyes, looming behind, being crushed by it. Face = emotion. Anchor = topic context. "Shocked face" alone = REJECTED. "Shocked face gripping [villain_object]" = APPROVED.
-- scale_shock_WITH_ANCHOR: villain_object or trap_symbol at unnatural scale next to victim_object. Giant bank stamp crushing tiny house. Massive chain around small family.
-- anchor_object_spotlight: villain_object or trap_symbol as dramatic hero, lit like evidence. Mortgage contract with glowing clause, house keys in mousetrap, sinking house.
-- environmental_anchor: contrast_pair as split environment. Left: dream. Right: nightmare. Above: pristine. Below: rotting.
-- For FACELESS channels: objects, symbolic items, environments, hands gripping anchor objects, silhouettes with anchor props — the anchor IS the subject.
-
-POSITIONING — RULE OF THIRDS:
-- LEFT or RIGHT vertical third line — NEVER center
-- Subject and text in OPPOSING quadrants
+FORMAT H — DIAGRAM/EXPLAINER (arrows, labels, simple visual logic):
+- Simple visual explanation of the video's concept
+- Arrows, comparison boxes, labeled elements
+- Clean, educational feel
+- Works for how-to, explainer, step-by-step content
 
 ═══════════════════════════════════════
-ELEMENT 3 — BACKGROUND RULES
+VISUAL STYLE MATCHING
 ═══════════════════════════════════════
+CRITICAL: The thumbnail must match the video's visual style.
 
-5 MANDATORY QUESTIONS:
-1. COLOR: From complementary pair table (opposite of text)
-2. BLUR: Heavy Gaussian / cinematic bokeh
-3. VIGNETTE: Heavy dark edges ALL sides
-4. PSYCHOLOGY: What it communicates (danger=embers, mystery=fog, wealth=gold, isolation=emptiness)
-5. ANCHOR ECHO: Can a subtle anchor appear in background? (faint house silhouette in fog, chain texture in vignette, faint dollar signs in bokeh) — reinforces topic WITHOUT a 4th element
-6. AVOIDANCE: No pure RED, WHITE, or dark GREY backgrounds
+${({
+  skeleton_protagonist: `SKELETON PROTAGONIST STYLE:
+- The transparent glass skeleton with ivory bones and expressive brown/amber eyeballs should appear in thumbnails where characters are needed
+- Show the skeleton interacting with the topic (holding objects, in dramatic situations, reacting to events)
+- The skeleton IS the brand — viewers recognize it instantly
+- Full body or waist-up, never just a skull. Always with expressive amber eyeballs
+- Combine skeleton with bold text overlays and photorealistic environments for maximum impact
+- Other people in frame should be photorealistic humans contrasting with the glass skeleton`,
+
+  cinematic_realistic: `CINEMATIC REALISTIC STYLE:
+- Photorealistic compositions with Hollywood-grade cinematic lighting
+- Dramatic three-point lighting, rim light separation, volumetric atmosphere
+- Characters look like real people in movie stills — skin texture, real clothing, natural hair
+- Text overlays should feel like movie titles or documentary title cards
+- Moody color grading: teal and orange, warm amber, cool blue`,
+
+  photorealistic_4k: `PHOTOREALISTIC 4K STYLE:
+- DSLR photograph quality — razor sharp, natural lighting, editorial feel
+- Characters and objects look like professional National Geographic photography
+- Clean, real, no stylization — the power comes from reality itself
+- Text overlays should be clean and modern, like magazine covers or news graphics
+- Natural color palette, no dramatic color grading`,
+
+  anime: `ANIME STYLE:
+- Studio Ghibli meets modern anime — vibrant colors, expressive eyes, clean linework
+- Characters have anime proportions: large eyes, stylized hair, cel-shaded skin
+- Backgrounds are painted anime art with atmospheric perspective
+- Text can be bold and colorful, matching anime energy — think manga title pages
+- Vivid saturated colors, dramatic expressions, dynamic poses`,
+
+  cinematic_anime: `CINEMATIC ANIME STYLE:
+- Makoto Shinkai / Ufotable quality — dramatic god rays, ultra-detailed backgrounds
+- Anime characters with cinematic lighting: rim lights, volumetric atmosphere, rich color grading
+- Widescreen epic compositions, film grain overlay, anamorphic lens feel
+- Text overlays should feel like anime movie posters — bold, dramatic, integrated into the scene
+- Deep shadows, vibrant highlights, atmospheric depth`,
+
+  cartoon_2d: `2D CARTOON STYLE:
+- Bold clean outlines, vibrant flat colors, Cartoon Network / Disney Channel quality
+- Characters with exaggerated proportions, big expressive faces, dynamic poses
+- Playful simplified backgrounds with bright cheerful colors
+- Text overlays should be big, bold, fun — matching cartoon energy with thick outlines
+- Think: educational cartoon channels with character + bold text + simple colorful scene`,
+
+  picstory_cocomelon: `COCOMELON / KIDS 3D STYLE:
+- Adorable soft rounded 3D characters with big eyes, pastel colors, toy-like proportions
+- Warm studio lighting, cheerful atmosphere, child-safe wholesome imagery
+- Smooth plastic-like textures, gentle soft shadows
+- Text overlays should be friendly, rounded fonts, bright primary colors
+- Nursery rhyme aesthetic — parents should feel safe clicking`,
+
+  cinematic_picstory: `CINEMATIC PIXAR STYLE:
+- Pixar / DreamWorks quality 3D characters with dramatic studio lighting
+- Expressive stylized faces, subsurface scattering on skin, rich color grading
+- Depth of field with bokeh, volumetric atmosphere, emotional cinematography
+- Text overlays should feel like animated movie posters — polished and professional
+- Think: Pixar movie poster energy with a thumbnail's boldness`,
+
+  oil_painting: `OIL PAINTING STYLE:
+- Visible thick impasto brushstrokes, rich pigment texture, museum masterpiece quality
+- Classical fine art composition with Rembrandt chiaroscuro lighting
+- Warm varnish glow, painterly soft edges, canvas grain visible
+- Text overlays should feel like gallery exhibition titles — elegant yet bold
+- Deep rich colors, warm tones, classical drama`,
+
+  watercolor: `WATERCOLOR STYLE:
+- Soft translucent washes on textured paper, visible paper grain, delicate bleeding edges
+- Gentle color harmonies, luminous transparency where white paper shows through
+- Botanical illustration quality, soft and ethereal atmosphere
+- Text overlays should be clean and modern to contrast with the soft painterly background
+- Pastel and gentle tones, dreamy atmospheric quality`,
+
+  comic_book: `COMIC BOOK STYLE:
+- Bold black ink outlines, halftone dot shading, vibrant saturated colors
+- Marvel / DC Comics quality — dynamic action poses, dramatic foreshortening
+- Strong action lines, Ben-Day dots, professional sequential art energy
+- Text overlays should feel like comic book title cards — bold, impactful, with action energy
+- POW/BAM energy without being cheesy — dramatic and bold`,
+
+  humpty_dumpty: `STORYBOOK ILLUSTRATION STYLE:
+- Whimsical hand-drawn quality with gentle watercolor washes, fairy tale aesthetic
+- Rounded friendly character designs, warm nostalgic nursery rhyme atmosphere
+- Soft golden lighting, vintage children's book illustration quality
+- Text overlays should feel like storybook titles — charming, warm, inviting
+- Maurice Sendak / Beatrix Potter inspired warmth`,
+
+  harry_potter: `MAGICAL FANTASY STYLE:
+- Warm candlelight, gothic castle interiors, mysterious atmosphere
+- Rich jewel-tone colors: deep burgundy, gold, emerald with magical golden particles
+- Weathered leather and parchment textures, enchanted artifacts with luminous glow
+- Text overlays should feel like magical inscriptions — gold text with ethereal glow effects
+- Cozy yet mysterious British boarding school aesthetic`,
+
+  '3d_whiteboard_cartoon': `3D WHITEBOARD CARTOON STYLE:
+- Clean bold black ink outlines, flat cheerful color fills, YouTube explainer aesthetic
+- Characters with friendly exaggerated proportions — larger heads, expressive eyes, simple noses
+- Clean isometric environments, simplified recognizable settings
+- Text overlays should be bold, clean, educational — like whiteboard annotations
+- Approachable professional visual style — think popular finance/business explainer channels`,
+
+  low_poly_3d_cartoon: `LOW-POLY 3D CARTOON STYLE:
+- All geometry from visible flat-shaded polygons and triangular facets
+- Exaggerated proportions: oversized heads, angular noses, large round expressive eyes
+- Bright saturated colors, matte clay-toy quality, warm and inviting
+- Text overlays should be bold and clean against the colorful low-poly backgrounds
+- Think: the popular personal finance cartoon channels with character + big text + money visuals`
+})[visualStyle] || `CINEMATIC STYLE:
+- Professional photorealistic compositions with dramatic lighting
+- Moody, cinematic, movie-quality feel
+- Text overlays should feel like movie titles
+- Strong color grading and atmospheric depth`}
 
 ═══════════════════════════════════════
-DEAD ZONE ENFORCEMENT
+TEXT OVERLAY RULES
 ═══════════════════════════════════════
-BOTTOM-RIGHT QUADRANT: Always empty. YouTube timestamp zone.
-All critical elements in UPPER TWO-THIRDS and LEFT TWO-THIRDS.
-
-═══════════════════════════════════════
-CONCEPT TYPES (use ALL 10):
-═══════════════════════════════════════
-A=REVELATION, B=WARNING, C=COMPARISON, D=EMOTION CLOSE-UP, E=DATA SHOCK,
-F=FORBIDDEN, G=TRANSFORMATION, H=SYMBOL, I=ENVIRONMENT, J=ABSTRACT METAPHOR
-
-═══════════════════════════════════════
-IMAGE PROMPT — 5-BLOCK STRUCTURE
-═══════════════════════════════════════
-
-BLOCK 1 — OPENING:
-"1920x1080 Full HD 16:9 widescreen landscape YouTube thumbnail with exactly three visual elements — one subject containing a [anchor type] visual anchor, one bold text overlay, one psychologically designed background. Graphic design composition with bold typography."
-
-BLOCK 2 — TEXT (write FIRST — the star):
-"Dominant text: massive bold [font] text reading "[EXACT WORDS]" in [text_color_name] with [outline] and [shadow], [container if any], positioned at [position], filling [one-third for 2 words / one-quarter for 3 words] of frame width. Area behind text is [background_color_pair] ensuring readability."
-
-BLOCK 3 — SUBJECT WITH ANCHOR (opposite to text):
-"Subject on [left-third / right-third] gridline: [description by hook_type]:
-- exaggerated_emotion_WITH_ANCHOR: extreme close-up of [archetype] with [facial muscles], [eye direction]. CRITICALLY: [anchor object described — what it is, how it's integrated: gripped in hands, visible over shoulder, looming behind, reflected in eyes]. The [anchor] identifies this as a [topic] video. [Lighting details].
-- scale_shock_WITH_ANCHOR: [anchor at unnatural scale] next to [reference]. Size difference immediately jarring. Anchor connects to specific topic.
-- anchor_object_spotlight: [anchor as hero object] in razor-sharp focus, dramatic lighting, everything else blurred. Object tells the story.
-- environmental_anchor: [contrast_pair split] with extreme depth. Environment IS the story.
-For faceless: anchor objects, symbolic items, hands, silhouettes, environments."
-
-BLOCK 4 — BACKGROUND WITH ANCHOR ECHO:
-"Background: dominant [background_color_pair] [gradient/wash]. Heavy Gaussian blur creating bokeh depth. [Atmosphere: smoke/embers/fog/particles]. [Anchor echo: subtle anchor silhouette/texture through atmosphere]. Heavy vignette all edges. No YouTube UI colors."
-
-BLOCK 5 — STYLE + DEAD ZONE:
-"Cinematic dramatic lighting. Bottom-right quadrant clear. All critical visuals in upper two-thirds and left two-thirds. Ultra high resolution, professional quality."
-
-RULES: NO hex codes. NO percentages. NO pixel values. Named colors + spatial language. 200+ words per prompt. Three elements + anchor. Text in "QUOTATION MARKS" for Ideogram.
+1. MAX 4 words (ideal: 2-3). ALL CAPS.
+2. Text must DIRECTLY relate to the video title — a viewer should connect the thumbnail text to the title
+3. Use the video title's own keywords when possible, not generic shock words
+4. BANNED generic text: "THEY LIED", "IT'S OVER", "SHOCKING", "YOU WON'T BELIEVE" (unless the title literally says this)
+5. GOOD text examples tied to titles:
+   - Title "How Mortgages Really Work" → Text: "YOUR MORTGAGE" or "30 YEAR TRAP" or "NOT YOURS"
+   - Title "Why Diamond Drills Cost Millions" → Text: "$2M DRILL" or "DIAMOND CORE" or "WHY SO MUCH?"
+   - Title "The Psychology Behind Buying" → Text: "WHY BUY?" or "YOUR BRAIN" or "BUYING TRAP"
+6. Text color: vivid (crimson, electric yellow, white, neon green, hot orange)
+7. Text must have thick outline and drop shadow for readability
+8. Font: Impact, Bebas Neue, or bold condensed sans-serif
+9. Position: upper area preferred, never in bottom-right (YouTube timestamp zone)
 
 ═══════════════════════════════════════
-OUTPUT FORMAT (EXACT JSON)
+COMPOSITION RULES
 ═══════════════════════════════════════
+- Maximum 3 visual elements (subject + text + background)
+- Dead zone: bottom-right quadrant always empty
+- Text and subject in opposing areas of frame
+- Background: simple, supports mood, never distracting
+- NO hex codes, NO percentages, NO pixel values in prompts
+- Use named colors and spatial language
 
+═══════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════
 {
-  "script_anchors": {
-    "villain_object": "specific physical villain",
-    "victim_object": "specific physical victim",
-    "trap_symbol": "visual metaphor described visually",
-    "shock_data": "specific number/percentage/timeline",
-    "contrast_pair": { "illusion": "what people believe", "reality": "what's true" },
-    "niche_objects": ["obj1", "obj2", "obj3", "obj4", "obj5"]
+  "video_analysis": {
+    "core_subject": "5-word summary",
+    "key_visual_moment": "most powerful scene from script",
+    "emotional_core": "primary emotion",
+    "niche_objects": ["obj1", "obj2", "obj3"],
+    "title_keywords": ["word1", "word2"]
   },
-  "ctr_strategy": "Overall psychological approach anchored to script content",
   "thumbnails": [
     {
       "rank": 1,
-      "concept_type": "revelation/warning/comparison/emotion_closeup/data_shock/forbidden/transformation/symbol/environment/abstract",
-      "psychological_trigger": "curiosity_gap/fear/forbidden_knowledge/social_proof/emotional_contrast",
-      "text_category": "curiosity_gap / forbidden_knowledge / shock_contradiction",
-      "concept_description": "Three elements + anchor working together",
-      "text_overlay": "MAX 3 WORDS IN CAPS",
-      "topic_anchor_word": "The topic-specific word in this text, or 'emotion_only'",
-      "specificity_test_passed": true,
+      "format": "A/B/C/D/E/F/G/H",
+      "concept_description": "What this thumbnail shows and why it works",
+      "text_overlay": "MAX 4 WORDS CAPS",
+      "title_connection": "How this text connects to the video title",
       "text_design": {
         "color": "vivid color name",
-        "outline": "very thick black / thick dark navy",
-        "shadow": "heavy black drop shadow / colored glow",
-        "container": "raw / banner / stamp / badge / glow",
-        "container_color": "color name or null",
-        "position": "upper-left / upper-center / bottom-center / across-center",
+        "outline": "thick black outline",
+        "shadow": "heavy drop shadow",
+        "position": "upper-left / upper-center / across-center",
         "size": "massive / large",
-        "font_style": "Impact / Bebas Neue / bold condensed sans-serif"
+        "font_style": "Impact / Bebas Neue / bold condensed"
       },
       "subject_design": {
-        "hook_type": "exaggerated_emotion_WITH_ANCHOR / scale_shock_WITH_ANCHOR / anchor_object_spotlight / environmental_anchor",
-        "description": "Subject + anchor object — both described",
-        "anchor_object": "The specific script anchor visible",
-        "anchor_placement": "held / reflected / looming / over shoulder / hero object / split environment",
-        "grid_position": "left-third / right-third",
-        "eye_direction": "at camera / at anchor / at text",
-        "crop": "extreme close-up / chest-up / wide"
+        "description": "What appears in the thumbnail — using ${visualStyle} visual style",
+        "position": "left-third / right-third / center",
+        "style_match": "How this matches the video's ${visualStyle} style"
       },
       "background_design": {
-        "dominant_color": "complementary color from pair table",
-        "blur": "heavy Gaussian bokeh",
-        "vignette": "heavy all edges",
-        "atmosphere": "smoke / embers / fog / particles / gold shimmer / vast emptiness / clean",
-        "anchor_echo": "subtle anchor silhouette/texture/pattern or none",
-        "psychological_purpose": "danger / mystery / wealth / isolation / revelation / urgency"
+        "color": "complementary to text color",
+        "style": "gradient / solid / scene / blurred environment",
+        "mood": "what it communicates"
       },
-      "script_anchor_used": "villain_object / victim_object / trap_symbol / shock_data / contrast_pair",
-      "anchor_placement": "How anchor appears in subject + background",
-      "topic_identifiable_without_text": "Can viewer identify topic from image alone? YES + reason / NO",
-      "background_color_pair": "text color ON background color",
-      "focal_point": "Primary visual anchor point",
-      "visual_metaphor": "Symbolic meaning",
-      "color_scheme": "3 named colors: text, subject accent, background",
-      "style_reference": "cinematic / minimal / documentary / dramatic / gritty",
+      "visual_metaphor": "Symbolic meaning if any",
+      "color_scheme": "text color, accent color, background color",
+      "style_reference": "cinematic / minimal / documentary / bold / educational",
       "ctr_score": 9,
-      "why_it_stops_scrolling": "Psychological mechanism — which bias + how anchor makes it topic-specific",
-      "faceless_adaptation": "How it works without a presenter face — what anchor replaces the face",
-      "dead_zone_clear": true,
-      "three_element_count": 3,
-      "image_prompt": "200+ words: Block 1 (opening+anchor type) → Block 2 (text in quotes) → Block 3 (subject WITH anchor object described) → Block 4 (background+anchor echo) → Block 5 (style+dead zone). Named colors. Spatial language.",
-      "negative_prompt": "blurry, low quality, pixelated, watermark, distorted text, misspelled text, illegible text, small text, text overlap on face, more than three visual elements, cluttered, pure red background, pure white background, dark grey background, jpeg artifacts, text in bottom right, generic expression without context object, no topic anchor visible"
+      "why_it_works": "Why a viewer would click this",
+      "faceless_adaptation": "How it works without a presenter face",
+      "image_prompt": "200+ word Ideogram prompt. Start with: 1920x1080 Full HD 16:9 widescreen landscape YouTube thumbnail. Text in QUOTATION MARKS for Ideogram rendering. Use named colors, spatial language, NO hex codes. Describe the complete scene matching ${visualStyle} visual style.",
+      "negative_prompt": "blurry, low quality, pixelated, watermark, distorted text, misspelled text, small text, cluttered, jpeg artifacts, text in bottom right"
     }
   ]
 }
 
 REQUIREMENTS:
-- FIRST extract script_anchors, THEN design all 10 concepts using those anchors
-- ALL 10 concepts use ALL 10 different concept types
-- EVERY concept has a visible script anchor object in the subject or background
-- EVERY image_prompt follows the 5-BLOCK structure with anchor in Block 3
-- EVERY text_overlay is MAX 3 words, ALL CAPS, topic-specific
-- At least 6 of 10 text overlays contain a topic-specific word (not emotion-only)
-- EVERY background uses complementary color pair + optional anchor echo
-- EVERY concept scores 8+ CTR
-- Dead zone (bottom-right) clear on ALL concepts
-- Text and subject in OPPOSING quadrants on ALL concepts
-- Faceless channel — no presenter faces. Anchor objects, symbolic items, environments instead.
-- Variety: different text categories, subject hooks, background atmospheres, anchor objects
+- Generate 10 thumbnails using at least 5 DIFFERENT format types
+- EVERY text overlay must connect to the video title (not generic outrage)
+- EVERY thumbnail must match the "${visualStyle}" visual style where characters appear
+- At least 3 thumbnails should feature the video's character style (${visualStyle === 'skeleton_protagonist' ? 'the glass skeleton' : 'the video character'})
+- Include at least 1 data/number format, 1 question format, and 1 scene snapshot
+- All text must be readable, bold, and properly contrasted against background
+- Dead zone (bottom-right) clear on all concepts
+- Variety in formats, colors, compositions, and emotional approaches
 
-Generate 10 premium script-anchored thumbnail concepts now.`;
+Generate 10 thumbnails now.`;
 
     const result = await safeGeminiCall(prompt, 0.9);
 
