@@ -160,11 +160,11 @@ const styleMap = {
     negative: "modern, contemporary, bright fluorescent, cartoon, anime, flat colors, minimalist, sci-fi, futuristic, clinical, sterile"
   },
   "3d_whiteboard_cartoon": {
-    positive: "Clean 3D whiteboard cartoon style, bold consistent medium-thickness black ink outlines around all elements, bright cheerful slightly desaturated flat color fills with single-tone cel shading. Characters with friendly exaggerated proportions, larger heads, expressive cartoon eyes, thick eyebrows, simple noses, casual clothing in flat color with fold shading. Clean isometric perspective environments, simplified recognizable settings — green grass, gradient blue skies, brick buildings, tiled floors. All objects with bold outlines and flat color — vending machines, vehicles, furniture. Sky blue and teal environments, warm browns and peach skin, navy plaid clothing, pops of orange yellow green. Even ambient lighting, no harsh shadows, YouTube explainer style, approachable professional visually clean",
+    positive: "Clean 3D whiteboard cartoon, bold consistent black ink outlines, bright cheerful flat color fills with single-tone cel shading. Characters with friendly exaggerated proportions — larger heads, expressive eyes, thick eyebrows, simple noses, casual clothing in flat color with fold shading. Clean isometric environments — green grass, gradient blue skies, brick buildings, tiled floors. All objects with bold outlines and flat color. Sky blue and teal environments, warm browns and peach skin. Even ambient lighting, no harsh shadows, YouTube explainer style, approachable professional",
     negative: "photorealistic, photograph, 3D render, CGI, anime, painterly, watercolor, oil painting, sketch, dark, gritty, horror, film grain, lens flare, bokeh, dramatic shadows, neon, cyberpunk, fantasy, abstract, pixel art, low poly, voxel"
   },
   low_poly_3d_cartoon: {
-    positive: "Stylized low-poly 3D cartoon animation, all geometry built from visible flat-shaded polygons and triangular facets. Exaggerated proportions with oversized heads, prominent angular noses, deeply expressive large round eyes, thick sculpted eyebrows. Hair as chunky geometric strands with polygon facets, warm peach-tan skin with polygon-edge shading. Clothing modeled with visible folds and flat polygon faces. Suburban environments with clapboard houses, white picket fences, shingled roofs with geometric ridges, bright saturated green grass planes, chunky faceted tree canopies. Boxy cartoon vehicles with yellow disc headlights. Bright gradient sky, geometric cloud clusters, warm sunlight with soft directional shadows. Vibrant saturated colors — rich reds, deep blues, bright greens, warm peach, yellow accents. Clean polygon edges on all surfaces, flat-shaded faces, no smoothing, matte plastic quality like clay toys, soft ambient occlusion, Pixar-level expressiveness with geometric stylization",
+    positive: "Stylized low-poly 3D cartoon, all geometry from visible flat-shaded polygons and triangular facets. Exaggerated proportions — oversized heads, angular noses, large round eyes, thick eyebrows. Chunky geometric hair, warm peach-tan skin with polygon-edge shading. Clothing with visible folds and flat polygon faces. Suburban environments — clapboard houses, white picket fences, bright green grass, faceted tree canopies, boxy vehicles. Bright gradient sky, geometric clouds, warm sunlight. Vibrant saturated colors, clean polygon edges, no smoothing, matte clay-toy quality, soft ambient occlusion, Pixar expressiveness with geometric stylization",
     negative: "photorealistic, photograph, smooth high-poly, hyperrealistic, film grain, lens flare, bokeh, anime, cel-shaded, 2D flat, hand-drawn, sketch, watercolor, oil painting, dark horror, neon cyberpunk, abstract, pixel art, voxel art, wireframe, monochrome, desaturated, ray-traced, photogrammetry"
   },
   skeleton_protagonist: {
@@ -172,6 +172,11 @@ const styleMap = {
     negative: "cartoon skeleton, halloween decoration, flat 2D, anime, comic, x-ray medical, horror gore, neon, plastic toy, low quality, blurry, abstract, minimalist, sketch, painting, chibi, dia de los muertos, empty dark eye sockets, bare bones without transparent body, scary horror skeleton, torso only, bust shot, head and shoulders only, cropped at waist, isolated character on blank background, portrait crop"
   }
 };
+
+// ══════════════════════════════════════════════════════════════════
+// UNIVERSAL ANTI-CROP NEGATIVE (appended to ALL styles)
+// ══════════════════════════════════════════════════════════════════
+const UNIVERSAL_NEGATIVE_SUFFIX = ", torso only, bust shot, head and shoulders only, cropped at waist, isolated character on blank background, portrait crop, blurred empty background, character floating in void";
 
 // ══════════════════════════════════════════════════════════════════
 // STYLE-SPECIFIC INSTRUCTIONS FOR LLM
@@ -271,14 +276,16 @@ function getStyleSceneBodyRules(styleName) {
     }
   };
 
-  return rules[styleName] || null;
+  // ═══ UNIVERSAL FRAMING — appended to ALL styles ═══
+  const base = rules[styleName] || null;
+  if (base) {
+    base.rendering = (base.rendering || '') + ' Frame characters full body head-to-toe in most scenes. Show detailed sharp environments with visible props and architecture, not empty blurred backgrounds. Characters should be mid-action interacting with environment and other people.';
+  }
+  return base;
 }
 
 // ══════════════════════════════════════════════════════════════════
-// STYLE-SPECIFIC LLM REINFORCEMENT INSTRUCTIONS
-// ══════════════════════════════════════════════════════════════════
-// For styles that require extra guidance beyond the prefix and
-// body rules (e.g. character override styles like skeleton_protagonist)
+// STYLE-SPECIFIC LLM REINFORCEMENT
 // ══════════════════════════════════════════════════════════════════
 
 function getStyleReinforcementInstruction(visualStyle) {
@@ -288,16 +295,16 @@ function getStyleReinforcementInstruction(visualStyle) {
 The protagonist in EVERY image prompt must be described as: "a photorealistic transparent skeleton with a clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through the translucent torso, big round expressive brown amber eyeballs in the skull sockets"
 
 MANDATORY FRAMING:
-- Show the skeleton FULL BODY (head to feet) in MOST scenes — NOT torso-only, NOT bust shots, NOT head-and-shoulders
-- Describe the ENVIRONMENT in detail FIRST (location, props, weather, textures, architecture) THEN place the skeleton within it
-- The skeleton must be DOING an action — holding, reaching, kneeling, walking, gesturing — NOT standing static facing camera
-- Include other photorealistic humans in most scenes — crowds, companions, onlookers — the skeleton lives in a populated world
-- Backgrounds must be SHARP and DETAILED — NOT blurred bokeh. Show the full world the character inhabits
-- Each scene must contain a visual CONTINUITY element that connects to the next scene (shared prop, color shift, gesture echo)
+- Show the skeleton FULL BODY (head to feet) in MOST scenes — NOT torso-only, NOT bust shots
+- Describe the ENVIRONMENT in detail FIRST (location, props, weather, textures) THEN place the skeleton within it
+- The skeleton must be DOING an action — holding, reaching, kneeling, walking — NOT standing static
+- Include other photorealistic humans in most scenes — crowds, companions, onlookers
+- Backgrounds must be SHARP and DETAILED — NOT blurred bokeh
+- Each scene must contain a visual CONTINUITY element connecting to the next scene
 - The skeleton wears context-appropriate clothing per scene
-- Lighting: golden hour, volumetric rays, warm amber grading, strong rim light on bone edges
-- NEVER describe the skeleton with empty dark eye sockets — always BIG ROUND EXPRESSIVE BROWN/AMBER EYEBALLS
-- NEVER generate a torso-only portrait against a blurred background — that is the WRONG output for this style`
+- Lighting: golden hour, volumetric rays, warm amber grading, rim light on bone edges
+- NEVER empty dark eye sockets — always BIG ROUND EXPRESSIVE BROWN/AMBER EYEBALLS
+- NEVER torso-only portrait against blurred background`
   };
   return instructions[visualStyle] || '';
 }
@@ -413,6 +420,10 @@ Deno.serve(async (req) => {
 
     const visualStyle = project.visual_style || 'cinematic_realistic';
     const styleConfig = styleMap[visualStyle] || styleMap.cinematic_realistic;
+
+    // ═══ UNIVERSAL: Append anti-crop negatives to ALL styles ═══
+    const effectiveNegative = (styleConfig.negative || '') + UNIVERSAL_NEGATIVE_SUFFIX;
+
     const orientation = project.orientation || 'landscape';
 
     // ── Style-specific LLM reinforcement (e.g. skeleton protagonist) ──
@@ -426,14 +437,14 @@ Deno.serve(async (req) => {
       orientationConfig = {
         format: 'portrait',
         directive: "PORTRAIT VERTICAL 9:16 format, tall vertical framing",
-        composition: "Compose for VERTICAL 9:16 mobile frame: tall compositions, center subjects, close-up and medium shots, vertical depth stacking",
+        composition: "Compose for VERTICAL 9:16 mobile frame: tall compositions, full body characters visible head to toe, vertical depth stacking, environment visible above and below character",
         animation: "vertical 9:16 — tilt up/down, vertical reveals, close-up push-ins, portrait motion"
       };
     } else {
       orientationConfig = {
         format: 'landscape',
         directive: "LANDSCAPE HORIZONTAL 16:9 widescreen, wide cinematic framing",
-        composition: "Compose for WIDESCREEN 16:9: wide establishing shots, rule of thirds, horizontal leading lines, foreground/midground/background depth",
+        composition: "Compose for WIDESCREEN 16:9: wide establishing shots, rule of thirds, horizontal leading lines, foreground/midground/background depth, full body characters within environment",
         animation: "widescreen 16:9 — horizontal pans, dolly forward/back, crane shots, lateral parallax"
       };
     }
@@ -538,6 +549,16 @@ ${styleReinforcement}
 "${styleConfig.positive}"
 ${styleBodyBlock}
 
+**UNIVERSAL FRAMING RULES (apply to ALL visual styles):**
+- Show characters FULL BODY (head to feet) in most scenes — NOT torso-only or bust crops unless specifically an ECU emotional beat
+- Describe the ENVIRONMENT in detail FIRST (location, architecture, props, weather, textures) THEN place characters within it doing an ACTION
+- Characters must be DOING something — holding, reaching, walking, gesturing, interacting — NOT standing static facing camera
+- Backgrounds must be SHARP and DETAILED with visible props and architecture, not blurred to nothing
+- Include foreground elements for depth and scene richness (objects on tables, plants, tools, fences, etc.)
+- Each scene must contain a visual CONTINUITY element connecting to adjacent scenes (shared prop, color shift, gesture echo, location transform)
+- NEVER generate an isolated character portrait against a blank or blurred background — always place them IN a detailed world
+- Include other people in scenes where the story calls for it — the character lives in a populated world
+
 **DIRECTOR'S SCENE NOTES:**
 ${sceneDirections}
 
@@ -547,8 +568,10 @@ ${sceneDirections}
    - START with the style prefix: "${styleConfig.positive}."
    - Then add orientation: "${orientationConfig.directive}."
    - Then write the SCENE BODY describing what's actually in the frame:
+     • Describe the ENVIRONMENT and SETTING first — location, weather, architecture, props, atmosphere
+     • Then place characters FULL BODY within that environment, doing a specific ACTION
      • Use the style body rules above to describe characters, environments, and objects
-     • The scene body is WHERE the visual style really shows — describe characters with the style's specific features (e.g. polygon facets for low-poly, bold outlines for cartoon, brushstrokes for oil painting)
+     • The scene body is WHERE the visual style really shows — describe characters with the style's specific features
      • Embed shot type and composition from director notes
      • If characters appear → embed FULL physical description USING THE STYLE'S CHARACTER RULES
      • ${orientationConfig.composition}
@@ -556,29 +579,28 @@ ${sceneDirections}
    - Abstract concepts → PHYSICAL METAPHORS
    - End with: "ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image"
 
-2. **animation_prompt** — RICH, CINEMATIC ${CLIP_DURATION}-second motion direction that captures the SOUL of the scene:
-   - This is NOT a simple camera instruction. It's a FULL MOTION POEM describing everything that moves and breathes in the frame over ${CLIP_DURATION} seconds.
-   - **STRUCTURE your animation prompt with ALL of these layers:**
-     a) **PRIMARY CAMERA MOTION**: Specific camera movement with exact speed, direction, and framing change (e.g. "Slow, deliberate push-in from medium shot to close-up over 5 seconds, slightly left of center")
-     b) **ATMOSPHERIC MOTION**: What the environment is doing — dust motes floating, fog drifting, light shifting, shadows crawling, rain streaking, leaves tumbling, fabric rippling in breeze, steam rising, candlelight flickering
-     c) **SUBJECT MICRO-MOTION**: Subtle human/character movement — breathing rhythm, hair shifting, fingers tightening, eyes darting, chest rising, lips parting, shoulders dropping, fabric settling on body
-     d) **LIGHT DYNAMICS**: How light evolves — golden hour rays slowly creeping across a surface, neon signs pulsing, firelight dancing on walls, cloud shadows drifting across landscape, headlights sweeping
-     e) **DEPTH & FOCUS SHIFTS**: Rack focus from foreground to background, shallow DOF breathing, bokeh orbs drifting, focus pull revealing hidden detail
-     f) **EMOTIONAL QUALITY**: The FEELING of the motion — "heavy and reluctant" vs "urgent and searching" vs "tender and hesitant" vs "triumphant and soaring"
-   - **RESPECT ARC POSITION**: ${orientationConfig.animation}
-     • SETUP scenes: Slow, contemplative, breathing. Camera observes with patience. Atmosphere settles.
-     • RISING scenes: Building momentum. Camera grows bolder. Environment responds with increasing energy.
-     • CLIMAX scenes: Peak intensity. Dynamic camera. Every element in the frame vibrates with emotional force.
-     • RESOLUTION scenes: Exhale. Camera pulls back gently. Motion softens. Peace settles.
-   - **MINIMUM 3-4 rich sentences** describing the complete motion tapestry
-   - NEVER write generic prompts like "slow pan right" or "subtle movement" — every animation prompt must be SPECIFIC to THIS scene's emotional content
+2. **animation_prompt** — RICH, CINEMATIC ${CLIP_DURATION}-second motion direction:
+   - NOT a simple camera instruction — a FULL MOTION POEM describing everything that moves over ${CLIP_DURATION} seconds.
+   - **Include ALL layers:**
+     a) **CAMERA MOTION**: Specific movement with speed, direction, framing change
+     b) **ATMOSPHERIC MOTION**: Dust motes, fog, light shifting, rain, leaves, fabric rippling, steam
+     c) **SUBJECT MOTION**: Breathing, hair shifting, fingers tightening, eyes darting, fabric settling
+     d) **LIGHT DYNAMICS**: Rays creeping across surfaces, firelight dancing, shadows drifting
+     e) **DEPTH SHIFTS**: Rack focus, DOF breathing, focus pulls revealing detail
+     f) **EMOTIONAL QUALITY**: "heavy and reluctant" vs "urgent and searching" vs "tender and hesitant"
+   - **ARC POSITION**: ${orientationConfig.animation}
+     • SETUP: Slow, contemplative. Camera observes with patience.
+     • RISING: Building momentum. Camera grows bolder.
+     • CLIMAX: Peak intensity. Dynamic camera. Every element vibrates.
+     • RESOLUTION: Exhale. Camera pulls back gently. Peace settles.
+   - **MINIMUM 3-4 rich sentences** — NEVER generic "slow pan right"
 
 **RESPONSE:**
 {
   "prompts": [
     {
       "scene_number": 1,
-      "image_prompt": "[style prefix]. [orientation]. [SCENE BODY using style-specific character/environment/object descriptions]... ABSOLUTELY NO text...",
+      "image_prompt": "[style prefix]. [orientation]. [ENVIRONMENT FIRST, then FULL BODY character mid-action within it, using style-specific rules]... ABSOLUTELY NO text...",
       "animation_prompt": "[motion direction]"
     }
   ]
