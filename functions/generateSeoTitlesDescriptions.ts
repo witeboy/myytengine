@@ -94,7 +94,8 @@ function validateTitle(title) {
   if (!title.title || title.title.trim().length === 0) issues.push('Empty title');
   if (title.title && title.title.length > 100) issues.push(`Too long: ${title.title.length} chars`);
   if (title.title && title.title.length < 20) issues.push(`Too short: ${title.title.length} chars`);
-  const weakOpeners = ['how to', 'what is', 'guide to', 'a video about', 'today we'];
+  // "How to" and "Why" are now GOOD — they're SEO-friendly searchable formats
+  const weakOpeners = ['a video about', 'today we', 'in this video', 'welcome to', 'hey guys'];
   if (weakOpeners.some(w => (title.title || '').toLowerCase().startsWith(w))) {
     issues.push('Weak generic opener');
   }
@@ -179,26 +180,45 @@ POWER WORDS:
 - Exclusivity: Nobody Knows, Only 1%, They Don't Want You To Know
 - Contrast: Actually, Really, Secretly, Quietly, Silently
 
-TITLE FORMULAS (use a DIFFERENT formula per title):
-A: "[SHOCKING CLAIM] That [AUTHORITY] Has Hidden For [TIME]"
-B: "The [ADJECTIVE] Truth About [TOPIC] (They Lied To You)"
-C: "[NUMBER] [TOPIC] [Power Word] That [Consequence]"
-D: "Why [COMMON BELIEF ABOUT TOPIC] Is Completely Wrong"
-E: "I [DID THING] For [TIME PERIOD] — What I Found Will Shock You"
-F: "[TOPIC] EXPOSED: The [ADJECTIVE] Secret Nobody Talks About"
-G: "Stop [COMMON ACTION]: Here's What [AUTHORITY] Won't Tell You"
-H: "The [TOPIC] [POWER WORD] That [SPECIFIC CONSEQUENCE]"
-I: "What Happens When [SCENARIO] — The Truth Is Disturbing"
-J: "[WARNING]: [TOPIC] Is [SHOCKING REVELATION] Right Now"
+TITLE FORMULAS (use a DIFFERENT formula per title — MIX of searchable + curiosity):
 
-BAD titles (5/10 — DO NOT write like this):
-- "Everything About Credit Cards"
-- "How Banks Work - A Full Explanation"
+SEARCHABLE / SEO-FIRST (use 4 of 10 — these rank in YouTube search):
+A: "How [TOPIC] Actually Works (And Why Most People Get It Wrong)"
+B: "Why [COMMON BELIEF] Is [SURPRISING TRUTH] — [TOPIC] Explained"
+C: "The [NUMBER] [TOPIC] Rule That Changes Everything"
+D: "[TOPIC]: What Nobody Tells You (Step-by-Step)"
 
-GOOD titles (10/10 — WRITE like this):
-- "The Hidden Fee That Costs Americans $29 Billion Every Year"
-- "I Read Every Bank's Fine Print. What I Found Is Disturbing."
-- "The 11-Minute Decision That Destroyed a $200M Company"
+CURIOSITY / STORY-DRIVEN (use 3 of 10 — these dominate recommendations):
+E: "The [ADJECTIVE] [TOPIC] [POWER WORD] That [SPECIFIC CONSEQUENCE]"
+F: "What Happens When [SPECIFIC SCENARIO] — [TOPIC]"
+G: "I [RESEARCHED/ANALYZED] [TOPIC] For [TIME] — Here's What I Found"
+
+BOLD CLAIM / DATA (use 3 of 10 — these drive shares):
+H: "The $[AMOUNT] [TOPIC] Mistake [GROUP] Keeps Making"
+I: "Every [TOPIC] [TRAP/MISTAKE] [GROUP] Falls Into, Explained"
+J: "Do This Once You [MILESTONE] — [TOPIC] [STRATEGY]"
+
+MANDATORY MIX:
+- At least 3 titles must start with the video's CORE TOPIC KEYWORD in the first 3 words
+- At least 2 titles must use "How to" / "Why" / "What" / "Here's Why" format (pure search intent)
+- At least 2 titles must include a specific number, dollar amount, or data point
+- NO MORE than 3 titles should use dramatic/exposé framing
+- Every title must be recognizably about "${topicTitle}" — not generic outrage
+
+BAD titles (generic outrage — could be about ANYTHING):
+- "They Lied To You About Everything"
+- "The Shocking Truth Nobody Wants You To Know"
+- "Stop Doing This RIGHT NOW"
+
+GOOD titles (topic-specific + searchable + compelling):
+- "How Mortgages Actually Work (And Why You're Paying Double)"
+- "The $50,000 Rule That Changes How You Save Money"
+- "Why Diamond Drill Bits Cost $2M (The Real Reason)"
+- "Do This Once You Have $100,000 Saved"
+- "Every Financial Trap Middle Class People Fall Into, Explained"
+- "The Japanese Way To Save Money (Step-by-Step)"
+- "Asbestos Is a Bigger Problem Than We Thought"
+- "How to Package Your Services So Clients Actually Buy"
 
 ═══════════════════════════════════════
 PART 2: 3 SEO DESCRIPTIONS
