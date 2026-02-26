@@ -197,14 +197,16 @@ Deno.serve(async (req) => {
     const rawPrompt = scene.image_prompt;
     const sanitized = safetySanitize(rawPrompt);
 
-    // ── Strip close-up language that fights full-body framing ──
-    let cleaned = sanitized
-      .replace(/\b(extreme close[- ]?up|ECU|macro shot|tight on face|head shot|bust shot|chest[- ]up)\b/gi, 'medium wide shot')
-      .replace(/\b(shallow depth of field|shallow DOF|f\/1\.\d|creamy bokeh)\b/gi, 'deep depth of field sharp background');
-
-    const framingPrefix = "Full body wide shot from head to feet showing complete figure and detailed environment, characters shown at full human scale within the scene";
-    const framingSuffix = "full body visible head to toe, feet touching ground, wide framing showing full environment, do not crop at torso or waist";
-    const finalPrompt = `${framingPrefix}, ${cleaned}, ${framingSuffix}`;
+    // Grok Imagine silently truncates long prompts — cap at 900 chars
+    // Front-load framing so it's never lost to truncation
+    const framingPrefix = "Full body wide shot head to feet, detailed environment, full figure visible";
+    let promptBody = sanitized;
+    const maxBody = 900 - framingPrefix.length - 5;
+    if (promptBody.length > maxBody) {
+      console.log(`⚠️ Prompt trimmed: ${promptBody.length} → ${maxBody} chars`);
+      promptBody = promptBody.substring(0, maxBody);
+    }
+    const finalPrompt = `${framingPrefix}, ${promptBody}`;
 
     // Detect orientation from prompt content or project setting
     const orientation = detectOrientation(finalPrompt, project.orientation);
@@ -213,8 +215,7 @@ Deno.serve(async (req) => {
 
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`🖼️ Scene ${scene.scene_number} | ${dimensions} (${aspectRatio})`);
-    const wasStripped = sanitized !== cleaned;
-    console.log(`📐 Prompt: ${finalPrompt.length} chars | Passthrough mode${wasStripped ? ' | ⚠️ Close-up language stripped' : ''}`);
+    console.log(`📐 Prompt: ${finalPrompt.length} chars | Passthrough mode`);
     console.log(`🔗 Model: Grok Imagine via Kie`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
