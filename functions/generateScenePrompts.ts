@@ -458,8 +458,7 @@ Deno.serve(async (req) => {
       };
     }
 
-    const framingPrefix = "Full body wide shot showing complete scene from head to feet, detailed sharp environment with visible props and architecture, character mid-action in a populated world";
-const promptPrefix = `${framingPrefix}, ${styleConfig.positive}, ${orientationConfig.directive}`;
+    const promptPrefix = `${styleConfig.positive}, ${orientationConfig.directive}`;
 
     let characters = [];
     if (project.character_descriptions) {
