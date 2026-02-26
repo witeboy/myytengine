@@ -168,8 +168,8 @@ const styleMap = {
     negative: "photorealistic, photograph, smooth high-poly, hyperrealistic, film grain, lens flare, bokeh, anime, cel-shaded, 2D flat, hand-drawn, sketch, watercolor, oil painting, dark horror, neon cyberpunk, abstract, pixel art, voxel art, wireframe, monochrome, desaturated, ray-traced, photogrammetry"
   },
   skeleton_protagonist: {
-    positive: "Ultra-cinematic scene, the main character is a photorealistic transparent skeleton with clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through translucent torso including ribcage spine and pelvis, big round expressive brown amber eyeballs in skull eye sockets, adult male skeletal proportions, context-appropriate attire, interacting naturally with photorealistic humans and real-world environments, dramatic cinematic volumetric lighting with golden hour sunlight, strong rim lighting on bone edges, subtle bloom and atmospheric haze with dust particles, photorealistic background with authentic textures, warm bokeh depth of field, HDR cinematic lens, 4K ultra-realistic detail, warm amber color grading, skeleton protagonist always central focus",
-    negative: "cartoon skeleton, halloween decoration, flat 2D, anime, comic, x-ray medical, horror gore, neon, plastic toy, low quality, blurry, abstract, minimalist, sketch, painting, chibi, dia de los muertos, empty dark eye sockets, bare bones without transparent body, scary horror skeleton"
+    positive: "Ultra-cinematic wide scene, full body head to toe view of a photorealistic transparent skeleton with clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through translucent torso including ribcage spine and pelvis, big round expressive brown amber eyeballs in skull eye sockets, adult male skeletal proportions, context-appropriate attire, skeleton shown FULL BODY interacting with photorealistic humans in detailed real-world environments, dramatic cinematic volumetric lighting with golden hour sunlight, strong rim lighting on bone edges, atmospheric haze with dust particles, photorealistic sharp detailed background with authentic textures and props, HDR cinematic lens, 4K ultra-realistic detail, warm amber color grading, full scene composition showing character within environment",
+    negative: "cartoon skeleton, halloween decoration, flat 2D, anime, comic, x-ray medical, horror gore, neon, plastic toy, low quality, blurry, abstract, minimalist, sketch, painting, chibi, dia de los muertos, empty dark eye sockets, bare bones without transparent body, scary horror skeleton, torso only, bust shot, head and shoulders only, cropped at waist, isolated character on blank background, portrait crop"
   }
 };
 
@@ -264,10 +264,10 @@ function getStyleSceneBodyRules(styleName) {
       rendering: "Clean polygon edges on all surfaces, flat-shaded with no smoothing (signature faceted look). Soft ambient occlusion, gentle directional shadows, no outlines or cel-shading. Bright gradient sky, geometric cloud clusters. Vibrant saturated colors, warm and inviting."
     },
     skeleton_protagonist: {
-      characters: "Protagonist in EVERY scene: photorealistic transparent skeleton with clear glass-like semi-transparent body shell, glossy ivory bones visible through translucent torso (ribcage, spine, pelvis), big round expressive brown/amber EYEBALLS in skull sockets (NOT empty sockets), adult male proportions. Wears context-appropriate clothing. Other characters are photorealistic normal humans. NOT scary/horror — relatable hero via gesture, posture, expressive eyes.",
-      environments: "Photorealistic real-world environments with authentic textures — stone, cloth, metal, wood. Cinematic golden hour lighting, volumetric rays, floating dust particles. Warm bokeh backgrounds. The skeleton exists naturally in photorealistic spaces.",
-      objects: "Photorealistic props — metal weapons, leather gear, wooden furniture, cloth fabrics. Strong rim lighting on bone edges separating skeleton from environment.",
-      rendering: "High-end 3D render character in photorealistic world. HDR cinematic lens, shallow DOF, warm amber grading, dramatic volumetric lighting, golden hour, high contrast shadows. Skeleton always CENTRAL FOCUS of frame."
+      characters: "Protagonist in EVERY scene: photorealistic transparent skeleton with clear glass-like body shell, glossy ivory bones visible through translucent torso, big round expressive brown/amber EYEBALLS in skull sockets. MUST be shown FULL BODY head-to-toe in most scenes — standing, sitting, kneeling, walking, running. Wears context-appropriate clothing. Must be DOING an action (holding objects, gesturing, interacting with people). Other characters are photorealistic normal humans shown alongside or interacting with the skeleton.",
+      environments: "Photorealistic DETAILED real-world environments shown in SHARP FOCUS — NOT blurred bokeh backgrounds. Every scene has a specific location with visible architecture, landscape features, props, furniture, tools, weather effects. The skeleton exists INSIDE this world, not floating in front of it. Include foreground elements for depth.",
+      objects: "Photorealistic props the skeleton is actively interacting with — tools in hand, objects being held or carried, furniture being used, vehicles, food, weapons, documents. Props tell the story and connect scenes together.",
+      rendering: "Cinematic wide-to-medium framing showing full body within environment. HDR cinematic lens, warm amber grading, dramatic volumetric golden hour lighting, strong rim light separating skeleton from background. Sharp detailed backgrounds. Favor 9:16 vertical framing with character full body visible."
     }
   };
 
@@ -284,15 +284,20 @@ function getStyleSceneBodyRules(styleName) {
 function getStyleReinforcementInstruction(visualStyle) {
   const instructions = {
     skeleton_protagonist: `
-**🦴 SKELETON PROTAGONIST STYLE — CRITICAL:**
+**🦴 SKELETON PROTAGONIST STYLE — CRITICAL FRAMING RULES:**
 The protagonist in EVERY image prompt must be described as: "a photorealistic transparent skeleton with a clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through the translucent torso, big round expressive brown amber eyeballs in the skull sockets"
-- The skeleton wears context-appropriate clothing described in the visual concept
-- Other characters are photorealistic normal humans
-- The skeleton is ALWAYS the central figure, never in the background
-- NOT horror, NOT scary — the skeleton is the relatable hero with expressive eyes and body language
-- Environment is always photorealistic with real-world textures
+
+MANDATORY FRAMING:
+- Show the skeleton FULL BODY (head to feet) in MOST scenes — NOT torso-only, NOT bust shots, NOT head-and-shoulders
+- Describe the ENVIRONMENT in detail FIRST (location, props, weather, textures, architecture) THEN place the skeleton within it
+- The skeleton must be DOING an action — holding, reaching, kneeling, walking, gesturing — NOT standing static facing camera
+- Include other photorealistic humans in most scenes — crowds, companions, onlookers — the skeleton lives in a populated world
+- Backgrounds must be SHARP and DETAILED — NOT blurred bokeh. Show the full world the character inhabits
+- Each scene must contain a visual CONTINUITY element that connects to the next scene (shared prop, color shift, gesture echo)
+- The skeleton wears context-appropriate clothing per scene
 - Lighting: golden hour, volumetric rays, warm amber grading, strong rim light on bone edges
-- NEVER describe the skeleton with empty dark eye sockets — always BIG ROUND EXPRESSIVE BROWN/AMBER EYEBALLS`
+- NEVER describe the skeleton with empty dark eye sockets — always BIG ROUND EXPRESSIVE BROWN/AMBER EYEBALLS
+- NEVER generate a torso-only portrait against a blurred background — that is the WRONG output for this style`
   };
   return instructions[visualStyle] || '';
 }
