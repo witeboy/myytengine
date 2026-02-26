@@ -89,26 +89,38 @@ function cleanNarrationText(text) {
 // ══════════════════════════════════════════════════════════════════
 // VISUAL STYLE CHARACTER DIRECTIVES
 // ══════════════════════════════════════════════════════════════════
+// Certain visual styles inject a mandatory character override so
+// the LLM always features a specific protagonist. Add new styles here.
+// Returns empty string for styles that don't need character override.
+// ══════════════════════════════════════════════════════════════════
 
 function getStyleCharacterDirective(visualStyle) {
   const directives = {
     skeleton_protagonist: `
-**🦴 MANDATORY CHARACTER OVERRIDE — SKELETON PROTAGONIST STYLE:**
-The MAIN CHARACTER in EVERY scene is a photorealistic transparent skeleton with:
-- A clear glass-like semi-transparent humanoid body shell (like a resin mannequin with a skeleton inside)
-- Glossy ivory bones visible through the translucent torso — ribcage, spine, pelvis all visible
-- Big round expressive brown/amber EYEBALLS sitting in the skull eye sockets (NOT empty dark sockets — real expressive eyes)
-- Consistent adult male skeletal proportions across all scenes
-- Context-appropriate clothing that changes per scene (ancient robes, military gear, modern clothes, etc.)
-- The skeleton interacts NATURALLY with real photorealistic humans and environments — nobody treats him as unusual
+**🦴 MANDATORY — SKELETON PROTAGONIST STYLE:**
 
-CRITICAL RULES FOR EVERY SCENE:
-- In your visual_concept, the skeleton protagonist MUST be described as the central figure
-- Replace any generic "person/man/woman/character" references with the skeleton protagonist
-- The skeleton is NOT scary or horror — he is the relatable HERO expressed through gesture, posture, and expressive eyes
-- Other characters in scenes should be photorealistic normal humans
-- Environments must be photorealistic with real-world textures (stone, cloth, metal, wood)
-- Lighting should favor warm cinematic golden hour, volumetric light rays, dust particles, warm amber grading
+CHARACTER IDENTITY (consistent across ALL scenes):
+- A photorealistic transparent glass-like humanoid body shell with glossy ivory skeleton visible inside (ribcage, spine, pelvis, all bones)
+- Big round expressive brown/amber EYEBALLS in the skull sockets (NOT empty dark sockets)
+- Adult male proportions, context-appropriate clothing per scene (robes, gear, suits, etc.)
+- NOT scary or horror — he is the relatable HERO of the story
+
+**🎬 CRITICAL FRAMING RULES — READ CAREFULLY:**
+
+1. **FULL BODY HEAD-TO-TOE**: The skeleton must be shown as a FULL HUMAN-SIZED figure in MOST scenes. Frame him head to feet — like a real person standing, sitting, kneeling, walking, running. Show his FULL body interacting with the world. NEVER default to torso-only or bust shots. Close-ups of face/hands are allowed ONLY for 1-2 key emotional beats, not as the default.
+
+2. **ENVIRONMENT FIRST**: Every scene is a WORLD, not a portrait. Describe the environment in detail BEFORE the character — the room, landscape, weather, crowd, props, textures, architecture. The skeleton lives INSIDE a rich, detailed, photorealistic world. Blurred backgrounds are BANNED for this style.
+
+3. **INTERACTION AND ACTION**: The skeleton must be DOING something — holding objects, gesturing to people, walking through crowds, sitting at tables, kneeling in rivers, climbing, reaching, pointing. Static standing poses facing camera are LAZY. Show him mid-action in a story moment.
+
+4. **OTHER PEOPLE IN FRAME**: Include photorealistic normal humans interacting with or near the skeleton in MOST scenes — crowds, companions, onlookers, workers. He exists in a populated world, not alone in empty space.
+
+5. **SCENE FLOW**: Every visual_concept must contain a CONTINUITY ELEMENT that bridges to the next scene — a prop that reappears, a color that shifts, a gesture that echoes, a location that transforms. Scenes are NOT isolated portraits — they are frames in a continuous film.
+
+6. **PERSPECTIVE VARIETY**: Use the full director's toolkit — low angles looking up at the skeleton against sky, overhead God's-eye views of him in a crowd, over-shoulder shots from behind him looking at what he sees, wide establishing shots showing him small in a vast landscape, medium shots of him with companions.
+
+BAD visual_concept: "The transparent skeleton protagonist stands with expressive amber eyes, glass body reflecting light, ribcage visible through translucent torso."
+GOOD visual_concept: "Full-body view of the skeleton protagonist kneeling knee-deep in a rushing river, muddy water swirling around his transparent legs, both hands lifting a massive gold nugget above the surface. Behind him, dozens of miners in worn 1849-era clothing pan for gold among sun-bleached boulders. Golden hour light catches the water droplets on his glass skin. A coiled rope and shovel rest on the rocky bank in the foreground."
 `
   };
   return directives[visualStyle] || '';
@@ -116,6 +128,9 @@ CRITICAL RULES FOR EVERY SCENE:
 
 // ══════════════════════════════════════════════════════════════════
 // NICHE DIRECTOR PROFILES
+// ══════════════════════════════════════════════════════════════════
+// Instead of hardcoded motifs, these are DIRECTORIAL SENSIBILITIES
+// that guide the AI to think visually for each niche.
 // ══════════════════════════════════════════════════════════════════
 
 function getNicheDirectorProfile(niche) {
@@ -315,16 +330,14 @@ Deno.serve(async (req) => {
       console.log(`🦴 Style directive active: ${visualStyle}`);
     }
 
+    // ═══ FIX A: 5-second scenes instead of 8 ═══
     const MAX_SCENE_SECONDS = 5;
     const totalTargetScenes = Math.max(8, Math.round((durationMinutes * 60) / MAX_SCENE_SECONDS));
     const phases = calculatePhaseAllocation(totalTargetScenes);
     const scriptChunks = splitScriptByPhase(finalScript, phases);
     const numBatches = scriptChunks.length;
 
-    // ══════════════════════════════════════════════════════════════
-    // BATCH 0: Story analysis + blueprint creation (in-memory)
-    // ══════════════════════════════════════════════════════════════
-
+    // ═══ FIX B: In-memory blueprint for batch 0 (race condition fix) ═══
     let blueprint;
     let freshProject = project;
 
@@ -396,9 +409,10 @@ ${finalScript}
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
       const analysis = await callGemini(analysisPrompt, 0.6);
+
       const storyAnalysis = analysis.story_analysis || analysis;
 
-      // FIX 1: Keep blueprint in memory — avoids stale re-read race condition
+      // Keep blueprint in memory — avoids stale re-read after update
       blueprint = {
         story_analysis: storyAnalysis,
         phases: phases.map(p => ({ name: p.name, purpose: p.purpose, scene_count: p.scenes })),
@@ -428,7 +442,7 @@ ${finalScript}
       console.log(`  Characters: ${storyAnalysis.characters?.map(c => c.name).join(', ') || 'None identified'}`);
       console.log(`  Motifs: ${storyAnalysis.recurring_visual_motifs?.join(', ') || 'N/A'}`);
     } else {
-      // Subsequent batch — data has propagated, safe to read from DB
+      // Subsequent batches — data has propagated, safe to read from DB
       freshProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
       try {
         blueprint = JSON.parse(freshProject.scene_blueprint);
@@ -444,16 +458,12 @@ ${finalScript}
     if (freshProject.character_descriptions) {
       try { characters = JSON.parse(freshProject.character_descriptions); } catch (_) {}
     }
+
     const characterBlock = characters.length > 0
       ? `**ESTABLISHED CHARACTERS (use these EXACT descriptions for consistency):**\n${characters.map(c => `  • ${c.name}: ${c.visual_description || c.description}`).join('\n')}`
       : '';
 
-    // ══════════════════════════════════════════════════════════════
-    // FIX 2: LOOP ALL PHASES in one call
-    // Frontend calls this function once — all phases run sequentially
-    // Blueprint saved after each phase so progress persists on timeout
-    // ══════════════════════════════════════════════════════════════
-
+    // ═══ FIX C: Loop ALL phases in one call ═══
     let grandTotalCreated = 0;
 
     for (let batchIdx = startBatch; batchIdx < scriptChunks.length; batchIdx++) {
@@ -502,11 +512,13 @@ A scene changes when the VISUAL needs to change — not at every period.
 
 🎬 **RULE 2: EVERY SCENE HAS A VISUAL CONCEPT, NOT JUST A DESCRIPTION**
 WRONG: "A person looking worried about money"
-RIGHT: "Extreme close-up of weathered hands slowly closing around a faded family photograph, the edges worn soft from years of handling. Single warm lamp light from the left creates deep shadows across the knuckles. Shallow depth of field dissolves the cluttered kitchen table behind into warm bokeh circles."
+WRONG: "The skeleton protagonist stands with expressive eyes and visible ribcage"
+RIGHT: "Full-body wide shot of a man sitting alone at a cluttered kitchen table at 2 AM, head in hands, surrounded by scattered bills and a cold cup of coffee. A single overhead lamp casts harsh downward light, leaving the corners of the small apartment in deep shadow. Through the window behind him, city lights blur into bokeh. A framed family photo on the fridge catches a sliver of light."
 
 🎬 **RULE 3: SHOT VARIETY IS NON-NEGOTIABLE**
 Never use the same shot type consecutively. Cycle through:
-ECU, CU, MCU, MS, MWS, WS, EWS, OTS, INSERT/DETAIL, LOW ANGLE, HIGH ANGLE/OVERHEAD, DUTCH ANGLE, POV
+WS, EWS, MWS, MS, LOW ANGLE, HIGH ANGLE/OVERHEAD, OTS, MCU, CU, POV, INSERT/DETAIL, DUTCH ANGLE, ECU
+Favor wider shots (WS, EWS, MWS, MS) that show full body and environment. Use close-ups (CU, ECU) sparingly for key emotional beats only.
 
 🎬 **RULE 4: EMOTIONAL ESCALATION WITHIN THE PHASE**
 Even within a single phase, scenes should ESCALATE emotionally.
@@ -530,10 +542,10 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
     {
       "scene_number": ${sceneOffset + 1},
       "narration_text": "EXACT words from the script segment that play during this scene.",
-      "visual_concept": "A rich, specific, CINEMATIC description of what we SEE. 2-4 sentences.",
+      "visual_concept": "A rich, specific, CINEMATIC description of what we SEE. 2-4 sentences. MUST describe: (1) the FULL environment/location with specific details, (2) the character shown FULL BODY head-to-toe doing a specific ACTION, (3) other people or elements in the scene, (4) atmospheric details like weather/light/props. Think like a DP describing a film frame.",
       "shot_type": "e.g. 'ECU — Extreme Close-Up'",
       "camera_angle": "e.g. 'Low angle, 15 degrees, slightly left of center'",
-      "camera_movement": "e.g. 'Slow push-in over 8 seconds, from MS to MCU'",
+      "camera_movement": "e.g. 'Slow push-in over 5 seconds, from MS to MCU'",
       "lighting": "e.g. 'Single warm practical light from desk lamp, camera left.'",
       "color_palette": "e.g. 'Warm amber #D4A574, deep shadow brown #2C1810, cream highlight #F5F0E8'",
       "mood": "2-3 words (e.g. 'quiet desperation', 'fragile hope')",
@@ -552,8 +564,12 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
 - EVERY word of the script segment must appear in exactly one scene's narration_text
 - NO added narration — use ONLY the provided script words
 - visual_concept must NEVER describe text, charts, graphs, or readable content on screen
+- visual_concept must describe the FULL SCENE: environment FIRST, then full-body character action, then other people, then atmosphere
+- Characters must be shown FULL BODY (head to feet) in most scenes — torso-only crops are BANNED unless specifically an ECU emotional beat
+- Every scene must contain a CONTINUITY ELEMENT that visually bridges to the next scene (shared prop, color shift, gesture echo, location transform)
 - Adjacent scenes MUST use different shot types
 - emotional_intensity should generally escalate through the phase
+- NEVER describe the character in isolation against a blank/blurred background — always place them IN a detailed world
 `;
 
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
@@ -611,14 +627,14 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
       blueprint.scenes = [...blueprint.scenes, ...newBlueprintScenes];
       grandTotalCreated += scenesCreated;
 
-      // Save blueprint after each phase — progress persists even if later phase times out
+      // Save after each phase — progress persists even if later phase times out
       await base44.asServiceRole.entities.Projects.update(project_id, {
         scene_blueprint: JSON.stringify(blueprint)
       });
 
       console.log(`✓ Phase ${currentChunk.phase} complete — ${scenesCreated} scenes | Running total: ${grandTotalCreated}/${totalTargetScenes}`);
 
-    } // ── end phase loop ──
+    } // end phase loop
 
     // All phases done
     await base44.asServiceRole.entities.Projects.update(project_id, {
