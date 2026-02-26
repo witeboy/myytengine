@@ -105,9 +105,11 @@ ${topic_description ? `CONTEXT: ${topic_description}` : ''}
 RULES:
 - Each hook MUST be under 120 characters
 - Use 5 DIFFERENT hook types (no repeats)
-- Each must create an unanswered question resolved only by watching
+- At least 2 hooks must directly reference the topic title — the viewer should IMMEDIATELY know what the video is about
+- NOT every hook needs to be dramatic or controversial — include at least 1 calm/educational hook and 1 direct question hook
 - No generic openers like "In this video..." or "Today we..."
 - Must work as both thumbnail text and voiceover opener
+- Hook styles should MATCH the topic tone — a finance explainer doesn't need horror-movie energy
 
 HOOK TYPES (use one per hook):
 1. CURIOSITY GAP - information void the brain wants filled
