@@ -89,10 +89,6 @@ function cleanNarrationText(text) {
 // ══════════════════════════════════════════════════════════════════
 // VISUAL STYLE CHARACTER DIRECTIVES
 // ══════════════════════════════════════════════════════════════════
-// Certain visual styles inject a mandatory character override so
-// the LLM always features a specific protagonist. Add new styles here.
-// Returns empty string for styles that don't need character override.
-// ══════════════════════════════════════════════════════════════════
 
 function getStyleCharacterDirective(visualStyle) {
   const directives = {
@@ -120,9 +116,6 @@ CRITICAL RULES FOR EVERY SCENE:
 
 // ══════════════════════════════════════════════════════════════════
 // NICHE DIRECTOR PROFILES
-// ══════════════════════════════════════════════════════════════════
-// Instead of hardcoded motifs, these are DIRECTORIAL SENSIBILITIES
-// that guide the AI to think visually for each niche.
 // ══════════════════════════════════════════════════════════════════
 
 function getNicheDirectorProfile(niche) {
@@ -291,7 +284,7 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { project_id, batch_index, selected_hook } = await req.json();
-    const currentBatch = batch_index || 0;
+    const startBatch = batch_index || 0;
 
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
     const project = projects[0];
@@ -328,11 +321,14 @@ Deno.serve(async (req) => {
     const scriptChunks = splitScriptByPhase(finalScript, phases);
     const numBatches = scriptChunks.length;
 
-    // ── Build or retrieve blueprint ─────────────────────────────
-    let blueprint;
-    let freshProject = project; // default to what we already have
+    // ══════════════════════════════════════════════════════════════
+    // BATCH 0: Story analysis + blueprint creation (in-memory)
+    // ══════════════════════════════════════════════════════════════
 
-    if (currentBatch === 0) {
+    let blueprint;
+    let freshProject = project;
+
+    if (startBatch === 0) {
       const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
       for (const s of oldScenes) {
         await base44.asServiceRole.entities.Scenes.delete(s.id);
@@ -400,10 +396,9 @@ ${finalScript}
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
       const analysis = await callGemini(analysisPrompt, 0.6);
-
       const storyAnalysis = analysis.story_analysis || analysis;
 
-      // Build blueprint in memory — NO re-read needed
+      // FIX 1: Keep blueprint in memory — avoids stale re-read race condition
       blueprint = {
         story_analysis: storyAnalysis,
         phases: phases.map(p => ({ name: p.name, purpose: p.purpose, scene_count: p.scenes })),
@@ -421,7 +416,6 @@ ${finalScript}
           : project.character_descriptions
       });
 
-      // Update freshProject with character data we just saved
       freshProject = {
         ...project,
         character_descriptions: storyAnalysis.characters
@@ -434,7 +428,7 @@ ${finalScript}
       console.log(`  Characters: ${storyAnalysis.characters?.map(c => c.name).join(', ') || 'None identified'}`);
       console.log(`  Motifs: ${storyAnalysis.recurring_visual_motifs?.join(', ') || 'N/A'}`);
     } else {
-      // Subsequent batch calls — read blueprint from DB
+      // Subsequent batch — data has propagated, safe to read from DB
       freshProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
       try {
         blueprint = JSON.parse(freshProject.scene_blueprint);
@@ -446,36 +440,35 @@ ${finalScript}
     const storyAnalysis = blueprint.story_analysis;
     const nicheProfile = blueprint.niche_profile;
 
-    if (currentBatch >= scriptChunks.length) {
-      return Response.json({
-        success: true,
-        done: true,
-        scene_count: blueprint.scenes.length,
-        total_batches: numBatches
-      });
-    }
-
-    const existingScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-    const sceneOffset = existingScenes.length;
-
-    const currentChunk = scriptChunks[currentBatch];
-    const scenesForBatch = currentChunk.scenes;
-
     let characters = [];
     if (freshProject.character_descriptions) {
       try { characters = JSON.parse(freshProject.character_descriptions); } catch (_) {}
     }
-
-    const previousScenes = blueprint.scenes.slice(-3);
-    const continuityContext = previousScenes.length > 0
-      ? `**LAST ${previousScenes.length} SCENES (for visual continuity):**\n${previousScenes.map(s => `  Scene ${s.scene_number}: [${s.shot_type}] ${s.visual_concept} | Mood: ${s.mood} | Palette: ${s.color_palette}`).join('\n')}`
-      : '**This is the OPENING — establish the visual world with a strong first impression.**';
-
     const characterBlock = characters.length > 0
       ? `**ESTABLISHED CHARACTERS (use these EXACT descriptions for consistency):**\n${characters.map(c => `  • ${c.name}: ${c.visual_description || c.description}`).join('\n')}`
       : '';
 
-    const breakdownPrompt = `
+    // ══════════════════════════════════════════════════════════════
+    // FIX 2: LOOP ALL PHASES in one call
+    // Frontend calls this function once — all phases run sequentially
+    // Blueprint saved after each phase so progress persists on timeout
+    // ══════════════════════════════════════════════════════════════
+
+    let grandTotalCreated = 0;
+
+    for (let batchIdx = startBatch; batchIdx < scriptChunks.length; batchIdx++) {
+      const existingScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
+      const sceneOffset = existingScenes.length;
+
+      const currentChunk = scriptChunks[batchIdx];
+      const scenesForBatch = currentChunk.scenes;
+
+      const previousScenes = blueprint.scenes.slice(-3);
+      const continuityContext = previousScenes.length > 0
+        ? `**LAST ${previousScenes.length} SCENES (for visual continuity):**\n${previousScenes.map(s => `  Scene ${s.scene_number}: [${s.shot_type}] ${s.visual_concept} | Mood: ${s.mood} | Palette: ${s.color_palette}`).join('\n')}`
+        : '**This is the OPENING — establish the visual world with a strong first impression.**';
+
+      const breakdownPrompt = `
 You are a world-class film director blocking out scenes for a visual narrative.
 ${styleDirective}
 
@@ -563,87 +556,85 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
 - emotional_intensity should generally escalate through the phase
 `;
 
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`🎬 SCENE BREAKDOWN — Phase: ${currentChunk.phase} (Batch ${currentBatch + 1}/${numBatches})`);
-    console.log(`📍 Generating scenes ${sceneOffset + 1}-${sceneOffset + scenesForBatch}`);
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`🎬 SCENE BREAKDOWN — Phase: ${currentChunk.phase} (Batch ${batchIdx + 1}/${numBatches})`);
+      console.log(`📍 Generating scenes ${sceneOffset + 1}-${sceneOffset + scenesForBatch}`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
-    const result = await callGemini(breakdownPrompt, 0.7);
+      const result = await callGemini(breakdownPrompt, 0.7);
 
-    let scenesCreated = 0;
-    const newBlueprintScenes = [];
+      let scenesCreated = 0;
+      const newBlueprintScenes = [];
 
-    if (result.scenes && Array.isArray(result.scenes)) {
-      for (let i = 1; i < result.scenes.length; i++) {
-        if (result.scenes[i].shot_type === result.scenes[i - 1].shot_type) {
-          console.warn(`⚠️ Consecutive duplicate shot type at scene ${result.scenes[i].scene_number}: ${result.scenes[i].shot_type}`);
+      if (result.scenes && Array.isArray(result.scenes)) {
+        for (let i = 1; i < result.scenes.length; i++) {
+          if (result.scenes[i].shot_type === result.scenes[i - 1].shot_type) {
+            console.warn(`⚠️ Consecutive duplicate shot type at scene ${result.scenes[i].scene_number}: ${result.scenes[i].shot_type}`);
+          }
+        }
+
+        for (const scene of result.scenes) {
+          const sceneNum = sceneOffset + scenesCreated + 1;
+          const cleanedNarration = cleanNarrationText(scene.narration_text);
+
+          await base44.asServiceRole.entities.Scenes.create({
+            project_id,
+            scene_number: sceneNum,
+            narration_text: cleanedNarration,
+            image_prompt: "",
+            animation_prompt: "",
+            duration_seconds: scene.duration_seconds || 8,
+            status: "breakdown_ready"
+          });
+
+          newBlueprintScenes.push({
+            scene_number: sceneNum,
+            phase: currentChunk.phase,
+            visual_concept: scene.visual_concept,
+            shot_type: scene.shot_type,
+            camera_angle: scene.camera_angle,
+            camera_movement: scene.camera_movement,
+            lighting: scene.lighting,
+            color_palette: scene.color_palette,
+            mood: scene.mood,
+            depth_of_field: scene.depth_of_field,
+            niche_visual_element: scene.niche_visual_element,
+            continuity_bridge: scene.continuity_bridge,
+            emotional_intensity: scene.emotional_intensity || 0.5,
+            duration_seconds: scene.duration_seconds || 8
+          });
+
+          scenesCreated++;
         }
       }
 
-      for (const scene of result.scenes) {
-        const sceneNum = sceneOffset + scenesCreated + 1;
-        const cleanedNarration = cleanNarrationText(scene.narration_text);
+      blueprint.scenes = [...blueprint.scenes, ...newBlueprintScenes];
+      grandTotalCreated += scenesCreated;
 
-        await base44.asServiceRole.entities.Scenes.create({
-          project_id,
-          scene_number: sceneNum,
-          narration_text: cleanedNarration,
-          image_prompt: "",
-          animation_prompt: "",
-          duration_seconds: scene.duration_seconds || 8,
-          status: "breakdown_ready"
-        });
+      // Save blueprint after each phase — progress persists even if later phase times out
+      await base44.asServiceRole.entities.Projects.update(project_id, {
+        scene_blueprint: JSON.stringify(blueprint)
+      });
 
-        newBlueprintScenes.push({
-          scene_number: sceneNum,
-          phase: currentChunk.phase,
-          visual_concept: scene.visual_concept,
-          shot_type: scene.shot_type,
-          camera_angle: scene.camera_angle,
-          camera_movement: scene.camera_movement,
-          lighting: scene.lighting,
-          color_palette: scene.color_palette,
-          mood: scene.mood,
-          depth_of_field: scene.depth_of_field,
-          niche_visual_element: scene.niche_visual_element,
-          continuity_bridge: scene.continuity_bridge,
-          emotional_intensity: scene.emotional_intensity || 0.5,
-          duration_seconds: scene.duration_seconds || 8
-        });
+      console.log(`✓ Phase ${currentChunk.phase} complete — ${scenesCreated} scenes | Running total: ${grandTotalCreated}/${totalTargetScenes}`);
 
-        scenesCreated++;
-      }
-    }
+    } // ── end phase loop ──
 
-    blueprint.scenes = [...blueprint.scenes, ...newBlueprintScenes];
-
+    // All phases done
     await base44.asServiceRole.entities.Projects.update(project_id, {
-      scene_blueprint: JSON.stringify(blueprint)
+      status: "breakdown_complete",
+      current_step: 5
     });
 
-    const totalScenesNow = sceneOffset + scenesCreated;
-    const isDone = (currentBatch + 1) >= numBatches;
-
-    if (isDone) {
-      await base44.asServiceRole.entities.Projects.update(project_id, {
-        status: "breakdown_complete",
-        current_step: 5
-      });
-    }
-
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`✓ Phase ${currentChunk.phase} complete`);
-    console.log(`📊 Created: ${scenesCreated} scenes | Total: ${totalScenesNow}/${totalTargetScenes}`);
-    console.log(`${isDone ? '🎉 FULL BREAKDOWN COMPLETE — Ready for prompt generation' : '⏭️ More phases remaining'}`);
+    console.log(`🎉 FULL BREAKDOWN COMPLETE — ${grandTotalCreated} scenes ready for prompt generation`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     return Response.json({
       success: true,
-      done: isDone,
-      batch_completed: currentBatch,
-      phase_completed: currentChunk.phase,
-      scenes_created: scenesCreated,
-      total_scenes: totalScenesNow,
+      done: true,
+      scenes_created: grandTotalCreated,
+      total_scenes: grandTotalCreated,
       total_target: totalTargetScenes,
       total_batches: numBatches
     });
