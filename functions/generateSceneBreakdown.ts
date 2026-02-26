@@ -92,18 +92,21 @@ function cleanNarrationText(text) {
 
 function normalizeStyleKey(raw) {
   if (!raw) return '';
-  const normalized = raw.trim().toLowerCase().replace(/[\s\-]+/g, '_');
+  console.log(`🔍 RAW visual_style value: "${raw}" (type: ${typeof raw}, length: ${raw.length}, charCodes: ${[...raw].slice(0,30).map(c=>c.charCodeAt(0)).join(',')})`);
+  const normalized = raw.trim().toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+  console.log(`🔍 Normalized to: "${normalized}"`);
   const knownStyles = [
     'cinematic_realistic', 'photorealistic_4k', 'anime', 'cinematic_anime',
     'cartoon_2d', 'picstory_cocomelon', 'cinematic_picstory', 'oil_painting',
     'watercolor', 'comic_book', 'humpty_dumpty', 'harry_potter',
     '3d_whiteboard_cartoon', 'low_poly_3d_cartoon', 'skeleton_protagonist'
   ];
-  if (knownStyles.includes(normalized)) return normalized;
+  if (knownStyles.includes(normalized)) { console.log(`✅ Direct match: ${normalized}`); return normalized; }
   for (const key of knownStyles) {
-    if (normalized.includes(key) || key.includes(normalized)) return key;
+    if (normalized.includes(key) || key.includes(normalized)) { console.log(`✅ Fuzzy match: ${key}`); return key; }
   }
-  console.warn(`⚠️ Unknown visual_style "${raw}" → normalized: "${normalized}"`);
+  if (normalized.includes('skeleton')) { console.log(`✅ Keyword match: skeleton_protagonist`); return 'skeleton_protagonist'; }
+  console.warn(`❌ No match for "${raw}" → "${normalized}"`);
   return normalized;
 }
 
