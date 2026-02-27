@@ -296,9 +296,30 @@ function getStyleSceneBodyRules(styleName) {
 // ══════════════════════════════════════════════════════════════════
 
 function getStyleReinforcementInstruction(visualStyle) {
+  // ═══ UNIVERSAL — every style gets this ═══
+  const universalReinforcement = `
+**🎬 MANDATORY PRODUCTION RULES (ALL STYLES):**
+
+ENVIRONMENT-FIRST: Every image_prompt must describe the LOCATION and SETTING in the first 1-2 sentences BEFORE mentioning any character. Include: specific place, architecture/landscape, weather/time of day, foreground props, atmospheric details.
+
+FULL-BODY ACTION: Characters shown FULL BODY (head to feet) in 80% of scenes. They must be DOING an action — walking, sitting, reaching, holding, kneeling, gesturing. NEVER static standing portrait facing camera. Close-ups allowed for max 2 scenes.
+
+CAMERA DIRECTION: Each image_prompt must specify a SHOT TYPE (wide, medium, low angle, overhead, OTS, tracking, dutch angle, POV) and it must DIFFER from adjacent scenes.
+
+POPULATED WORLD: Include other people, objects, vehicles, animals in MOST scenes. The character lives in a busy, living world — not alone in empty space.
+
+THREE-LAYER DEPTH: Every scene has foreground (edge objects, blurred props), midground (character + action), background (environment stretching into distance).
+
+EMOTIONAL LIGHTING: Specify light SOURCE (sun, lamp, fire, neon, window), DIRECTION (from left, backlit, overhead, rim), and MOOD (warm golden, cold blue, harsh white, dramatic chiaroscuro).
+
+BODY LANGUAGE: Characters express emotion through POSTURE — slumped, wide stance, hunched, arms spread, hands clasped, leaning forward, stepping back. NOT just facial expression.
+
+CONTINUITY: Each scene must contain a visual element that connects to the next scene — shared prop, color shift, gesture echo, location transform.
+`;
+
   const instructions = {
-    skeleton_protagonist: `
-**🦴 SKELETON PROTAGONIST STYLE — CRITICAL FRAMING RULES:**
+    skeleton_protagonist: universalReinforcement + `
+**🦴 SKELETON PROTAGONIST STYLE — ADDITIONAL RULES:**
 The protagonist in EVERY image prompt must be described as: "a photorealistic transparent skeleton with a clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through the translucent torso, big round expressive brown amber eyeballs in the skull sockets"
 
 MANDATORY FRAMING:
@@ -313,7 +334,7 @@ MANDATORY FRAMING:
 - NEVER empty dark eye sockets — always BIG ROUND EXPRESSIVE BROWN/AMBER EYEBALLS
 - NEVER torso-only portrait against blurred background`
   };
-  return instructions[visualStyle] || '';
+  return instructions[visualStyle] || universalReinforcement;
 }
 
 // ══════════════════════════════════════════════════════════════════
