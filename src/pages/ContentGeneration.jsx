@@ -113,53 +113,79 @@ export default function ContentGeneration() {
     } catch (_) {}
 
     try {
-      // ── Phase 1: Scene Breakdown ────────────────────────────────
+      // ── Phase 1: Scene Breakdown (loop — 1 chunk per call) ──────
       setImportPhase('breakdown');
       setImportProgress('Analyzing script & breaking down into cinematic scenes...');
 
-      await invokeWithTimeout('generateSceneBreakdown', { project_id: projectId });
+      let breakdownDone = false;
+      let nextBatch = 0;
 
-      // Poll until scenes exist with breakdown_ready status
-      await pollForCompletion(async () => {
-        const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
-        const sorted = freshScenes.sort((a, b) => a.scene_number - b.scene_number);
-        queryClient.setQueryData(['scenes', projectId], sorted);
+      while (!breakdownDone) {
+        try {
+          const bdResult = await base44.functions.invoke('generateSceneBreakdown', {
+            project_id: projectId,
+            batch_index: nextBatch
+          });
+          const bdData = bdResult.data || bdResult;
+          breakdownDone = bdData.done === true;
+          nextBatch = bdData.next_batch ?? (nextBatch + 1);
 
-        const breakdownReady = freshScenes.filter(s => s.status === 'breakdown_ready');
-        const anyReady = freshScenes.filter(s => s.status === 'breakdown_ready' || s.status === 'prompts_ready');
+          const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+          const sorted = freshScenes.sort((a, b) => a.scene_number - b.scene_number);
+          queryClient.setQueryData(['scenes', projectId], sorted);
 
-        if (freshScenes.length > 0) {
-          setTotalExpectedScenes(prev => prev > 0 ? prev : freshScenes.length);
-          setImportProgress(`Breaking down script... ${freshScenes.length} scenes created (${breakdownReady.length} ready for prompts)`);
-        } else {
-          setImportProgress('AI is analyzing story structure, characters & themes...');
+          const target = bdData.total_target || freshScenes.length;
+          setTotalExpectedScenes(target);
+          setImportProgress(`Breaking down script... ${freshScenes.length}/${target} scenes created`);
+        } catch (err) {
+          const status = err?.response?.status || err?.status;
+          if (status === 504) {
+            // Timeout — wait and retry same batch (scenes may have been saved)
+            await new Promise(r => setTimeout(r, 8000));
+            const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+            queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+            setImportProgress(`Recovering from timeout... ${freshScenes.length} scenes so far`);
+            // Don't increment nextBatch — retry
+            continue;
+          }
+          throw err;
         }
-
-        // Check project status too — in case all scenes saved and status updated
-        const freshProjects = await base44.entities.Projects.filter({ id: projectId });
-        const proj = freshProjects[0];
-        const statusDone = proj?.status === 'breakdown_complete' || proj?.status === 'content_generation';
-
-        return (anyReady.length > 0 && anyReady.length === freshScenes.length) || statusDone;
-      }, 360, 5000); // 360 polls × 5s = 30 minutes max wait for 10k word scripts
+      }
 
       await refetchScenes();
 
-      // ── Phase 2: Prompt Generation ──────────────────────────────
+      // ── Phase 2: Prompt Generation (loop — 1 batch per call) ────
       setImportPhase('prompts');
       setImportProgress('Converting director notes into visual prompts...');
 
-      await invokeWithTimeout('generateScenePrompts', { project_id: projectId });
+      let promptsDone = false;
 
-      // Poll until scenes move to prompts_ready
-      await pollForCompletion(async () => {
-        const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
-        queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
-        const pending = freshScenes.filter(s => s.status === 'breakdown_ready');
-        const ready = freshScenes.filter(s => s.status === 'prompts_ready');
-        setImportProgress(`Generating production prompts... ${ready.length}/${freshScenes.length} ready`);
-        return pending.length === 0 && ready.length > 0;
-      }, 360, 5000); // 30 min max for prompts too
+      while (!promptsDone) {
+        try {
+          const prResult = await base44.functions.invoke('generateScenePrompts', {
+            project_id: projectId
+          });
+          const prData = prResult.data || prResult;
+          promptsDone = prData.done === true;
+
+          const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+          queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+          const ready = freshScenes.filter(s => s.status === 'prompts_ready');
+          const total = freshScenes.length;
+          setImportProgress(`Generating production prompts... ${ready.length}/${total} ready`);
+        } catch (err) {
+          const status = err?.response?.status || err?.status;
+          if (status === 504) {
+            await new Promise(r => setTimeout(r, 8000));
+            const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+            queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+            const ready = freshScenes.filter(s => s.status === 'prompts_ready');
+            setImportProgress(`Recovering... ${ready.length}/${freshScenes.length} prompts ready`);
+            continue;
+          }
+          throw err;
+        }
+      }
 
       await refetchScenes();
     } catch (err) {
