@@ -475,6 +475,59 @@ Deno.serve(async (req) => {
       ? `**CHARACTERS (embed FULL physical description into every prompt where they appear):**\n${characters.map(c => `• ${c.name}: ${c.visual_description || c.description || ''}`).join('\n')}`
       : '';
 
+    // ═══ CHARACTER IDENTITY TAGS — style-aware, force-injected into EVERY prompt post-LLM ═══
+    // Each character gets a description rendered in the visual language of the chosen style
+
+    const styleCharacterRules = {
+      cinematic_realistic: (desc) =>
+        `photorealistic human with ${desc}, natural skin texture with visible pores, real fabric clothing with realistic wrinkles and material weight, natural hair with individual strand detail, cinematic three-point lighting on face`,
+      photorealistic_4k: (desc) =>
+        `DSLR-quality photorealistic person with ${desc}, razor-sharp skin detail, real fabric textures, natural hair strands, authentic micro-expressions, editorial photography lighting`,
+      anime: (desc) =>
+        `anime-style character with ${desc}, large expressive detailed eyes with highlight reflections, clean sharp linework, cel-shaded smooth skin, stylized colorful flowing hair, anime proportions with slightly elongated limbs`,
+      cinematic_anime: (desc) =>
+        `cinematic anime character with ${desc}, Makoto Shinkai quality rendering, sharp detailed linework with subtle cel-shading gradients, dramatic volumetric lighting on face and hair, flowing hair interacting with light and wind, rich color depth on skin and clothing`,
+      cartoon_2d: (desc) =>
+        `2D cartoon character with ${desc}, bold clean black outlines around entire body, flat vibrant color fills with subtle gradient shading, exaggerated friendly proportions with larger head, big expressive eyes with thick outlines, dynamic pose`,
+      picstory_cocomelon: (desc) =>
+        `adorable 3D rendered character with ${desc}, soft rounded plastic-smooth features, big sparkly expressive eyes, pastel-colored clothing with smooth toy-like texture, toy-like chunky proportions, cheerful warm expression, CoComelon animation quality`,
+      cinematic_picstory: (desc) =>
+        `Pixar-quality 3D animated character with ${desc}, subsurface scattering on skin giving warm translucent glow, detailed clothing with fabric physics and subtle wrinkles, expressive stylized features with realistic proportions, dramatic studio rim lighting`,
+      oil_painting: (desc) =>
+        `oil-painted character with ${desc}, visible impasto brushstrokes on skin in warm pigment tones, classical portrait lighting with Rembrandt chiaroscuro, soft painterly edges on hair and clothing, rich varnish glow, canvas texture visible on face`,
+      watercolor: (desc) =>
+        `watercolor-rendered character with ${desc}, soft translucent color washes for skin with paper grain showing through, delicate wet-on-wet blending on hair, gentle bleeding edges on clothing silhouette, luminous transparency where white paper peeks through`,
+      comic_book: (desc) =>
+        `comic book character with ${desc}, bold black ink outlines, halftone dot shading on skin and clothing, vibrant saturated flat colors with dramatic shadow areas, dynamic foreshortened pose, Ben-Day dot pattern on mid-tones, Marvel/DC art quality`,
+      humpty_dumpty: (desc) =>
+        `whimsical storybook character with ${desc}, rounded friendly soft shapes, gentle watercolor wash coloring, warm nostalgic fairy tale proportions, delicate cross-hatching for shading, vintage children's book illustration charm, golden warm lighting`,
+      harry_potter: (desc) =>
+        `fantasy character with ${desc}, warm candlelit skin tones with amber glow, weathered textured robes and wizard attire, magical golden particle effects around edges, gothic atmosphere, jewel-tone color palette of deep burgundy and emerald on clothing`,
+      "3d_whiteboard_cartoon": (desc) =>
+        `3D whiteboard cartoon character with ${desc}, bold consistent black ink outlines around entire body, bright cheerful flat color fills with single-tone cel-shading, friendly exaggerated proportions with larger head, thick expressive eyebrows, simple rounded nose, warm peach-brown skin tones, flat-colored casual clothing with subtle fold shading`,
+      low_poly_3d_cartoon: (desc) =>
+        `low-poly 3D character with ${desc}, all features built from visible flat-shaded polygon facets and triangular faces, oversized geometric head, angular protruding nose, large round expressive eyes, chunky geometric hair blocks, warm peach-tan skin with polygon-edge shading, blocky hands, clothing with visible polygon folds and flat faces, matte clay-toy quality`,
+      skeleton_protagonist: (desc) =>
+        `photorealistic transparent skeleton with clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets, ${desc}, full body head-to-toe, wearing context-appropriate clothing, interacting with photorealistic environment and humans`
+    };
+
+    const defaultStyleTransform = (desc) => `character with ${desc}, detailed and consistent appearance`;
+
+    const characterIdentityTags = {};
+    const styleTransform = styleCharacterRules[visualStyle] || defaultStyleTransform;
+
+    for (const c of characters) {
+      const name = (c.name || '').toLowerCase().trim();
+      const rawDesc = c.visual_description || c.description || '';
+      if (name && rawDesc) {
+        // Transform the raw description into style-specific rendering language
+        const styledDesc = styleTransform(rawDesc);
+        // Cap at 400 chars to stay within prompt budget
+        characterIdentityTags[name] = styledDesc.length > 400 ? styledDesc.substring(0, 400).trim() : styledDesc;
+      }
+    }
+    console.log(`👤 Style-aware character tags (${visualStyle}) built for: ${Object.keys(characterIdentityTags).join(', ') || 'none'}`);
+
     let storyContext = '';
     let blueprintSceneMap = {}; // scene_number → director data from blueprint
     try {
@@ -591,7 +644,10 @@ ${sceneDirections}
      • Use the style body rules above to describe characters, environments, and objects
      • The scene body is WHERE the visual style really shows — describe characters with the style's specific features
      • Embed shot type and composition from director notes
-     • If characters appear → embed FULL physical description USING THE STYLE'S CHARACTER RULES
+     • If a character appears → you MUST include their COMPLETE physical description EVERY TIME, even if they appeared in previous scenes. NEVER shorten to just a name or "the woman" or "he". ALWAYS write the full appearance: hair color, hair style, skin tone, eye color, build, clothing, distinguishing features. Treat each image_prompt as if the image generator has NEVER seen this character before — because it hasn't.
+     • Use this EXACT pattern: "[Character name], [full physical description from character list], [what they're wearing in THIS scene], [what action they're doing]"
+     • Example: "Elena, a tall woman in her early 30s with long straight black hair, olive skin, sharp green eyes, athletic build, wearing a navy business suit with rolled sleeves, reaching across the conference table to grab a document"
+     • NEVER write just "Elena walks in" or "the protagonist" or "she sits down" — the image generator doesn't know who that is
      • ${orientationConfig.composition}
    - FORBIDDEN: text, words, letters, numbers, charts, graphs, signs in the image
    - Abstract concepts → PHYSICAL METAPHORS
@@ -639,8 +695,54 @@ ${sceneDirections}
         let imagePrompt, animationPrompt;
 
         if (generated) {
+          let rawPrompt = generated.image_prompt || '';
+
+          // ═══ CHARACTER IDENTITY INJECTION ═══
+          // Check if any known character name appears in the prompt
+          // If the LLM shortened the description, replace with the full identity tag
+          for (const [charName, charDesc] of Object.entries(characterIdentityTags)) {
+            // Build regex to find the character name (case-insensitive, word boundary)
+            const namePattern = new RegExp(`\\b${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+
+            if (namePattern.test(rawPrompt)) {
+              // Check if the LLM already included a decent description near the name
+              // Look for the name followed by at least 40 chars of description
+              const descCheck = new RegExp(
+                `\\b${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b[,\\s]+[^.]{40,}`, 'gi'
+              );
+
+              if (!descCheck.test(rawPrompt)) {
+                // LLM used the name without full description — inject identity
+                const capitalizedName = charName.charAt(0).toUpperCase() + charName.slice(1);
+                rawPrompt = rawPrompt.replace(
+                  namePattern,
+                  `${capitalizedName} (${charDesc})`
+                );
+                console.log(`👤 Injected identity for "${charName}" in scene ${s.scene_number}`);
+              }
+            }
+          }
+
+          // Also check for generic references and inject primary character
+          if (characters.length > 0) {
+            const primaryChar = characters[0];
+            const primaryName = (primaryChar.name || '').toLowerCase();
+            const primaryDesc = characterIdentityTags[primaryName] || '';
+            if (primaryDesc) {
+              const genericRefs = /\b(the protagonist|the main character|the character|the figure|the person|the man|the woman|the hero|the narrator)\b/gi;
+              if (genericRefs.test(rawPrompt)) {
+                const capitalizedName = primaryName.charAt(0).toUpperCase() + primaryName.slice(1);
+                rawPrompt = rawPrompt.replace(
+                  genericRefs,
+                  `${capitalizedName} (${primaryDesc})`
+                );
+                console.log(`👤 Replaced generic reference with "${primaryName}" in scene ${s.scene_number}`);
+              }
+            }
+          }
+
           imagePrompt = validateAndEnhancePrompt(
-            generated.image_prompt || '', styleConfig, orientationConfig, s.scene_number, visualStyle
+            rawPrompt, styleConfig, orientationConfig, s.scene_number, visualStyle
           );
           animationPrompt = generated.animation_prompt || '';
           if (animationPrompt.length < 80) {
