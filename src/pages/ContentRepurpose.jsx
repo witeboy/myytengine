@@ -52,6 +52,7 @@ export default function ContentRepurpose() {
   const [tweakNotes, setTweakNotes] = useState('');
   const [selectedStyle, setSelectedStyle] = useState('cinematic_realistic');
   const [selectedOrientation, setSelectedOrientation] = useState('landscape');
+  const [targetDurationMin, setTargetDurationMin] = useState(0); // 0 = match original
 
   // Step 4: New script
   const [newScript, setNewScript] = useState('');
@@ -99,6 +100,7 @@ export default function ContentRepurpose() {
 
       setAnalysis(result);
       setNewTitle(result.title || 'Untitled Video');
+      setTargetDurationMin(Math.ceil((result.estimated_duration_seconds || 600) / 60));
       const vs = (result.visual_style || '').toLowerCase();
       if (vs.includes('anime')) setSelectedStyle('cinematic_anime');
       else if (vs.includes('cartoon')) setSelectedStyle('cartoon_2d');
@@ -150,12 +152,15 @@ export default function ContentRepurpose() {
     });
 
     // Step 2: Initialize batches
+    const targetTotalWords = targetDurationMin * 150;
     const initResp = await base44.functions.invoke('initializeRepurposeBatches', {
       project_id: tempProject.id,
       original_script: originalScript,
       new_title: newTitle,
       analysis,
       tweak_notes: tweakNotes,
+      target_duration_minutes: targetDurationMin,
+      target_total_words: targetTotalWords,
     });
     const initResult = initResp.data;
     const totalBatches = initResult.batches_created || 0;
@@ -208,7 +213,7 @@ export default function ContentRepurpose() {
       tone: analysis.script_style,
       visual_style: selectedStyle,
       orientation: selectedOrientation,
-      video_duration_minutes: Math.ceil((analysis.estimated_duration_seconds || 600) / 60),
+      video_duration_minutes: targetDurationMin,
       status: 'script_complete',
       current_step: 4,
     });
@@ -221,7 +226,7 @@ export default function ContentRepurpose() {
       title: newTitle || analysis.title,
       full_script: newScript,
       word_count: newScript.split(/\s+/).filter(w => w).length,
-      estimated_duration_sec: analysis.estimated_duration_seconds || 600,
+      estimated_duration_sec: targetDurationMin * 60,
     });
 
     setPipelineStep('Redirecting to Content Generation...');
@@ -398,6 +403,48 @@ export default function ContentRepurpose() {
                 <Input value={newTitle} onChange={e => setNewTitle(e.target.value)} />
                 <p className="text-xs text-gray-400 mt-1">Original: {analysis.title}</p>
               </div>
+              {/* Duration Control */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-gray-700">Target Video Duration</label>
+                  <div className="flex items-center gap-2">
+                    <Badge className="bg-emerald-100 text-emerald-800 font-mono">
+                      {targetDurationMin} min → {(targetDurationMin * 150).toLocaleString()} words
+                    </Badge>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min={1}
+                    max={60}
+                    value={targetDurationMin}
+                    onChange={e => setTargetDurationMin(parseInt(e.target.value))}
+                    className="flex-1 accent-emerald-600"
+                  />
+                  <Input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={targetDurationMin}
+                    onChange={e => setTargetDurationMin(Math.max(1, Math.min(60, parseInt(e.target.value) || 1)))}
+                    className="w-20 text-center"
+                  />
+                  <span className="text-sm text-gray-500">min</span>
+                </div>
+                <div className="flex items-center justify-between mt-2 text-[11px] text-gray-400">
+                  <span>Original: {Math.ceil((analysis?.estimated_duration_seconds || 600) / 60)} min (~{analysis?.estimated_word_count || 'N/A'} words)</span>
+                  <span>
+                    {targetDurationMin > Math.ceil((analysis?.estimated_duration_seconds || 600) / 60)
+                      ? `↑ Expanding ${Math.round((targetDurationMin / Math.ceil((analysis?.estimated_duration_seconds || 600) / 60) - 1) * 100)}%`
+                      : targetDurationMin < Math.ceil((analysis?.estimated_duration_seconds || 600) / 60)
+                      ? `↓ Condensing ${Math.round((1 - targetDurationMin / Math.ceil((analysis?.estimated_duration_seconds || 600) / 60)) * 100)}%`
+                      : '= Same length'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1">Based on 150 words/minute narration speed. AI will expand or condense the original while preserving hooks, emotional arcs, climax, and storytelling structure.</p>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm font-medium text-gray-700 mb-1 block">Visual Style</label>
