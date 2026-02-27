@@ -230,13 +230,6 @@ Deno.serve(async (req) => {
     const cleanedText = cleanScript(script.full_script);
     const wordCount = cleanedText.split(/\s+/).filter(w => w.length > 0).length;
     
-    // ── Check script length - limit to ~50000 words for safety ───────
-    if (wordCount > 60000) {
-      return Response.json({ 
-        error: `Script too long (${wordCount} words). Please reduce to under 50000 words for reliable generation.`,
-        word_count: wordCount,
-      }, { status: 400 });
-    }
     
     console.log(`🎙 Voiceover: ${wordCount} words, ${cleanedText.length} chars`);
 
@@ -257,24 +250,7 @@ Deno.serve(async (req) => {
     const isAi33Voice = AI33_KEY && /^[a-zA-Z0-9]{20,}$/.test(selectedVoiceId);
     const useMinimax = !forceAi33 && MINIMAX_KEY && !isAi33Voice;
 
-    // ── Split text into chunks (smaller chunks for faster processing) ─
-    const chunkLimit = useMinimax ? 4500 : 2500; // Reduced chunk sizes
-    const chunks = splitTextIntoChunks(cleanedText, chunkLimit);
     
-    // ── Limit chunks to prevent timeout ────────────────────────────
-    if (chunks.length > 3) {
-      return Response.json({ 
-        error: `Script too long (${chunks.length} chunks needed). Please reduce script length.`,
-        word_count: wordCount,
-        chunks_needed: chunks.length,
-      }, { status: 400 });
-    }
-    
-    console.log(`🎙 ${chunks.length} chunk(s), provider=${useMinimax ? 'minimax' : 'ai33'}, voice=${selectedVoiceId}`);
-
-    let allAudioBytes = [];
-    let totalDuration = 0;
-    let usedProvider = 'none';
 
     // ── TRY MINIMAX ────────────────────────────────────────────────
     if (useMinimax) {
