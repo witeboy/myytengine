@@ -3,28 +3,39 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 // Splits the original script into batches for repurpose rewriting.
 // Each batch gets a chunk of the original + style instructions.
 
-async function callGemini(prompt, temperature = 0.7) {
-  const apiKey = Deno.env.get("GEMINI_API_KEY");
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: 8192, responseMimeType: "application/json" }
-      })
-    }
-  );
+async function callLLM(prompt, temperature = 0.7) {
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: "You are a world-class scriptwriter and content strategist. Always respond in valid JSON only. No markdown, no code fences, no commentary." },
+        { role: "user", content: prompt }
+      ],
+      temperature,
+      max_tokens: 8192,
+      response_format: { type: "json_object" }
+    })
+  });
 
   if (!response.ok) {
     const err = await response.json();
-    throw new Error(`Gemini error: ${err.error?.message || response.status}`);
+    throw new Error(`OpenAI error: ${err.error?.message || response.status}`);
   }
 
   const data = await response.json();
-  if (!data.candidates?.length) throw new Error("No candidates from Gemini");
-  return JSON.parse(data.candidates[0].content.parts[0].text);
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error("No content in OpenAI response");
+
+  try { return JSON.parse(text); } catch (_) {}
+  // Fallback: extract JSON from fences
+  const fenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) return JSON.parse(fenceMatch[1].trim());
+  throw new Error("Failed to parse OpenAI JSON");
 }
 
 Deno.serve(async (req) => {
@@ -99,7 +110,7 @@ Generate exactly ${numBatches} segments.`;
 
     let segments = [];
     try {
-      const result = await callGemini(outlinePrompt, 0.6);
+      const result = await callLLM(outlinePrompt, 0.6);
       segments = result.segments || [];
     } catch (e) {
       console.warn('Outline generation failed, using defaults:', e.message);
