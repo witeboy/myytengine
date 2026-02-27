@@ -496,7 +496,10 @@ const promptPrefix = `${framingPrefix}, ${styleConfig.positive}, ${orientationCo
     let totalWarnings = 0;
     const totalBatches = Math.ceil(pendingScenes.length / BATCH_SIZE);
 
-    for (let bIdx = 0; bIdx < totalBatches; bIdx++) {
+    // Process 1 batch per call to avoid platform timeout
+    const startBIdx = 0; // always 0 — we only process scenes with status "breakdown_ready"
+    const maxBatchesPerCall = 1;
+    for (let bIdx = startBIdx; bIdx < Math.min(startBIdx + maxBatchesPerCall, totalBatches); bIdx++) {
       const batchScenes = pendingScenes.slice(bIdx * BATCH_SIZE, (bIdx + 1) * BATCH_SIZE);
       if (batchScenes.length === 0) break;
 
@@ -691,12 +694,17 @@ ${sceneDirections}
     if (totalWarnings > 0) console.log(`⚠️ ${totalWarnings} fallback prompts used`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
+    const remainingScenes = (await base44.asServiceRole.entities.Scenes.filter({ project_id }))
+      .filter(s => s.status === 'breakdown_ready').length;
+    const allDone = remainingScenes === 0;
+
     return Response.json({
       success: true,
-      done: true,
+      done: allDone,
       prompts_applied: totalPrompts,
       quality_warnings: totalWarnings,
       total_batches: totalBatches,
+      remaining_scenes: remainingScenes,
       total_scenes: pendingScenes.length
     });
 
