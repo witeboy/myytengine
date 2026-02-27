@@ -147,7 +147,13 @@ export default function ContentGeneration() {
           if (status === 400 && errMsg.includes('blueprint')) {
             console.log(`Blueprint not ready yet, retrying batch ${nextBatch} in 5s...`);
             await new Promise(r => setTimeout(r, 5000));
-            continue; // retry same batch
+            continue;
+          }
+          // Transient server error (JSON parse, timeout, etc) — retry same batch
+          if (status === 500 || status === 502) {
+            console.log(`Server error on batch ${nextBatch}, retrying in 8s...`);
+            await new Promise(r => setTimeout(r, 8000));
+            continue;
           }
           if (status === 504) {
             // Timeout — wait and retry same batch (scenes may have been saved)
@@ -185,7 +191,8 @@ export default function ContentGeneration() {
           setImportProgress(`Generating production prompts... ${ready.length}/${total} ready`);
         } catch (err) {
           const status = err?.response?.status || err?.status;
-          if (status === 504) {
+          if (status === 500 || status === 502 || status === 504) {
+            console.log(`Prompts error ${status}, retrying in 8s...`);
             await new Promise(r => setTimeout(r, 8000));
             const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
             queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
