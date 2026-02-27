@@ -18,6 +18,191 @@ import ScriptComparison from '@/components/repurpose/ScriptComparison';
 import HookVariants from '@/components/repurpose/HookVariants';
 import OngoingRepurposeProjects from '@/components/repurpose/OngoingRepurposeProjects';
 
+// ── Inline Script Extender Component ────────────────────────────
+function ScriptExtender({ script, title, analysis, onUpdate }) {
+  const [expanding, setExpanding] = useState(false);
+  const [targetPct, setTargetPct] = useState(20);
+  const [progress, setProgress] = useState('');
+
+  const currentWords = script.split(/\s+/).filter(w => w.length > 0).length;
+  const targetWords = Math.round(currentWords * (1 + targetPct / 100));
+  const extraWords = targetWords - currentWords;
+  const targetMinutes = Math.round(targetWords / 150);
+
+  const handleExtend = async () => {
+    setExpanding(true);
+    let workingScript = script;
+    let workingWords = currentWords;
+    const finalTarget = targetWords;
+    const minAcceptable = Math.round(finalTarget * 0.95);
+    let passes = 0;
+    const MAX_PASSES = 5;
+
+    while (workingWords < minAcceptable && passes < MAX_PASSES) {
+      passes++;
+      const deficit = finalTarget - workingWords;
+      const paragraphsNeeded = Math.max(1, Math.round(deficit / 100));
+      setProgress(`Pass ${passes}: adding ~${deficit} words (${paragraphsNeeded} paragraphs)...`);
+
+      try {
+        // Split script into chunks — send only the last portion for context
+        const scriptTail = workingScript.length > 3000
+          ? '...\n\n' + workingScript.slice(-3000)
+          : workingScript;
+
+        const result = await base44.integrations.Core.InvokeLLM({
+          prompt: `You are a world-class YouTube scriptwriter expanding an existing narration.
+
+CURRENT SCRIPT (last section for context — ${workingWords} total words):
+"""
+${scriptTail}
+"""
+
+TITLE: "${title}"
+STYLE: ${analysis?.script_style || 'dramatic'} | TONE: ${analysis?.tone_description || 'engaging'} | PACING: ${analysis?.pacing || 'dynamic'}
+
+YOUR TASK: Write EXACTLY ${deficit} words (${paragraphsNeeded} paragraphs of 80-120 words each) that will be INSERTED throughout the script to enrich it.
+
+FORMAT YOUR OUTPUT AS NUMBERED INSERTION BLOCKS:
+[AFTER: "quote the last 5-8 words of the paragraph this goes after"]
+<the new paragraph(s) to insert>
+
+[AFTER: "quote the last 5-8 words of another paragraph"]  
+<the new paragraph(s) to insert>
+
+EXPANSION RULES:
+- Add NEW examples, anecdotes, case studies, and vivid stories related to "${title}"
+- Deepen emotional moments with sensory details and "imagine this" scenarios
+- Add rhetorical questions ("But here's what most people miss...")
+- Add audience-directed moments ("Think about that for a second...")
+- Add surprising statistics, comparisons, or counter-intuitive facts
+- Add mini-stories that illustrate existing points more vividly
+- NEVER repeat existing content — every sentence must be NEW
+- NEVER add [MUSIC], [VISUAL], headers, or stage directions
+- Match the existing voice, tone, rhythm, and style perfectly
+- Spread insertions EVENLY across the script — not all at the end
+- Each insertion block should be 80-150 words
+
+You MUST write at least ${deficit} words total across all insertion blocks.`,
+        });
+
+        if (!result || result.length < 50) {
+          console.warn(`Pass ${passes}: LLM returned empty`);
+          continue;
+        }
+
+        // Parse insertion blocks and apply them
+        const insertionPattern = /\[AFTER:\s*"([^"]+)"\]\s*\n([\s\S]*?)(?=\[AFTER:|$)/gi;
+        let applied = 0;
+        let updatedScript = workingScript;
+        let match;
+
+        while ((match = insertionPattern.exec(result)) !== null) {
+          const anchor = match[1].trim();
+          let newContent = match[2].trim()
+            .replace(/\[[^\]]*\]/gi, '')
+            .replace(/\*\*/g, '')
+            .replace(/^\s*(VISUAL|AUDIO|MUSIC|SOUND|SFX).*$/gim, '')
+            .trim();
+
+          if (!newContent || newContent.length < 30) continue;
+
+          // Find the anchor in the script
+          const anchorIdx = updatedScript.indexOf(anchor);
+          if (anchorIdx >= 0) {
+            // Find end of the paragraph containing the anchor
+            const afterAnchor = anchorIdx + anchor.length;
+            const nextParaBreak = updatedScript.indexOf('\n\n', afterAnchor);
+            const insertPoint = nextParaBreak >= 0 ? nextParaBreak : afterAnchor;
+            updatedScript = updatedScript.slice(0, insertPoint) + '\n\n' + newContent + updatedScript.slice(insertPoint);
+            applied++;
+          }
+        }
+
+        // If structured insertions failed, fall back to appending
+        if (applied === 0) {
+          const cleanResult = result
+            .replace(/\[AFTER:[^\]]*\]/gi, '')
+            .replace(/\[[^\]]*\]/gi, '')
+            .replace(/\*\*/g, '')
+            .replace(/^\s*(VISUAL|AUDIO|MUSIC|SOUND|SFX).*$/gim, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+
+          if (cleanResult.length > 50) {
+            // Insert at ~70% mark to avoid always appending at the end
+            const insertPoint = Math.round(updatedScript.length * 0.7);
+            const nearestBreak = updatedScript.indexOf('\n\n', insertPoint);
+            const breakPoint = nearestBreak >= 0 ? nearestBreak : insertPoint;
+            updatedScript = updatedScript.slice(0, breakPoint) + '\n\n' + cleanResult + '\n\n' + updatedScript.slice(breakPoint);
+          }
+        }
+
+        workingScript = updatedScript;
+        workingWords = workingScript.split(/\s+/).filter(w => w.length > 0).length;
+        setProgress(`Pass ${passes} done: ${workingWords}/${finalTarget} words`);
+
+      } catch (err) {
+        console.error(`Extension pass ${passes} failed:`, err);
+        setProgress(`Pass ${passes} failed, retrying...`);
+      }
+    }
+
+    onUpdate(workingScript);
+    setExpanding(false);
+    setProgress('');
+  };
+
+  return (
+    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-blue-600" />
+          <span className="text-sm font-semibold text-blue-900">Script Extender</span>
+        </div>
+        <span className="text-xs text-blue-600">
+          {currentWords} words → {targetWords} words (+{extraWords}) → ~{targetMinutes} min
+        </span>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-1">
+          <span className="text-xs text-gray-600 whitespace-nowrap">Extend by:</span>
+          {[10, 20, 30, 50, 75, 100].map(pct => (
+            <button
+              key={pct}
+              onClick={() => setTargetPct(pct)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
+                targetPct === pct
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-white text-blue-700 border border-blue-200 hover:bg-blue-50'
+              }`}
+            >
+              +{pct}%
+            </button>
+          ))}
+        </div>
+        <Button
+          onClick={handleExtend}
+          disabled={expanding}
+          size="sm"
+          className="bg-blue-600 hover:bg-blue-700 gap-1.5"
+        >
+          {expanding ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+          {expanding ? 'Extending...' : `Add ${extraWords} words`}
+        </Button>
+      </div>
+
+      {progress && (
+        <div className="mt-2 flex items-center gap-2">
+          <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
+          <span className="text-xs text-blue-700">{progress}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const VISUAL_STYLES = [
   { value: 'cinematic_realistic', label: 'Cinematic Realistic' },
   { value: 'photorealistic_4k', label: 'Photorealistic 4K' },
@@ -567,9 +752,17 @@ OUTPUT: ${deficit} words of continuation.`,
                 <div className="flex items-center gap-2 flex-wrap">
                   <Badge className="bg-emerald-100 text-emerald-800">{newTitle}</Badge>
                   <Badge variant="outline">{newScript.split(/\s+/).filter(w => w).length} words</Badge>
+                  <Badge variant="outline">~{Math.round(newScript.split(/\s+/).filter(w => w).length / 150)} min</Badge>
                   <Badge variant="outline">{selectedStyle.replace(/_/g, ' ')}</Badge>
-  
                 </div>
+
+                {/* ── Script Extender ─────────────────────────────── */}
+                <ScriptExtender
+                  script={newScript}
+                  title={newTitle}
+                  analysis={analysis}
+                  onUpdate={(updated) => setNewScript(updated)}
+                />
 
                 {/* Hook Variants */}
                 <HookVariants
