@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, original_script, new_title, analysis, tweak_notes } = await req.json();
+    const { project_id, original_script, new_title, analysis, tweak_notes, target_duration_minutes, target_total_words } = await req.json();
     if (!project_id || !original_script) {
       return Response.json({ error: 'Missing project_id or original_script' }, { status: 400 });
     }
@@ -44,14 +44,20 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.ScriptBatches.delete(batch.id);
     }
 
-    // Calculate batch count based on original word count
+    // Calculate target word count from user-specified duration (150 wpm benchmark)
     const originalWords = original_script.split(/\s+/).filter(w => w.length > 0);
-    const totalWords = originalWords.length;
-    const WORDS_PER_BATCH = 1500;
-    const numBatches = Math.max(2, Math.ceil(totalWords / WORDS_PER_BATCH));
-    const wordsPerBatch = Math.ceil(totalWords / numBatches);
+    const originalTotalWords = originalWords.length;
+    const finalTargetWords = target_total_words || originalTotalWords; // fallback to original length
+    const scaleFactor = finalTargetWords / Math.max(originalTotalWords, 1); // e.g. 1.5 = expand 50%, 0.5 = condense 50%
 
-    console.log(`Repurpose batches: ${totalWords} words → ${numBatches} batches @ ~${wordsPerBatch} words each`);
+    const WORDS_PER_BATCH = 1500;
+    const numBatches = Math.max(2, Math.ceil(finalTargetWords / WORDS_PER_BATCH));
+    const wordsPerBatch = Math.ceil(finalTargetWords / numBatches);
+
+    const targetDurationMin = target_duration_minutes || Math.ceil(originalTotalWords / 150);
+    const scalePct = Math.round((scaleFactor - 1) * 100);
+    const scaleLabel = scalePct > 0 ? `expanding +${scalePct}%` : scalePct < 0 ? `condensing ${scalePct}%` : 'same length';
+    console.log(`Repurpose: ${originalTotalWords} original → ${finalTargetWords} target (${scaleLabel}) → ${numBatches} batches @ ~${wordsPerBatch} words`);
 
     // Split original script into chunks for each batch
     const sentences = original_script.match(/[^.!?]+[.!?]+[\s]*/g) || [original_script];
@@ -99,11 +105,15 @@ Generate exactly ${numBatches} segments.`;
       console.warn('Outline generation failed, using defaults:', e.message);
     }
 
-    // Create batch records
+    // Create batch records — each batch gets scaled target word count
     const createdBatches = [];
     for (let i = 0; i < numBatches; i++) {
       const seg = segments[i];
-      const chunkWordCount = originalChunks[i]?.split(/\s+/).filter(w => w.length > 0).length || wordsPerBatch;
+      const originalChunkWords = originalChunks[i]?.split(/\s+/).filter(w => w.length > 0).length || 0;
+      // Scale this chunk proportionally to hit overall target
+      const scaledTarget = Math.round(originalChunkWords * scaleFactor) || wordsPerBatch;
+      // Clamp between reasonable bounds
+      const batchTarget = Math.max(200, Math.min(3000, scaledTarget));
 
       const batch = await base44.asServiceRole.entities.ScriptBatches.create({
         project_id,
@@ -112,6 +122,7 @@ Generate exactly ${numBatches} segments.`;
         focus_area: seg?.focus_area || `Part ${i + 1} of the repurposed script`,
         synopsis: JSON.stringify({
           original_chunk: originalChunks[i] || '',
+          original_chunk_words: originalChunkWords,
           emotional_arc: seg?.emotional_arc || '',
           key_beats: seg?.key_beats || '',
           new_title,
@@ -120,8 +131,11 @@ Generate exactly ${numBatches} segments.`;
           analysis_tone: analysis?.tone_description || '',
           analysis_pacing: analysis?.pacing || '',
           analysis_hook: analysis?.hook_technique || '',
+          scale_factor: scaleFactor,
+          target_duration_minutes: targetDurationMin,
+          total_target_words: finalTargetWords,
         }),
-        target_words: chunkWordCount,
+        target_words: batchTarget,
         status: 'pending',
       });
       createdBatches.push(batch);
@@ -132,7 +146,10 @@ Generate exactly ${numBatches} segments.`;
     return Response.json({
       success: true,
       batches_created: createdBatches.length,
-      total_target_words: totalWords,
+      original_words: originalTotalWords,
+      total_target_words: finalTargetWords,
+      scale_factor: scaleFactor,
+      target_duration_minutes: targetDurationMin,
       batches: createdBatches,
     });
   } catch (error) {
