@@ -697,49 +697,105 @@ ${sceneDirections}
         if (generated) {
           let rawPrompt = generated.image_prompt || '';
 
-          // ═══ CHARACTER IDENTITY INJECTION ═══
-          // Check if any known character name appears in the prompt
-          // If the LLM shortened the description, replace with the full identity tag
+          // ═══ INLINE CHARACTER IDENTITY INJECTION ═══
+          // Image gen models don't do name resolution — "Elena" in a cast block
+          // won't connect to "Elena" in the body. We must inline descriptions
+          // directly where each character is mentioned.
+
+          // Step 1: Count how many known characters appear in this scene
+          const sceneCast = [];
           for (const [charName, charDesc] of Object.entries(characterIdentityTags)) {
-            // Build regex to find the character name (case-insensitive, word boundary)
             const namePattern = new RegExp(`\\b${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-
             if (namePattern.test(rawPrompt)) {
-              // Check if the LLM already included a decent description near the name
-              // Look for the name followed by at least 40 chars of description
+              sceneCast.push({ name: charName, desc: charDesc });
+            }
+          }
+
+          // Step 2: Check for generic references → map to primary character
+          const genericRefs = /\b(the protagonist|the main character|the character|the figure|the hero|the narrator)\b/gi;
+          if (genericRefs.test(rawPrompt) && characters.length > 0) {
+            const primaryName = (characters[0].name || '').toLowerCase().trim();
+            if (primaryName && !sceneCast.find(c => c.name === primaryName)) {
+              sceneCast.unshift({ name: primaryName, desc: characterIdentityTags[primaryName] || '' });
+            }
+          }
+
+          if (sceneCast.length > 0) {
+            // Step 3: Budget per character based on count
+            // Total char budget for ALL characters: ~500 chars
+            // Ensures prompt doesn't bloat past Grok's sweet spot
+            const totalCharBudget = 500;
+            const perCharBudget = Math.floor(totalCharBudget / sceneCast.length);
+
+            // Step 4: Build compact inline descriptions
+            const inlineDescs = {};
+            for (const c of sceneCast) {
+              let desc = c.desc || '';
+              if (desc.length > perCharBudget) {
+                // Trim to budget at a natural comma break
+                const lastComma = desc.lastIndexOf(',', perCharBudget);
+                desc = lastComma > perCharBudget * 0.5
+                  ? desc.substring(0, lastComma).trim()
+                  : desc.substring(0, perCharBudget).trim();
+              }
+              inlineDescs[c.name] = desc;
+            }
+
+            // Step 5: Replace FIRST occurrence of each name with name + inline description
+            // Subsequent occurrences keep just the name (Grok has visual context by then)
+            let modifiedPrompt = rawPrompt;
+
+            for (const [charName, desc] of Object.entries(inlineDescs)) {
+              if (!desc) continue;
+              const escapedName = charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+              // Check if LLM already gave a decent description (40+ chars after name)
               const descCheck = new RegExp(
-                `\\b${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b[,\\s]+[^.]{40,}`, 'gi'
+                `\\b${escapedName}\\b[,\\s]+[^.]{40,}`, 'gi'
               );
+              if (descCheck.test(modifiedPrompt)) {
+                // LLM already described this character — skip injection
+                console.log(`👤 Scene ${s.scene_number}: "${charName}" already described by LLM — skipping`);
+                continue;
+              }
 
-              if (!descCheck.test(rawPrompt)) {
-                // LLM used the name without full description — inject identity
-                const capitalizedName = charName.charAt(0).toUpperCase() + charName.slice(1);
-                rawPrompt = rawPrompt.replace(
-                  namePattern,
-                  `${capitalizedName} (${charDesc})`
-                );
-                console.log(`👤 Injected identity for "${charName}" in scene ${s.scene_number}`);
+              // Also strip any short LLM parentheticals like "Elena (a young woman)"
+              const nameWithParens = new RegExp(
+                `\\b${escapedName}\\b\\s*\\([^)]{5,}\\)`, 'gi'
+              );
+              modifiedPrompt = modifiedPrompt.replace(nameWithParens, charName);
+
+              // Replace FIRST occurrence: "Elena crouches" → "a [full desc] crouches"
+              const firstOccurrence = new RegExp(`\\b${escapedName}\\b`, 'i');
+              const match = modifiedPrompt.match(firstOccurrence);
+              if (match) {
+                const idx = modifiedPrompt.indexOf(match[0]);
+                const before = modifiedPrompt.substring(0, idx);
+                const after = modifiedPrompt.substring(idx + match[0].length);
+                modifiedPrompt = `${before}a ${desc}${after}`;
+
+                console.log(`👤 Scene ${s.scene_number}: inlined "${charName}" (${desc.length} chars)`);
               }
             }
-          }
 
-          // Also check for generic references and inject primary character
-          if (characters.length > 0) {
-            const primaryChar = characters[0];
-            const primaryName = (primaryChar.name || '').toLowerCase();
-            const primaryDesc = characterIdentityTags[primaryName] || '';
-            if (primaryDesc) {
-              const genericRefs = /\b(the protagonist|the main character|the character|the figure|the person|the man|the woman|the hero|the narrator)\b/gi;
-              if (genericRefs.test(rawPrompt)) {
-                const capitalizedName = primaryName.charAt(0).toUpperCase() + primaryName.slice(1);
-                rawPrompt = rawPrompt.replace(
-                  genericRefs,
-                  `${capitalizedName} (${primaryDesc})`
-                );
-                console.log(`👤 Replaced generic reference with "${primaryName}" in scene ${s.scene_number}`);
+            // Step 6: Replace generic references with primary character description
+            if (characters.length > 0) {
+              const primaryName = (characters[0].name || '').toLowerCase().trim();
+              const primaryDesc = inlineDescs[primaryName];
+              if (primaryDesc) {
+                modifiedPrompt = modifiedPrompt.replace(genericRefs, `a ${primaryDesc}`);
+
+                // Also handle "the man"/"the woman" only if single character in scene
+                if (sceneCast.length === 1) {
+                  modifiedPrompt = modifiedPrompt
+                    .replace(/\bthe (man|woman|boy|girl|person)\b/gi, `the ${primaryDesc.split(',').slice(0, 3).join(',')}`);
+                }
               }
             }
+
+            rawPrompt = modifiedPrompt;
           }
+
 
           imagePrompt = validateAndEnhancePrompt(
             rawPrompt, styleConfig, orientationConfig, s.scene_number, visualStyle
