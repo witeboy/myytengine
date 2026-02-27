@@ -361,35 +361,20 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
     enhanced = enhanced.replace(/\s{2,}/g, ' ').replace(/,\s*,/g, ',');
   }
 
-  // Orientation
-  const compHint = orientationConfig.format === 'portrait'
-    ? 'vertical 9:16 frame, tall vertical composition'
-    : 'widescreen 16:9 frame, wide horizontal composition';
+ // Strip any orientation words the LLM may have included (orientation is handled by API aspect_ratio param)
+  enhanced = enhanced
+    .replace(/\b(LANDSCAPE|PORTRAIT)\s+(HORIZONTAL|VERTICAL)\b/gi, '')
+    .replace(/\bvertical\s+\d+:\d+\s*(frame|format)?\b/gi, '')
+    .replace(/\bwidescreen\s+\d+:\d+\s*(frame|format)?\b/gi, '')
+    .replace(/\b\d{1,2}:\d{1,2}\s*(widescreen|vertical|horizontal|frame|format|ratio)\b/gi, '')
+    .replace(/\b(wide|tall)\s+(cinematic|vertical|horizontal)\s+(framing|composition)\b/gi, '');
 
-  if (orientationConfig.format === 'portrait') {
-    if (!/portrait|vertical|9:16/i.test(enhanced)) {
-      enhanced = enhanced.replace(/landscape|horizontal|widescreen|16:?9/gi, '');
-      enhanced = `${compHint}. ${enhanced}`;
-    }
-  } else {
-    if (!/landscape|widescreen|16:9/i.test(enhanced)) {
-      enhanced = enhanced.replace(/portrait|vertical|9:?16/gi, '');
-      enhanced = `${compHint}. ${enhanced}`;
-    }
-  }
+  // DO NOT add anti-text instruction — Grok renders it as visible text
+  // The LLM prompt already instructs physical metaphors for abstract concepts
 
-  // No text rule
-  if (!/no text/i.test(enhanced)) {
-    enhanced += ', ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image';
-  }
-
-  // Quality suffix — style-appropriate
+  // Quality suffix — style-appropriate (no resolution numbers — Grok renders them)
   if (!/masterpiece|professional|high quality/i.test(enhanced)) {
-    if (isPhotoStyle) {
-      enhanced += ', masterpiece quality, highly detailed, 8K resolution, professional composition, award-winning cinematography';
-    } else {
-      enhanced += ', masterpiece quality, highly detailed, professional composition, best quality';
-    }
+    enhanced += ', masterpiece quality, highly detailed, professional composition';
   }
 
   return enhanced;
@@ -480,7 +465,7 @@ Deno.serve(async (req) => {
     }
 
     const framingPrefix = "Full body wide shot showing complete scene from head to feet, detailed sharp environment with visible props and architecture, character mid-action in a populated world";
-const promptPrefix = `${framingPrefix}, ${styleConfig.positive}, ${orientationConfig.directive}`;
+    const promptPrefix = `${framingPrefix}, ${styleConfig.positive}`;
 
     let characters = [];
     if (project.character_descriptions) {
@@ -600,8 +585,7 @@ ${sceneDirections}
 
 1. **image_prompt** — Production-ready AI image generation prompt:
    - START with the style prefix: "${styleConfig.positive}."
-   - Then add orientation: "${orientationConfig.directive}."
-   - Then write the SCENE BODY describing what's actually in the frame:
+   - Then write the SCENE BODY describing what's actually in the frame (do NOT include orientation, aspect ratio, or resolution words — those are handled separately):
      • Describe the ENVIRONMENT and SETTING first — location, weather, architecture, props, atmosphere
      • Then place characters FULL BODY within that environment, doing a specific ACTION
      • Use the style body rules above to describe characters, environments, and objects
@@ -634,7 +618,7 @@ ${sceneDirections}
   "prompts": [
     {
       "scene_number": 1,
-      "image_prompt": "[style prefix]. [orientation]. [ENVIRONMENT FIRST, then FULL BODY character mid-action within it, using style-specific rules]... ABSOLUTELY NO text...",
+      "image_prompt": "[style prefix]. [ENVIRONMENT FIRST, then FULL BODY character mid-action within it, using style-specific rules]",
       "animation_prompt": "[motion direction]"
     }
   ]
