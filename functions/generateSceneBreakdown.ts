@@ -13,47 +13,76 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 // Pipeline: Script → [THIS FUNCTION] → Scene Prompts → Image Gen → Animation
 // ══════════════════════════════════════════════════════════════════
 
-async function callGemini(prompt, temperature = 0.7) {
-  const apiKey = Deno.env.get("GEMINI_API_KEY");
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: 16384, responseMimeType: "application/json" }
-      })
-    }
-  );
+async function callLLM(prompt, temperature = 0.7, retries = 3) {
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
 
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(`Gemini error: ${err.error?.message || response.status}`);
-  }
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "gpt-4o",
+          messages: [
+            { role: "system", content: "You are a world-class film director. Always respond in valid JSON only. No markdown, no commentary, no code fences — pure JSON." },
+            { role: "user", content: prompt }
+          ],
+          temperature,
+          max_tokens: 16384,
+          response_format: { type: "json_object" }
+        })
+      });
 
-  const data = await response.json();
-  if (!data.candidates?.length) throw new Error("No candidates from Gemini");
-  const rawText = data.candidates[0].content.parts[0].text;
+      if (response.status === 429) {
+        const waitMs = Math.pow(2, attempt + 1) * 5000;
+        console.log(`Rate limited, waiting ${waitMs / 1000}s (retry ${attempt + 1}/${retries})...`);
+        await new Promise(r => setTimeout(r, waitMs));
+        continue;
+      }
 
-  try {
-    return JSON.parse(rawText);
-  } catch (e) {
-    console.log("JSON parse failed, attempting recovery...");
-    const lastBrace = rawText.lastIndexOf('}');
-    if (lastBrace === -1) throw new Error("Cannot recover JSON from Gemini response");
-    const trimmed = rawText.substring(0, lastBrace + 1);
-    const attempts = [trimmed + ']}', trimmed + '}]}', trimmed];
-    for (const attempt of attempts) {
-      try {
-        const parsed = JSON.parse(attempt);
-        if (parsed.scenes && Array.isArray(parsed.scenes)) {
-          console.log(`Recovered ${parsed.scenes.length} scenes from truncated JSON`);
-          return parsed;
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(`OpenAI ${response.status}: ${err.error?.message || JSON.stringify(err)}`);
+      }
+
+      const data = await response.json();
+      const text = data.choices?.[0]?.message?.content;
+      if (!text) throw new Error("No content in OpenAI response");
+
+      // 3-stage JSON parsing
+      try { return JSON.parse(text); } catch (_) {}
+
+      let jsonStr = text;
+      if (text.includes("```json")) jsonStr = text.split("```json")[1].split("```")[0].trim();
+      else if (text.includes("```")) jsonStr = text.split("```")[1].split("```")[0].trim();
+      try { return JSON.parse(jsonStr); } catch (_) {}
+
+      // Recovery: find last complete JSON object
+      const lastBrace = text.lastIndexOf('}');
+      if (lastBrace > 0) {
+        const trimmed = text.substring(0, lastBrace + 1);
+        for (const suffix of [']}', '}]}', '']) {
+          try {
+            const parsed = JSON.parse(trimmed + suffix);
+            if (parsed.scenes || parsed.story_analysis) {
+              console.log(`Recovered JSON from truncated response`);
+              return parsed;
+            }
+          } catch (_) {}
         }
-      } catch (_) {}
+      }
+
+      throw new Error("Failed to parse OpenAI JSON response");
+
+    } catch (error) {
+      if (attempt === retries - 1) throw error;
+      console.warn(`Attempt ${attempt + 1} failed: ${error.message}, retrying...`);
+      await new Promise(r => setTimeout(r, 2000));
     }
-    throw new Error("Failed to parse Gemini JSON response after recovery attempts");
   }
 }
 
@@ -446,7 +475,7 @@ ${finalScript}
       console.log(`🎨 Niche: ${niche}${visualStyle ? ` | 🖼️ Style: ${visualStyle}` : ''}`);
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
-      const analysis = await callGemini(analysisPrompt, 0.6);
+      const analysis = await callLLM(analysisPrompt, 0.6);
 
       const storyAnalysis = analysis.story_analysis || analysis;
 
@@ -648,7 +677,7 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
       console.log(`📍 Generating scenes ${sceneOffset + 1}-${sceneOffset + scenesForBatch}`);
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
-      const result = await callGemini(breakdownPrompt, 0.7);
+      const result = await callLLM(breakdownPrompt, 0.7);
 
       let scenesCreated = 0;
       const newBlueprintScenes = [];
