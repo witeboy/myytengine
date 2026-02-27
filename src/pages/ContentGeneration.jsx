@@ -122,6 +122,9 @@ export default function ContentGeneration() {
 
       while (!breakdownDone) {
         try {
+          // Small delay between batches to let DB propagate
+          if (nextBatch > 0) await new Promise(r => setTimeout(r, 3000));
+
           const bdResult = await base44.functions.invoke('generateSceneBreakdown', {
             project_id: projectId,
             batch_index: nextBatch
@@ -139,6 +142,13 @@ export default function ContentGeneration() {
           setImportProgress(`Breaking down script... ${freshScenes.length}/${target} scenes created`);
         } catch (err) {
           const status = err?.response?.status || err?.status;
+          const errMsg = err?.response?.data?.error || '';
+          // Blueprint not yet propagated — wait and retry same batch
+          if (status === 400 && errMsg.includes('blueprint')) {
+            console.log(`Blueprint not ready yet, retrying batch ${nextBatch} in 5s...`);
+            await new Promise(r => setTimeout(r, 5000));
+            continue; // retry same batch
+          }
           if (status === 504) {
             // Timeout — wait and retry same batch (scenes may have been saved)
             await new Promise(r => setTimeout(r, 8000));
