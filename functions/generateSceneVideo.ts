@@ -52,8 +52,24 @@ Deno.serve(async (req) => {
     console.log(`🖼️ Image: ${scene.image_url.substring(0, 80)}...`);
     console.log(`🎥 Prompt: ${prompt.substring(0, 120)}...`);
 
+    // Verify image URL is still accessible before submitting
+    try {
+      const imgCheck = await fetch(scene.image_url, { method: 'HEAD' });
+      if (!imgCheck.ok) {
+        return Response.json({
+          error: `Scene image URL returned ${imgCheck.status} — re-generate the image first`,
+          scene_id
+        }, { status: 400 });
+      }
+    } catch (urlErr) {
+      return Response.json({
+        error: `Scene image URL unreachable: ${urlErr.message} — re-generate the image`,
+        scene_id
+      }, { status: 400 });
+    }
+
     // ══════════════════════════════════════════════════════════════
-    // SUBMIT TO GROK IMAGINE IMAGE-TO-VIDEO VIA KIE
+    // SUBMIT TO GROK IMAGINE IMAGE-TO-VIDEO VIA KIE (with retry)
     // ══════════════════════════════════════════════════════════════
 
     const response = await fetch(`${KIE_BASE}/createTask`, {
