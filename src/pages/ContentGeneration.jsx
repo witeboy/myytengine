@@ -21,6 +21,109 @@ import {
   XCircle, Clock, Zap, Video, FolderDown, Mic, Music, Volume2
 } from 'lucide-react';
 
+// ── Fix Prompts Button ──────────────────────────────────────────
+function FixPromptsButton({ projectId, sceneCount, onComplete }) {
+  const [fixing, setFixing] = useState(false);
+  const [fixType, setFixType] = useState(null);
+  const [result, setResult] = useState(null);
+  const [showMenu, setShowMenu] = useState(false);
+
+  const handleFix = async (type) => {
+    setShowMenu(false);
+    setFixing(true);
+    setFixType(type);
+    setResult(null);
+
+    try {
+      const resp = await base44.functions.invoke('fixScenePrompts', {
+        project_id: projectId,
+        fix_type: type
+      });
+      const data = resp.data || resp;
+      setResult(data);
+      await onComplete();
+    } catch (err) {
+      console.error('Fix prompts failed:', err);
+      setResult({ error: err.message });
+    }
+
+    setFixing(false);
+    setFixType(null);
+
+    // Auto-hide result after 5s
+    setTimeout(() => setResult(null), 5000);
+  };
+
+  if (sceneCount === 0) return null;
+
+  const fixOptions = [
+    { type: 'all', label: 'Fix Everything', desc: 'Characters + Cleanup + Quality', icon: '🔧' },
+    { type: 'characters', label: 'Fix Characters', desc: 'Inject identity descriptions', icon: '👤' },
+    { type: 'cleanup', label: 'Clean Metadata', desc: 'Strip orientation/text artifacts', icon: '🧹' },
+    { type: 'quality', label: 'Flag Thin Prompts', desc: 'Reset weak prompts for regen', icon: '⚠️' },
+  ];
+
+  return (
+    <div className="relative">
+      <Button
+        onClick={() => setShowMenu(!showMenu)}
+        disabled={fixing}
+        variant="outline"
+        className="border-orange-200 text-orange-700 hover:bg-orange-50"
+      >
+        {fixing ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin mr-1" />
+            Fixing {fixType === 'characters' ? 'Characters' : fixType === 'cleanup' ? 'Metadata' : fixType === 'quality' ? 'Quality' : 'All'}...
+          </>
+        ) : (
+          <>
+            <Wand2 className="w-4 h-4 mr-1" />
+            Fix Prompts ({sceneCount})
+          </>
+        )}
+      </Button>
+
+      {/* Dropdown Menu */}
+      {showMenu && !fixing && (
+        <div className="absolute top-full mt-1 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-64">
+          {fixOptions.map(opt => (
+            <button
+              key={opt.type}
+              onClick={() => handleFix(opt.type)}
+              className="w-full text-left px-4 py-2.5 hover:bg-orange-50 first:rounded-t-lg last:rounded-b-lg flex items-start gap-2"
+            >
+              <span className="text-lg">{opt.icon}</span>
+              <div>
+                <p className="text-sm font-medium text-gray-800">{opt.label}</p>
+                <p className="text-xs text-gray-500">{opt.desc}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Result Toast */}
+      {result && (
+        <div className={`absolute top-full mt-1 right-0 z-50 rounded-lg p-3 shadow-lg text-xs w-64 ${
+          result.error ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-green-50 border border-green-200 text-green-700'
+        }`}>
+          {result.error ? (
+            <p>Failed: {result.error}</p>
+          ) : (
+            <>
+              <p className="font-medium">Fixed {result.fixed}/{result.total} scenes</p>
+              {result.character_fixes > 0 && <p>👤 {result.character_fixes} character injections</p>}
+              {result.cleanup_fixes > 0 && <p>🧹 {result.cleanup_fixes} metadata cleanups</p>}
+              {result.quality_resets > 0 && <p>⚠️ {result.quality_resets} thin prompts flagged for regen</p>}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Audio Assets Download Panel ─────────────────────────────────
 function AudioAssetsPanel({ project }) {
   const [downloading, setDownloading] = useState(null);
@@ -1108,6 +1211,13 @@ export default function ContentGeneration() {
                 {enhancingAll ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Sparkles className="w-4 h-4 mr-1" />}
                 {enhancingAll ? 'Enhancing...' : 'AI Enhance All'}
               </Button>
+
+              {/* Fix Prompts Dropdown */}
+              <FixPromptsButton
+                projectId={projectId}
+                sceneCount={scenes.filter(s => s.status === 'prompts_ready' || s.status === 'image_generated').length}
+                onComplete={async () => { await refetchScenes(); }}
+              />
               <Button
                 onClick={handleGenerateImages}
                 disabled={generatingImages}
