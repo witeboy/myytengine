@@ -480,12 +480,44 @@ ${finalScript}
       console.log(`  Characters: ${storyAnalysis.characters?.map(c => c.name).join(', ') || 'None identified'}`);
       console.log(`  Motifs: ${storyAnalysis.recurring_visual_motifs?.join(', ') || 'N/A'}`);
     } else {
-      // Subsequent batches — data has propagated, safe to read from DB
       freshProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
-      try {
-        blueprint = JSON.parse(freshProject.scene_blueprint);
-      } catch (e) {
-        return Response.json({ error: 'Scene blueprint not found. Run batch 0 first.' }, { status: 400 });
+      
+      // Try reading blueprint — if field didn't persist, reconstruct
+      let blueprintLoaded = false;
+      if (freshProject.scene_blueprint) {
+        try {
+          blueprint = JSON.parse(freshProject.scene_blueprint);
+          blueprintLoaded = true;
+          console.log(`✓ Blueprint loaded from DB (${blueprint.scenes?.length || 0} scenes)`);
+        } catch (_) {
+          console.warn('Blueprint field exists but failed to parse');
+        }
+      }
+
+      if (!blueprintLoaded) {
+        console.warn('⚠️ Blueprint not in DB — reconstructing from available data');
+        const nicheProfile = getNicheDirectorProfile(niche);
+        
+        let characters = [];
+        try { characters = JSON.parse(freshProject.character_descriptions || '[]'); } catch(_) {}
+        
+        // Rebuild minimal story analysis from project data
+        blueprint = {
+          story_analysis: {
+            central_theme: freshProject.name || 'The story',
+            narrative_arc_summary: '',
+            emotional_trajectory: ['curiosity', 'understanding', 'insight', 'resolution'],
+            key_turning_points: [],
+            visual_world: nicheProfile.visual_world,
+            recurring_visual_motifs: [],
+            color_arc: nicheProfile.emotional_palette,
+            characters: characters
+          },
+          phases: phases.map(p => ({ name: p.name, purpose: p.purpose, scene_count: p.scenes })),
+          total_target_scenes: totalTargetScenes,
+          niche_profile: nicheProfile,
+          scenes: []
+        };
       }
     }
 
