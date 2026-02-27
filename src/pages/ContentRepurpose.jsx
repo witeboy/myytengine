@@ -128,11 +128,23 @@ export default function ContentRepurpose() {
     const originalScript = hasOriginalScript ? analysis.original_script : '';
 
     if (!originalScript) {
-      // Fallback: no transcript, use single LLM call
       setStatusMsg('Writing new script...');
-      const originalWordCount = analysis.estimated_word_count || 1500;
+      const targetWords = targetDurationMin * 150;
       const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `Write a ${originalWordCount}-word YouTube narration script about "${newTitle}" in a ${analysis.script_style || 'dramatic'} style. ${tweakNotes || ''}\nReturn ONLY the narration text, no headers.`,
+        prompt: `Write a ${targetWords}-word YouTube narration script about "${newTitle}" in a ${analysis.script_style || 'dramatic'} style.
+
+TARGET: Exactly ${targetWords} words (${targetDurationMin} minute video at 150 words per minute).
+
+REQUIREMENTS:
+- Open with a powerful hook that creates immediate curiosity (first 5 seconds)
+- Build emotional tension throughout with a clear arc: setup → rising action → climax → resolution
+- Use vivid sensory details, specific examples, and "imagine this" scenarios
+- Include rhetorical questions, callbacks, and direct audience address
+- Short punchy sentences for tension, longer flowing ones for reflection
+- End with a strong emotional payoff or call to action
+${tweakNotes ? `\nUSER NOTES: ${tweakNotes}` : ''}
+
+Write ONLY spoken narration. No headers, [MUSIC], [VISUAL], or formatting. Pure script text, exactly ${targetWords} words.`,
       });
       setNewScript(result);
       setLoading(false);
@@ -191,11 +203,63 @@ export default function ContentRepurpose() {
     const sorted = completedBatches
       .filter(b => b.status === 'completed' && b.content)
       .sort((a, b) => a.batch_number - b.batch_number);
-    const fullScript = sorted.map(b => b.content).join('\n\n').trim();
+    let fullScript = sorted.map(b => b.content).join('\n\n').trim();
+    let currentWords = fullScript.split(/\s+/).filter(w => w.length > 0).length;
+    const targetMinWords = Math.round(targetTotalWords * 0.85);
+
+    // Step 5: If still under target, do expansion passes
+    let expansionAttempt = 0;
+    while (currentWords < targetMinWords && expansionAttempt < 3) {
+      expansionAttempt++;
+      const deficit = targetTotalWords - currentWords;
+      setStatusMsg(`Expanding script (${currentWords}/${targetTotalWords} words, pass ${expansionAttempt})...`);
+      setBatchProgress(p => ({ ...p, words: currentWords }));
+
+      try {
+        const expandResp = await base44.integrations.Core.InvokeLLM({
+          prompt: `You are expanding a YouTube narration script that is ${deficit} words SHORT of its target.
+
+CURRENT SCRIPT (${currentWords} words — needs ${targetTotalWords} total):
+"""
+${fullScript.substring(fullScript.length - 3000)}
+"""
+
+TITLE: "${newTitle}"
+TARGET: ${targetTotalWords} words total (${targetDurationMin} minute video at 150 words/minute)
+SHORTFALL: ${deficit} words needed
+
+Write EXACTLY ${deficit} words that CONTINUE this script seamlessly:
+- Pick up naturally from where the script ends
+- Add new examples, deeper emotional moments, vivid anecdotes, audience questions
+- Maintain the same voice, tone, pacing, and storytelling style
+- Do NOT repeat or summarize what's already written
+- Do NOT add headers, labels, [MUSIC], [VISUAL] or any non-narration text
+- Write ONLY spoken narration
+
+OUTPUT: ${deficit} words of continuation.`,
+        });
+
+        if (expandResp && expandResp.length > 50) {
+          const cleanExpansion = expandResp
+            .replace(/\[[^\]]*\]/gi, '')
+            .replace(/\*\*/g, '')
+            .replace(/^\s*(Here|Below|Sure|Okay|Certainly).*?\n/i, '')
+            .trim();
+          if (cleanExpansion.length > 50) {
+            fullScript = fullScript + '\n\n' + cleanExpansion;
+            currentWords = fullScript.split(/\s+/).filter(w => w.length > 0).length;
+            console.log(`Expansion pass ${expansionAttempt}: now ${currentWords} words`);
+          }
+        }
+      } catch (expErr) {
+        console.warn(`Expansion pass ${expansionAttempt} failed:`, expErr.message);
+        break;
+      }
+    }
 
     setNewScript(fullScript);
+    console.log(`Final script: ${currentWords} words (target: ${targetTotalWords})`);
 
-    // Cleanup temp project batches (leave project archived)
     setLoading(false);
     setStatusMsg('');
     setStep(4);
