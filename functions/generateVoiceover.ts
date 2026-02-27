@@ -230,10 +230,10 @@ Deno.serve(async (req) => {
     const cleanedText = cleanScript(script.full_script);
     const wordCount = cleanedText.split(/\s+/).filter(w => w.length > 0).length;
     
-    // ── Check script length - limit to ~500 words for safety ───────
-    if (wordCount > 600) {
+    // ── Check script length - limit to ~50000 words for safety ───────
+    if (wordCount > 60000) {
       return Response.json({ 
-        error: `Script too long (${wordCount} words). Please reduce to under 500 words for reliable generation.`,
+        error: `Script too long (${wordCount} words). Please reduce to under 50000 words for reliable generation.`,
         word_count: wordCount,
       }, { status: 400 });
     }
