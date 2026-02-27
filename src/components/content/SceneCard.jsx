@@ -3,10 +3,122 @@ import { base44 } from '@/api/base44Client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, ImageIcon, Film, Settings2, RefreshCw } from 'lucide-react';
+import { Loader2, ImageIcon, Film, Settings2, RefreshCw, Wrench, Check, ChevronDown } from 'lucide-react';
 import AnimationEditor from './AnimationEditor';
 import SceneSfxEditor from './SceneSfxEditor';
 import PromptEnhancer from './PromptEnhancer';
+
+// ── Per-Scene Fix Prompt Button ─────────────────────────────────
+function FixPromptButton({ sceneId, projectId, onFixed }) {
+  const [fixing, setFixing] = useState(false);
+  const [fixType, setFixType] = useState(null);
+  const [result, setResult] = useState(null);
+  const [showMenu, setShowMenu] = useState(false);
+
+  const handleFix = async (type) => {
+    setShowMenu(false);
+    setFixing(true);
+    setFixType(type);
+    setResult(null);
+
+    try {
+      const resp = await base44.functions.invoke('fixScenePrompts', {
+        project_id: projectId,
+        scene_ids: [sceneId],
+        fix_type: type
+      });
+      const data = resp.data || resp;
+      setResult(data);
+      onFixed?.();
+    } catch (err) {
+      console.error('Fix prompt failed:', err);
+      setResult({ error: err.message });
+    }
+
+    setFixing(false);
+    setFixType(null);
+    setTimeout(() => setResult(null), 4000);
+  };
+
+  return (
+    <div className="relative">
+      <div className="flex gap-1">
+        {/* Main fix button — runs "all" */}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => handleFix('all')}
+          disabled={fixing}
+          className="flex-1 border-orange-200 text-orange-700 hover:bg-orange-50 text-xs"
+        >
+          {fixing ? (
+            <Loader2 className="w-3 h-3 animate-spin mr-1" />
+          ) : result?.fixed > 0 ? (
+            <Check className="w-3 h-3 mr-1 text-green-600" />
+          ) : (
+            <Wrench className="w-3 h-3 mr-1" />
+          )}
+          {fixing
+            ? `Fixing ${fixType === 'characters' ? 'chars' : fixType === 'cleanup' ? 'meta' : 'all'}...`
+            : result?.fixed > 0
+              ? 'Fixed!'
+              : 'Fix Prompt'
+          }
+        </Button>
+
+        {/* Dropdown for specific fix types */}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setShowMenu(!showMenu)}
+          disabled={fixing}
+          className="px-1.5 border-orange-200 text-orange-700 hover:bg-orange-50"
+        >
+          <ChevronDown className="w-3 h-3" />
+        </Button>
+      </div>
+
+      {/* Dropdown menu */}
+      {showMenu && !fixing && (
+        <div className="absolute bottom-full mb-1 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-52">
+          {[
+            { type: 'all', label: 'Fix Everything', icon: '🔧' },
+            { type: 'characters', label: 'Fix Characters', icon: '👤' },
+            { type: 'cleanup', label: 'Clean Metadata', icon: '🧹' },
+            { type: 'quality', label: 'Check Quality', icon: '⚠️' },
+          ].map(opt => (
+            <button
+              key={opt.type}
+              onClick={() => handleFix(opt.type)}
+              className="w-full text-left px-3 py-2 hover:bg-orange-50 first:rounded-t-lg last:rounded-b-lg flex items-center gap-2 text-xs"
+            >
+              <span>{opt.icon}</span>
+              <span className="font-medium text-gray-700">{opt.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Result toast */}
+      {result && (
+        <div className={`absolute bottom-full mb-1 right-0 z-50 rounded-md px-2.5 py-1.5 shadow-md text-[10px] whitespace-nowrap ${
+          result.error
+            ? 'bg-red-50 border border-red-200 text-red-600'
+            : result.fixed > 0
+              ? 'bg-green-50 border border-green-200 text-green-700'
+              : 'bg-gray-50 border border-gray-200 text-gray-500'
+        }`}>
+          {result.error
+            ? `Error: ${result.error.substring(0, 40)}`
+            : result.fixed > 0
+              ? `✓ ${result.character_fixes || 0} chars · ${result.cleanup_fixes || 0} cleanup${result.quality_resets > 0 ? ` · ${result.quality_resets} flagged` : ''}`
+              : 'No changes needed'
+          }
+        </div>
+      )}
+    </div>
+  );
+}
 
 const statusColors = {
   pending: 'bg-gray-100 text-gray-600',
@@ -165,6 +277,11 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
             {rephrasing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <RefreshCw className="w-3 h-3 mr-1" />}
             {rephrasing ? 'Rephrasing...' : 'Rephrase Prompt (Policy Fix)'}
           </Button>
+        )}
+
+        {/* Fix Prompt — inject characters, clean metadata, check quality */}
+        {scene.image_prompt && !scene.image_prompt.startsWith('DIRECTOR_NOTES:') && (
+          <FixPromptButton sceneId={scene.id} projectId={scene.project_id} onFixed={onSceneUpdated} />
         )}
 
         {/* Actions */}
