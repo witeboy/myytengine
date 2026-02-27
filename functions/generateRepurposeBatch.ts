@@ -181,18 +181,19 @@ ${retryBlock}
 **OUTPUT**: Write ONLY the spoken narration. No headers, no formatting, no meta-commentary. Pure script text that sounds natural when read aloud at 150 words per minute.`;
     };
 
-    // Generate with retry logic
+    // Generate with aggressive retry + concatenation for expansion
     let finalContent = '';
     let finalWordCount = 0;
-    const MAX_ATTEMPTS = 3;
+    const MAX_ATTEMPTS = 5;
+    const isExpansionMode = scaleFactor > 1.15;
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       const isRetry = attempt > 1;
       const prompt = buildPrompt(isRetry, finalContent, finalWordCount);
 
-      console.log(`Batch ${batch.batch_number}: attempt ${attempt}/${MAX_ATTEMPTS} (target: ${targetWords}, min: ${minimumWords})...`);
+      console.log(`Batch ${batch.batch_number}: attempt ${attempt}/${MAX_ATTEMPTS} (target: ${targetWords}, min: ${minimumWords}, have: ${finalWordCount})...`);
 
-      const rawText = await safeGeminiCall(prompt, 0.8);
+      const rawText = await safeGeminiCall(prompt, isRetry ? 0.9 : 0.8);
       const cleaned = cleanNarration(rawText);
       const wordCount = countWords(cleaned);
 
@@ -208,9 +209,58 @@ ${retryBlock}
         break;
       }
 
+      // If expanding and still way too short after attempt 3, try "continue writing" approach
+      if (isExpansionMode && attempt >= 3 && finalWordCount < minimumWords) {
+        console.log(`Batch ${batch.batch_number}: expansion shortfall — trying continuation approach...`);
+        const remainingWords = targetWords - finalWordCount;
+        const continuePrompt = `You are continuing a YouTube narration script. The segment below is INCOMPLETE — it needs ${remainingWords} MORE words to reach the target of ${targetWords} total words.
+
+**SCRIPT SO FAR** (${finalWordCount} words — needs ${remainingWords} more):
+"""
+${finalContent}
+"""
+
+**TITLE**: "${synopsisData.new_title || 'New Video'}"
+**SEGMENT FOCUS**: ${batch.focus_area}
+**STYLE**: ${synopsisData.analysis_style || 'Match original'} | Tone: ${synopsisData.analysis_tone || 'Match original'}
+
+**YOUR TASK**: Write EXACTLY ${remainingWords} words that CONTINUE this segment seamlessly.
+- Pick up from the last sentence naturally
+- Add deeper examples, emotional moments, audience-directed questions, vivid anecdotes
+- Maintain the same voice, tone, and pacing
+- Do NOT repeat what's already written
+- Do NOT add headers, labels, or meta-commentary
+- Write ONLY narration text
+
+OUTPUT: ${remainingWords} words of continuation narration.`;
+
+        try {
+          const contRaw = await safeGeminiCall(continuePrompt, 0.85);
+          const contCleaned = cleanNarration(contRaw);
+          const contWords = countWords(contCleaned);
+          if (contWords > 50) {
+            finalContent = finalContent + '\n\n' + contCleaned;
+            finalWordCount = countWords(finalContent);
+            console.log(`Batch ${batch.batch_number}: continuation added ${contWords} words → total ${finalWordCount}`);
+          }
+        } catch (contErr) {
+          console.warn(`Batch ${batch.batch_number}: continuation failed: ${contErr.message}`);
+        }
+
+        if (finalWordCount >= minimumWords) {
+          console.log(`Batch ${batch.batch_number}: ✓ accepted after continuation with ${finalWordCount} words`);
+          break;
+        }
+      }
+
       if (attempt < MAX_ATTEMPTS) {
         console.log(`Batch ${batch.batch_number}: ${finalWordCount}/${minimumWords} — retrying...`);
       }
+    }
+
+    // Final safety: if still under minimum after all attempts, log warning
+    if (finalWordCount < minimumWords) {
+      console.warn(`⚠️ Batch ${batch.batch_number}: UNDER TARGET — got ${finalWordCount}/${targetWords} after ${MAX_ATTEMPTS} attempts`);
     }
 
     // Save
