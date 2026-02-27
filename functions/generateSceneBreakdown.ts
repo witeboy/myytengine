@@ -145,8 +145,42 @@ function normalizeStyleKey(raw) {
 // ══════════════════════════════════════════════════════════════════
 
 function getStyleCharacterDirective(visualStyle) {
+  // ═══ UNIVERSAL CINEMATIC DIRECTION — applies to ALL styles ═══
+  const universalDirective = `
+**🎬 MANDATORY CINEMATIC DIRECTION (ALL VISUAL STYLES):**
+
+1. **ENVIRONMENT-FIRST COMPOSITION**: Every scene starts with the WORLD — describe the location, architecture, weather, time of day, props, textures, and atmosphere BEFORE any character. Characters exist INSIDE environments, not floating in front of them. No blurred/empty backgrounds.
+
+2. **FULL-BODY ACTION FRAMING**: Characters must be shown FULL BODY (head to feet) in 80% of scenes — sitting, walking, kneeling, running, reaching, climbing. Close-ups allowed for 1-2 key emotional beats only. NEVER default to bust/torso crops.
+
+3. **DYNAMIC INTERACTION**: Characters must physically INTERACT with their environment — hands on objects, feet on ground, leaning against walls, sitting in chairs, holding tools, gesturing to people. Static standing poses facing camera are FORBIDDEN. Show mid-action story moments.
+
+4. **POPULATED WORLD**: Include other people, animals, vehicles, or environmental activity in MOST scenes. The world is alive and busy, not empty. Crowds, companions, passersby, workers — the character exists in a living world.
+
+5. **CINEMATIC CAMERA VARIETY**: Use the full director's toolkit across scenes:
+   - LOW ANGLE: Looking up at character for power/drama
+   - HIGH ANGLE/OVERHEAD: God's-eye view for scale/vulnerability
+   - OVER-SHOULDER: From behind character looking at what they see
+   - WIDE ESTABLISHING: Character small in vast landscape
+   - MEDIUM TWO-SHOT: Character with another person, showing relationship
+   - TRACKING: Following character in motion through space
+   - DUTCH ANGLE: Tilted frame for tension/unease
+   - POV: What the character sees (no character visible)
+   NEVER use the same angle/shot type in consecutive scenes.
+
+6. **EMOTIONAL LIGHTING**: Light tells the story — golden hour for hope, harsh overhead for isolation, blue twilight for melancholy, warm firelight for intimacy, cold fluorescent for clinical/corporate. Specify light SOURCE, DIRECTION, and QUALITY in every scene.
+
+7. **FOREGROUND DEPTH**: Every scene has THREE layers — foreground objects (blurred edge items, hands, tools, plants), midground (character + action), background (environment extending into distance). This creates cinematic depth.
+
+8. **CONTINUITY THREADING**: Adjacent scenes share at least ONE visual element — a prop that reappears, a color that shifts, a gesture that echoes, a location that transforms. Scenes are frames in a continuous film, not isolated portraits.
+
+9. **PERSPECTIVE & SCALE**: Vary the character's size in frame — sometimes they fill the shot, sometimes they're tiny against a vast landscape, sometimes we see just their hands working on something. This creates visual rhythm and prevents monotony.
+
+10. **EMOTION THROUGH BODY LANGUAGE**: Characters express emotion through FULL BODY posture — slumped shoulders for defeat, wide stance for confidence, hunched forward for anxiety, arms spread for freedom, hands clasped for prayer/desperation. Face is secondary to body.
+`;
+
   const directives = {
-    skeleton_protagonist: `
+    skeleton_protagonist: universalDirective + `
 **🦴 MANDATORY — SKELETON PROTAGONIST STYLE:**
 
 CHARACTER IDENTITY (consistent across ALL scenes):
@@ -173,7 +207,7 @@ BAD visual_concept: "The transparent skeleton protagonist stands with expressive
 GOOD visual_concept: "Full-body view of the skeleton protagonist kneeling knee-deep in a rushing river, muddy water swirling around his transparent legs, both hands lifting a massive gold nugget above the surface. Behind him, dozens of miners in worn 1849-era clothing pan for gold among sun-bleached boulders. Golden hour light catches the water droplets on his glass skin. A coiled rope and shovel rest on the rocky bank in the foreground."
 `
   };
-  return directives[visualStyle] || '';
+  return directives[visualStyle] || universalDirective;
 }
 
 // ══════════════════════════════════════════════════════════════════
