@@ -117,10 +117,17 @@ Deno.serve(async (req) => {
       .replace(/^[\s,.]+/, '')
       .trim();
 
-    // 5. Cap at 900 chars (Grok limit — longer prompts cause artifacts)
-    if (finalPrompt.length > 900) {
-      finalPrompt = finalPrompt.substring(0, 897) + '...';
+    // 5. Smart cap at 1200 chars — never cut mid-sentence
+    if (finalPrompt.length > 1200) {
+      const cutZone = finalPrompt.substring(1100, 1200);
+      const lastPeriod = cutZone.lastIndexOf('.');
+      const lastComma = cutZone.lastIndexOf(',');
+      const cutPoint = lastPeriod >= 0 ? 1100 + lastPeriod + 1
+                     : lastComma >= 0 ? 1100 + lastComma + 1
+                     : 1200;
+      finalPrompt = finalPrompt.substring(0, cutPoint).trim();
     }
+
 
     // Orientation ONLY from project setting (not in prompt text)
     const aspectRatio = project.orientation === "portrait" ? "9:16" : "16:9";
