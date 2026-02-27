@@ -229,11 +229,42 @@ Deno.serve(async (req) => {
         }
       }
 
+      // ═══ FIX 4: FRAMING ENFORCEMENT ═══
+      if (mode === 'all' || mode === 'cleanup') {
+        // Check if prompt lacks full-body/environment-first framing
+        const hasFraming = /full.?body|head.?to.?(feet|toe)|wide.?shot|establishing|environment/i.test(prompt);
+        if (!hasFraming) {
+          // Prepend framing instruction based on style
+          const isPhotoStyle = ['cinematic_realistic', 'photorealistic_4k', 'skeleton_protagonist'].includes(visualStyle);
+          const framingPrefix = isPhotoStyle
+            ? 'Full body wide shot showing complete scene head to feet, detailed sharp environment with architecture and props, characters mid-action in populated world. '
+            : 'Full body shot showing characters head to feet in detailed environment with visible props and background elements, characters mid-action. ';
+          prompt = framingPrefix + prompt;
+          changed = true;
+        }
+
+        // Differentiate unnamed group characters ("friends", "crowd", "coworkers")
+        const groupRefs = prompt.match(/\b(friends|colleagues|coworkers|companions|group|crowd|strangers|others)\b/gi);
+        if (groupRefs) {
+          prompt = prompt.replace(
+            /\b(with|among|surrounded by)\s+(friends|colleagues|coworkers|companions|others)\b/gi,
+            (match, prep, group) => `${prep} a diverse group of ${group} — each with distinctly different hair colors, hairstyles, skin tones, clothing colors, and body types, no two looking alike`
+          );
+          changed = true;
+        }
+      }
+
       // Save if changed
       if (changed) {
-        // Cap at 900 chars
-        if (prompt.length > 900) {
-          prompt = prompt.substring(0, 897) + '...';
+        // Smart truncation — cap at 1200 chars but never cut mid-sentence
+        if (prompt.length > 1200) {
+          const cutZone = prompt.substring(1100, 1200);
+          const lastPeriod = cutZone.lastIndexOf('.');
+          const lastComma = cutZone.lastIndexOf(',');
+          const cutPoint = lastPeriod >= 0 ? 1100 + lastPeriod + 1
+                         : lastComma >= 0 ? 1100 + lastComma + 1
+                         : 1200;
+          prompt = prompt.substring(0, cutPoint).trim();
         }
 
         try {
