@@ -18,8 +18,143 @@ import ProcessingNotifier from '@/components/content/ProcessingNotifier';
 import {
   Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film,
   Palette, Sparkles, Monitor, Clapperboard, Wand2, CheckCircle2,
-  XCircle, Clock, Zap, Video, FolderDown
+  XCircle, Clock, Zap, Video, FolderDown, Mic, Music, Volume2
 } from 'lucide-react';
+
+// ── Audio Assets Download Panel ─────────────────────────────────
+function AudioAssetsPanel({ project }) {
+  const [downloading, setDownloading] = useState(null);
+
+  // Collect all audio URLs from project fields
+  const assets = [
+    {
+      key: 'voiceover',
+      label: 'Voiceover',
+      icon: <Mic className="w-4 h-4" />,
+      url: project.voiceover_url || project.narration_url || project.voiceover_audio_url,
+      color: 'blue',
+      ext: 'mp3',
+    },
+    {
+      key: 'elevenlabs_voiceover',
+      label: 'ElevenLabs Voiceover',
+      icon: <Mic className="w-4 h-4" />,
+      url: project.elevenlabs_voiceover_url || project.elevenlabs_audio_url,
+      color: 'indigo',
+      ext: 'mp3',
+    },
+    {
+      key: 'music',
+      label: 'Background Music',
+      icon: <Music className="w-4 h-4" />,
+      url: project.music_url || project.background_music_url,
+      color: 'purple',
+      ext: 'mp3',
+    },
+    {
+      key: 'sfx',
+      label: 'Sound Effects',
+      icon: <Volume2 className="w-4 h-4" />,
+      url: project.sfx_url || project.sound_effects_url || project.effects_url,
+      color: 'amber',
+      ext: 'mp3',
+    },
+    {
+      key: 'mixed',
+      label: 'Mixed Audio',
+      icon: <Volume2 className="w-4 h-4" />,
+      url: project.mixed_audio_url || project.final_audio_url,
+      color: 'emerald',
+      ext: 'mp3',
+    },
+  ].filter(a => a.url && a.url.startsWith('http'));
+
+  if (assets.length === 0) return null;
+
+  const handleDownload = async (asset) => {
+    setDownloading(asset.key);
+    try {
+      const response = await fetch(asset.url);
+      if (!response.ok) throw new Error('Download failed');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const projectName = (project.name || 'project').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
+      a.download = `${projectName}_${asset.key}.${asset.ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(`Download ${asset.key} failed:`, err);
+      // Fallback: open in new tab
+      window.open(asset.url, '_blank');
+    }
+    setDownloading(null);
+  };
+
+  const colorMap = {
+    blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', badge: 'bg-blue-100 text-blue-800', btn: 'bg-blue-600 hover:bg-blue-700' },
+    indigo: { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700', badge: 'bg-indigo-100 text-indigo-800', btn: 'bg-indigo-600 hover:bg-indigo-700' },
+    purple: { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700', badge: 'bg-purple-100 text-purple-800', btn: 'bg-purple-600 hover:bg-purple-700' },
+    amber: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', badge: 'bg-amber-100 text-amber-800', btn: 'bg-amber-600 hover:bg-amber-700' },
+    emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', badge: 'bg-emerald-100 text-emerald-800', btn: 'bg-emerald-600 hover:bg-emerald-700' },
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Download className="w-4 h-4 text-gray-600" />
+          Audio Assets
+          <Badge variant="outline" className="text-[10px] ml-auto">{assets.length} available</Badge>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {assets.map(asset => {
+            const c = colorMap[asset.color] || colorMap.blue;
+            const isDownloading = downloading === asset.key;
+            return (
+              <div
+                key={asset.key}
+                className={`${c.bg} ${c.border} border rounded-lg p-3 flex items-center gap-3`}
+              >
+                <div className={`w-10 h-10 rounded-lg ${c.badge} flex items-center justify-center flex-shrink-0`}>
+                  {asset.icon}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-medium ${c.text}`}>{asset.label}</p>
+                  <div className="mt-1.5">
+                    <audio
+                      src={asset.url}
+                      controls
+                      preload="none"
+                      className="w-full h-7"
+                      style={{ maxWidth: '100%' }}
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleDownload(asset)}
+                  disabled={isDownloading}
+                  className={`${c.btn} text-white p-2 rounded-lg flex-shrink-0 transition-colors`}
+                  title={`Download ${asset.label}`}
+                >
+                  {isDownloading
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <Download className="w-4 h-4" />
+                  }
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function ContentGeneration() {
   const navigate = useNavigate();
@@ -1026,6 +1161,11 @@ export default function ContentGeneration() {
                 onChange={(update) => setAudioLevels(prev => ({ ...prev, ...update }))}
               />
             </div>
+
+            {/* ═══════════════════════════════════════════════════════
+                AUDIO ASSETS — Download Panel
+                ═══════════════════════════════════════════════════════ */}
+            <AudioAssetsPanel project={project} />
           </div>
         )}
       </div>
