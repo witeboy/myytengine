@@ -515,10 +515,12 @@ ${finalScript}
       ? `**ESTABLISHED CHARACTERS (use these EXACT descriptions for consistency):**\n${characters.map(c => `  • ${c.name}: ${c.visual_description || c.description}`).join('\n')}`
       : '';
 
-    // ═══ FIX C: Loop ALL phases in one call ═══
+    // Process max 4 chunks per invocation to avoid timeout
+    const MAX_CHUNKS_PER_CALL = 4;
     let grandTotalCreated = 0;
+    const endBatch = Math.min(startBatch + MAX_CHUNKS_PER_CALL, scriptChunks.length);
 
-    for (let batchIdx = startBatch; batchIdx < scriptChunks.length; batchIdx++) {
+    for (let batchIdx = startBatch; batchIdx < endBatch; batchIdx++) {
       const existingScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
       const sceneOffset = existingScenes.length;
 
@@ -688,23 +690,31 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
 
     } // end phase loop
 
-    // All phases done
-    await base44.asServiceRole.entities.Projects.update(project_id, {
-      status: "breakdown_complete",
-      current_step: 5
-    });
+    const allDone = endBatch >= scriptChunks.length;
 
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`🎉 FULL BREAKDOWN COMPLETE — ${grandTotalCreated} scenes ready for prompt generation`);
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    if (allDone) {
+      await base44.asServiceRole.entities.Projects.update(project_id, {
+        status: "breakdown_complete",
+        current_step: 5
+      });
+
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`🎉 FULL BREAKDOWN COMPLETE — ${grandTotalCreated} scenes ready for prompt generation`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    } else {
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`⏭️ Processed chunks ${startBatch + 1}-${endBatch}/${scriptChunks.length} — ${grandTotalCreated} scenes this call`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    }
 
     return Response.json({
       success: true,
-      done: true,
+      done: allDone,
       scenes_created: grandTotalCreated,
-      total_scenes: grandTotalCreated,
+      total_scenes: (await base44.asServiceRole.entities.Scenes.filter({ project_id })).length,
       total_target: totalTargetScenes,
-      total_batches: numBatches
+      total_batches: scriptChunks.length,
+      next_batch: allDone ? null : endBatch
     });
 
   } catch (error) {
