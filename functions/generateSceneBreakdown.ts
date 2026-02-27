@@ -515,12 +515,11 @@ ${finalScript}
       ? `**ESTABLISHED CHARACTERS (use these EXACT descriptions for consistency):**\n${characters.map(c => `  • ${c.name}: ${c.visual_description || c.description}`).join('\n')}`
       : '';
 
-    // Process max 4 chunks per invocation to avoid timeout
-    const MAX_CHUNKS_PER_CALL = 4;
+    // Process 1 chunk per invocation to stay within platform timeout
     let grandTotalCreated = 0;
-    const endBatch = Math.min(startBatch + MAX_CHUNKS_PER_CALL, scriptChunks.length);
+    const endBatch = startBatch + 1;
 
-    for (let batchIdx = startBatch; batchIdx < endBatch; batchIdx++) {
+    for (let batchIdx = startBatch; batchIdx < endBatch && batchIdx < scriptChunks.length; batchIdx++) {
       const existingScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
       const sceneOffset = existingScenes.length;
 
