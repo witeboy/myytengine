@@ -148,6 +148,24 @@ You MUST write at least ${deficit} words total across all insertion blocks.`,
       }
     }
 
+    // Clean any markdown/formatting artifacts that would break TTS
+    workingScript = workingScript
+      .replace(/\*\*\.\*\*/g, '.')
+      .replace(/\*\*,\*\*/g, ',')
+      .replace(/\*\*!\*\*/g, '!')
+      .replace(/\*\*\?\*\*/g, '?')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')   // **bold text** → bold text
+      .replace(/\*([^*]+)\*/g, '$1')        // *italic text* → italic text
+      .replace(/__([^_]+)__/g, '$1')        // __underline__ → underline
+      .replace(/_([^_]+)_/g, '$1')          // _italic_ → italic
+      .replace(/#{1,6}\s*/g, '')            // ### headers → remove
+      .replace(/^\s*[-*]\s+/gm, '')         // - bullet points → remove
+      .replace(/^\s*\d+\.\s+/gm, '')        // 1. numbered lists → remove
+      .replace(/\[[^\]]*\]/g, '')           // [brackets] → remove
+      .replace(/`([^`]+)`/g, '$1')          // `code` → code
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
     onUpdate(workingScript);
     setExpanding(false);
     setProgress('');
