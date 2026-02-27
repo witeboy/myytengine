@@ -152,65 +152,107 @@ async function getYouTubeTranscriptFree(videoId) {
   try {
     console.log(`[Transcript T1.5] Fetching via InnerTube for ${videoId}...`);
     
-    // Fetch the video page to get captions
     const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
       headers: { 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'Accept-Language': 'en-US,en;q=0.9',
         'Accept': 'text/html,application/xhtml+xml'
       }
     });
     const html = await pageRes.text();
     
-    // Extract captions URL from the page
-    const captionMatch = html.match(/"captionTracks":\s*(\[.*?\])/);
-    if (!captionMatch) {
-      console.log('[Transcript T1.5] No captionTracks found in page');
+    // Multiple extraction patterns (YouTube changes these periodically)
+    let captionTracks = null;
+    const patterns = [
+      /"captionTracks":\s*(\[.*?\])\s*[,}]/,
+      /captionTracks\\?":\s*(\[.*?\])/,
+      /"playerCaptionsTracklistRenderer".*?"captionTracks":\s*(\[.*?\])/s,
+    ];
+    
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (match) {
+        try {
+          let jsonStr = match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+          captionTracks = JSON.parse(jsonStr);
+          console.log(`[Transcript T1.5] Found ${captionTracks.length} caption tracks`);
+          break;
+        } catch (_) { continue; }
+      }
+    }
+    
+    if (!captionTracks || captionTracks.length === 0) {
+      // Try extracting from ytInitialPlayerResponse
+      const playerMatch = html.match(/ytInitialPlayerResponse\s*=\s*({.*?});/s);
+      if (playerMatch) {
+        try {
+          const player = JSON.parse(playerMatch[1]);
+          captionTracks = player?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+          if (captionTracks) console.log(`[Transcript T1.5] Found ${captionTracks.length} tracks from playerResponse`);
+        } catch (_) {}
+      }
+    }
+    
+    if (!captionTracks || captionTracks.length === 0) {
+      console.log('[Transcript T1.5] No captionTracks found');
       return null;
     }
     
-    let captionTracks;
-    try {
-      captionTracks = JSON.parse(captionMatch[1]);
-    } catch (e) {
-      console.log('[Transcript T1.5] Failed to parse captionTracks');
-      return null;
-    }
+    // Priority: manual English > auto English > manual any > auto any
+    const enManual = captionTracks.find(t => t.languageCode === 'en' && t.kind !== 'asr');
+    const enAuto = captionTracks.find(t => t.languageCode === 'en' && t.kind === 'asr');
+    const enAny = captionTracks.find(t => t.languageCode?.startsWith('en'));
+    const anyManual = captionTracks.find(t => t.kind !== 'asr');
+    const track = enManual || enAuto || enAny || anyManual || captionTracks[0];
     
-    // Prefer English, fall back to any language
-    const enTrack = captionTracks.find(t => t.languageCode === 'en') || 
-                    captionTracks.find(t => t.languageCode?.startsWith('en')) ||
-                    captionTracks[0];
-    
-    if (!enTrack?.baseUrl) {
+    if (!track?.baseUrl) {
       console.log('[Transcript T1.5] No caption track URL found');
       return null;
     }
     
-    // Fetch the caption XML
-    const captionRes = await fetch(enTrack.baseUrl);
+    console.log(`[Transcript T1.5] Using track: ${track.languageCode} (${track.kind === 'asr' ? 'auto-generated' : 'manual'})`);
+    
+    // Fetch caption XML — try with fmt=json3 first (more reliable), fall back to XML
+    let transcript = '';
+    
+    // Try JSON3 format
+    try {
+      const json3Url = track.baseUrl + (track.baseUrl.includes('?') ? '&' : '?') + 'fmt=json3';
+      const json3Res = await fetch(json3Url);
+      if (json3Res.ok) {
+        const json3 = await json3Res.json();
+        if (json3.events) {
+          const parts = json3.events
+            .filter(e => e.segs)
+            .flatMap(e => e.segs.map(s => s.utf8?.trim()).filter(Boolean));
+          transcript = parts.join(' ').replace(/\s+/g, ' ').trim();
+          if (transcript.length > 50) {
+            console.log(`[Transcript T1.5] Got ${transcript.length} chars from JSON3 format`);
+            return transcript;
+          }
+        }
+      }
+    } catch (_) {}
+    
+    // Fall back to XML format
+    const captionRes = await fetch(track.baseUrl);
     const captionXml = await captionRes.text();
     
-    // Parse XML to extract text
     const textParts = [];
     const textRegex = /<text[^>]*>(.*?)<\/text>/gs;
     let match;
     while ((match = textRegex.exec(captionXml)) !== null) {
       let text = match[1]
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/<[^>]+>/g, '')
-        .trim();
+        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
+        .replace(/<[^>]+>/g, '').trim();
       if (text) textParts.push(text);
     }
     
-    const transcript = textParts.join(' ').replace(/\s+/g, ' ').trim();
+    transcript = textParts.join(' ').replace(/\s+/g, ' ').trim();
     
     if (transcript.length > 50) {
-      console.log(`[Transcript T1.5] Got ${transcript.length} chars from InnerTube captions`);
+      console.log(`[Transcript T1.5] Got ${transcript.length} chars from XML format`);
       return transcript;
     }
     
@@ -291,6 +333,58 @@ Deno.serve(async (req) => {
       }
     }
 
+// Tier 1.6: Try youtube-transcript via RapidAPI
+    if (!transcript || transcript.length < 50) {
+      const rapidKey = Deno.env.get("RAPIDAPI_KEY");
+      if (rapidKey) {
+        try {
+          console.log(`[Transcript T1.6] Trying RapidAPI YouTube Transcript...`);
+          const rapidRes = await fetch(`https://youtube-transcriptor.p.rapidapi.com/transcript?video_id=${videoId}&lang=en`, {
+            headers: { 'X-RapidAPI-Key': rapidKey, 'X-RapidAPI-Host': 'youtube-transcriptor.p.rapidapi.com' }
+          });
+          if (rapidRes.ok) {
+            const rapidData = await rapidRes.json();
+            let rapidText = '';
+            if (Array.isArray(rapidData)) {
+              rapidText = rapidData.map(s => s.subtitle || s.text || '').join(' ').replace(/\s+/g, ' ').trim();
+            } else if (rapidData?.transcription) {
+              rapidText = Array.isArray(rapidData.transcription) 
+                ? rapidData.transcription.map(s => s.subtitle || s.text || '').join(' ').replace(/\s+/g, ' ').trim()
+                : rapidData.transcription;
+            }
+            if (rapidText && rapidText.length > 50) {
+              transcript = rapidText;
+              transcriptSource = 'rapidapi';
+              console.log(`[Transcript T1.6] Got ${transcript.length} chars`);
+            }
+          }
+        } catch (err) {
+          console.log(`[Transcript T1.6] Error: ${err.message}`);
+        }
+      }
+    }
+
+    // Tier 1.7: Try Kome.ai transcript API
+    if (!transcript || transcript.length < 50) {
+      try {
+        console.log(`[Transcript T1.7] Trying Kome.ai...`);
+        const komeRes = await fetch(`https://kome.ai/api/transcript?url=https://www.youtube.com/watch?v=${videoId}`, {
+          headers: { 'Accept': 'application/json' }
+        });
+        if (komeRes.ok) {
+          const komeData = await komeRes.json();
+          const komeText = komeData?.transcript || komeData?.text || '';
+          if (komeText.length > 50) {
+            transcript = komeText;
+            transcriptSource = 'kome';
+            console.log(`[Transcript T1.7] Got ${transcript.length} chars`);
+          }
+        }
+      } catch (err) {
+        console.log(`[Transcript T1.7] Error: ${err.message}`);
+      }
+    }
+
     // Tier 1.75: Try supadata.ai free transcript API
     if (!transcript || transcript.length < 50) {
       try {
@@ -323,111 +417,158 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Tier 2: Cobalt (extract audio) → AssemblyAI (speech-to-text)
+    // Tier 2: OpenAI Whisper via direct audio URL (no Cobalt needed)
     if (!transcript || transcript.length < 50) {
-      console.log('[Analyze] No captions found, falling back to Cobalt + AssemblyAI...');
-      const cobaltUrl = Deno.env.get("COBALT_API_URL");
-      const aaiKey = Deno.env.get("ASSEMBLYAI_API_KEY");
-
-      if (cobaltUrl && aaiKey) {
+      const openaiKey = Deno.env.get("OPENAI_API_KEY");
+      if (openaiKey) {
         try {
-          // Step A: Extract audio via Cobalt
-          console.log('[Cobalt] Requesting audio extraction...');
-          const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
-          // Normalize Cobalt URL — remove trailing slash, ensure correct endpoint
-          const cobaltEndpoint = cobaltUrl.replace(/\/+$/, '');
-          const cobaltRes = await fetch(cobaltEndpoint, {
-            method: "POST",
-            headers: { 
-              "Content-Type": "application/json", 
-              "Accept": "application/json",
-              "User-Agent": "Mozilla/5.0"
-            },
-            body: JSON.stringify({ url: youtubeUrl, downloadMode: "audio", audioFormat: "mp3" })
-          });
-
-          let cobaltData;
-          try {
-            cobaltData = await cobaltRes.json();
-          } catch (parseErr) {
-            console.log(`[Cobalt] Failed to parse response as JSON (status ${cobaltRes.status})`);
-            throw new Error('Cobalt returned non-JSON response');
-          }
-          console.log(`[Cobalt] Response keys: ${Object.keys(cobaltData).join(', ')}`);
-          const audioUrl = cobaltData.url || cobaltData.audio;
-
-          if (!audioUrl) {
-            console.log(`[Cobalt] No audio URL returned: ${JSON.stringify(cobaltData).substring(0, 300)}`);
-          } else {
-            console.log(`[Cobalt] Got audio URL, downloading...`);
-
-            // Step B: Download the audio
-            const audioRes = await fetch(audioUrl);
-            if (!audioRes.ok) {
-              console.log(`[Cobalt] Audio download failed: ${audioRes.status}`);
-            } else {
-              const audioData = await audioRes.arrayBuffer();
-              console.log(`[Cobalt] Downloaded ${(audioData.byteLength / 1024 / 1024).toFixed(1)}MB`);
-
-              // Step C: Upload raw audio to AssemblyAI
-              console.log('[AssemblyAI] Uploading audio...');
-              const uploadRes = await fetch('https://api.assemblyai.com/v2/upload', {
-                method: 'POST',
-                headers: { 'authorization': aaiKey, 'content-type': 'application/octet-stream' },
-                body: audioData,
+          console.log('[Transcript T2] Trying OpenAI Whisper via audio extraction...');
+          
+          // Step A: Get audio URL from multiple sources
+          let audioUrl = null;
+          
+          // Try Cobalt first
+          const cobaltUrl = Deno.env.get("COBALT_API_URL");
+          if (cobaltUrl) {
+            try {
+              const cobaltEndpoint = cobaltUrl.replace(/\/+$/, '');
+              const cobaltRes = await fetch(cobaltEndpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "Accept": "application/json", "User-Agent": "Mozilla/5.0" },
+                body: JSON.stringify({ url: `https://www.youtube.com/watch?v=${videoId}`, downloadMode: "audio", audioFormat: "mp3" })
               });
-
-              if (!uploadRes.ok) {
-                console.log(`[AssemblyAI] Upload failed: ${uploadRes.status}`);
-              } else {
-                const uploadData = await uploadRes.json();
-                if (!uploadData.upload_url) {
-                  console.log('[AssemblyAI] No upload_url returned');
-                } else {
-                  // Step D: Start transcription
-                  console.log('[AssemblyAI] Starting transcription...');
-                  const startRes = await fetch("https://api.assemblyai.com/v2/transcript", {
-                    method: "POST",
-                    headers: { "authorization": aaiKey, "content-type": "application/json" },
-                    body: JSON.stringify({ audio_url: uploadData.upload_url, language_detection: true })
+              const cobaltData = await cobaltRes.json();
+              audioUrl = cobaltData.url || cobaltData.audio;
+              if (audioUrl) console.log('[Transcript T2] Got audio URL from Cobalt');
+            } catch (err) {
+              console.log(`[Transcript T2] Cobalt failed: ${err.message}`);
+            }
+          }
+          
+          if (!audioUrl) {
+            console.log('[Transcript T2] No audio URL available, skipping Whisper');
+          } else {
+            // Step B: Download audio (cap at 24MB for Whisper limit)
+            console.log('[Transcript T2] Downloading audio...');
+            const audioRes = await fetch(audioUrl);
+            if (audioRes.ok) {
+              const audioData = await audioRes.arrayBuffer();
+              const sizeMB = audioData.byteLength / 1024 / 1024;
+              console.log(`[Transcript T2] Downloaded ${sizeMB.toFixed(1)}MB`);
+              
+              if (sizeMB > 24) {
+                console.log('[Transcript T2] Audio too large for Whisper (>24MB), falling back to AssemblyAI');
+                // Use AssemblyAI for large files — submit-only, poll separately
+                const aaiKey = Deno.env.get("ASSEMBLYAI_API_KEY");
+                if (aaiKey) {
+                  const uploadRes = await fetch('https://api.assemblyai.com/v2/upload', {
+                    method: 'POST',
+                    headers: { 'authorization': aaiKey, 'content-type': 'application/octet-stream' },
+                    body: audioData,
                   });
-
-                  const startData = await startRes.json();
-                  if (startData.id && !startData.error) {
-                    const transcriptId = startData.id;
-                    console.log(`[AssemblyAI] Job ${transcriptId} — polling...`);
-
-                    for (let i = 0; i < 80; i++) {
-                      await new Promise(r => setTimeout(r, 3000));
-                      const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
-                        headers: { "authorization": aaiKey }
-                      });
-                      const result = await pollRes.json();
-                      console.log(`[AssemblyAI] Poll ${i + 1}: ${result.status}`);
-
-                      if (result.status === "completed" && result.text?.length >= 50) {
-                        transcript = result.text;
-                        transcriptSource = 'cobalt_assemblyai';
-                        console.log(`[AssemblyAI] Done! ${transcript.length} chars`);
-                        break;
-                      }
-                      if (result.status === "error") {
-                        console.log(`[AssemblyAI] Error: ${result.error}`);
-                        break;
+                  if (uploadRes.ok) {
+                    const uploadData = await uploadRes.json();
+                    const startRes = await fetch("https://api.assemblyai.com/v2/transcript", {
+                      method: "POST",
+                      headers: { "authorization": aaiKey, "content-type": "application/json" },
+                      body: JSON.stringify({ audio_url: uploadData.upload_url, language_detection: true })
+                    });
+                    const startData = await startRes.json();
+                    if (startData.id) {
+                      console.log(`[Transcript T2] AssemblyAI job ${startData.id} — polling (max 45s)...`);
+                      for (let i = 0; i < 15; i++) {
+                        await new Promise(r => setTimeout(r, 3000));
+                        const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${startData.id}`, {
+                          headers: { "authorization": aaiKey }
+                        });
+                        const result = await pollRes.json();
+                        if (result.status === "completed" && result.text?.length >= 50) {
+                          transcript = result.text;
+                          transcriptSource = 'assemblyai';
+                          console.log(`[Transcript T2] AssemblyAI done: ${transcript.length} chars`);
+                          break;
+                        }
+                        if (result.status === "error") {
+                          console.log(`[Transcript T2] AssemblyAI error: ${result.error}`);
+                          break;
+                        }
                       }
                     }
-                  } else {
-                    console.log(`[AssemblyAI] Submit failed: ${startData.error || 'unknown'}`);
                   }
+                }
+              } else {
+                // Step C: Send to OpenAI Whisper
+                console.log('[Transcript T2] Sending to Whisper...');
+                const formData = new FormData();
+                formData.append('file', new File([audioData], 'audio.mp3', { type: 'audio/mpeg' }));
+                formData.append('model', 'whisper-1');
+                formData.append('response_format', 'text');
+                formData.append('language', 'en');
+                
+                const whisperRes = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${openaiKey}` },
+                  body: formData
+                });
+                
+                if (whisperRes.ok) {
+                  const whisperText = await whisperRes.text();
+                  if (whisperText.length > 50) {
+                    transcript = whisperText.trim();
+                    transcriptSource = 'openai_whisper';
+                    console.log(`[Transcript T2] Whisper done: ${transcript.length} chars`);
+                  }
+                } else {
+                  console.log(`[Transcript T2] Whisper failed: ${whisperRes.status}`);
                 }
               }
             }
           }
         } catch (err) {
-          console.log(`[Cobalt+AssemblyAI] Error: ${err.message}`);
+          console.log(`[Transcript T2] Error: ${err.message}`);
         }
-      } else {
-        console.log('[Analyze] Missing COBALT_API_URL or ASSEMBLYAI_API_KEY for Tier 2');
+      }
+    }
+
+    // Tier 2.5: AssemblyAI direct (if Cobalt gave audio but Whisper failed)
+    if (!transcript || transcript.length < 50) {
+      const aaiKey = Deno.env.get("ASSEMBLYAI_API_KEY");
+      if (aaiKey) {
+        try {
+          // Try using YouTube URL directly with AssemblyAI (they support some URLs)
+          console.log('[Transcript T2.5] Trying AssemblyAI with YouTube URL...');
+          const startRes = await fetch("https://api.assemblyai.com/v2/transcript", {
+            method: "POST",
+            headers: { "authorization": aaiKey, "content-type": "application/json" },
+            body: JSON.stringify({ 
+              audio_url: `https://www.youtube.com/watch?v=${videoId}`,
+              language_detection: true 
+            })
+          });
+          const startData = await startRes.json();
+          if (startData.id && !startData.error) {
+            console.log(`[Transcript T2.5] AssemblyAI job ${startData.id} — polling...`);
+            for (let i = 0; i < 15; i++) {
+              await new Promise(r => setTimeout(r, 3000));
+              const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${startData.id}`, {
+                headers: { "authorization": aaiKey }
+              });
+              const result = await pollRes.json();
+              if (result.status === "completed" && result.text?.length >= 50) {
+                transcript = result.text;
+                transcriptSource = 'assemblyai_direct';
+                console.log(`[Transcript T2.5] Done: ${transcript.length} chars`);
+                break;
+              }
+              if (result.status === "error") {
+                console.log(`[Transcript T2.5] Error: ${result.error}`);
+                break;
+              }
+            }
+          }
+        } catch (err) {
+          console.log(`[Transcript T2.5] Error: ${err.message}`);
+        }
       }
     }
 
@@ -436,8 +577,8 @@ Deno.serve(async (req) => {
     }
 
     // ── 3. Deep analysis with Gemini (using real transcript) ─────
-    // Cap transcript sent to Gemini to avoid timeouts (keep full for original_script)
-    const maxTranscriptLen = 30000;
+    // Send full transcript to Gemini — use gemini-2.0-flash with 1M context window
+    const maxTranscriptLen = 120000; // ~30K words = 2 hour video
     const truncatedTranscript = transcript
       ? (transcript.length > maxTranscriptLen
           ? transcript.substring(0, maxTranscriptLen) + '... [truncated from ' + transcript.length + ' chars]'
@@ -501,7 +642,7 @@ CRITICAL: The "original_script" field must contain the ENTIRE original transcrip
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: analysisPrompt }] }],
-          generationConfig: { temperature: 0.5, maxOutputTokens: 65536, responseMimeType: "application/json" }
+          generationConfig: { temperature: 0.5, maxOutputTokens: 100000, responseMimeType: "application/json" }
         })
       }
     );
