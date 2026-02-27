@@ -2,32 +2,39 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // Generates a single repurpose batch — rewriting one chunk of the original script
 
-async function safeGeminiCall(prompt, temperature = 0.8) {
-  const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+async function callOpenAI(prompt, temperature = 0.8, maxTokens = 16384) {
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
 
-  const response = await fetch(
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + geminiApiKey,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: 16384 }
-      })
-    }
-  );
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: "You are a world-class YouTube scriptwriter. Write ONLY spoken narration — no headers, no formatting, no [MUSIC], no [VISUAL], no meta-commentary. Pure script text that sounds natural when read aloud. You MUST hit the exact word count target specified." },
+        { role: "user", content: prompt }
+      ],
+      temperature,
+      max_tokens: maxTokens,
+    })
+  });
+
+  if (response.status === 429) {
+    console.log("Rate limited, waiting 10s...");
+    await new Promise(r => setTimeout(r, 10000));
+    return callOpenAI(prompt, temperature, maxTokens);
+  }
 
   if (!response.ok) {
     const err = await response.json();
-    throw new Error(`Gemini API Error ${response.status}: ${err.error?.message || "Unknown"}`);
+    throw new Error(`OpenAI ${response.status}: ${err.error?.message || "Unknown"}`);
   }
 
   const data = await response.json();
-  if (!data.candidates || data.candidates.length === 0) {
-    throw new Error("Gemini returned no candidates.");
-  }
-
-  return data.candidates[0].content.parts[0].text;
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error("No content in OpenAI response");
+  return text;
 }
 
 function cleanNarration(text) {
@@ -161,6 +168,8 @@ ${scaleInstruction}
 **MAXIMUM ACCEPTABLE: ${Math.round(targetWords * 1.1)} WORDS**
 **═══════════════════════════════════════════════════════════════**
 
+This is NOT optional. A ${targetWords}-word narration is approximately ${Math.round(targetWords / 250)} pages of text, ${Math.round(targetWords / 150)} minutes of spoken audio at 150 wpm, and requires approximately ${Math.round(targetWords / 100)} substantial paragraphs of 80-120 words each. If you write fewer than ${minimumWords} words, your output will be REJECTED.
+
 **STORYTELLING RULES (non-negotiable regardless of length)**:
 - HOOK: ${batch.batch_number === 1 ? 'Open with a powerful hook that creates immediate curiosity or emotional tension. Match the original hook technique.' : 'Continue the momentum from the previous section.'}
 - EMOTIONAL ARC: Every segment must have its own mini arc — setup → tension → payoff
@@ -193,7 +202,7 @@ ${retryBlock}
 
       console.log(`Batch ${batch.batch_number}: attempt ${attempt}/${MAX_ATTEMPTS} (target: ${targetWords}, min: ${minimumWords}, have: ${finalWordCount})...`);
 
-      const rawText = await safeGeminiCall(prompt, isRetry ? 0.9 : 0.8);
+      const rawText = await callOpenAI(prompt, isRetry ? 0.9 : 0.8);
       const cleaned = cleanNarration(rawText);
       const wordCount = countWords(cleaned);
 
@@ -209,15 +218,15 @@ ${retryBlock}
         break;
       }
 
-      // If expanding and still way too short after attempt 3, try "continue writing" approach
-      if (isExpansionMode && attempt >= 3 && finalWordCount < minimumWords) {
+     // If still too short after attempt 2, try "continue writing" approach
+      if (attempt >= 2 && finalWordCount > 200 && finalWordCount < minimumWords) {
         console.log(`Batch ${batch.batch_number}: expansion shortfall — trying continuation approach...`);
         const remainingWords = targetWords - finalWordCount;
         const continuePrompt = `You are continuing a YouTube narration script. The segment below is INCOMPLETE — it needs ${remainingWords} MORE words to reach the target of ${targetWords} total words.
 
 **SCRIPT SO FAR** (${finalWordCount} words — needs ${remainingWords} more):
 """
-${finalContent}
+${finalContent.slice(-2000)}
 """
 
 **TITLE**: "${synopsisData.new_title || 'New Video'}"
@@ -225,17 +234,24 @@ ${finalContent}
 **STYLE**: ${synopsisData.analysis_style || 'Match original'} | Tone: ${synopsisData.analysis_tone || 'Match original'}
 
 **YOUR TASK**: Write EXACTLY ${remainingWords} words that CONTINUE this segment seamlessly.
-- Pick up from the last sentence naturally
-- Add deeper examples, emotional moments, audience-directed questions, vivid anecdotes
+That means approximately ${Math.round(remainingWords / 100)} paragraphs of 80-120 words each, or ${Math.round(remainingWords / 150)} minutes of narration.
+
+HOW TO CONTINUE:
+- Pick up from the last sentence naturally — your first word is the next thought
+- Add NEW examples, case studies, emotional moments, vivid anecdotes for "${synopsisData.new_title}"
+- Add rhetorical questions ("But here's what nobody talks about...")
+- Add "imagine this" scenarios with sensory details
+- Add surprising facts, statistics, or comparisons
+- Add audience-directed pauses ("Think about that for a second...")
 - Maintain the same voice, tone, and pacing
-- Do NOT repeat what's already written
-- Do NOT add headers, labels, or meta-commentary
+- Do NOT repeat or summarize anything already written
+- Do NOT add headers, [MUSIC], [VISUAL], or meta-commentary
 - Write ONLY narration text
 
-OUTPUT: ${remainingWords} words of continuation narration.`;
+You MUST write at least ${remainingWords} words. If you write fewer, your output will be REJECTED.`;
 
         try {
-          const contRaw = await safeGeminiCall(continuePrompt, 0.85);
+          const contRaw = await callOpenAI(continuePrompt, 0.85);
           const contCleaned = cleanNarration(contRaw);
           const contWords = countWords(contCleaned);
           if (contWords > 50) {
@@ -250,6 +266,34 @@ OUTPUT: ${remainingWords} words of continuation narration.`;
         if (finalWordCount >= minimumWords) {
           console.log(`Batch ${batch.batch_number}: ✓ accepted after continuation with ${finalWordCount} words`);
           break;
+        }
+
+        // Second continuation pass if still short
+        if (finalWordCount < minimumWords && finalWordCount > 400) {
+          const remaining2 = targetWords - finalWordCount;
+          console.log(`Batch ${batch.batch_number}: 2nd continuation for ${remaining2} more words...`);
+          try {
+            const cont2Raw = await callOpenAI(`Continue this narration with EXACTLY ${remaining2} more words. That's ${Math.round(remaining2 / 100)} more paragraphs.
+
+LAST PARAGRAPH:
+"${finalContent.split('\n').filter(p => p.trim()).slice(-1)[0] || ''}"
+
+TOPIC: "${synopsisData.new_title}"
+FOCUS: ${batch.focus_area}
+
+Write ${remaining2} words of NEW narration continuing from above. Pure spoken text only, no headers.`, 0.9);
+            const cont2Cleaned = cleanNarration(cont2Raw);
+            if (countWords(cont2Cleaned) > 50) {
+              finalContent = finalContent + '\n\n' + cont2Cleaned;
+              finalWordCount = countWords(finalContent);
+              console.log(`Batch ${batch.batch_number}: 2nd continuation → total ${finalWordCount}`);
+            }
+          } catch (_) {}
+
+          if (finalWordCount >= minimumWords) {
+            console.log(`Batch ${batch.batch_number}: ✓ accepted after 2nd continuation with ${finalWordCount} words`);
+            break;
+          }
         }
       }
 
