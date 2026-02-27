@@ -32,6 +32,7 @@ export default function ContentGeneration() {
   const [generatingVideos, setGeneratingVideos] = useState(false);
   const [audioLevels, setAudioLevels] = useState({ narration: 1, music: 0.3, sfx: 0.5 });
   const [enhancingAll, setEnhancingAll] = useState(false);
+  const [retryingPrompts, setRetryingPrompts] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState({ current: 0, total: 0, label: '' });
   const [estimatedWordCount, setEstimatedWordCount] = useState(0);
@@ -408,6 +409,45 @@ export default function ContentGeneration() {
     await refetchScenes();
     setGeneratingVideos(false);
     setVideoProgress({ current: 0, total: 0, sceneName: '', phase: '', sceneStatuses: {} });
+  };
+
+// ══════════════════════════════════════════════════════════════════
+  // RETRY PROMPT GENERATION — for scenes stuck at breakdown_ready
+  // ══════════════════════════════════════════════════════════════════
+  const handleRetryPrompts = async () => {
+    setRetryingPrompts(true);
+    try {
+      let done = false;
+      while (!done) {
+        try {
+          const result = await base44.functions.invoke('generateScenePrompts', {
+            project_id: projectId
+          });
+          const data = result.data || result;
+          done = data.done === true;
+
+          const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+          queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+
+          const ready = freshScenes.filter(s => s.status === 'prompts_ready').length;
+          const total = freshScenes.length;
+          console.log(`Retry prompts: ${ready}/${total} ready`);
+        } catch (err) {
+          const status = err?.response?.status || err?.status;
+          if (status === 500 || status === 502 || status === 504) {
+            console.log(`Prompt retry error ${status}, retrying in 8s...`);
+            await new Promise(r => setTimeout(r, 8000));
+            continue;
+          }
+          throw err;
+        }
+      }
+    } catch (err) {
+      console.error('Retry prompts failed:', err);
+    } finally {
+      await refetchScenes();
+      setRetryingPrompts(false);
+    }
   };
 
   // ══════════════════════════════════════════════════════════════════
@@ -913,6 +953,17 @@ export default function ContentGeneration() {
                 )}
               </div>
               <div className="flex-1" />
+              {breakdownReadyCount > 0 && (
+                <Button
+                  onClick={handleRetryPrompts}
+                  disabled={retryingPrompts}
+                  variant="outline"
+                  className="border-amber-200 text-amber-700 hover:bg-amber-50"
+                >
+                  {retryingPrompts ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Wand2 className="w-4 h-4 mr-1" />}
+                  {retryingPrompts ? `Generating Prompts... (${breakdownReadyCount} left)` : `Generate Prompts (${breakdownReadyCount})`}
+                </Button>
+              )}
               <Button
                 onClick={handleEnhanceAll}
                 disabled={enhancingAll}
