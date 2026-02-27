@@ -282,6 +282,7 @@ function calculatePhaseAllocation(totalTargetScenes) {
 }
 
 function splitScriptByPhase(script, phases) {
+  const MAX_SCENES_PER_CALL = 25;
   const sentences = script.match(/[^.!?]+[.!?]+[\s]*/g) || [script];
   const totalSentences = sentences.length;
   const totalPhaseScenes = phases.reduce((a, b) => a + b.scenes, 0);
@@ -294,15 +295,29 @@ function splitScriptByPhase(script, phases) {
     const sentenceCount = Math.max(1, Math.round(totalSentences * proportion));
     const isLast = i === phases.length - 1;
     const endCursor = isLast ? totalSentences : Math.min(cursor + sentenceCount, totalSentences);
-    const segment = sentences.slice(cursor, endCursor).join("").trim();
+    const phaseSentences = sentences.slice(cursor, endCursor);
+    const phaseText = phaseSentences.join("").trim();
 
-    if (segment.length > 0) {
-      chunks.push({
-        phase: phase.name,
-        purpose: phase.purpose,
-        scenes: phase.scenes,
-        text: segment
-      });
+    if (phaseText.length > 0) {
+      if (phase.scenes > MAX_SCENES_PER_CALL) {
+        const subCount = Math.ceil(phase.scenes / MAX_SCENES_PER_CALL);
+        const sentPerSub = Math.ceil(phaseSentences.length / subCount);
+        let remaining = phase.scenes;
+
+        for (let s = 0; s < subCount; s++) {
+          const subScenes = (s === subCount - 1) ? remaining : Math.min(MAX_SCENES_PER_CALL, remaining);
+          const subStart = s * sentPerSub;
+          const subEnd = (s === subCount - 1) ? phaseSentences.length : subStart + sentPerSub;
+          const subText = phaseSentences.slice(subStart, subEnd).join("").trim();
+
+          if (subText.length > 0) {
+            chunks.push({ phase: phase.name, purpose: phase.purpose, scenes: subScenes, text: subText });
+            remaining -= subScenes;
+          }
+        }
+      } else {
+        chunks.push({ phase: phase.name, purpose: phase.purpose, scenes: phase.scenes, text: phaseText });
+      }
     }
     cursor = endCursor;
   }
