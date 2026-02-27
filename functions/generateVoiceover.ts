@@ -250,61 +250,109 @@ Deno.serve(async (req) => {
     const isAi33Voice = AI33_KEY && /^[a-zA-Z0-9]{20,}$/.test(selectedVoiceId);
     const useMinimax = !forceAi33 && MINIMAX_KEY && !isAi33Voice;
 
-    
+    const chunks = splitTextIntoChunks(cleanedText, 9000);
+    let allAudioBytes = [];
+    let totalDuration = 0;
+    let usedProvider = 'none';
 
-    // ── TRY MINIMAX ────────────────────────────────────────────────
+    console.log(`🎙 Split into ${chunks.length} chunks for TTS`);
+
+    // ── TRY MINIMAX (parallel batches of 10) ───────────────────────
     if (useMinimax) {
       try {
-        for (let i = 0; i < chunks.length; i++) {
-          // Check if we're running out of time (leave 15s buffer)
-          const elapsed = Date.now() - startTime;
-          if (elapsed > 75000) {
-            throw new Error('Running out of time, aborting MiniMax');
+        const CONCURRENCY = 10;
+        const results = new Array(chunks.length).fill(null);
+
+        for (let batch = 0; batch < chunks.length; batch += CONCURRENCY) {
+          const batchEnd = Math.min(batch + CONCURRENCY, chunks.length);
+          console.log(`🎙 MiniMax batch ${Math.floor(batch / CONCURRENCY) + 1}: chunks ${batch + 1}-${batchEnd}`);
+
+          const promises = [];
+          for (let i = batch; i < batchEnd; i++) {
+            const idx = i;
+            promises.push((async () => {
+              for (let retry = 0; retry < 3; retry++) {
+                try {
+                  if (retry > 0) await new Promise(r => setTimeout(r, 2000 * retry));
+                  const result = await generateWithMinimax(MINIMAX_KEY, chunks[idx], selectedVoiceId);
+                  console.log(`✓ Chunk ${idx + 1}: ${result.audioBytes.length} bytes, ${result.durationSec.toFixed(1)}s`);
+                  return { idx, ...result };
+                } catch (err) {
+                  console.warn(`⚠️ Chunk ${idx + 1} attempt ${retry + 1}: ${err.message}`);
+                }
+              }
+              return { idx, audioBytes: null, durationSec: 0 };
+            })());
           }
-          
-          console.log(`🎙 MiniMax chunk ${i + 1}/${chunks.length} (${chunks[i].length} chars)...`);
-          const result = await generateWithMinimax(MINIMAX_KEY, chunks[i], selectedVoiceId);
-          allAudioBytes.push(result.audioBytes);
-          totalDuration += result.durationSec;
-          console.log(`✓ MiniMax chunk ${i + 1}: ${result.audioBytes.length} bytes, ${result.durationSec.toFixed(1)}s`);
+
+          const batchResults = await Promise.all(promises);
+          for (const r of batchResults) results[r.idx] = r;
         }
-        usedProvider = 'minimax';
+
+        for (const r of results) {
+          if (r?.audioBytes) {
+            allAudioBytes.push(r.audioBytes);
+            totalDuration += r.durationSec;
+          }
+        }
+
+        if (allAudioBytes.length > 0) {
+          usedProvider = 'minimax';
+          console.log(`✓ MiniMax done: ${allAudioBytes.length}/${chunks.length} chunks, ${totalDuration.toFixed(1)}s`);
+        } else {
+          throw new Error('All MiniMax chunks failed');
+        }
       } catch (mmErr) {
-        console.warn(`⚠️ MiniMax TTS failed: ${mmErr.message}`);
+        console.warn(`⚠️ MiniMax failed: ${mmErr.message}`);
         allAudioBytes = [];
         totalDuration = 0;
       }
     }
 
-    // ── FALLBACK TO AI33 ───────────────────────────────────────────
+    // ── FALLBACK TO AI33 (parallel batches of 5) ───────────────────
     if (usedProvider === 'none' && AI33_KEY) {
-      // Check remaining time before attempting AI33
-      const elapsed = Date.now() - startTime;
-      if (elapsed > 30000) {
-        return Response.json({ 
-          error: 'MiniMax failed and not enough time for AI33 fallback. Please try again.',
-          elapsed_ms: elapsed,
-        }, { status: 500 });
-      }
-      
       console.log('🎙 Falling back to AI33 (ElevenLabs)...');
-      const ai33VoiceId = isAi33Voice ? selectedVoiceId : '21m00Tcm4TlvDq8ikWAM'; // Rachel default
+      const ai33VoiceId = isAi33Voice ? selectedVoiceId : '21m00Tcm4TlvDq8ikWAM';
       const ai33Chunks = splitTextIntoChunks(cleanedText, 2500);
-      
-      // Only process first chunk if multiple to avoid timeout
-      const chunksToProcess = ai33Chunks.slice(0, 1);
-      if (ai33Chunks.length > 1) {
-        console.warn(`⚠️ AI33: Only processing first chunk to avoid timeout (${ai33Chunks.length} total)`);
+      const AI33_CONCURRENCY = 5;
+      const ai33Results = new Array(ai33Chunks.length).fill(null);
+
+      for (let batch = 0; batch < ai33Chunks.length; batch += AI33_CONCURRENCY) {
+        const batchEnd = Math.min(batch + AI33_CONCURRENCY, ai33Chunks.length);
+        console.log(`🎙 AI33 batch ${Math.floor(batch / AI33_CONCURRENCY) + 1}: chunks ${batch + 1}-${batchEnd}`);
+
+        const promises = [];
+        for (let i = batch; i < batchEnd; i++) {
+          const idx = i;
+          promises.push((async () => {
+            for (let retry = 0; retry < 3; retry++) {
+              try {
+                if (retry > 0) await new Promise(r => setTimeout(r, 3000 * retry));
+                const result = await generateWithAi33(AI33_KEY, ai33Chunks[idx], ai33VoiceId);
+                console.log(`✓ AI33 chunk ${idx + 1}: ${result.audioBytes.length} bytes`);
+                return { idx, ...result };
+              } catch (err) {
+                console.warn(`⚠️ AI33 chunk ${idx + 1} attempt ${retry + 1}: ${err.message}`);
+              }
+            }
+            return { idx, audioBytes: null, durationSec: 0 };
+          })());
+        }
+
+        const batchResults = await Promise.all(promises);
+        for (const r of batchResults) ai33Results[r.idx] = r;
       }
 
-      for (let i = 0; i < chunksToProcess.length; i++) {
-        console.log(`🎙 AI33 chunk ${i + 1}/${chunksToProcess.length} (${chunksToProcess[i].length} chars)...`);
-        const result = await generateWithAi33(AI33_KEY, chunksToProcess[i], ai33VoiceId);
-        allAudioBytes.push(result.audioBytes);
-        totalDuration += result.durationSec;
-        console.log(`✓ AI33 chunk ${i + 1}: ${result.audioBytes.length} bytes, ${result.durationSec.toFixed(1)}s`);
+      for (const r of ai33Results) {
+        if (r?.audioBytes) {
+          allAudioBytes.push(r.audioBytes);
+          totalDuration += r.durationSec;
+        }
       }
-      usedProvider = 'ai33';
+      if (allAudioBytes.length > 0) {
+        usedProvider = 'ai33';
+        console.log(`✓ AI33 done: ${allAudioBytes.length}/${ai33Chunks.length} chunks`);
+      }
     }
 
     if (usedProvider === 'none') {
@@ -361,7 +409,8 @@ Deno.serve(async (req) => {
       voiceover_duration_seconds: totalDuration,
       word_count: wordCount,
       voice_id: selectedVoiceId,
-      chunks_count: chunks.length,
+      chunks_processed: allAudioBytes.length,
+      chunks_total: chunks.length,
       provider: usedProvider,
       processing_time_ms: totalTime,
     });
