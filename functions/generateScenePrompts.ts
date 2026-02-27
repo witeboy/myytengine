@@ -5,7 +5,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 // Pipeline: Script → Breakdown → [THIS] → Image Gen → Animation
 // ══════════════════════════════════════════════════════════════════
 
-const BATCH_SIZE = 12;
+const BASE_BATCH_SIZE = 12;
 const CLIP_DURATION = 5;
 const PARALLEL_PROMPT_BATCHES = 3; // Run 3 Gemini prompt calls concurrently
 
@@ -555,8 +555,46 @@ Deno.serve(async (req) => {
     let totalWarnings = 0;
     const totalBatches = Math.ceil(pendingScenes.length / BATCH_SIZE);
 
+    // ═══ QUALITY ANCHORS — best prompts from completed scenes ═══
+    // Inject 2-3 examples of GOOD prompts into every batch so the LLM
+    // knows the expected quality bar, not just the instructions
+    let qualityAnchors = '';
+    try {
+      const completedScenes = allScenes
+        .filter(s => s.status === 'prompts_ready' && s.image_prompt && !s.image_prompt.startsWith('DIRECTOR_NOTES:'))
+        .sort((a, b) => a.scene_number - b.scene_number);
+
+      if (completedScenes.length >= 2) {
+        // Pick the longest/richest prompts as quality examples
+        const ranked = [...completedScenes]
+          .sort((a, b) => (b.image_prompt?.length || 0) - (a.image_prompt?.length || 0))
+          .slice(0, 3);
+
+        qualityAnchors = `
+**═══════════════════════════════════════════════════════════════**
+**QUALITY REFERENCE — your output MUST match or exceed this detail level:**
+**═══════════════════════════════════════════════════════════════**
+${ranked.map((s, i) => `
+EXAMPLE ${i + 1} (Scene ${s.scene_number} — ${s.image_prompt.length} chars):
+image_prompt: "${s.image_prompt.substring(0, 500)}"
+animation_prompt: "${(s.animation_prompt || '').substring(0, 200)}"
+`).join('\n')}
+**Every prompt you write MUST be at least this detailed. Prompts shorter than 150 characters will be REJECTED.**
+**═══════════════════════════════════════════════════════════════**`;
+
+        console.log(`📋 Quality anchors loaded from ${ranked.length} existing scenes (${ranked.map(s => `S${s.scene_number}: ${s.image_prompt.length}ch`).join(', ')})`);
+      }
+    } catch (_) {
+      console.log('No quality anchors available — first batch');
+    }
     // Process 1 batch per call to avoid platform timeout
-    const startBIdx = 0; // always 0 — we only process scenes with status "breakdown_ready"
+    // Adaptive batch size: 12 for first 60 scenes, 8 for 60-200, 6 for 200+
+    const totalPendingScenes = pendingScenes.length;
+    const completedSoFar = allScenes.filter(s => s.status === 'prompts_ready').length;
+    const BATCH_SIZE = completedSoFar > 200 ? 6 : completedSoFar > 60 ? 8 : BASE_BATCH_SIZE;
+    console.log(`📦 Batch size: ${BATCH_SIZE} (${completedSoFar} scenes already completed)`);
+
+    const startBIdx = 0;
     const maxBatchesPerCall = 1;
     for (let bIdx = startBIdx; bIdx < Math.min(startBIdx + maxBatchesPerCall, totalBatches); bIdx++) {
       const batchScenes = pendingScenes.slice(bIdx * BATCH_SIZE, (bIdx + 1) * BATCH_SIZE);
@@ -607,12 +645,13 @@ Deno.serve(async (req) => {
 **Rendering Language:** ${styleBodyRules.rendering}
 **═══════════════════════════════════════════════════════════════**` : '';
 
-      const prompt = `**MISSION: Convert Director's Notes → Production-Ready Image & Animation Prompts**
+     const prompt = `**MISSION: Convert Director's Notes → Production-Ready Image & Animation Prompts**
 
 ${storyContext}
 
 ${characterBlock}
 ${styleReinforcement}
+${qualityAnchors}
 
 **VISUAL STYLE: "${visualStyle}"**
 **ORIENTATION:** ${orientationConfig.format}
@@ -696,6 +735,42 @@ ${sceneDirections}
 
         if (generated) {
           let rawPrompt = generated.image_prompt || '';
+
+          // ═══ QUALITY GATE — catch lazy/thin prompts ═══
+          const promptWords = rawPrompt.split(/\s+/).filter(w => w.length > 0).length;
+
+          if (promptWords < 30) {
+            // Critically thin — LLM got lazy on this scene. Regenerate solo.
+            console.warn(`⚠️ Scene ${s.scene_number}: only ${promptWords} words — regenerating...`);
+            try {
+              const soloPrompt = `Generate ONE detailed image prompt for this scene.
+
+**VISUAL STYLE:** "${visualStyle}" — ${styleConfig.positive}
+${getStyleSceneBodyRules(visualStyle) ? `**Characters:** ${getStyleSceneBodyRules(visualStyle).characters}\n**Environments:** ${getStyleSceneBodyRules(visualStyle).environments}` : ''}
+
+**SCENE ${s.scene_number}:**
+Narration: "${s.narration_text}"
+${s.director ? `Visual Concept: ${s.director.visual_concept}\nShot: ${s.director.shot_type} | Angle: ${s.director.camera_angle} | Lighting: ${s.director.lighting} | Mood: ${s.director.mood}` : ''}
+
+**REQUIREMENTS:**
+- Minimum 80 words describing the complete scene
+- Start with ENVIRONMENT (location, architecture, weather, props, atmosphere)
+- Then place characters FULL BODY mid-action with complete physical descriptions
+- Include camera angle, lighting direction, color palette, mood
+- End with composition details and depth layers
+
+Respond with ONLY the image_prompt text, no JSON, no labels.`;
+
+              const soloResult = await callGemini(soloPrompt, 0.8, 4096);
+              const soloText = typeof soloResult === 'string' ? soloResult : (soloResult.image_prompt || soloResult.prompt || JSON.stringify(soloResult));
+              if (soloText && soloText.split(/\s+/).length > 30) {
+                rawPrompt = soloText;
+                console.log(`✓ Scene ${s.scene_number}: regenerated — now ${soloText.split(/\s+/).length} words`);
+              }
+            } catch (regenErr) {
+              console.warn(`Scene ${s.scene_number} regen failed: ${regenErr.message}`);
+            }
+          }
 
           // ═══ INLINE CHARACTER IDENTITY INJECTION ═══
           // Image gen models don't do name resolution — "Elena" in a cast block
