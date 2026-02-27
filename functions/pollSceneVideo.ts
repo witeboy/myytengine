@@ -44,13 +44,17 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, status: 'COMPLETED', video_url: videoUrl });
     }
 
-    // Support both old veo_task: and new grok_vid_task: prefixes
+    // Extract task ID from any provider prefix
     let taskId = null;
-    if (videoUrl.startsWith('grok_vid_task:')) {
-      taskId = videoUrl.replace('grok_vid_task:', '');
-    } else if (videoUrl.startsWith('veo_task:')) {
-      taskId = videoUrl.replace('veo_task:', '');
-    } else if (videoUrl.startsWith('runway_task:') || videoUrl.startsWith('freepik_task:')) {
+    const prefixes = ['runway_task:', 'hailuo_task:', 'grok_vid_task:', 'veo_task:'];
+    for (const prefix of prefixes) {
+      if (videoUrl.startsWith(prefix)) {
+        taskId = videoUrl.replace(prefix, '');
+        break;
+      }
+    }
+
+    if (!taskId && videoUrl.startsWith('freepik_task:')) {
       return Response.json({
         error: 'This scene uses a legacy video provider. Re-generate the video.',
         legacy_task: videoUrl
