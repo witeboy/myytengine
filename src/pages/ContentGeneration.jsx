@@ -286,20 +286,34 @@ function AudioAssetsPanel({ project }) {
       console.log(`CORS blocked for ${asset.key} — using direct link`);
     }
 
-    // Method 2: Direct <a> tag (bypasses CORS, browser handles download)
+    // Method 2: Backend proxy (server-side, no CORS)
     try {
-      const a = document.createElement('a');
-      a.href = asset.url;
-      a.download = `${projectName}_${asset.key}.${ext}`;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    } catch (_) {
-      // Method 3: Last resort — open in new tab
-      window.open(asset.url, '_blank');
+      const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url: asset.url });
+      const data = proxyRes.data || proxyRes;
+      if (data.success && data.data) {
+        const binary = atob(data.data);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: data.content_type || 'application/octet-stream' });
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = `${projectName}_${asset.key}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+        setDownloading(null);
+        return;
+      }
+    } catch (proxyErr) {
+      console.warn(`Proxy download failed for ${asset.key}: ${proxyErr.message}`);
     }
+
+    // Method 3: Last resort — open in new tab
+    window.open(asset.url, '_blank');
 
     setDownloading(null);
   };
@@ -914,14 +928,24 @@ export default function ContentGeneration() {
       if (res.ok) return await res.blob();
     } catch (_) {}
 
-    // Method 2: Try via proxy for CORS-blocked URLs
+    // Method 2: Backend proxy (no CORS restrictions server-side)
     try {
-      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-      const res = await fetch(proxyUrl);
-      if (res.ok) return await res.blob();
-    } catch (_) {}
+      const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url });
+      const data = proxyRes.data || proxyRes;
+      if (data.success && data.data) {
+        // Convert base64 back to blob
+        const binary = atob(data.data);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        return new Blob([bytes], { type: data.content_type || 'application/octet-stream' });
+      }
+    } catch (proxyErr) {
+      console.warn(`Proxy fetch failed for ${url.substring(0, 60)}: ${proxyErr.message}`);
+    }
 
-    console.warn(`CORS blocked, skipping: ${url.substring(0, 60)}`);
+    console.warn(`All fetch methods failed, skipping: ${url.substring(0, 60)}`);
     return null;
   };
 
