@@ -21,7 +21,10 @@ import {
   XCircle, Clock, Zap, Video, FolderDown, Mic, Music, Volume2
 } from 'lucide-react';
 
-// ── Fix Prompts Button ──────────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════════════════
+// Fix Prompts Button — Module-level component
+// ═══════════════════════════════════════════════════════════════════
 function FixPromptsButton({ projectId, sceneCount, onComplete }) {
   const [fixing, setFixing] = useState(false);
   const [fixType, setFixType] = useState(null);
@@ -49,8 +52,6 @@ function FixPromptsButton({ projectId, sceneCount, onComplete }) {
 
     setFixing(false);
     setFixType(null);
-
-    // Auto-hide result after 5s
     setTimeout(() => setResult(null), 5000);
   };
 
@@ -84,7 +85,6 @@ function FixPromptsButton({ projectId, sceneCount, onComplete }) {
         )}
       </Button>
 
-      {/* Dropdown Menu */}
       {showMenu && !fixing && (
         <div className="absolute top-full mt-1 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-64">
           {fixOptions.map(opt => (
@@ -103,7 +103,6 @@ function FixPromptsButton({ projectId, sceneCount, onComplete }) {
         </div>
       )}
 
-      {/* Result Toast */}
       {result && (
         <div className={`absolute top-full mt-1 right-0 z-50 rounded-lg p-3 shadow-lg text-xs w-64 ${
           result.error ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-green-50 border border-green-200 text-green-700'
@@ -124,13 +123,15 @@ function FixPromptsButton({ projectId, sceneCount, onComplete }) {
   );
 }
 
-// ── Audio Assets Download Panel ─────────────────────────────────
+
+// ═══════════════════════════════════════════════════════════════════
+// Audio Assets Download Panel — Module-level component
+// ═══════════════════════════════════════════════════════════════════
 function AudioAssetsPanel({ project }) {
   const [downloading, setDownloading] = useState(null);
   const [prodSettings, setProdSettings] = useState(null);
-  const projectId = project?.id;
-
   const [musicTracks, setMusicTracks] = useState([]);
+  const projectId = project?.id;
 
   // Load production settings + music tracks on mount
   useEffect(() => {
@@ -148,12 +149,11 @@ function AudioAssetsPanel({ project }) {
     })();
   }, [projectId]);
 
-  // Scan ALL fields on project + prodSettings for audio URLs
+  // ── Scan ALL fields on project + prodSettings for audio URLs ──
   const allAudioUrls = {};
 
   const categorizeField = (field, url) => {
     if (!url || typeof url !== 'string' || !url.startsWith('http')) return;
-    // Skip non-audio URLs (images, videos, thumbnails)
     if (/\.(png|jpg|jpeg|webp|gif|mp4|webm|mov|svg)(\?|$)/i.test(url)) return;
     if (/(image|thumbnail|poster|avatar|cover|photo|scene|video)/i.test(field) && !/(audio|voice|music|sound|narr)/i.test(field)) return;
 
@@ -203,7 +203,6 @@ function AudioAssetsPanel({ project }) {
 
   // Add music tracks from MusicTracks entity
   if (musicTracks.length > 0) {
-    // Selected track first, then others
     const sorted = [...musicTracks].sort((a, b) => (b.is_selected ? 1 : 0) - (a.is_selected ? 1 : 0));
     sorted.forEach((track, i) => {
       if (track.audio_url && track.audio_url.startsWith('http')) {
@@ -218,7 +217,6 @@ function AudioAssetsPanel({ project }) {
     });
   }
 
-  // Log what we found for debugging
   console.log('🔊 Audio assets found:', Object.entries(allAudioUrls).map(([k, v]) => `${k}: ${v.field}`).join(', '));
 
   const iconMap = {
@@ -246,14 +244,14 @@ function AudioAssetsPanel({ project }) {
   }));
 
   // Deduplicate by URL
-  const seen = new Set();
+  const seenUrls = new Set();
   const uniqueAssets = assets.filter(a => {
-    if (seen.has(a.url)) return false;
-    seen.add(a.url);
+    if (seenUrls.has(a.url)) return false;
+    seenUrls.add(a.url);
     return true;
   });
 
-    if (uniqueAssets.length === 0) return null;
+  if (uniqueAssets.length === 0) return null;
 
   const handleDownload = async (asset) => {
     setDownloading(asset.key);
@@ -262,7 +260,6 @@ function AudioAssetsPanel({ project }) {
       if (!response.ok) throw new Error('Download failed');
       const blob = await response.blob();
 
-      // Detect format from content-type or URL
       const contentType = response.headers.get('content-type') || '';
       let ext = 'mp3';
       if (contentType.includes('wav')) ext = 'wav';
@@ -270,15 +267,15 @@ function AudioAssetsPanel({ project }) {
       else if (asset.url.includes('.wav')) ext = 'wav';
       else if (asset.url.includes('.ogg')) ext = 'ogg';
 
-      const url = URL.createObjectURL(blob);
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url;
+      a.href = blobUrl;
       const projectName = (project.name || 'project').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
       a.download = `${projectName}_${asset.key}.${ext}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      URL.revokeObjectURL(blobUrl);
     } catch (err) {
       console.error(`Download ${asset.key} failed:`, err);
       window.open(asset.url, '_blank');
@@ -290,7 +287,7 @@ function AudioAssetsPanel({ project }) {
     setDownloading('all');
     for (const asset of uniqueAssets) {
       await handleDownload(asset);
-      await new Promise(r => setTimeout(r, 500)); // Small gap between downloads
+      await new Promise(r => setTimeout(r, 500));
     }
     setDownloading(null);
   };
@@ -373,6 +370,10 @@ function AudioAssetsPanel({ project }) {
   );
 }
 
+
+// ═══════════════════════════════════════════════════════════════════
+// MAIN COMPONENT — Content Generation Page
+// ═══════════════════════════════════════════════════════════════════
 export default function ContentGeneration() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -394,8 +395,8 @@ export default function ContentGeneration() {
   const [imageProgress, setImageProgress] = useState({ current: 0, total: 0, sceneName: '' });
   const [videoProgress, setVideoProgress] = useState({
     current: 0, total: 0, sceneName: '',
-    phase: '', // 'submitting' | 'polling' | 'done'
-    sceneStatuses: {} // { [scene_id]: 'queued' | 'submitting' | 'polling' | 'done' | 'failed' }
+    phase: '',
+    sceneStatuses: {}
   });
   const pollAbortRef = useRef(false);
 
@@ -417,30 +418,26 @@ export default function ContentGeneration() {
     enabled: !!projectId,
   });
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => { pollAbortRef.current = true; };
   }, []);
 
   // ══════════════════════════════════════════════════════════════════
-  // TWO-PHASE IMPORT: Scene Breakdown → Prompt Generation
+  // HELPERS
   // ══════════════════════════════════════════════════════════════════
-  // Fire-and-forget helper that tolerates 504 timeouts
   const invokeWithTimeout = async (fnName, payload) => {
     try {
       await base44.functions.invoke(fnName, payload);
     } catch (err) {
-      // 504 = gateway timeout — function is still running in the background
       const status = err?.response?.status || err?.status;
       if (status === 504) {
         console.log(`${fnName} returned 504 (timeout) — function still running, will poll for results`);
-        return; // not an error, just slow
+        return;
       }
-      throw err; // re-throw real errors
+      throw err;
     }
   };
 
-  // Poll until scenes appear or project status changes
   const pollForCompletion = async (checkFn, maxPolls = 60, intervalMs = 5000) => {
     for (let i = 0; i < maxPolls; i++) {
       await new Promise(r => setTimeout(r, intervalMs));
@@ -450,10 +447,12 @@ export default function ContentGeneration() {
     return false;
   };
 
+  // ══════════════════════════════════════════════════════════════════
+  // IMPORT: Scene Breakdown → Prompt Generation
+  // ══════════════════════════════════════════════════════════════════
   const handleImport = async () => {
     setImporting(true);
 
-    // Estimate word count from script for progress estimation
     try {
       const scriptsList = await base44.entities.Scripts.filter({ project_id: projectId });
       const script = scriptsList.find(s => s.version === 'final_aggregated');
@@ -466,7 +465,7 @@ export default function ContentGeneration() {
     } catch (_) {}
 
     try {
-      // ── Phase 1: Scene Breakdown (loop — 1 chunk per call) ──────
+      // ── Phase 1: Scene Breakdown ────────────────────────────────
       setImportPhase('breakdown');
       setImportProgress('Analyzing script & breaking down into cinematic scenes...');
 
@@ -475,7 +474,6 @@ export default function ContentGeneration() {
 
       while (!breakdownDone) {
         try {
-          // Small delay between batches to let DB propagate
           if (nextBatch > 0) await new Promise(r => setTimeout(r, 3000));
 
           const bdResult = await base44.functions.invoke('generateSceneBreakdown', {
@@ -487,8 +485,7 @@ export default function ContentGeneration() {
           nextBatch = bdData.next_batch ?? (nextBatch + 1);
 
           const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
-          const sorted = freshScenes.sort((a, b) => a.scene_number - b.scene_number);
-          queryClient.setQueryData(['scenes', projectId], sorted);
+          queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
 
           const target = bdData.total_target || freshScenes.length;
           setTotalExpectedScenes(target);
@@ -496,25 +493,21 @@ export default function ContentGeneration() {
         } catch (err) {
           const status = err?.response?.status || err?.status;
           const errMsg = err?.response?.data?.error || '';
-          // Blueprint not yet propagated — wait and retry same batch
           if (status === 400 && errMsg.includes('blueprint')) {
             console.log(`Blueprint not ready yet, retrying batch ${nextBatch} in 5s...`);
             await new Promise(r => setTimeout(r, 5000));
             continue;
           }
-          // Transient server error (JSON parse, timeout, etc) — retry same batch
           if (status === 500 || status === 502) {
             console.log(`Server error on batch ${nextBatch}, retrying in 8s...`);
             await new Promise(r => setTimeout(r, 8000));
             continue;
           }
           if (status === 504) {
-            // Timeout — wait and retry same batch (scenes may have been saved)
             await new Promise(r => setTimeout(r, 8000));
             const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
             queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
             setImportProgress(`Recovering from timeout... ${freshScenes.length} scenes so far`);
-            // Don't increment nextBatch — retry
             continue;
           }
           throw err;
@@ -523,7 +516,7 @@ export default function ContentGeneration() {
 
       await refetchScenes();
 
-      // ── Phase 2: Prompt Generation (loop — 1 batch per call) ────
+      // ── Phase 2: Prompt Generation ──────────────────────────────
       setImportPhase('prompts');
       setImportProgress('Converting director notes into visual prompts...');
 
@@ -531,17 +524,14 @@ export default function ContentGeneration() {
 
       while (!promptsDone) {
         try {
-          const prResult = await base44.functions.invoke('generateScenePrompts', {
-            project_id: projectId
-          });
+          const prResult = await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
           const prData = prResult.data || prResult;
           promptsDone = prData.done === true;
 
           const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
           queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
           const ready = freshScenes.filter(s => s.status === 'prompts_ready');
-          const total = freshScenes.length;
-          setImportProgress(`Generating production prompts... ${ready.length}/${total} ready`);
+          setImportProgress(`Generating production prompts... ${ready.length}/${freshScenes.length} ready`);
         } catch (err) {
           const status = err?.response?.status || err?.status;
           if (status === 500 || status === 502 || status === 504) {
@@ -572,7 +562,7 @@ export default function ContentGeneration() {
   };
 
   // ══════════════════════════════════════════════════════════════════
-  // GENERATE ALL IMAGES (Grok Imagine via Kie)
+  // GENERATE ALL IMAGES
   // ══════════════════════════════════════════════════════════════════
   const handleGenerateImages = async () => {
     setGeneratingImages(true);
@@ -615,24 +605,15 @@ export default function ContentGeneration() {
   };
 
   // ══════════════════════════════════════════════════════════════════
-  // GENERATE & POLL ALL VIDEOS (Veo 3.1 Quality via Kie)
+  // GENERATE & POLL ALL VIDEOS
   // ══════════════════════════════════════════════════════════════════
-  //
-  // Flow:
-  //   1. Submit all scenes → generateSceneVideo (returns task_id)
-  //   2. Poll all pending scenes every 15s → pollSceneVideo
-  //   3. Each COMPLETED scene gets real video_url written to DB
-  //
-  // All scenes submitted first, then polled in parallel rounds.
-  // ══════════════════════════════════════════════════════════════════
-
   const handleGenerateVideos = async () => {
     setGeneratingVideos(true);
     pollAbortRef.current = false;
 
     const ready = scenes.filter(s =>
       s.image_url &&
-      s.image_url.startsWith('http') && // Veo needs public URLs
+      s.image_url.startsWith('http') &&
       (s.status === 'image_generated' || s.status === 'prompts_ready') &&
       (!s.video_url || s.video_url.startsWith('grok_vid_task:') || s.video_url.startsWith('veo_task:'))
     );
@@ -642,7 +623,6 @@ export default function ContentGeneration() {
       return;
     }
 
-    // Initialize per-scene statuses
     const initialStatuses = {};
     ready.forEach(s => { initialStatuses[s.id] = 'queued'; });
 
@@ -652,7 +632,7 @@ export default function ContentGeneration() {
       sceneStatuses: { ...initialStatuses }
     });
 
-    // ── Phase 1: Submit all scenes to Veo ───────────────────────
+    // Phase 1: Submit all
     const pendingPolls = [];
 
     for (let i = 0; i < ready.length; i++) {
@@ -670,11 +650,7 @@ export default function ContentGeneration() {
       try {
         const response = await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
         const result = response.data || response;
-        pendingPolls.push({
-          scene_id: scene.id,
-          task_id: result.task_id,
-          scene_number: scene.scene_number
-        });
+        pendingPolls.push({ scene_id: scene.id, task_id: result.task_id, scene_number: scene.scene_number });
         setVideoProgress(prev => ({
           ...prev,
           sceneStatuses: { ...prev.sceneStatuses, [scene.id]: 'polling' }
@@ -688,7 +664,7 @@ export default function ContentGeneration() {
       }
     }
 
-    // ── Phase 2: Poll all pending scenes until done ─────────────
+    // Phase 2: Poll all
     if (pendingPolls.length > 0) {
       setVideoProgress(prev => ({
         ...prev,
@@ -698,7 +674,7 @@ export default function ContentGeneration() {
 
       let remaining = [...pendingPolls];
       let pollCount = 0;
-      const MAX_POLLS = 60; // 60 × 15s = 15 min max
+      const MAX_POLLS = 60;
 
       while (remaining.length > 0 && pollCount < MAX_POLLS && !pollAbortRef.current) {
         await new Promise(r => setTimeout(r, 15000));
@@ -708,11 +684,8 @@ export default function ContentGeneration() {
 
         for (const item of remaining) {
           if (pollAbortRef.current) break;
-
           try {
-            const pollResponse = await base44.functions.invoke('pollSceneVideo', {
-              scene_id: item.scene_id
-            });
+            const pollResponse = await base44.functions.invoke('pollSceneVideo', { scene_id: item.scene_id });
             const pollResult = pollResponse.data || pollResponse;
 
             if (pollResult.status === 'COMPLETED') {
@@ -737,7 +710,6 @@ export default function ContentGeneration() {
         remaining = stillPending;
         await refetchScenes();
 
-        // Update summary text
         setVideoProgress(prev => {
           const s = prev.sceneStatuses;
           const done = Object.values(s).filter(v => v === 'done').length;
@@ -752,7 +724,6 @@ export default function ContentGeneration() {
         });
       }
 
-      // Timeout warning
       if (remaining.length > 0 && pollCount >= MAX_POLLS) {
         console.warn(`Polling timed out with ${remaining.length} scenes still pending`);
       }
@@ -763,8 +734,8 @@ export default function ContentGeneration() {
     setVideoProgress({ current: 0, total: 0, sceneName: '', phase: '', sceneStatuses: {} });
   };
 
-// ══════════════════════════════════════════════════════════════════
-  // RETRY PROMPT GENERATION — for scenes stuck at breakdown_ready
+  // ══════════════════════════════════════════════════════════════════
+  // RETRY PROMPT GENERATION
   // ══════════════════════════════════════════════════════════════════
   const handleRetryPrompts = async () => {
     setRetryingPrompts(true);
@@ -772,18 +743,13 @@ export default function ContentGeneration() {
       let done = false;
       while (!done) {
         try {
-          const result = await base44.functions.invoke('generateScenePrompts', {
-            project_id: projectId
-          });
+          const result = await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
           const data = result.data || result;
           done = data.done === true;
 
           const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
           queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
-
-          const ready = freshScenes.filter(s => s.status === 'prompts_ready').length;
-          const total = freshScenes.length;
-          console.log(`Retry prompts: ${ready}/${total} ready`);
+          console.log(`Retry prompts: ${freshScenes.filter(s => s.status === 'prompts_ready').length}/${freshScenes.length} ready`);
         } catch (err) {
           const status = err?.response?.status || err?.status;
           if (status === 500 || status === 502 || status === 504) {
@@ -809,10 +775,7 @@ export default function ContentGeneration() {
     setEnhancingAll(true);
     for (const scene of scenes) {
       try {
-        await base44.functions.invoke('enhanceScenePrompts', {
-          scene_id: scene.id,
-          enhance_type: 'both',
-        });
+        await base44.functions.invoke('enhanceScenePrompts', { scene_id: scene.id, enhance_type: 'both' });
       } catch (err) {
         console.warn(`Scene ${scene.scene_number} enhance failed:`, err.message);
       }
@@ -822,13 +785,8 @@ export default function ContentGeneration() {
   };
 
   // ══════════════════════════════════════════════════════════════════
-  // EXPORT — Download all assets as numbered zip
+  // EXPORT ZIP
   // ══════════════════════════════════════════════════════════════════
-  // Files named: S01_setup_image.png, S01_setup_video.mp4, etc.
-  // Sorted by scene_number. Arc position in filename for clarity.
-  // Also includes a manifest.json with all metadata.
-  // ══════════════════════════════════════════════════════════════════
-
   const loadJSZip = async () => {
     if (window.JSZip) return window.JSZip;
     return new Promise((resolve, reject) => {
@@ -851,7 +809,6 @@ export default function ContentGeneration() {
         if (arc.includes('resolution')) return 'resolution';
       }
     } catch (_) {}
-    // Fallback: guess from scene position
     const pos = scene.scene_number / scenes.length;
     if (pos <= 0.15) return 'setup';
     if (pos <= 0.50) return 'rising';
@@ -888,10 +845,10 @@ export default function ContentGeneration() {
       const zip = new JSZip();
       const folder = zip.folder(`${projectName}_assets`);
 
-      // Count total assets to download
+      // Count total assets
       const totalAssets = scenes.reduce((sum, s) => {
         let count = 0;
-        if (s.image_url && !s.image_url.startsWith('data:')) count++;
+        if (s.image_url && s.image_url.startsWith('http')) count++;
         if (s.video_url && !s.video_url.startsWith('veo_task:') && !s.video_url.startsWith('grok_vid_task:') && s.video_url.startsWith('http')) count++;
         return sum + count;
       }, 0);
@@ -899,7 +856,7 @@ export default function ContentGeneration() {
       setExportProgress({ current: 0, total: totalAssets, label: 'Preparing...' });
       let downloaded = 0;
 
-      // Adaptive padding — 2 digits for ≤99 scenes, 3 for ≤999, 4 for 1000+
+      // Adaptive padding
       const padWidth = scenes.length > 999 ? 4 : scenes.length > 99 ? 3 : 2;
 
       for (const scene of scenes) {
@@ -907,33 +864,27 @@ export default function ContentGeneration() {
         const arc = getArcLabel(scene);
         const prefix = `S${num}_${arc}`;
 
-        // ── Download image ────────────────────────────────────────
+        // Download image
         if (scene.image_url && scene.image_url.startsWith('http')) {
           setExportProgress({ current: downloaded, total: totalAssets, label: `${prefix}_image` });
           const ext = getExtension(scene.image_url, 'png');
           const blob = await fetchAsBlob(scene.image_url);
-          if (blob) {
-            folder.file(`${prefix}_image.${ext}`, blob);
-          }
+          if (blob) folder.file(`${prefix}_image.${ext}`, blob);
           downloaded++;
         }
 
-        // ── Download video ────────────────────────────────────────
+        // Download video
         if (scene.video_url && !scene.video_url.startsWith('veo_task:') && !scene.video_url.startsWith('grok_vid_task:') && scene.video_url.startsWith('http')) {
           setExportProgress({ current: downloaded, total: totalAssets, label: `${prefix}_video` });
           const ext = getExtension(scene.video_url, 'mp4');
           const blob = await fetchAsBlob(scene.video_url);
-          if (blob) {
-            folder.file(`${prefix}_video.${ext}`, blob);
-          }
+          if (blob) folder.file(`${prefix}_video.${ext}`, blob);
           downloaded++;
         }
       }
 
-// ── Download audio assets ─────────────────────────────────
+      // ── Audio assets ──────────────────────────────────────────
       const audioAssets = [];
-
-      // Check project fields for audio URLs
       const audioFields = [
         'voiceover_url', 'narration_url', 'voiceover_audio_url', 'audio_url',
         'elevenlabs_voiceover_url', 'elevenlabs_audio_url',
@@ -942,6 +893,7 @@ export default function ContentGeneration() {
         'mixed_audio_url', 'final_audio_url'
       ];
 
+      // Scan project fields
       for (const field of audioFields) {
         const url = project?.[field];
         if (url && typeof url === 'string' && url.startsWith('http')) {
@@ -950,11 +902,11 @@ export default function ContentGeneration() {
         }
       }
 
-// Check MusicTracks entity
+      // Scan MusicTracks entity
       try {
-        const musicTracks = await base44.entities.MusicTracks?.filter({ project_id: projectId });
-        if (musicTracks?.length > 0) {
-          musicTracks.forEach((track, i) => {
+        const mt = await base44.entities.MusicTracks?.filter({ project_id: projectId });
+        if (mt?.length > 0) {
+          mt.forEach((track, i) => {
             if (track.audio_url && track.audio_url.startsWith('http') && !audioAssets.find(a => a.url === track.audio_url)) {
               const label = track.is_selected ? 'background-music-selected' : `music-track-${i + 1}`;
               audioAssets.push({ label, url: track.audio_url });
@@ -963,7 +915,7 @@ export default function ContentGeneration() {
         }
       } catch (_) {}
 
-      // Also check ProductionSettings entity
+      // Scan ProductionSettings entity
       try {
         const prodSettings = await base44.entities.ProductionSettings?.filter({ project_id: projectId });
         if (prodSettings?.length > 0) {
@@ -975,7 +927,6 @@ export default function ContentGeneration() {
               audioAssets.push({ label, url });
             }
           }
-          // Check voiceover_parts JSON array
           if (ps.voiceover_parts) {
             try {
               const parts = JSON.parse(ps.voiceover_parts);
@@ -1006,21 +957,22 @@ export default function ContentGeneration() {
         }
       }
 
-      // ── Add manifest.json ─────────────────────────────────────
+      // ── Manifest ──────────────────────────────────────────────
       const manifest = scenes.map(s => ({
         scene_number: s.scene_number,
         arc_position: getArcLabel(s),
         narration: s.narration_text,
         duration: s.duration_seconds,
-        image_file: s.image_url && s.image_url.startsWith('http') ? `S${String(s.scene_number).padStart(padWidth, '0')}_${getArcLabel(s)}_image.${getExtension(s.image_url, 'png')}` : null,
+        image_file: s.image_url && s.image_url.startsWith('http')
+          ? `S${String(s.scene_number).padStart(padWidth, '0')}_${getArcLabel(s)}_image.${getExtension(s.image_url, 'png')}`
+          : null,
         video_file: (s.video_url && !s.video_url.startsWith('veo_task:') && !s.video_url.startsWith('grok_vid_task:') && s.video_url.startsWith('http'))
           ? `S${String(s.scene_number).padStart(padWidth, '0')}_${getArcLabel(s)}_video.${getExtension(s.video_url, 'mp4')}`
           : null,
       }));
-
       folder.file('manifest.json', JSON.stringify(manifest, null, 2));
 
-      // ── Generate and download zip ─────────────────────────────
+      // ── Generate zip ──────────────────────────────────────────
       setExportProgress({ current: totalAssets, total: totalAssets, label: 'Compressing zip...' });
       const zipBlob = await zip.generateAsync({ type: 'blob' }, (meta) => {
         setExportProgress(prev => ({ ...prev, label: `Compressing... ${Math.round(meta.percent)}%` }));
@@ -1035,7 +987,6 @@ export default function ContentGeneration() {
 
     } catch (err) {
       console.error('Export failed:', err);
-      // Fallback: export JSON only
       const exportData = scenes.map(s => ({
         scene_number: s.scene_number,
         arc_position: getArcLabel(s),
@@ -1086,6 +1037,9 @@ export default function ContentGeneration() {
       }
     : { queued: 0, submitting: 0, polling: 0, done: 0, failed: 0 };
 
+  // ══════════════════════════════════════════════════════════════════
+  // RENDER
+  // ══════════════════════════════════════════════════════════════════
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <StageProgress currentStage={2} />
@@ -1098,14 +1052,10 @@ export default function ContentGeneration() {
                 {exporting ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                    {exportProgress.total > 0
-                      ? `${exportProgress.current}/${exportProgress.total}`
-                      : 'Preparing...'}
+                    {exportProgress.total > 0 ? `${exportProgress.current}/${exportProgress.total}` : 'Preparing...'}
                   </>
                 ) : (
-                  <>
-                    <FolderDown className="w-4 h-4 mr-1" /> Export Zip
-                  </>
+                  <><FolderDown className="w-4 h-4 mr-1" /> Export Zip</>
                 )}
               </Button>
             )}
@@ -1144,9 +1094,7 @@ export default function ContentGeneration() {
           </div>
         )}
 
-        {/* ═══════════════════════════════════════════════════════════
-            IMPORT PROGRESS — ProcessingNotifier
-            ═══════════════════════════════════════════════════════════ */}
+        {/* Import Progress */}
         <ProcessingNotifier
           active={importing}
           phase={importPhase}
@@ -1158,9 +1106,7 @@ export default function ContentGeneration() {
           wordCount={estimatedWordCount}
         />
 
-        {/* ═══════════════════════════════════════════════════════════
-            IMAGE GENERATION PROGRESS
-            ═══════════════════════════════════════════════════════════ */}
+        {/* Image Generation Progress */}
         {generatingImages && imageProgress.total > 0 && (
           <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-lg p-4 mb-6">
             <div className="flex items-center gap-3">
@@ -1168,30 +1114,23 @@ export default function ContentGeneration() {
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   <Badge className="bg-emerald-100 text-emerald-800 text-xs">
-                    <ImageIcon className="w-3 h-3 mr-1" />
-                    Generating Images
+                    <ImageIcon className="w-3 h-3 mr-1" /> Generating Images
                   </Badge>
                   <span className="text-xs font-medium text-emerald-700">
                     {imageProgress.current} / {imageProgress.total}
                   </span>
                 </div>
                 <div className="w-full bg-emerald-100 rounded-full h-2 mt-2">
-                  <div
-                    className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
-                    style={{ width: `${(imageProgress.current / imageProgress.total) * 100}%` }}
-                  />
+                  <div className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${(imageProgress.current / imageProgress.total) * 100}%` }} />
                 </div>
-                <p className="text-xs text-gray-500 mt-1.5">
-                  {imageProgress.sceneName} · Grok Imagine via Kie
-                </p>
+                <p className="text-xs text-gray-500 mt-1.5">{imageProgress.sceneName} · Grok Imagine via Kie</p>
               </div>
             </div>
           </div>
         )}
 
-        {/* ═══════════════════════════════════════════════════════════
-            VIDEO GENERATION PROGRESS
-            ═══════════════════════════════════════════════════════════ */}
+        {/* Video Generation Progress */}
         {generatingVideos && videoProgress.total > 0 && (
           <div className="bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-200 rounded-lg p-4 mb-6">
             <div className="flex items-center gap-3">
@@ -1200,53 +1139,38 @@ export default function ContentGeneration() {
                 <div className="flex items-center gap-2 mb-2">
                   <Badge className="bg-violet-100 text-violet-800 text-xs">
                     <Video className="w-3 h-3 mr-1" />
-                    {videoProgress.phase === 'submitting'
-                      ? 'Submitting to Grok Imagine'
-                      : 'Rendering with Grok · 480p'}
+                    {videoProgress.phase === 'submitting' ? 'Submitting to Grok Imagine' : 'Rendering with Grok · 480p'}
                   </Badge>
                 </div>
-
-                {/* Progress bar */}
                 <div className="w-full bg-violet-100 rounded-full h-2 mb-3">
-                  <div
-                    className="bg-violet-500 h-2 rounded-full transition-all duration-700"
-                    style={{
-                      width: `${((videoStatusCounts.done + videoStatusCounts.failed) / videoProgress.total) * 100}%`
-                    }}
-                  />
+                  <div className="bg-violet-500 h-2 rounded-full transition-all duration-700"
+                    style={{ width: `${((videoStatusCounts.done + videoStatusCounts.failed) / videoProgress.total) * 100}%` }} />
                 </div>
-
-                {/* Per-scene status chips */}
                 <div className="flex flex-wrap gap-1.5">
                   {Object.entries(videoProgress.sceneStatuses).map(([sceneId, status]) => {
                     const scene = scenes.find(s => s.id === sceneId);
                     const num = scene?.scene_number || '?';
                     const colors = {
-                      done:       'bg-green-100 text-green-700',
-                      failed:     'bg-red-100 text-red-700',
-                      polling:    'bg-amber-100 text-amber-700',
+                      done: 'bg-green-100 text-green-700',
+                      failed: 'bg-red-100 text-red-700',
+                      polling: 'bg-amber-100 text-amber-700',
                       submitting: 'bg-blue-100 text-blue-700',
-                      queued:     'bg-gray-100 text-gray-500',
+                      queued: 'bg-gray-100 text-gray-500',
                     };
                     const icons = {
-                      done:       <CheckCircle2 className="w-3 h-3" />,
-                      failed:     <XCircle className="w-3 h-3" />,
-                      polling:    <Clock className="w-3 h-3 animate-pulse" />,
+                      done: <CheckCircle2 className="w-3 h-3" />,
+                      failed: <XCircle className="w-3 h-3" />,
+                      polling: <Clock className="w-3 h-3 animate-pulse" />,
                       submitting: <Zap className="w-3 h-3" />,
-                      queued:     <Clock className="w-3 h-3 opacity-40" />,
+                      queued: <Clock className="w-3 h-3 opacity-40" />,
                     };
                     return (
-                      <span
-                        key={sceneId}
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${colors[status] || 'bg-gray-100 text-gray-500'}`}
-                      >
-                        {icons[status]}
-                        S{num}
+                      <span key={sceneId} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${colors[status] || 'bg-gray-100 text-gray-500'}`}>
+                        {icons[status]} S{num}
                       </span>
                     );
                   })}
                 </div>
-
                 <p className="text-xs text-gray-500 mt-2">
                   {videoStatusCounts.done > 0 && `${videoStatusCounts.done} complete`}
                   {videoStatusCounts.polling > 0 && ` · ${videoStatusCounts.polling} rendering`}
@@ -1259,9 +1183,7 @@ export default function ContentGeneration() {
           </div>
         )}
 
-        {/* ═══════════════════════════════════════════════════════════
-            EXPORT PROGRESS BANNER
-            ═══════════════════════════════════════════════════════════ */}
+        {/* Export Progress */}
         {exporting && exportProgress.total > 0 && (
           <div className="bg-gradient-to-r from-sky-50 to-cyan-50 border border-sky-200 rounded-lg p-4 mb-6">
             <div className="flex items-center gap-3">
@@ -1269,22 +1191,17 @@ export default function ContentGeneration() {
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   <Badge className="bg-sky-100 text-sky-800 text-xs">
-                    <FolderDown className="w-3 h-3 mr-1" />
-                    Exporting Assets
+                    <FolderDown className="w-3 h-3 mr-1" /> Exporting Assets
                   </Badge>
                   <span className="text-xs font-medium text-sky-700">
                     {exportProgress.current} / {exportProgress.total}
                   </span>
                 </div>
                 <div className="w-full bg-sky-100 rounded-full h-2 mt-2">
-                  <div
-                    className="bg-sky-500 h-2 rounded-full transition-all duration-500"
-                    style={{ width: `${(exportProgress.current / exportProgress.total) * 100}%` }}
-                  />
+                  <div className="bg-sky-500 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${(exportProgress.current / exportProgress.total) * 100}%` }} />
                 </div>
-                <p className="text-xs text-gray-500 mt-1.5">
-                  {exportProgress.label}
-                </p>
+                <p className="text-xs text-gray-500 mt-1.5">{exportProgress.label}</p>
               </div>
             </div>
           </div>
@@ -1299,9 +1216,7 @@ export default function ContentGeneration() {
                 <p className="text-sm font-medium text-amber-800">
                   {directorNotesCount} scene{directorNotesCount > 1 ? 's have' : ' has'} director notes that need converting to image prompts
                 </p>
-                <p className="text-xs text-amber-600 mt-1">
-                  Click below to generate visual prompts before creating images.
-                </p>
+                <p className="text-xs text-amber-600 mt-1">Click below to generate visual prompts before creating images.</p>
               </div>
               <Button
                 size="sm"
@@ -1344,8 +1259,7 @@ export default function ContentGeneration() {
                 disabled={importing || !project?.visual_style || !project?.orientation}
                 className="bg-blue-600 hover:bg-blue-700"
               >
-                <Import className="w-4 h-4 mr-2" />
-                Import Script & Generate Scenes
+                <Import className="w-4 h-4 mr-2" /> Import Script & Generate Scenes
               </Button>
               {(!project?.visual_style || !project?.orientation) && (
                 <p className="text-sm text-amber-600 flex items-center gap-1">
@@ -1368,63 +1282,43 @@ export default function ContentGeneration() {
                 </Badge>
               )}
               <div className="flex items-center gap-2 text-sm font-medium">
-                <Layers className="w-4 h-4 text-blue-600" />
-                {scenes.length} scenes
+                <Layers className="w-4 h-4 text-blue-600" /> {scenes.length} scenes
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <ImageIcon className="w-4 h-4 text-green-600" />
-                {imageCount}/{scenes.length} images
+                <ImageIcon className="w-4 h-4 text-green-600" /> {imageCount}/{scenes.length} images
               </div>
               <div className="flex items-center gap-2 text-sm">
-                <Film className="w-4 h-4 text-purple-600" />
-                {videoCount}/{scenes.length} videos
+                <Film className="w-4 h-4 text-purple-600" /> {videoCount}/{scenes.length} videos
                 {animatingCount > 0 && (
-                  <span className="text-xs text-amber-600 font-medium">
-                    ({animatingCount} rendering)
-                  </span>
+                  <span className="text-xs text-amber-600 font-medium">({animatingCount} rendering)</span>
                 )}
               </div>
               <div className="flex-1" />
+
               {breakdownReadyCount > 0 && (
-                <Button
-                  onClick={handleRetryPrompts}
-                  disabled={retryingPrompts}
-                  variant="outline"
-                  className="border-amber-200 text-amber-700 hover:bg-amber-50"
-                >
+                <Button onClick={handleRetryPrompts} disabled={retryingPrompts} variant="outline" className="border-amber-200 text-amber-700 hover:bg-amber-50">
                   {retryingPrompts ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Wand2 className="w-4 h-4 mr-1" />}
                   {retryingPrompts ? `Generating Prompts... (${breakdownReadyCount} left)` : `Generate Prompts (${breakdownReadyCount})`}
                 </Button>
               )}
-              <Button
-                onClick={handleEnhanceAll}
-                disabled={enhancingAll}
-                variant="outline"
-                className="border-purple-200 text-purple-700 hover:bg-purple-50"
-              >
+
+              <Button onClick={handleEnhanceAll} disabled={enhancingAll} variant="outline" className="border-purple-200 text-purple-700 hover:bg-purple-50">
                 {enhancingAll ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Sparkles className="w-4 h-4 mr-1" />}
                 {enhancingAll ? 'Enhancing...' : 'AI Enhance All'}
               </Button>
 
-              {/* Fix Prompts Dropdown */}
               <FixPromptsButton
                 projectId={projectId}
                 sceneCount={scenes.filter(s => s.status === 'prompts_ready' || s.status === 'image_generated').length}
                 onComplete={async () => { await refetchScenes(); }}
               />
-              <Button
-                onClick={handleGenerateImages}
-                disabled={generatingImages}
-                variant="outline"
-              >
+
+              <Button onClick={handleGenerateImages} disabled={generatingImages} variant="outline">
                 {generatingImages ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <ImageIcon className="w-4 h-4 mr-1" />}
                 {generatingImages ? 'Generating...' : 'Generate All Images'}
               </Button>
-              <Button
-                onClick={handleGenerateVideos}
-                disabled={generatingVideos || imageCount === 0}
-                variant="outline"
-              >
+
+              <Button onClick={handleGenerateVideos} disabled={generatingVideos || imageCount === 0} variant="outline">
                 {generatingVideos ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Film className="w-4 h-4 mr-1" />}
                 {generatingVideos ? 'Animating...' : 'Animate All Scenes'}
               </Button>
@@ -1444,16 +1338,8 @@ export default function ContentGeneration() {
           <div className="mb-8 space-y-4">
             {latestScript && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <VoiceoverPanel
-                  project={project}
-                  script={latestScript}
-                  onUpdate={() => refetchProject()}
-                />
-                <ElevenLabsVoiceoverPanel
-                  project={project}
-                  script={latestScript}
-                  onUpdate={() => refetchProject()}
-                />
+                <VoiceoverPanel project={project} script={latestScript} onUpdate={() => refetchProject()} />
+                <ElevenLabsVoiceoverPanel project={project} script={latestScript} onUpdate={() => refetchProject()} />
               </div>
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1465,10 +1351,6 @@ export default function ContentGeneration() {
                 onChange={(update) => setAudioLevels(prev => ({ ...prev, ...update }))}
               />
             </div>
-
-            {/* ═══════════════════════════════════════════════════════
-                AUDIO ASSETS — Download Panel
-                ═══════════════════════════════════════════════════════ */}
             <AudioAssetsPanel project={project} />
           </div>
         )}
