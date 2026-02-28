@@ -1,99 +1,151 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // ══════════════════════════════════════════════════════════════════
-// BEAT SYNC ENGINE — Media-Aware Duration + Narrative Transitions
+// BEAT SYNC ENGINE v2 — Character-Position Beat Alignment
 // ══════════════════════════════════════════════════════════════════
 //
-// ONE backend call does everything:
-//   1. Word-count proportional duration distribution
-//   2. Media-type constraints (video 6s cap, image unlimited)
-//   3. Minimum 3s enforcement + redistribution
-//   4. Normalization to exact voiceover duration
-//   5. Transition analysis (OpenAI narrative cues)
-//   6. Transition rules enforcement
+// Instead of word-count proportional math, this maps each scene's
+// narration to exact time positions using character-position ratios.
+// Scene boundaries snap to sentence endings so cuts never happen
+// mid-sentence.
 //
-// Returns data only — frontend applies incrementally.
+// Also generates caption_data (word-level timestamps) for the
+// caption overlay system.
+//
+// ONE backend call:
+//   1. Build full script from all scenes
+//   2. Map each scene's char position → time position
+//   3. Snap boundaries to sentence ends
+//   4. Generate word-level timestamps for captions
+//   5. Analyze transitions (narrative cues)
+//   6. Enforce transition rules
+//   7. Apply all updates server-side
 // ══════════════════════════════════════════════════════════════════
 
-const MAX_VIDEO_DURATION = 6.0; // Grok/Runway max video length
+const MAX_VIDEO_DURATION = 6.0;
 const MIN_SCENE_DURATION = 3.0;
-const WORDS_PER_SECOND = 2.5;   // Average narration speed
 
 // ══════════════════════════════════════════════════════════════════
-// PHASE 1: Media-Aware Duration Distribution
+// PHASE 1: Character-Position Duration Mapping
 // ══════════════════════════════════════════════════════════════════
 
 function computeDurations(scenes, totalVoDuration) {
-  // Step 1: Calculate word counts
-  const sceneData = scenes.map(s => {
-    const words = (s.narration_text || '').split(/\s+/).filter(Boolean).length;
-    const hasVideo = s.video_url && s.video_url.startsWith('http') &&
-      !s.video_url.startsWith('http://placeholder');
-    const hasImage = s.image_url && s.image_url.startsWith('http');
+  // Step 1: Build the full concatenated script
+  const sceneTexts = scenes.map(s => (s.narration_text || '').trim());
+  const fullScript = sceneTexts.join(' ');
+  const totalChars = fullScript.length;
 
-    let mediaType = 'none';
-    if (hasVideo) mediaType = 'video';
-    else if (hasImage) mediaType = 'image';
+  if (totalChars === 0) {
+    const perScene = totalVoDuration / scenes.length;
+    return scenes.map(s => ({
+      scene_id: s.id,
+      scene_number: s.scene_number,
+      duration_seconds: Math.max(MIN_SCENE_DURATION, Math.round(perScene * 10) / 10),
+      char_start: 0,
+      char_end: 0,
+      time_start: 0,
+      time_end: perScene,
+      narration_text: '',
+      media_type: classifyMedia(s),
+      video_hold: false,
+      video_play_seconds: 0,
+    }));
+  }
+
+  // Step 2: Find each scene's character start/end in the full script
+  let charCursor = 0;
+  const sceneData = scenes.map((s, i) => {
+    const text = sceneTexts[i];
+    const charStart = charCursor;
+    const charEnd = charCursor + text.length;
+    charCursor = charEnd + 1; // +1 for the space between scenes
 
     return {
       scene_id: s.id,
       scene_number: s.scene_number,
-      word_count: words,
-      media_type: mediaType,
-      narration_text: s.narration_text || '',
+      narration_text: text,
+      char_start: charStart,
+      char_end: charEnd,
+      media_type: classifyMedia(s),
     };
   });
 
-  const totalWords = sceneData.reduce((sum, s) => sum + s.word_count, 0);
+  // Step 3: Map character positions → time positions
+  const charsPerSecond = totalChars / totalVoDuration;
 
-  // Step 2: Raw proportional distribution based on word count
-  if (totalWords > 0) {
-    sceneData.forEach(s => {
-      s.raw_duration = (s.word_count / totalWords) * totalVoDuration;
-    });
-  } else {
-    // Equal distribution if no narration
-    const perScene = totalVoDuration / sceneData.length;
-    sceneData.forEach(s => { s.raw_duration = perScene; });
-  }
-
-  // Step 3: Enforce minimum 3s per scene
-  let deficit = 0;
   sceneData.forEach(s => {
-    if (s.raw_duration < MIN_SCENE_DURATION) {
-      deficit += MIN_SCENE_DURATION - s.raw_duration;
-      s.raw_duration = MIN_SCENE_DURATION;
-    }
+    s.time_start_raw = s.char_start / charsPerSecond;
+    s.time_end_raw = s.char_end / charsPerSecond;
+    s.duration_raw = s.time_end_raw - s.time_start_raw;
   });
 
-  // Redistribute deficit from scenes above minimum (proportionally)
-  if (deficit > 0) {
-    const aboveMin = sceneData.filter(s => s.raw_duration > MIN_SCENE_DURATION);
-    const aboveTotal = aboveMin.reduce((sum, s) => sum + s.raw_duration, 0);
-    if (aboveTotal > 0) {
-      aboveMin.forEach(s => {
-        const share = (s.raw_duration / aboveTotal) * deficit;
-        s.raw_duration = Math.max(MIN_SCENE_DURATION, s.raw_duration - share);
-      });
+  // Step 4: Snap scene boundaries to sentence endings
+  const sentenceEnds = [];
+  for (let i = 0; i < fullScript.length; i++) {
+    if ((fullScript[i] === '.' || fullScript[i] === '!' || fullScript[i] === '?') &&
+        (i === fullScript.length - 1 || fullScript[i + 1] === ' ' || fullScript[i + 1] === '"')) {
+      sentenceEnds.push(i);
     }
   }
 
-  // Step 4: Identify video scenes that exceed 6s — tag as "video_with_hold"
-  // The video plays for 6s, then the last frame holds as a still for the remainder.
-  // Duration stays at full narration allocation — media strategy handles the crossfade.
+  for (let i = 0; i < sceneData.length - 1; i++) {
+    const boundaryChar = sceneData[i].char_end;
+    let bestEnd = boundaryChar;
+    let bestDist = Infinity;
+    for (const se of sentenceEnds) {
+      const dist = Math.abs(se - boundaryChar);
+      if (dist < bestDist && dist < 200) {
+        bestDist = dist;
+        bestEnd = se + 1;
+      }
+    }
+
+    if (bestEnd !== boundaryChar) {
+      sceneData[i].char_end = bestEnd;
+      if (i + 1 < sceneData.length) {
+        sceneData[i + 1].char_start = bestEnd + 1;
+      }
+    }
+  }
+
+  // Step 5: Recalculate times after snapping
   sceneData.forEach(s => {
-    s.video_hold = (s.media_type === 'video' && s.raw_duration > MAX_VIDEO_DURATION);
-    s.video_play_seconds = s.video_hold ? MAX_VIDEO_DURATION : s.raw_duration;
+    s.time_start = Math.max(0, s.char_start / charsPerSecond);
+    s.time_end = Math.min(totalVoDuration, s.char_end / charsPerSecond);
+    s.duration_seconds = Math.round((s.time_end - s.time_start) * 10) / 10;
   });
 
-  // Step 5: Normalize to exact voiceover duration
-  const rawTotal = sceneData.reduce((sum, s) => sum + s.raw_duration, 0);
+  sceneData[0].time_start = 0;
+  sceneData[sceneData.length - 1].time_end = totalVoDuration;
+  sceneData[sceneData.length - 1].duration_seconds =
+    Math.round((totalVoDuration - sceneData[sceneData.length - 1].time_start) * 10) / 10;
+
+  // Step 6: Enforce minimum 3s per scene
+  for (let pass = 0; pass < 3; pass++) {
+    for (let i = 0; i < sceneData.length; i++) {
+      if (sceneData[i].duration_seconds < MIN_SCENE_DURATION) {
+        const deficit = MIN_SCENE_DURATION - sceneData[i].duration_seconds;
+        sceneData[i].duration_seconds = MIN_SCENE_DURATION;
+        const neighbors = [];
+        if (i > 0) neighbors.push(i - 1);
+        if (i < sceneData.length - 1) neighbors.push(i + 1);
+        const longestNeighbor = neighbors.reduce((best, idx) =>
+          sceneData[idx].duration_seconds > sceneData[best].duration_seconds ? idx : best,
+          neighbors[0]
+        );
+        sceneData[longestNeighbor].duration_seconds =
+          Math.max(MIN_SCENE_DURATION, sceneData[longestNeighbor].duration_seconds - deficit);
+      }
+    }
+  }
+
+  // Step 7: Normalize to exact total
+  const rawTotal = sceneData.reduce((sum, s) => sum + s.duration_seconds, 0);
   const scale = totalVoDuration / rawTotal;
   sceneData.forEach(s => {
-    s.duration_seconds = Math.max(MIN_SCENE_DURATION, Math.round(s.raw_duration * scale * 10) / 10);
+    s.duration_seconds = Math.max(MIN_SCENE_DURATION, Math.round(s.duration_seconds * scale * 10) / 10);
   });
 
-  // Final adjustment — add/subtract remaining difference from longest scene
   const adjustedTotal = sceneData.reduce((sum, s) => sum + s.duration_seconds, 0);
   const diff = Math.round((totalVoDuration - adjustedTotal) * 10) / 10;
   if (Math.abs(diff) > 0.05) {
@@ -103,7 +155,15 @@ function computeDurations(scenes, totalVoDuration) {
       Math.max(MIN_SCENE_DURATION, Math.round((sceneData[longestIdx].duration_seconds + diff) * 10) / 10);
   }
 
-  // Recompute video_hold after normalization
+  // Step 8: Recalculate start times sequentially
+  let timeAcc = 0;
+  sceneData.forEach(s => {
+    s.time_start = Math.round(timeAcc * 100) / 100;
+    timeAcc += s.duration_seconds;
+    s.time_end = Math.round(timeAcc * 100) / 100;
+  });
+
+  // Step 9: Video hold detection
   sceneData.forEach(s => {
     s.video_hold = (s.media_type === 'video' && s.duration_seconds > MAX_VIDEO_DURATION);
     s.video_play_seconds = s.video_hold
@@ -114,36 +174,76 @@ function computeDurations(scenes, totalVoDuration) {
   return sceneData;
 }
 
+function classifyMedia(scene) {
+  const hasVideo = scene.video_url && scene.video_url.startsWith('http') &&
+    !scene.video_url.startsWith('http://placeholder');
+  const hasImage = scene.image_url && scene.image_url.startsWith('http');
+  if (hasVideo) return 'video';
+  if (hasImage) return 'image';
+  return 'none';
+}
+
 
 // ══════════════════════════════════════════════════════════════════
-// PHASE 2: Narrative-Aware Transition Analysis
+// PHASE 2: Generate Word-Level Timestamps (Caption Data)
+// ══════════════════════════════════════════════════════════════════
+
+function generateCaptionData(sceneData) {
+  const captionData = [];
+
+  for (const scene of sceneData) {
+    const text = scene.narration_text || '';
+    if (!text) continue;
+
+    const words = text.split(/\s+/).filter(Boolean);
+    if (words.length === 0) continue;
+
+    const sceneDuration = scene.duration_seconds;
+    const sceneStart = scene.time_start;
+    const totalWordChars = words.reduce((sum, w) => sum + w.length, 0);
+
+    let wordTime = sceneStart;
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      const wordProportion = word.length / totalWordChars;
+      const wordDuration = sceneDuration * wordProportion;
+
+      captionData.push({
+        word: word,
+        start: Math.round(wordTime * 100) / 100,
+        end: Math.round((wordTime + wordDuration) * 100) / 100,
+        scene_number: scene.scene_number,
+      });
+
+      wordTime += wordDuration;
+    }
+  }
+
+  return captionData;
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// PHASE 3: Narrative-Aware Transitions
 // ══════════════════════════════════════════════════════════════════
 
 async function analyzeTransitions(sceneData, openaiKey) {
-  // For small projects (≤50 scenes), use LLM for intelligent transitions.
-  // For large projects, use pure rule-based heuristics.
-
-  const totalScenes = sceneData.length;
-
-  if (totalScenes <= 50 && openaiKey) {
+  if (sceneData.length <= 50 && openaiKey) {
     try {
       return await analyzeTransitionsLLM(sceneData, openaiKey);
     } catch (err) {
       console.warn(`LLM transition analysis failed: ${err.message} — using rules`);
     }
   }
-
-  // Rule-based fallback (also used for 50+ scenes)
   return analyzeTransitionsRuleBased(sceneData);
 }
 
 async function analyzeTransitionsLLM(sceneData, openaiKey) {
-  // Build compact scene summaries — first/last 20 words of narration
   const summaries = sceneData.map(s => {
-    const words = s.narration_text.split(/\s+/);
+    const words = (s.narration_text || '').split(/\s+/);
     const first = words.slice(0, 15).join(' ');
     const last = words.length > 20 ? '...' + words.slice(-10).join(' ') : '';
-    return `S${s.scene_number} [${s.duration_seconds}s ${s.media_type}]: "${first}${last}"`;
+    return `S${s.scene_number} [${s.duration_seconds}s]: "${first}${last}"`;
   }).join('\n');
 
   const prompt = `You are a professional film editor. Analyze scene transitions for a video.
@@ -155,18 +255,10 @@ For each scene, decide the transition INTO it.
 Rules:
 - "cut" (0s): default, 70-80% of all transitions. Same topic continuation.
 - "dissolve" (0.7s): mood/topic shift, time passing, perspective change.
-- "fade_to_black" (1.2s): major act break, chapter divider. MAX 3 total.
+- "fade_to_black" (1.2s): major act break. MAX 3 total.
 - "fade_from_black" (1.0s): scene 1 ONLY.
 
-Look for these cues in narration:
-- Time jumps: "years later", "the next day", "meanwhile" → dissolve or fade
-- Topic shifts: completely new subject → dissolve
-- Emotional pivots: hope→despair, calm→urgent → dissolve
-- Continuity: "first...second...third" → cut
-- Act breaks: conclusion of major argument → fade_to_black
-
-Return JSON array with exactly ${sceneData.length} entries:
-[{"scene_number":1,"transition":"fade_from_black","duration":1.0,"reason":"Opening"}]
+Return JSON: {"transitions":[{"scene_number":1,"transition":"fade_from_black","duration":1.0,"reason":"Opening"}]}
 
 CRITICAL: 70%+ must be "cut". Only cut/dissolve/fade_to_black/fade_from_black allowed.`;
 
@@ -189,28 +281,19 @@ CRITICAL: 70%+ must be "cut". Only cut/dissolve/fade_to_black/fade_from_black al
   });
 
   if (!response.ok) throw new Error(`OpenAI ${response.status}`);
-
   const data = await response.json();
   const text = data.choices?.[0]?.message?.content || '{}';
   let parsed;
-
-  try {
-    parsed = JSON.parse(text);
-  } catch (_) {
-    // Try extracting array from markdown fences
+  try { parsed = JSON.parse(text); } catch (_) {
     const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (fenced) parsed = JSON.parse(fenced[1]);
     else throw new Error('JSON parse failed');
   }
 
-  // Handle both { transitions: [...] } and direct [...]
   const transitions = Array.isArray(parsed) ? parsed : (parsed.transitions || []);
-
   if (transitions.length < sceneData.length * 0.5) {
-    throw new Error(`Only got ${transitions.length} transitions for ${sceneData.length} scenes`);
+    throw new Error(`Only got ${transitions.length} transitions`);
   }
-
-  console.log(`✓ LLM returned ${transitions.length} transition suggestions`);
 
   return transitions.map((t, i) => ({
     scene_number: t.scene_number || sceneData[i]?.scene_number || i + 1,
@@ -222,171 +305,79 @@ CRITICAL: 70%+ must be "cut". Only cut/dissolve/fade_to_black/fade_from_black al
 
 function analyzeTransitionsRuleBased(sceneData) {
   return sceneData.map((scene, i) => {
-    // Scene 1: always fade from black
-    if (i === 0) return {
-      scene_number: scene.scene_number,
-      transition_type: 'fade_from_black',
-      transition_duration: 1.0,
-      reason: 'Opening shot',
-    };
+    if (i === 0) return { scene_number: scene.scene_number, transition_type: 'fade_from_black', transition_duration: 1.0, reason: 'Opening' };
+    if (i === sceneData.length - 1) return { scene_number: scene.scene_number, transition_type: 'fade_to_black', transition_duration: 1.5, reason: 'Closing' };
 
-    // Last scene: always fade to black
-    if (i === sceneData.length - 1) return {
-      scene_number: scene.scene_number,
-      transition_type: 'fade_to_black',
-      transition_duration: 1.5,
-      reason: 'Closing shot',
-    };
+    const currText = (scene.narration_text || '').toLowerCase();
+    const prevText = (sceneData[i - 1].narration_text || '').toLowerCase();
 
-    // Analyze narration for transition cues
-    const prevNarration = (sceneData[i - 1].narration_text || '').toLowerCase();
-    const currNarration = (scene.narration_text || '').toLowerCase();
+    const timeJumpCues = ['years later', 'months later', 'the next day', 'meanwhile', 'on the other side', 'across the world'];
+    if (timeJumpCues.some(cue => currText.startsWith(cue) || currText.includes(cue))) {
+      return { scene_number: scene.scene_number, transition_type: 'fade_to_black', transition_duration: 1.2, reason: 'Time jump' };
+    }
 
-    // Time jump cues
-    const timeJumpCues = ['years later', 'months later', 'the next day', 'the next morning',
-      'fast forward', 'looking back', 'in the beginning', 'once upon', 'meanwhile',
-      'on the other side', 'across the world', 'back in'];
-    const hasTimeJump = timeJumpCues.some(cue => currNarration.includes(cue));
-    if (hasTimeJump) return {
-      scene_number: scene.scene_number,
-      transition_type: 'fade_to_black',
-      transition_duration: 1.2,
-      reason: 'Time/location jump detected in narration',
-    };
-
-    // Topic shift: check word overlap between adjacent scenes
-    const prevWords = new Set(prevNarration.split(/\s+/).filter(w => w.length > 4));
-    const currWords = new Set(currNarration.split(/\s+/).filter(w => w.length > 4));
+    const pivotCues = ['but ', 'however', 'on the other hand', 'in contrast', 'nevertheless', 'yet ', 'instead'];
+    const hasPivot = pivotCues.some(cue => currText.startsWith(cue));
+    const prevWords = new Set(prevText.split(/\s+/).filter(w => w.length > 4));
+    const currWords = new Set(currText.split(/\s+/).filter(w => w.length > 4));
     const overlap = [...currWords].filter(w => prevWords.has(w)).length;
-    const similarity = overlap / Math.max(currWords.size, 1);
+    const sim = overlap / Math.max(currWords.size, 1);
 
-    // Structural cues — "but", "however", "on the other hand" at the start
-    const pivotCues = ['but ', 'however', 'on the other hand', 'in contrast',
-      'nevertheless', 'yet ', 'instead', 'surprisingly'];
-    const hasPivot = pivotCues.some(cue => currNarration.startsWith(cue));
+    if ((sim < 0.03 || hasPivot) && i % 3 === 0) {
+      return { scene_number: scene.scene_number, transition_type: 'dissolve', transition_duration: 0.7, reason: hasPivot ? 'Pivot' : 'Topic shift' };
+    }
 
-    // Dissolve for topic shifts or pivots (but only ~15-20% of scenes)
-    if ((similarity < 0.03 || hasPivot) && i % 3 === 0) return {
-      scene_number: scene.scene_number,
-      transition_type: 'dissolve',
-      transition_duration: 0.7,
-      reason: hasPivot ? 'Narrative pivot' : 'Topic shift (low word overlap)',
-    };
-
-    // Default: cut
-    return {
-      scene_number: scene.scene_number,
-      transition_type: 'cut',
-      transition_duration: 0,
-      reason: 'Continuous flow',
-    };
+    return { scene_number: scene.scene_number, transition_type: 'cut', transition_duration: 0, reason: 'Flow' };
   });
 }
 
 
 // ══════════════════════════════════════════════════════════════════
-// PHASE 3: Cinematographic Rules Engine
+// PHASE 4: Rules Engine
 // ══════════════════════════════════════════════════════════════════
 
 function enforceRules(transitions, sceneData) {
-  const VALID_TYPES = ['cut', 'dissolve', 'fade_to_black', 'fade_from_black'];
-  const DURATION_MAP = {
-    cut: 0,
-    dissolve: 0.7,
-    fade_to_black: 1.2,
-    fade_from_black: 1.0,
-  };
+  const VALID = ['cut', 'dissolve', 'fade_to_black', 'fade_from_black'];
+  const DUR = { cut: 0, dissolve: 0.7, fade_to_black: 1.2, fade_from_black: 1.0 };
 
-  // ── Pass 1: Sanitize types and durations ────────────────────────
-  transitions = transitions.map((t, i) => {
+  transitions = transitions.map(t => {
     let type = (t.transition_type || 'cut').toLowerCase().replace(/\s+/g, '_');
-
-    // Block amateur transitions
-    if (['wipe', 'slide', 'zoom', 'spin', 'flip', 'swipe', 'push', 'fade'].includes(type)) {
-      type = type === 'fade' ? 'dissolve' : 'cut';
-    }
-    if (!VALID_TYPES.includes(type)) type = 'cut';
-
-    let duration = parseFloat(t.transition_duration || DURATION_MAP[type]) || 0;
-
-    // Clamp durations
-    if (type === 'cut') duration = 0;
-    if (type === 'dissolve') duration = Math.max(0.4, Math.min(1.0, duration));
-    if (type === 'fade_to_black') duration = Math.max(0.6, Math.min(1.5, duration));
-    if (type === 'fade_from_black') duration = Math.max(0.6, Math.min(1.2, duration));
-
-    return { ...t, transition_type: type, transition_duration: Math.round(duration * 10) / 10 };
+    if (['wipe', 'slide', 'zoom', 'spin', 'flip'].includes(type)) type = 'cut';
+    if (type === 'fade') type = 'dissolve';
+    if (!VALID.includes(type)) type = 'cut';
+    let dur = parseFloat(t.transition_duration || DUR[type]) || 0;
+    if (type === 'cut') dur = 0;
+    return { ...t, transition_type: type, transition_duration: Math.round(dur * 10) / 10 };
   });
 
-  // ── Rule 1: Scene 1 = fade_from_black ───────────────────────────
-  if (transitions.length > 0) {
-    transitions[0].transition_type = 'fade_from_black';
-    transitions[0].transition_duration = 1.0;
-    transitions[0].reason = 'Opening — fade from black';
-  }
+  if (transitions.length > 0) { transitions[0].transition_type = 'fade_from_black'; transitions[0].transition_duration = 1.0; }
+  if (transitions.length > 1) { transitions[transitions.length - 1].transition_type = 'fade_to_black'; transitions[transitions.length - 1].transition_duration = 1.5; }
 
-  // ── Rule 2: Last scene = fade_to_black ──────────────────────────
-  if (transitions.length > 1) {
-    transitions[transitions.length - 1].transition_type = 'fade_to_black';
-    transitions[transitions.length - 1].transition_duration = 1.5;
-    transitions[transitions.length - 1].reason = 'Closing — fade to black';
-  }
-
-  // ── Rule 3: Short scenes (< 4s) forced to cut ──────────────────
   transitions.forEach((t, i) => {
-    if (i === 0 || i === transitions.length - 1) return; // skip enforced first/last
+    if (i === 0 || i === transitions.length - 1) return;
     const scene = sceneData.find(s => s.scene_number === t.scene_number);
     if (scene && scene.duration_seconds < 4 && t.transition_type !== 'cut') {
-      t.transition_type = 'cut';
-      t.transition_duration = 0;
-      t.reason += ' (forced cut: scene < 4s)';
+      t.transition_type = 'cut'; t.transition_duration = 0;
     }
   });
 
-  // ── Rule 4: Max 3 fade_to_black total ───────────────────────────
-  let fadeCount = 0;
+  let fc = 0;
   for (let i = 1; i < transitions.length - 1; i++) {
-    if (transitions[i].transition_type === 'fade_to_black') {
-      fadeCount++;
-      if (fadeCount > 3) {
-        transitions[i].transition_type = 'dissolve';
-        transitions[i].transition_duration = 0.8;
-        transitions[i].reason += ' (downgraded: max 3 fades)';
-      }
-    }
+    if (transitions[i].transition_type === 'fade_to_black') { fc++; if (fc > 3) { transitions[i].transition_type = 'dissolve'; transitions[i].transition_duration = 0.8; } }
   }
 
-  // ── Rule 5: Max 2 consecutive dissolves ─────────────────────────
-  let consecutiveDissolves = 0;
+  let cc = 0;
   for (let i = 1; i < transitions.length - 1; i++) {
-    if (transitions[i].transition_type === 'dissolve') {
-      consecutiveDissolves++;
-      if (consecutiveDissolves > 2) {
-        transitions[i].transition_type = 'cut';
-        transitions[i].transition_duration = 0;
-        transitions[i].reason += ' (downgraded: max 2 consecutive dissolves)';
-        consecutiveDissolves = 0;
-      }
-    } else {
-      consecutiveDissolves = 0;
-    }
+    if (transitions[i].transition_type === 'dissolve') { cc++; if (cc > 2) { transitions[i].transition_type = 'cut'; transitions[i].transition_duration = 0; cc = 0; } } else { cc = 0; }
   }
 
-  // ── Rule 6: Enforce minimum 70% cuts ────────────────────────────
-  const middleTransitions = transitions.slice(1, -1);
-  const nonCutCount = middleTransitions.filter(t => t.transition_type !== 'cut').length;
-  const maxNonCut = Math.floor(middleTransitions.length * 0.30);
-
-  if (nonCutCount > maxNonCut) {
-    let excess = nonCutCount - maxNonCut;
-    // Demote dissolves first (weakest), back to front
-    for (let i = transitions.length - 2; i >= 1 && excess > 0; i--) {
-      if (transitions[i].transition_type === 'dissolve') {
-        transitions[i].transition_type = 'cut';
-        transitions[i].transition_duration = 0;
-        transitions[i].reason += ' (downgraded: 70% cut minimum)';
-        excess--;
-      }
+  const mid = transitions.slice(1, -1);
+  const nc = mid.filter(t => t.transition_type !== 'cut').length;
+  const mx = Math.floor(mid.length * 0.30);
+  if (nc > mx) {
+    let ex = nc - mx;
+    for (let i = transitions.length - 2; i >= 1 && ex > 0; i--) {
+      if (transitions[i].transition_type === 'dissolve') { transitions[i].transition_type = 'cut'; transitions[i].transition_duration = 0; ex--; }
     }
   }
 
@@ -409,157 +400,99 @@ Deno.serve(async (req) => {
 
     const openaiKey = Deno.env.get('OPENAI_API_KEY');
 
-    // ── Fetch project, scenes, production settings ────────────────
-    const [projects, allScenes, prodSettings] = await Promise.all([
-      base44.asServiceRole.entities.Projects.filter({ id: project_id }),
+    const [allScenes, prodSettings] = await Promise.all([
       base44.asServiceRole.entities.Scenes.filter({ project_id }),
       base44.asServiceRole.entities.ProductionSettings.filter({ project_id }),
     ]);
 
-    const project = projects[0];
-    if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
-
     const scenes = allScenes.sort((a, b) => a.scene_number - b.scene_number);
     if (scenes.length === 0) return Response.json({ error: 'No scenes found' }, { status: 400 });
 
-    const voiceoverUrl = prodSettings[0]?.voiceover_url;
-    const totalVoDuration = prodSettings[0]?.total_duration_seconds ||
-      prodSettings[0]?.voiceover_duration_seconds || 0;
+    const prod = prodSettings[0];
+    const totalVoDuration = prod?.total_duration_seconds || 0;
+    const voiceoverUrl = prod?.voiceover_url;
 
     if (!voiceoverUrl || totalVoDuration <= 0) {
-      return Response.json({
-        error: 'No voiceover audio found. Generate voiceover first.',
-      }, { status: 400 });
+      return Response.json({ error: 'No voiceover found. Generate voiceover first.' }, { status: 400 });
     }
 
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`🎵 Beat Sync: ${scenes.length} scenes · ${totalVoDuration}s voiceover`);
+    console.log(`🎵 Beat Sync v2: ${scenes.length} scenes · ${totalVoDuration}s voiceover`);
 
-    // ══════════════════════════════════════════════════════════════
-    // PHASE 1: Compute media-aware durations
-    // ══════════════════════════════════════════════════════════════
+    // PHASE 1: Compute durations
     const sceneData = computeDurations(scenes, totalVoDuration);
+    console.log(`✓ Durations: ${sceneData.filter(s => s.media_type === 'video').length} video · ${sceneData.filter(s => s.media_type === 'image').length} image · ${sceneData.filter(s => s.video_hold).length} holds`);
 
-    console.log(`✓ Durations computed:`);
-    console.log(`  Videos: ${sceneData.filter(s => s.media_type === 'video').length}`);
-    console.log(`  Images: ${sceneData.filter(s => s.media_type === 'image').length}`);
-    console.log(`  Video+hold: ${sceneData.filter(s => s.video_hold).length}`);
-    console.log(`  Total: ${sceneData.reduce((sum, s) => sum + s.duration_seconds, 0).toFixed(1)}s`);
+    // PHASE 2: Caption data
+    const captionData = generateCaptionData(sceneData);
+    console.log(`✓ Captions: ${captionData.length} words timestamped`);
 
-    // ══════════════════════════════════════════════════════════════
-    // PHASE 2: Analyze transitions
-    // ══════════════════════════════════════════════════════════════
+    // PHASE 3: Transitions
     let transitions = await analyzeTransitions(sceneData, openaiKey);
-
-    // ══════════════════════════════════════════════════════════════
-    // PHASE 3: Enforce cinematographic rules
-    // ══════════════════════════════════════════════════════════════
     transitions = enforceRules(transitions, sceneData);
 
-    // ── Build stats ───────────────────────────────────────────────
+    // PHASE 4: Apply server-side
+    console.log(`📝 Applying ${sceneData.length} scene updates...`);
+    let applied = 0;
+    let failed = 0;
+
+    for (let i = 0; i < sceneData.length; i++) {
+      const sd = sceneData[i];
+      const tr = transitions.find(t => t.scene_number === sd.scene_number) || {};
+
+      const payload = {
+        duration_seconds: sd.duration_seconds,
+        start_time: sd.time_start,
+      };
+      if (tr.transition_type) {
+        payload.transition_type = tr.transition_type;
+        payload.transition_duration = tr.transition_duration || 0;
+      }
+      if (sd.video_hold) {
+        payload.video_hold = true;
+        payload.video_play_seconds = sd.video_play_seconds;
+      }
+
+      let ok = false;
+      for (let a = 0; a < 5; a++) {
+        try {
+          await base44.asServiceRole.entities.Scenes.update(sd.scene_id, payload);
+          ok = true;
+          break;
+        } catch (_) {
+          if (a < 4) await new Promise(r => setTimeout(r, 500 * (a + 1)));
+        }
+      }
+      if (ok) applied++; else failed++;
+      if ((i + 1) % 50 === 0 || i === sceneData.length - 1) console.log(`  ${applied}/${sceneData.length} done · ${failed} failed`);
+    }
+
+    // Save caption data
+    try {
+      await base44.asServiceRole.entities.ProductionSettings.update(prod.id, {
+        caption_data: JSON.stringify(captionData),
+      });
+      console.log(`✓ Caption data saved`);
+    } catch (err) {
+      console.warn(`⚠ Caption save failed: ${err.message}`);
+    }
+
     const stats = {
       total_scenes: sceneData.length,
       total_duration: totalVoDuration,
       video_scenes: sceneData.filter(s => s.media_type === 'video').length,
       image_scenes: sceneData.filter(s => s.media_type === 'image').length,
-      no_media_scenes: sceneData.filter(s => s.media_type === 'none').length,
       video_holds: sceneData.filter(s => s.video_hold).length,
       cuts: transitions.filter(t => t.transition_type === 'cut').length,
       dissolves: transitions.filter(t => t.transition_type === 'dissolve').length,
-      fades: transitions.filter(t =>
-        t.transition_type === 'fade_to_black' || t.transition_type === 'fade_from_black'
-      ).length,
-      cut_percentage: 0,
+      fades: transitions.filter(t => t.transition_type.includes('fade')).length,
+      caption_words: captionData.length,
     };
-    stats.cut_percentage = Math.round((stats.cuts / Math.max(stats.total_scenes, 1)) * 100);
-
-    console.log(`✓ Transitions: ${stats.cuts} cuts (${stats.cut_percentage}%) · ${stats.dissolves} dissolves · ${stats.fades} fades`);
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-
-    // ══════════════════════════════════════════════════════════════
-    // PHASE 4: Apply all updates server-side (no rate limits)
-    // ══════════════════════════════════════════════════════════════
-    
-    console.log(`📝 Applying ${sceneData.length} scene updates server-side...`);
-    
-    let applied = 0;
-    let failed = 0;
-
-    // Merge duration + transition into ONE update per scene
-    for (let i = 0; i < sceneData.length; i++) {
-      const sd = sceneData[i];
-      const tr = transitions.find(t => t.scene_number === sd.scene_number) || {};
-      
-      const updatePayload = {
-        duration_seconds: sd.duration_seconds,
-      };
-
-      // Add transition data
-      if (tr.transition_type) {
-        updatePayload.transition_type = tr.transition_type;
-        updatePayload.transition_duration = tr.transition_duration || 0;
-      }
-
-      // Add video hold metadata
-      if (sd.video_hold) {
-        updatePayload.video_hold = true;
-        updatePayload.video_play_seconds = sd.video_play_seconds;
-      }
-
-      // Retry with backoff
-      let success = false;
-      for (let attempt = 0; attempt < 5; attempt++) {
-        try {
-          await base44.asServiceRole.entities.Scenes.update(sd.scene_id, updatePayload);
-          success = true;
-          break;
-        } catch (err) {
-          if (attempt < 4) {
-            const delay = 500 * (attempt + 1);
-            await new Promise(r => setTimeout(r, delay));
-          }
-        }
-      }
-
-      if (success) applied++;
-      else failed++;
-
-      // Log progress every 50 scenes
-      if ((i + 1) % 50 === 0 || i === sceneData.length - 1) {
-        console.log(`  ✓ ${applied} applied / ${failed} failed / ${sceneData.length - i - 1} remaining`);
-      }
-    }
 
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`✓ Beat Sync complete: ${applied}/${sceneData.length} scenes updated`);
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`✓ Complete: ${applied} scenes · ${stats.cuts} cuts · ${stats.dissolves} dissolves · ${stats.fades} fades`);
 
-    return Response.json({
-      success: true,
-      apply_mode: 'server',
-      applied,
-      failed,
-      total_duration: totalVoDuration,
-      scene_durations: sceneData.map(s => ({
-        scene_id: s.scene_id,
-        scene_number: s.scene_number,
-        duration_seconds: s.duration_seconds,
-        media_type: s.media_type,
-        video_hold: s.video_hold,
-        video_play_seconds: s.video_play_seconds,
-      })),
-      transitions: transitions.map(t => {
-        const scene = sceneData.find(s => s.scene_number === t.scene_number);
-        return {
-          scene_id: scene?.scene_id,
-          scene_number: t.scene_number,
-          transition_type: t.transition_type,
-          transition_duration: t.transition_duration,
-          reason: t.reason,
-        };
-      }),
-      stats,
-    });
+    return Response.json({ success: true, apply_mode: 'server', applied, failed, total_duration: totalVoDuration, stats });
 
   } catch (error) {
     console.error('autoSyncTimeline error:', error.message);
