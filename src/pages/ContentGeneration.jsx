@@ -217,8 +217,12 @@ function AudioAssetsPanel({ project }) {
     });
   }
 
-  console.log('🔊 Audio assets found:', Object.entries(allAudioUrls).map(([k, v]) => `${k}: ${v.field}`).join(', '));
-
+// Only log once on mount, not every re-render
+  useEffect(() => {
+    if (Object.keys(allAudioUrls).length > 0) {
+      console.log('🔊 Audio assets found:', Object.entries(allAudioUrls).map(([k, v]) => `${k}: ${v.field}`).join(', '));
+    }
+  }, [projectId, musicTracks.length, prodSettings]);
   const iconMap = {
     voiceover: <Mic className="w-4 h-4" />,
     elevenlabs_voiceover: <Mic className="w-4 h-4" />,
