@@ -253,6 +253,14 @@ function AudioAssetsPanel({ project }) {
 
   if (uniqueAssets.length === 0) return null;
 
+  const corsBlockedDomains = [
+    'tempfile.aiquickdraw.com', 'aiquickdraw.com', 'kie.ai', 'api.kie.ai',
+  ];
+
+  const isCorsBocked = (url) => {
+    try { return corsBlockedDomains.some(d => new URL(url).hostname.includes(d)); } catch (_) { return false; }
+  };
+
   const handleDownload = async (asset) => {
     setDownloading(asset.key);
 
@@ -261,10 +269,42 @@ function AudioAssetsPanel({ project }) {
     if (asset.url.includes('.wav')) ext = 'wav';
     else if (asset.url.includes('.ogg')) ext = 'ogg';
     else if (asset.url.includes('.mp4')) ext = 'mp4';
+    else if (asset.url.includes('.jpg') || asset.url.includes('.jpeg')) ext = 'jpg';
+    else if (asset.url.includes('.png')) ext = 'png';
 
-    // Method 1: Try fetch + blob (works for same-origin or CORS-enabled)
+    // CORS-blocked domain → go straight to backend proxy
+    if (isCorsBocked(asset.url)) {
+      try {
+        const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url: asset.url });
+        const data = proxyRes.data || proxyRes;
+        if (data.success && data.data) {
+          const binary = atob(data.data);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          const blob = new Blob([bytes], { type: data.content_type || 'application/octet-stream' });
+          const blobUrl = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = blobUrl;
+          a.download = `${projectName}_${asset.key}.${ext}`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(blobUrl);
+          setDownloading(null);
+          return;
+        }
+      } catch (err) {
+        console.warn(`Proxy download failed: ${err.message}`);
+        window.open(asset.url, '_blank');
+        setDownloading(null);
+        return;
+      }
+    }
+
+    // Non-blocked domain: try direct fetch
     try {
       const response = await fetch(asset.url, { mode: 'cors' });
+
       if (response.ok) {
         const contentType = response.headers.get('content-type') || '';
         if (contentType.includes('wav')) ext = 'wav';
@@ -921,31 +961,61 @@ export default function ContentGeneration() {
     return 'resolution';
   };
 
+  // Domains that block CORS — skip direct fetch, go straight to backend proxy
+  const corsBlockedDomains = [
+    'tempfile.aiquickdraw.com',
+    'aiquickdraw.com',
+    'kie.ai',
+    'api.kie.ai',
+  ];
+
+  const isCorsBocked = (url) => {
+    try {
+      const hostname = new URL(url).hostname;
+      return corsBlockedDomains.some(d => hostname.includes(d));
+    } catch (_) { return false; }
+  };
+
+  const proxyFetch = async (url) => {
+    const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url });
+    const data = proxyRes.data || proxyRes;
+    if (data.success && data.data) {
+      const binary = atob(data.data);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return new Blob([bytes], { type: data.content_type || 'application/octet-stream' });
+    }
+    return null;
+  };
+
   const fetchAsBlob = async (url) => {
+    // Known CORS-blocked domain → skip direct fetch, go straight to proxy
+    if (isCorsBocked(url)) {
+      try {
+        console.log(`📥 Proxy fetching (CORS-blocked): ${url.substring(0, 60)}`);
+        return await proxyFetch(url);
+      } catch (err) {
+        console.warn(`Proxy failed: ${url.substring(0, 60)} — ${err.message}`);
+        return null;
+      }
+    }
+
     // Method 1: Direct fetch (works for same-origin or CORS-enabled)
     try {
       const res = await fetch(url, { mode: 'cors' });
       if (res.ok) return await res.blob();
     } catch (_) {}
 
-    // Method 2: Backend proxy (no CORS restrictions server-side)
+    // Method 2: Backend proxy fallback
     try {
-      const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url });
-      const data = proxyRes.data || proxyRes;
-      if (data.success && data.data) {
-        // Convert base64 back to blob
-        const binary = atob(data.data);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-          bytes[i] = binary.charCodeAt(i);
-        }
-        return new Blob([bytes], { type: data.content_type || 'application/octet-stream' });
-      }
+      console.log(`📥 Proxy fallback: ${url.substring(0, 60)}`);
+      return await proxyFetch(url);
     } catch (proxyErr) {
-      console.warn(`Proxy fetch failed for ${url.substring(0, 60)}: ${proxyErr.message}`);
+      console.warn(`All fetch methods failed: ${url.substring(0, 60)}`);
     }
 
-    console.warn(`All fetch methods failed, skipping: ${url.substring(0, 60)}`);
     return null;
   };
 
