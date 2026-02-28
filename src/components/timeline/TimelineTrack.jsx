@@ -31,11 +31,21 @@ export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, 
   };
 
   const TRANSITION_ICONS = {
-    fade: '🌑',
+    fade_from_black: '🌅',
+    fade_to_black: '🌑',
     dissolve: '💫',
+    fade: '💫',
     zoom: '🔍',
     wipe: '➡️',
     slide: '📱',
+    cut: '',
+  };
+
+  const TRANSITION_COLORS = {
+    fade_from_black: 'bg-amber-600 border-amber-300',
+    fade_to_black: 'bg-indigo-600 border-indigo-300',
+    dissolve: 'bg-blue-600 border-blue-300',
+    cut: 'bg-gray-700/80 border-gray-500',
   };
 
   return (
@@ -49,7 +59,16 @@ export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, 
         const isPendingVideo = scene.video_url?.startsWith('grok_vid_task:') || scene.video_url?.startsWith('veo_task:');
         const mediaSrc = hasVideo ? scene.video_url : hasImage ? scene.image_url : null;
         const transition = scene.transition_type;
-        const isResizing = resizing === scene.id;
+        const isResizingThis = resizing === scene.id;
+
+        // Video hold detection: video < scene duration
+        const isVideoHold = hasVideo && scene.duration_seconds > 6;
+        const videoPlaySeconds = scene.video_play_seconds || Math.min(scene.duration_seconds, 6);
+        const holdSeconds = isVideoHold ? Math.max(0, scene.duration_seconds - videoPlaySeconds) : 0;
+
+        // Visual: show video portion vs hold portion inside the block
+        const videoWidthPx = isVideoHold ? videoPlaySeconds * pixelsPerSecond : width;
+        const holdWidthPx = isVideoHold ? holdSeconds * pixelsPerSecond : 0;
 
         return (
           <React.Fragment key={scene.id}>
@@ -57,7 +76,7 @@ export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, 
               data-scene-block="true"
               className={`absolute top-1 bottom-1 rounded cursor-pointer transition-all overflow-hidden group ${
                 isSelected ? 'ring-2 ring-white z-10' : ''
-              } ${isResizing ? 'z-20 ring-2 ring-yellow-400' : ''}`}
+              } ${isResizingThis ? 'z-20 ring-2 ring-yellow-400' : ''}`}
               style={{ left, width: Math.max(width, 24) }}
               onClick={(e) => { onSelectScene(scene.id); }}
             >
@@ -72,6 +91,20 @@ export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, 
                 <div className="absolute inset-0 bg-gradient-to-br from-gray-700 to-gray-800" />
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+
+              {/* Video hold overlay — shows where video freezes to still */}
+              {isVideoHold && holdWidthPx > 8 && (
+                <div
+                  className="absolute top-0 bottom-0 bg-amber-500/15 border-l border-dashed border-amber-400/50"
+                  style={{ left: videoWidthPx, width: holdWidthPx }}
+                >
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-[7px] text-amber-300/70 font-mono whitespace-nowrap rotate-0">
+                      HOLD {holdSeconds.toFixed(1)}s
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Scene info */}
               <div className="absolute bottom-0 left-0 right-0 px-1.5 pb-0.5">
@@ -100,14 +133,20 @@ export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, 
                 })()}
               </div>
 
-              {/* Media type badge */}
+              {/* Media type badge — top right */}
               {(hasVideo || hasImage) && (
-                <div className="absolute top-0.5 right-0.5">
+                <div className="absolute top-0.5 right-0.5 flex items-center gap-0.5">
                   <span className={`text-[7px] font-bold px-1 py-px rounded ${
                     hasVideo ? 'bg-purple-500/70 text-white' : 'bg-emerald-500/70 text-white'
                   }`}>
                     {hasVideo ? 'VID' : 'IMG'}
                   </span>
+                  {/* +HOLD badge for video scenes exceeding 6s */}
+                  {isVideoHold && (
+                    <span className="text-[6px] font-bold px-1 py-px rounded bg-amber-500/80 text-white">
+                      +HOLD
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -132,32 +171,44 @@ export default function TimelineTrack({ scenes, pixelsPerSecond, selectedScene, 
               />
             </div>
 
-            {/* Transition button between scenes — improved visibility */}
-            {idx < scenes.length - 1 && (
-              <button
-                className={`absolute z-10 flex items-center justify-center transition-all hover:scale-125 ${
-                  transition && transition !== 'cut'
-                    ? 'w-6 h-6 bg-blue-600 rounded-full border-2 border-blue-300 shadow-lg shadow-blue-500/40'
-                    : 'w-5 h-5 bg-gray-700/80 rounded-full border border-gray-500 hover:bg-blue-600 hover:border-blue-400 opacity-60 hover:opacity-100'
-                }`}
-                style={{
-                  left: left + width - 3,
-                  top: '50%',
-                  transform: 'translate(-50%, -50%)',
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onTransitionClick?.(scene, scenes[idx + 1]);
-                }}
-                title={transition && transition !== 'cut' ? `${transition} ${scene.transition_duration || 0.5}s` : 'Click to add transition'}
-              >
-                {transition && transition !== 'cut' ? (
-                  <span className="text-[9px]">{TRANSITION_ICONS[transition] || '✨'}</span>
-                ) : (
-                  <span className="text-[9px] text-gray-300 font-bold">+</span>
-                )}
-              </button>
-            )}
+            {/* ── Transition button between scenes ── */}
+            {idx < scenes.length - 1 && (() => {
+              const nextScene = scenes[idx + 1];
+              const nextTransition = nextScene?.transition_type;
+              const nextDuration = nextScene?.transition_duration || 0;
+              const hasTransition = nextTransition && nextTransition !== 'cut';
+              const colorClass = TRANSITION_COLORS[nextTransition] || TRANSITION_COLORS.cut;
+              const icon = TRANSITION_ICONS[nextTransition] || '';
+
+              return (
+                <button
+                  className={`absolute z-10 flex items-center justify-center transition-all hover:scale-125 ${
+                    hasTransition
+                      ? `w-6 h-6 ${colorClass} rounded-full border-2 shadow-lg`
+                      : 'w-5 h-5 bg-gray-700/80 rounded-full border border-gray-500 hover:bg-blue-600 hover:border-blue-400 opacity-60 hover:opacity-100'
+                  }`}
+                  style={{
+                    left: left + width - 3,
+                    top: '50%',
+                    transform: 'translate(-50%, -50%)',
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onTransitionClick?.(scene, nextScene);
+                  }}
+                  title={hasTransition
+                    ? `${nextTransition.replace(/_/g, ' ')} (${nextDuration}s)`
+                    : 'Click to add transition'
+                  }
+                >
+                  {hasTransition ? (
+                    <span className="text-[9px]">{icon || '✨'}</span>
+                  ) : (
+                    <span className="text-[9px] text-gray-300 font-bold">+</span>
+                  )}
+                </button>
+              );
+            })()}
           </React.Fragment>
         );
       })}
