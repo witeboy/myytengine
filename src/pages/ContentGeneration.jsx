@@ -130,7 +130,9 @@ function AudioAssetsPanel({ project }) {
   const [prodSettings, setProdSettings] = useState(null);
   const projectId = project?.id;
 
-  // Load production settings on mount
+  const [musicTracks, setMusicTracks] = useState([]);
+
+  // Load production settings + music tracks on mount
   useEffect(() => {
     if (!projectId) return;
     (async () => {
@@ -138,59 +140,118 @@ function AudioAssetsPanel({ project }) {
         const ps = await base44.entities.ProductionSettings?.filter({ project_id: projectId });
         if (ps?.length > 0) setProdSettings(ps[0]);
       } catch (_) {}
+
+      try {
+        const tracks = await base44.entities.MusicTracks?.filter({ project_id: projectId });
+        if (tracks?.length > 0) setMusicTracks(tracks);
+      } catch (_) {}
     })();
   }, [projectId]);
 
-  // Scan ALL possible sources for audio URLs
-  const findUrl = (...fields) => {
-    for (const field of fields) {
-      // Check project
-      const pVal = project?.[field];
-      if (pVal && typeof pVal === 'string' && pVal.startsWith('http')) return pVal;
-      // Check production settings
-      const psVal = prodSettings?.[field];
-      if (psVal && typeof psVal === 'string' && psVal.startsWith('http')) return psVal;
+  // Scan ALL fields on project + prodSettings for audio URLs
+  const allAudioUrls = {};
+
+  const categorizeField = (field, url) => {
+    if (!url || typeof url !== 'string' || !url.startsWith('http')) return;
+    // Skip non-audio URLs (images, videos, thumbnails)
+    if (/\.(png|jpg|jpeg|webp|gif|mp4|webm|mov|svg)(\?|$)/i.test(url)) return;
+    if (/(image|thumbnail|poster|avatar|cover|photo|scene|video)/i.test(field) && !/(audio|voice|music|sound|narr)/i.test(field)) return;
+
+    const f = field.toLowerCase();
+    let category = null;
+    let label = null;
+
+    if (/elevenlabs|eleven_labs/.test(f)) {
+      category = 'elevenlabs_voiceover';
+      label = 'Voiceover (ElevenLabs)';
+    } else if (/voiceover|narration|voice|narrator|tts/.test(f)) {
+      category = 'voiceover';
+      label = 'Voiceover';
+    } else if (/music|soundtrack|bgm|background_music|bg_music|melody/.test(f)) {
+      category = 'music';
+      label = 'Background Music';
+    } else if (/sfx|sound_effect|effect|foley/.test(f)) {
+      category = 'sfx';
+      label = 'Sound Effects';
+    } else if (/mix|master|final_audio|combined/.test(f)) {
+      category = 'mixed';
+      label = 'Final Mixed Audio';
+    } else if (/audio|\.mp3|\.wav|\.ogg/.test(f) || /\.mp3|\.wav|\.ogg/i.test(url)) {
+      category = `other_${field}`;
+      label = field.replace(/_/g, ' ').replace(/url$/i, '').trim();
+      label = label.charAt(0).toUpperCase() + label.slice(1);
     }
-    return null;
+
+    if (category && !allAudioUrls[category]) {
+      allAudioUrls[category] = { url, label, field };
+    }
   };
 
-  const assets = [
-    {
-      key: 'voiceover',
-      label: 'Voiceover (MiniMax)',
-      icon: <Mic className="w-4 h-4" />,
-      url: findUrl('voiceover_url', 'narration_url', 'voiceover_audio_url', 'audio_url', 'minimax_voiceover_url'),
-      color: 'blue',
-    },
-    {
-      key: 'elevenlabs_voiceover',
-      label: 'Voiceover (ElevenLabs)',
-      icon: <Mic className="w-4 h-4" />,
-      url: findUrl('elevenlabs_voiceover_url', 'elevenlabs_audio_url', 'elevenlabs_url'),
-      color: 'indigo',
-    },
-    {
-      key: 'music',
-      label: 'Background Music',
-      icon: <Music className="w-4 h-4" />,
-      url: findUrl('music_url', 'background_music_url', 'music_audio_url', 'bg_music_url'),
-      color: 'purple',
-    },
-    {
-      key: 'sfx',
-      label: 'Sound Effects',
-      icon: <Volume2 className="w-4 h-4" />,
-      url: findUrl('sfx_url', 'sound_effects_url', 'effects_url', 'sfx_audio_url'),
-      color: 'amber',
-    },
-    {
-      key: 'mixed',
-      label: 'Final Mixed Audio',
-      icon: <Volume2 className="w-4 h-4" />,
-      url: findUrl('mixed_audio_url', 'final_audio_url', 'mixed_url', 'master_audio_url'),
-      color: 'emerald',
-    },
-  ].filter(a => a.url);
+  // Scan project fields
+  if (project) {
+    for (const [field, value] of Object.entries(project)) {
+      categorizeField(field, value);
+    }
+  }
+
+  // Scan production settings fields
+  if (prodSettings) {
+    for (const [field, value] of Object.entries(prodSettings)) {
+      categorizeField(field, value);
+    }
+  }
+
+  // Add music tracks from MusicTracks entity
+  if (musicTracks.length > 0) {
+    // Selected track first, then others
+    const sorted = [...musicTracks].sort((a, b) => (b.is_selected ? 1 : 0) - (a.is_selected ? 1 : 0));
+    sorted.forEach((track, i) => {
+      if (track.audio_url && track.audio_url.startsWith('http')) {
+        const key = track.is_selected ? 'music' : `music_alt_${i}`;
+        const label = track.is_selected
+          ? `🎵 ${track.title || 'Background Music'} (Selected)`
+          : `${track.title || `Music Track ${i + 1}`}`;
+        if (!allAudioUrls[key]) {
+          allAudioUrls[key] = { url: track.audio_url, label, field: `MusicTracks.${track.id}` };
+        }
+      }
+    });
+  }
+
+  // Log what we found for debugging
+  console.log('🔊 Audio assets found:', Object.entries(allAudioUrls).map(([k, v]) => `${k}: ${v.field}`).join(', '));
+
+  const iconMap = {
+    voiceover: <Mic className="w-4 h-4" />,
+    elevenlabs_voiceover: <Mic className="w-4 h-4" />,
+    music: <Music className="w-4 h-4" />,
+    sfx: <Volume2 className="w-4 h-4" />,
+    mixed: <Volume2 className="w-4 h-4" />,
+  };
+
+  const colorOrder = {
+    voiceover: 'blue',
+    elevenlabs_voiceover: 'indigo',
+    music: 'purple',
+    sfx: 'amber',
+    mixed: 'emerald',
+  };
+
+  const assets = Object.entries(allAudioUrls).map(([category, { url, label }]) => ({
+    key: category,
+    label,
+    icon: iconMap[category] || <Volume2 className="w-4 h-4" />,
+    url,
+    color: colorOrder[category] || 'blue',
+  }));
+
+  // Deduplicate by URL
+  const seen = new Set();
+  const uniqueAssets = assets.filter(a => {
+    if (seen.has(a.url)) return false;
+    seen.add(a.url);
+    return true;
+  });
 
   // Deduplicate — same URL under different names
   const seen = new Set();
@@ -896,6 +957,19 @@ export default function ContentGeneration() {
           audioAssets.push({ label, url });
         }
       }
+
+// Check MusicTracks entity
+      try {
+        const musicTracks = await base44.entities.MusicTracks?.filter({ project_id: projectId });
+        if (musicTracks?.length > 0) {
+          musicTracks.forEach((track, i) => {
+            if (track.audio_url && track.audio_url.startsWith('http') && !audioAssets.find(a => a.url === track.audio_url)) {
+              const label = track.is_selected ? 'background-music-selected' : `music-track-${i + 1}`;
+              audioAssets.push({ label, url: track.audio_url });
+            }
+          });
+        }
+      } catch (_) {}
 
       // Also check ProductionSettings entity
       try {
