@@ -553,7 +553,7 @@ Deno.serve(async (req) => {
 
     let totalPrompts = 0;
     let totalWarnings = 0;
-    const totalBatches = Math.ceil(pendingScenes.length / BATCH_SIZE);
+    const totalBatches = Math.ceil(pendingScenes.length / BASE_BATCH_SIZE);
 
     // ═══ QUALITY ANCHORS — best prompts from completed scenes ═══
     // Inject 2-3 examples of GOOD prompts into every batch so the LLM
