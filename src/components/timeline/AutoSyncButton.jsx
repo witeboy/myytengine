@@ -73,14 +73,17 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
       }
 
       let success = false;
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; attempt < 5; attempt++) {
         try {
           await base44.entities.Scenes.update(d.scene_id, updatePayload);
           success = true;
           break;
         } catch (err) {
-          if (attempt < 2) {
-            await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          const is429 = err?.message?.includes('429') || err?.message?.includes('Rate limit');
+          const delay = is429 ? 3000 * (attempt + 1) : 1500 * (attempt + 1);
+          if (attempt < 4) {
+            setProgress(`Durations: ${completed}/${durations.length} (rate limited, waiting ${Math.round(delay/1000)}s...)`);
+            await new Promise(r => setTimeout(r, delay));
           }
         }
       }
@@ -89,9 +92,9 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
       completed++;
       setProgress(`Durations: ${completed}/${durations.length}`);
 
-      // Throttle to avoid rate limits
+      // Throttle between updates — 500ms keeps us under rate limits
       if (i < durations.length - 1) {
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 500));
       }
     }
 
@@ -109,14 +112,17 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
       };
 
       let success = false;
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; attempt < 5; attempt++) {
         try {
           await base44.entities.Scenes.update(t.scene_id, updatePayload);
           success = true;
           break;
         } catch (err) {
-          if (attempt < 2) {
-            await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          const is429 = err?.message?.includes('429') || err?.message?.includes('Rate limit');
+          const delay = is429 ? 3000 * (attempt + 1) : 1500 * (attempt + 1);
+          if (attempt < 4) {
+            setProgress(`Transitions: ${appliedTransitions}/${transitions.length} (rate limited, waiting ${Math.round(delay/1000)}s...)`);
+            await new Promise(r => setTimeout(r, delay));
           }
         }
       }
@@ -127,7 +133,7 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
       setProgress(`Transitions: ${appliedTransitions}/${transitions.length}`);
 
       if (i < transitions.length - 1) {
-        await new Promise(r => setTimeout(r, 100));
+        await new Promise(r => setTimeout(r, 500));
       }
     }
 
