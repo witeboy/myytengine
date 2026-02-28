@@ -476,10 +476,69 @@ Deno.serve(async (req) => {
     console.log(`✓ Transitions: ${stats.cuts} cuts (${stats.cut_percentage}%) · ${stats.dissolves} dissolves · ${stats.fades} fades`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
-    // ── Return to frontend — NO DB writes ─────────────────────────
+    // ══════════════════════════════════════════════════════════════
+    // PHASE 4: Apply all updates server-side (no rate limits)
+    // ══════════════════════════════════════════════════════════════
+    
+    console.log(`📝 Applying ${sceneData.length} scene updates server-side...`);
+    
+    let applied = 0;
+    let failed = 0;
+
+    // Merge duration + transition into ONE update per scene
+    for (let i = 0; i < sceneData.length; i++) {
+      const sd = sceneData[i];
+      const tr = transitions.find(t => t.scene_number === sd.scene_number) || {};
+      
+      const updatePayload = {
+        duration_seconds: sd.duration_seconds,
+      };
+
+      // Add transition data
+      if (tr.transition_type) {
+        updatePayload.transition_type = tr.transition_type;
+        updatePayload.transition_duration = tr.transition_duration || 0;
+      }
+
+      // Add video hold metadata
+      if (sd.video_hold) {
+        updatePayload.video_hold = true;
+        updatePayload.video_play_seconds = sd.video_play_seconds;
+      }
+
+      // Retry with backoff
+      let success = false;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          await base44.asServiceRole.entities.Scenes.update(sd.scene_id, updatePayload);
+          success = true;
+          break;
+        } catch (err) {
+          if (attempt < 4) {
+            const delay = 500 * (attempt + 1);
+            await new Promise(r => setTimeout(r, delay));
+          }
+        }
+      }
+
+      if (success) applied++;
+      else failed++;
+
+      // Log progress every 50 scenes
+      if ((i + 1) % 50 === 0 || i === sceneData.length - 1) {
+        console.log(`  ✓ ${applied} applied / ${failed} failed / ${sceneData.length - i - 1} remaining`);
+      }
+    }
+
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`✓ Beat Sync complete: ${applied}/${sceneData.length} scenes updated`);
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+
     return Response.json({
       success: true,
-      apply_mode: 'frontend',
+      apply_mode: 'server',
+      applied,
+      failed,
       total_duration: totalVoDuration,
       scene_durations: sceneData.map(s => ({
         scene_id: s.scene_id,
