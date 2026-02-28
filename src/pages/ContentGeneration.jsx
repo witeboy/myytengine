@@ -255,31 +255,52 @@ function AudioAssetsPanel({ project }) {
 
   const handleDownload = async (asset) => {
     setDownloading(asset.key);
+
+    const projectName = (project.name || 'project').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
+    let ext = 'mp3';
+    if (asset.url.includes('.wav')) ext = 'wav';
+    else if (asset.url.includes('.ogg')) ext = 'ogg';
+    else if (asset.url.includes('.mp4')) ext = 'mp4';
+
+    // Method 1: Try fetch + blob (works for same-origin or CORS-enabled)
     try {
-      const response = await fetch(asset.url);
-      if (!response.ok) throw new Error('Download failed');
-      const blob = await response.blob();
+      const response = await fetch(asset.url, { mode: 'cors' });
+      if (response.ok) {
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('wav')) ext = 'wav';
+        else if (contentType.includes('ogg')) ext = 'ogg';
 
-      const contentType = response.headers.get('content-type') || '';
-      let ext = 'mp3';
-      if (contentType.includes('wav')) ext = 'wav';
-      else if (contentType.includes('ogg')) ext = 'ogg';
-      else if (asset.url.includes('.wav')) ext = 'wav';
-      else if (asset.url.includes('.ogg')) ext = 'ogg';
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = `${projectName}_${asset.key}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+        setDownloading(null);
+        return;
+      }
+    } catch (_) {
+      console.log(`CORS blocked for ${asset.key} — using direct link`);
+    }
 
-      const blobUrl = URL.createObjectURL(blob);
+    // Method 2: Direct <a> tag (bypasses CORS, browser handles download)
+    try {
       const a = document.createElement('a');
-      a.href = blobUrl;
-      const projectName = (project.name || 'project').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
+      a.href = asset.url;
       a.download = `${projectName}_${asset.key}.${ext}`;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-    } catch (err) {
-      console.error(`Download ${asset.key} failed:`, err);
+    } catch (_) {
+      // Method 3: Last resort — open in new tab
       window.open(asset.url, '_blank');
     }
+
     setDownloading(null);
   };
 
@@ -887,13 +908,21 @@ export default function ContentGeneration() {
   };
 
   const fetchAsBlob = async (url) => {
+    // Method 1: Direct fetch (works for same-origin or CORS-enabled)
     try {
-      const res = await fetch(url);
-      if (!res.ok) return null;
-      return await res.blob();
-    } catch (_) {
-      return null;
-    }
+      const res = await fetch(url, { mode: 'cors' });
+      if (res.ok) return await res.blob();
+    } catch (_) {}
+
+    // Method 2: Try via proxy for CORS-blocked URLs
+    try {
+      const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+      const res = await fetch(proxyUrl);
+      if (res.ok) return await res.blob();
+    } catch (_) {}
+
+    console.warn(`CORS blocked, skipping: ${url.substring(0, 60)}`);
+    return null;
   };
 
   const getExtension = (url, fallback) => {
