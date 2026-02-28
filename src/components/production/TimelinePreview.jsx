@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Play, RotateCcw } from 'lucide-react';
+import CaptionOverlay from '@/components/CaptionOverlay';
 
 export default function TimelinePreview({ 
   blocks, 
