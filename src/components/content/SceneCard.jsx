@@ -8,7 +8,18 @@ import AnimationEditor from './AnimationEditor';
 import SceneSfxEditor from './SceneSfxEditor';
 import PromptEnhancer from './PromptEnhancer';
 
-// ── Per-Scene Fix Prompt Button ─────────────────────────────────
+const statusColors = {
+  pending: 'bg-gray-100 text-gray-600',
+  prompts_ready: 'bg-yellow-100 text-yellow-800',
+  image_generated: 'bg-green-100 text-green-800',
+  video_generated: 'bg-purple-100 text-purple-800',
+  failed: 'bg-red-100 text-red-800',
+};
+
+
+// ═══════════════════════════════════════════════════════════════════
+// Per-Scene Fix Prompt Button — Module-level component
+// ═══════════════════════════════════════════════════════════════════
 function FixPromptButton({ sceneId, projectId, onFixed }) {
   const [fixing, setFixing] = useState(false);
   const [fixType, setFixType] = useState(null);
@@ -120,20 +131,16 @@ function FixPromptButton({ sceneId, projectId, onFixed }) {
   );
 }
 
-const statusColors = {
-  pending: 'bg-gray-100 text-gray-600',
-  prompts_ready: 'bg-yellow-100 text-yellow-800',
-  image_generated: 'bg-green-100 text-green-800',
-  video_generated: 'bg-purple-100 text-purple-800',
-  failed: 'bg-red-100 text-red-800',
-};
 
+// ═══════════════════════════════════════════════════════════════════
+// MAIN COMPONENT — Scene Card
+// ═══════════════════════════════════════════════════════════════════
 export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, onSceneUpdated }) {
   const [loadingImage, setLoadingImage] = useState(false);
-    const [loadingVideo, setLoadingVideo] = useState(false);
-    const [polling, setPolling] = useState(false);
-    const [showAnimEditor, setShowAnimEditor] = useState(false);
-    const [rephrasing, setRephrasing] = useState(false);
+  const [loadingVideo, setLoadingVideo] = useState(false);
+  const [polling, setPolling] = useState(false);
+  const [showAnimEditor, setShowAnimEditor] = useState(false);
+  const [rephrasing, setRephrasing] = useState(false);
   const pollRef = useRef(null);
 
   const hasPendingTask = (
@@ -142,13 +149,11 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
   );
 
   useEffect(() => {
-    // Clear any existing poll first
     if (pollRef.current) {
       clearInterval(pollRef.current);
       pollRef.current = null;
     }
 
-    // Only start polling if there's actually a pending task prefix right now
     if (!hasPendingTask) {
       setPolling(false);
       setLoadingVideo(false);
@@ -159,9 +164,7 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
     setLoadingVideo(true);
     pollRef.current = setInterval(async () => {
       try {
-        const res = await base44.functions.invoke('pollSceneVideo', {
-          scene_id: scene.id,
-        });
+        const res = await base44.functions.invoke('pollSceneVideo', { scene_id: scene.id });
         const status = res.data?.status;
         if (status === 'COMPLETED' || status === 'FAILED') {
           clearInterval(pollRef.current);
