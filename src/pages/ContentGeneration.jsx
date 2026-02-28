@@ -846,8 +846,11 @@ export default function ContentGeneration() {
       setExportProgress({ current: 0, total: totalAssets, label: 'Preparing...' });
       let downloaded = 0;
 
+      // Adaptive padding — 2 digits for ≤99 scenes, 3 for ≤999, 4 for 1000+
+      const padWidth = scenes.length > 999 ? 4 : scenes.length > 99 ? 3 : 2;
+
       for (const scene of scenes) {
-        const num = String(scene.scene_number).padStart(2, '0');
+        const num = String(scene.scene_number).padStart(padWidth, '0');
         const arc = getArcLabel(scene);
         const prefix = `S${num}_${arc}`;
 
@@ -943,11 +946,12 @@ export default function ContentGeneration() {
         arc_position: getArcLabel(s),
         narration: s.narration_text,
         duration: s.duration_seconds,
-        image_file: s.image_url ? `S${String(s.scene_number).padStart(2, '0')}_${getArcLabel(s)}_image.${getExtension(s.image_url, 'png')}` : null,
+        image_file: s.image_url && s.image_url.startsWith('http') ? `S${String(s.scene_number).padStart(padWidth, '0')}_${getArcLabel(s)}_image.${getExtension(s.image_url, 'png')}` : null,
         video_file: (s.video_url && !s.video_url.startsWith('veo_task:') && !s.video_url.startsWith('grok_vid_task:') && s.video_url.startsWith('http'))
-          ? `S${String(s.scene_number).padStart(2, '0')}_${getArcLabel(s)}_video.${getExtension(s.video_url, 'mp4')}`
+          ? `S${String(s.scene_number).padStart(padWidth, '0')}_${getArcLabel(s)}_video.${getExtension(s.video_url, 'mp4')}`
           : null,
       }));
+
       folder.file('manifest.json', JSON.stringify(manifest, null, 2));
 
       // ── Generate and download zip ─────────────────────────────
