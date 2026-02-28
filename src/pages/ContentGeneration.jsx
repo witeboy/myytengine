@@ -13,8 +13,8 @@ import ElevenLabsVoiceoverPanel from '@/components/script/ElevenLabsVoiceoverPan
 import VisualStyleSelector from '@/components/content/VisualStyleSelector';
 import OrientationSelector from '@/components/content/OrientationSelector';
 import MusicPanel from '@/components/content/MusicPanel';
-import ScriptPanel from './ScriptPanel';
-import CaptionStylePicker from './CaptionStylePicker';
+import ScriptPanel from '@/components/ScriptPanel'; 
+import CaptionStylePicker from '@/components/CaptionStylePicker';
 import AudioMixerPanel from '@/components/content/AudioMixerPanel';
 import ProcessingNotifier from '@/components/content/ProcessingNotifier';
 import {
