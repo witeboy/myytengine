@@ -253,15 +253,7 @@ function AudioAssetsPanel({ project }) {
     return true;
   });
 
-  // Deduplicate — same URL under different names
-  const seen = new Set();
-  const uniqueAssets = assets.filter(a => {
-    if (seen.has(a.url)) return false;
-    seen.add(a.url);
-    return true;
-  });
-
-  if (uniqueAssets.length === 0) return null;
+    if (uniqueAssets.length === 0) return null;
 
   const handleDownload = async (asset) => {
     setDownloading(asset.key);
