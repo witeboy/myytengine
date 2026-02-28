@@ -587,15 +587,85 @@ export default function ContentGeneration() {
       .filter(s => s.status === 'prompts_ready' || (!s.image_url && !s.image_prompt?.startsWith('DIRECTOR_NOTES:')))
       .sort((a, b) => a.scene_number - b.scene_number);
 
-    setImageProgress({ current: 0, total: readyScenes.length, sceneName: '' });
+    const CONCURRENCY = 5; // 5 parallel image generations at once
+    const total = readyScenes.length;
+    let completed = 0;
+    let failed = 0;
 
-    for (let i = 0; i < readyScenes.length; i++) {
-      const scene = readyScenes[i];
-      setImageProgress({ current: i + 1, total: readyScenes.length, sceneName: `Scene ${scene.scene_number}` });
-      try {
-        await base44.functions.invoke('generateSceneImage', { scene_id: scene.id });
-      } catch (err) {
-        console.warn(`Scene ${scene.scene_number} image failed:`, err.message);
+    setImageProgress({ current: 0, total, sceneName: `Starting ${total} scenes (${CONCURRENCY} parallel)...` });
+
+    // Process in parallel batches of CONCURRENCY
+    for (let i = 0; i < total; i += CONCURRENCY) {
+      const batch = readyScenes.slice(i, i + CONCURRENCY);
+      const batchNum = Math.floor(i / CONCURRENCY) + 1;
+      const totalBatches = Math.ceil(total / CONCURRENCY);
+
+      setImageProgress({
+        current: completed,
+        total,
+        sceneName: `Batch ${batchNum}/${totalBatches} — Scenes ${batch.map(s => s.scene_number).join(', ')}`
+      });
+
+      // Fire all in this batch simultaneously
+      const results = await Promise.allSettled(
+        batch.map(async (scene) => {
+          try {
+            await base44.functions.invoke('generateSceneImage', { scene_id: scene.id });
+            return { scene_number: scene.scene_number, success: true };
+          } catch (err) {
+            console.warn(`Scene ${scene.scene_number} image failed:`, err.message);
+            return { scene_number: scene.scene_number, success: false, error: err.message };
+          }
+        })
+      );
+
+      // Count results
+      for (const r of results) {
+        const val = r.status === 'fulfilled' ? r.value : { success: false };
+        if (val.success) {
+          completed++;
+        } else {
+          failed++;
+          completed++;
+        }
+      }
+
+      setImageProgress({
+        current: completed,
+        total,
+        sceneName: `${completed - failed} generated · ${failed > 0 ? `${failed} failed · ` : ''}${total - completed} remaining`
+      });
+
+      // Refresh scene grid after each batch
+      await refetchScenes();
+
+      // Small cooldown between batches to avoid rate limits
+      if (i + CONCURRENCY < total) {
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+
+    // Final retry pass for failed scenes
+    if (failed > 0) {
+      setImageProgress({ current: completed, total, sceneName: `Retrying ${failed} failed scenes...` });
+      const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+      const stillFailed = freshScenes
+        .filter(s => s.status === 'prompts_ready' && !s.image_url)
+        .sort((a, b) => a.scene_number - b.scene_number);
+
+      for (const scene of stillFailed) {
+        try {
+          await base44.functions.invoke('generateSceneImage', { scene_id: scene.id });
+          failed--;
+          setImageProgress({
+            current: completed,
+            total,
+            sceneName: `Retry: Scene ${scene.scene_number} ✓ · ${failed} remaining`
+          });
+        } catch (err) {
+          console.warn(`Retry scene ${scene.scene_number} failed again:`, err.message);
+        }
+        await new Promise(r => setTimeout(r, 3000)); // Slower retry pace
       }
       await refetchScenes();
     }
