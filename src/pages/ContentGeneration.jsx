@@ -127,52 +127,80 @@ function FixPromptsButton({ projectId, sceneCount, onComplete }) {
 // ── Audio Assets Download Panel ─────────────────────────────────
 function AudioAssetsPanel({ project }) {
   const [downloading, setDownloading] = useState(null);
+  const [prodSettings, setProdSettings] = useState(null);
+  const projectId = project?.id;
 
-  // Collect all audio URLs from project fields
+  // Load production settings on mount
+  useEffect(() => {
+    if (!projectId) return;
+    (async () => {
+      try {
+        const ps = await base44.entities.ProductionSettings?.filter({ project_id: projectId });
+        if (ps?.length > 0) setProdSettings(ps[0]);
+      } catch (_) {}
+    })();
+  }, [projectId]);
+
+  // Scan ALL possible sources for audio URLs
+  const findUrl = (...fields) => {
+    for (const field of fields) {
+      // Check project
+      const pVal = project?.[field];
+      if (pVal && typeof pVal === 'string' && pVal.startsWith('http')) return pVal;
+      // Check production settings
+      const psVal = prodSettings?.[field];
+      if (psVal && typeof psVal === 'string' && psVal.startsWith('http')) return psVal;
+    }
+    return null;
+  };
+
   const assets = [
     {
       key: 'voiceover',
-      label: 'Voiceover',
+      label: 'Voiceover (MiniMax)',
       icon: <Mic className="w-4 h-4" />,
-      url: project.voiceover_url || project.narration_url || project.voiceover_audio_url,
+      url: findUrl('voiceover_url', 'narration_url', 'voiceover_audio_url', 'audio_url', 'minimax_voiceover_url'),
       color: 'blue',
-      ext: 'mp3',
     },
     {
       key: 'elevenlabs_voiceover',
-      label: 'ElevenLabs Voiceover',
+      label: 'Voiceover (ElevenLabs)',
       icon: <Mic className="w-4 h-4" />,
-      url: project.elevenlabs_voiceover_url || project.elevenlabs_audio_url,
+      url: findUrl('elevenlabs_voiceover_url', 'elevenlabs_audio_url', 'elevenlabs_url'),
       color: 'indigo',
-      ext: 'mp3',
     },
     {
       key: 'music',
       label: 'Background Music',
       icon: <Music className="w-4 h-4" />,
-      url: project.music_url || project.background_music_url,
+      url: findUrl('music_url', 'background_music_url', 'music_audio_url', 'bg_music_url'),
       color: 'purple',
-      ext: 'mp3',
     },
     {
       key: 'sfx',
       label: 'Sound Effects',
       icon: <Volume2 className="w-4 h-4" />,
-      url: project.sfx_url || project.sound_effects_url || project.effects_url,
+      url: findUrl('sfx_url', 'sound_effects_url', 'effects_url', 'sfx_audio_url'),
       color: 'amber',
-      ext: 'mp3',
     },
     {
       key: 'mixed',
-      label: 'Mixed Audio',
+      label: 'Final Mixed Audio',
       icon: <Volume2 className="w-4 h-4" />,
-      url: project.mixed_audio_url || project.final_audio_url,
+      url: findUrl('mixed_audio_url', 'final_audio_url', 'mixed_url', 'master_audio_url'),
       color: 'emerald',
-      ext: 'mp3',
     },
-  ].filter(a => a.url && a.url.startsWith('http'));
+  ].filter(a => a.url);
 
-  if (assets.length === 0) return null;
+  // Deduplicate — same URL under different names
+  const seen = new Set();
+  const uniqueAssets = assets.filter(a => {
+    if (seen.has(a.url)) return false;
+    seen.add(a.url);
+    return true;
+  });
+
+  if (uniqueAssets.length === 0) return null;
 
   const handleDownload = async (asset) => {
     setDownloading(asset.key);
@@ -180,19 +208,36 @@ function AudioAssetsPanel({ project }) {
       const response = await fetch(asset.url);
       if (!response.ok) throw new Error('Download failed');
       const blob = await response.blob();
+
+      // Detect format from content-type or URL
+      const contentType = response.headers.get('content-type') || '';
+      let ext = 'mp3';
+      if (contentType.includes('wav')) ext = 'wav';
+      else if (contentType.includes('ogg')) ext = 'ogg';
+      else if (asset.url.includes('.wav')) ext = 'wav';
+      else if (asset.url.includes('.ogg')) ext = 'ogg';
+
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       const projectName = (project.name || 'project').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
-      a.download = `${projectName}_${asset.key}.${asset.ext}`;
+      a.download = `${projectName}_${asset.key}.${ext}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error(`Download ${asset.key} failed:`, err);
-      // Fallback: open in new tab
       window.open(asset.url, '_blank');
+    }
+    setDownloading(null);
+  };
+
+  const handleDownloadAll = async () => {
+    setDownloading('all');
+    for (const asset of uniqueAssets) {
+      await handleDownload(asset);
+      await new Promise(r => setTimeout(r, 500)); // Small gap between downloads
     }
     setDownloading(null);
   };
@@ -211,45 +256,61 @@ function AudioAssetsPanel({ project }) {
         <CardTitle className="text-base flex items-center gap-2">
           <Download className="w-4 h-4 text-gray-600" />
           Audio Assets
-          <Badge variant="outline" className="text-[10px] ml-auto">{assets.length} available</Badge>
+          <Badge variant="outline" className="text-[10px] ml-1">{uniqueAssets.length} available</Badge>
+          <div className="ml-auto">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleDownloadAll}
+              disabled={downloading === 'all'}
+              className="text-xs gap-1"
+            >
+              {downloading === 'all'
+                ? <Loader2 className="w-3 h-3 animate-spin" />
+                : <Download className="w-3 h-3" />
+              }
+              Download All Audio
+            </Button>
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {assets.map(asset => {
+          {uniqueAssets.map(asset => {
             const c = colorMap[asset.color] || colorMap.blue;
             const isDownloading = downloading === asset.key;
             return (
               <div
                 key={asset.key}
-                className={`${c.bg} ${c.border} border rounded-lg p-3 flex items-center gap-3`}
+                className={`${c.bg} ${c.border} border rounded-lg p-3 flex flex-col gap-2`}
               >
-                <div className={`w-10 h-10 rounded-lg ${c.badge} flex items-center justify-center flex-shrink-0`}>
-                  {asset.icon}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium ${c.text}`}>{asset.label}</p>
-                  <div className="mt-1.5">
-                    <audio
-                      src={asset.url}
-                      controls
-                      preload="none"
-                      className="w-full h-7"
-                      style={{ maxWidth: '100%' }}
-                    />
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-lg ${c.badge} flex items-center justify-center flex-shrink-0`}>
+                    {asset.icon}
                   </div>
+                  <p className={`text-sm font-medium ${c.text} flex-1`}>{asset.label}</p>
+                  <button
+                    onClick={() => handleDownload(asset)}
+                    disabled={isDownloading}
+                    className={`${c.btn} text-white p-1.5 rounded-lg flex-shrink-0 transition-colors`}
+                    title={`Download ${asset.label}`}
+                  >
+                    {isDownloading
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      : <Download className="w-3.5 h-3.5" />
+                    }
+                  </button>
                 </div>
-                <button
-                  onClick={() => handleDownload(asset)}
-                  disabled={isDownloading}
-                  className={`${c.btn} text-white p-2 rounded-lg flex-shrink-0 transition-colors`}
-                  title={`Download ${asset.label}`}
-                >
-                  {isDownloading
-                    ? <Loader2 className="w-4 h-4 animate-spin" />
-                    : <Download className="w-4 h-4" />
-                  }
-                </button>
+                <audio
+                  src={asset.url}
+                  controls
+                  preload="none"
+                  className="w-full h-8"
+                  style={{ maxWidth: '100%' }}
+                />
+                <p className="text-[10px] text-gray-400 truncate" title={asset.url}>
+                  {asset.url.substring(0, 60)}...
+                </p>
               </div>
             );
           })}
@@ -791,7 +852,7 @@ export default function ContentGeneration() {
         const prefix = `S${num}_${arc}`;
 
         // ── Download image ────────────────────────────────────────
-        if (scene.image_url && !scene.image_url.startsWith('data:')) {
+        if (scene.image_url && scene.image_url.startsWith('http')) {
           setExportProgress({ current: downloaded, total: totalAssets, label: `${prefix}_image` });
           const ext = getExtension(scene.image_url, 'png');
           const blob = await fetchAsBlob(scene.image_url);
@@ -808,6 +869,69 @@ export default function ContentGeneration() {
           const blob = await fetchAsBlob(scene.video_url);
           if (blob) {
             folder.file(`${prefix}_video.${ext}`, blob);
+          }
+          downloaded++;
+        }
+      }
+
+// ── Download audio assets ─────────────────────────────────
+      const audioAssets = [];
+
+      // Check project fields for audio URLs
+      const audioFields = [
+        'voiceover_url', 'narration_url', 'voiceover_audio_url', 'audio_url',
+        'elevenlabs_voiceover_url', 'elevenlabs_audio_url',
+        'music_url', 'background_music_url', 'music_audio_url',
+        'sfx_url', 'sound_effects_url', 'effects_url',
+        'mixed_audio_url', 'final_audio_url'
+      ];
+
+      for (const field of audioFields) {
+        const url = project?.[field];
+        if (url && typeof url === 'string' && url.startsWith('http')) {
+          const label = field.replace(/_url$/, '').replace(/_/g, '-');
+          audioAssets.push({ label, url });
+        }
+      }
+
+      // Also check ProductionSettings entity
+      try {
+        const prodSettings = await base44.entities.ProductionSettings?.filter({ project_id: projectId });
+        if (prodSettings?.length > 0) {
+          const ps = prodSettings[0];
+          for (const field of audioFields) {
+            const url = ps?.[field];
+            if (url && typeof url === 'string' && url.startsWith('http') && !audioAssets.find(a => a.url === url)) {
+              const label = `ps-${field.replace(/_url$/, '').replace(/_/g, '-')}`;
+              audioAssets.push({ label, url });
+            }
+          }
+          // Check voiceover_parts JSON array
+          if (ps.voiceover_parts) {
+            try {
+              const parts = JSON.parse(ps.voiceover_parts);
+              if (Array.isArray(parts)) {
+                parts.forEach((partUrl, i) => {
+                  if (partUrl && partUrl.startsWith('http')) {
+                    audioAssets.push({ label: `voiceover-part-${i + 1}`, url: partUrl });
+                  }
+                });
+              }
+            } catch (_) {}
+          }
+        }
+      } catch (_) {
+        console.log('No ProductionSettings entity or no records found');
+      }
+
+      if (audioAssets.length > 0) {
+        const audioFolder = folder.folder('audio');
+        for (const asset of audioAssets) {
+          setExportProgress({ current: downloaded, total: totalAssets + audioAssets.length, label: `Audio: ${asset.label}` });
+          const blob = await fetchAsBlob(asset.url);
+          if (blob) {
+            const ext = asset.url.includes('.wav') ? 'wav' : 'mp3';
+            audioFolder.file(`${asset.label}.${ext}`, blob);
           }
           downloaded++;
         }
