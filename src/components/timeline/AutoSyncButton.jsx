@@ -28,139 +28,45 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
     setResult(null);
     setError(null);
 
-    // ── Phase 1: Backend computes durations + transitions ─────────
+    // ── Single backend call — computes + applies everything ───────
     setPhase('computing');
-    setProgress('Analyzing scenes...');
+    setProgress('Analyzing scenes & applying...');
 
     let data;
     try {
       const res = await base44.functions.invoke('autoSyncTimeline', { project_id: projectId });
       data = res.data || res;
 
-      if (!data?.success || !data?.scene_durations) {
-        throw new Error(data?.error || 'Sync failed — no data returned');
+      if (!data?.success) {
+        throw new Error(data?.error || 'Sync failed');
       }
     } catch (err) {
       setSyncing(false);
       setPhase(null);
-      setError(err.message || 'Backend sync failed');
+      setError(err.message || 'Beat sync failed');
       setTimeout(() => setError(null), 5000);
       return;
     }
 
-    const durations = data.scene_durations;
-    const transitions = data.transitions || [];
-    const totalSteps = durations.length + transitions.length;
-    let completed = 0;
-    let failedDurations = 0;
-    let failedTransitions = 0;
-
-    // ── Phase 2: Apply durations incrementally ────────────────────
-    setPhase('durations');
-
-    for (let i = 0; i < durations.length; i++) {
-      const d = durations[i];
-      if (!d.scene_id) continue;
-
-      const updatePayload = {
-        duration_seconds: d.duration_seconds,
-      };
-
-      // Store video_hold metadata so timeline can show +HOLD badge
-      if (d.video_hold) {
-        updatePayload.video_hold = true;
-        updatePayload.video_play_seconds = d.video_play_seconds;
-      }
-
-      let success = false;
-      for (let attempt = 0; attempt < 5; attempt++) {
-        try {
-          await base44.entities.Scenes.update(d.scene_id, updatePayload);
-          success = true;
-          break;
-        } catch (err) {
-          const is429 = err?.message?.includes('429') || err?.message?.includes('Rate limit');
-          const delay = is429 ? 3000 * (attempt + 1) : 1500 * (attempt + 1);
-          if (attempt < 4) {
-            setProgress(`Durations: ${completed}/${durations.length} (rate limited, waiting ${Math.round(delay/1000)}s...)`);
-            await new Promise(r => setTimeout(r, delay));
-          }
-        }
-      }
-
-      if (!success) failedDurations++;
-      completed++;
-      setProgress(`Durations: ${completed}/${durations.length}`);
-
-      // Throttle between updates — 500ms keeps us under rate limits
-      if (i < durations.length - 1) {
-        await new Promise(r => setTimeout(r, 500));
-      }
-    }
-
-    // ── Phase 3: Apply transitions incrementally ──────────────────
-    setPhase('transitions');
-    let appliedTransitions = 0;
-
-    for (let i = 0; i < transitions.length; i++) {
-      const t = transitions[i];
-      if (!t.scene_id) continue;
-
-      const updatePayload = {
-        transition_type: t.transition_type,
-        transition_duration: t.transition_duration,
-      };
-
-      let success = false;
-      for (let attempt = 0; attempt < 5; attempt++) {
-        try {
-          await base44.entities.Scenes.update(t.scene_id, updatePayload);
-          success = true;
-          break;
-        } catch (err) {
-          const is429 = err?.message?.includes('429') || err?.message?.includes('Rate limit');
-          const delay = is429 ? 3000 * (attempt + 1) : 1500 * (attempt + 1);
-          if (attempt < 4) {
-            setProgress(`Transitions: ${appliedTransitions}/${transitions.length} (rate limited, waiting ${Math.round(delay/1000)}s...)`);
-            await new Promise(r => setTimeout(r, delay));
-          }
-        }
-      }
-
-      if (!success) failedTransitions++;
-      else appliedTransitions++;
-      completed++;
-      setProgress(`Transitions: ${appliedTransitions}/${transitions.length}`);
-
-      if (i < transitions.length - 1) {
-        await new Promise(r => setTimeout(r, 500));
-      }
-    }
-
-    // ── Phase 4: Done ─────────────────────────────────────────────
+    // ── Done — just refresh the timeline ──────────────────────────
     setPhase('done');
     setSyncing(false);
     setProgress(null);
 
-    // Build result summary
     const stats = data.stats || {};
     const parts = [
-      `${durations.length} scenes synced`,
-      `${Math.floor(stats.total_duration / 60)}:${String(Math.floor(stats.total_duration % 60)).padStart(2, '0')}`,
+      `${data.applied || stats.total_scenes} scenes synced`,
+      `${Math.floor((stats.total_duration || 0) / 60)}:${String(Math.floor((stats.total_duration || 0) % 60)).padStart(2, '0')}`,
     ];
     if (stats.dissolves > 0) parts.push(`${stats.dissolves} dissolves`);
     if (stats.fades > 0) parts.push(`${stats.fades} fades`);
     if (stats.video_holds > 0) parts.push(`${stats.video_holds} video holds`);
-
-    const failures = failedDurations + failedTransitions;
-    if (failures > 0) parts.push(`${failures} failed`);
+    if (data.failed > 0) parts.push(`${data.failed} failed`);
 
     setResult(`✓ ${parts.join(' · ')}`);
 
-    // Refresh timeline
     onSynced?.();
 
-    // Auto-clear result
     setTimeout(() => { setResult(null); setPhase(null); }, 6000);
   };
 
