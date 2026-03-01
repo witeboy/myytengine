@@ -1,12 +1,60 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Monitor, Film, Maximize2, Minimize2, Smartphone, MonitorIcon } from 'lucide-react';
+import CaptionOverlay from '@/components/CaptionOverlay';
 
 export default function PreviewPanel({ currentScene, currentTime, isPlaying, totalScenes, totalDuration, orientation, projectId, onOrientationChange }) {
   const videoRef = useRef(null);
   const [videoError, setVideoError] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef(null);
+
+  // Caption data from ProductionSettings
+  const [captionData, setCaptionData] = useState([]);
+  const [captionStyle, setCaptionStyle] = useState({});
+  const previewBoxRef = useRef(null);
+  const [previewSize, setPreviewSize] = useState({ w: 640, h: 360 });
+
+  useEffect(() => {
+    if (!projectId) return;
+    (async () => {
+      try {
+        const ps = await base44.entities.ProductionSettings?.filter({ project_id: projectId });
+        if (ps?.length > 0) {
+          const p = ps[0];
+          // Parse caption_data JSON
+          if (p.caption_data) {
+            try { setCaptionData(JSON.parse(p.caption_data)); } catch {}
+          }
+          // Caption style fields
+          setCaptionStyle({
+            caption_enabled: p.caption_enabled ?? true,
+            caption_style_preset: p.caption_style_preset || 'hormozi',
+            caption_font_size: p.caption_font_size || 64,
+            caption_text_color: p.caption_text_color || '#FFFFFF',
+            caption_highlight_color: p.caption_highlight_color || '#00FF88',
+            caption_bg_color: p.caption_bg_color || 'transparent',
+            caption_stroke_width: p.caption_stroke_width ?? 4,
+            caption_position: p.caption_position || 'center',
+            caption_animation: p.caption_animation || 'word_highlight',
+            caption_max_words: p.caption_max_words || 3,
+          });
+        }
+      } catch {}
+    })();
+  }, [projectId]);
+
+  // Track preview box size for responsive captions
+  useEffect(() => {
+    if (!previewBoxRef.current) return;
+    const obs = new ResizeObserver(entries => {
+      for (const e of entries) {
+        setPreviewSize({ w: e.contentRect.width, h: e.contentRect.height });
+      }
+    });
+    obs.observe(previewBoxRef.current);
+    return () => obs.disconnect();
+  }, []);
 
   const timeInScene = currentTime - (currentScene?.start_time || 0);
   const sceneDuration = currentScene?.duration_seconds || 8;
@@ -96,6 +144,7 @@ export default function PreviewPanel({ currentScene, currentTime, isPlaying, tot
 
       {/* Preview container */}
       <div
+        ref={previewBoxRef}
         className="relative bg-black rounded-lg overflow-hidden shadow-2xl border border-gray-800/30 flex items-center justify-center"
         style={isPortrait
           ? { aspectRatio: '9/16', maxHeight: 'calc(100% - 60px)', width: 'auto', maxWidth: '50%' }
@@ -135,6 +184,17 @@ export default function PreviewPanel({ currentScene, currentTime, isPlaying, tot
             <Film className="w-8 h-8 mx-auto mb-2 opacity-20" />
             <p className="text-[11px]">No media — Scene {currentScene.scene_number}</p>
           </div>
+        )}
+
+        {/* Caption Overlay */}
+        {captionData.length > 0 && captionStyle.caption_enabled && (
+          <CaptionOverlay
+            captionData={captionData}
+            currentTime={currentTime}
+            style={captionStyle}
+            containerWidth={previewSize.w}
+            containerHeight={previewSize.h}
+          />
         )}
 
         {/* Progress bar */}
