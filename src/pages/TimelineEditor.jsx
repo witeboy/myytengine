@@ -486,7 +486,7 @@ export default function TimelineEditor() {
 
         {/* CENTER: Properties Panel (collapsible/detachable) */}
         {!detachedPanels.properties && (
-          <div className="flex-shrink-0 overflow-y-auto border-r border-gray-700/30 relative" style={{ width: panelSizes.properties }}>
+          <div className="flex-shrink-0 overflow-hidden border-r border-gray-700/30 relative" style={{ width: panelSizes.properties }}>
             <div className="absolute top-0 right-0 z-10 flex gap-px p-0.5">
               <button
                 onClick={() => toggleDetachPanel('properties')}
@@ -502,38 +502,8 @@ export default function TimelineEditor() {
               onUpdateDuration={(dur) => handleUpdateDuration(selectedScene, dur)}
               onRefetch={refetchScenes}
             />
-
-            {/* Script Panel */}
-            <div className="border-t border-gray-700/30 mt-1">
-              <ScriptPanel
-                scenes={scenes}
-                projectId={projectId}
-                currentSceneNumber={currentScene?.scene_number}
-                onSceneClick={(sceneNum) => {
-                  const s = scenesWithTiming.find(sc => sc.scene_number === sceneNum);
-                  if (s) {
-                    setSelectedScene(s.id);
-                    setCurrentTime(s.start_time);
-                    if (voiceoverRef.current) voiceoverRef.current.currentTime = s.start_time;
-                  }
-                }}
-                onCleanComplete={() => refetchScenes()}
-                compact={true}
-              />
-            </div>
-
-            {/* Caption Style Picker */}
-            {prodSettings[0]?.id && (
-              <div className="border-t border-gray-700/30 mt-1 p-2">
-                <CaptionStylePicker
-                  productionSettingsId={prodSettings[0].id}
-                  currentPreset={prodSettings[0].caption_style_preset || 'hormozi'}
-                />
-              </div>
-            )}
           </div>
         )}
-
         {/* RIGHT: Preview Monitor (detachable) */}
         {!detachedPanels.preview ? (
           <div className="flex-1 min-w-0 overflow-hidden relative">
@@ -547,22 +517,46 @@ export default function TimelineEditor() {
               </button>
             </div>
             {scenes.length > 0 ? (
-              <PreviewPanel
-                currentScene={currentScene}
-                currentTime={currentTime}
-                isPlaying={isPlaying}
-                totalScenes={scenes.length}
-                totalDuration={totalDuration}
-                orientation={previewOrientation || project?.orientation || 'landscape'}
-                projectId={projectId}
-                onOrientationChange={(o) => { setPreviewOrientation(o); refetchProject(); }}
-              />
+              <div className="h-full flex flex-col">
+                {/* Preview */}
+                <div className="flex-1 min-h-0">
+                  <PreviewPanel
+                    currentScene={currentScene}
+                    currentTime={currentTime}
+                    isPlaying={isPlaying}
+                    totalScenes={scenes.length}
+                    totalDuration={totalDuration}
+                    orientation={previewOrientation || project?.orientation || 'landscape'}
+                    projectId={projectId}
+                    onOrientationChange={(o) => { setPreviewOrientation(o); refetchProject(); }}
+                  />
+                </div>
+                {/* Script Panel — below preview, scrollable */}
+                <div className="flex-shrink-0 border-t border-gray-700/30 max-h-40 overflow-y-auto">
+                  <ScriptPanel
+                    scenes={scenes}
+                    projectId={projectId}
+                    currentSceneNumber={currentScene?.scene_number}
+                    onSceneClick={(sceneNum) => {
+                      const s = scenesWithTiming.find(sc => sc.scene_number === sceneNum);
+                      if (s) {
+                        setSelectedScene(s.id);
+                        setCurrentTime(s.start_time);
+                        if (voiceoverRef.current) voiceoverRef.current.currentTime = s.start_time;
+                      }
+                    }}
+                    onCleanComplete={() => refetchScenes()}
+                    compact={true}
+                  />
+                </div>
+              </div>
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-gray-600 bg-[#0d0d1a]">
                 <Monitor className="w-16 h-16 mb-3 opacity-20" />
                 <p className="text-sm">Import scenes to start editing</p>
               </div>
             )}
+
           </div>
         ) : (
           <div className="flex-1 min-w-0 flex items-center justify-center bg-[#0d0d1a]">
@@ -756,6 +750,12 @@ export default function TimelineEditor() {
             voiceoverUrl={voiceoverUrl}
             onSynced={refetchScenes}
           />
+          {prodSettings[0]?.id && (
+            <CaptionStylePicker
+              productionSettingsId={prodSettings[0].id}
+              currentPreset={prodSettings[0].caption_style_preset || 'hormozi'}
+            />
+          )}
           {/* Re-attach buttons for detached panels */}
           {Object.entries(detachedPanels).filter(([, v]) => v).map(([key]) => (
             <button
