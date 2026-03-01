@@ -602,10 +602,53 @@ ${finalScript}
 
     for (let batchIdx = startBatch; batchIdx < endBatch && batchIdx < scriptChunks.length; batchIdx++) {
       const existingScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-      const sceneOffset = existingScenes.length;
 
       const currentChunk = scriptChunks[batchIdx];
       const scenesForBatch = currentChunk.scenes;
+
+      // ═══ FIX: Use EXPECTED offset, not actual count ═══
+      // This prevents retry-duplication: if batch 3 times out but
+      // succeeded, retrying batch 3 would use actual count (too high)
+      // and create duplicate scenes with the same text at new numbers.
+      let expectedBefore = 0;
+      for (let i = 0; i < batchIdx; i++) {
+        expectedBefore += scriptChunks[i].scenes;
+      }
+      const sceneOffset = expectedBefore;
+
+      // ═══ FIX: Skip if this batch was already processed ═══
+      const expectedStart = expectedBefore + 1;
+      const expectedEnd = expectedBefore + scenesForBatch;
+      const existingInRange = existingScenes.filter(s =>
+        s.scene_number >= expectedStart && s.scene_number <= expectedEnd
+      );
+
+      if (existingInRange.length >= Math.floor(scenesForBatch * 0.8)) {
+        console.log(`⏭️ Batch ${batchIdx} already has ${existingInRange.length}/${scenesForBatch} scenes (S${expectedStart}-S${expectedEnd}). Skipping.`);
+        // Add existing scenes to blueprint for continuity
+        for (const es of existingInRange.sort((a, b) => a.scene_number - b.scene_number)) {
+          if (!blueprint.scenes.find(bs => bs.scene_number === es.scene_number)) {
+            blueprint.scenes.push({
+              scene_number: es.scene_number,
+              phase: currentChunk.phase,
+              visual_concept: '',
+              shot_type: '',
+              mood: '',
+              color_palette: '',
+            });
+          }
+        }
+        grandTotalCreated += existingInRange.length;
+        continue;
+      }
+
+      // ═══ FIX: Delete any orphan scenes in this range before re-creating ═══
+      if (existingInRange.length > 0 && existingInRange.length < Math.floor(scenesForBatch * 0.8)) {
+        console.log(`🧹 Partial batch ${batchIdx}: clearing ${existingInRange.length} orphan scenes before regenerating`);
+        for (const orphan of existingInRange) {
+          await base44.asServiceRole.entities.Scenes.delete(orphan.id);
+        }
+      }
 
       const previousScenes = blueprint.scenes.slice(-3);
       const continuityContext = previousScenes.length > 0
