@@ -17,6 +17,9 @@ import ScriptPanel from '@/components/ScriptPanel';
 import CaptionStylePicker from '@/components/CaptionStylePicker';
 import AudioMixerPanel from '@/components/content/AudioMixerPanel';
 import ProcessingNotifier from '@/components/content/ProcessingNotifier';
+import ScriptPanel from './ScriptPanel';
+import CaptionStylePicker from './CaptionStylePicker';
+import DedupButton from '@/components/content/DedupButton';
 import {
   Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film,
   Palette, Sparkles, Monitor, Clapperboard, Wand2, CheckCircle2,
@@ -1512,6 +1515,12 @@ export default function ContentGeneration() {
                 onComplete={async () => { await refetchScenes(); }}
               />
 
+<DedupButton
+  projectId={projectId}
+  sceneCount={scenes.length}
+  onComplete={() => fetchScenes()}
+/>
+
               <Button onClick={handleGenerateImages} disabled={generatingImages} variant="outline">
                 {generatingImages ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <ImageIcon className="w-4 h-4 mr-1" />}
                 {generatingImages ? 'Generating...' : 'Generate All Images'}
@@ -1524,6 +1533,21 @@ export default function ContentGeneration() {
             </>
           ) : null}
         </div>
+
+{/* Script Panel */}
+<ScriptPanel
+  scenes={scenes}
+  projectId={projectId}
+  onCleanComplete={() => fetchScenes()}
+/>
+
+{/* Caption Style Picker */}
+{productionSettings?.id && (
+  <CaptionStylePicker
+    productionSettingsId={productionSettings.id}
+    currentPreset={productionSettings.caption_style_preset || 'hormozi'}
+  />
+)}
 
         {/* Scene Grid */}
         {scenes.length > 0 && (
