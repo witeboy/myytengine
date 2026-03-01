@@ -472,6 +472,7 @@ export default function ContentGeneration() {
   const [exportProgress, setExportProgress] = useState({ current: 0, total: 0, label: '' });
   const [estimatedWordCount, setEstimatedWordCount] = useState(0);
   const [totalExpectedScenes, setTotalExpectedScenes] = useState(0);
+  const [prodSettingsData, setProdSettingsData] = useState(null);
 
   // ── Per-scene generation tracking ─────────────────────────────
   const [imageProgress, setImageProgress] = useState({ current: 0, total: 0, sceneName: '' });
@@ -503,6 +504,16 @@ export default function ContentGeneration() {
   useEffect(() => {
     return () => { pollAbortRef.current = true; };
   }, []);
+  // Load production settings for caption style picker
+  useEffect(() => {
+    if (!projectId) return;
+    (async () => {
+      try {
+        const ps = await base44.entities.ProductionSettings?.filter({ project_id: projectId });
+        if (ps?.length > 0) setProdSettingsData(ps[0]);
+      } catch (_) {}
+    })();
+  }, [projectId]);
 
   // ══════════════════════════════════════════════════════════════════
   // HELPERS
@@ -1516,7 +1527,7 @@ export default function ContentGeneration() {
 <DedupButton
   projectId={projectId}
   sceneCount={scenes.length}
-  onComplete={() => fetchScenes()}
+  onComplete={() => refetchScenes()}
 />
 
               <Button onClick={handleGenerateImages} disabled={generatingImages} variant="outline">
@@ -1536,14 +1547,14 @@ export default function ContentGeneration() {
 <ScriptPanel
   scenes={scenes}
   projectId={projectId}
-  onCleanComplete={() => fetchScenes()}
+  onCleanComplete={() => refetchScenes()}
 />
 
 {/* Caption Style Picker */}
-{productionSettings?.id && (
+{prodSettingsData?.id && (
   <CaptionStylePicker
-    productionSettingsId={productionSettings.id}
-    currentPreset={productionSettings.caption_style_preset || 'hormozi'}
+    productionSettingsId={prodSettingsData.id}
+    currentPreset={prodSettingsData.caption_style_preset || 'hormozi'}
   />
 )}
 
