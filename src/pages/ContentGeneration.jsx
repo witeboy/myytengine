@@ -17,8 +17,6 @@ import ScriptPanel from '@/components/ScriptPanel';
 import CaptionStylePicker from '@/components/CaptionStylePicker';
 import AudioMixerPanel from '@/components/content/AudioMixerPanel';
 import ProcessingNotifier from '@/components/content/ProcessingNotifier';
-import ScriptPanel from './ScriptPanel';
-import CaptionStylePicker from './CaptionStylePicker';
 import DedupButton from '@/components/content/DedupButton';
 import {
   Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film,
