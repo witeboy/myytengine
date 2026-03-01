@@ -23,6 +23,8 @@ import SfxGenerateDialog from '@/components/timeline/SfxGenerateDialog';
 import InlineWaveform from '@/components/timeline/InlineWaveform';
 import AutoSyncButton from '@/components/timeline/AutoSyncButton';
 import useTimelineHistory from '@/components/timeline/useTimelineHistory';
+import ScriptPanel from '@/components/ScriptPanel';
+import CaptionStylePicker from '@/components/CaptionStylePicker';
 import {
   Loader2, Film, Play, Pause, SkipBack, SkipForward,
   Volume2, VolumeX, Mic, Music, Monitor,
@@ -484,7 +486,7 @@ export default function TimelineEditor() {
 
         {/* CENTER: Properties Panel (collapsible/detachable) */}
         {!detachedPanels.properties && (
-          <div className="flex-shrink-0 overflow-hidden border-r border-gray-700/30 relative" style={{ width: panelSizes.properties }}>
+          <div className="flex-shrink-0 overflow-y-auto border-r border-gray-700/30 relative" style={{ width: panelSizes.properties }}>
             <div className="absolute top-0 right-0 z-10 flex gap-px p-0.5">
               <button
                 onClick={() => toggleDetachPanel('properties')}
@@ -500,6 +502,35 @@ export default function TimelineEditor() {
               onUpdateDuration={(dur) => handleUpdateDuration(selectedScene, dur)}
               onRefetch={refetchScenes}
             />
+
+            {/* Script Panel */}
+            <div className="border-t border-gray-700/30 mt-1">
+              <ScriptPanel
+                scenes={scenes}
+                projectId={projectId}
+                currentSceneNumber={currentScene?.scene_number}
+                onSceneClick={(sceneNum) => {
+                  const s = scenesWithTiming.find(sc => sc.scene_number === sceneNum);
+                  if (s) {
+                    setSelectedScene(s.id);
+                    setCurrentTime(s.start_time);
+                    if (voiceoverRef.current) voiceoverRef.current.currentTime = s.start_time;
+                  }
+                }}
+                onCleanComplete={() => refetchScenes()}
+                compact={true}
+              />
+            </div>
+
+            {/* Caption Style Picker */}
+            {prodSettings[0]?.id && (
+              <div className="border-t border-gray-700/30 mt-1 p-2">
+                <CaptionStylePicker
+                  productionSettingsId={prodSettings[0].id}
+                  currentPreset={prodSettings[0].caption_style_preset || 'hormozi'}
+                />
+              </div>
+            )}
           </div>
         )}
 
@@ -564,8 +595,33 @@ export default function TimelineEditor() {
             <span className="text-[10px] font-medium text-gray-400 flex items-center gap-1"><GripVertical className="w-3 h-3" /> Properties</span>
             <button onClick={() => toggleDetachPanel('properties')} className="text-gray-500 hover:text-white text-[10px]">Dock</button>
           </div>
-          <div className="flex-1 overflow-hidden">
+          <div className="flex-1 overflow-y-auto">
             <PropertiesPanel scene={scenesWithTiming.find(s => s.id === selectedScene)} onClose={() => setSelectedScene(null)} onUpdateDuration={(dur) => handleUpdateDuration(selectedScene, dur)} onRefetch={refetchScenes} />
+            <div className="border-t border-gray-700/30 mt-1">
+              <ScriptPanel
+                scenes={scenes}
+                projectId={projectId}
+                currentSceneNumber={currentScene?.scene_number}
+                onSceneClick={(sceneNum) => {
+                  const s = scenesWithTiming.find(sc => sc.scene_number === sceneNum);
+                  if (s) {
+                    setSelectedScene(s.id);
+                    setCurrentTime(s.start_time);
+                    if (voiceoverRef.current) voiceoverRef.current.currentTime = s.start_time;
+                  }
+                }}
+                onCleanComplete={() => refetchScenes()}
+                compact={true}
+              />
+            </div>
+            {prodSettings[0]?.id && (
+              <div className="border-t border-gray-700/30 mt-1 p-2">
+                <CaptionStylePicker
+                  productionSettingsId={prodSettings[0].id}
+                  currentPreset={prodSettings[0].caption_style_preset || 'hormozi'}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}
