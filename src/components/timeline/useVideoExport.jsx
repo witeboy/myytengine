@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
+import { base44 } from '@/api/base44Client';
 
 const QUALITY_PRESETS = {
   '1080p': { width: 1920, height: 1080, bitrate: 5_000_000 },
@@ -64,25 +65,87 @@ export default function useVideoExport() {
     return { supported: true, warning: true, reason: `${quality} H.264 encoding may not be fully supported. Try a lower quality if export fails.`, codec: profiles[0] };
   }, []);
 
-  const loadImage = (url) => new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('Failed to load image'));
-    img.src = url;
-  });
+  // ═══ CORS-safe image loading ═══
+  // Images from tempfile.aiquickdraw.com etc. block CORS, so <img crossOrigin>
+  // fails and canvas frames become black. Fix: fetch as blob → createImageBitmap.
+  // Fallback: backend proxy for CORS-blocked domains.
+  const loadImage = async (url) => {
+    // Method 1: Direct fetch as blob (works if server sends CORS headers)
+    try {
+      const resp = await fetch(url, { mode: 'cors' });
+      if (resp.ok) {
+        const blob = await resp.blob();
+        return await createImageBitmap(blob);
+      }
+    } catch {}
 
-  const loadVideoElement = (url) => new Promise((resolve, reject) => {
-    const video = document.createElement('video');
-    video.crossOrigin = 'anonymous';
-    video.muted = true;
-    video.playsInline = true;
-    video.preload = 'auto';
-    const timer = setTimeout(() => reject(new Error('Video load timeout')), 30000);
-    video.onloadeddata = () => { clearTimeout(timer); resolve(video); };
-    video.onerror = () => { clearTimeout(timer); reject(new Error('Failed to load video')); };
-    video.src = url;
-  });
+    // Method 2: Backend proxy (for CORS-blocked domains)
+    try {
+      console.log(`📥 Export proxy: ${url.substring(0, 60)}`);
+      const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url });
+      const data = proxyRes.data || proxyRes;
+      if (data.success && data.data) {
+        const binary = atob(data.data);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], { type: data.content_type || 'image/png' });
+        return await createImageBitmap(blob);
+      }
+    } catch (e) {
+      console.warn(`Proxy image failed: ${url.substring(0, 60)} — ${e.message}`);
+    }
+
+    // Method 3: Last resort — try without crossOrigin (tainted canvas, VideoFrame may throw)
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error('All image load methods failed'));
+      img.src = url;
+    });
+  };
+
+  // ═══ CORS-safe video loading ═══
+  // Fetch video as blob → create blob URL → load video element from same-origin blob.
+  const loadVideoElement = async (url) => {
+    let blobUrl = null;
+
+    // Method 1: Direct fetch as blob
+    try {
+      const resp = await fetch(url, { mode: 'cors' });
+      if (resp.ok) {
+        const blob = await resp.blob();
+        blobUrl = URL.createObjectURL(blob);
+      }
+    } catch {}
+
+    // Method 2: Load with crossOrigin (some CDNs support it)
+    if (!blobUrl) {
+      return new Promise((resolve, reject) => {
+        const video = document.createElement('video');
+        video.crossOrigin = 'anonymous';
+        video.muted = true;
+        video.playsInline = true;
+        video.preload = 'auto';
+        const timer = setTimeout(() => reject(new Error('Video load timeout')), 30000);
+        video.onloadeddata = () => { clearTimeout(timer); resolve(video); };
+        video.onerror = () => { clearTimeout(timer); reject(new Error('Failed to load video')); };
+        video.src = url;
+      });
+    }
+
+    // Load from blob URL (same-origin, always CORS-safe)
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      video.muted = true;
+      video.playsInline = true;
+      video.preload = 'auto';
+      const timer = setTimeout(() => { URL.revokeObjectURL(blobUrl); reject(new Error('timeout')); }, 30000);
+      video.onloadeddata = () => { clearTimeout(timer); video._blobUrl = blobUrl; resolve(video); };
+      video.onerror = () => { clearTimeout(timer); URL.revokeObjectURL(blobUrl); reject(new Error('load failed')); };
+      video.src = blobUrl;
+    });
+  };
 
   const seekVideo = (video, time) => new Promise((resolve) => {
     const target = Math.max(0, Math.min(time, (video.duration || 0) - 0.01));
@@ -98,11 +161,22 @@ export default function useVideoExport() {
     ctx.fillRect(0, 0, w, h);
     if (!media) return;
     let sw, sh;
-    if (mediaType === 'video') { sw = media.videoWidth || 1; sh = media.videoHeight || 1; }
-    else { sw = media.naturalWidth || media.width || 1; sh = media.naturalHeight || media.height || 1; }
+    if (mediaType === 'video') {
+      sw = media.videoWidth || media.width || 1;
+      sh = media.videoHeight || media.height || 1;
+    } else {
+      // Works for Image, ImageBitmap, and HTMLImageElement
+      sw = media.naturalWidth || media.width || 1;
+      sh = media.naturalHeight || media.height || 1;
+    }
     const scale = Math.min(w / sw, h / sh);
     const dw = sw * scale, dh = sh * scale;
-    ctx.drawImage(media, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    try {
+      ctx.drawImage(media, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    } catch (e) {
+      console.warn('drawFrame failed (CORS tainted?):', e.message);
+      // Black frame fallback
+    }
   };
 
   const decodeAudio = async (url) => {
