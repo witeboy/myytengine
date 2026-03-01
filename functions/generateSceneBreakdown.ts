@@ -655,9 +655,27 @@ ${finalScript}
         ? `**LAST ${previousScenes.length} SCENES (for visual continuity):**\n${previousScenes.map(s => `  Scene ${s.scene_number}: [${s.shot_type}] ${s.visual_concept} | Mood: ${s.mood} | Palette: ${s.color_palette}`).join('\n')}`
         : '**This is the OPENING — establish the visual world with a strong first impression.**';
 
+      // ═══ FIX: Overlap prevention — show LLM what previous batch already covered ═══
+      let overlapGuard = '';
+      if (batchIdx > 0) {
+        const prevChunk = scriptChunks[batchIdx - 1];
+        const prevSentences = (prevChunk.text || '').match(/[^.!?]+[.!?]+[\s]*/g) || [];
+        const lastFew = prevSentences.slice(-5).join('').trim();
+        if (lastFew) {
+          overlapGuard = `
+**⚠️ CRITICAL — ALREADY COVERED (DO NOT REPEAT):**
+The following text was already covered in the previous batch. Do NOT create scenes for ANY of this content. Your script segment starts AFTER this:
+"${lastFew}"
+
+If any sentence in your script segment below overlaps with the above, SKIP IT and only create scenes for NEW content.
+`;
+        }
+      }
+
       const breakdownPrompt = `
 You are a world-class film director blocking out scenes for a visual narrative.
 ${styleDirective}
+${overlapGuard}
 
 **YOUR STORY ANALYSIS (from your earlier read-through):**
 - Central Theme: ${storyAnalysis.central_theme}
