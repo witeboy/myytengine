@@ -140,7 +140,7 @@ export default function FlowRemake() {
         console.warn(`Transition ${i + 1}→${i + 2} failed:`, err.message);
       }
 
-      if (i < transitions - 1) await new Promise(r => setTimeout(r, 2000));
+      if (i < transitions - 1) await new Promise(r => setTimeout(r, 3000));
     }
 
     setVideoProgress({ current: transitions, total: transitions, label: 'All submitted!' });
