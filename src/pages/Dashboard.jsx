@@ -32,7 +32,14 @@ function getStage(status) {
   return 1;
 }
 
+function isProgressionProject(project) {
+  return project.project_mode === 'progression' || project.name?.startsWith('_flow_');
+}
+
 function getRoute(project) {
+  // Progression/Flow projects
+  if (isProgressionProject(project)) return `FlowRemake?project_id=${project.id}`;
+
   // UGC projects navigate with project_id so the pipeline can resume
   if (isUgcProject(project)) return `UGCPipeline?project_id=${project.id}`;
   
@@ -93,8 +100,11 @@ export default function Dashboard() {
             <Button variant="outline" onClick={() => navigate(createPageUrl('ResearchTerminal'))}>
               <Search className="w-4 h-4 mr-2" /> Niche Research
             </Button>
-            <Button variant="outline" onClick={() => navigate(createPageUrl('ChannelAuditor'))}>
+<Button variant="outline" onClick={() => navigate(createPageUrl('ChannelAuditor'))}>
               <Shield className="w-4 h-4 mr-2" /> Channel Auditor
+            </Button>
+            <Button variant="outline" onClick={() => navigate(createPageUrl('FlowRemake'))} className="border-amber-300 text-amber-700 hover:bg-amber-50">
+              <Film className="w-4 h-4 mr-2" /> Flow / Re-make
             </Button>
             <Button onClick={() => navigate(createPageUrl('NewProject'))} className="bg-blue-600 hover:bg-blue-700">
               <Plus className="w-5 h-5 mr-2" /> New Project
