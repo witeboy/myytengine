@@ -51,6 +51,7 @@ import ChannelAuditor from './pages/ChannelAuditor';
 import ContentGeneration from './pages/ContentGeneration';
 import ContentRepurpose from './pages/ContentRepurpose';
 import Dashboard from './pages/Dashboard';
+import FlowRemake from './pages/FlowRemake';
 import Home from './pages/Home';
 import MediaLibrary from './pages/MediaLibrary';
 import NewProject from './pages/NewProject';
@@ -72,6 +73,7 @@ export const PAGES = {
     "ContentGeneration": ContentGeneration,
     "ContentRepurpose": ContentRepurpose,
     "Dashboard": Dashboard,
+    "FlowRemake": FlowRemake,
     "Home": Home,
     "MediaLibrary": MediaLibrary,
     "NewProject": NewProject,
