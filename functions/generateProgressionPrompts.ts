@@ -132,7 +132,9 @@ RULE 5 — TITLE INCLUSION: The project title "${title}" must appear in every sc
 
 RULE 6 — SCENE SEVEN IS DIFFERENT: Scene seven breaks all locks. New angle, new composition, includes people, shows the subject being used/enjoyed. Emotional payoff.
 
-RULE 7 — NO TECHNICAL PHOTOGRAPHY TERMS: Do not use "bokeh", "depth of field", "aperture", "ISO", "shutter speed", "focal length", "lens", "f-stop" in image prompts. These get rendered as text. Use simple visual descriptions instead.`;
+RULE 7 — NO TECHNICAL PHOTOGRAPHY TERMS: Do not use "bokeh", "depth of field", "aperture", "ISO", "shutter speed", "focal length", "lens", "f-stop" in image prompts. These get rendered as text. Use simple visual descriptions instead.
+
+CRITICAL — SCENE COUNT: You MUST generate EXACTLY 7 scenes in the "scenes" array. scene_number 1 through 7. Not 1 scene. Not 5 scenes. EXACTLY 7. Each scene has its own unique image_prompt and video_transition_prompt. The scenes array must have 7 objects. If you return fewer than 7, the system will reject your response.`;
 
     console.log(`🎬 Flow: ${title} | ${category} | ${orientation}`);
     console.log(`📋 Subject: ${subject_description || 'none'}`);
