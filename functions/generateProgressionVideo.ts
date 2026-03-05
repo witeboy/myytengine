@@ -93,9 +93,28 @@ Deno.serve(async (req) => {
     }
 
     // Build motion prompt from the start scene's animation_prompt
-    const motionPrompt = startScene.animation_prompt ||
-      'High-speed cinematic time-lapse, construction progression, workers seen from behind with no visible faces, equipment and machinery in motion, dust particles catching sunlight, subtle steady camera push-in';
-
+    // Build camera-locked video prompt
+    let motionPrompt = startScene.animation_prompt || 'High-speed cinematic time-lapse showing construction progression';
+    
+    // ═══ ENFORCE CAMERA LOCK IN EVERY VIDEO PROMPT ═══
+    const cameraLockVideo = 'Completely static locked tripod camera, zero camera movement, no pan, no tilt, no zoom, no push-in, no dolly, camera stays perfectly frozen in place, only the subject and workers move within the fixed frame';
+    
+    // Strip any camera movement instructions the prompt may contain
+    motionPrompt = motionPrompt
+      .replace(/subtle\s*(camera\s*)?(push[- ]?in|pan|tilt|dolly|zoom|track|move)/gi, '')
+      .replace(/slow\s*(camera\s*)?(push[- ]?in|pan|tilt|dolly|zoom|track|move)/gi, '')
+      .replace(/camera\s*(push|pan|tilt|dolly|zoom|track|sweep|glide|rise|lower|move)\w*/gi, '')
+      .replace(/,\s*,/g, ',')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+    
+    // Prepend camera lock + append it again at end for emphasis
+    motionPrompt = `${cameraLockVideo}. ${motionPrompt}. ${cameraLockVideo}`;
+    
+    // Cap at 500 chars
+    if (motionPrompt.length > 500) {
+      motionPrompt = motionPrompt.substring(0, 497).trim() + '...';
+    }
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`🎬 Progression Video: S${startScene.scene_number} → S${endScene.scene_number}`);
     console.log(`🖼️ Start: ${startScene.image_url.substring(0, 60)}...`);
