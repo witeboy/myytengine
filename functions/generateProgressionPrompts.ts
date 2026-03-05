@@ -129,8 +129,6 @@ const CATEGORY_LANGUAGE = {
     const catLang = CATEGORY_LANGUAGE[category] || CATEGORY_LANGUAGE.construction;
 
     const isPortrait = orientation === 'portrait';
-    const lensSpec = isPortrait ? 'vertical composition, 35mm lens, portrait, camera height 10m' : '3/4 aerial perspective, 24mm lens, camera height 12m';
-
     const prompt = `You are a ${catLang.engineer_role} AND a professional photographer creating a progression photo series.
 
 PROJECT: "${title}"
