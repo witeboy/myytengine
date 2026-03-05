@@ -205,9 +205,36 @@ RULE 10 — HOLD TIMING: Scene one = one and a half seconds. Scenes two through 
       return Response.json({ error: `LLM returned no scenes array. Got keys: ${Object.keys(result).join(', ')}` }, { status: 500 });
     }
 
-    if (result.scenes.length < 7) {
-      console.error(`❌ Only ${result.scenes.length} scenes returned`);
-      return Response.json({ error: `Expected 7 scenes, got ${result.scenes.length}` }, { status: 500 });
+   if (result.scenes.length < 7) {
+      console.warn(`⚠ Only ${result.scenes.length} scenes — retrying with shorter prompt...`);
+      
+      // Retry with a focused completion prompt
+      const retryPrompt = `You previously generated ${result.scenes.length} scene(s) for a ${category} progression project "${title}". 
+      
+You MUST generate ALL 7 scenes. Here is what you have so far:
+${JSON.stringify(result.scenes, null, 0)}
+
+The camera_suffix is: "${result.camera_suffix || 'Same fixed perspective, same background, same lighting, identical camera position, no humans, no machinery, ' + (visual_style || 'photorealistic') + ', sharp focus, no text, no watermarks'}"
+
+Now generate the COMPLETE scenes array with ALL 7 scenes. Return JSON: {"scenes":[...all 7...]}
+
+Stages: ${stages.map((s, i) => `S${i+1}: ${s}`).join(', ')}
+
+Keep each image_prompt under one hundred words plus camera_suffix. Keep video_transition_prompt under fifty words.`;
+
+      try {
+        const retry = await callLLM(retryPrompt, 0.5);
+        if (retry.scenes && retry.scenes.length >= 7) {
+          result.scenes = retry.scenes;
+          console.log(`✓ Retry succeeded: ${retry.scenes.length} scenes`);
+        } else {
+          console.error(`❌ Retry also failed: ${retry.scenes?.length || 0} scenes`);
+          return Response.json({ error: `Could not generate 7 scenes after retry` }, { status: 500 });
+        }
+      } catch (retryErr) {
+        console.error(`❌ Retry failed: ${retryErr.message}`);
+        return Response.json({ error: `Expected 7 scenes, got ${result.scenes.length}` }, { status: 500 });
+      }
     }
 
     // Delete old scenes
