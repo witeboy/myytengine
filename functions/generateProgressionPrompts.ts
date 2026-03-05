@@ -81,61 +81,113 @@ Deno.serve(async (req) => {
     const videoCues = arc?.video_cues || [];
     if (!stages || stages.length < 7) return Response.json({ error: 'Need 7 stages' }, { status: 400 });
 
+const CATEGORY_LANGUAGE = {
+      construction: {
+        engineer_role: 'structural engineer and site inspector',
+        technical_terms: 'RCC footings, plinth beams, column starters, brick masonry infill, roof slab, shuttering, rebar cages, formwork, PCC layer, plastering, UPVC window frames, MS railing, waterproofing membrane, vitrified tile, external plaster coat, parapet wall, lintel beam, chajja',
+        stage_one_desc: 'empty cleared plot of land with boundary markers, excavated soil, pegs and string lines marking the layout, no structure exists yet',
+        position_lock: 'The building occupies the SAME position centered in the frame across all scenes. The surrounding neighborhood, boundary walls, trees, sky stay identical.',
+      },
+      renovation: {
+        engineer_role: 'interior designer and renovation contractor',
+        technical_terms: 'load-bearing wall, stud framing, electrical conduit, PEX plumbing, drywall sheets, joint compound, crown molding, baseboard trim, recessed lighting, subway tile backsplash, quartz countertop, floating vanity, LVP flooring, cabinet carcass, soft-close hinges',
+        stage_one_desc: 'neglected room interior with peeling wallpaper, stained carpet, yellowed ceiling, dated wood paneling, old fluorescent fixtures, cracked tile',
+        position_lock: 'The room is viewed from the SAME corner angle. The window position, door frame, ceiling height, and room proportions stay identical. Only the surfaces, fixtures, and furnishings change.',
+      },
+      restoration: {
+        engineer_role: 'master restorer and conservation specialist',
+        technical_terms: 'surface oxidation, patina removal, rust pitting, bead blasting, body filler, primer coat, wet sanding, clear coat, chrome replating, gasket replacement, honing, polishing compound, lacquer finish, original factory spec',
+        stage_one_desc: 'heavily damaged original item showing deep rust, dents, cracked paint, missing parts, general neglect and decay, covered in grime and dirt',
+        position_lock: 'The subject sits on the SAME surface in the SAME position and angle. The background wall, floor, lighting direction stay identical. Only the condition of the subject changes.',
+      },
+      space_remodel: {
+        engineer_role: 'commercial architect and fit-out contractor',
+        technical_terms: 'concrete slab floor, exposed ductwork, cable tray, glass partition wall, raised access floor, suspended ceiling grid, LED panel lights, data cabling, fire sprinkler heads, reception millwork, acoustic panels, breakout area, kitchenette countertop',
+        stage_one_desc: 'vast empty warehouse interior with bare concrete floor, exposed steel roof trusses, industrial windows, dust and debris, no partitions',
+        position_lock: 'The interior is viewed from the SAME entry point angle. Ceiling height, far wall, window positions stay identical. Only the interior build-out changes.',
+      },
+      vehicle: {
+        engineer_role: 'master automotive restorer and body shop technician',
+        technical_terms: 'quarter panel, rocker panel, A-pillar, B-pillar, door skin, fender flare, chassis rail, subframe, engine bay, firewall, wheel arch, drip rail, rain gutter, pinch weld, spot weld, body filler, guide coat, orange peel, clear coat, color sand, cut and buff, chrome bumper, trim clip',
+        stage_one_desc: 'abandoned rusted vehicle sitting on flat tires with broken glass, heavily oxidized paint, visible dents and body damage, missing trim pieces, overall decay',
+        position_lock: 'The vehicle sits in the SAME position on the SAME surface at the SAME three-quarter front angle. Background wall, ground surface, lighting direction stay identical. Only the vehicle condition changes.',
+      },
+      street_urban: {
+        engineer_role: 'civil engineer and urban planner',
+        technical_terms: 'bituminous surface, storm drain inlet, curb and gutter, manhole cover, utility trench, compacted sub-base, asphalt overlay, road marking paint, pedestrian bollard, LED street light, tree grate, permeable paver, cycle lane separator, tactile paving, median strip',
+        stage_one_desc: 'deteriorated street with cracked and potholed asphalt, faded lane markings, overgrown weeds in gutter cracks, leaning utility pole, general urban decay',
+        position_lock: 'The street is viewed from the SAME elevated position looking down the road. Building facades on both sides, distant vanishing point, sky proportion all stay identical. Only the road surface and street furniture change.',
+      },
+      nature: {
+        engineer_role: 'landscape architect and horticulturist',
+        technical_terms: 'topsoil layer, raised bed cedar frame, drip irrigation line, landscape fabric, bark mulch, root ball, transplant, trellis support, compost amendment, pollinator border, stepping stone path, edging stone, rain barrel, companion planting, succession planting',
+        stage_one_desc: 'bare patch of earth with scattered weeds, rocks, and dry soil, no planted beds, no paths, no structure, just raw unworked ground',
+        position_lock: 'The garden plot is viewed from the SAME slightly elevated angle. Boundary fence, background trees or structures, sky stay identical. Only the garden beds and plantings change.',
+      },
+    };
+
+    const catLang = CATEGORY_LANGUAGE[category] || CATEGORY_LANGUAGE.construction;
+
     const isPortrait = orientation === 'portrait';
     const lensSpec = isPortrait ? 'vertical composition, 35mm lens, portrait, camera height 10m' : '3/4 aerial perspective, 24mm lens, camera height 12m';
 
-    const prompt = `Create a 7-scene VISUAL PROGRESSION — cinematic time-lapse transformation.
+    const prompt = `You are a ${catLang.engineer_role} AND a professional photographer creating a progression photo series.
 
-PROJECT TITLE: "${title}"
+PROJECT: "${title}"
 SUBJECT: ${subject_description || title}
 Category: ${category}
-Visual Style: ${visual_style || 'photorealistic'}
-Orientation: ${isPortrait ? '9:16 vertical' : '16:9 horizontal'}
+Orientation: ${isPortrait ? 'vertical portrait' : 'horizontal landscape'}
 
-STAGES:
-${stages.map((s, i) => `  S${i + 1}: ${s}`).join('\n')}
+THE 7 STAGES (in exact order):
+${stages.map((s, i) => `  Stage ${i + 1}: ${s}`).join('\n')}
 
-VIDEO CUES:
-${videoCues.map((c, i) => `  T${i + 1}-${i + 2}: ${c}`).join('\n')}
+VIDEO TRANSITION CUES:
+${videoCues.map((c, i) => `  Between ${i + 1} and ${i + 2}: ${c}`).join('\n')}
 
-Generate JSON:
+TECHNICAL VOCABULARY FOR THIS CATEGORY (use these terms in prompts):
+${catLang.technical_terms}
+
+Generate this EXACT JSON structure:
+
 {
-  "subject_identity": "A HYPER-SPECIFIC description of the EXACT subject being transformed. If it is a vehicle: exact make, model, year, body style, color when new. If building: exact style, dimensions, material. If object: exact type, brand, model. This description MUST be specific enough that any artist would draw the SAME object. Example: 'a 1987 Toyota Land Cruiser FJ60, boxy SUV body, rounded headlights, chrome front bumper, originally silver metallic paint'. 30-50 words.",
+  "subject_identity": "Describe the EXACT final ${category === 'vehicle' ? 'vehicle' : category === 'nature' ? 'garden' : category === 'street_urban' ? 'street' : category === 'renovation' || category === 'space_remodel' ? 'space' : 'structure'} being transformed. Be hyper-specific about its final completed form — style, materials, key features, distinguishing details. Write like a ${catLang.engineer_role} would describe the finished project. Forty to sixty words.",
 
-  "composition_lock": "A description of WHERE the subject sits in the frame and what surrounds it. NO numbers. NO measurements. NO technical camera specs. NO focal lengths. NO f-stops. NO distances in meters. Describe using ONLY visual words. Example: 'The vehicle is centered in the frame, facing slightly to the right at a three-quarter angle. It sits on flat dusty ground that fills the lower third of the image. Behind the vehicle, a tall concrete perimeter wall stretches across the full width. Beyond the wall, three palm trees and a water tower are visible against a clear blue sky with a few white clouds. Golden late-afternoon sunlight comes from the left side, casting long shadows to the right.' This block is COPIED VERBATIM into scenes one through six. 80-100 words. CRITICAL: Do NOT use ANY numbers, measurements, millimeters, meters, degrees, f-stops, or resolution values — Grok will render them as visible text in the image.",
-
-  "visual_style_suffix": "${visual_style || 'photorealistic'}, sharp focus, absolutely no text, no numbers, no words, no letters, no writing, no watermarks, no UI elements, no people, no vehicles other than the subject, no machinery",
+  "camera_suffix": "Same fixed three-quarter perspective, same background, same lighting direction, identical camera position throughout, no humans, no machinery, no equipment, ${visual_style || 'photorealistic'}, sharp focus, no text, no numbers, no words, no letters, no writing, no watermarks",
 
   "scenes": [
     {
       "scene_number": 1,
-      "title": "Stage title that includes the project title ${title}",
-      "image_prompt": "For scenes one through six: Start with the EXACT composition_lock text WORD FOR WORD. Then write: the subject_identity text. Then describe ONLY what has changed about the subject at THIS stage — rust patterns, missing parts, new paint, structural changes. Describe the subject in its CURRENT CONDITION at this stage. Keep the subject in the EXACT SAME POSITION, SAME SIZE, SAME ANGLE in every scene. The background must be IDENTICAL. End with visual_style_suffix. TOTAL prompt should be 120-180 words. For scene seven: DIFFERENT composition — close-up or action shot showing the completed subject being used and enjoyed. Include people.",
-      "video_transition_prompt": "For scenes one through six: Describe a cinematic time-lapse showing the transformation from THIS stage to the NEXT. Workers visible but only from behind, never showing faces. Equipment and tools in use. Dust and debris. Fast-forward motion. The camera stays perfectly still — only the subject changes. 40-60 words. Scene seven: null",
+      "title": "${title} - [stage name]",
+      "image_prompt": "STRUCTURE: Write a technical description of what is PHYSICALLY VISIBLE at this stage using category-specific terminology (${catLang.technical_terms.split(',').slice(0, 6).join(',')}). Describe specific materials, components, conditions, and structural elements. Be precise like a ${catLang.engineer_role} writing a site inspection report. CAMERA: End with the camera_suffix text VERBATIM — copied exactly, not rephrased. TOTAL: one hundred twenty to one hundred eighty words.",
+      "video_transition_prompt": "Cinematic high-speed time-lapse showing the transformation from THIS stage to the NEXT. Workers visible only from behind, no faces. Describe specific activities for this category. Camera stays perfectly still, only the subject changes. Forty to sixty words.",
       "hold_seconds": 1.5,
       "is_camera_locked": true
     }
   ]
 }
 
-ABSOLUTE RULES — VIOLATION OF ANY RULE MEANS FAILURE:
+ABSOLUTE RULES:
 
-RULE 1 — ZERO NUMBERS IN IMAGE PROMPTS: The image_prompt must contain ZERO digits. No "10m", no "35mm", no "f/5.6", no "4K", no "720p", no "1080", no "24mm". Use ONLY descriptive words: "medium distance", "slightly above eye level", "sharp focus". Grok Imagine RENDERS numbers as visible text in the image. ANY number in the prompt will appear as ugly text overlaid on the image.
+RULE 1 — SCENE ONE IS THE STARTING STATE: Scene one shows: ${catLang.stage_one_desc}. Nothing has been done yet. This is the raw starting condition before any work begins.
 
-RULE 2 — SAME SUBJECT IDENTITY: The subject_identity description must appear in EVERY image prompt for scenes one through six. It is the SAME object transforming. Not a different car. Not a different building. The EXACT SAME one described with the EXACT SAME identity words plus its current condition at that stage.
+RULE 2 — REALISTIC STEP-BY-STEP PROGRESSION: Each scene must show the NEXT logical step. No skipping stages. Each scene adds specific new elements visible from the previous scene. A viewer must see CLEAR physical change between each consecutive pair.
 
-RULE 3 — COMPOSITION LOCK = VERBATIM: The composition_lock text is COPIED CHARACTER FOR CHARACTER into scenes one through six. Not paraphrased. Not reworded. COPIED. This ensures the subject stays in the same position, same size, same angle, same background in every frame.
+RULE 3 — POSITION LOCKED: ${catLang.position_lock} The subject does NOT move, rotate, or shift between scenes one through six.
 
-RULE 4 — ONLY THE SUBJECT CHANGES: Between scenes one through six, the ONLY thing that changes is the CONDITION of the subject. The background, ground, sky, lighting, shadows, surrounding elements — ALL stay identical. Described by the composition_lock block.
+RULE 4 — CAMERA SUFFIX VERBATIM: Every image_prompt for scenes one through six MUST end with the EXACT camera_suffix text. Copied character for character. Not rephrased.
 
-RULE 5 — TITLE INCLUSION: The project title "${title}" must appear in every scene title.
+RULE 5 — TECHNICAL LANGUAGE: Write prompts like a ${catLang.engineer_role} describing an inspection photo. Use specific technical terms from this vocabulary: ${catLang.technical_terms}. Do NOT write poetic or atmospheric descriptions. Be precise and structural.
 
-RULE 6 — SCENE SEVEN IS DIFFERENT: Scene seven breaks all locks. New angle, new composition, includes people, shows the subject being used/enjoyed. Emotional payoff.
+RULE 6 — NO DIGIT NUMBERS IN IMAGE PROMPTS: Spell out all numbers as words. Write "two-story" not "2-story". Grok renders digits as visible text in the image.
 
-RULE 7 — NO TECHNICAL PHOTOGRAPHY TERMS: Do not use "bokeh", "depth of field", "aperture", "ISO", "shutter speed", "focal length", "lens", "f-stop" in image prompts. These get rendered as text. Use simple visual descriptions instead.
+RULE 7 — EXACTLY SEVEN SCENES in the scenes array.
 
-CRITICAL — SCENE COUNT: You MUST generate EXACTLY 7 scenes in the "scenes" array. scene_number 1 through 7. Not 1 scene. Not 5 scenes. EXACTLY 7. Each scene has its own unique image_prompt and video_transition_prompt. The scenes array must have 7 objects. If you return fewer than 7, the system will reject your response.`;
+RULE 8 — TITLE: Every scene title must start with "${title} -".
 
+RULE 9 — SCENE SEVEN UNLOCKED: Scene seven uses a DIFFERENT camera angle — closer, at ground level, showing people actively using and enjoying the completed result. Warm emotional payoff. This is the only scene where people appear in the image_prompt.
+
+RULE 10 — HOLD TIMING: Scene one = one and a half seconds. Scenes two through five = point eight seconds. Scene six = one and a half seconds. Scene seven = two seconds.`;
+    
     console.log(`🎬 Flow: ${title} | ${category} | ${orientation}`);
     console.log(`📋 Subject: ${subject_description || 'none'}`);
     console.log(`🎨 Style: ${visual_style}`);
