@@ -65,7 +65,15 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, title, category, subject_description, visual_style, orientation, custom_stages } = await req.json();
+    const body = await req.json();
+    const project_id = body.project_id;
+    const title = (body.title || '').replace(/["""''`\\\n\r]/g, "'").substring(0, 200);
+    const category = body.category;
+    const subject_description = (body.subject_description || '').replace(/["""''`\\\n\r]/g, "'").substring(0, 500);
+    const visual_style = body.visual_style || 'photorealistic';
+    const orientation = body.orientation || 'portrait';
+    const custom_stages = body.custom_stages;
+
     if (!project_id || !title || !category) return Response.json({ error: 'project_id, title, category required' }, { status: 400 });
 
     const arc = CATEGORY_ARCS[category];
@@ -126,24 +134,74 @@ RULE 6 — SCENE SEVEN IS DIFFERENT: Scene seven breaks all locks. New angle, ne
 
 RULE 7 — NO TECHNICAL PHOTOGRAPHY TERMS: Do not use "bokeh", "depth of field", "aperture", "ISO", "shutter speed", "focal length", "lens", "f-stop" in image prompts. These get rendered as text. Use simple visual descriptions instead.`;
 
-    console.log(`🎬 Flow: ${title} | ${category}`);
-    const result = await callLLM(prompt, 0.6);
-    if (!result.scenes || result.scenes.length < 7) throw new Error(`Expected 7, got ${result.scenes?.length || 0}`);
+    console.log(`🎬 Flow: ${title} | ${category} | ${orientation}`);
+    console.log(`📋 Subject: ${subject_description || 'none'}`);
+    console.log(`🎨 Style: ${visual_style}`);
+    console.log(`📝 Prompt length: ${prompt.length} chars`);
 
-    const old = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-    for (const s of old) await base44.asServiceRole.entities.Scenes.delete(s.id);
-
-    for (const scene of result.scenes) {
-      await base44.asServiceRole.entities.Scenes.create({
-        project_id, scene_number: scene.scene_number, narration_text: scene.title,
-        image_prompt: scene.image_prompt, animation_prompt: scene.video_transition_prompt || '',
-        duration_seconds: scene.hold_seconds || 1, status: 'prompts_ready',
-      });
+    let result;
+    try {
+      result = await callLLM(prompt, 0.6);
+      console.log(`✓ LLM returned: ${JSON.stringify(result).substring(0, 200)}...`);
+    } catch (llmErr) {
+      console.error(`❌ LLM call failed: ${llmErr.message}`);
+      return Response.json({ error: `LLM failed: ${llmErr.message}` }, { status: 500 });
     }
 
-    await base44.asServiceRole.entities.Projects.update(project_id, { status: 'breakdown_complete', current_step: 5 });
+    if (!result.scenes || !Array.isArray(result.scenes)) {
+      console.error(`❌ No scenes array in result. Keys: ${Object.keys(result).join(', ')}`);
+      return Response.json({ error: `LLM returned no scenes array. Got keys: ${Object.keys(result).join(', ')}` }, { status: 500 });
+    }
 
-    return Response.json({ success: true, scenes_created: result.scenes.length, camera_lock_block: result.camera_lock_block });
+    if (result.scenes.length < 7) {
+      console.error(`❌ Only ${result.scenes.length} scenes returned`);
+      return Response.json({ error: `Expected 7 scenes, got ${result.scenes.length}` }, { status: 500 });
+    }
+
+    // Delete old scenes
+    try {
+      const old = await base44.asServiceRole.entities.Scenes.filter({ project_id });
+      console.log(`🧹 Deleting ${old.length} old scenes...`);
+      for (const s of old) {
+        await base44.asServiceRole.entities.Scenes.delete(s.id);
+      }
+    } catch (delErr) {
+      console.warn(`⚠ Delete old scenes failed: ${delErr.message} — continuing anyway`);
+    }
+
+    // Create new scenes
+    let created = 0;
+    for (const scene of result.scenes) {
+      try {
+        await base44.asServiceRole.entities.Scenes.create({
+          project_id,
+          scene_number: scene.scene_number || (created + 1),
+          narration_text: scene.title || `Scene ${created + 1}`,
+          image_prompt: scene.image_prompt || '',
+          animation_prompt: scene.video_transition_prompt || '',
+          duration_seconds: scene.hold_seconds || 1,
+          status: 'prompts_ready',
+        });
+        created++;
+      } catch (createErr) {
+        console.error(`❌ Failed to create scene ${scene.scene_number}: ${createErr.message}`);
+      }
+    }
+
+    console.log(`✓ Created ${created}/7 scenes`);
+
+    try {
+      await base44.asServiceRole.entities.Projects.update(project_id, { status: 'breakdown_complete', current_step: 5 });
+    } catch (updErr) {
+      console.warn(`⚠ Project update failed: ${updErr.message}`);
+    }
+
+    return Response.json({
+      success: true,
+      scenes_created: created,
+      subject_identity: result.subject_identity,
+      composition_lock: result.composition_lock?.substring(0, 100),
+    });
   } catch (error) {
     console.error('generateProgressionPrompts error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
