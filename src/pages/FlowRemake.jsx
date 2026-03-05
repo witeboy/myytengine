@@ -59,7 +59,13 @@ export default function FlowRemake() {
     setError(null);
 
     try {
+      // If retrying, use existing project. If fresh, create new.
       let pid = currentProjectId;
+      
+      // If project exists but we want fresh prompts, just reuse pid
+      if (pid) {
+        console.log(`Reusing existing project: ${pid}`);
+      }
 
       if (!pid) {
         const project = await base44.entities.Projects.create({
