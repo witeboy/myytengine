@@ -44,7 +44,7 @@ async function callLLM(prompt, temperature = 0.7) {
           { role: "system", content: "You are a world-class architectural photographer and AI image prompt engineer. Always respond in valid JSON only." },
           { role: "user", content: prompt }
         ],
-        temperature, max_tokens: 8192, response_format: { type: "json_object" }
+        temperature, max_tokens: 16384, response_format: { type: "json_object" }
       })
     });
     if (response.status === 429) { await new Promise(r => setTimeout(r, Math.pow(2, attempt + 1) * 5000)); continue; }
