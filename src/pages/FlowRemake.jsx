@@ -9,7 +9,7 @@ import { createPageUrl } from '@/utils';
 import VisualStyleSelector from '@/components/content/VisualStyleSelector';
 import OrientationSelector from '@/components/content/OrientationSelector';
 import {
-  Loader2, ArrowRight, ArrowLeft, Film, ImageIcon, Music,
+ Loader2, ArrowRight, ArrowLeft, Film, ImageIcon, Music, Download,
   CheckCircle, XCircle, Pencil, Sparkles, Building2, Wrench,
   Car, TreePine, Home, Warehouse, MapPin, Plus
 } from 'lucide-react';
@@ -422,10 +422,77 @@ export default function FlowRemake() {
           <div className="text-center py-12">
             <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
             <h2 className="text-2xl font-bold mb-2">Progression Complete!</h2>
-            <p className="text-gray-500 mb-6">7 scenes generated. Open Timeline to add music and export.</p>
-            <div className="flex gap-3 justify-center">
+            <p className="text-gray-500 mb-4">{imageCount} images · {videoCount} videos ready</p>
+
+            {/* Asset preview grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 max-w-4xl mx-auto mb-6 text-left">
+              {scenes.map(s => (
+                <div key={s.id} className="bg-white rounded-lg border overflow-hidden">
+                  {s.image_url?.startsWith('http') ? (
+                    <img src={s.image_url} alt={`S${s.scene_number}`} className="w-full aspect-video object-cover" />
+                  ) : (
+                    <div className="w-full aspect-video bg-gray-100 flex items-center justify-center text-gray-400 text-xs">No image</div>
+                  )}
+                  <div className="p-2 space-y-1">
+                    <p className="text-[10px] font-medium truncate">{s.narration_text}</p>
+                    <div className="flex gap-1">
+                      {s.image_url?.startsWith('http') && (
+                        <a href={s.image_url} download={`scene_${s.scene_number}_image.png`} target="_blank" rel="noopener"
+                          className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded hover:bg-blue-100">
+                          Image ↓
+                        </a>
+                      )}
+                      {s.video_url?.startsWith('http') && !s.video_url.includes('grok_vid_task') && (
+                        <a href={s.video_url} download={`scene_${s.scene_number}_video.mp4`} target="_blank" rel="noopener"
+                          className="text-[9px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded hover:bg-purple-100">
+                          Video ↓
+                        </a>
+                      )}
+                      {s.video_url?.startsWith('grok_vid_task') && (
+                        <span className="text-[9px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">Rendering...</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-3 justify-center flex-wrap">
               <Button variant="outline" onClick={() => setStep(3)}>
-                <ArrowLeft className="w-4 h-4 mr-1" /> Review Images
+                <ArrowLeft className="w-4 h-4 mr-1" /> Back to Images
+              </Button>
+              <Button
+                variant="outline"
+                className="border-green-300 text-green-700 hover:bg-green-50"
+                onClick={async () => {
+                  const freshScenes = await base44.entities.Scenes.filter({ project_id: currentProjectId });
+                  const sorted = freshScenes.sort((a, b) => a.scene_number - b.scene_number);
+                  for (const scene of sorted) {
+                    if (scene.image_url?.startsWith('http')) {
+                      const a = document.createElement('a');
+                      a.href = scene.image_url;
+                      a.download = `${title || 'flow'}_scene_${scene.scene_number}_image.png`;
+                      a.target = '_blank';
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      await new Promise(r => setTimeout(r, 500));
+                    }
+                    if (scene.video_url?.startsWith('http') && !scene.video_url.includes('grok_vid_task')) {
+                      const a = document.createElement('a');
+                      a.href = scene.video_url;
+                      a.download = `${title || 'flow'}_scene_${scene.scene_number}_video.mp4`;
+                      a.target = '_blank';
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      await new Promise(r => setTimeout(r, 500));
+                    }
+                  }
+                }}
+              >
+                <Download className="w-4 h-4 mr-1" /> Download All Assets
               </Button>
               <Button onClick={() => navigate(createPageUrl(`TimelineEditor?project_id=${currentProjectId}`))} className="bg-blue-600 hover:bg-blue-700">
                 Open Timeline <ArrowRight className="w-4 h-4 ml-1" />
