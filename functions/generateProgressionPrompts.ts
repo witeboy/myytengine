@@ -78,8 +78,11 @@ Deno.serve(async (req) => {
 
     const prompt = `Create a 7-scene VISUAL PROGRESSION — cinematic time-lapse transformation.
 
-PROJECT: Title: "${title}" | Category: ${category} | Subject: ${subject_description || title}
-Visual Style: ${visual_style || 'photorealistic 4K'} | Orientation: ${isPortrait ? '9:16' : '16:9'} | Lens: ${lensSpec}
+PROJECT TITLE: "${title}"
+SUBJECT: ${subject_description || title}
+Category: ${category}
+Visual Style: ${visual_style || 'photorealistic'}
+Orientation: ${isPortrait ? '9:16 vertical' : '16:9 horizontal'}
 
 STAGES:
 ${stages.map((s, i) => `  S${i + 1}: ${s}`).join('\n')}
@@ -89,27 +92,39 @@ ${videoCues.map((c, i) => `  T${i + 1}-${i + 2}: ${c}`).join('\n')}
 
 Generate JSON:
 {
-  "camera_lock_block": "EXTREMELY detailed camera+environment description IDENTICAL for scenes 1-6. Exact camera height in meters, distance in meters, angle degrees, lens mm, f-stop, time of day, sun angle and direction, sky details, background elements (specific buildings/trees/terrain), foreground elements. 80-120 words. Do NOT describe the subject itself.",
-  "visual_style_suffix": "${visual_style || 'photorealistic 4K'}, sharp focus, no text, no watermarks, no people, no vehicles, no machinery.",
+  "subject_identity": "A HYPER-SPECIFIC description of the EXACT subject being transformed. If it is a vehicle: exact make, model, year, body style, color when new. If building: exact style, dimensions, material. If object: exact type, brand, model. This description MUST be specific enough that any artist would draw the SAME object. Example: 'a 1987 Toyota Land Cruiser FJ60, boxy SUV body, rounded headlights, chrome front bumper, originally silver metallic paint'. 30-50 words.",
+
+  "composition_lock": "A description of WHERE the subject sits in the frame and what surrounds it. NO numbers. NO measurements. NO technical camera specs. NO focal lengths. NO f-stops. NO distances in meters. Describe using ONLY visual words. Example: 'The vehicle is centered in the frame, facing slightly to the right at a three-quarter angle. It sits on flat dusty ground that fills the lower third of the image. Behind the vehicle, a tall concrete perimeter wall stretches across the full width. Beyond the wall, three palm trees and a water tower are visible against a clear blue sky with a few white clouds. Golden late-afternoon sunlight comes from the left side, casting long shadows to the right.' This block is COPIED VERBATIM into scenes one through six. 80-100 words. CRITICAL: Do NOT use ANY numbers, measurements, millimeters, meters, degrees, f-stops, or resolution values — Grok will render them as visible text in the image.",
+
+  "visual_style_suffix": "${visual_style || 'photorealistic'}, sharp focus, absolutely no text, no numbers, no words, no letters, no writing, no watermarks, no UI elements, no people, no vehicles other than the subject, no machinery",
+
   "scenes": [
     {
       "scene_number": 1,
-      "title": "Stage title",
-      "image_prompt": "Scenes 1-6: EXACT camera_lock_block text VERBATIM + subject description at this stage (60-80 words with specific textures, materials, colors, dimensions, structural details) + visual_style_suffix. NO people/machines/vehicles. Scene 7: DIFFERENT camera angle (ground level, closer, human perspective), includes people and activity, warm emotional payoff.",
-      "video_transition_prompt": "Scenes 1-6: High-speed cinematic time-lapse showing transformation from THIS scene to the NEXT. Workers visible but ONLY from behind (no faces ever visible). Equipment and machinery allowed. Dust particles in light, materials being moved, structural changes happening fast. Subtle camera push-in. 40-60 words. Scene 7: null",
+      "title": "Stage title that includes the project title ${title}",
+      "image_prompt": "For scenes one through six: Start with the EXACT composition_lock text WORD FOR WORD. Then write: the subject_identity text. Then describe ONLY what has changed about the subject at THIS stage — rust patterns, missing parts, new paint, structural changes. Describe the subject in its CURRENT CONDITION at this stage. Keep the subject in the EXACT SAME POSITION, SAME SIZE, SAME ANGLE in every scene. The background must be IDENTICAL. End with visual_style_suffix. TOTAL prompt should be 120-180 words. For scene seven: DIFFERENT composition — close-up or action shot showing the completed subject being used and enjoyed. Include people.",
+      "video_transition_prompt": "For scenes one through six: Describe a cinematic time-lapse showing the transformation from THIS stage to the NEXT. Workers visible but only from behind, never showing faces. Equipment and tools in use. Dust and debris. Fast-forward motion. The camera stays perfectly still — only the subject changes. 40-60 words. Scene seven: null",
       "hold_seconds": 1.5,
       "is_camera_locked": true
     }
   ]
 }
 
-CRITICAL RULES:
-1. camera_lock_block COPIED VERBATIM at start of scenes 1-6. NOT paraphrased. IDENTICAL text.
-2. Scene 7 = DIFFERENT camera (closer, ground level), INCLUDES people enjoying the result.
-3. Image prompts 1-6 = ZERO people, ZERO machines, ZERO vehicles. Structurally active but empty.
-4. Video prompts = workers backs-to-camera, equipment, activity ALLOWED.
-5. Each scene shows SPECIFIC NEW structural elements vs previous (not just "more complete").
-6. Hold: S1=1.5s, S2-5=0.8s, S6=1.5s, S7=2.0s`;
+ABSOLUTE RULES — VIOLATION OF ANY RULE MEANS FAILURE:
+
+RULE 1 — ZERO NUMBERS IN IMAGE PROMPTS: The image_prompt must contain ZERO digits. No "10m", no "35mm", no "f/5.6", no "4K", no "720p", no "1080", no "24mm". Use ONLY descriptive words: "medium distance", "slightly above eye level", "sharp focus". Grok Imagine RENDERS numbers as visible text in the image. ANY number in the prompt will appear as ugly text overlaid on the image.
+
+RULE 2 — SAME SUBJECT IDENTITY: The subject_identity description must appear in EVERY image prompt for scenes one through six. It is the SAME object transforming. Not a different car. Not a different building. The EXACT SAME one described with the EXACT SAME identity words plus its current condition at that stage.
+
+RULE 3 — COMPOSITION LOCK = VERBATIM: The composition_lock text is COPIED CHARACTER FOR CHARACTER into scenes one through six. Not paraphrased. Not reworded. COPIED. This ensures the subject stays in the same position, same size, same angle, same background in every frame.
+
+RULE 4 — ONLY THE SUBJECT CHANGES: Between scenes one through six, the ONLY thing that changes is the CONDITION of the subject. The background, ground, sky, lighting, shadows, surrounding elements — ALL stay identical. Described by the composition_lock block.
+
+RULE 5 — TITLE INCLUSION: The project title "${title}" must appear in every scene title.
+
+RULE 6 — SCENE SEVEN IS DIFFERENT: Scene seven breaks all locks. New angle, new composition, includes people, shows the subject being used/enjoyed. Emotional payoff.
+
+RULE 7 — NO TECHNICAL PHOTOGRAPHY TERMS: Do not use "bokeh", "depth of field", "aperture", "ISO", "shutter speed", "focal length", "lens", "f-stop" in image prompts. These get rendered as text. Use simple visual descriptions instead.`;
 
     console.log(`🎬 Flow: ${title} | ${category}`);
     const result = await callLLM(prompt, 0.6);
