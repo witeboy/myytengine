@@ -103,23 +103,42 @@ export default function FlowRemake() {
     setGenerating(false);
   };
 
-  // ═══ STEP 2: Generate images SEQUENTIALLY ═══
+  // ═══ STEP 2: Generate images SEQUENTIALLY with reference chaining ═══
   const handleGenerateImages = async () => {
     setGeneratingImages(true);
     setImageProgress({ current: 0, total: 7 });
 
+    let previousImageUrl = null;
+
     for (let i = 0; i < scenes.length; i++) {
-      setImageProgress({ current: i, total: scenes.length, label: `Scene ${i + 1}: ${scenes[i].narration_text}` });
+      const refLabel = previousImageUrl ? ' (with reference)' : ' (first scene)';
+      setImageProgress({
+        current: i,
+        total: scenes.length,
+        label: `Scene ${i + 1}: ${scenes[i].narration_text}${refLabel}`
+      });
 
       try {
-        await base44.functions.invoke('generateSceneImage', { scene_id: scenes[i].id });
+        // Call progression-specific image gen with reference chaining
+        const res = await base44.functions.invoke('generateProgressionImage', {
+          scene_id: scenes[i].id,
+          reference_image_url: previousImageUrl,
+        });
+
+        const data = res.data || res;
+        if (data?.image_url) {
+          previousImageUrl = data.image_url;
+          console.log(`✓ Scene ${i + 1} generated${data.used_reference ? ' (referenced prev)' : ''}: ${data.image_url.substring(0, 60)}`);
+        }
       } catch (err) {
         console.warn(`Scene ${i + 1} image failed:`, err.message);
+        // Don't break chain — try next scene without reference
       }
 
       await refetchScenes();
-      // Small delay between sequential calls
-      if (i < scenes.length - 1) await new Promise(r => setTimeout(r, 1000));
+
+      // Delay between sequential calls
+      if (i < scenes.length - 1) await new Promise(r => setTimeout(r, 2000));
     }
 
     setImageProgress({ current: scenes.length, total: scenes.length, label: 'Complete!' });
