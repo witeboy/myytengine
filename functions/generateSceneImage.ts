@@ -117,6 +117,22 @@ Deno.serve(async (req) => {
       .replace(/^[\s,.]+/, '')
       .trim();
 
+// 4.5 Strip ALL numbers/measurements that Grok renders as visible text (critical for Flow/Progression mode)
+    finalPrompt = finalPrompt
+      .replace(/\b\d+\s*m\b/gi, '')              // "10m", "35m"
+      .replace(/\b\d+\s*mm\b/gi, '')             // "35mm", "24mm", "4mm"
+      .replace(/\b\d+\s*meters?\b/gi, '')        // "10 meters"
+      .replace(/\bf[/:]?\s*\d+\.?\d*\b/gi, '')   // "f/5.6", "F:6", "f5.6"
+      .replace(/\b\d+\s*degrees?\b/gi, '')       // "36 degrees"
+      .replace(/\b\d+\s*°\b/g, '')               // "36°"
+      .replace(/\b\d+k\b/gi, '')                 // "4k", "35k", "14k"
+      .replace(/\b\d+p\b/gi, '')                 // "480p", "720p"
+      .replace(/\b\d+\s*mers?\b/gi, '')          // "10 mers" (LLM typos)
+      .replace(/\b\d+\s*x\s*\d+\b/gi, '')        // "1920x1080"
+      .replace(/,\s*,/g, ',')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
+
     // 5. Smart cap at 1200 chars — never cut mid-sentence
     if (finalPrompt.length > 1200) {
       const cutZone = finalPrompt.substring(1100, 1200);
