@@ -117,8 +117,7 @@ Deno.serve(async (req) => {
         style: "DESIGN",
         rendering_speed: "QUALITY",
         expand_prompt: false,
-        negative_prompt: "blurry, low quality, pixelated, watermark, distorted text, misspelled text, illegible text, small text, jpeg artifacts, low resolution, compressed"
-      });
+negative_prompt: "blurry, low quality, pixelated, watermark, distorted text, misspelled text, illegible text, small text, jpeg artifacts, low resolution, compressed, flat expression, stock photo smile, generic pose, stiff pose, dead eyes"      });
       imageUrl = await kiePollResult(KIE_API_KEY, taskId);
       model = "ideogram/v3-generate";
     } catch (e) {
@@ -135,7 +134,7 @@ Deno.serve(async (req) => {
           style: "DESIGN",
           rendering_speed: "BALANCED",
           expand_prompt: false,
-          negative_prompt: "blurry, low quality, pixelated, watermark"
+          negative_prompt: "blurry, low quality, pixelated, watermark, distorted text, flat expression, stock photo smile"
         });
         imageUrl = await kiePollResult(KIE_API_KEY, taskId);
         model = "ideogram/v3-generate (balanced)";
