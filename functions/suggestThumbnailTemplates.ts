@@ -42,7 +42,10 @@ async function gemini(prompt, temp, maxTok) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        maxOutputTokens: maxTok,
+        generationConfig: {         // <--- ADD THIS WRAPPER
+          maxOutputTokens: maxTok,
+          temperature: temp         // <--- ADD THIS SO YOUR 'temp' VARIABLE ACTUALLY WORKS
+        }
       })
     });
     if (r.status === 429) { await new Promise(w => setTimeout(w, (i + 1) * 10000)); continue; }
