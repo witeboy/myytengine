@@ -426,31 +426,51 @@ export default function PostProduction() {
   const runGeneration = async (templateIds) => {
     setGeneratingThumbs(true);
     setThumbError(null);
-    const res = await base44.functions.invoke('generateThumbnailsFromScript', {
-      project_id: projectId,
-      reference_style: referenceStyle || undefined,
-      niche_dna: selectedNiche?.synthesized_dna || undefined,
-      niche_name: selectedNiche?.name || undefined,
-      selected_title: selectedTitles.length > 0 ? selectedTitles.map(t => t.title).join(' | ') : undefined,
-      selected_templates: templateIds?.length === 3 ? templateIds : undefined,
-    });
-    if (res.data?.error) setThumbError(res.data.error);
-    refetchThumbs();
+
+    try {
+      // Step 1: Generate concepts (LLM only, no images)
+      const res = await base44.functions.invoke('generateThumbnailConcepts', {
+        project_id: projectId,
+        video_title: selectedTitles.length > 0 ? selectedTitles[0].title : (project?.name || 'Untitled'),
+        reference_style: referenceStyle || undefined,
+        niche_dna: selectedNiche?.synthesized_dna || undefined,
+        niche_name: selectedNiche?.name || undefined,
+        selected_title: selectedTitles.length > 0 ? selectedTitles.map(t => t.title).join(' | ') : undefined,
+        selected_templates: templateIds?.length === 3 ? templateIds : undefined,
+      });
+
+      const data = res.data || res;
+      if (data?.error) {
+        setThumbError(data.error);
+        setGeneratingThumbs(false);
+        return;
+      }
+
+      await refetchThumbs();
+
+      // Step 2: Generate images one at a time (separate calls, no timeout)
+      const concepts = await base44.entities.ThumbnailConcepts.filter({ project_id: projectId });
+      const sorted = concepts.sort((a, b) => (a.rank || 0) - (b.rank || 0));
+
+      for (let i = 0; i < sorted.length; i++) {
+        const concept = sorted[i];
+        if (concept.image_url) continue;
+        try {
+          console.log(`Generating thumbnail image ${i + 1}/${sorted.length}...`);
+          await base44.functions.invoke('generateThumbnailImage', { concept_id: concept.id });
+        } catch (imgErr) {
+          console.warn(`Thumbnail ${concept.rank} image failed:`, imgErr.message);
+        }
+        await refetchThumbs();
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    } catch (err) {
+      setThumbError(err.message || 'Generation failed');
+    }
+
+    await refetchThumbs();
     setGeneratingThumbs(false);
   };
-
-  // Concepts saved — now generate images one at a time
-    const concepts = await base44.entities.ThumbnailConcepts.filter({ project_id: projectId });
-    for (const concept of concepts) {
-      if (concept.image_url) continue; // already has image
-      try {
-        setThumbnailProgress?.(`Generating image ${concept.rank || ''}...`);
-        await base44.functions.invoke('generateThumbnailImage', { concept_id: concept.id });
-      } catch (imgErr) {
-        console.warn(`Thumbnail image ${concept.rank} failed:`, imgErr.message);
-      }
-      await new Promise(r => setTimeout(r, 1000));
-    }
 
   // Called by template picker when user confirms 3 templates
   const handleTemplatesSelected = (templateIds) => {
