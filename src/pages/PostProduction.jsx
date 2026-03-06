@@ -439,6 +439,19 @@ export default function PostProduction() {
     setGeneratingThumbs(false);
   };
 
+  // Concepts saved — now generate images one at a time
+    const concepts = await base44.entities.ThumbnailConcepts.filter({ project_id: projectId });
+    for (const concept of concepts) {
+      if (concept.image_url) continue; // already has image
+      try {
+        setThumbnailProgress?.(`Generating image ${concept.rank || ''}...`);
+        await base44.functions.invoke('generateThumbnailImage', { concept_id: concept.id });
+      } catch (imgErr) {
+        console.warn(`Thumbnail image ${concept.rank} failed:`, imgErr.message);
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+
   // Called by template picker when user confirms 3 templates
   const handleTemplatesSelected = (templateIds) => {
     setSelectedTemplateIds(templateIds);
