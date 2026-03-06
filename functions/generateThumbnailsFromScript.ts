@@ -203,6 +203,8 @@ function detectAndSelectTemplates(title = "", script = "", projectNiche = "", is
   const topNiche = Object.entries(scores).sort((a,b)=>b[1]-a[1])[0]?.[0] || "finance";
 
   // Score all templates
+  // Always boost face-required templates so at least 1 appears in top 3
+  const faceBonus = 15;
   const ranked = Object.values(TEMPLATE_DNA)
     .filter(t => t.id !== "shorts_hook_frame")
     .map(t => {
@@ -211,6 +213,7 @@ function detectAndSelectTemplates(title = "", script = "", projectNiche = "", is
       const sigHits = (t.signals||[]).filter(kw => text.includes(kw.toLowerCase())).length;
       score += sigHits * 8;
       score += (t.power||3) * 5;
+      if (t.face_required) score += faceBonus; // guarantee at least 1 face template
       return { ...t, _score: score };
     })
     .sort((a,b) => b._score - a._score);
@@ -277,7 +280,85 @@ Deno.serve(async (req) => {
     const topicTitle = topic?.title || script.title || project.name || 'Untitled Video';
 
     const fullScript = script.full_script || [script.cold_open, script.act_1, script.act_2, script.act_3, script.outro].filter(Boolean).join('\n\n');
-    const trunc = fullScript.substring(0, 3000);
+
+    // ── SMART SCRIPT DISTILLATION ──────────────────────────────────
+    // For long scripts: extract thumbnail-relevant elements from the
+    // ENTIRE script before truncating. Thumbnails need the climax,
+    // the shocking number, the revelation — usually NOT at the start.
+    // ──────────────────────────────────────────────────────────────
+    let trunc;
+    const LONG_SCRIPT_THRESHOLD = 4000;
+
+    if (fullScript.length > LONG_SCRIPT_THRESHOLD) {
+      console.log(`Long script detected: ${fullScript.length} chars. Running distillation...`);
+      try {
+        // Sample the script intelligently: start + middle + end
+        const start  = fullScript.substring(0, 2000);
+        const mid    = fullScript.substring(Math.floor(fullScript.length * 0.4), Math.floor(fullScript.length * 0.4) + 2000);
+        const end    = fullScript.substring(fullScript.length - 2000);
+
+        const distilled = await gemini(`You are extracting thumbnail intelligence from a long video script. You will receive 3 excerpts from the script: the OPENING, MIDDLE, and END. Extract ONLY the elements that drive viral YouTube thumbnails.
+
+VIDEO: "${topicTitle}" | NICHE: "${project.niche}"
+
+=== SCRIPT OPENING (first 2000 chars) ===
+${start}
+
+=== SCRIPT MIDDLE (middle 2000 chars) ===
+${mid}
+
+=== SCRIPT END (last 2000 chars) ===
+${end}
+
+Extract the highest-CTR thumbnail elements from the ENTIRE script:
+
+JSON: {
+  "one_line_summary": "What this video is actually about in 1 sentence",
+  "the_climax": "The single most dramatic/shocking/revealing moment in the entire script — the moment that would make someone click",
+  "the_revelation": "What secret or surprising truth does this video reveal? What do viewers NOT know going in?",
+  "best_shocking_number": "The single most impactful specific number/stat/dollar amount from the script (e.g. '$47,000', '73%', '10 years')",
+  "best_visual_moment": "The most cinematically powerful visual described anywhere in the script — be hyper specific",
+  "core_emotion": "The dominant emotion this video creates in viewers (be specific: not 'curiosity' but 'gut-punch regret about wasted years')",
+  "stakes": "What is at risk for the viewer if they DON'T watch this?",
+  "villain": "The thing/system/person causing the problem in this script",
+  "transformation": "The before → after journey described in the script",
+  "forbidden_knowledge": "The thing viewers were never told / the thing 'they' don't want you to know",
+  "best_quote": "The single most powerful line from anywhere in the script — verbatim if possible",
+  "thumbnail_text_ideas": ["3-5 specific thumbnail text options pulled directly from script content, MAX 4 WORDS each, ALL CAPS"]
+}`, 0.3, 2048);
+
+        // Build a rich compressed context from distillation
+        trunc = `[SCRIPT DISTILLATION — Full script was ${fullScript.length} chars, distilled to key thumbnail elements]
+
+CLIMAX: ${distilled.the_climax}
+REVELATION: ${distilled.the_revelation}
+SHOCKING NUMBER: ${distilled.best_shocking_number}
+BEST VISUAL MOMENT: ${distilled.best_visual_moment}
+CORE EMOTION: ${distilled.core_emotion}
+STAKES: ${distilled.stakes}
+VILLAIN/PROBLEM: ${distilled.villain}
+TRANSFORMATION: ${distilled.transformation}
+FORBIDDEN KNOWLEDGE: ${distilled.forbidden_knowledge}
+MOST POWERFUL LINE: "${distilled.best_quote}"
+THUMBNAIL TEXT IDEAS FROM SCRIPT: ${(distilled.thumbnail_text_ideas||[]).join(' | ')}
+ONE LINE SUMMARY: ${distilled.one_line_summary}
+
+[SCRIPT OPENING — first 800 chars for context]
+${start.substring(0, 800)}`;
+
+        console.log(`Distillation done. Climax: ${distilled.the_climax?.substring(0, 80)}...`);
+      } catch (e) {
+        console.warn(`Distillation failed (${e.message}), falling back to smart sample`);
+        // Fallback: sample start + end instead of just truncating from start
+        const startSample = fullScript.substring(0, 1500);
+        const endSample   = fullScript.substring(fullScript.length - 1000);
+        trunc = startSample + '\n\n[...middle omitted...]\n\n' + endSample;
+      }
+    } else {
+      // Short script — use as-is
+      trunc = fullScript.substring(0, 3000);
+    }
+    console.log(`Script context ready: ${trunc.length} chars`);
 
     // Detect if this is a Shorts project
     const isShorts = (project.content_type || '').toLowerCase().includes('short') ||
