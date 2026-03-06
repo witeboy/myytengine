@@ -571,8 +571,7 @@ JSON: {"concepts":[{
     console.log("Phase 3: Image prompts for " + p2concepts.length + " concepts");
 
     const styleDesc = style.includes('anime') ? 'anime style' : style.includes('oil') ? 'oil painting style' : style.includes('comic') ? 'comic book style' : 'cinematic photorealistic 4K HDR';
-    const dimensionSpec = isShorts ? "1080x1920 Full HD 9:16 vertical YouTube Shorts thumbnail" : "1920x1080 Full HD 16:9 landscape YouTube thumbnail";
-
+    const dimensionSpec = isShorts ? "1080x1920 Full HD 9:16 vertical short-form video thumbnail, graphic design composition" : "1920x1080 Full HD 16:9 widescreen video thumbnail, graphic design composition";
     const p3 = await gemini(`You are an elite Ideogram V3 prompt engineer specializing in viral YouTube thumbnails achieving 10M+ views.
 
 ${templateDNABlock}
@@ -658,7 +657,7 @@ JSON: {"thumbnails":[{
   "color_scheme": "",
   "style_reference": "cinema",
   "ctr_score": 9,
-  "negative_prompt": "blurry, low quality, pixelated, watermark, distorted text, small text, cluttered, text in bottom-right, text at bottom edge, low contrast text, muted colors, too many elements, flat lighting, stock photo expression, generic smile",
+  "negative_prompt": "blurry, low quality, pixelated, YouTube logo, YouTube watermark, YouTube text, channel logo, subscribe button, bell icon, watermark, distorted text, small text, cluttered, text in bottom-right, text at bottom edge, low contrast text, muted colors, flat lighting, stock photo expression, generic smile"
   "image_prompt": ""
 },{
   "rank": 2,
@@ -702,9 +701,14 @@ JSON: {"thumbnails":[{
       let ip = t.image_prompt || '';
       const textToOverlay = t.text_overlay || '';
 
-      // Force overlay text into Ideogram quotation marks
-      if (textToOverlay && !ip.includes(`"${textToOverlay}"`)) {
-        ip = `"${textToOverlay}" in massive bold Impact font with thick black outline and heavy drop shadow, positioned upper-${i===1?'center':'left'}. ` + ip;
+      // Strip any existing bare text references before adding quoted version
+      if (textToOverlay) {
+        // Remove unquoted occurrences to prevent duplication
+        ip = ip.replace(new RegExp(textToOverlay.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), `"${textToOverlay}"`);
+        // Add quoted version at start only if not already present
+        if (!ip.includes(`"${textToOverlay}"`)) {
+          ip = `"${textToOverlay}" in massive bold Impact font with thick black outline and heavy drop shadow, positioned upper-${i===1?'center':'left'}. ` + ip;
+        }
       }
 
       // Force dimension spec
@@ -712,9 +716,9 @@ JSON: {"thumbnails":[{
         ip = dimensionSpec + ". " + ip;
       }
 
-      // Reinforce text block at end for Ideogram
+// Single reinforcement at end — do NOT repeat the text, just reference it
       if (textToOverlay) {
-        ip += ` Critical text overlay that MUST appear clearly and legibly: "${textToOverlay}". Large bold Impact font, maximum contrast, thick outline.`;
+        ip += ` The text overlay above MUST be rendered large, bold, and clearly legible with thick outline.`;
       }
 
       const tmplUsed = TEMPLATE_DNA[t.template_type] || primaryTemplate;
