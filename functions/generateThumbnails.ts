@@ -574,44 +574,25 @@ Generate 10 thumbnails now.`;
 
     const savedResults = await Promise.all(savePromises);
     const successfullySaved = savedResults.filter(r => r.success);
-    console.log(`\n═══ Generating ${successfullySaved.length} thumbnail images ═══`);
-
     // ──────────────────────────────────────────────────────────────
-    // GENERATE IMAGES
+    // RETURN CONCEPTS — Images generated separately by frontend
+    // (Generating 10 images here would timeout at 60s)
     // ──────────────────────────────────────────────────────────────
-    const imagePromises = successfullySaved.map(async (saved) => {
-      const { record, imagePrompt, negativePrompt, isShorts: shorts } = saved;
-      try {
-        const { url, model } = await generateThumbnailImage(KIE_API_KEY, imagePrompt, negativePrompt, shorts);
-        if (url) {
-          await base44.asServiceRole.entities.ThumbnailConcepts.update(record.id, { image_url: url });
-          console.log(`✓ Image rank ${record.rank} via ${model}`);
-          thumbnails.push({ ...record, image_url: url, model_used: model });
-        } else {
-          thumbnails.push({ ...record, image_url: null, model_used: 'failed' });
-        }
-      } catch (imgErr) {
-        console.error(`✗ Image error rank ${record.rank}:`, imgErr.message);
-        thumbnails.push({ ...record, image_url: null, model_used: 'error' });
-      }
-    });
-
-    await Promise.all(imagePromises);
+    const conceptIds = successfullySaved.map(s => s.record.id);
 
     try { await base44.entities.Projects.update(project_id, { current_step: 12 }); } catch (_) {}
 
-    const imagesGenerated = thumbnails.filter(t => t.image_url).length;
-
     console.log('══════════════════════════════════════════════════════');
-    console.log(`Templates Used: ${selectedTemplates.map(t=>t.name).join(' | ')}`);
-    console.log(`Shorts Mode: ${isShorts}`);
-    console.log(`Concepts: ${successfullySaved.length} | Images: ${imagesGenerated}`);
+    console.log(`Templates: ${selectedTemplates.map(t=>t.name).join(' | ')}`);
+    console.log(`Shorts: ${isShorts} | Concepts saved: ${successfullySaved.length}`);
     console.log(`Skipped: ${skipped.length} | Quality Warnings: ${qualityWarnings}`);
+    console.log('Images will be generated separately per-concept by frontend');
     console.log('══════════════════════════════════════════════════════');
 
     return Response.json({
       success: true,
-      thumbnails,
+      concepts_saved: successfullySaved.length,
+      concept_ids: conceptIds,
       template_selection: {
         is_shorts: isShorts,
         primary_template: primaryTemplate.name,
@@ -622,17 +603,12 @@ Generate 10 thumbnails now.`;
       meta: {
         total_generated: result.data.thumbnails.length,
         total_saved: successfullySaved.length,
-        total_images: imagesGenerated,
         total_skipped: skipped.length,
         quality_warnings: qualityWarnings,
-        architecture: "Template-DNA Auto-Select, 26-template vault, face/emotion intelligence, Shorts detection",
-        image_model_primary: "ideogram/v3-quality",
-        image_model_fallback: "flux-2/pro",
         dimensions: isShorts ? "1080x1920" : "1920x1080",
         skipped_details: skipped
       }
     });
-
   } catch (error) {
     console.error('generateThumbnailConcepts v5 error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
