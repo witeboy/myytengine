@@ -823,19 +823,13 @@ JSON: {"thumbnails":[{
     const good = saved.filter(s => s.ok);
     console.log(`Saved: ${good.length} concepts. Generating ${good.length} images...`);
 
-    const results = await Promise.all(good.map(async ({ rec, ip, neg, isShorts: shorts }) => {
-      try {
-        const { url, model } = await genImage(KIE_KEY, ip, neg, shorts);
-        if (url) {
-          await base44.asServiceRole.entities.ThumbnailConcepts.update(rec.id, { image_url: url });
-          return { ...rec, image_url: url, model };
-        }
-        return { ...rec, image_url: null, model: 'failed' };
-      } catch (e) { return { ...rec, image_url: null, model: 'error' }; }
+    // DON'T generate images here — takes too long and causes timeout.
+    // Return concepts with prompts. Frontend generates images one at a time.
+    const results = good.map(({ rec, ip, neg, isShorts: shorts }) => ({
+      ...rec, image_url: null, image_prompt: ip, negative_prompt: neg, is_shorts: shorts
     }));
 
-    const imgCount = results.filter(r => r.image_url).length;
-    console.log(`Done: ${imgCount}/${good.length} images | Templates: ${selectedTemplates.map(t=>t.name).join(' | ')}`);
+    console.log(`Done: ${good.length} concepts saved (images will be generated separately)`);
 
     return Response.json({
       success: true, thumbnails: results,
