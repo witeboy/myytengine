@@ -289,9 +289,20 @@ Deno.serve(async (req) => {
     const nicheCtx = niche_dna ? ` NICHE DNA: ${niche_dna.substring(0,600)}` : '';
 
     // ──────────────────────────────────────────────────────────────
-    // PRE-PHASE: TEMPLATE AUTO-SELECTION
+    // PRE-PHASE: TEMPLATE SELECTION (user-chosen OR auto-detected)
     // ──────────────────────────────────────────────────────────────
-    const selectedTemplates = detectAndSelectTemplates(topicTitle, trunc, project.niche || '', isShorts);
+    let selectedTemplates;
+    if (selected_templates?.length === 3) {
+      selectedTemplates = selected_templates.map(id => TEMPLATE_DNA[id]).filter(Boolean);
+      if (selectedTemplates.length < 3) {
+        const auto = detectAndSelectTemplates(topicTitle, trunc, project.niche || '', isShorts);
+        while (selectedTemplates.length < 3) selectedTemplates.push(auto[selectedTemplates.length] || auto[0]);
+      }
+      console.log(`User-selected templates: [${selectedTemplates.map(t=>t.name).join(' | ')}]`);
+    } else {
+      selectedTemplates = detectAndSelectTemplates(topicTitle, trunc, project.niche || '', isShorts);
+      console.log(`Auto-selected templates: [${selectedTemplates.map(t=>t.name).join(' | ')}]`);
+    }
     const templateDNABlock = buildTemplateDNABlock(selectedTemplates);
     const primaryTemplate = selectedTemplates[0];
 
@@ -333,55 +344,7 @@ JSON: {
 }`, 0.9, 4096);
 
     console.log("Phase 0 done. Hook: " + (script_essence.emotional_hook || 'unknown'));
-    // Build selected template DNA context if user chose templates
-const templateContext = selected_templates?.length > 0
-  ? buildTemplateContext(selected_templates)
-  : '';
-
-// Function to build template DNA context string
-function buildTemplateContext(templateIds) {
-  const TEMPLATE_DNA = {
-    shock_face:          { name:"The Shock Face",           face_emotion:"EXTREME SHOCK: eyes blown wide, eyebrows maximum arch, jaw dropped in O shape, both hands to cheeks. Must be readable at 120px.", text_formula:"SHOCKING NUMBER or PAINFUL OUTCOME. MAX 4 WORDS.", color:"DARK background + ELECTRIC YELLOW text.", composition:"Face 45-55% of frame, rule-of-thirds. Rim light for separation." },
-    income_reveal:       { name:"The Income Reveal",        face_emotion:"PROUD CONFIDENCE: chest out, chin raised, calm knowing smile. Genuine pride.", text_formula:"SPECIFIC ODD DOLLAR AMOUNT + TIME. e.g. '$47,382 IN 6 MONTHS'.", color:"DARK background + NEON GREEN dollar amount + GOLD accent.", composition:"Dollar amount centered-large, proof element slightly blurred background." },
-    warning_alert:       { name:"The Warning / Alert",      face_emotion:"URGENT WARNING: intense stare, furrowed brows, jaw set, pointing finger at viewer.", text_formula:"STOP [THIS] or WARNING: [OUTCOME]. MAX 4 WORDS.", color:"DEEP RED dominant + WHITE/YELLOW text + ⚠️ symbol.", composition:"Warning symbol top-left, text center, subject center-right." },
-    secret_hidden:       { name:"The Secret / Hidden Truth",face_emotion:"CONSPIRATORIAL: finger to lips, sideways glance, knowing half-smile.", text_formula:"HIDDEN [TRUTH]. MAX 4 WORDS.", color:"NEAR BLACK + GOLD text + single dramatic spotlight.", composition:"Subject slightly off-center with dramatic lighting." },
-    breaking_news:       { name:"The Breaking News",        face_emotion:"URGENT PRESENTER: pointing at chart, leaning forward, 'act now' energy.", text_formula:"BREAKING: [WHAT CHANGED]. MAX 5 WORDS.", color:"RED banner + WHITE text + DARK background.", composition:"News broadcast aesthetic, red alert banner." },
-    before_after:        { name:"The Before / After Split", face_emotion:"LEFT: defeated/stressed | RIGHT: confident/liberated with genuine relief.", text_formula:"STATE → STATE. e.g. 'BROKE → $200K'.", color:"LEFT dark cold blues | RIGHT warm bright gold/green | CENTER sharp divider.", composition:"50/50 split with arrow divider center." },
-    numbered_list:       { name:"The Numbered List Bomb",   face_emotion:"KNOWLEDGEABLE AUTHORITY: head tilt, confident half-smile, one finger raised.", text_formula:"ODD NUMBER + WHAT THEY WANT. e.g. '7 HABITS OF RICH'.", color:"Bold background + MASSIVE number in accent color.", composition:"Number large 25-35% of frame." },
-    identity_challenge:  { name:"The Identity Challenge",   face_emotion:"DIRECT ACCUSATORY: eye contact, raised single eyebrow, pointing finger at lens, half-smirk.", text_formula:"IF YOU [DO THIS] = [IDENTITY]. MAX 5 WORDS.", color:"DARK PURPLE/blue + WHITE accent text.", composition:"Face pointing toward text, gesture bridges both." },
-    finance_versus:      { name:"The Finance Versus",       face_emotion:"DECISIVE AUTHORITY: arms crossed, confident half-smile of someone who tested both options.", text_formula:"[OPTION A] VS [OPTION B]. MAX 5 WORDS.", color:"SPLIT — LEFT bold color + RIGHT contrasting color. VS center WHITE/YELLOW.", composition:"50/50 split, each half has own color and icon. VS divider center." },
-    lifestyle_proof:     { name:"The Lifestyle Proof",      face_emotion:"CASUAL ABUNDANT CONFIDENCE: one hand on luxury item, other in pocket. Wealth is ordinary now.", text_formula:"LUXURY ITEM + HOW FUNDED. e.g. 'MY LAMBO PAID BY YOUTUBE'.", color:"DARK background + GOLD text + luxury item glamour.", composition:"Luxury item 50-60% of frame. Income source in large text." },
-    finance_audit:       { name:"The Finance Audit",        face_emotion:"AUDITOR'S HORROR-DISBELIEF: eyes wide squinting, head tilted back, hand to temple, grimace of 'HOW did this happen'. Pained disbelief. Gaze directed RIGHT at the data.", text_formula:"FINANCIAL DISASTER NUMBER + WHO. e.g. '$200K DEBT AT 23'.", color:"SPLIT — auditor face left (dark) + financial data right (clinical/red numbers).", composition:"Auditor pained face left-third + financial breakdown data right-two-thirds." },
-    cliffhanger:         { name:"The Cliffhanger",          face_emotion:"TENSE ANTICIPATION: eyes slightly wide looking OFF-FRAME, jaw tensed, one hand mid-gesture, frozen at moment before everything changes. NOT at camera.", text_formula:"INCOMPLETE REVELATION + ellipsis. e.g. 'SHE LEFT EVERYTHING...'.", color:"WARM AMBER to DEEP ORANGE gradient + heavy sepia grade.", composition:"Subject in dramatic mid-action looking into negative space." },
-    true_account:        { name:"The True Account",         face_emotion:"DOCUMENTARY SUBJECT: calm but haunted expression, slightly off-camera gaze.", text_formula:"TRUE STORY: [WHAT HAPPENED].", color:"DESATURATED muted tones + yellowed newspaper aesthetic.", composition:"Documentary aesthetic, file folder or newspaper texture." },
-    cold_case_file:      { name:"The Cold Case File",       face_emotion:"HAUNTED: troubled expression, dark circles, looking down or away, residual fear.", text_formula:"THE [CRIME] THAT [OUTCOME]. e.g. 'THE MURDER NOBODY SOLVED'.", color:"NEAR BLACK + BLOOD RED accent + YELLOW evidence highlight.", composition:"Evidence board aesthetic: polaroids, red string, case stamps." },
-    suspect_reveal:      { name:"The Suspect Reveal",       face_emotion:"HALF-SHADOWED AMBIGUITY: exactly half face in deep shadow, one eye visible with penetrating gaze.", text_formula:"ACCUSATORY WITHOUT CONFIRMING. e.g. 'SHE SMILED AT THE FUNERAL'.", color:"PURE BLACK + SINGLE harsh light + POLICE YELLOW tape.", composition:"50% deep shadow, 50% harsh revelation light." },
-    heartbreak_headline: { name:"The Heartbreak Headline",  face_emotion:"RAW EMOTIONAL PAIN — NOT staged: eyes red-rimmed or glistening with real tears, lower lip trembling, shoulders slightly collapsed. ZERO performance.", text_formula:"UNRESOLVED PAINFUL MOMENT. Short and specific.", color:"DESATURATED dark blues + single warm light on face + heavy vignette.", composition:"Desaturated environment, face has only warmth." },
-    relationship_red_flag:{ name:"The Relationship Red Flag",face_emotion:"PROTECTIVE WARNING: raised eyebrow skepticism + caring urgency. Stop gesture or crossed arms protectively.", text_formula:"DIRECT CHALLENGE. e.g. 'IF HE DOES THIS — RUN'.", color:"RED dominant + WHITE thick-outline text + red flag element.", composition:"Warning/protective pose with strong eye contact." },
-    destination_wow:     { name:"The Destination Wow Shot", face_emotion:"AWESTRUCK JOY: jaw slightly dropped, eyes wide with genuine wonder, arms spread embracing view.", text_formula:"[PLACE] FOR $AMOUNT. e.g. 'MALDIVES FOR $800'.", color:"ULTRA-VIVID SATURATED landscape + golden hour light.", composition:"Wide cinematic shot, small human for SCALE, destination 75-80% of frame." },
-    hidden_gem:          { name:"The Hidden Gem Reveal",    face_emotion:"DISCOVERER'S EXCITEMENT: genuine surprise-joy, pointing at discovery, breathless secret-sharing energy.", text_formula:"EXCLUSIVITY + PLACE. e.g. 'HIDDEN BEACH NOBODY KNOWS'.", color:"LUSH natural greens + crystal azure blues.", composition:"No tourist infrastructure. Sense of private discovery." },
-    ai_takeover:         { name:"The AI Takeover Frame",    face_emotion:"ALARMED URGENCY: wide eyes of someone who saw the threat, raised hand in stop gesture, forward lean.", text_formula:"AI THREAT + PERSONAL IMPACT. e.g. 'AI JUST REPLACED 10K JOBS'.", color:"ELECTRIC NEON BLUE on NEAR BLACK + purple AI circuit aesthetic.", composition:"AI/robot element dominant and threatening." },
-    cheat_code_reveal:   { name:"The Cheat Code Reveal",    face_emotion:"CONSPIRATORIAL SECRET SHARER: leaning forward, one eyebrow raised, half-smile of giving forbidden access.", text_formula:"TIME/EFFORT COMPRESSION. e.g. '10 HRS → 5 MINS'.", color:"DARK PURPLE + ELECTRIC CYAN + code/terminal aesthetic.", composition:"Tool/screen interface VISIBLE as proof." },
-    tech_comparison:     { name:"The Tech Comparison",      face_emotion:"DECISIVE TESTING AUTHORITY: confident direct gaze, 'I've done the research' look.", text_formula:"[TOOL A] VS [TOOL B].", color:"SPLIT with tool brand colors on each side + bold VS center.", composition:"Logos/interfaces from each tool visible. VS divider center." },
-    plot_twist_tease:    { name:"The Plot Twist Tease",     face_emotion:"MIND-BLOWN MAXIMUM: both hands on head, eyes at ABSOLUTE maximum width, mouth in O shape, leaning back from impact. NOT posed.", text_formula:"UNREVEALED MYSTERY. e.g. 'THE TWIST YOU MISSED'.", color:"CINEMATIC TEAL AND ORANGE + FILM GRAIN + GOLD highlight text.", composition:"SPLIT: reactor face 40% + cinematic scene 60%." },
-    deep_lore_dive:      { name:"The Deep Lore Dive",       face_emotion:"DETECTIVE REVEAL: magnifying glass gesture, intensely focused, eureka single raised finger.", text_formula:"HIDDEN KNOWLEDGE. e.g. 'THE CLUE NOBODY NOTICED'.", color:"DARK mysterious tones + spotlight on key element + annotation arrows.", composition:"Icon/symbol from IP with dramatic spotlight." },
-    reaction_recap:      { name:"The Reaction Recap",       face_emotion:"COMPLETELY AUTHENTIC UNFILTERED: real tears, genuine crinkle-eye laugh, or hand covering mouth in gasp. ZERO performance, ZERO posing.", text_formula:"EMOTIONAL REACTION + SUBJECT. e.g. 'I CRIED 3 TIMES'.", color:"SPLIT: warm natural lighting on face + content-matched grade.", composition:"40-50% authentic reaction face + 50-60% content being reacted to." },
-    shorts_hook_frame:   { name:"The Shorts Hook Frame",    face_emotion:"EXTREME VERSION of video's core emotion amplified 200%.", text_formula:"1-2 LINES MAX. POV hook or shocking statement.", color:"SINGLE BOLD background + WHITE/NEON text top 30%.", composition:"VERTICAL 9:16. Text top 30%. Subject bottom 70%." },
-  };
-
-  return templateIds.map((id, i) => {
-    const t = TEMPLATE_DNA[id];
-    if (!t) return `TEMPLATE ${i+1}: ${id} (use its standard DNA)`;
-    return `
-TEMPLATE ${i+1} — "${t.name}" (ID: ${id})
-FACE/EMOTION LAW: ${t.face_emotion}
-TEXT FORMULA: ${t.text_formula}
-COLOR SYSTEM: ${t.color}
-COMPOSITION: ${t.composition}
-RULE: Concept ${i+1} MUST use this template. All phase outputs for concept ${i+1} must implement this template's DNA exactly.`.trim();
-  }).join('\n\n');
-}
-
+    
     await new Promise(r => setTimeout(r, 2000));
 
     // ──────────────────────────────────────────────────────────────
