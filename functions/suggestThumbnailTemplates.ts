@@ -42,7 +42,7 @@ async function gemini(prompt, temp, maxTok) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: temp, maxOutputTokens: maxTok, responseMimeType: "application/json" }
+        maxOutputTokens: maxTok,
       })
     });
     if (r.status === 429) { await new Promise(w => setTimeout(w, (i + 1) * 10000)); continue; }
@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
     const topic = topics.find(t => t.is_selected);
     const topicTitle = topic?.title || script.title || project.name || 'Untitled Video';
     const fullScript = script.full_script || [script.cold_open, script.act_1, script.act_2, script.act_3, script.outro].filter(Boolean).join('\n\n');
-    const scriptPreview = fullScript.substring(0, 4000);
+    const scriptPreview = fullScript.substring(0, 2000);
 
     // Build template catalog for Gemini
     const templateCatalog = Object.entries(TEMPLATE_DNA).map(([id, t]) => ({
@@ -153,7 +153,7 @@ Respond in this exact JSON:
       "key_visual_element": "What the main image should show — specific to this script"
     }
   ]
-}`, 0.7, 4096);
+}`, 0.7, 2048);
 
     // Enrich with full template DNA
     const enriched = (result.top_5 || []).map(item => {
