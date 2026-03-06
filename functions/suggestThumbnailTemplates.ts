@@ -42,29 +42,30 @@ async function gemini(prompt, temp, maxTok) {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {         // <--- ADD THIS WRAPPER
+        generationConfig: {
           maxOutputTokens: maxTok,
-          temperature: temp         // <--- ADD THIS SO YOUR 'temp' VARIABLE ACTUALLY WORKS
+          temperature: temp,
+          responseMimeType: "application/json"
         }
       })
     });
+    
     if (r.status === 429) { await new Promise(w => setTimeout(w, (i + 1) * 10000)); continue; }
     if (!r.ok) { const e = await r.json(); throw new Error("Gemini " + r.status + ": " + (e.error?.message || "")); }
+    
     const d = await r.json();
     if (!d.candidates?.length) throw new Error("No candidates");
-    const t = d.candidates[0].content.parts[0].text;
-    const clean = s => s.replace(/[\x00-\x1F\x7F]/g, c => "\n\r\t".includes(c) ? c : ' ').replace(/,\s*([}\]])/g, '$1');
-    try { return JSON.parse(t); } catch (_) {}
-    try { return JSON.parse(clean(t)); } catch (_) {}
-    let j = t;
-    if (t.includes("```json")) j = t.split("```json")[1].split("```")[0].trim();
-    else if (t.includes("```")) j = t.split("```")[1].split("```")[0].trim();
-    try { return JSON.parse(clean(j)); } catch (_) {}
-    const m = j.match(/\{[\s\S]*\}/);
-    if (m) try { return JSON.parse(clean(m[0])); } catch (_) {}
-    throw new Error("Parse failed");
+    
+    const textOutput = d.candidates[0].content.parts[0].text;
+    
+    try { 
+      return JSON.parse(textOutput); 
+    } catch (e) {
+      console.error("Failed to parse output:", textOutput);
+      throw new Error("JSON Parse failed on Gemini output");
+    }
   }
-  throw new Error("Rate limited");
+  throw new Error("Rate limited after 3 attempts");
 }
 
 Deno.serve(async (req) => {
