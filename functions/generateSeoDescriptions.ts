@@ -1,212 +1,164 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+// ══════════════════════════════════════════════════════════════════
+// generateSeoDescriptions.js — PHASE 2 (Descriptions Only)
+// ══════════════════════════════════════════════════════════════════
+// Place in: Base44 Backend Functions
+// Called after Phase 1 completes
+// ══════════════════════════════════════════════════════════════════
+
+import { base44 } from './base44Client.js';
+import OpenAI from 'openai';
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // ══════════════════════════════════════════════════════════════════
-// STREAMLINED JSON PARSING
+// FAST JSON PARSER
 // ══════════════════════════════════════════════════════════════════
 
 function parseOpenAIJson(text) {
-  try { return JSON.parse(text); } catch (_) {}
+  if (!text || typeof text !== 'string') return null;
   
-  let cleaned = text;
-  if (text.includes("```")) {
-    const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (match) cleaned = match[1];
-  }
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
   
-  try { return JSON.parse(cleaned.trim()); } catch (_) {}
+  if (start === -1 || end === -1 || end <= start) return null;
   
-  const objMatch = cleaned.match(/\{[\s\S]*\}/);
-  if (objMatch) return JSON.parse(objMatch[0]);
+  let jsonStr = text.slice(start, end + 1);
+  jsonStr = jsonStr
+    .replace(/[\x00-\x1F\x7F]/g, ' ')
+    .replace(/,\s*([}\]])/g, '$1');
   
-  throw new Error("Failed to parse JSON");
-}
-
-async function safeOpenAICall(prompt, temperature = 0.7, maxTokens = 3000) {
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
-  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
-
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: "You are a YouTube SEO expert. Respond with valid JSON only." },
-        { role: "user", content: prompt }
-      ],
-      temperature,
-      max_tokens: maxTokens,
-      response_format: { type: "json_object" }
-    })
-  });
-
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(`OpenAI ${response.status}: ${err.error?.message || 'Unknown'}`);
-  }
-
-  const data = await response.json();
-  const text = data.choices?.[0]?.message?.content;
-  if (!text) throw new Error("Empty OpenAI response");
-
-  return { success: true, data: parseOpenAIJson(text) };
-}
-
-// ══════════════════════════════════════════════════════════════════
-// MAIN HANDLER — PHASE 2: DESCRIPTIONS ONLY
-// ══════════════════════════════════════════════════════════════════
-
-Deno.serve(async (req) => {
   try {
-    const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    console.error('JSON parse failed:', e.message);
+    return null;
+  }
+}
 
+// ══════════════════════════════════════════════════════════════════
+// MAIN HANDLER
+// ══════════════════════════════════════════════════════════════════
+
+export default async function handler(req) {
+  try {
     const { project_id } = await req.json();
-    if (!project_id) return Response.json({ error: 'Missing project_id' }, { status: 400 });
-
-    // ══════════════════════════════════════════════════════════════
-    // LOAD DATA
-    // ══════════════════════════════════════════════════════════════
-    const [projects, allScripts, allTopics, metadataList] = await Promise.all([
-      base44.entities.Projects.filter({ id: project_id }),
-      base44.entities.Scripts.filter({ project_id }),
-      base44.entities.Topics.filter({ project_id }),
-      base44.entities.UploadMetadata.filter({ project_id })
-    ]);
-
-    const project = projects[0];
-    if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
-
-    const script = allScripts.find(s => s.version === 'final_aggregated') || allScripts[0];
-    if (!script) return Response.json({ error: 'No script found' }, { status: 404 });
-
-    const metadata = metadataList[0];
-    if (!metadata) return Response.json({ error: 'No metadata found — run Phase 1 first' }, { status: 404 });
-
-    const topic = allTopics.find(t => t.is_selected === true) || allTopics[0];
-    const topicTitle = topic?.title || script.title || project.name || 'Untitled';
-
-    // Get the primary title from Phase 1
-    const primaryTitle = metadata.title_primary || topicTitle;
-
-    const scriptContent = script.full_script ||
-      [script.cold_open, script.act_1, script.act_2, script.act_3, script.outro]
-        .filter(Boolean).join('\n\n');
     
-    const truncatedScript = scriptContent.substring(0, 2500);
+    if (!project_id) {
+      return new Response(JSON.stringify({ error: 'Missing project_id' }), { status: 400 });
+    }
 
-    console.log('══════════════════════════════════════════════════════');
-    console.log('PHASE 2: DESCRIPTIONS (OpenAI GPT-4o)');
-    console.log(`Topic: ${topicTitle}`);
-    console.log('══════════════════════════════════════════════════════');
+    // Load project and existing metadata
+    const project = await base44.entities.Projects.get(project_id);
+    if (!project) {
+      return new Response(JSON.stringify({ error: 'Project not found' }), { status: 404 });
+    }
 
-    // ══════════════════════════════════════════════════════════════
-    // DESCRIPTION-ONLY PROMPT
-    // ══════════════════════════════════════════════════════════════
+    const existingMeta = await base44.entities.UploadMetadata.filter({ project_id });
+    if (existingMeta.length === 0) {
+      return new Response(JSON.stringify({ error: 'Run Phase 1 first' }), { status: 400 });
+    }
 
-    const prompt = `You are a YouTube SEO expert. Generate 3 video descriptions for this video.
+    const meta = existingMeta[0];
+    const titles = JSON.parse(meta.titles || '[]');
+    const tags = JSON.parse(meta.tags || '[]');
 
-VIDEO TOPIC: "${topicTitle}"
-VIDEO TITLE: "${primaryTitle}"
-NICHE: "${project.niche}"
+    // Load script
+    const script = await base44.entities.Scripts.filter({ project_id });
+    const scriptContent = script[0]?.content || '';
+    const videoTitle = titles[0]?.title || project.working_title || project.topic;
+    const niche = project.niche || 'general';
 
-SCRIPT EXCERPT:
-${truncatedScript}
+    // Script excerpt for context
+    const scriptExcerpt = scriptContent.slice(0, 1500);
 
-═══════════════════════════════════════
-GENERATE 3 DESCRIPTIONS
-═══════════════════════════════════════
+    // ════════════════════════════════════════════════════════════════
+    // PHASE 2 PROMPT: Descriptions Only
+    // ════════════════════════════════════════════════════════════════
 
-Each description should have:
+    const systemPrompt = `You are a YouTube description copywriter. Write compelling, SEO-optimized descriptions.
+Return ONLY valid JSON with no markdown.`;
 
-1. **HOOK** (first 150 chars — shown before "Show More")
-   - Primary keyword in first sentence
-   - Immediate curiosity or urgency
+    const userPrompt = `Write 3 YouTube video descriptions for this video:
 
-2. **EXPANDED CONTENT** (200-300 words)
-   - 3-5 long-tail keywords woven naturally
-   - Emotional stakes and value proposition
+TITLE: ${videoTitle}
+NICHE: ${niche}
+TAGS: ${tags.slice(0, 5).join(', ')}
+SCRIPT EXCERPT: ${scriptExcerpt}
 
-3. **TIMESTAMPS** (realistic from script)
-   0:00 - Introduction
-   (add 4-6 more based on script content)
-
-4. **CTA SECTION**
-   - Subscribe reason tied to topic
-   - Comment prompt (engaging question)
-
-═══════════════════════════════════════
-3 VARIANTS
-═══════════════════════════════════════
-
-1. "Maximum SEO" — keyword-dense, 400-500 words total
-2. "Engagement Focused" — emotionally compelling, drives comments, 300-400 words
-3. "Community Building" — creates belonging, drives subs, 300-400 words
-
-═══════════════════════════════════════
-OUTPUT — EXACT JSON STRUCTURE
-═══════════════════════════════════════
-
+Generate JSON with this EXACT structure:
 {
   "descriptions": [
     {
-      "label": "Maximum SEO",
-      "content": "Full description with all sections...",
-      "primary_keywords": ["keyword1", "keyword2"],
-      "long_tail_keywords": ["phrase1", "phrase2"]
+      "style": "hook_heavy",
+      "description": "Full description 400-600 words. Start with compelling hook. Include timestamps placeholder [TIMESTAMPS]. Include CTA. Natural keyword integration.",
+      "word_count": 500
     },
     {
-      "label": "Engagement Focused",
-      "content": "Full description...",
-      "primary_keywords": ["keyword1"],
-      "long_tail_keywords": ["phrase1"]
+      "style": "seo_optimized",
+      "description": "Full description 400-600 words. Front-load keywords. Dense but readable. Include timestamps placeholder. Multiple CTAs.",
+      "word_count": 500
     },
     {
-      "label": "Community Building",
-      "content": "Full description...",
-      "primary_keywords": ["keyword1"],
-      "long_tail_keywords": ["phrase1"]
+      "style": "storytelling",
+      "description": "Full description 400-600 words. Narrative approach. Emotional hooks. Include timestamps placeholder. Soft CTA.",
+      "word_count": 500
     }
   ]
 }
 
-Respond ONLY with the JSON object.`;
+RULES:
+- Each description MUST be 400-600 words
+- Include [TIMESTAMPS] placeholder in each
+- First 150 characters are crucial (shown in search)
+- Include relevant keywords naturally
+- End each with a call-to-action
+- Return ONLY the JSON object`;
 
-    const result = await safeOpenAICall(prompt, 0.7, 3000);
-
-    if (!result.success) {
-      console.error('OpenAI failed:', result.error);
-      return Response.json({ error: result.error }, { status: 500 });
-    }
-
-    const { descriptions = [] } = result.data;
-
-    if (!descriptions.length) {
-      return Response.json({ error: 'No descriptions generated' }, { status: 500 });
-    }
-
-    // ══════════════════════════════════════════════════════════════
-    // UPDATE EXISTING METADATA WITH DESCRIPTIONS
-    // ══════════════════════════════════════════════════════════════
-    await base44.entities.UploadMetadata.update(metadata.id, {
-      description_template: descriptions[0]?.content || '',
-      description_alt_1: descriptions[1]?.content || '',
-      description_alt_2: descriptions[2]?.content || ''
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ],
+      max_tokens: 3000,
+      temperature: 0.7
     });
 
-    console.log(`✓ Phase 2 complete: ${descriptions.length} descriptions`);
+    const responseText = completion.choices[0]?.message?.content || '';
+    const parsed = parseOpenAIJson(responseText);
 
-    return Response.json({
+    if (!parsed || !parsed.descriptions) {
+      return new Response(JSON.stringify({ 
+        error: 'Failed to parse descriptions',
+        raw: responseText.slice(0, 500)
+      }), { status: 500 });
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // UPDATE DATABASE
+    // ════════════════════════════════════════════════════════════════
+
+    await base44.entities.UploadMetadata.update(meta.id, {
+      descriptions: JSON.stringify(parsed.descriptions),
+      status: 'complete'
+    });
+
+    // ════════════════════════════════════════════════════════════════
+    // RETURN RESPONSE
+    // ════════════════════════════════════════════════════════════════
+
+    return new Response(JSON.stringify({
       success: true,
-      descriptions
+      descriptions: parsed.descriptions
+    }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
-    console.error('generateSeoDescriptions error:', error.message);
-    return Response.json({ error: error.message }, { status: 500 });
+    console.error('SEO Phase 2 error:', error);
+    return new Response(JSON.stringify({ 
+      error: error.message || 'Description generation failed'
+    }), { status: 500 });
   }
-});
+}
