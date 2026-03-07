@@ -1,6 +1,6 @@
 // ══════════════════════════════════════════════════════════════════
-// ThumbnailWithTextOverlay.jsx
-// COMPLETE VERSION with Intelligent Image-Aware Text Positioning
+// ThumbnailWithTextOverlay.jsx — V2 COMPLETE
+// Template-based MASSIVE text overlay system
 // ══════════════════════════════════════════════════════════════════
 // Place in: src/components/postprod/ThumbnailWithTextOverlay.jsx
 // ══════════════════════════════════════════════════════════════════
@@ -8,282 +8,595 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Download, RefreshCw, Edit3, Check, X, Wand2, RotateCcw } from 'lucide-react';
+import { 
+  Download, RefreshCw, Edit3, Check, X, 
+  ChevronDown, Palette, Type, Layout, Save
+} from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════════
-// POSITION PRESETS
+// TEXT OVERLAY TEMPLATES — Matching Pro YouTube Thumbnails
+// Font sizes are % of canvas HEIGHT for massive text
 // ══════════════════════════════════════════════════════════════════
 
-const POSITION_PRESETS = {
-  'upper-left':    { x: 0.05, y: 0.12, align: 'left' },
-  'upper-center':  { x: 0.50, y: 0.12, align: 'center' },
-  'upper-right':   { x: 0.95, y: 0.12, align: 'right' },
-  'center-left':   { x: 0.05, y: 0.50, align: 'left' },
-  'center':        { x: 0.50, y: 0.50, align: 'center' },
-  'center-right':  { x: 0.95, y: 0.50, align: 'right' },
-  'lower-left':    { x: 0.05, y: 0.78, align: 'left' },
-  'lower-center':  { x: 0.50, y: 0.78, align: 'center' }
-  // Note: No lower-right — YouTube timestamp covers it
+const TEXT_TEMPLATES = {
+  // ─── TEMPLATE 1: SHOCK FACE SIDE TEXT ───────────────────────────
+  // Like your Image 1 & 2: "$10 A DAY?" on left side
+  shock_side: {
+    id: 'shock_side',
+    name: 'Shock Side Text',
+    preview: '💥 Big text left',
+    description: 'Massive text on dark left side, subject on right',
+    layers: [
+      {
+        id: 'headline',
+        type: 'primary',
+        position: { x: 0.05, y: 0.20 },
+        align: 'left',
+        fontSizePercent: 0.14,  // 14% of height = ~150px on 1080p
+        fontWeight: 900,
+        fontFamily: 'Impact, Arial Black, sans-serif',
+        color: '#FFFFFF',
+        strokeColor: '#000000',
+        strokeWidth: 0.06,
+        shadow: true,
+        maxWidth: 0.50,
+        uppercase: true
+      }
+    ]
+  },
+
+  // ─── TEMPLATE 2: CENTERED MASSIVE ───────────────────────────────
+  // Giant centered headline filling top
+  centered_massive: {
+    id: 'centered_massive',
+    name: 'Centered Massive',
+    preview: '🎯 Giant centered',
+    description: 'Huge centered headline, fills top third',
+    layers: [
+      {
+        id: 'headline',
+        type: 'primary',
+        position: { x: 0.50, y: 0.18 },
+        align: 'center',
+        fontSizePercent: 0.16,  // 16% = ~173px
+        fontWeight: 900,
+        fontFamily: 'Impact, Arial Black, sans-serif',
+        color: '#FFFFFF',
+        strokeColor: '#000000',
+        strokeWidth: 0.07,
+        shadow: true,
+        maxWidth: 0.90,
+        uppercase: true
+      }
+    ]
+  },
+
+  // ─── TEMPLATE 3: YOUTUBE STACKED ────────────────────────────────
+  // Like Image 4: "YOUTUBE" + "THUMBNAIL" + "DESIGN"
+  stacked_youtube: {
+    id: 'stacked_youtube',
+    name: 'YouTube Stacked',
+    preview: '📺 Multi-line stacked',
+    description: 'Large headline + smaller subtext stacked',
+    layers: [
+      {
+        id: 'headline',
+        type: 'primary',
+        position: { x: 0.50, y: 0.14 },
+        align: 'center',
+        fontSizePercent: 0.15,
+        fontWeight: 900,
+        fontFamily: 'Impact, Arial Black, sans-serif',
+        color: '#FFD700',  // Gold/Yellow
+        strokeColor: '#000000',
+        strokeWidth: 0.06,
+        shadow: true,
+        maxWidth: 0.85,
+        uppercase: true
+      },
+      {
+        id: 'subtext',
+        type: 'secondary',
+        position: { x: 0.50, y: 0.32 },
+        align: 'center',
+        fontSizePercent: 0.10,
+        fontWeight: 900,
+        fontFamily: 'Impact, Arial Black, sans-serif',
+        color: '#FFFFFF',
+        strokeColor: '#000000',
+        strokeWidth: 0.05,
+        shadow: true,
+        maxWidth: 0.80,
+        uppercase: true
+      }
+    ]
+  },
+
+  // ─── TEMPLATE 4: BEFORE/AFTER SPLIT ─────────────────────────────
+  // Like Image 6 & 7: BEFORE on left (red), AFTER on right (green)
+  split_before_after: {
+    id: 'split_before_after',
+    name: 'Before/After Split',
+    preview: '↔️ Left vs Right',
+    description: 'BEFORE on left (red), AFTER on right (green)',
+    layers: [
+      {
+        id: 'before_label',
+        type: 'primary',
+        position: { x: 0.25, y: 0.12 },
+        align: 'center',
+        fontSizePercent: 0.12,
+        fontWeight: 900,
+        fontFamily: 'Impact, Arial Black, sans-serif',
+        color: '#FF4444',  // Red
+        strokeColor: '#000000',
+        strokeWidth: 0.06,
+        shadow: true,
+        maxWidth: 0.40,
+        uppercase: true,
+        defaultText: 'BEFORE'
+      },
+      {
+        id: 'after_label',
+        type: 'secondary',
+        position: { x: 0.75, y: 0.12 },
+        align: 'center',
+        fontSizePercent: 0.12,
+        fontWeight: 900,
+        fontFamily: 'Impact, Arial Black, sans-serif',
+        color: '#00FF88',  // Green
+        strokeColor: '#000000',
+        strokeWidth: 0.06,
+        shadow: true,
+        maxWidth: 0.40,
+        uppercase: true,
+        defaultText: 'AFTER'
+      }
+    ]
+  },
+
+  // ─── TEMPLATE 5: INCOME/MONEY REVEAL ────────────────────────────
+  // Massive green dollar amount
+  income_reveal: {
+    id: 'income_reveal',
+    name: 'Income Reveal',
+    preview: '💰 Big money number',
+    description: 'Massive dollar amount with subtext',
+    layers: [
+      {
+        id: 'amount',
+        type: 'primary',
+        position: { x: 0.05, y: 0.18 },
+        align: 'left',
+        fontSizePercent: 0.20,  // 20% = ~216px MASSIVE
+        fontWeight: 900,
+        fontFamily: 'Impact, Arial Black, sans-serif',
+        color: '#00FF88',  // Money green
+        strokeColor: '#000000',
+        strokeWidth: 0.06,
+        shadow: true,
+        maxWidth: 0.60,
+        uppercase: true,
+        defaultText: '$47,382'
+      },
+      {
+        id: 'timeframe',
+        type: 'secondary',
+        position: { x: 0.05, y: 0.38 },
+        align: 'left',
+        fontSizePercent: 0.08,
+        fontWeight: 900,
+        fontFamily: 'Impact, Arial Black, sans-serif',
+        color: '#FFFFFF',
+        strokeColor: '#000000',
+        strokeWidth: 0.05,
+        shadow: true,
+        maxWidth: 0.50,
+        uppercase: true,
+        defaultText: 'IN 6 MONTHS'
+      }
+    ]
+  },
+
+  // ─── TEMPLATE 6: WARNING/ALERT ──────────────────────────────────
+  warning_alert: {
+    id: 'warning_alert',
+    name: 'Warning Alert',
+    preview: '⚠️ Urgent warning',
+    description: 'Red alert text, urgent feel',
+    layers: [
+      {
+        id: 'warning',
+        type: 'primary',
+        position: { x: 0.50, y: 0.15 },
+        align: 'center',
+        fontSizePercent: 0.14,
+        fontWeight: 900,
+        fontFamily: 'Impact, Arial Black, sans-serif',
+        color: '#FFFFFF',
+        strokeColor: '#CC0000',  // Red outline
+        strokeWidth: 0.08,
+        shadow: true,
+        maxWidth: 0.85,
+        uppercase: true,
+        defaultText: 'STOP DOING THIS'
+      },
+      {
+        id: 'consequence',
+        type: 'secondary',
+        position: { x: 0.50, y: 0.32 },
+        align: 'center',
+        fontSizePercent: 0.07,
+        fontWeight: 900,
+        fontFamily: 'Impact, Arial Black, sans-serif',
+        color: '#FF4444',
+        strokeColor: '#000000',
+        strokeWidth: 0.05,
+        shadow: true,
+        maxWidth: 0.70,
+        uppercase: true
+      }
+    ]
+  },
+
+  // ─── TEMPLATE 7: QUESTION HOOK ──────────────────────────────────
+  question_hook: {
+    id: 'question_hook',
+    name: 'Question Hook',
+    preview: '❓ Curiosity question',
+    description: 'Big question that demands an answer',
+    layers: [
+      {
+        id: 'question',
+        type: 'primary',
+        position: { x: 0.05, y: 0.15 },
+        align: 'left',
+        fontSizePercent: 0.15,
+        fontWeight: 900,
+        fontFamily: 'Impact, Arial Black, sans-serif',
+        color: '#FFFFFF',
+        strokeColor: '#000000',
+        strokeWidth: 0.06,
+        shadow: true,
+        maxWidth: 0.55,
+        uppercase: true,
+        defaultText: '$10 A DAY?'
+      }
+    ]
+  },
+
+  // ─── TEMPLATE 8: METRIC CARDS ───────────────────────────────────
+  // Like Image 3: "YOU CAN DO IT" + floating stat badges
+  metric_cards: {
+    id: 'metric_cards',
+    name: 'Metric Cards',
+    preview: '📊 Stats with badges',
+    description: 'Main text + floating metric indicators',
+    layers: [
+      {
+        id: 'headline',
+        type: 'primary',
+        position: { x: 0.50, y: 0.12 },
+        align: 'center',
+        fontSizePercent: 0.13,
+        fontWeight: 900,
+        fontFamily: 'Impact, Arial Black, sans-serif',
+        color: '#FFFFFF',
+        strokeColor: '#000000',
+        strokeWidth: 0.06,
+        shadow: true,
+        maxWidth: 0.90,
+        uppercase: true,
+        defaultText: 'YOU CAN DO IT'
+      },
+      {
+        id: 'metric1',
+        type: 'badge',
+        position: { x: 0.28, y: 0.78 },
+        align: 'center',
+        fontSizePercent: 0.045,
+        fontWeight: 700,
+        fontFamily: 'Arial, sans-serif',
+        color: '#000000',
+        bgColor: '#FFFFFF',
+        bgPadding: { x: 20, y: 10 },
+        borderRadius: 8,
+        shadow: true,
+        maxWidth: 0.30,
+        uppercase: false,
+        defaultText: '300K Subscribers ↑'
+      },
+      {
+        id: 'metric2',
+        type: 'badge',
+        position: { x: 0.72, y: 0.78 },
+        align: 'center',
+        fontSizePercent: 0.045,
+        fontWeight: 700,
+        fontFamily: 'Arial, sans-serif',
+        color: '#000000',
+        bgColor: '#FFFFFF',
+        bgPadding: { x: 20, y: 10 },
+        borderRadius: 8,
+        shadow: true,
+        maxWidth: 0.30,
+        uppercase: false,
+        defaultText: '$150 Revenue ↑'
+      }
+    ]
+  },
+
+  // ─── TEMPLATE 9: DATA EXPLOSION ─────────────────────────────────
+  // Like Image 5: "HIGH CTR" badge + "THUMBNAIL" + stats
+  data_explosion: {
+    id: 'data_explosion',
+    name: 'Data Explosion',
+    preview: '📈 Multiple stats',
+    description: 'Headline + multiple data points',
+    layers: [
+      {
+        id: 'badge',
+        type: 'badge',
+        position: { x: 0.50, y: 0.08 },
+        align: 'center',
+        fontSizePercent: 0.04,
+        fontWeight: 700,
+        fontFamily: 'Arial, sans-serif',
+        color: '#FFFFFF',
+        bgColor: '#FF0000',
+        bgPadding: { x: 15, y: 8 },
+        borderRadius: 6,
+        shadow: true,
+        maxWidth: 0.30,
+        uppercase: true,
+        defaultText: 'HIGH CTR'
+      },
+      {
+        id: 'main_stat',
+        type: 'primary',
+        position: { x: 0.50, y: 0.22 },
+        align: 'center',
+        fontSizePercent: 0.16,
+        fontWeight: 900,
+        fontFamily: 'Impact, Arial Black, sans-serif',
+        color: '#FFFFFF',
+        strokeColor: '#000000',
+        strokeWidth: 0.06,
+        shadow: true,
+        maxWidth: 0.85,
+        uppercase: true,
+        defaultText: 'THUMBNAIL'
+      },
+      {
+        id: 'stat1',
+        type: 'secondary',
+        position: { x: 0.30, y: 0.42 },
+        align: 'center',
+        fontSizePercent: 0.09,
+        fontWeight: 900,
+        fontFamily: 'Impact, Arial Black, sans-serif',
+        color: '#00FF88',
+        strokeColor: '#000000',
+        strokeWidth: 0.05,
+        shadow: true,
+        maxWidth: 0.35,
+        uppercase: true,
+        defaultText: '10X VIEWS'
+      },
+      {
+        id: 'stat2',
+        type: 'secondary',
+        position: { x: 0.70, y: 0.42 },
+        align: 'center',
+        fontSizePercent: 0.09,
+        fontWeight: 900,
+        fontFamily: 'Impact, Arial Black, sans-serif',
+        color: '#00FF88',
+        strokeColor: '#000000',
+        strokeWidth: 0.05,
+        shadow: true,
+        maxWidth: 0.35,
+        uppercase: true,
+        defaultText: '17% CTR'
+      }
+    ]
+  },
+
+  // ─── TEMPLATE 10: MINIMAL CORNER ────────────────────────────────
+  minimal_corner: {
+    id: 'minimal_corner',
+    name: 'Minimal Corner',
+    preview: '📌 Small corner',
+    description: 'Subtle text, lets image speak',
+    layers: [
+      {
+        id: 'text',
+        type: 'primary',
+        position: { x: 0.05, y: 0.88 },
+        align: 'left',
+        fontSizePercent: 0.06,
+        fontWeight: 700,
+        fontFamily: 'Arial, sans-serif',
+        color: '#FFFFFF',
+        strokeColor: '#000000',
+        strokeWidth: 0.08,
+        shadow: true,
+        maxWidth: 0.50,
+        uppercase: false
+      }
+    ]
+  }
 };
 
 // ══════════════════════════════════════════════════════════════════
-// INTELLIGENT IMAGE ANALYSIS
-// Analyzes regions to find optimal text placement
+// CANVAS TEXT RENDERER — Multi-Layer Support
 // ══════════════════════════════════════════════════════════════════
 
-/**
- * Analyzes a region of the image for text placement suitability
- */
-function analyzeRegion(ctx, canvasWidth, canvasHeight, region) {
-  const x = Math.floor(region.x * canvasWidth);
-  const y = Math.floor(region.y * canvasHeight);
-  const w = Math.max(1, Math.floor(region.w * canvasWidth));
-  const h = Math.max(1, Math.floor(region.h * canvasHeight));
-
-  let imageData;
-  try {
-    imageData = ctx.getImageData(x, y, w, h);
-  } catch (e) {
-    // CORS or other error — return neutral values
-    return {
-      avgBrightness: 128,
-      variance: 1000,
-      isUniform: false,
-      isDark: false,
-      isLight: false,
-      dominantColor: { r: 128, g: 128, b: 128 }
-    };
-  }
-
-  const pixels = imageData.data;
-  let totalBrightness = 0;
-  const brightnessValues = [];
-  let brightPixels = 0;
-  let darkPixels = 0;
-  const colors = { r: 0, g: 0, b: 0 };
-
-  // Sample every 4th pixel for performance (still accurate)
-  for (let i = 0; i < pixels.length; i += 16) {
-    const r = pixels[i];
-    const g = pixels[i + 1];
-    const b = pixels[i + 2];
-    
-    // Perceived brightness (human eye sensitivity weighted)
-    const brightness = (0.299 * r + 0.587 * g + 0.114 * b);
-    brightnessValues.push(brightness);
-    totalBrightness += brightness;
-    
-    if (brightness > 180) brightPixels++;
-    if (brightness < 80) darkPixels++;
-    
-    colors.r += r;
-    colors.g += g;
-    colors.b += b;
-  }
-
-  const pixelCount = brightnessValues.length || 1;
-  const avgBrightness = totalBrightness / pixelCount;
-  
-  // Calculate variance (low = uniform = good for text)
-  const variance = brightnessValues.reduce((sum, b) => 
-    sum + Math.pow(b - avgBrightness, 2), 0) / pixelCount;
-
-  return {
-    avgBrightness,
-    variance,
-    isUniform: variance < 1500,
-    isDark: avgBrightness < 100,
-    isLight: avgBrightness > 180,
-    dominantColor: {
-      r: Math.round(colors.r / pixelCount),
-      g: Math.round(colors.g / pixelCount),
-      b: Math.round(colors.b / pixelCount)
-    }
-  };
-}
-
-/**
- * Finds the best position for text by analyzing all candidate zones
- */
-function findBestTextPosition(canvas, ctx, textLength) {
-  const width = canvas.width;
-  const height = canvas.height;
-  
-  // Define candidate zones with their analysis regions
-  const zones = [
-    { id: 'upper-left',   x: 0.05, y: 0.12, align: 'left',   region: { x: 0, y: 0, w: 0.45, h: 0.22 } },
-    { id: 'upper-center', x: 0.50, y: 0.12, align: 'center', region: { x: 0.20, y: 0, w: 0.60, h: 0.22 } },
-    { id: 'upper-right',  x: 0.95, y: 0.12, align: 'right',  region: { x: 0.55, y: 0, w: 0.45, h: 0.22 } },
-    { id: 'center-left',  x: 0.05, y: 0.50, align: 'left',   region: { x: 0, y: 0.38, w: 0.35, h: 0.24 } },
-    { id: 'center-right', x: 0.95, y: 0.50, align: 'right',  region: { x: 0.65, y: 0.38, w: 0.35, h: 0.24 } },
-    { id: 'lower-left',   x: 0.05, y: 0.78, align: 'left',   region: { x: 0, y: 0.65, w: 0.45, h: 0.20 } },
-    { id: 'lower-center', x: 0.50, y: 0.78, align: 'center', region: { x: 0.15, y: 0.65, w: 0.55, h: 0.20 } },
-  ];
-
-  const scored = zones.map(zone => {
-    const data = analyzeRegion(ctx, width, height, zone.region);
-    
-    let score = 100;
-
-    // REWARD: Uniform areas (low variance) — text is more readable
-    if (data.isUniform) {
-      score += 40;
-    } else {
-      score -= Math.min(50, data.variance / 80);
-    }
-
-    // REWARD: Dark areas — white/bright text pops better
-    if (data.isDark) {
-      score += 35;
-    } else if (data.avgBrightness < 120) {
-      score += 20;
-    }
-
-    // REWARD: Very dark + uniform = perfect zone
-    if (data.isDark && data.isUniform) {
-      score += 25;
-    }
-
-    // PENALIZE: Very light areas — hard to read any text color
-    if (data.isLight) {
-      score -= 30;
-    }
-
-    // PENALIZE: Mid-brightness with high variance (busy, detailed areas)
-    if (!data.isDark && !data.isLight && !data.isUniform) {
-      score -= 35;
-    }
-
-    // PREFER: Upper positions (standard thumbnail convention)
-    if (zone.id.startsWith('upper')) {
-      score += 12;
-    }
-
-    // PREFER: Left-aligned for longer text (easier to read)
-    if (textLength > 20 && zone.align === 'left') {
-      score += 8;
-    }
-
-    return { ...zone, score: Math.max(0, score), data };
-  });
-
-  // Sort by score (highest = best placement)
-  scored.sort((a, b) => b.score - a.score);
-  
-  const best = scored[0];
-  
-  // Determine suggested text color based on region analysis
-  let suggestedColor = { fill: '#FFFFFF', outline: '#000000' };
-  
-  if (best.data.avgBrightness > 180) {
-    // Light background → dark text
-    suggestedColor = { fill: '#000000', outline: '#FFFFFF' };
-  } else if (best.data.avgBrightness > 140) {
-    // Medium-light → dark text with white outline
-    suggestedColor = { fill: '#1a1a1a', outline: '#FFFFFF' };
-  } else if (best.data.dominantColor.b > best.data.dominantColor.r + 40) {
-    // Blue-ish background → gold text
-    suggestedColor = { fill: '#FFD700', outline: '#000000' };
-  } else if (best.data.dominantColor.r > best.data.dominantColor.b + 40 && best.data.avgBrightness < 80) {
-    // Dark red/warm → cyan or white
-    suggestedColor = { fill: '#FFFFFF', outline: '#000000' };
-  } else if (best.data.dominantColor.g > best.data.dominantColor.r + 20) {
-    // Green-ish → white or gold
-    suggestedColor = { fill: '#FFFFFF', outline: '#000000' };
-  }
-
-  return {
-    position: best.id,
-    x: best.x,
-    y: best.y,
-    align: best.align,
-    score: best.score,
-    brightness: best.data.avgBrightness,
-    isUniform: best.data.isUniform,
-    suggestedColor,
-    allScores: scored.map(z => ({ id: z.id, score: z.score, brightness: z.data.avgBrightness }))
-  };
-}
-
-// ══════════════════════════════════════════════════════════════════
-// SMART FONT SIZE CALCULATOR
-// ══════════════════════════════════════════════════════════════════
-
-function calculateOptimalFontSize(text, canvasWidth, canvasHeight, maxWidthPercent = 0.85) {
-  const words = text.split(' ').length;
-  const chars = text.length;
-
-  // Base size percentages based on word count
-  let sizePercent;
-  if (words <= 2) sizePercent = 0.12;      // Massive — 2 words or less
-  else if (words <= 3) sizePercent = 0.095; // Large — 3 words
-  else if (words <= 4) sizePercent = 0.075; // Medium — 4 words
-  else if (words <= 5) sizePercent = 0.065; // Small-medium — 5 words
-  else sizePercent = 0.055;                 // Small — 6+ words
-
-  let fontSize = Math.round(canvasHeight * sizePercent);
-
-  // Adjust if text would be too wide
-  const estimatedWidth = chars * fontSize * 0.52;
-  const maxWidth = canvasWidth * maxWidthPercent;
-
-  if (estimatedWidth > maxWidth) {
-    fontSize = Math.round((maxWidth / chars) / 0.52);
-  }
-
-  // Clamp to reasonable range
-  return Math.max(40, Math.min(fontSize, canvasHeight * 0.15));
-}
-
-// ══════════════════════════════════════════════════════════════════
-// CANVAS TEXT RENDERER
-// ══════════════════════════════════════════════════════════════════
-
-function drawTextOnCanvas(ctx, config) {
-  const {
-    text,
-    canvasWidth,
-    canvasHeight,
-    position = 'upper-left',
-    color = '#FFFFFF',
-    outlineColor = '#000000',
-    fontSize = null,
-    fontFamily = 'Impact, Arial Black, Helvetica, sans-serif'
-  } = config;
-
+function drawTextLayer(ctx, layer, text, canvasWidth, canvasHeight) {
   if (!text || !text.trim()) return;
 
-  const pos = POSITION_PRESETS[position] || POSITION_PRESETS['upper-left'];
-  const calculatedFontSize = fontSize || calculateOptimalFontSize(text, canvasWidth, canvasHeight);
-  const outlineWidth = Math.max(3, Math.round(calculatedFontSize * 0.055));
-  const shadowOffset = Math.max(2, Math.round(calculatedFontSize * 0.025));
+  const displayText = layer.uppercase ? text.toUpperCase() : text;
+  const fontSize = Math.round(canvasHeight * layer.fontSizePercent);
+  const strokeWidth = Math.max(4, Math.round(fontSize * layer.strokeWidth));
+  const shadowOffset = Math.max(3, Math.round(fontSize * 0.04));
 
-  // Convert text to uppercase for impact
-  const displayText = text.toUpperCase();
+  const x = canvasWidth * layer.position.x;
+  const y = canvasHeight * layer.position.y;
 
-  // Calculate pixel position
-  const x = canvasWidth * pos.x;
-  const y = canvasHeight * pos.y;
-
-  // Set font
-  ctx.font = `900 ${calculatedFontSize}px ${fontFamily}`;
+  ctx.font = `${layer.fontWeight} ${fontSize}px ${layer.fontFamily}`;
   ctx.textBaseline = 'middle';
-  ctx.textAlign = pos.align;
+  ctx.textAlign = layer.align;
 
-  // Layer 1: Shadow (depth effect)
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-  ctx.fillText(displayText, x + shadowOffset, y + shadowOffset);
+  // Handle badge type (with background)
+  if (layer.type === 'badge' && layer.bgColor) {
+    const metrics = ctx.measureText(displayText);
+    const textWidth = metrics.width;
+    const textHeight = fontSize;
+    const padX = layer.bgPadding?.x || 15;
+    const padY = layer.bgPadding?.y || 8;
+    const radius = layer.borderRadius || 6;
 
-  // Layer 2: Outline (stroke for contrast)
-  ctx.strokeStyle = outlineColor;
-  ctx.lineWidth = outlineWidth;
+    let bgX = x - padX;
+    if (layer.align === 'center') bgX = x - textWidth/2 - padX;
+    else if (layer.align === 'right') bgX = x - textWidth - padX;
+
+    const bgY = y - textHeight/2 - padY;
+    const bgWidth = textWidth + padX * 2;
+    const bgHeight = textHeight + padY * 2;
+
+    // Shadow
+    if (layer.shadow) {
+      ctx.fillStyle = 'rgba(0,0,0,0.4)';
+      roundRect(ctx, bgX + 4, bgY + 4, bgWidth, bgHeight, radius);
+      ctx.fill();
+    }
+
+    // Background
+    ctx.fillStyle = layer.bgColor;
+    roundRect(ctx, bgX, bgY, bgWidth, bgHeight, radius);
+    ctx.fill();
+
+    // Text
+    ctx.fillStyle = layer.color;
+    ctx.fillText(displayText, x, y);
+    return;
+  }
+
+  // Standard text: Shadow → Stroke → Fill
+  if (layer.shadow) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillText(displayText, x + shadowOffset, y + shadowOffset);
+  }
+
+  ctx.strokeStyle = layer.strokeColor || '#000000';
+  ctx.lineWidth = strokeWidth;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.strokeText(displayText, x, y);
 
-  // Layer 3: Fill (main text color)
-  ctx.fillStyle = color;
+  ctx.fillStyle = layer.color;
   ctx.fillText(displayText, x, y);
+}
+
+function roundRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+// ══════════════════════════════════════════════════════════════════
+// TEMPLATE SELECTOR
+// ══════════════════════════════════════════════════════════════════
+
+function TemplateSelector({ selectedTemplate, onSelect, isOpen, onToggle }) {
+  const templates = Object.values(TEXT_TEMPLATES);
+
+  return (
+    <div className="relative">
+      <Button
+        size="sm"
+        variant="outline"
+        className="gap-2 h-9 w-full justify-between"
+        onClick={onToggle}
+      >
+        <div className="flex items-center gap-2">
+          <Layout className="w-4 h-4 text-purple-500" />
+          <span className="font-medium">
+            {TEXT_TEMPLATES[selectedTemplate]?.name || 'Select Template'}
+          </span>
+        </div>
+        <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </Button>
+
+      {isOpen && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-xl z-50 max-h-80 overflow-y-auto">
+          {templates.map(template => (
+            <button
+              key={template.id}
+              onClick={() => {
+                onSelect(template.id);
+                onToggle();
+              }}
+              className={`w-full px-3 py-2.5 text-left hover:bg-purple-50 flex items-center gap-3 border-b last:border-b-0 ${
+                selectedTemplate === template.id ? 'bg-purple-50' : ''
+              }`}
+            >
+              <span className="text-xl w-8">{template.preview.split(' ')[0]}</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm text-gray-900">{template.name}</p>
+                <p className="text-xs text-gray-500 truncate">{template.description}</p>
+              </div>
+              {selectedTemplate === template.id && (
+                <Check className="w-4 h-4 text-purple-600 shrink-0" />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// LAYER TEXT EDITOR
+// ══════════════════════════════════════════════════════════════════
+
+function LayerEditor({ layer, text, onChange, color, onColorChange }) {
+  return (
+    <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
+      <div className="flex-1">
+        <label className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">
+          {layer.id.replace(/_/g, ' ')}
+        </label>
+        <input
+          type="text"
+          value={text}
+          onChange={(e) => onChange(e.target.value)}
+          className={`w-full px-2 py-1.5 text-sm border rounded font-bold bg-white ${
+            layer.uppercase ? 'uppercase' : ''
+          }`}
+          placeholder={layer.defaultText || 'Enter text...'}
+        />
+      </div>
+      <div className="pt-4">
+        <input
+          type="color"
+          value={color}
+          onChange={(e) => onColorChange(e.target.value)}
+          className="w-9 h-9 rounded cursor-pointer border-2 border-gray-200"
+          title="Text color"
+        />
+      </div>
+    </div>
+  );
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -297,58 +610,53 @@ export default function ThumbnailWithTextOverlay({
   onTextChange,
   onDownload,
   editable = true,
-  showAnalysis = false,
   className = ''
 }) {
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
-  
-  // State
+
   const [isEditing, setIsEditing] = useState(false);
-  const [editText, setEditText] = useState('');
-  const [editPosition, setEditPosition] = useState('upper-left');
-  const [editColor, setEditColor] = useState('#FFFFFF');
+  const [templateId, setTemplateId] = useState('shock_side');
+  const [templateSelectorOpen, setTemplateSelectorOpen] = useState(false);
+  const [layerTexts, setLayerTexts] = useState({});
+  const [layerColors, setLayerColors] = useState({});
   const [imageLoaded, setImageLoaded] = useState(false);
   const [error, setError] = useState(null);
-  
-  // Smart positioning state
-  const [analysisResult, setAnalysisResult] = useState(null);
-  const [useSmartPosition, setUseSmartPosition] = useState(true);
 
-  // Parse text config from concept if not provided directly
-  const parsedConfig = React.useMemo(() => {
-    if (textConfig.primary_text) return textConfig;
+  const currentTemplate = TEXT_TEMPLATES[templateId] || TEXT_TEMPLATES.shock_side;
 
+  // Parse saved config
+  const savedConfig = React.useMemo(() => {
     try {
-      const styleData = JSON.parse(concept.text_style || '{}');
-      return {
-        primary_text: concept.text_overlay || styleData.primary_text || '',
-        secondary_text: styleData.secondary_text || '',
-        position: styleData.position || 'upper-left',
-        color: styleData.color || '#FFFFFF',
-        outline_color: styleData.outline_color || '#000000'
-      };
+      return JSON.parse(concept.text_style || '{}');
     } catch (_) {
-      return {
-        primary_text: concept.text_overlay || '',
-        position: 'upper-left',
-        color: '#FFFFFF',
-        outline_color: '#000000'
-      };
+      return {};
     }
-  }, [textConfig, concept]);
+  }, [concept.text_style]);
 
-  // Initialize edit state when config changes
+  // Initialize from saved config
   useEffect(() => {
-    setEditText(parsedConfig.primary_text || '');
-    setEditPosition(parsedConfig.position || 'upper-left');
-    setEditColor(parsedConfig.color || '#FFFFFF');
-  }, [parsedConfig]);
+    const tplId = savedConfig.templateId || 'shock_side';
+    const template = TEXT_TEMPLATES[tplId];
+    if (!template) return;
 
-  // ════════════════════════════════════════════════════════════════
-  // MAIN RENDER FUNCTION
-  // ════════════════════════════════════════════════════════════════
-  
+    setTemplateId(tplId);
+
+    const texts = {};
+    const colors = {};
+
+    template.layers.forEach(layer => {
+      texts[layer.id] = savedConfig.layerTexts?.[layer.id] || 
+                        concept.text_overlay || 
+                        layer.defaultText || '';
+      colors[layer.id] = savedConfig.layerColors?.[layer.id] || layer.color;
+    });
+
+    setLayerTexts(texts);
+    setLayerColors(colors);
+  }, [savedConfig, concept.text_overlay]);
+
+  // Render canvas
   const renderCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || !imageUrl) return;
@@ -358,68 +666,22 @@ export default function ThumbnailWithTextOverlay({
     img.crossOrigin = 'anonymous';
 
     img.onload = () => {
-      // Detect shorts vs standard
-      const isShorts = concept.image_prompt?.includes('9:16') || 
-                       concept.image_prompt?.includes('1080x1920') ||
-                       img.height > img.width * 1.3;
-      
+      const isShorts = concept.image_prompt?.includes('9:16') || img.height > img.width * 1.3;
       canvas.width = isShorts ? 1080 : 1920;
       canvas.height = isShorts ? 1920 : 1080;
 
-      // Draw base image
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      
-      // Store image reference for re-rendering
       imageRef.current = img;
 
-      // Get current text to render
-      const currentText = isEditing ? editText : parsedConfig.primary_text;
-      
-      if (currentText && currentText.trim()) {
-        let finalPosition;
-        let finalColor;
-        let finalOutlineColor;
-
-        if (isEditing) {
-          // User is editing — use their choices
-          finalPosition = editPosition;
-          finalColor = editColor;
-          finalOutlineColor = parsedConfig.outline_color || '#000000';
-        } else if (useSmartPosition) {
-          // ════════════════════════════════════════════════════════
-          // INTELLIGENT POSITIONING
-          // ════════════════════════════════════════════════════════
-          const analysis = findBestTextPosition(canvas, ctx, currentText.length);
-          
-          setAnalysisResult(analysis);
-          
-          console.log(`🎯 Smart Position: ${analysis.position}`);
-          console.log(`   Score: ${analysis.score.toFixed(0)} | Brightness: ${analysis.brightness.toFixed(0)}`);
-          console.log(`   Uniform: ${analysis.isUniform} | Color: ${analysis.suggestedColor.fill}`);
-
-          finalPosition = analysis.position;
-          finalColor = analysis.suggestedColor.fill;
-          finalOutlineColor = analysis.suggestedColor.outline;
-
-          // Redraw image since analysis read pixel data
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        } else {
-          // Use stored config
-          finalPosition = parsedConfig.position || 'upper-left';
-          finalColor = parsedConfig.color || '#FFFFFF';
-          finalOutlineColor = parsedConfig.outline_color || '#000000';
-        }
-
-        // Draw text overlay
-        drawTextOnCanvas(ctx, {
-          text: currentText,
-          canvasWidth: canvas.width,
-          canvasHeight: canvas.height,
-          position: finalPosition,
-          color: finalColor,
-          outlineColor: finalOutlineColor
-        });
-      }
+      // Draw all layers
+      currentTemplate.layers.forEach(layer => {
+        const text = layerTexts[layer.id] || layer.defaultText || '';
+        const modifiedLayer = {
+          ...layer,
+          color: layerColors[layer.id] || layer.color
+        };
+        drawTextLayer(ctx, modifiedLayer, text, canvas.width, canvas.height);
+      });
 
       setImageLoaded(true);
       setError(null);
@@ -431,57 +693,38 @@ export default function ThumbnailWithTextOverlay({
     };
 
     img.src = imageUrl;
-  }, [imageUrl, parsedConfig, isEditing, editText, editPosition, editColor, useSmartPosition, concept.image_prompt]);
+  }, [imageUrl, currentTemplate, layerTexts, layerColors, concept.image_prompt]);
 
-  // Render on mount and dependency changes
   useEffect(() => {
     renderCanvas();
   }, [renderCanvas]);
 
-  // Re-render when editing changes (for live preview)
-  useEffect(() => {
-    if (isEditing && imageRef.current) {
-      const canvas = canvasRef.current;
-      const ctx = canvas.getContext('2d');
-      
-      // Redraw image
-      ctx.drawImage(imageRef.current, 0, 0, canvas.width, canvas.height);
-      
-      // Draw text with current edit values
-      if (editText && editText.trim()) {
-        drawTextOnCanvas(ctx, {
-          text: editText,
-          canvasWidth: canvas.width,
-          canvasHeight: canvas.height,
-          position: editPosition,
-          color: editColor,
-          outlineColor: parsedConfig.outline_color || '#000000'
-        });
-      }
-    }
-  }, [editText, editPosition, editColor, isEditing, parsedConfig.outline_color]);
-
-  // ════════════════════════════════════════════════════════════════
-  // HANDLERS
-  // ════════════════════════════════════════════════════════════════
-
-  const handleSaveEdit = () => {
+  // Handlers
+  const handleSave = () => {
     if (onTextChange) {
       onTextChange({
-        primary_text: editText,
-        position: editPosition,
-        color: editColor,
-        outline_color: parsedConfig.outline_color || '#000000'
+        templateId,
+        layerTexts,
+        layerColors,
+        primary_text: layerTexts[currentTemplate.layers[0]?.id] || ''
       });
     }
     setIsEditing(false);
-    setUseSmartPosition(false); // User made manual choices
   };
 
-  const handleCancelEdit = () => {
-    setEditText(parsedConfig.primary_text || '');
-    setEditPosition(parsedConfig.position || 'upper-left');
-    setEditColor(parsedConfig.color || '#FFFFFF');
+  const handleCancel = () => {
+    const tplId = savedConfig.templateId || 'shock_side';
+    const template = TEXT_TEMPLATES[tplId];
+    setTemplateId(tplId);
+    
+    const texts = {};
+    const colors = {};
+    template.layers.forEach(layer => {
+      texts[layer.id] = savedConfig.layerTexts?.[layer.id] || layer.defaultText || '';
+      colors[layer.id] = savedConfig.layerColors?.[layer.id] || layer.color;
+    });
+    setLayerTexts(texts);
+    setLayerColors(colors);
     setIsEditing(false);
   };
 
@@ -497,29 +740,26 @@ export default function ThumbnailWithTextOverlay({
     if (onDownload) onDownload();
   };
 
-  const handleReanalyze = () => {
-    setUseSmartPosition(true);
-    setTimeout(renderCanvas, 50);
+  const handleTemplateChange = (newTemplateId) => {
+    setTemplateId(newTemplateId);
+    
+    const template = TEXT_TEMPLATES[newTemplateId];
+    const texts = {};
+    const colors = {};
+    template.layers.forEach(layer => {
+      texts[layer.id] = layerTexts[layer.id] || layer.defaultText || '';
+      colors[layer.id] = layerColors[layer.id] || layer.color;
+    });
+    setLayerTexts(texts);
+    setLayerColors(colors);
   };
 
-  // Color presets for quick selection
-  const colorPresets = [
-    { color: '#FFFFFF', label: 'White' },
-    { color: '#FFD700', label: 'Gold' },
-    { color: '#00FF88', label: 'Mint' },
-    { color: '#00FFFF', label: 'Cyan' },
-    { color: '#FF4444', label: 'Red' },
-    { color: '#FF6B00', label: 'Orange' },
-    { color: '#000000', label: 'Black' }
-  ];
-
-  // ════════════════════════════════════════════════════════════════
-  // RENDER
-  // ════════════════════════════════════════════════════════════════
+  // Quick color presets
+  const colorPresets = ['#FFFFFF', '#FFD700', '#00FF88', '#00FFFF', '#FF4444', '#FF6B00', '#FF00FF'];
 
   return (
     <div className={`relative ${className}`}>
-      {/* Canvas Display */}
+      {/* Canvas */}
       <div className="relative rounded-lg overflow-hidden bg-gray-900">
         <canvas
           ref={canvasRef}
@@ -530,45 +770,33 @@ export default function ThumbnailWithTextOverlay({
           }}
         />
 
-        {/* Loading State */}
         {!imageLoaded && !error && imageUrl && (
           <div className="absolute inset-0 flex items-center justify-center bg-gray-800">
             <RefreshCw className="w-8 h-8 text-gray-400 animate-spin" />
           </div>
         )}
 
-        {/* Error State */}
         {error && (
           <div className="absolute inset-0 flex items-center justify-center bg-red-900/50">
             <p className="text-red-200 text-sm">{error}</p>
           </div>
         )}
 
-        {/* Action Buttons (when not editing) */}
         {imageLoaded && !isEditing && editable && (
           <div className="absolute top-2 right-2 flex gap-1">
             <Button
               size="sm"
               variant="secondary"
-              className="h-8 w-8 p-0 bg-black/50 hover:bg-black/70 text-white"
-              onClick={handleReanalyze}
-              title="Re-analyze for best position"
-            >
-              <Wand2 className="w-4 h-4" />
-            </Button>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="h-8 w-8 p-0 bg-black/50 hover:bg-black/70 text-white"
+              className="h-8 w-8 p-0 bg-black/60 hover:bg-black/80 text-white"
               onClick={() => setIsEditing(true)}
-              title="Edit text"
+              title="Edit text overlay"
             >
               <Edit3 className="w-4 h-4" />
             </Button>
             <Button
               size="sm"
               variant="secondary"
-              className="h-8 w-8 p-0 bg-black/50 hover:bg-black/70 text-white"
+              className="h-8 w-8 p-0 bg-black/60 hover:bg-black/80 text-white"
               onClick={handleDownload}
               title="Download"
             >
@@ -577,11 +805,10 @@ export default function ThumbnailWithTextOverlay({
           </div>
         )}
 
-        {/* Smart Position Badge */}
-        {imageLoaded && !isEditing && analysisResult && showAnalysis && (
+        {imageLoaded && !isEditing && (
           <div className="absolute bottom-2 left-2">
-            <Badge className="bg-black/60 text-white text-[10px]">
-              🎯 {analysisResult.position} • Score: {analysisResult.score.toFixed(0)}
+            <Badge className="bg-black/70 text-white text-[10px]">
+              📐 {currentTemplate.name}
             </Badge>
           </div>
         )}
@@ -589,123 +816,64 @@ export default function ThumbnailWithTextOverlay({
 
       {/* Edit Panel */}
       {isEditing && (
-        <div className="mt-3 p-4 bg-gray-50 rounded-lg border space-y-4">
-          {/* Text Input */}
+        <div className="mt-3 p-4 bg-white rounded-lg border shadow-lg space-y-4">
           <div>
             <label className="text-xs font-semibold text-gray-700 mb-1.5 block">
-              Overlay Text
+              Text Layout Template
             </label>
-            <input
-              type="text"
-              value={editText}
-              onChange={(e) => setEditText(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm border rounded-lg font-bold uppercase tracking-wide"
-              placeholder="YOUR TEXT HERE"
-              maxLength={35}
-              autoFocus
+            <TemplateSelector
+              selectedTemplate={templateId}
+              onSelect={handleTemplateChange}
+              isOpen={templateSelectorOpen}
+              onToggle={() => setTemplateSelectorOpen(!templateSelectorOpen)}
             />
-            <div className="flex justify-between mt-1.5">
-              <p className="text-xs text-gray-400">
-                {editText.split(' ').filter(w => w).length} words • {editText.length}/35 chars
-              </p>
-              {editText.split(' ').filter(w => w).length > 4 && (
-                <p className="text-xs text-amber-600">⚠️ 4 words max recommended</p>
-              )}
-            </div>
           </div>
 
-          {/* Position Selector */}
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-gray-700 block">
+              Text Layers ({currentTemplate.layers.length})
+            </label>
+            {currentTemplate.layers.map(layer => (
+              <LayerEditor
+                key={layer.id}
+                layer={layer}
+                text={layerTexts[layer.id] || ''}
+                onChange={(value) => setLayerTexts(prev => ({ ...prev, [layer.id]: value }))}
+                color={layerColors[layer.id] || layer.color}
+                onColorChange={(value) => setLayerColors(prev => ({ ...prev, [layer.id]: value }))}
+              />
+            ))}
+          </div>
+
           <div>
             <label className="text-xs font-semibold text-gray-700 mb-1.5 block">
-              Position
+              Quick Colors (Primary)
             </label>
-            <div className="grid grid-cols-4 gap-1.5">
-              {Object.keys(POSITION_PRESETS).map(pos => (
+            <div className="flex gap-1.5">
+              {colorPresets.map(color => (
                 <button
-                  key={pos}
-                  onClick={() => setEditPosition(pos)}
-                  className={`text-[10px] px-2 py-1.5 rounded-md border transition-all ${
-                    editPosition === pos
-                      ? 'bg-purple-100 border-purple-500 text-purple-700 font-medium'
-                      : 'bg-white border-gray-200 text-gray-600 hover:border-purple-300 hover:bg-purple-50'
+                  key={color}
+                  onClick={() => setLayerColors(prev => ({ 
+                    ...prev, 
+                    [currentTemplate.layers[0]?.id]: color 
+                  }))}
+                  className={`w-8 h-8 rounded-full border-2 transition-all ${
+                    layerColors[currentTemplate.layers[0]?.id] === color
+                      ? 'border-purple-500 scale-110 shadow-md'
+                      : 'border-gray-300 hover:scale-105'
                   }`}
-                >
-                  {pos.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
-                </button>
+                  style={{ backgroundColor: color }}
+                />
               ))}
             </div>
           </div>
 
-          {/* Color Selector */}
-          <div>
-            <label className="text-xs font-semibold text-gray-700 mb-1.5 block">
-              Text Color
-            </label>
-            <div className="flex items-center gap-2">
-              <div className="flex gap-1.5">
-                {colorPresets.map(({ color, label }) => (
-                  <button
-                    key={color}
-                    onClick={() => setEditColor(color)}
-                    className={`w-8 h-8 rounded-full border-2 transition-all ${
-                      editColor.toLowerCase() === color.toLowerCase() 
-                        ? 'border-purple-500 scale-110 shadow-md' 
-                        : 'border-gray-300 hover:border-purple-300'
-                    }`}
-                    style={{ 
-                      backgroundColor: color,
-                      boxShadow: color === '#FFFFFF' ? 'inset 0 0 0 1px #ddd' : undefined
-                    }}
-                    title={label}
-                  />
-                ))}
-              </div>
-              <div className="flex items-center gap-1.5 ml-2">
-                <span className="text-xs text-gray-400">Custom:</span>
-                <input
-                  type="color"
-                  value={editColor}
-                  onChange={(e) => setEditColor(e.target.value)}
-                  className="w-8 h-8 rounded cursor-pointer border border-gray-300"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Analysis Info */}
-          {analysisResult && (
-            <div className="bg-blue-50 rounded-lg px-3 py-2 text-xs text-blue-700">
-              <span className="font-medium">🎯 AI Suggestion:</span> {analysisResult.position} position 
-              (brightness: {analysisResult.brightness.toFixed(0)}, 
-              {analysisResult.isUniform ? ' uniform area' : ' mixed area'})
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div className="flex gap-2 pt-1">
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex-1 h-9"
-              onClick={handleCancelEdit}
-            >
+          <div className="flex gap-2 pt-2 border-t">
+            <Button size="sm" variant="outline" className="flex-1 h-10" onClick={handleCancel}>
               <X className="w-4 h-4 mr-1.5" /> Cancel
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-9"
-              onClick={handleReanalyze}
-              title="Re-analyze image"
-            >
-              <RotateCcw className="w-4 h-4" />
-            </Button>
-            <Button
-              size="sm"
-              className="flex-1 h-9 bg-purple-600 hover:bg-purple-700"
-              onClick={handleSaveEdit}
-            >
-              <Check className="w-4 h-4 mr-1.5" /> Save
+            <Button size="sm" className="flex-1 h-10 bg-purple-600 hover:bg-purple-700" onClick={handleSave}>
+              <Save className="w-4 h-4 mr-1.5" /> Save
             </Button>
           </div>
         </div>
@@ -716,7 +884,6 @@ export default function ThumbnailWithTextOverlay({
 
 // ══════════════════════════════════════════════════════════════════
 // BATCH DOWNLOAD UTILITY
-// Downloads all thumbnails with text overlays baked in
 // ══════════════════════════════════════════════════════════════════
 
 export async function downloadAllThumbnails(concepts, prefix = 'thumbnail') {
@@ -727,7 +894,7 @@ export async function downloadAllThumbnails(concepts, prefix = 'thumbnail') {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
 
-    const isShorts = concept.image_prompt?.includes('9:16') || concept.image_prompt?.includes('1080x1920');
+    const isShorts = concept.image_prompt?.includes('9:16');
     canvas.width = isShorts ? 1080 : 1920;
     canvas.height = isShorts ? 1920 : 1080;
 
@@ -736,47 +903,29 @@ export async function downloadAllThumbnails(concepts, prefix = 'thumbnail') {
 
     await new Promise((resolve, reject) => {
       img.onload = () => {
-        // Draw image
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-        // Parse text config
-        let text = concept.text_overlay || '';
-        let position = 'upper-left';
-        let color = '#FFFFFF';
-        let outlineColor = '#000000';
-
+        let config = {};
         try {
-          const textStyle = JSON.parse(concept.text_style || '{}');
-          text = text || textStyle.primary_text || '';
-          position = textStyle.position || position;
-          color = textStyle.color || color;
-          outlineColor = textStyle.outline_color || outlineColor;
+          config = JSON.parse(concept.text_style || '{}');
         } catch (_) {}
 
-        // If no position saved, use smart positioning
-        if (text && (!concept.text_style || !JSON.parse(concept.text_style || '{}').position)) {
-          const analysis = findBestTextPosition(canvas, ctx, text.length);
-          position = analysis.position;
-          color = analysis.suggestedColor.fill;
-          outlineColor = analysis.suggestedColor.outline;
-          
-          // Redraw image after analysis
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        }
-
-        // Draw text
-        if (text) {
-          drawTextOnCanvas(ctx, {
-            text,
-            canvasWidth: canvas.width,
-            canvasHeight: canvas.height,
-            position,
-            color,
-            outlineColor
+        const templateId = config.templateId || 'shock_side';
+        const template = TEXT_TEMPLATES[templateId];
+        
+        if (template) {
+          template.layers.forEach(layer => {
+            const text = config.layerTexts?.[layer.id] || 
+                        concept.text_overlay || 
+                        layer.defaultText || '';
+            const modifiedLayer = {
+              ...layer,
+              color: config.layerColors?.[layer.id] || layer.color
+            };
+            drawTextLayer(ctx, modifiedLayer, text, canvas.width, canvas.height);
           });
         }
 
-        // Download
         const link = document.createElement('a');
         link.download = `${prefix}-${concept.rank || i + 1}.png`;
         link.href = canvas.toDataURL('image/png', 1.0);
@@ -784,36 +933,10 @@ export async function downloadAllThumbnails(concepts, prefix = 'thumbnail') {
 
         resolve();
       };
-      img.onerror = () => reject(new Error(`Failed to load image for concept ${concept.rank || i + 1}`));
+      img.onerror = () => reject(new Error(`Failed to load image`));
       img.src = concept.image_url;
     });
 
-    // Delay between downloads to prevent browser issues
     await new Promise(r => setTimeout(r, 600));
   }
-}
-
-// ══════════════════════════════════════════════════════════════════
-// STANDALONE ANALYSIS FUNCTION (for debugging/testing)
-// ══════════════════════════════════════════════════════════════════
-
-export function analyzeImageForTextPlacement(imageUrl) {
-  return new Promise((resolve, reject) => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-
-    img.onload = () => {
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0);
-
-      const analysis = findBestTextPosition(canvas, ctx, 20); // Assume medium-length text
-      resolve(analysis);
-    };
-
-    img.onerror = () => reject(new Error('Failed to load image'));
-    img.src = imageUrl;
-  });
 }
