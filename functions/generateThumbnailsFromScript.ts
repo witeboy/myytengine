@@ -256,73 +256,303 @@ const VISUAL_STYLE_PROMPTS = {
 };
 
 // ══════════════════════════════════════════════════════════════════
-// TEMPLATE DNA — Simplified for v6 (focused on psychology + expression)
+// TEMPLATE DNA — ALL 26 TEMPLATES (matches suggestThumbnailTemplates)
+// Each template maps to an emotion + composition + expression spec
 // ══════════════════════════════════════════════════════════════════
 
 const TEMPLATE_DNA = {
+  // ─── FINANCE / MONEY ───────────────────────────────────────────
   shock_face: {
     id: "shock_face",
     name: "The Shock Face",
     emotion: "shock",
     composition: "F",
-    face_expression: "EXTREME SHOCK: eyes blown wide open to absolute maximum, eyebrows raised at highest arch, jaw dropped open in perfect O shape, both hands raised to cheeks or covering mouth, forehead creased with total disbelief. The face must be readable and impactful at 120px thumbnail size.",
-    psychology: "Mirror neurons — viewer FEELS the shock before processing any text"
+    face_required: true,
+    face_expression: "EXTREME SHOCK: eyes blown wide open to absolute maximum, eyebrows raised at highest arch, jaw dropped open in perfect O shape, both hands raised to cheeks or covering mouth, forehead creased with total disbelief. Readable at 120px.",
+    psychology: "Mirror neurons — viewer FEELS the shock before processing text",
+    text_formula: "MAX 4 WORDS ALL CAPS. SHOCKING NUMBER or PAINFUL OUTCOME."
   },
+  
   income_reveal: {
     id: "income_reveal",
     name: "The Income Reveal",
     emotion: "money",
     composition: "G",
-    face_expression: "PROUD CONFIDENCE: chest out, chin slightly raised, calm knowing smile with closed lips. Genuine pride and satisfaction, not arrogance. Relaxed posture of someone comfortable with success.",
-    psychology: "Aspiration + Social Proof — showing the result creates instant credibility"
+    face_required: false,
+    face_expression: "PROUD CONFIDENCE: chest out, chin slightly raised, calm knowing smile. Genuine pride, not arrogance.",
+    psychology: "Aspiration + Social Proof — showing the result creates instant credibility",
+    text_formula: "SPECIFIC ODD DOLLAR AMOUNT + TIME. e.g. '$47,382 IN 6 MONTHS'"
   },
+  
   warning_alert: {
     id: "warning_alert",
-    name: "The Warning Alert",
+    name: "The Warning/Alert",
     emotion: "warning",
     composition: "F",
-    face_expression: "URGENT WARNING: intense direct stare into camera, eyebrows furrowed with concern, jaw set firmly, one hand raised in stop gesture or pointing at viewer. The look of someone delivering critical news.",
-    psychology: "Loss aversion — fear of losing beats desire to gain"
+    face_required: false,
+    face_expression: "URGENT WARNING: intense stare into camera, eyebrows furrowed, jaw set, pointing finger at viewer.",
+    psychology: "Loss aversion — fear of losing beats desire to gain",
+    text_formula: "STOP [THIS] or WARNING: [OUTCOME]. MAX 4 WORDS."
   },
+  
+  secret_hidden: {
+    id: "secret_hidden",
+    name: "The Secret/Hidden Truth",
+    emotion: "curiosity",
+    composition: "E",
+    face_required: false,
+    face_expression: "CONSPIRATORIAL: finger to lips, sideways glance, knowing half-smile, forbidden knowledge energy.",
+    psychology: "Information gap + exclusivity",
+    text_formula: "HIDDEN [TRUTH]. MAX 4 WORDS."
+  },
+  
+  breaking_news: {
+    id: "breaking_news",
+    name: "The Breaking News",
+    emotion: "warning",
+    composition: "D",
+    face_required: false,
+    face_expression: "URGENT PRESENTER: pointing at chart, leaning toward camera, 'act now' energy.",
+    psychology: "FOMO + urgency",
+    text_formula: "BREAKING: [WHAT CHANGED]. MAX 5 WORDS."
+  },
+  
   before_after: {
     id: "before_after",
     name: "The Before/After Split",
     emotion: "comparison",
     composition: "B",
-    face_expression: "LEFT SIDE: defeated, stressed, slumped posture, worried expression. RIGHT SIDE: confident, liberated, genuine relief smile, open posture. Clear transformation visible.",
-    psychology: "Transformation desire — viewers see themselves in the journey"
+    face_required: false,
+    face_expression: "LEFT: defeated, stressed, slumped. RIGHT: confident, liberated, genuine relief smile.",
+    psychology: "Transformation desire — viewers see themselves in the journey",
+    text_formula: "STATE_A → STATE_B. e.g. 'BROKE → $200K'"
   },
-  data_explosion: {
-    id: "data_explosion",
-    name: "The Data Explosion",
-    emotion: "success",
-    composition: "D",
-    face_expression: "PRESENTER ENERGY: confident half-smile, one eyebrow slightly raised, gesturing toward data, authoritative but approachable. The expert revealing insights.",
-    psychology: "Authority + specificity — real numbers create trust"
-  },
-  secret_reveal: {
-    id: "secret_reveal",
-    name: "The Secret Reveal",
+  
+  numbered_list: {
+    id: "numbered_list",
+    name: "The Numbered List Bomb",
     emotion: "curiosity",
-    composition: "E",
-    face_expression: "CONSPIRATORIAL: finger to lips or hand near mouth, sideways glance, knowing half-smile, leaning forward. The look of sharing forbidden knowledge.",
-    psychology: "Information gap + exclusivity — secrets demand attention"
+    composition: "C",
+    face_required: false,
+    face_expression: "KNOWLEDGEABLE AUTHORITY: head tilt, confident half-smile, one finger raised.",
+    psychology: "Listicle brain — feels completable",
+    text_formula: "ODD NUMBER + WHAT THEY WANT. e.g. '7 HABITS OF RICH'"
   },
-  finance_audit: {
-    id: "finance_audit",
-    name: "The Finance Audit",
-    emotion: "shock",
-    composition: "H",
-    face_expression: "AUDITOR'S HORROR-DISBELIEF: eyes wide and slightly squinting as if looking at something painful, head tilted back or to side, one hand raised to temple or jaw, mouth open in grimace. Pained disbelief mixed with dark humor at what they're seeing.",
-    psychology: "Vicarious learning + rubbernecking — watching someone else's disaster feels safe"
+  
+  identity_challenge: {
+    id: "identity_challenge",
+    name: "The Identity Challenge",
+    emotion: "warning",
+    composition: "F",
+    face_required: true,
+    face_expression: "DIRECT ACCUSATORY: eye contact + raised single eyebrow + pointing finger at lens + half-smirk.",
+    psychology: "Ego threat — click to defend identity",
+    text_formula: "IF YOU [DO THIS] = [IDENTITY]. MAX 5 WORDS."
   },
+  
+  finance_versus: {
+    id: "finance_versus",
+    name: "The Finance Versus",
+    emotion: "comparison",
+    composition: "B",
+    face_required: false,
+    face_expression: "DECISIVE AUTHORITY: arms crossed, confident half-smile of someone who tested BOTH sides.",
+    psychology: "Binary thinking + tribal loyalty — people pick sides",
+    text_formula: "[OPTION A] VS [OPTION B]. MAX 5 WORDS."
+  },
+  
   lifestyle_proof: {
     id: "lifestyle_proof",
     name: "The Lifestyle Proof",
     emotion: "money",
     composition: "G",
-    face_expression: "CASUAL ABUNDANT CONFIDENCE: one hand casually touching luxury item, other hand relaxed. Body language of someone so comfortable with wealth it's ordinary. NOT flexing, just normal life.",
-    psychology: "Social proof + aspiration — the luxury item is evidence the strategy worked"
+    face_required: false,
+    face_expression: "CASUAL ABUNDANT CONFIDENCE: one hand casually touching luxury item, other in pocket. Wealth is ordinary.",
+    psychology: "Social proof + aspiration — luxury item is evidence",
+    text_formula: "LUXURY ITEM + HOW IT'S FUNDED. e.g. 'MY LAMBO PAID BY YOUTUBE'"
+  },
+  
+  finance_audit: {
+    id: "finance_audit",
+    name: "The Finance Audit Reaction",
+    emotion: "shock",
+    composition: "H",
+    face_required: true,
+    face_expression: "AUDITOR'S HORROR-DISBELIEF: eyes wide and squinting at something painful, head tilted, hand to temple, mouth in grimace. The Caleb Hammer face.",
+    psychology: "Vicarious learning + rubbernecking — watching disaster feels safe",
+    text_formula: "FINANCIAL DISASTER NUMBER + WHO. e.g. '$200K DEBT AT 23'"
+  },
+
+  // ─── STORYTELLING / DOCUMENTARY ────────────────────────────────
+  cliffhanger: {
+    id: "cliffhanger",
+    name: "The Cliffhanger Frame",
+    emotion: "curiosity",
+    composition: "F",
+    face_required: true,
+    face_expression: "TENSE ANTICIPATION: eyes slightly wide looking OFF-FRAME at something unseen, jaw tensed, frozen at moment before everything changes.",
+    psychology: "Zeigarnik effect — open loop brain demands closure",
+    text_formula: "INCOMPLETE REVELATION with ellipsis. e.g. 'SHE LEFT EVERYTHING...'"
+  },
+  
+  true_account: {
+    id: "true_account",
+    name: "The True Account Banner",
+    emotion: "curiosity",
+    composition: "C",
+    face_required: false,
+    face_expression: "DOCUMENTARY SUBJECT: calm haunted expression, natural unstyled look, slightly off-camera gaze.",
+    psychology: "Reality anchoring — 'TRUE STORY' = forbidden knowledge",
+    text_formula: "TRUE STORY: [WHAT HAPPENED]."
+  },
+
+  // ─── TRUE CRIME ────────────────────────────────────────────────
+  cold_case_file: {
+    id: "cold_case_file",
+    name: "The Cold Case File",
+    emotion: "fear",
+    composition: "C",
+    face_required: false,
+    face_expression: "HAUNTED: troubled expression, dark circles, looking down or away, vulnerability mixed with fear.",
+    psychology: "Justice obsession + morbid curiosity — hardwired to solve mysteries",
+    text_formula: "THE [CRIME] THAT [UNSOLVED OUTCOME]. e.g. 'THE MURDER NOBODY SOLVED'"
+  },
+  
+  suspect_reveal: {
+    id: "suspect_reveal",
+    name: "The Suspect Reveal",
+    emotion: "fear",
+    composition: "F",
+    face_required: true,
+    face_expression: "HALF-SHADOWED AMBIGUITY: exactly half face in deep shadow, visible half shows suspicious stare OR unsettling calm normalcy.",
+    psychology: "Accusation trigger — wired to stare at the accused",
+    text_formula: "ACCUSATORY WITHOUT CONFIRMING. e.g. 'SHE SMILED AT THE FUNERAL'"
+  },
+
+  // ─── RELATIONSHIPS ─────────────────────────────────────────────
+  heartbreak_headline: {
+    id: "heartbreak_headline",
+    name: "The Heartbreak Headline",
+    emotion: "fear",
+    composition: "F",
+    face_required: true,
+    face_expression: "RAW EMOTIONAL PAIN: eyes red-rimmed or glistening, lower lip trembling, chin dimpled, shoulders collapsed. Zero performance.",
+    psychology: "Emotional contagion — pain is most universally shared emotion",
+    text_formula: "UNRESOLVED PAINFUL MOMENT. e.g. 'HE LEFT WITHOUT A WORD'"
+  },
+  
+  relationship_red_flag: {
+    id: "relationship_red_flag",
+    name: "The Relationship Red Flag",
+    emotion: "warning",
+    composition: "F",
+    face_required: true,
+    face_expression: "PROTECTIVE WARNING: raised eyebrow skepticism + caring urgency. Trusted friend saying 'you need to hear this'.",
+    psychology: "Self-protection instinct — click to confirm or deny own situation",
+    text_formula: "DIRECT CHALLENGE. e.g. 'IF HE DOES THIS — RUN'"
+  },
+
+  // ─── TRAVEL ────────────────────────────────────────────────────
+  destination_wow: {
+    id: "destination_wow",
+    name: "The Destination Wow Shot",
+    emotion: "inspiration",
+    composition: "C",
+    face_required: false,
+    face_expression: "AWESTRUCK JOY: jaw dropped, eyes wide with wonder, arms spread embracing view. Authentic wanderlust.",
+    psychology: "Escapism pull — stunning scenery triggers immediate desire",
+    text_formula: "[PLACE] FOR $AMOUNT. e.g. 'MALDIVES FOR $800'"
+  },
+  
+  hidden_gem: {
+    id: "hidden_gem",
+    name: "The Hidden Gem Reveal",
+    emotion: "curiosity",
+    composition: "E",
+    face_required: false,
+    face_expression: "DISCOVERER'S EXCITEMENT: genuine surprise-joy, pointing at discovery, breathless excitement.",
+    psychology: "Exclusivity + FOMO — nobody talks about this",
+    text_formula: "EXCLUSIVITY + PLACE. e.g. 'HIDDEN BEACH NOBODY KNOWS'"
+  },
+
+  // ─── AI / TECH ─────────────────────────────────────────────────
+  ai_takeover: {
+    id: "ai_takeover",
+    name: "The AI Takeover Frame",
+    emotion: "warning",
+    composition: "D",
+    face_required: false,
+    face_expression: "ALARMED URGENCY: wide eyes of someone who saw the threat, raised stop hand, forward lean.",
+    psychology: "Existential fear + curiosity — AI threatens identity and job",
+    text_formula: "AI THREAT + PERSONAL IMPACT. e.g. 'AI JUST REPLACED 10,000 JOBS'"
+  },
+  
+  cheat_code_reveal: {
+    id: "cheat_code_reveal",
+    name: "The Cheat Code Reveal",
+    emotion: "curiosity",
+    composition: "E",
+    face_required: false,
+    face_expression: "CONSPIRATORIAL: leaning forward, one eyebrow raised, half-smile of forbidden access.",
+    psychology: "Shortcut psychology + unfair advantage desire",
+    text_formula: "TIME/EFFORT COMPRESSION. e.g. '10 HRS → 5 MINS'"
+  },
+  
+  tech_comparison: {
+    id: "tech_comparison",
+    name: "The Tech Comparison Bomb",
+    emotion: "comparison",
+    composition: "B",
+    face_required: false,
+    face_expression: "DECISIVE AUTHORITY: confident direct gaze, hands on desk, 'I've tested both' energy.",
+    psychology: "Tribal loyalty — tech people are fanatically loyal to tools",
+    text_formula: "[TOOL A] VS [TOOL B] or I TESTED EVERY [AI]."
+  },
+
+  // ─── MOVIES / ENTERTAINMENT ────────────────────────────────────
+  plot_twist_tease: {
+    id: "plot_twist_tease",
+    name: "The Plot Twist Tease",
+    emotion: "shock",
+    composition: "F",
+    face_required: true,
+    face_expression: "MIND-BLOWN MAXIMUM: both hands on head OR face, eyes at ABSOLUTE MAXIMUM width, mouth open in O shape, leaning back from impact.",
+    psychology: "Spoiler magnetism — seen it: validation; not seen it: secret knowledge",
+    text_formula: "UNREVEALED MYSTERY. e.g. 'THE TWIST YOU MISSED'"
+  },
+  
+  deep_lore_dive: {
+    id: "deep_lore_dive",
+    name: "The Deep Lore Dive",
+    emotion: "curiosity",
+    composition: "E",
+    face_required: false,
+    face_expression: "DETECTIVE REVEAL: magnifying glass gesture, intensely focused, eureka single raised finger.",
+    psychology: "Superfan identity — true fans NEED hidden knowledge",
+    text_formula: "HIDDEN KNOWLEDGE. e.g. 'THE CLUE NOBODY NOTICED'"
+  },
+  
+  reaction_recap: {
+    id: "reaction_recap",
+    name: "The Reaction Recap",
+    emotion: "shock",
+    composition: "H",
+    face_required: true,
+    face_expression: "COMPLETELY AUTHENTIC UNFILTERED REACTION: real tears, genuine laugh with crinkled eyes, OR hand covering mouth in gasp. ZERO performance.",
+    psychology: "Shared experience — reliving emotional peaks through someone else",
+    text_formula: "EMOTIONAL REACTION + SUBJECT. e.g. 'I CRIED 3 TIMES'"
+  },
+
+  // ─── SHORTS ────────────────────────────────────────────────────
+  shorts_hook_frame: {
+    id: "shorts_hook_frame",
+    name: "The Shorts Hook Frame",
+    emotion: "shock",
+    composition: "F",
+    face_required: false,
+    face_expression: "EXTREME VERSION of video's core emotion amplified 200%. Fills 80%+ of vertical frame.",
+    psychology: "Pattern interrupt — stop scroll in under 0.3 seconds",
+    text_formula: "1-2 LINES MAXIMUM. POV hook / shocking statement. ALL CAPS MASSIVE."
   }
 };
 
