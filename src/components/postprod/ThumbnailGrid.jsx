@@ -1,6 +1,6 @@
 // ══════════════════════════════════════════════════════════════════
-// ThumbnailGrid.jsx — COMPLETE VERSION
-// Uses ThumbnailWithTextOverlay with intelligent positioning
+// ThumbnailGrid.jsx — COMPLETE
+// Grid display for thumbnail concepts with overlay editing
 // ══════════════════════════════════════════════════════════════════
 // Place in: src/components/postprod/ThumbnailGrid.jsx
 // ══════════════════════════════════════════════════════════════════
@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   CheckCircle2, RefreshCw, Download, Trash2, Star, Eye, Loader2,
-  Sparkles, AlertCircle, Type, Palette, Layout, Wand2, Package
+  Sparkles, AlertCircle, Type, Palette, Layout, Package
 } from 'lucide-react';
 import ThumbnailWithTextOverlay, { downloadAllThumbnails } from './ThumbnailWithTextOverlay';
 
@@ -25,23 +25,19 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
 
-  // Parse concept metadata
   const ctrScore = concept.ctr_score || 7;
   const template = concept.concept_type || 'custom';
 
-  // Parse color system
   let colorSystem = {};
   try {
     colorSystem = JSON.parse(concept.color_scheme || '{}');
   } catch (_) {}
 
-  // Parse text style
   let textStyle = {};
   try {
     textStyle = JSON.parse(concept.text_style || '{}');
   } catch (_) {}
 
-  // Handle regenerate image
   const handleRegenerate = async () => {
     setRegenerating(true);
     setError(null);
@@ -54,7 +50,6 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
     setRegenerating(false);
   };
 
-  // Handle delete
   const handleDelete = async () => {
     if (!confirm('Delete this thumbnail concept?')) return;
     setDeleting(true);
@@ -67,7 +62,6 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
     setDeleting(false);
   };
 
-  // Handle select as final
   const handleSelect = async () => {
     try {
       const all = await base44.entities.ThumbnailConcepts.filter({ project_id: projectId });
@@ -81,7 +75,6 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
     }
   };
 
-  // Handle text change from overlay editor
   const handleTextChange = async (newTextConfig) => {
     try {
       await base44.entities.ThumbnailConcepts.update(concept.id, {
@@ -127,7 +120,6 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
             concept={concept}
             onTextChange={handleTextChange}
             editable={true}
-            showAnalysis={false}
           />
         ) : (
           <div className="aspect-video bg-gradient-to-br from-gray-100 to-gray-200 flex flex-col items-center justify-center p-6">
@@ -142,17 +134,16 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
                 <div className="w-16 h-16 rounded-full bg-purple-100 flex items-center justify-center mb-3">
                   <Sparkles className="w-8 h-8 text-purple-400" />
                 </div>
-                <p className="text-sm text-gray-600 font-medium mb-1">No image generated yet</p>
-                <p className="text-xs text-gray-400 mb-3">Click below to generate</p>
-                <Button size="sm" onClick={handleRegenerate} className="gap-2 bg-purple-600 hover:bg-purple-700">
-                  <Sparkles className="w-4 h-4" /> Generate Image
+                <p className="text-sm text-gray-600 font-medium mb-1">No image yet</p>
+                <Button size="sm" onClick={handleRegenerate} className="gap-2 bg-purple-600 hover:bg-purple-700 mt-2">
+                  <Sparkles className="w-4 h-4" /> Generate
                 </Button>
               </>
             )}
           </div>
         )}
 
-        {/* Error Display */}
+        {/* Error */}
         {error && (
           <div className="px-3 py-2 bg-red-50 border-t border-red-100">
             <p className="text-xs text-red-600 flex items-center gap-1.5">
@@ -162,9 +153,8 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
           </div>
         )}
 
-        {/* Metadata Bar */}
+        {/* Metadata */}
         <div className="p-3 border-t bg-gray-50/80 space-y-2.5">
-          {/* Template + Emotion + CTR */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 flex-wrap">
               <Badge variant="outline" className="text-[10px] bg-white">
@@ -184,24 +174,22 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
             </div>
           </div>
 
-          {/* Text Preview */}
           <div className="flex items-start gap-1.5">
             <Type className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" />
             <p className="text-xs text-gray-600 line-clamp-1 flex-1 font-medium">
-              {concept.text_overlay || textStyle.primary_text || 
+              {concept.text_overlay || textStyle.layerTexts?.headline || 
                 <span className="text-gray-400 italic font-normal">No overlay text</span>
               }
             </p>
           </div>
 
-          {/* Concept Description (truncated) */}
           {concept.concept_description && (
-            <p className="text-[10px] text-gray-400 line-clamp-2 leading-relaxed">
+            <p className="text-[10px] text-gray-400 line-clamp-2">
               {concept.concept_description}
             </p>
           )}
 
-          {/* Action Buttons */}
+          {/* Actions */}
           <div className="flex items-center gap-1.5 pt-1">
             {concept.image_url && (
               <>
@@ -216,23 +204,19 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
                   onClick={handleSelect}
                 >
                   {concept.is_selected ? (
-                    <>
-                      <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Selected
-                    </>
+                    <><CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Selected</>
                   ) : (
-                    <>
-                      <Eye className="w-3.5 h-3.5 mr-1" /> Select
-                    </>
+                    <><Eye className="w-3.5 h-3.5 mr-1" /> Select</>
                   )}
                 </Button>
 
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300"
+                  className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600"
                   onClick={handleRegenerate}
                   disabled={regenerating}
-                  title="Regenerate image"
+                  title="Regenerate"
                 >
                   {regenerating ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -246,10 +230,10 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
             <Button
               size="sm"
               variant="outline"
-              className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 hover:border-red-300"
+              className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50"
               onClick={handleDelete}
               disabled={deleting}
-              title="Delete concept"
+              title="Delete"
             >
               {deleting ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -275,7 +259,6 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
   const selectedThumb = sortedThumbnails.find(t => t.is_selected);
   const withImages = sortedThumbnails.filter(t => t.image_url);
 
-  // Handle download all
   const handleDownloadAll = async () => {
     if (withImages.length === 0) return;
     
@@ -288,7 +271,6 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
     setDownloading(false);
   };
 
-  // Empty state
   if (thumbnails.length === 0) {
     return (
       <Card className="border-dashed">
@@ -305,7 +287,7 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
 
   return (
     <div className="space-y-4">
-      {/* Header with stats and actions */}
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
@@ -329,27 +311,19 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleDownloadAll}
-            disabled={downloading || withImages.length === 0}
-            className="gap-2 h-8"
-          >
-            {downloading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Downloading...
-              </>
-            ) : (
-              <>
-                <Download className="w-4 h-4" />
-                Download All ({withImages.length})
-              </>
-            )}
-          </Button>
-        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={handleDownloadAll}
+          disabled={downloading || withImages.length === 0}
+          className="gap-2 h-8"
+        >
+          {downloading ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Downloading...</>
+          ) : (
+            <><Download className="w-4 h-4" /> Download All ({withImages.length})</>
+          )}
+        </Button>
       </div>
 
       {/* Grid */}
@@ -364,15 +338,11 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
         ))}
       </div>
 
-      {/* Footer legend */}
+      {/* Legend */}
       <div className="flex items-center justify-center gap-6 text-xs text-gray-400 pt-3 border-t">
         <span className="flex items-center gap-1.5">
-          <Wand2 className="w-3.5 h-3.5" />
-          AI auto-positions text on dark areas
-        </span>
-        <span className="flex items-center gap-1.5">
           <Type className="w-3.5 h-3.5" />
-          Click edit to customize
+          Click edit to customize text
         </span>
         <span className="flex items-center gap-1.5">
           <Download className="w-3.5 h-3.5" />
