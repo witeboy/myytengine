@@ -1,8 +1,8 @@
 // ══════════════════════════════════════════════════════════════════
-// ThumbnailGrid.jsx — UPDATED VERSION
-// Uses ThumbnailWithTextOverlay for client-side text rendering
+// ThumbnailGrid.jsx — COMPLETE VERSION
+// Uses ThumbnailWithTextOverlay with intelligent positioning
 // ══════════════════════════════════════════════════════════════════
-// Replace your existing ThumbnailGrid.jsx with this version
+// Place in: src/components/postprod/ThumbnailGrid.jsx
 // ══════════════════════════════════════════════════════════════════
 
 import React, { useState } from 'react';
@@ -12,13 +12,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   CheckCircle2, RefreshCw, Download, Trash2, Star, Eye, Loader2,
-  Sparkles, AlertCircle, Type, Palette, Layout
+  Sparkles, AlertCircle, Type, Palette, Layout, Wand2, Package
 } from 'lucide-react';
 import ThumbnailWithTextOverlay, { downloadAllThumbnails } from './ThumbnailWithTextOverlay';
 
-// ──────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
 // SINGLE THUMBNAIL CARD
-// ──────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
 
 function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
   const [regenerating, setRegenerating] = useState(false);
@@ -28,7 +28,6 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
   // Parse concept metadata
   const ctrScore = concept.ctr_score || 7;
   const template = concept.concept_type || 'custom';
-  const composition = concept.focal_point || 'F';
 
   // Parse color system
   let colorSystem = {};
@@ -71,7 +70,6 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
   // Handle select as final
   const handleSelect = async () => {
     try {
-      // Deselect all others
       const all = await base44.entities.ThumbnailConcepts.filter({ project_id: projectId });
       await Promise.all(all.map(t =>
         base44.entities.ThumbnailConcepts.update(t.id, { is_selected: t.id === concept.id })
@@ -102,12 +100,12 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
         ? 'ring-2 ring-purple-500 shadow-lg shadow-purple-100'
         : 'hover:shadow-md'
     }`}>
-      <CardContent className="p-0">
+      <CardContent className="p-0 relative">
         {/* Rank Badge */}
-        <div className="absolute top-2 left-2 z-10">
+        <div className="absolute top-2 left-2 z-20">
           <Badge className={`
-            ${concept.is_selected ? 'bg-purple-600' : 'bg-black/60'}
-            text-white font-bold
+            ${concept.is_selected ? 'bg-purple-600' : 'bg-black/70'}
+            text-white font-bold text-xs
           `}>
             #{concept.rank || 1}
           </Badge>
@@ -115,8 +113,8 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
 
         {/* Selected Indicator */}
         {concept.is_selected && (
-          <div className="absolute top-2 right-2 z-10">
-            <div className="bg-green-500 text-white p-1 rounded-full">
+          <div className="absolute top-2 right-12 z-20">
+            <div className="bg-green-500 text-white p-1.5 rounded-full shadow-md">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
@@ -129,20 +127,25 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
             concept={concept}
             onTextChange={handleTextChange}
             editable={true}
+            showAnalysis={false}
           />
         ) : (
-          <div className="aspect-video bg-gray-100 flex flex-col items-center justify-center p-4">
+          <div className="aspect-video bg-gradient-to-br from-gray-100 to-gray-200 flex flex-col items-center justify-center p-6">
             {regenerating ? (
               <>
-                <Loader2 className="w-8 h-8 text-purple-500 animate-spin mb-2" />
-                <p className="text-sm text-gray-500">Generating image...</p>
+                <Loader2 className="w-10 h-10 text-purple-500 animate-spin mb-3" />
+                <p className="text-sm text-gray-600 font-medium">Generating image...</p>
+                <p className="text-xs text-gray-400 mt-1">This may take 30-60 seconds</p>
               </>
             ) : (
               <>
-                <Sparkles className="w-8 h-8 text-gray-300 mb-2" />
-                <p className="text-sm text-gray-500 mb-2">No image yet</p>
-                <Button size="sm" onClick={handleRegenerate} className="gap-1">
-                  <Sparkles className="w-3 h-3" /> Generate
+                <div className="w-16 h-16 rounded-full bg-purple-100 flex items-center justify-center mb-3">
+                  <Sparkles className="w-8 h-8 text-purple-400" />
+                </div>
+                <p className="text-sm text-gray-600 font-medium mb-1">No image generated yet</p>
+                <p className="text-xs text-gray-400 mb-3">Click below to generate</p>
+                <Button size="sm" onClick={handleRegenerate} className="gap-2 bg-purple-600 hover:bg-purple-700">
+                  <Sparkles className="w-4 h-4" /> Generate Image
                 </Button>
               </>
             )}
@@ -152,79 +155,89 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
         {/* Error Display */}
         {error && (
           <div className="px-3 py-2 bg-red-50 border-t border-red-100">
-            <p className="text-xs text-red-600 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" /> {error}
+            <p className="text-xs text-red-600 flex items-center gap-1.5">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" /> 
+              <span className="truncate">{error}</span>
             </p>
           </div>
         )}
 
         {/* Metadata Bar */}
-        <div className="p-3 border-t bg-gray-50 space-y-2">
-          {/* Template + CTR */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-[10px]">
+        <div className="p-3 border-t bg-gray-50/80 space-y-2.5">
+          {/* Template + Emotion + CTR */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <Badge variant="outline" className="text-[10px] bg-white">
                 <Layout className="w-2.5 h-2.5 mr-1" />
                 {template.replace(/_/g, ' ')}
               </Badge>
-              <Badge variant="outline" className="text-[10px]">
-                <Palette className="w-2.5 h-2.5 mr-1" />
-                {colorSystem.emotion || 'custom'}
-              </Badge>
+              {colorSystem.emotion && (
+                <Badge variant="outline" className="text-[10px] bg-white">
+                  <Palette className="w-2.5 h-2.5 mr-1" />
+                  {colorSystem.emotion}
+                </Badge>
+              )}
             </div>
-            <div className="flex items-center gap-1">
-              <Star className="w-3 h-3 text-yellow-500" />
-              <span className="text-xs font-medium">{ctrScore}/10</span>
+            <div className="flex items-center gap-1 bg-yellow-50 px-2 py-0.5 rounded-full">
+              <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
+              <span className="text-xs font-semibold text-yellow-700">{ctrScore}/10</span>
             </div>
           </div>
 
           {/* Text Preview */}
-          <div className="flex items-center gap-1">
-            <Type className="w-3 h-3 text-gray-400" />
-            <p className="text-xs text-gray-600 truncate flex-1">
-              {concept.text_overlay || textStyle.primary_text || 'No text'}
+          <div className="flex items-start gap-1.5">
+            <Type className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-gray-600 line-clamp-1 flex-1 font-medium">
+              {concept.text_overlay || textStyle.primary_text || 
+                <span className="text-gray-400 italic font-normal">No overlay text</span>
+              }
             </p>
           </div>
 
-          {/* Concept Description */}
+          {/* Concept Description (truncated) */}
           {concept.concept_description && (
-            <p className="text-[10px] text-gray-400 line-clamp-2">
+            <p className="text-[10px] text-gray-400 line-clamp-2 leading-relaxed">
               {concept.concept_description}
             </p>
           )}
 
           {/* Action Buttons */}
-          <div className="flex items-center gap-1 pt-1">
+          <div className="flex items-center gap-1.5 pt-1">
             {concept.image_url && (
               <>
                 <Button
                   size="sm"
                   variant={concept.is_selected ? 'default' : 'outline'}
-                  className={`flex-1 h-7 text-xs ${concept.is_selected ? 'bg-green-600 hover:bg-green-700' : ''}`}
+                  className={`flex-1 h-8 text-xs ${
+                    concept.is_selected 
+                      ? 'bg-green-600 hover:bg-green-700' 
+                      : 'hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300'
+                  }`}
                   onClick={handleSelect}
                 >
                   {concept.is_selected ? (
                     <>
-                      <CheckCircle2 className="w-3 h-3 mr-1" /> Selected
+                      <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Selected
                     </>
                   ) : (
                     <>
-                      <Eye className="w-3 h-3 mr-1" /> Select
+                      <Eye className="w-3.5 h-3.5 mr-1" /> Select
                     </>
                   )}
                 </Button>
 
                 <Button
                   size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 p-0"
+                  variant="outline"
+                  className="h-8 w-8 p-0 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-300"
                   onClick={handleRegenerate}
                   disabled={regenerating}
+                  title="Regenerate image"
                 >
                   {regenerating ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <RefreshCw className="w-3 h-3" />
+                    <RefreshCw className="w-3.5 h-3.5" />
                   )}
                 </Button>
               </>
@@ -232,15 +245,16 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
 
             <Button
               size="sm"
-              variant="ghost"
-              className="h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-50"
+              variant="outline"
+              className="h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 hover:border-red-300"
               onClick={handleDelete}
               disabled={deleting}
+              title="Delete concept"
             >
               {deleting ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
-                <Trash2 className="w-3 h-3" />
+                <Trash2 className="w-3.5 h-3.5" />
               )}
             </Button>
           </div>
@@ -250,33 +264,40 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
   );
 }
 
-// ──────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
 // MAIN GRID COMPONENT
-// ──────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
 
 export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
   const [downloading, setDownloading] = useState(false);
 
   const sortedThumbnails = [...thumbnails].sort((a, b) => (a.rank || 0) - (b.rank || 0));
   const selectedThumb = sortedThumbnails.find(t => t.is_selected);
+  const withImages = sortedThumbnails.filter(t => t.image_url);
 
   // Handle download all
   const handleDownloadAll = async () => {
+    if (withImages.length === 0) return;
+    
     setDownloading(true);
     try {
-      await downloadAllThumbnails(sortedThumbnails, `project-${projectId}-thumb`);
+      await downloadAllThumbnails(withImages, `project-${projectId}-thumb`);
     } catch (e) {
       console.error('Download failed:', e);
     }
     setDownloading(false);
   };
 
+  // Empty state
   if (thumbnails.length === 0) {
     return (
-      <Card>
-        <CardContent className="py-12 text-center">
-          <Sparkles className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500">No thumbnail concepts yet</p>
+      <Card className="border-dashed">
+        <CardContent className="py-16 text-center">
+          <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+            <Sparkles className="w-10 h-10 text-gray-300" />
+          </div>
+          <p className="text-gray-500 font-medium mb-1">No thumbnail concepts yet</p>
+          <p className="text-sm text-gray-400">Generate concepts using the panel above</p>
         </CardContent>
       </Card>
     );
@@ -284,37 +305,55 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
 
   return (
     <div className="space-y-4">
-      {/* Header with actions */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <p className="text-sm text-gray-500">
-            {thumbnails.length} concept{thumbnails.length !== 1 ? 's' : ''}
-            {selectedThumb && (
-              <span className="ml-2 text-green-600">
-                • #{selectedThumb.rank} selected
-              </span>
-            )}
-          </p>
+      {/* Header with stats and actions */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Package className="w-4 h-4 text-gray-400" />
+            <span className="text-sm text-gray-600">
+              <span className="font-semibold text-gray-900">{thumbnails.length}</span> concept{thumbnails.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          
+          {withImages.length > 0 && withImages.length < thumbnails.length && (
+            <Badge variant="outline" className="text-xs">
+              {withImages.length} with images
+            </Badge>
+          )}
+          
+          {selectedThumb && (
+            <Badge className="bg-green-100 text-green-700 text-xs">
+              <CheckCircle2 className="w-3 h-3 mr-1" />
+              #{selectedThumb.rank} selected
+            </Badge>
+          )}
         </div>
 
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={handleDownloadAll}
-          disabled={downloading || !thumbnails.some(t => t.image_url)}
-          className="gap-2"
-        >
-          {downloading ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Download className="w-4 h-4" />
-          )}
-          Download All
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleDownloadAll}
+            disabled={downloading || withImages.length === 0}
+            className="gap-2 h-8"
+          >
+            {downloading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Downloading...
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                Download All ({withImages.length})
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {sortedThumbnails.map(concept => (
           <ThumbnailCard
             key={concept.id}
@@ -325,13 +364,19 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
         ))}
       </div>
 
-      {/* Legend */}
-      <div className="flex items-center gap-4 text-xs text-gray-400 pt-2">
-        <span className="flex items-center gap-1">
-          <Type className="w-3 h-3" /> Click edit to customize text
+      {/* Footer legend */}
+      <div className="flex items-center justify-center gap-6 text-xs text-gray-400 pt-3 border-t">
+        <span className="flex items-center gap-1.5">
+          <Wand2 className="w-3.5 h-3.5" />
+          AI auto-positions text on dark areas
         </span>
-        <span className="flex items-center gap-1">
-          <Download className="w-3 h-3" /> Downloads include text overlay
+        <span className="flex items-center gap-1.5">
+          <Type className="w-3.5 h-3.5" />
+          Click edit to customize
+        </span>
+        <span className="flex items-center gap-1.5">
+          <Download className="w-3.5 h-3.5" />
+          Downloads include text overlay
         </span>
       </div>
     </div>
