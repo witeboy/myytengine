@@ -484,27 +484,58 @@ export default function PostProduction() {
   };
 
   const handleGenerateSeo = async () => {
-    setGeneratingSeo(true);
-    setSeoError(null);
-    try {
-      const res = await base44.functions.invoke('generateSeoTitlesDescriptions', { project_id: projectId });
-      const d = res.data;
-      if (d.error) {
-        setSeoError(d.error);
-      } else {
-        setSeoTitles(d.titles || []);
-        setSeoDescriptions(d.descriptions || []);
-        setSeoAnalysis(d.seo_analysis || null);
-        setTagsBreakdown(d.tags_breakdown || null);
-        setHashtags(d.metadata_extra?.hashtags?.split(' ').filter(Boolean) || d.hashtags || []);
-        setPinnedComment(d.metadata_extra?.pinned_comment || d.pinned_comment || '');
-        refetchMeta();
-      }
-    } catch (e) {
-      setSeoError(e?.response?.data?.error || e.message || 'SEO generation failed');
+  setGeneratingSeo(true);
+  setSeoError(null);
+  
+  try {
+    // ══════════════════════════════════════════════════════════════
+    // PHASE 1: Titles, Tags, Hashtags, Pinned Comment
+    // ══════════════════════════════════════════════════════════════
+    console.log('Phase 1: Generating titles & tags...');
+    const res1 = await base44.functions.invoke('generateSeoTitlesDescriptions', { 
+      project_id: projectId 
+    });
+    const d1 = res1.data;
+    
+    if (d1.error) {
+      setSeoError(d1.error);
+      setGeneratingSeo(false);
+      return;
     }
-    setGeneratingSeo(false);
-  };
+
+    // Set titles immediately so user sees progress
+    setSeoTitles(d1.titles || []);
+    setSeoAnalysis(d1.seo_analysis || null);
+    setTagsBreakdown(d1.tags_breakdown || null);
+    setHashtags(d1.hashtags || []);
+    setPinnedComment(d1.pinned_comment || '');
+
+    // ══════════════════════════════════════════════════════════════
+    // PHASE 2: Descriptions (separate call to avoid CPU limit)
+    // ══════════════════════════════════════════════════════════════
+    if (d1.needs_descriptions) {
+      console.log('Phase 2: Generating descriptions...');
+      const res2 = await base44.functions.invoke('generateSeoDescriptions', { 
+        project_id: projectId 
+      });
+      const d2 = res2.data;
+      
+      if (d2.error) {
+        console.warn('Description generation failed:', d2.error);
+        // Don't fail entirely — titles are still usable
+      } else {
+        setSeoDescriptions(d2.descriptions || []);
+      }
+    }
+
+    refetchMeta();
+    
+  } catch (e) {
+    setSeoError(e?.response?.data?.error || e.message || 'SEO generation failed');
+  }
+  
+  setGeneratingSeo(false);
+};
 
   const handlePublish = async () => {
     await base44.entities.Projects.update(projectId, { status: 'published', current_step: 14 });
@@ -593,14 +624,18 @@ export default function PostProduction() {
             )}
 
             {generatingSeo && (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-3" />
-                  <p className="text-gray-500">Analyzing script for maximum SEO impact...</p>
-                  <p className="text-xs text-gray-400 mt-1">Titles, descriptions, 30 tags, hashtags & pinned comment</p>
-                </CardContent>
-              </Card>
-            )}
+  <Card>
+    <CardContent className="py-12 text-center">
+      <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-3" />
+      <p className="text-gray-500">
+        {seoTitles ? 'Phase 2: Generating descriptions...' : 'Phase 1: Generating titles & tags...'}
+      </p>
+      <p className="text-xs text-gray-400 mt-1">
+        {seoTitles ? '2 of 2 — Almost done' : '1 of 2 — Titles, tags, hashtags'}
+      </p>
+    </CardContent>
+  </Card>
+)}
 
             {!seoTitles && !generatingSeo && (
               <Card>
