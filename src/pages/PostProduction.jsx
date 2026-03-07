@@ -483,59 +483,95 @@ export default function PostProduction() {
     runGeneration(selectedTemplateIds.length === 3 ? selectedTemplateIds : undefined);
   };
 
-  const handleGenerateSeo = async () => {
+  // ══════════════════════════════════════════════════════════════════
+// handleGenerateSeo Function — For PostProduction.jsx
+// ══════════════════════════════════════════════════════════════════
+// FIND AND REPLACE the existing handleGenerateSeo function in your
+// PostProduction.jsx file with this two-phase version
+// ══════════════════════════════════════════════════════════════════
+
+const handleGenerateSeo = async () => {
   setGeneratingSeo(true);
   setSeoError(null);
   
   try {
-    // ══════════════════════════════════════════════════════════════
-    // PHASE 1: Titles, Tags, Hashtags, Pinned Comment
-    // ══════════════════════════════════════════════════════════════
-    console.log('Phase 1: Generating titles & tags...');
+    // ════════════════════════════════════════════════════════════════
+    // PHASE 1: Generate titles, tags, hashtags (fast)
+    // ════════════════════════════════════════════════════════════════
     const res1 = await base44.functions.invoke('generateSeoTitlesDescriptions', { 
       project_id: projectId 
     });
-    const d1 = res1.data;
     
-    if (d1.error) {
-      setSeoError(d1.error);
+    const data1 = res1.data;
+    
+    if (data1.error) {
+      setSeoError(data1.error);
       setGeneratingSeo(false);
       return;
     }
-
-    // Set titles immediately so user sees progress
-    setSeoTitles(d1.titles || []);
-    setSeoAnalysis(d1.seo_analysis || null);
-    setTagsBreakdown(d1.tags_breakdown || null);
-    setHashtags(d1.hashtags || []);
-    setPinnedComment(d1.pinned_comment || '');
-
-    // ══════════════════════════════════════════════════════════════
-    // PHASE 2: Descriptions (separate call to avoid CPU limit)
-    // ══════════════════════════════════════════════════════════════
-    if (d1.needs_descriptions) {
-      console.log('Phase 2: Generating descriptions...');
+    
+    // Update UI with Phase 1 results immediately
+    setSeoTitles(data1.titles || []);
+    setSeoAnalysis(data1.seo_analysis || null);
+    setTagsBreakdown(data1.tags_breakdown || null);
+    setHashtags(data1.hashtags || []);
+    setPinnedComment(data1.pinned_comment || '');
+    
+    // ════════════════════════════════════════════════════════════════
+    // PHASE 2: Generate descriptions (slower, but UI already updated)
+    // ════════════════════════════════════════════════════════════════
+    if (data1.needs_descriptions) {
       const res2 = await base44.functions.invoke('generateSeoDescriptions', { 
         project_id: projectId 
       });
-      const d2 = res2.data;
       
-      if (d2.error) {
-        console.warn('Description generation failed:', d2.error);
-        // Don't fail entirely — titles are still usable
-      } else {
-        setSeoDescriptions(d2.descriptions || []);
+      const data2 = res2.data;
+      
+      if (!data2.error && data2.descriptions) {
+        setSeoDescriptions(data2.descriptions);
       }
     }
-
+    
+    // Refetch metadata to ensure UI is in sync
     refetchMeta();
     
   } catch (e) {
+    console.error('SEO generation error:', e);
     setSeoError(e?.response?.data?.error || e.message || 'SEO generation failed');
   }
   
   setGeneratingSeo(false);
 };
+
+// ══════════════════════════════════════════════════════════════════
+// OPTIONAL: Loading UI Update
+// ══════════════════════════════════════════════════════════════════
+// Find your existing loading card for SEO generation and update it:
+// 
+// BEFORE:
+// <p className="text-gray-500">Generating SEO metadata...</p>
+//
+// AFTER (shows which phase is running):
+
+/*
+{generatingSeo && (
+  <Card>
+    <CardContent className="py-8 text-center">
+      <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-purple-500" />
+      <p className="text-gray-600 font-medium">
+        {seoTitles?.length > 0 
+          ? 'Phase 2: Generating descriptions...' 
+          : 'Phase 1: Generating titles & tags...'}
+      </p>
+      <p className="text-xs text-gray-400 mt-1">
+        {seoTitles?.length > 0 
+          ? '2 of 2 — Almost done' 
+          : '1 of 2 — Titles, tags, hashtags'}
+      </p>
+    </CardContent>
+  </Card>
+)}
+*/
 
   const handlePublish = async () => {
     await base44.entities.Projects.update(projectId, { status: 'published', current_step: 14 });
