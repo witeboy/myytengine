@@ -429,7 +429,7 @@ export default function PostProduction() {
 
     try {
       // Step 1: Generate concepts (LLM only, no images)
-      const res = await base44.functions.invoke('generateThumbnailConcepts', {
+      const res = await base44.functions.invoke('generateThumbnailsFromScript', {
         project_id: projectId,
         video_title: selectedTitles.length > 0 ? selectedTitles[0].title : (project?.name || 'Untitled'),
         reference_style: referenceStyle || undefined,
