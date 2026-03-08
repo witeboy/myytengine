@@ -1,715 +1,319 @@
-// ══════════════════════════════════════════════════════════════════
-// generateThumbnailsFromScript.js — V6 COMPLETE
-// ══════════════════════════════════════════════════════════════════
-// Place in: Base44 Backend Functions
-// Generates thumbnail concepts with text-free images + overlay config
-// ══════════════════════════════════════════════════════════════════
-
-import { base44 } from './base44Client.js';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // ══════════════════════════════════════════════════════════════════
-// EMOTION → COLOR PSYCHOLOGY SYSTEMS
+// generateThumbnailsFromScript.js — V7 COMPLETE
 // ══════════════════════════════════════════════════════════════════
+// + Image style variations (demographics, professions, framing)
+// + Niche-specific templates
+// ══════════════════════════════════════════════════════════════════
+
+const SUBJECT_DEMOGRAPHICS = {
+  young_male: { prompt: 'young man in his early 20s, clean-shaven, modern casual style' },
+  young_female: { prompt: 'young woman in her early 20s, modern casual style, natural makeup' },
+  male_30s: { prompt: 'man in his 30s, professional appearance, light stubble optional' },
+  female_30s: { prompt: 'woman in her 30s, professional appearance, confident posture' },
+  mature_male: { prompt: 'mature man in his 40s-50s, distinguished look' },
+  mature_female: { prompt: 'mature woman in her 40s-50s, elegant professional look' }
+};
+
+const SUBJECT_PROFESSIONS = {
+  developer: { prompt: 'wearing casual tech startup attire, hoodie or t-shirt, glasses optional' },
+  banker: { prompt: 'wearing formal business suit, tie, professional Wall Street look' },
+  entrepreneur: { prompt: 'smart casual business attire, confident startup founder energy' },
+  creator: { prompt: 'casual trendy style, ring light reflections in eyes, studio hints' },
+  stay_at_home_parent: { prompt: 'comfortable casual home attire, warm authentic look' },
+  student: { prompt: 'casual youthful style, backpack or books hints' },
+  fitness: { prompt: 'athletic wear, fit physique, gym or outdoor hints' },
+  corporate: { prompt: 'premium business attire, corner office hints, power pose' },
+  creative: { prompt: 'artistic eclectic style, creative studio hints' },
+  casual: { prompt: 'everyday casual clothes, relatable everyman/everywoman look' }
+};
+
+const SUBJECT_FRAMING = {
+  face_closeup: { prompt: 'extreme close-up of face filling 60% of frame' },
+  head_shoulders: { prompt: 'head and shoulders framing, upper torso visible' },
+  upper_body: { prompt: 'upper body from waist up, hands can gesture' },
+  full_body: { prompt: 'full body visible, environmental context' },
+  side_profile: { prompt: 'dramatic side profile, silhouette potential' },
+  over_shoulder: { prompt: 'over-the-shoulder view looking at something' }
+};
+
+const NICHE_TEMPLATES = {
+  finance: {
+    primary: ['shock_face', 'income_reveal', 'warning_alert'],
+    secondary: ['before_after', 'finance_audit', 'lifestyle_proof'],
+    colors: { bg: 'dark teal to black', accent: 'gold, neon green', text: '#00FF88' },
+    props: ['money stacks', 'laptop with charts', 'luxury items'],
+    expressions: ['shock at numbers', 'proud confidence', 'worried concern']
+  },
+  true_crime: {
+    primary: ['cold_case_file', 'suspect_reveal', 'cliffhanger'],
+    secondary: ['warning_alert', 'secret_hidden', 'true_account'],
+    colors: { bg: 'pure black with red vignette', accent: 'blood red', text: '#FFFFFF' },
+    props: ['police tape', 'evidence files', 'dark shadows'],
+    expressions: ['haunted stare', 'fearful eyes', 'suspicious glance']
+  },
+  love_story: {
+    primary: ['heartbreak_headline', 'before_after', 'cliffhanger'],
+    secondary: ['secret_hidden', 'true_account', 'relationship_red_flag'],
+    colors: { bg: 'deep red to black gradient', accent: 'pink, gold', text: '#FFFFFF' },
+    props: ['wedding ring', 'torn photo', 'roses'],
+    expressions: ['heartbroken tears', 'hopeful smile', 'longing gaze']
+  },
+  technology: {
+    primary: ['ai_takeover', 'cheat_code_reveal', 'tech_comparison'],
+    secondary: ['breaking_news', 'numbered_list', 'warning_alert'],
+    colors: { bg: 'dark blue to purple', accent: 'cyan, electric blue', text: '#00FFFF' },
+    props: ['glowing screens', 'holographic UI', 'futuristic devices'],
+    expressions: ['amazed discovery', 'intense focus', 'worried about AI']
+  },
+  explainer: {
+    primary: ['numbered_list', 'secret_hidden', 'question_hook'],
+    secondary: ['warning_alert', 'before_after', 'cheat_code_reveal'],
+    colors: { bg: 'deep blue gradient', accent: 'yellow, white', text: '#FFD700' },
+    props: ['lightbulb', 'pointing gesture', 'diagrams'],
+    expressions: ['eureka moment', 'knowledgeable nod', 'curious raised eyebrow']
+  },
+  diy: {
+    primary: ['before_after', 'cheat_code_reveal', 'numbered_list'],
+    secondary: ['income_reveal', 'warning_alert', 'lifestyle_proof'],
+    colors: { bg: 'warm orange to brown', accent: 'yellow, white', text: '#FFFFFF' },
+    props: ['tools', 'raw materials', 'finished project'],
+    expressions: ['proud accomplishment', 'focused concentration']
+  },
+  vlog: {
+    primary: ['cliffhanger', 'reaction_recap', 'lifestyle_proof'],
+    secondary: ['breaking_news', 'heartbreak_headline', 'secret_hidden'],
+    colors: { bg: 'natural lighting tones', accent: 'warm sunlight', text: '#FFFFFF' },
+    props: ['camera', 'daily life items', 'location landmarks'],
+    expressions: ['genuine surprise', 'candid laughter', 'emotional moment']
+  },
+  events: {
+    primary: ['breaking_news', 'reaction_recap', 'cliffhanger'],
+    secondary: ['shock_face', 'plot_twist_tease', 'secret_hidden'],
+    colors: { bg: 'dramatic dark with spotlights', accent: 'red, gold', text: '#FFFFFF' },
+    props: ['event venue', 'crowd hints', 'stage lights'],
+    expressions: ['amazed audience reaction', 'excited anticipation']
+  },
+  travel: {
+    primary: ['destination_wow', 'hidden_gem', 'before_after'],
+    secondary: ['numbered_list', 'income_reveal', 'secret_hidden'],
+    colors: { bg: 'destination-specific colors', accent: 'golden hour', text: '#FFFFFF' },
+    props: ['stunning scenery', 'passport', 'airplane'],
+    expressions: ['awestruck wonder', 'excited explorer']
+  }
+};
 
 const EMOTION_COLOR_SYSTEMS = {
-  shock: {
-    emotion: 'shock',
-    background: 'deep purple to black gradient, dramatic shadows',
-    accent: 'electric yellow, bright gold sparks',
-    textColor: '#FFFFFF',
-    textOutline: '#000000',
-    mood: 'jaw-dropping revelation, mind-blown moment'
-  },
-  warning: {
-    emotion: 'warning',
-    background: 'dark crimson vignette, urgent red undertones',
-    accent: 'white with red glow, warning symbols',
-    textColor: '#FFFFFF',
-    textOutline: '#CC0000',
-    mood: 'urgent alert, stop-what-youre-doing energy'
-  },
-  success: {
-    emotion: 'success',
-    background: 'dark teal to emerald gradient, prosperity glow',
-    accent: 'gold sparkles, mint green highlights',
-    textColor: '#00FF88',
-    textOutline: '#000000',
-    mood: 'achievement unlocked, winning feeling'
-  },
-  money: {
-    emotion: 'money',
-    background: 'near black with gold particle dust, luxury dark',
-    accent: 'neon green numbers, gold accents',
-    textColor: '#00FF88',
-    textOutline: '#000000',
-    mood: 'wealth revelation, money mindset'
-  },
-  comparison: {
-    emotion: 'comparison',
-    background: 'split dark blue-gray and amber, glowing center divide',
-    accent: 'white divider line, contrasting halves',
-    textColor: '#FFFFFF',
-    textOutline: '#000000',
-    mood: 'clear contrast, decisive comparison'
-  },
-  curiosity: {
-    emotion: 'curiosity',
-    background: 'deep blue to purple gradient, mysterious shadows',
-    accent: 'cyan glow, question mark energy',
-    textColor: '#00FFFF',
-    textOutline: '#000000',
-    mood: 'must-know secret, forbidden knowledge'
-  },
-  fear: {
-    emotion: 'fear',
-    background: 'pure black with red vignette, horror undertones',
-    accent: 'blood red accents, sharp shadows',
-    textColor: '#FFFFFF',
-    textOutline: '#000000',
-    mood: 'danger lurking, scary truth'
-  },
-  inspiration: {
-    emotion: 'inspiration',
-    background: 'orange to amber sunrise gradient, warm glow',
-    accent: 'warm yellow rays, hopeful light',
-    textColor: '#FFFFFF',
-    textOutline: '#000000',
-    mood: 'motivational, you-can-do-this energy'
-  }
+  shock: { background: 'deep purple to black', accent: 'electric yellow', textColor: '#FFFFFF', textOutline: '#000000' },
+  warning: { background: 'dark crimson vignette', accent: 'white with red glow', textColor: '#FFFFFF', textOutline: '#CC0000' },
+  success: { background: 'dark teal to emerald', accent: 'gold sparkles', textColor: '#00FF88', textOutline: '#000000' },
+  money: { background: 'near black with gold dust', accent: 'neon green', textColor: '#00FF88', textOutline: '#000000' },
+  comparison: { background: 'split blue-gray and amber', accent: 'white divider', textColor: '#FFFFFF', textOutline: '#000000' },
+  curiosity: { background: 'deep blue to purple', accent: 'cyan glow', textColor: '#00FFFF', textOutline: '#000000' },
+  fear: { background: 'pure black with red vignette', accent: 'blood red', textColor: '#FFFFFF', textOutline: '#000000' },
+  inspiration: { background: 'orange to amber sunrise', accent: 'warm yellow rays', textColor: '#FFFFFF', textOutline: '#000000' }
 };
 
-// ══════════════════════════════════════════════════════════════════
-// COMPOSITION TYPES (Layout Blueprints)
-// ══════════════════════════════════════════════════════════════════
-
-const COMPOSITION_TYPES = {
-  A: {
-    name: 'Reaction + Floating Metrics',
-    layout: 'Subject positioned left-center, glass morphism metric cards floating right side',
-    textZone: 'upper-left',
-    subjectPosition: 'left 40%'
-  },
-  B: {
-    name: 'Before/After Split',
-    layout: '50/50 vertical split with glowing divider line down center',
-    textZone: 'upper-center',
-    subjectPosition: 'split across both halves'
-  },
-  C: {
-    name: 'Single Massive Element',
-    layout: 'One dramatic object fills 60% of frame, subject smaller',
-    textZone: 'upper-left',
-    subjectPosition: 'corner or edge'
-  },
-  D: {
-    name: 'Data Explosion',
-    layout: 'Subject center with floating charts, numbers, graphs around them',
-    textZone: 'upper-center',
-    subjectPosition: 'center 50%'
-  },
-  E: {
-    name: 'The Reveal Frame',
-    layout: 'Curtain or door opening effect, light streaming through gap',
-    textZone: 'upper-left',
-    subjectPosition: 'emerging from gap'
-  },
-  F: {
-    name: 'Confrontational Face',
-    layout: 'Extreme close-up face filling right 60%, heavy negative space left',
-    textZone: 'upper-left',
-    subjectPosition: 'right side, cropped at edges'
-  },
-  G: {
-    name: 'Lifestyle Proof',
-    layout: 'Person with luxury item or proof element, aspirational setting',
-    textZone: 'upper-left',
-    subjectPosition: 'center with item'
-  },
-  H: {
-    name: 'Audit/Reaction Split',
-    layout: 'Face reacting on left, data/evidence on right',
-    textZone: 'upper-center',
-    subjectPosition: 'left 40%, content right 60%'
-  }
+const TEMPLATE_DNA = {
+  shock_face: { emotion: 'shock', composition: 'F' },
+  income_reveal: { emotion: 'money', composition: 'G' },
+  warning_alert: { emotion: 'warning', composition: 'F' },
+  secret_hidden: { emotion: 'curiosity', composition: 'E' },
+  breaking_news: { emotion: 'warning', composition: 'D' },
+  before_after: { emotion: 'comparison', composition: 'B' },
+  numbered_list: { emotion: 'curiosity', composition: 'C' },
+  identity_challenge: { emotion: 'warning', composition: 'F' },
+  finance_versus: { emotion: 'comparison', composition: 'B' },
+  lifestyle_proof: { emotion: 'money', composition: 'G' },
+  finance_audit: { emotion: 'shock', composition: 'H' },
+  cliffhanger: { emotion: 'curiosity', composition: 'F' },
+  true_account: { emotion: 'curiosity', composition: 'C' },
+  cold_case_file: { emotion: 'fear', composition: 'C' },
+  suspect_reveal: { emotion: 'fear', composition: 'F' },
+  heartbreak_headline: { emotion: 'fear', composition: 'F' },
+  relationship_red_flag: { emotion: 'warning', composition: 'F' },
+  destination_wow: { emotion: 'inspiration', composition: 'C' },
+  hidden_gem: { emotion: 'curiosity', composition: 'E' },
+  ai_takeover: { emotion: 'warning', composition: 'D' },
+  cheat_code_reveal: { emotion: 'curiosity', composition: 'E' },
+  tech_comparison: { emotion: 'comparison', composition: 'B' },
+  plot_twist_tease: { emotion: 'shock', composition: 'F' },
+  deep_lore_dive: { emotion: 'curiosity', composition: 'E' },
+  reaction_recap: { emotion: 'shock', composition: 'H' },
+  shorts_hook_frame: { emotion: 'shock', composition: 'F' },
+  question_hook: { emotion: 'curiosity', composition: 'F' }
 };
-
-// ══════════════════════════════════════════════════════════════════
-// TEXT OVERLAY TEMPLATE MAPPING
-// Maps thumbnail templates to text overlay templates
-// ══════════════════════════════════════════════════════════════════
 
 const TEXT_OVERLAY_MAPPING = {
   shock_face: 'shock_side',
   income_reveal: 'income_reveal',
   warning_alert: 'warning_alert',
-  secret_hidden: 'question_hook',
-  breaking_news: 'centered_massive',
   before_after: 'split_before_after',
-  numbered_list: 'stacked_youtube',
-  identity_challenge: 'shock_side',
   finance_versus: 'split_before_after',
-  lifestyle_proof: 'income_reveal',
+  tech_comparison: 'split_before_after',
   finance_audit: 'data_explosion',
-  cliffhanger: 'shock_side',
-  true_account: 'centered_massive',
+  reaction_recap: 'metric_cards',
+  numbered_list: 'stacked_youtube',
+  breaking_news: 'centered_massive',
+  destination_wow: 'centered_massive',
+  secret_hidden: 'question_hook',
+  hidden_gem: 'question_hook',
+  cheat_code_reveal: 'data_explosion',
   cold_case_file: 'shock_side',
   suspect_reveal: 'shock_side',
   heartbreak_headline: 'shock_side',
-  relationship_red_flag: 'warning_alert',
-  destination_wow: 'centered_massive',
-  hidden_gem: 'question_hook',
-  ai_takeover: 'warning_alert',
-  cheat_code_reveal: 'data_explosion',
-  tech_comparison: 'split_before_after',
-  plot_twist_tease: 'shock_side',
-  deep_lore_dive: 'question_hook',
-  reaction_recap: 'metric_cards',
-  shorts_hook_frame: 'centered_massive'
+  cliffhanger: 'shock_side',
+  lifestyle_proof: 'income_reveal',
+  question_hook: 'question_hook'
 };
 
-// ══════════════════════════════════════════════════════════════════
-// TEMPLATE DNA — ALL 26 TEMPLATES
-// ══════════════════════════════════════════════════════════════════
-
-const TEMPLATE_DNA = {
-  // ─── FINANCE / MONEY ───────────────────────────────────────────
-  shock_face: {
-    id: "shock_face",
-    name: "The Shock Face",
-    emotion: "shock",
-    composition: "F",
-    face_required: true,
-    face_expression: "EXTREME SHOCK: eyes wide, eyebrows raised, jaw dropped, hands on cheeks",
-    text_formula: "MAX 4 WORDS. SHOCKING NUMBER or OUTCOME."
-  },
-  
-  income_reveal: {
-    id: "income_reveal",
-    name: "The Income Reveal",
-    emotion: "money",
-    composition: "G",
-    face_required: false,
-    face_expression: "PROUD CONFIDENCE: chest out, calm knowing smile",
-    text_formula: "SPECIFIC DOLLAR AMOUNT + TIME. e.g. '$47,382 IN 6 MONTHS'"
-  },
-  
-  warning_alert: {
-    id: "warning_alert",
-    name: "The Warning/Alert",
-    emotion: "warning",
-    composition: "F",
-    face_required: false,
-    face_expression: "URGENT WARNING: intense stare, pointing finger",
-    text_formula: "STOP [THIS] or WARNING: [OUTCOME]."
-  },
-  
-  secret_hidden: {
-    id: "secret_hidden",
-    name: "The Secret/Hidden Truth",
-    emotion: "curiosity",
-    composition: "E",
-    face_required: false,
-    face_expression: "CONSPIRATORIAL: finger to lips, knowing half-smile",
-    text_formula: "HIDDEN [TRUTH]. MAX 4 WORDS."
-  },
-  
-  breaking_news: {
-    id: "breaking_news",
-    name: "The Breaking News",
-    emotion: "warning",
-    composition: "D",
-    face_required: false,
-    face_expression: "URGENT PRESENTER: pointing at chart, leaning forward",
-    text_formula: "BREAKING: [WHAT CHANGED]."
-  },
-  
-  before_after: {
-    id: "before_after",
-    name: "The Before/After Split",
-    emotion: "comparison",
-    composition: "B",
-    face_required: false,
-    face_expression: "LEFT: defeated. RIGHT: confident.",
-    text_formula: "STATE_A → STATE_B. e.g. 'BROKE → $200K'"
-  },
-  
-  numbered_list: {
-    id: "numbered_list",
-    name: "The Numbered List Bomb",
-    emotion: "curiosity",
-    composition: "C",
-    face_required: false,
-    face_expression: "KNOWLEDGEABLE: confident half-smile, one finger raised",
-    text_formula: "ODD NUMBER + WHAT THEY WANT."
-  },
-  
-  identity_challenge: {
-    id: "identity_challenge",
-    name: "The Identity Challenge",
-    emotion: "warning",
-    composition: "F",
-    face_required: true,
-    face_expression: "ACCUSATORY: raised eyebrow, pointing at camera",
-    text_formula: "IF YOU [DO THIS] = [IDENTITY]."
-  },
-  
-  finance_versus: {
-    id: "finance_versus",
-    name: "The Finance Versus",
-    emotion: "comparison",
-    composition: "B",
-    face_required: false,
-    face_expression: "DECISIVE: arms crossed, confident",
-    text_formula: "[OPTION A] VS [OPTION B]."
-  },
-  
-  lifestyle_proof: {
-    id: "lifestyle_proof",
-    name: "The Lifestyle Proof",
-    emotion: "money",
-    composition: "G",
-    face_required: false,
-    face_expression: "CASUAL ABUNDANCE: touching luxury item casually",
-    text_formula: "LUXURY ITEM + SOURCE."
-  },
-  
-  finance_audit: {
-    id: "finance_audit",
-    name: "The Finance Audit Reaction",
-    emotion: "shock",
-    composition: "H",
-    face_required: true,
-    face_expression: "AUDITOR HORROR: eyes wide squinting, hand to temple",
-    text_formula: "FINANCIAL DISASTER NUMBER."
-  },
-
-  // ─── STORYTELLING / DOCUMENTARY ────────────────────────────────
-  cliffhanger: {
-    id: "cliffhanger",
-    name: "The Cliffhanger Frame",
-    emotion: "curiosity",
-    composition: "F",
-    face_required: true,
-    face_expression: "TENSE: eyes wide looking OFF-FRAME, jaw tensed",
-    text_formula: "INCOMPLETE REVELATION with ellipsis."
-  },
-  
-  true_account: {
-    id: "true_account",
-    name: "The True Account Banner",
-    emotion: "curiosity",
-    composition: "C",
-    face_required: false,
-    face_expression: "DOCUMENTARY SUBJECT: calm haunted expression",
-    text_formula: "TRUE STORY: [WHAT HAPPENED]."
-  },
-
-  // ─── TRUE CRIME ────────────────────────────────────────────────
-  cold_case_file: {
-    id: "cold_case_file",
-    name: "The Cold Case File",
-    emotion: "fear",
-    composition: "C",
-    face_required: false,
-    face_expression: "HAUNTED: troubled expression, dark circles",
-    text_formula: "THE [CRIME] THAT [UNSOLVED]."
-  },
-  
-  suspect_reveal: {
-    id: "suspect_reveal",
-    name: "The Suspect Reveal",
-    emotion: "fear",
-    composition: "F",
-    face_required: true,
-    face_expression: "HALF-SHADOWED: half face in deep shadow",
-    text_formula: "ACCUSATORY WITHOUT CONFIRMING."
-  },
-
-  // ─── RELATIONSHIPS ─────────────────────────────────────────────
-  heartbreak_headline: {
-    id: "heartbreak_headline",
-    name: "The Heartbreak Headline",
-    emotion: "fear",
-    composition: "F",
-    face_required: true,
-    face_expression: "RAW PAIN: eyes glistening, lip trembling",
-    text_formula: "UNRESOLVED PAINFUL MOMENT."
-  },
-  
-  relationship_red_flag: {
-    id: "relationship_red_flag",
-    name: "The Relationship Red Flag",
-    emotion: "warning",
-    composition: "F",
-    face_required: true,
-    face_expression: "PROTECTIVE WARNING: raised eyebrow skepticism",
-    text_formula: "IF HE DOES THIS — RUN."
-  },
-
-  // ─── TRAVEL ────────────────────────────────────────────────────
-  destination_wow: {
-    id: "destination_wow",
-    name: "The Destination Wow Shot",
-    emotion: "inspiration",
-    composition: "C",
-    face_required: false,
-    face_expression: "AWESTRUCK: jaw dropped, arms spread",
-    text_formula: "[PLACE] FOR $AMOUNT."
-  },
-  
-  hidden_gem: {
-    id: "hidden_gem",
-    name: "The Hidden Gem Reveal",
-    emotion: "curiosity",
-    composition: "E",
-    face_required: false,
-    face_expression: "DISCOVERER EXCITEMENT: genuine surprise-joy",
-    text_formula: "HIDDEN [PLACE] NOBODY KNOWS."
-  },
-
-  // ─── AI / TECH ─────────────────────────────────────────────────
-  ai_takeover: {
-    id: "ai_takeover",
-    name: "The AI Takeover Frame",
-    emotion: "warning",
-    composition: "D",
-    face_required: false,
-    face_expression: "ALARMED: wide eyes, raised stop hand",
-    text_formula: "AI THREAT + IMPACT."
-  },
-  
-  cheat_code_reveal: {
-    id: "cheat_code_reveal",
-    name: "The Cheat Code Reveal",
-    emotion: "curiosity",
-    composition: "E",
-    face_required: false,
-    face_expression: "CONSPIRATORIAL: leaning forward, eyebrow raised",
-    text_formula: "TIME COMPRESSION. e.g. '10 HRS → 5 MINS'"
-  },
-  
-  tech_comparison: {
-    id: "tech_comparison",
-    name: "The Tech Comparison Bomb",
-    emotion: "comparison",
-    composition: "B",
-    face_required: false,
-    face_expression: "DECISIVE: confident direct gaze",
-    text_formula: "[TOOL A] VS [TOOL B]."
-  },
-
-  // ─── MOVIES / ENTERTAINMENT ────────────────────────────────────
-  plot_twist_tease: {
-    id: "plot_twist_tease",
-    name: "The Plot Twist Tease",
-    emotion: "shock",
-    composition: "F",
-    face_required: true,
-    face_expression: "MIND-BLOWN: hands on head, eyes maximum width",
-    text_formula: "THE TWIST YOU MISSED."
-  },
-  
-  deep_lore_dive: {
-    id: "deep_lore_dive",
-    name: "The Deep Lore Dive",
-    emotion: "curiosity",
-    composition: "E",
-    face_required: false,
-    face_expression: "DETECTIVE: magnifying glass gesture, focused",
-    text_formula: "THE CLUE NOBODY NOTICED."
-  },
-  
-  reaction_recap: {
-    id: "reaction_recap",
-    name: "The Reaction Recap",
-    emotion: "shock",
-    composition: "H",
-    face_required: true,
-    face_expression: "AUTHENTIC REACTION: real tears or genuine laugh",
-    text_formula: "EMOTIONAL REACTION. e.g. 'I CRIED 3 TIMES'"
-  },
-
-  // ─── SHORTS ────────────────────────────────────────────────────
-  shorts_hook_frame: {
-    id: "shorts_hook_frame",
-    name: "The Shorts Hook Frame",
-    emotion: "shock",
-    composition: "F",
-    face_required: false,
-    face_expression: "EXTREME emotion amplified 200%",
-    text_formula: "1-2 LINES MASSIVE. POV hook."
-  }
+const COMPOSITION_TYPES = {
+  A: { name: 'Reaction + Metrics', textZone: 'upper-left' },
+  B: { name: 'Before/After Split', textZone: 'upper-center' },
+  C: { name: 'Single Massive Element', textZone: 'upper-left' },
+  D: { name: 'Data Explosion', textZone: 'upper-center' },
+  E: { name: 'The Reveal Frame', textZone: 'upper-left' },
+  F: { name: 'Confrontational Face', textZone: 'upper-left' },
+  G: { name: 'Lifestyle Proof', textZone: 'upper-left' },
+  H: { name: 'Audit/Reaction Split', textZone: 'upper-center' }
 };
 
-// ══════════════════════════════════════════════════════════════════
-// DETECT EMOTION FROM CONTENT
-// ══════════════════════════════════════════════════════════════════
-
-function detectEmotionFromContent(title, script, niche) {
-  const text = `${title} ${script}`.toLowerCase();
-  
-  // Warning triggers
-  if (/stop|warning|don't|never|avoid|mistake|wrong|danger|scam|fraud/.test(text)) {
-    return 'warning';
-  }
-  
-  // Money triggers
-  if (/\$[\d,]+|income|revenue|profit|money|rich|wealth|earning|salary/.test(text)) {
-    return 'money';
-  }
-  
-  // Comparison triggers
-  if (/vs\.?|versus|compared|better|worse|before.*after|transformation/.test(text)) {
-    return 'comparison';
-  }
-  
-  // Fear triggers
-  if (/murder|death|crime|scary|horror|creepy|dark|mystery|disappear/.test(text)) {
-    return 'fear';
-  }
-  
-  // Curiosity triggers
-  if (/secret|hidden|truth|reveal|discover|unknown|why|how/.test(text)) {
-    return 'curiosity';
-  }
-  
-  // Inspiration triggers  
-  if (/success|achieve|goal|dream|inspire|motivat|can do|possible/.test(text)) {
-    return 'inspiration';
-  }
-  
-  // Default to shock for engagement
-  return 'shock';
-}
-
-// ══════════════════════════════════════════════════════════════════
-// GENERATE OVERLAY TEXT FROM TITLE
-// ══════════════════════════════════════════════════════════════════
-
-function generateOverlayText(title, template) {
-  // Extract key elements from title
-  const words = title.split(' ');
-  
-  // Look for numbers/money
-  const moneyMatch = title.match(/\$[\d,]+/);
-  const numberMatch = title.match(/\d+/);
-  
-  // Template-specific text generation
-  switch (template.id) {
-    case 'income_reveal':
-    case 'lifestyle_proof':
-      return moneyMatch ? moneyMatch[0] : (numberMatch ? `$${numberMatch[0]}` : words.slice(0, 3).join(' ').toUpperCase());
-    
-    case 'before_after':
-    case 'finance_versus':
-    case 'tech_comparison':
-      return 'BEFORE|AFTER'; // Special marker for split text
-    
-    case 'warning_alert':
-    case 'relationship_red_flag':
-      return `STOP ${words.slice(0, 2).join(' ')}`.toUpperCase();
-    
-    case 'numbered_list':
-      return numberMatch ? `${numberMatch[0]} SECRETS` : '7 SECRETS';
-    
-    default:
-      // Take first 4 impactful words
-      const impactWords = words.filter(w => w.length > 3).slice(0, 4);
-      return impactWords.join(' ').toUpperCase() || words.slice(0, 4).join(' ').toUpperCase();
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════
-// SELECT TEMPLATES
-// ══════════════════════════════════════════════════════════════════
-
-function selectTemplates(title, script, niche, selectedTemplateIds = null) {
-  // If user selected specific templates, use those
-  if (selectedTemplateIds && selectedTemplateIds.length === 3) {
-    return selectedTemplateIds.map(id => TEMPLATE_DNA[id] || TEMPLATE_DNA.shock_face);
-  }
-  
-  // Auto-select based on content
-  const emotion = detectEmotionFromContent(title, script, niche);
-  
-  // Find templates matching this emotion
-  const matchingTemplates = Object.values(TEMPLATE_DNA).filter(t => t.emotion === emotion);
-  
-  // If not enough, add some universal ones
-  const universalTemplates = [
-    TEMPLATE_DNA.shock_face,
-    TEMPLATE_DNA.curiosity,
-    TEMPLATE_DNA.numbered_list
-  ];
-  
-  const pool = [...matchingTemplates, ...universalTemplates];
-  
-  // Select 3 unique templates
-  const selected = [];
-  for (const template of pool) {
-    if (selected.length >= 3) break;
-    if (!selected.find(t => t.id === template.id)) {
-      selected.push(template);
-    }
-  }
-  
-  return selected;
-}
-
-// ══════════════════════════════════════════════════════════════════
-// BUILD IMAGE PROMPT
-// ══════════════════════════════════════════════════════════════════
-
-function buildImagePrompt(template, title, niche) {
-  const emotion = template.emotion;
+function buildImagePrompt(template, niche, imageStyle, title) {
+  const templateData = TEMPLATE_DNA[template] || TEMPLATE_DNA.shock_face;
+  const emotion = templateData.emotion;
   const colorSystem = EMOTION_COLOR_SYSTEMS[emotion] || EMOTION_COLOR_SYSTEMS.shock;
-  const composition = COMPOSITION_TYPES[template.composition] || COMPOSITION_TYPES.F;
-  
-  return `THUMBNAIL IMAGE FOR YOUTUBE. CINEMATIC QUALITY.
+  const composition = COMPOSITION_TYPES[templateData.composition] || COMPOSITION_TYPES.F;
+  const nicheData = NICHE_TEMPLATES[niche] || NICHE_TEMPLATES.explainer;
 
-COMPOSITION: ${composition.name} — ${composition.layout}
+  const demographic = SUBJECT_DEMOGRAPHICS[imageStyle.demographic] || SUBJECT_DEMOGRAPHICS.young_male;
+  const profession = SUBJECT_PROFESSIONS[imageStyle.profession] || SUBJECT_PROFESSIONS.casual;
+  const framing = SUBJECT_FRAMING[imageStyle.framing] || SUBJECT_FRAMING.head_shoulders;
 
-SUBJECT/EXPRESSION: ${template.face_expression}
+  const expression = nicheData.expressions[Math.floor(Math.random() * nicheData.expressions.length)];
+  const prop = nicheData.props[Math.floor(Math.random() * nicheData.props.length)];
+
+  return `YOUTUBE THUMBNAIL IMAGE. CINEMATIC QUALITY. 16:9 ASPECT RATIO.
+
+SUBJECT: ${demographic.prompt}, ${profession.prompt}
+FRAMING: ${framing.prompt}
+EXPRESSION: ${expression}
+
+COMPOSITION: ${composition.name}
 
 COLOR PALETTE:
-- Background: ${colorSystem.background}
-- Accents: ${colorSystem.accent}
-- Mood: ${colorSystem.mood}
+- Background: ${nicheData.colors.bg || colorSystem.background}
+- Accents: ${nicheData.colors.accent || colorSystem.accent}
 
-LIGHTING: Dramatic three-point lighting with strong key light, moody fill, and rim light for depth.
+PROPS/ELEMENTS: ${prop}
+
+LIGHTING: Dramatic three-point lighting, strong key light, moody fill, rim light.
 
 CRITICAL REQUIREMENTS:
 - NO TEXT, NO WORDS, NO LETTERS, NO NUMBERS IN THE IMAGE
 - Leave clean negative space in ${composition.textZone} for text overlay
-- Subject positioned at ${composition.subjectPosition}
-- 16:9 aspect ratio, 1920x1080
+- Expression must be READABLE at 120px thumbnail size
 - Photorealistic, high contrast, saturated colors
-- Professional studio quality
 
-NICHE CONTEXT: ${niche}
-VIDEO TOPIC: ${title}`;
+VIDEO CONTEXT: ${title}`;
 }
 
-// ══════════════════════════════════════════════════════════════════
-// FAST JSON PARSER
-// ══════════════════════════════════════════════════════════════════
-
-function parseOpenAIJson(text) {
-  if (!text || typeof text !== 'string') return null;
-  
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  
-  if (start === -1 || end === -1 || end <= start) return null;
-  
-  let jsonStr = text.slice(start, end + 1);
-  jsonStr = jsonStr
-    .replace(/[\x00-\x1F\x7F]/g, ' ')
-    .replace(/,\s*([}\]])/g, '$1');
-  
-  try {
-    return JSON.parse(jsonStr);
-  } catch (e) {
-    return null;
+function selectTemplatesForNiche(niche, selectedTemplateIds = null) {
+  if (selectedTemplateIds && selectedTemplateIds.length === 3) {
+    return selectedTemplateIds;
   }
+  
+  const nicheData = NICHE_TEMPLATES[niche] || NICHE_TEMPLATES.explainer;
+  const primary = [...nicheData.primary];
+  const secondary = [...nicheData.secondary];
+  
+  for (let i = primary.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [primary[i], primary[j]] = [primary[j], primary[i]];
+  }
+  
+  return [primary[0], primary[1], secondary[Math.floor(Math.random() * secondary.length)]];
 }
 
-// ══════════════════════════════════════════════════════════════════
-// MAIN HANDLER
-// ══════════════════════════════════════════════════════════════════
-
-export default async function handler(req) {
+Deno.serve(async (req) => {
   try {
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
     const body = await req.json();
     const { 
       project_id, 
       video_title, 
       selected_templates,
+      image_style = {},
       custom_prompt 
     } = body;
 
     if (!project_id) {
-      return new Response(JSON.stringify({ error: 'Missing project_id' }), { status: 400 });
+      return Response.json({ error: 'Missing project_id' }, { status: 400 });
     }
 
-    // Load project data
-    const project = await base44.entities.Projects.get(project_id);
+    const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
+    const project = projects[0];
     if (!project) {
-      return new Response(JSON.stringify({ error: 'Project not found' }), { status: 404 });
+      return Response.json({ error: 'Project not found' }, { status: 404 });
     }
 
-    // Load script
-    const scripts = await base44.entities.Scripts.filter({ project_id });
-    const scriptContent = scripts[0]?.content || '';
-    
-    const effectiveTitle = video_title || project.working_title || project.topic || 'Untitled Video';
-    const projectNiche = project.niche || 'general';
+    const scripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
+    const effectiveTitle = video_title || project.working_title || project.topic || 'Untitled';
+    const projectNiche = project.niche || 'explainer';
 
-    // Select 3 templates
-    const templates = selectTemplates(
-      effectiveTitle, 
-      scriptContent, 
-      projectNiche, 
-      selected_templates
-    );
+    const finalImageStyle = {
+      demographic: image_style.demographic || 'young_male',
+      profession: image_style.profession || 'casual',
+      framing: image_style.framing || 'head_shoulders'
+    };
 
-    // Delete existing concepts for this project
-    const existing = await base44.entities.ThumbnailConcepts.filter({ project_id });
+    const templateIds = selectTemplatesForNiche(projectNiche, selected_templates);
+
+    // Delete existing concepts
+    const existing = await base44.asServiceRole.entities.ThumbnailConcepts.filter({ project_id });
     for (const concept of existing) {
-      await base44.entities.ThumbnailConcepts.delete(concept.id);
+      await base44.asServiceRole.entities.ThumbnailConcepts.delete(concept.id);
     }
 
-    // Generate concepts for each template
     const concepts = [];
     
-    for (let i = 0; i < templates.length; i++) {
-      const template = templates[i];
-      const emotion = template.emotion;
-      const colorSystem = EMOTION_COLOR_SYSTEMS[emotion] || EMOTION_COLOR_SYSTEMS.shock;
+    for (let i = 0; i < templateIds.length; i++) {
+      const templateId = templateIds[i];
+      const templateData = TEMPLATE_DNA[templateId] || TEMPLATE_DNA.shock_face;
+      const emotion = templateData.emotion;
+      const colorSystem = EMOTION_COLOR_SYSTEMS[emotion];
       
-      // Generate image prompt (text-free)
-      const imagePrompt = custom_prompt || buildImagePrompt(template, effectiveTitle, projectNiche);
+      const imagePrompt = custom_prompt || buildImagePrompt(
+        templateId, 
+        projectNiche, 
+        finalImageStyle, 
+        effectiveTitle
+      );
       
-      // Generate overlay text
-      const overlayText = generateOverlayText(effectiveTitle, template);
+      const textTemplateId = TEXT_OVERLAY_MAPPING[templateId] || 'shock_side';
+      const overlayText = effectiveTitle.split(' ').slice(0, 4).join(' ').toUpperCase();
       
-      // Get text overlay template ID
-      const textTemplateId = TEXT_OVERLAY_MAPPING[template.id] || 'shock_side';
-      
-      // Build text style config
       const textStyle = {
         templateId: textTemplateId,
-        layerTexts: {
-          headline: overlayText,
-          subtext: '',
-          before_label: 'BEFORE',
-          after_label: 'AFTER'
-        },
-        layerColors: {
-          headline: colorSystem.textColor,
-          subtext: '#FFFFFF'
-        }
+        layerTexts: { headline: overlayText },
+        layerColors: { headline: colorSystem?.textColor || '#FFFFFF' },
+        sizeMultiplier: 1.0
       };
-      
-      // Create concept in database
-      const concept = await base44.entities.ThumbnailConcepts.create({
+
+      const concept = await base44.asServiceRole.entities.ThumbnailConcepts.create({
         project_id,
         rank: i + 1,
-        concept_type: template.id,
-        concept_description: `${template.name}: ${template.text_formula}`,
+        concept_type: templateId,
+        concept_description: `${templateId.replace(/_/g, ' ')} — ${projectNiche} style`,
         image_prompt: imagePrompt,
         text_overlay: overlayText,
         text_style: JSON.stringify(textStyle),
-        color_scheme: JSON.stringify({
-          emotion: emotion,
-          background: colorSystem.background,
-          accent: colorSystem.accent,
-          textColor: colorSystem.textColor
-        }),
-        ctr_score: 7 + Math.floor(Math.random() * 3), // 7-9
+        color_scheme: JSON.stringify({ emotion, ...colorSystem, niche: projectNiche }),
+        image_style: JSON.stringify(finalImageStyle),
+        ctr_score: 7 + Math.floor(Math.random() * 3),
         is_selected: i === 0,
         status: 'pending_image'
       });
@@ -717,19 +321,18 @@ export default async function handler(req) {
       concepts.push(concept);
     }
 
-    return new Response(JSON.stringify({
+    return Response.json({
       success: true,
       concepts,
+      image_style: finalImageStyle,
+      niche: projectNiche,
       message: `Generated ${concepts.length} thumbnail concepts`
-    }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
     });
 
   } catch (error) {
     console.error('Thumbnail generation error:', error);
-    return new Response(JSON.stringify({ 
+    return Response.json({ 
       error: error.message || 'Thumbnail generation failed'
-    }), { status: 500 });
+    }, { status: 500 });
   }
-}
+});
