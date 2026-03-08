@@ -1,6 +1,6 @@
 // ══════════════════════════════════════════════════════════════════
-// ThumbnailGrid.jsx — COMPLETE
-// Grid display for thumbnail concepts with overlay editing
+// ThumbnailGrid.jsx — V3 FIXED
+// ✅ Save now works properly with async/await
 // ══════════════════════════════════════════════════════════════════
 // Place in: src/components/postprod/ThumbnailGrid.jsx
 // ══════════════════════════════════════════════════════════════════
@@ -75,15 +75,32 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
     }
   };
 
+  // ════════════════════════════════════════════════════════════════
+  // TEXT CHANGE HANDLER — FIXED: Returns a Promise
+  // ════════════════════════════════════════════════════════════════
   const handleTextChange = async (newTextConfig) => {
+    console.log('ThumbnailCard: Saving text config for concept', concept.id, newTextConfig);
+    
     try {
+      // Update the database
       await base44.entities.ThumbnailConcepts.update(concept.id, {
-        text_overlay: newTextConfig.primary_text,
+        text_overlay: newTextConfig.primary_text || '',
         text_style: JSON.stringify(newTextConfig)
       });
-      await onRefetch();
+      
+      console.log('ThumbnailCard: Save successful');
+      
+      // Refetch to update UI
+      if (onRefetch) {
+        await onRefetch();
+      }
+      
+      // Return success (important for the child component to know save worked)
+      return { success: true };
     } catch (e) {
-      setError(e.message);
+      console.error('ThumbnailCard: Save failed', e);
+      setError(e.message || 'Failed to save');
+      throw e; // Re-throw so child component knows it failed
     }
   };
 
@@ -167,6 +184,11 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
                   {colorSystem.emotion}
                 </Badge>
               )}
+              {textStyle.sizeMultiplier && textStyle.sizeMultiplier !== 1.0 && (
+                <Badge variant="outline" className="text-[10px] bg-white">
+                  {Math.round(textStyle.sizeMultiplier * 100)}%
+                </Badge>
+              )}
             </div>
             <div className="flex items-center gap-1 bg-yellow-50 px-2 py-0.5 rounded-full">
               <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
@@ -177,7 +199,7 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
           <div className="flex items-start gap-1.5">
             <Type className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" />
             <p className="text-xs text-gray-600 line-clamp-1 flex-1 font-medium">
-              {concept.text_overlay || textStyle.layerTexts?.headline || 
+              {concept.text_overlay || textStyle.layerTexts?.headline || textStyle.primary_text ||
                 <span className="text-gray-400 italic font-normal">No overlay text</span>
               }
             </p>
@@ -342,7 +364,7 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
       <div className="flex items-center justify-center gap-6 text-xs text-gray-400 pt-3 border-t">
         <span className="flex items-center gap-1.5">
           <Type className="w-3.5 h-3.5" />
-          Click edit to customize text
+          Click edit to customize text & size
         </span>
         <span className="flex items-center gap-1.5">
           <Download className="w-3.5 h-3.5" />
