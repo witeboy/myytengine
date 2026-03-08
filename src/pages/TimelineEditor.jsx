@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
@@ -19,21 +19,24 @@ import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Volume1,
   ZoomIn, ZoomOut, Undo2, Redo2, Scissors, Trash2, Copy,
   Download, Home, Image, Music, Type, Wand2, Film, Mic, Settings,
-  Loader2, CheckCircle, Sparkles, Star, Move,
-  LayoutGrid, List, FolderOpen, Plus, X,
+  Loader2, CheckCircle, Sparkles, Star, Move, ArrowLeft, FileVideo,
+  LayoutGrid, List, FolderOpen, Plus, X, Package,
   Bold, Italic, Underline,
   AlignLeft, AlignCenter, AlignRight, Palette,
-  Minimize2, Focus, Blend, ArrowUpRight, ArrowDownLeft, RefreshCw
+  Minimize2, Focus, Blend, ArrowUpRight, ArrowDownLeft
 } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════════
-// TIMELINE EDITOR V5 - AUTOSYNC FIXED
+// TIMELINE EDITOR V6
 // ══════════════════════════════════════════════════════════════════
-// AutoSync now matches each video clip to its scene's audio duration
+// - Audio beats from voiceover (not captions)
+// - Working Undo/Redo/Delete
+// - Navigation: Back, Export, Download Assets
 // ══════════════════════════════════════════════════════════════════
 
 const TRACK_HEIGHT = 56;
 const LABEL_WIDTH = 40;
+const MAX_HISTORY = 50;
 
 // ═══════════════════════════════════════════════════════════════════
 // DATA
@@ -55,22 +58,12 @@ const TRANSITIONS = [
   { id: 'gradual_fade', name: 'Gradual Fade' },
   { id: 'smooth_ink', name: 'Smooth Ink' },
   { id: 'expand_fade', name: 'Expand Fade' },
-  { id: 'smooth_rub', name: 'Smooth Rub' },
   { id: 'fuzzy_fade', name: 'Fuzzy Fade' },
   { id: 'overlap_fade', name: 'Overlap Fade' },
-  { id: 'fuzz_fade', name: 'Fuzz Fade' },
   { id: 'lazy_fade', name: 'Lazy Fade' },
   { id: 'square_fade', name: 'Square Fade' },
   { id: 'fade_up', name: 'Fade Up' },
   { id: 'central_fade', name: 'Central Fade' },
-];
-
-const TEXT_ANIMATIONS_IN = [
-  { id: 'none', name: 'None' },
-  { id: 'fade_in', name: 'Fade In' },
-  { id: 'slide_up', name: 'Slide Up' },
-  { id: 'typewriter', name: 'Typewriter' },
-  { id: 'wave', name: 'Wave' },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
@@ -94,10 +87,42 @@ function formatTimecode(seconds) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// TOP TOOLBAR
+// HISTORY HOOK FOR UNDO/REDO
 // ═══════════════════════════════════════════════════════════════════
 
-function TopToolbar({ activePanel, onPanelChange }) {
+function useHistory(initialState) {
+  const [history, setHistory] = useState([initialState]);
+  const [index, setIndex] = useState(0);
+
+  const state = history[index];
+
+  const setState = useCallback((newState) => {
+    const newHistory = history.slice(0, index + 1);
+    newHistory.push(typeof newState === 'function' ? newState(state) : newState);
+    if (newHistory.length > MAX_HISTORY) newHistory.shift();
+    setHistory(newHistory);
+    setIndex(newHistory.length - 1);
+  }, [history, index, state]);
+
+  const undo = useCallback(() => {
+    if (index > 0) setIndex(index - 1);
+  }, [index]);
+
+  const redo = useCallback(() => {
+    if (index < history.length - 1) setIndex(index + 1);
+  }, [history.length, index]);
+
+  const canUndo = index > 0;
+  const canRedo = index < history.length - 1;
+
+  return { state, setState, undo, redo, canUndo, canRedo };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TOP TOOLBAR WITH NAVIGATION
+// ═══════════════════════════════════════════════════════════════════
+
+function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport, onDownloadAssets }) {
   const panels = [
     { id: 'media', label: 'Media', icon: Film },
     { id: 'audio', label: 'Audio', icon: Music },
@@ -111,19 +136,56 @@ function TopToolbar({ activePanel, onPanelChange }) {
   ];
 
   return (
-    <div className="flex items-center gap-0.5 px-2 py-1 bg-[#1a1a2e] border-b border-gray-800">
-      {panels.map(panel => (
+    <div className="flex items-center justify-between px-2 py-1 bg-[#1a1a2e] border-b border-gray-800">
+      {/* Left - Back & Project Name */}
+      <div className="flex items-center gap-3">
         <button
-          key={panel.id}
-          onClick={() => onPanelChange(panel.id)}
-          className={`flex flex-col items-center gap-0.5 px-3 py-1.5 rounded transition-all ${
-            activePanel === panel.id ? 'text-cyan-400' : 'text-gray-400 hover:text-white'
-          }`}
+          onClick={onBack}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors"
         >
-          <panel.icon size={16} />
-          <span className="text-[9px]">{panel.label}</span>
+          <ArrowLeft size={16} />
+          <span className="text-xs">Back</span>
         </button>
-      ))}
+        <div className="h-4 w-px bg-gray-700" />
+        <span className="text-sm font-medium text-white truncate max-w-[150px]">{projectName || 'Untitled'}</span>
+      </div>
+
+      {/* Center - Panel Tabs */}
+      <div className="flex items-center gap-0.5">
+        {panels.map(panel => (
+          <button
+            key={panel.id}
+            onClick={() => onPanelChange(panel.id)}
+            className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded transition-all ${
+              activePanel === panel.id ? 'text-cyan-400' : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            <panel.icon size={14} />
+            <span className="text-[8px]">{panel.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Right - Export & Download */}
+      <div className="flex items-center gap-2">
+        <Button
+          onClick={onDownloadAssets}
+          variant="outline"
+          size="sm"
+          className="gap-1.5 text-xs border-gray-700 text-gray-300 hover:text-white"
+        >
+          <Package size={14} />
+          Assets
+        </Button>
+        <Button
+          onClick={onExport}
+          size="sm"
+          className="gap-1.5 text-xs bg-green-600 hover:bg-green-700"
+        >
+          <FileVideo size={14} />
+          Export MP4
+        </Button>
+      </div>
     </div>
   );
 }
@@ -170,12 +232,9 @@ function MediaPanel({ scenes, onSelectScene }) {
                     <Image className="w-5 h-5 text-gray-600" />
                   </div>
                 )}
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <Plus className="w-6 h-6 text-white" />
-                </div>
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 p-1">
                   <p className="text-[9px] text-white">Scene {scene.scene_number}</p>
-                  <p className="text-[8px] text-gray-300">{scene.audio_duration || scene.duration_seconds || 5}s</p>
+                  <p className="text-[8px] text-cyan-300">{(scene.audio_duration || scene.duration_seconds || 5).toFixed(1)}s audio</p>
                 </div>
               </div>
             ))}
@@ -213,9 +272,7 @@ function EffectsPanel({ selectedClip, onApplyEffect, appliedEffects }) {
       </div>
 
       {notification && (
-        <div className="mx-2 mt-2 px-3 py-2 bg-green-500/20 text-green-400 text-xs rounded">
-          {notification}
-        </div>
+        <div className="mx-2 mt-2 px-3 py-2 bg-green-500/20 text-green-400 text-xs rounded">{notification}</div>
       )}
 
       <div className="flex-1 overflow-y-auto p-2">
@@ -252,37 +309,31 @@ function TransitionsPanel({ selectedClipIndex, totalClips, onApplyTransition }) 
   const filtered = TRANSITIONS.filter(t => t.name.toLowerCase().includes(search.toLowerCase()));
 
   const handleApply = (transition) => {
-    if (selectedClipIndex === null || selectedClipIndex === undefined) {
+    if (selectedClipIndex === null || selectedClipIndex < 0) {
       setNotification('Select a video clip first');
-      setTimeout(() => setNotification(null), 2500);
-      return;
+    } else if (selectedClipIndex >= totalClips - 1) {
+      setNotification('Cannot add after last clip');
+    } else {
+      onApplyTransition(transition, selectedClipIndex);
+      setNotification(`Added ${transition.name}`);
     }
-    if (selectedClipIndex >= totalClips - 1) {
-      setNotification('Cannot add transition after last clip');
-      setTimeout(() => setNotification(null), 2500);
-      return;
-    }
-    onApplyTransition(transition, selectedClipIndex);
-    setNotification(`Added ${transition.name} after Scene ${selectedClipIndex + 1}`);
     setTimeout(() => setNotification(null), 2500);
   };
 
   return (
     <div className="h-full flex flex-col">
       <div className="px-3 py-2 border-b border-gray-800">
-        <Input placeholder="Search transitions..." value={search} onChange={e => setSearch(e.target.value)} className="h-7 text-xs bg-gray-800 border-gray-700" />
+        <Input placeholder="Search..." value={search} onChange={e => setSearch(e.target.value)} className="h-7 text-xs bg-gray-800 border-gray-700" />
       </div>
 
       {notification && (
         <div className="mx-2 mt-2 px-3 py-2 bg-cyan-500/20 text-cyan-400 text-xs rounded">{notification}</div>
       )}
 
-      <div className="px-3 py-2 text-[10px] text-gray-500">Select a clip, then click a transition</div>
-
       <div className="flex-1 overflow-y-auto p-2">
         <div className="grid grid-cols-2 gap-2">
           {filtered.map(transition => (
-            <button key={transition.id} onClick={() => handleApply(transition)} className="relative aspect-video bg-gray-800 rounded overflow-hidden hover:ring-2 hover:ring-cyan-500 group">
+            <button key={transition.id} onClick={() => handleApply(transition)} className="relative aspect-video bg-gray-800 rounded overflow-hidden hover:ring-2 hover:ring-cyan-500">
               <div className="absolute inset-0 bg-gradient-to-br from-blue-600/30 to-purple-600/30 flex items-center justify-center">
                 <Blend className="w-6 h-6 text-white/50" />
               </div>
@@ -304,10 +355,8 @@ function TransitionsPanel({ selectedClipIndex, totalClips, onApplyTransition }) 
 function CaptionsPanel({ onGenerate, isGenerating, captionCount }) {
   const [settings, setSettings] = useState({
     language: 'auto',
-    bilingual: 'none',
     highlightKeywords: false,
     aiEmojis: false,
-    identifyFillers: false,
     deleteExisting: false,
   });
 
@@ -327,7 +376,7 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount }) {
 
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-300">Auto highlight keywords</span>
+            <span className="text-xs text-gray-300">Highlight keywords</span>
             <Switch checked={settings.highlightKeywords} onCheckedChange={v => setSettings(s => ({ ...s, highlightKeywords: v }))} />
           </div>
           <div className="flex items-center justify-between">
@@ -337,14 +386,14 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount }) {
         </div>
 
         {captionCount > 0 && (
-          <div className="p-2 bg-gray-800/50 rounded text-xs text-gray-400">{captionCount} captions on timeline</div>
+          <div className="p-2 bg-gray-800/50 rounded text-xs text-gray-400">{captionCount} captions</div>
         )}
       </div>
 
       <div className="p-3 border-t border-gray-800">
         <div className="flex items-center gap-2 mb-3">
-          <input type="checkbox" id="deleteExisting" checked={settings.deleteExisting} onChange={e => setSettings(s => ({ ...s, deleteExisting: e.target.checked }))} className="rounded border-gray-600" />
-          <label htmlFor="deleteExisting" className="text-[10px] text-gray-400">Delete current captions</label>
+          <input type="checkbox" id="del" checked={settings.deleteExisting} onChange={e => setSettings(s => ({ ...s, deleteExisting: e.target.checked }))} className="rounded border-gray-600" />
+          <label htmlFor="del" className="text-[10px] text-gray-400">Delete existing</label>
         </div>
         <Button onClick={() => onGenerate(settings)} disabled={isGenerating} className="w-full bg-cyan-600 hover:bg-cyan-700">
           {isGenerating ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Generating...</> : 'Generate'}
@@ -363,7 +412,7 @@ function TextPropertiesPanel({ caption, onUpdate }) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-gray-500">
         <Type className="w-8 h-8 mb-2 opacity-50" />
-        <p className="text-xs">Select a caption to edit</p>
+        <p className="text-xs">Select a caption</p>
       </div>
     );
   }
@@ -398,20 +447,6 @@ function TextPropertiesPanel({ caption, onUpdate }) {
           <Input value={caption.color || '#FFFFFF'} onChange={e => update('color', e.target.value)} className="flex-1 h-8 text-xs bg-gray-800 border-gray-700" />
         </div>
       </div>
-
-      <div>
-        <label className="text-[10px] text-gray-400 mb-1 block">Alignment</label>
-        <div className="flex gap-1">
-          {[AlignLeft, AlignCenter, AlignRight].map((Icon, i) => {
-            const values = ['left', 'center', 'right'];
-            return (
-              <button key={i} onClick={() => update('align', values[i])} className={`flex-1 h-8 rounded flex items-center justify-center ${caption.align === values[i] ? 'bg-cyan-500/20 text-cyan-400' : 'bg-gray-800 text-gray-400'}`}>
-                <Icon size={14} />
-              </button>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }
@@ -425,7 +460,7 @@ function ClipPropertiesPanel({ clip, onUpdate }) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-gray-500">
         <Film className="w-8 h-8 mb-2 opacity-50" />
-        <p className="text-xs">Select a clip to edit</p>
+        <p className="text-xs">Select a clip</p>
       </div>
     );
   }
@@ -437,13 +472,13 @@ function ClipPropertiesPanel({ clip, onUpdate }) {
       <div className="text-sm font-medium text-white">Scene {clip.sceneNumber}</div>
 
       <div>
-        <label className="text-[10px] text-gray-400 mb-1 block">Duration (sec)</label>
+        <label className="text-[10px] text-gray-400 mb-1 block">Video Duration</label>
         <Input type="number" step="0.1" value={clip.duration} onChange={e => update('duration', parseFloat(e.target.value) || 1)} className="h-8 text-xs bg-gray-800 border-gray-700" />
       </div>
 
-      <div>
-        <label className="text-[10px] text-gray-400 mb-1 block">Audio Duration</label>
-        <p className="text-xs text-cyan-400">{clip.audioDuration || 'Not set'}s</p>
+      <div className="p-2 bg-cyan-500/10 rounded">
+        <label className="text-[10px] text-cyan-400 mb-1 block">Audio Beat Duration</label>
+        <p className="text-sm text-white font-mono">{clip.audioDuration?.toFixed(2) || '?'}s</p>
       </div>
 
       {clip.effects?.length > 0 && (
@@ -461,20 +496,9 @@ function ClipPropertiesPanel({ clip, onUpdate }) {
       )}
 
       <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-300">Mute video audio</span>
+        <span className="text-xs text-gray-300">Mute audio</span>
         <Switch checked={clip.audioMuted || false} onCheckedChange={v => update('audioMuted', v)} />
       </div>
-
-      {!clip.audioMuted && (
-        <div>
-          <label className="text-[10px] text-gray-400 mb-1 block">Volume</label>
-          <div className="flex items-center gap-2">
-            <Volume1 size={14} className="text-gray-400" />
-            <Slider value={[clip.volume || 100]} onValueChange={([v]) => update('volume', v)} min={0} max={200} className="flex-1" />
-            <span className="text-xs text-gray-400 w-8">{clip.volume || 100}%</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -488,12 +512,6 @@ function VideoPreview({ currentScene, currentTime, captions, selectedCaption, on
   const [dragging, setDragging] = useState(null);
 
   const activeCaptions = captions.filter(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration);
-
-  const handleMouseDown = (e, caption, action) => {
-    e.stopPropagation();
-    onSelectCaption(caption);
-    setDragging({ id: caption.id, action, startX: e.clientX, startY: e.clientY, initialX: caption.x || 50, initialY: caption.y || 85, initialSize: caption.fontSize || 24 });
-  };
 
   useEffect(() => {
     if (!dragging) return;
@@ -516,6 +534,12 @@ function VideoPreview({ currentScene, currentTime, captions, selectedCaption, on
     document.addEventListener('mouseup', handleMouseUp);
     return () => { document.removeEventListener('mousemove', handleMouseMove); document.removeEventListener('mouseup', handleMouseUp); };
   }, [dragging, captions, onUpdateCaption]);
+
+  const handleMouseDown = (e, caption, action) => {
+    e.stopPropagation();
+    onSelectCaption(caption);
+    setDragging({ id: caption.id, action, startX: e.clientX, startY: e.clientY, initialX: caption.x || 50, initialY: caption.y || 85, initialSize: caption.fontSize || 24 });
+  };
 
   return (
     <div className="h-full flex items-center justify-center p-4 bg-[#0a0a14]">
@@ -549,8 +573,6 @@ function VideoPreview({ currentScene, currentTime, captions, selectedCaption, on
                   fontSize: `${caption.fontSize || 24}px`,
                   fontWeight: caption.bold ? 'bold' : 'normal',
                   fontStyle: caption.italic ? 'italic' : 'normal',
-                  textDecoration: caption.underline ? 'underline' : 'none',
-                  textAlign: caption.align || 'center',
                 }}
               >
                 {caption.text}
@@ -577,18 +599,15 @@ function VideoPreview({ currentScene, currentTime, captions, selectedCaption, on
 function TransportControls({ isPlaying, onPlayPause, currentTime, totalDuration, onSeek }) {
   return (
     <div className="flex items-center justify-center gap-4 py-3 px-4 bg-[#12121f] border-t border-gray-800">
-      <button onClick={() => onSeek(Math.max(0, currentTime - 5))} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full">
+      <button onClick={() => onSeek(Math.max(0, currentTime - 5))} className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10">
         <SkipBack size={20} />
       </button>
-
-      <button onClick={onPlayPause} className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg ${isPlaying ? 'bg-red-600 hover:bg-red-700' : 'bg-white hover:bg-gray-200'}`}>
+      <button onClick={onPlayPause} className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg ${isPlaying ? 'bg-red-600' : 'bg-white'}`}>
         {isPlaying ? <Pause size={28} className="text-white" /> : <Play size={28} className="text-gray-900 ml-1" />}
       </button>
-
-      <button onClick={() => onSeek(Math.min(totalDuration, currentTime + 5))} className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full">
+      <button onClick={() => onSeek(Math.min(totalDuration, currentTime + 5))} className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-white/10">
         <SkipForward size={20} />
       </button>
-
       <div className="ml-4 flex items-center gap-2">
         <span className="text-sm font-mono text-cyan-400">{formatTimecode(currentTime)}</span>
         <span className="text-gray-600">/</span>
@@ -602,7 +621,7 @@ function TransportControls({ isPlaying, onPlayPause, currentTime, totalDuration,
 // TIMELINE RULER
 // ═══════════════════════════════════════════════════════════════════
 
-function TimelineRuler({ totalDuration, pixelsPerSecond, currentTime, onSeek }) {
+function TimelineRuler({ totalDuration, pixelsPerSecond, onSeek }) {
   const markers = [];
   const interval = pixelsPerSecond >= 15 ? 5 : pixelsPerSecond >= 8 ? 10 : 30;
   for (let t = 0; t <= totalDuration; t += interval) markers.push(t);
@@ -629,19 +648,13 @@ function TimelineRuler({ totalDuration, pixelsPerSecond, currentTime, onSeek }) 
 // TIMELINE TRACK
 // ═══════════════════════════════════════════════════════════════════
 
-function TimelineTrack({ type, clips, pixelsPerSecond, totalDuration, currentTime, selectedClipId, onSelectClip, onUpdateClip }) {
+function TimelineTrack({ type, label, clips, pixelsPerSecond, totalDuration, currentTime, selectedClipId, onSelectClip, onUpdateClip }) {
   const colors = { video: '#059669', audio: '#4f46e5', caption: '#d97706' };
   const icons = { video: Image, audio: Mic, caption: Type };
   const Icon = icons[type];
   const color = colors[type];
 
   const [dragging, setDragging] = useState(null);
-
-  const handleMouseDown = (e, clip, action) => {
-    e.stopPropagation();
-    onSelectClip(clip.id);
-    setDragging({ id: clip.id, action, startX: e.clientX, initialStart: clip.startTime, initialDuration: clip.duration });
-  };
 
   useEffect(() => {
     if (!dragging) return;
@@ -653,9 +666,6 @@ function TimelineTrack({ type, clips, pixelsPerSecond, totalDuration, currentTim
         onUpdateClip({ ...clip, startTime: Math.max(0, dragging.initialStart + delta) });
       } else if (dragging.action === 'resize-right') {
         onUpdateClip({ ...clip, duration: Math.max(0.5, dragging.initialDuration + delta) });
-      } else if (dragging.action === 'resize-left') {
-        const newStart = Math.max(0, dragging.initialStart + delta);
-        onUpdateClip({ ...clip, startTime: newStart, duration: Math.max(0.5, dragging.initialDuration - delta) });
       }
     };
     const handleMouseUp = () => setDragging(null);
@@ -664,11 +674,17 @@ function TimelineTrack({ type, clips, pixelsPerSecond, totalDuration, currentTim
     return () => { document.removeEventListener('mousemove', handleMouseMove); document.removeEventListener('mouseup', handleMouseUp); };
   }, [dragging, clips, pixelsPerSecond, onUpdateClip]);
 
+  const handleMouseDown = (e, clip, action) => {
+    e.stopPropagation();
+    onSelectClip(clip.id);
+    setDragging({ id: clip.id, action, startX: e.clientX, initialStart: clip.startTime, initialDuration: clip.duration });
+  };
+
   return (
     <div className="flex border-b border-gray-800">
-      <div className="flex-shrink-0 bg-[#12121f] flex items-center justify-center" style={{ width: LABEL_WIDTH, height: TRACK_HEIGHT }}>
+      <div className="flex-shrink-0 bg-[#12121f] flex items-center justify-center gap-1" style={{ width: LABEL_WIDTH, height: TRACK_HEIGHT }}>
         <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: color }} />
-        <Icon size={10} className="text-gray-400 ml-1" />
+        <Icon size={10} className="text-gray-400" />
       </div>
       <div className="relative bg-[#0a0a14]" style={{ height: TRACK_HEIGHT, width: Math.max(totalDuration * pixelsPerSecond, 800) }}>
         {clips.map(clip => {
@@ -691,7 +707,6 @@ function TimelineTrack({ type, clips, pixelsPerSecond, totalDuration, currentTim
                 </div>
                 {clip.audioMuted && <VolumeX className="w-3 h-3 text-red-400" />}
               </div>
-              <div className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/30" onMouseDown={(e) => handleMouseDown(e, clip, 'resize-left')} />
               <div className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/30" onMouseDown={(e) => handleMouseDown(e, clip, 'resize-right')} />
             </div>
           );
@@ -706,7 +721,7 @@ function TimelineTrack({ type, clips, pixelsPerSecond, totalDuration, currentTim
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════
 
-export default function TimelineEditorV5() {
+export default function TimelineEditorV6() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get('project_id');
@@ -718,10 +733,16 @@ export default function TimelineEditorV5() {
   const [pixelsPerSecond, setPixelsPerSecond] = useState(15);
   const [isMuted, setIsMuted] = useState(false);
 
-  // Clips
-  const [videoClips, setVideoClips] = useState([]);
+  // Clips with history for undo/redo
+  const videoHistory = useHistory([]);
+  const captionHistory = useHistory([]);
+  const videoClips = videoHistory.state;
+  const setVideoClips = videoHistory.setState;
+  const captionClips = captionHistory.state;
+  const setCaptionClips = captionHistory.setState;
+
+  // Audio clips (from voiceover - the source of truth for beats)
   const [audioClips, setAudioClips] = useState([]);
-  const [captionClips, setCaptionClips] = useState([]);
 
   // Selection
   const [selectedVideoClipId, setSelectedVideoClipId] = useState(null);
@@ -761,18 +782,31 @@ export default function TimelineEditorV5() {
   const voiceoverUrl = prodSettings[0]?.voiceover_url;
 
   // ═══════════════════════════════════════════════════════════════════
-  // CALCULATE AUDIO BEAT DURATIONS FROM SCENES
-  // Each scene has its own audio_duration that we need to respect
+  // AUDIO BEAT DURATIONS FROM SCENES (Source of Truth)
+  // Each scene has audio_duration from voiceover generation
   // ═══════════════════════════════════════════════════════════════════
 
-  const scenesWithAudioTiming = useMemo(() => {
+  const scenesWithAudioBeats = useMemo(() => {
     let offset = 0;
     return scenes.map(scene => {
-      // Use scene's audio_duration if available, otherwise fall back to duration_seconds or estimate
-      const audioDuration = scene.audio_duration || scene.duration_seconds || 5;
+      // Get audio duration - this is the beat duration from voiceover
+      // Priority: audio_duration > duration_seconds > estimate from text > 5s default
+      let audioDuration = 5;
+      
+      if (scene.audio_duration && scene.audio_duration > 0) {
+        audioDuration = scene.audio_duration;
+      } else if (scene.duration_seconds && scene.duration_seconds > 0) {
+        audioDuration = scene.duration_seconds;
+      } else if (scene.voiceover_text || scene.narration_text) {
+        // Estimate: ~150 words per minute
+        const text = scene.voiceover_text || scene.narration_text || '';
+        const wordCount = text.split(/\s+/).filter(w => w).length;
+        audioDuration = Math.max(2, Math.round((wordCount / 150) * 60 * 10) / 10);
+      }
+
       const result = {
         ...scene,
-        audioDuration: audioDuration,
+        audioDuration,
         audioStartTime: offset,
         audioEndTime: offset + audioDuration
       };
@@ -782,51 +816,54 @@ export default function TimelineEditorV5() {
   }, [scenes]);
 
   const totalDuration = useMemo(() => {
-    return scenesWithAudioTiming.reduce((sum, s) => sum + s.audioDuration, 0) || 60;
-  }, [scenesWithAudioTiming]);
+    return scenesWithAudioBeats.reduce((sum, s) => sum + s.audioDuration, 0) || 60;
+  }, [scenesWithAudioBeats]);
 
   // ═══════════════════════════════════════════════════════════════════
-  // INITIALIZE CLIPS - Video clips start with default/scene duration
-  // Audio clips show the correct audio beat durations
+  // INITIALIZE CLIPS
   // ═══════════════════════════════════════════════════════════════════
 
   useEffect(() => {
-    if (scenesWithAudioTiming.length === 0) return;
+    if (scenesWithAudioBeats.length === 0) return;
 
-    // Video clips - initially may not be synced
-    setVideoClips(scenesWithAudioTiming.map((scene, idx) => ({
-      id: `video-${scene.id}`,
+    // Only initialize if empty
+    if (videoClips.length === 0) {
+      // Video clips - start with scene durations (may need syncing)
+      const initialVideoClips = scenesWithAudioBeats.map((scene, idx) => {
+        const prevScenes = scenesWithAudioBeats.slice(0, idx);
+        const startTime = prevScenes.reduce((sum, s) => sum + (s.duration_seconds || 5), 0);
+        return {
+          id: `video-${scene.id}`,
+          sceneId: scene.id,
+          sceneNumber: scene.scene_number,
+          type: 'video',
+          startTime,
+          duration: scene.duration_seconds || 5,
+          audioDuration: scene.audioDuration,
+          label: `Scene ${scene.scene_number}`,
+          thumbnail: scene.image_url,
+          effects: [],
+          audioMuted: false,
+          volume: 100,
+          synced: false
+        };
+      });
+      setVideoClips(initialVideoClips);
+    }
+
+    // Audio clips - ALWAYS from voiceover beats (source of truth)
+    const audioBeats = scenesWithAudioBeats.map(scene => ({
+      id: `audio-${scene.id}`,
       sceneId: scene.id,
       sceneNumber: scene.scene_number,
-      type: 'video',
-      // Initially use whatever duration is set, may need syncing
-      startTime: scenesWithAudioTiming.slice(0, idx).reduce((sum, s) => sum + (s.duration_seconds || 5), 0),
-      duration: scene.duration_seconds || 5,
-      // Store the audio duration for reference
-      audioDuration: scene.audioDuration,
-      label: `Scene ${scene.scene_number}`,
-      thumbnail: scene.image_url,
-      effects: [],
-      audioMuted: false,
-      volume: 100,
-      transition: null,
-      synced: false
-    })));
+      type: 'audio',
+      startTime: scene.audioStartTime,
+      duration: scene.audioDuration,
+      label: `${scene.audioDuration.toFixed(1)}s`
+    }));
+    setAudioClips(audioBeats);
 
-    // Audio clips - always show correct audio beat durations
-    if (voiceoverUrl) {
-      // Create individual audio beat clips per scene
-      setAudioClips(scenesWithAudioTiming.map(scene => ({
-        id: `audio-${scene.id}`,
-        sceneId: scene.id,
-        sceneNumber: scene.scene_number,
-        type: 'audio',
-        startTime: scene.audioStartTime,
-        duration: scene.audioDuration,
-        label: `${scene.audioDuration.toFixed(1)}s`
-      })));
-    }
-  }, [scenesWithAudioTiming, voiceoverUrl]);
+  }, [scenesWithAudioBeats]);
 
   // Playback
   useEffect(() => {
@@ -859,97 +896,91 @@ export default function TimelineEditorV5() {
     }
   }, [isPlaying, currentTime, voiceoverUrl, isMuted]);
 
-  // Current scene based on video clips
+  // Current scene
   const currentScene = useMemo(() => {
-    const currentClip = videoClips.find(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration);
-    if (currentClip) {
-      return scenes.find(s => s.id === currentClip.sceneId);
-    }
-    return null;
+    const clip = videoClips.find(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration);
+    return clip ? scenes.find(s => s.id === clip.sceneId) : null;
   }, [videoClips, currentTime, scenes]);
 
   // ═══════════════════════════════════════════════════════════════════
-  // AUTOSYNC - MATCH VIDEO CLIPS TO AUDIO BEAT DURATIONS
+  // AUTOSYNC - Match video to audio beats
   // ═══════════════════════════════════════════════════════════════════
 
   const handleAutoSync = async () => {
     setIsSyncing(true);
     setSyncStatus(null);
 
-    try {
-      // First try backend sync
-      const result = await base44.functions.invoke('syncMediaToAudio', { project_id: projectId });
-      if (result?.success || result?.data?.success) {
-        await refetchScenes();
-        // After refetch, scenes will have updated durations
-      }
-    } catch (err) {
-      console.log('Backend sync not available, using client-side sync');
-    }
-
-    // CLIENT-SIDE SYNC: Match each video clip to its audio beat duration
-    // This is the key fix - each clip gets its scene's audio duration
+    // Match each video clip to its audio beat duration
     let offset = 0;
-    const syncedVideoClips = scenesWithAudioTiming.map(scene => {
-      const existingClip = videoClips.find(c => c.sceneId === scene.id);
-      const audioDuration = scene.audioDuration; // The audio beat duration
-      
-      const syncedClip = {
-        ...(existingClip || {}),
+    const syncedClips = scenesWithAudioBeats.map(scene => {
+      const existing = videoClips.find(c => c.sceneId === scene.id);
+      const clip = {
+        ...(existing || {}),
         id: `video-${scene.id}`,
         sceneId: scene.id,
         sceneNumber: scene.scene_number,
         type: 'video',
         startTime: offset,
-        duration: audioDuration, // <- THIS IS THE KEY: match audio duration
-        audioDuration: audioDuration,
+        duration: scene.audioDuration, // Match audio beat!
+        audioDuration: scene.audioDuration,
         label: `Scene ${scene.scene_number}`,
         thumbnail: scene.image_url,
-        effects: existingClip?.effects || [],
-        audioMuted: existingClip?.audioMuted || false,
-        volume: existingClip?.volume || 100,
-        transition: existingClip?.transition || null,
+        effects: existing?.effects || [],
+        audioMuted: existing?.audioMuted || false,
+        volume: existing?.volume || 100,
         synced: true
       };
-      
-      offset += audioDuration;
-      return syncedClip;
+      offset += scene.audioDuration;
+      return clip;
     });
 
-    setVideoClips(syncedVideoClips);
-
-    // Also regenerate captions to match new timing
-    const newCaptions = [];
-    scenesWithAudioTiming.forEach(scene => {
-      const text = scene.narration_text || scene.voiceover_text;
-      if (!text) return;
-      
-      const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-      const sentenceDur = scene.audioDuration / Math.max(sentences.length, 1);
-      
-      sentences.forEach((sentence, idx) => {
-        newCaptions.push({
-          id: `caption-${scene.id}-${idx}-synced`,
-          sceneId: scene.id,
-          sceneNumber: scene.scene_number,
-          type: 'caption',
-          startTime: scene.audioStartTime + idx * sentenceDur,
-          duration: sentenceDur,
-          text: sentence.trim(),
-          label: sentence.trim().slice(0, 20) + '...',
-          x: 50, y: 85, fontSize: 20, color: '#FFFFFF', bgColor: 'rgba(0,0,0,0.7)',
-          font: 'System', bold: false, italic: false, underline: false, align: 'center'
-        });
-      });
-    });
-    
-    if (captionClips.length > 0) {
-      setCaptionClips(newCaptions);
-    }
-
+    setVideoClips(syncedClips);
     setSyncStatus('success');
     setIsSyncing(false);
     setTimeout(() => setSyncStatus(null), 3000);
+  };
+
+  // ═══════════════════════════════════════════════════════════════════
+  // UNDO / REDO / DELETE
+  // ═══════════════════════════════════════════════════════════════════
+
+  const handleUndo = () => {
+    videoHistory.undo();
+    captionHistory.undo();
+  };
+
+  const handleRedo = () => {
+    videoHistory.redo();
+    captionHistory.redo();
+  };
+
+  const handleDelete = () => {
+    if (selectedVideoClipId) {
+      setVideoClips(videoClips.filter(c => c.id !== selectedVideoClipId));
+      setSelectedVideoClipId(null);
+    }
+    if (selectedCaptionId) {
+      setCaptionClips(captionClips.filter(c => c.id !== selectedCaptionId));
+      setSelectedCaptionId(null);
+    }
+  };
+
+  // ═══════════════════════════════════════════════════════════════════
+  // NAVIGATION
+  // ═══════════════════════════════════════════════════════════════════
+
+  const handleBack = () => {
+    navigate(createPageUrl('ContentGeneration') + `?project_id=${projectId}`);
+  };
+
+  const handleExport = () => {
+    // TODO: Implement export functionality
+    alert('Export functionality coming soon!\n\nThis will compile your video with all clips, transitions, and captions into an MP4 file.');
+  };
+
+  const handleDownloadAssets = () => {
+    // TODO: Implement asset download
+    alert('Download Assets functionality coming soon!\n\nThis will let you download all images, audio files, and captions.');
   };
 
   // Generate captions
@@ -958,7 +989,7 @@ export default function TimelineEditorV5() {
     if (settings.deleteExisting) setCaptionClips([]);
 
     const newCaptions = [];
-    scenesWithAudioTiming.forEach(scene => {
+    scenesWithAudioBeats.forEach(scene => {
       const text = scene.narration_text || scene.voiceover_text;
       if (!text) return;
       const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
@@ -967,14 +998,12 @@ export default function TimelineEditorV5() {
         newCaptions.push({
           id: `caption-${scene.id}-${idx}-${Date.now()}`,
           sceneId: scene.id,
-          sceneNumber: scene.scene_number,
           type: 'caption',
           startTime: scene.audioStartTime + idx * sentenceDur,
           duration: sentenceDur,
           text: sentence.trim(),
           label: sentence.trim().slice(0, 20) + '...',
           x: 50, y: 85, fontSize: 20, color: '#FFFFFF', bgColor: 'rgba(0,0,0,0.7)',
-          font: 'System', bold: false, italic: false, underline: false, align: 'center'
         });
       });
     });
@@ -986,13 +1015,13 @@ export default function TimelineEditorV5() {
   // Effects & Transitions
   const handleApplyEffect = (effect) => {
     if (!selectedVideoClipId) return;
-    setVideoClips(prev => prev.map(clip =>
+    setVideoClips(videoClips.map(clip =>
       clip.id === selectedVideoClipId ? { ...clip, effects: [...(clip.effects || []), effect.id] } : clip
     ));
   };
 
   const handleApplyTransition = (transition, clipIndex) => {
-    setVideoClips(prev => prev.map((clip, idx) =>
+    setVideoClips(videoClips.map((clip, idx) =>
       idx === clipIndex ? { ...clip, transition: transition.name } : clip
     ));
   };
@@ -1011,16 +1040,26 @@ export default function TimelineEditorV5() {
   const selectedCaption = captionClips.find(c => c.id === selectedCaptionId);
   const selectedClipIndex = videoClips.findIndex(c => c.id === selectedVideoClipId);
 
+  const canUndo = videoHistory.canUndo || captionHistory.canUndo;
+  const canRedo = videoHistory.canRedo || captionHistory.canRedo;
+
   return (
     <div className="h-screen flex flex-col bg-[#0a0a14] text-white overflow-hidden">
       {voiceoverUrl && <audio ref={audioRef} src={voiceoverUrl} preload="auto" />}
 
-      <TopToolbar activePanel={activePanel} onPanelChange={setActivePanel} />
+      <TopToolbar
+        activePanel={activePanel}
+        onPanelChange={setActivePanel}
+        projectName={project?.name}
+        onBack={handleBack}
+        onExport={handleExport}
+        onDownloadAssets={handleDownloadAssets}
+      />
 
       <div className="flex-1 flex min-h-0">
         {/* Left Panel */}
         <div className="w-56 flex-shrink-0 border-r border-gray-800 bg-[#12121f]">
-          {activePanel === 'media' && <MediaPanel scenes={scenes} onSelectScene={(s) => handleSeek(scenesWithAudioTiming.find(x => x.id === s.id)?.audioStartTime || 0)} />}
+          {activePanel === 'media' && <MediaPanel scenes={scenes} onSelectScene={(s) => handleSeek(scenesWithAudioBeats.find(x => x.id === s.id)?.audioStartTime || 0)} />}
           {activePanel === 'effects' && <EffectsPanel selectedClip={selectedVideoClip} onApplyEffect={handleApplyEffect} appliedEffects={selectedVideoClip?.effects} />}
           {activePanel === 'transitions' && <TransitionsPanel selectedClipIndex={selectedClipIndex >= 0 ? selectedClipIndex : null} totalClips={videoClips.length} onApplyTransition={handleApplyTransition} />}
           {activePanel === 'captions' && <CaptionsPanel onGenerate={handleGenerateCaptions} isGenerating={isGeneratingCaptions} captionCount={captionClips.length} />}
@@ -1038,26 +1077,19 @@ export default function TimelineEditorV5() {
               captions={captionClips}
               selectedCaption={selectedCaption}
               onSelectCaption={(c) => { setSelectedCaptionId(c?.id || null); setSelectedVideoClipId(null); }}
-              onUpdateCaption={(c) => setCaptionClips(prev => prev.map(x => x.id === c.id ? c : x))}
+              onUpdateCaption={(c) => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))}
               orientation={project?.orientation || 'landscape'}
             />
           </div>
-
-          <TransportControls
-            isPlaying={isPlaying}
-            onPlayPause={() => setIsPlaying(!isPlaying)}
-            currentTime={currentTime}
-            totalDuration={totalDuration}
-            onSeek={handleSeek}
-          />
+          <TransportControls isPlaying={isPlaying} onPlayPause={() => setIsPlaying(!isPlaying)} currentTime={currentTime} totalDuration={totalDuration} onSeek={handleSeek} />
         </div>
 
         {/* Right Panel */}
         <div className="w-64 flex-shrink-0 bg-[#12121f]">
           {selectedCaption ? (
-            <TextPropertiesPanel caption={selectedCaption} onUpdate={(c) => setCaptionClips(prev => prev.map(x => x.id === c.id ? c : x))} />
+            <TextPropertiesPanel caption={selectedCaption} onUpdate={(c) => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))} />
           ) : selectedVideoClip ? (
-            <ClipPropertiesPanel clip={selectedVideoClip} onUpdate={(c) => setVideoClips(prev => prev.map(x => x.id === c.id ? c : x))} />
+            <ClipPropertiesPanel clip={selectedVideoClip} onUpdate={(c) => setVideoClips(videoClips.map(x => x.id === c.id ? c : x))} />
           ) : (
             <div className="h-full flex items-center justify-center text-xs text-gray-500">Select a clip or caption</div>
           )}
@@ -1066,16 +1098,42 @@ export default function TimelineEditorV5() {
 
       {/* Bottom Toolbar */}
       <div className="flex items-center justify-between px-3 py-2 bg-[#12121f] border-t border-gray-800">
+        {/* Left - Undo/Redo/Delete */}
         <div className="flex items-center gap-1">
-          <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10"><Undo2 size={16} /></button>
-          <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10"><Redo2 size={16} /></button>
+          <button
+            onClick={handleUndo}
+            disabled={!canUndo}
+            className={`p-1.5 rounded ${canUndo ? 'text-gray-400 hover:text-white hover:bg-white/10' : 'text-gray-600 cursor-not-allowed'}`}
+            title="Undo"
+          >
+            <Undo2 size={16} />
+          </button>
+          <button
+            onClick={handleRedo}
+            disabled={!canRedo}
+            className={`p-1.5 rounded ${canRedo ? 'text-gray-400 hover:text-white hover:bg-white/10' : 'text-gray-600 cursor-not-allowed'}`}
+            title="Redo"
+          >
+            <Redo2 size={16} />
+          </button>
           <div className="w-px h-4 bg-gray-700 mx-1" />
-          <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10"><Scissors size={16} /></button>
-          <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10"><Copy size={16} /></button>
-          <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10"><Trash2 size={16} /></button>
+          <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10" title="Split">
+            <Scissors size={16} />
+          </button>
+          <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10" title="Duplicate">
+            <Copy size={16} />
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={!selectedVideoClipId && !selectedCaptionId}
+            className={`p-1.5 rounded ${(selectedVideoClipId || selectedCaptionId) ? 'text-red-400 hover:text-red-300 hover:bg-red-500/10' : 'text-gray-600 cursor-not-allowed'}`}
+            title="Delete"
+          >
+            <Trash2 size={16} />
+          </button>
         </div>
 
-        {/* AUTOSYNC BUTTON */}
+        {/* Center - AutoSync */}
         <Button
           onClick={handleAutoSync}
           disabled={isSyncing}
@@ -1085,15 +1143,12 @@ export default function TimelineEditorV5() {
             'bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-700 hover:to-purple-700'
           }`}
         >
-          {isSyncing ? (
-            <><Loader2 size={18} className="animate-spin" /> Syncing...</>
-          ) : syncStatus === 'success' ? (
-            <><CheckCircle size={18} /> Synced!</>
-          ) : (
-            <><Wand2 size={18} /> AutoSync to Audio</>
-          )}
+          {isSyncing ? <><Loader2 size={18} className="animate-spin" /> Syncing...</> :
+           syncStatus === 'success' ? <><CheckCircle size={18} /> Synced!</> :
+           <><Wand2 size={18} /> AutoSync to Audio</>}
         </Button>
 
+        {/* Right - Zoom & Info */}
         <div className="flex items-center gap-3 text-xs text-gray-500">
           <span>{videoClips.length} video</span>
           <span>{audioClips.length} audio</span>
@@ -1111,14 +1166,14 @@ export default function TimelineEditorV5() {
 
       {/* Timeline */}
       <div className="h-48 flex-shrink-0 bg-[#0a0a14] border-t border-gray-700 overflow-x-auto">
-        <TimelineRuler totalDuration={totalDuration} pixelsPerSecond={pixelsPerSecond} currentTime={currentTime} onSeek={handleSeek} />
+        <TimelineRuler totalDuration={totalDuration} pixelsPerSecond={pixelsPerSecond} onSeek={handleSeek} />
         {scenes.length === 0 ? (
           <div className="flex items-center justify-center h-32 text-gray-500 text-sm">No scenes</div>
         ) : (
           <>
-            <TimelineTrack type="video" clips={videoClips} pixelsPerSecond={pixelsPerSecond} totalDuration={totalDuration} currentTime={currentTime} selectedClipId={selectedVideoClipId} onSelectClip={(id) => { setSelectedVideoClipId(id); setSelectedCaptionId(null); }} onUpdateClip={(c) => setVideoClips(prev => prev.map(x => x.id === c.id ? c : x))} />
-            <TimelineTrack type="audio" clips={audioClips} pixelsPerSecond={pixelsPerSecond} totalDuration={totalDuration} currentTime={currentTime} selectedClipId={null} onSelectClip={() => {}} onUpdateClip={() => {}} />
-            <TimelineTrack type="caption" clips={captionClips} pixelsPerSecond={pixelsPerSecond} totalDuration={totalDuration} currentTime={currentTime} selectedClipId={selectedCaptionId} onSelectClip={(id) => { setSelectedCaptionId(id); setSelectedVideoClipId(null); }} onUpdateClip={(c) => setCaptionClips(prev => prev.map(x => x.id === c.id ? c : x))} />
+            <TimelineTrack type="video" label="Video" clips={videoClips} pixelsPerSecond={pixelsPerSecond} totalDuration={totalDuration} currentTime={currentTime} selectedClipId={selectedVideoClipId} onSelectClip={(id) => { setSelectedVideoClipId(id); setSelectedCaptionId(null); }} onUpdateClip={(c) => setVideoClips(videoClips.map(x => x.id === c.id ? c : x))} />
+            <TimelineTrack type="audio" label="Audio" clips={audioClips} pixelsPerSecond={pixelsPerSecond} totalDuration={totalDuration} currentTime={currentTime} selectedClipId={null} onSelectClip={() => {}} onUpdateClip={() => {}} />
+            <TimelineTrack type="caption" label="Caption" clips={captionClips} pixelsPerSecond={pixelsPerSecond} totalDuration={totalDuration} currentTime={currentTime} selectedClipId={selectedCaptionId} onSelectClip={(id) => { setSelectedCaptionId(id); setSelectedVideoClipId(null); }} onUpdateClip={(c) => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))} />
           </>
         )}
       </div>
