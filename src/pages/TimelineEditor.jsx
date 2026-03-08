@@ -1,265 +1,320 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { 
-  Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
-  ZoomIn, ZoomOut, RefreshCw, Lock, Unlock, Wand2, 
-  Image, Music, Type, Layers, ChevronDown, ChevronRight,
-  Scissors, Copy, Trash2, Undo, Redo, Download, Settings,
-  AlertCircle, CheckCircle, Loader2
-} from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { base44 } from '@/api/base44Client';
+import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
-import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Play, Pause, SkipBack, SkipForward, Volume2, VolumeX,
+  ZoomIn, ZoomOut, Undo2, Redo2, Scissors, Trash2, Copy,
+  Import, Download, Home, ChevronRight, ChevronDown, ChevronUp,
+  Image, Music, Type, Layers, Wand2, Film, Mic, Settings,
+  Loader2, CheckCircle, AlertCircle, RefreshCw, Sparkles,
+  LayoutGrid, List, FolderOpen, Plus, GripVertical, X,
+  SplitSquareHorizontal, Maximize, Volume1
+} from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════════
-// TIMELINE EDITOR — Full-Featured Video Timeline with AutoSync
+// CAPCUT-STYLE TIMELINE EDITOR
+// ══════════════════════════════════════════════════════════════════
+// Full video editing timeline with:
+// - Left panel: Media, Effects, Captions, Transitions tabs
+// - Center: Preview + Timeline tracks
+// - Right: Properties panel
+// - AutoSync to match media to audio beats
 // ══════════════════════════════════════════════════════════════════
 
-const TRACK_HEIGHT = 60;
-const LABEL_WIDTH = 140;
-const MIN_CLIP_WIDTH = 20;
+// ═══════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ═══════════════════════════════════════════════════════════════════
 
-// ══════════════════════════════════════════════════════════════════
+const TRACK_HEIGHT = 64;
+const LABEL_WIDTH = 48;
+
+// ═══════════════════════════════════════════════════════════════════
 // UTILITY FUNCTIONS
-// ══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
 
 function formatTime(seconds) {
-  if (!seconds || isNaN(seconds)) return '0:00.0';
+  if (!seconds || isNaN(seconds)) return '00:00';
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
-  const ms = Math.floor((seconds % 1) * 10);
-  return `${m}:${s.toString().padStart(2, '0')}.${ms}`;
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
 function formatTimeFull(seconds) {
-  if (!seconds || isNaN(seconds)) return '00:00:00';
+  if (!seconds || isNaN(seconds)) return '00:00:00:00';
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = Math.floor(seconds % 60);
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  const f = Math.floor((seconds % 1) * 30); // frames at 30fps
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}:${f.toString().padStart(2, '0')}`;
 }
 
-// ══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
+// MEDIA PANEL (Left Sidebar)
+// ═══════════════════════════════════════════════════════════════════
+
+function MediaPanel({ scenes, onAddToTimeline, selectedTab, onTabChange }) {
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
+
+  return (
+    <div className="h-full flex flex-col bg-[#1a1a2e]">
+      {/* Tabs */}
+      <div className="flex border-b border-gray-700">
+        {['Media', 'Effects', 'Captions', 'Audio'].map(tab => (
+          <button
+            key={tab}
+            onClick={() => onTabChange(tab.toLowerCase())}
+            className={`flex-1 py-2.5 text-xs font-medium transition-colors ${
+              selectedTab === tab.toLowerCase()
+                ? 'text-cyan-400 border-b-2 border-cyan-400 bg-cyan-500/10'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-3">
+        {selectedTab === 'media' && (
+          <>
+            {/* View Toggle */}
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs text-gray-400">{scenes.length} items</span>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`p-1.5 rounded ${viewMode === 'grid' ? 'bg-cyan-500/20 text-cyan-400' : 'text-gray-500 hover:text-white'}`}
+                >
+                  <LayoutGrid size={14} />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`p-1.5 rounded ${viewMode === 'list' ? 'bg-cyan-500/20 text-cyan-400' : 'text-gray-500 hover:text-white'}`}
+                >
+                  <List size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* Media Grid/List */}
+            {scenes.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <FolderOpen className="w-12 h-12 text-gray-600 mb-3" />
+                <p className="text-sm text-gray-400 mb-2">No media found</p>
+                <p className="text-xs text-gray-500">Generate scenes first in Content Generation</p>
+              </div>
+            ) : viewMode === 'grid' ? (
+              <div className="grid grid-cols-2 gap-2">
+                {scenes.map(scene => (
+                  <div
+                    key={scene.id}
+                    className="group relative aspect-video bg-gray-800 rounded-lg overflow-hidden cursor-pointer hover:ring-2 hover:ring-cyan-500"
+                    onClick={() => onAddToTimeline(scene)}
+                  >
+                    {scene.image_url ? (
+                      <img src={scene.image_url} className="w-full h-full object-cover" alt="" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Image className="w-6 h-6 text-gray-600" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <Plus className="w-8 h-8 text-white" />
+                    </div>
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-1.5">
+                      <p className="text-[10px] text-white font-medium">Scene {scene.scene_number}</p>
+                      <p className="text-[9px] text-gray-300">{scene.duration_seconds || 5}s</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {scenes.map(scene => (
+                  <div
+                    key={scene.id}
+                    className="flex items-center gap-2 p-2 rounded-lg bg-gray-800/50 hover:bg-gray-700 cursor-pointer"
+                    onClick={() => onAddToTimeline(scene)}
+                  >
+                    <div className="w-12 h-8 bg-gray-700 rounded overflow-hidden flex-shrink-0">
+                      {scene.image_url && (
+                        <img src={scene.image_url} className="w-full h-full object-cover" alt="" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-white truncate">Scene {scene.scene_number}</p>
+                      <p className="text-[10px] text-gray-400">{scene.duration_seconds || 5}s</p>
+                    </div>
+                    <Plus className="w-4 h-4 text-gray-500" />
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {selectedTab === 'effects' && (
+          <div className="grid grid-cols-2 gap-2">
+            {['Ken Burns', 'Zoom In', 'Zoom Out', 'Pan Left', 'Pan Right', 'Fade', 'Blur', 'Glow'].map(effect => (
+              <div
+                key={effect}
+                className="p-3 bg-gray-800/50 rounded-lg text-center cursor-pointer hover:bg-purple-500/20 hover:ring-1 hover:ring-purple-500"
+              >
+                <Sparkles className="w-5 h-5 mx-auto text-purple-400 mb-1" />
+                <p className="text-[10px] text-gray-300">{effect}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {selectedTab === 'captions' && (
+          <div className="space-y-2">
+            <Button size="sm" className="w-full bg-cyan-600 hover:bg-cyan-700 gap-2">
+              <Wand2 size={14} /> Auto-Generate Captions
+            </Button>
+            <div className="grid grid-cols-2 gap-2 mt-4">
+              {['Default', 'Bold', 'Minimal', 'TikTok', 'Netflix'].map(style => (
+                <div
+                  key={style}
+                  className="p-3 bg-gray-800/50 rounded-lg text-center cursor-pointer hover:bg-orange-500/20 hover:ring-1 hover:ring-orange-500"
+                >
+                  <Type className="w-5 h-5 mx-auto text-orange-400 mb-1" />
+                  <p className="text-[10px] text-gray-300">{style}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {selectedTab === 'audio' && (
+          <div className="space-y-3">
+            <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <Mic className="w-4 h-4 text-blue-400" />
+                <span className="text-xs text-blue-300">Voiceover</span>
+              </div>
+              <p className="text-[10px] text-gray-400">Generated from script</p>
+            </div>
+            <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+              <div className="flex items-center gap-2 mb-2">
+                <Music className="w-4 h-4 text-green-400" />
+                <span className="text-xs text-green-300">Background Music</span>
+              </div>
+              <p className="text-[10px] text-gray-400">Add music tracks</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PREVIEW PANEL
+// ═══════════════════════════════════════════════════════════════════
+
+function PreviewPanel({ currentScene, currentTime, isPlaying, captions, orientation }) {
+  const aspectClass = orientation === 'portrait' ? 'aspect-[9/16] max-w-[200px]' : 'aspect-video';
+
+  // Find active caption
+  const activeCaption = captions.find(
+    c => currentTime >= c.startTime && currentTime < c.startTime + c.duration
+  );
+
+  return (
+    <div className="h-full flex flex-col bg-black">
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className={`relative ${aspectClass} w-full bg-gray-900 rounded-lg overflow-hidden`}>
+          {currentScene?.image_url ? (
+            <img
+              src={currentScene.image_url}
+              className="w-full h-full object-contain"
+              alt={`Scene ${currentScene.scene_number}`}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <Film className="w-16 h-16 text-gray-700" />
+            </div>
+          )}
+
+          {/* Caption overlay */}
+          {activeCaption && (
+            <div className="absolute bottom-8 left-4 right-4">
+              <div className="bg-black/80 rounded-lg px-4 py-2 text-center">
+                <p className="text-white text-sm font-medium leading-relaxed">
+                  {activeCaption.text}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Scene indicator */}
+          <div className="absolute top-3 left-3 bg-black/60 rounded px-2 py-1">
+            <span className="text-[10px] text-white font-medium">
+              Scene {currentScene?.scene_number || '-'}
+            </span>
+          </div>
+
+          {/* Play indicator */}
+          {isPlaying && (
+            <div className="absolute top-3 right-3">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // TIMELINE RULER
-// ══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
 
 function TimelineRuler({ totalDuration, pixelsPerSecond, currentTime, onSeek }) {
   const markers = [];
-  
-  // Adaptive interval based on zoom
-  let interval = 1;
-  if (pixelsPerSecond < 5) interval = 30;
-  else if (pixelsPerSecond < 10) interval = 10;
-  else if (pixelsPerSecond < 20) interval = 5;
-  else if (pixelsPerSecond < 50) interval = 2;
-  else interval = 1;
+  const interval = pixelsPerSecond >= 15 ? 5 : pixelsPerSecond >= 8 ? 10 : 30;
 
   for (let t = 0; t <= totalDuration; t += interval) {
     markers.push(t);
   }
 
-  // Sub-markers for finer detail
-  const subMarkers = [];
-  if (pixelsPerSecond >= 20) {
-    const subInterval = interval / 5;
-    for (let t = 0; t <= totalDuration; t += subInterval) {
-      if (t % interval !== 0) {
-        subMarkers.push(t);
-      }
-    }
-  }
-
-  const handleClick = (e) => {
-    if (!onSeek) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const t = Math.max(0, Math.min(totalDuration, x / pixelsPerSecond));
-    onSeek(t);
-  };
-
   return (
     <div
-      className="h-8 bg-[#1a1a2e] border-b border-gray-700 relative cursor-pointer select-none"
-      onClick={handleClick}
-      style={{ width: totalDuration * pixelsPerSecond }}
+      className="h-6 bg-[#0d0d1a] border-b border-gray-800 relative cursor-pointer select-none"
+      style={{ width: Math.max(totalDuration * pixelsPerSecond, 800), marginLeft: LABEL_WIDTH }}
+      onClick={(e) => {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const t = Math.max(0, Math.min(totalDuration, x / pixelsPerSecond));
+        onSeek(t);
+      }}
     >
-      {/* Sub-markers */}
-      {subMarkers.map(t => (
-        <div
-          key={`sub-${t}`}
-          className="absolute bottom-0 w-px h-2 bg-gray-700"
-          style={{ left: t * pixelsPerSecond }}
-        />
-      ))}
-      
-      {/* Main markers */}
       {markers.map(t => (
         <div
           key={t}
           className="absolute bottom-0 flex flex-col items-center"
           style={{ left: t * pixelsPerSecond }}
         >
-          <span className="text-[10px] text-gray-400 font-mono mb-1">
-            {formatTime(t)}
-          </span>
-          <div className="w-px h-3 bg-gray-500" />
+          <span className="text-[9px] text-gray-500 font-mono">{formatTime(t)}</span>
+          <div className="w-px h-2 bg-gray-600" />
         </div>
       ))}
-      
-      {/* Playhead indicator on ruler */}
-      <div
-        className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
-        style={{ left: currentTime * pixelsPerSecond }}
-      >
-        <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-3 h-3 bg-red-500 rotate-45" />
-      </div>
     </div>
   );
 }
 
-// ══════════════════════════════════════════════════════════════════
-// TIMELINE CLIP
-// ══════════════════════════════════════════════════════════════════
-
-function TimelineClip({ 
-  clip, 
-  pixelsPerSecond, 
-  trackColor,
-  isSelected,
-  onSelect,
-  onMove,
-  onResize,
-  onDoubleClick
-}) {
-  const clipRef = useRef(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isResizing, setIsResizing] = useState(null); // 'left' | 'right' | null
-  const [dragStart, setDragStart] = useState({ x: 0, startTime: 0, duration: 0 });
-
-  const left = clip.startTime * pixelsPerSecond;
-  const width = Math.max(MIN_CLIP_WIDTH, clip.duration * pixelsPerSecond);
-
-  const handleMouseDown = (e, action = 'move') => {
-    e.stopPropagation();
-    onSelect?.(clip.id);
-    
-    if (action === 'move') {
-      setIsDragging(true);
-    } else {
-      setIsResizing(action);
-    }
-    
-    setDragStart({
-      x: e.clientX,
-      startTime: clip.startTime,
-      duration: clip.duration
-    });
-  };
-
-  useEffect(() => {
-    if (!isDragging && !isResizing) return;
-
-    const handleMouseMove = (e) => {
-      const deltaX = e.clientX - dragStart.x;
-      const deltaTime = deltaX / pixelsPerSecond;
-
-      if (isDragging) {
-        const newStart = Math.max(0, dragStart.startTime + deltaTime);
-        onMove?.(clip.id, newStart);
-      } else if (isResizing === 'left') {
-        const newStart = Math.max(0, dragStart.startTime + deltaTime);
-        const newDuration = Math.max(0.1, dragStart.duration - deltaTime);
-        onResize?.(clip.id, newStart, newDuration);
-      } else if (isResizing === 'right') {
-        const newDuration = Math.max(0.1, dragStart.duration + deltaTime);
-        onResize?.(clip.id, clip.startTime, newDuration);
-      }
-    };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-      setIsResizing(null);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isDragging, isResizing, dragStart, pixelsPerSecond, clip, onMove, onResize]);
-
-  return (
-    <div
-      ref={clipRef}
-      className={`absolute top-1 bottom-1 rounded-md overflow-hidden cursor-move transition-shadow ${
-        isSelected ? 'ring-2 ring-white shadow-lg z-10' : ''
-      }`}
-      style={{
-        left,
-        width,
-        backgroundColor: trackColor,
-      }}
-      onMouseDown={(e) => handleMouseDown(e, 'move')}
-      onDoubleClick={() => onDoubleClick?.(clip)}
-    >
-      {/* Left resize handle */}
-      <div
-        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 z-20"
-        onMouseDown={(e) => handleMouseDown(e, 'left')}
-      />
-      
-      {/* Clip content */}
-      <div className="absolute inset-0 flex items-center px-2 overflow-hidden pointer-events-none">
-        {clip.thumbnail && (
-          <img 
-            src={clip.thumbnail} 
-            className="h-full w-auto object-cover rounded mr-2 opacity-80"
-            alt=""
-          />
-        )}
-        <div className="flex-1 min-w-0">
-          <p className="text-xs font-medium text-white truncate drop-shadow">
-            {clip.label || `Scene ${clip.sceneNumber || ''}`}
-          </p>
-          <p className="text-[10px] text-white/70">
-            {formatTime(clip.duration)}
-          </p>
-        </div>
-      </div>
-      
-      {/* Waveform overlay for audio */}
-      {clip.type === 'audio' && clip.waveform && (
-        <div 
-          className="absolute inset-0 opacity-40 pointer-events-none"
-          style={{
-            backgroundImage: `url(${clip.waveform})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center'
-          }}
-        />
-      )}
-      
-      {/* Right resize handle */}
-      <div
-        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/20 z-20"
-        onMouseDown={(e) => handleMouseDown(e, 'right')}
-      />
-      
-      {/* Beat marker indicators */}
-      {clip.beatSynced && (
-        <div className="absolute top-0 right-1">
-          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" title="Beat synced" />
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
 // TIMELINE TRACK
-// ══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
 
-function TimelineTrack({
+function TimelineTrackRow({
   track,
   clips,
   pixelsPerSecond,
@@ -267,91 +322,92 @@ function TimelineTrack({
   currentTime,
   selectedClipId,
   onSelectClip,
-  onMoveClip,
-  onResizeClip,
-  onDoubleClickClip,
-  onTrackToggle,
-  collapsed
+  onUpdateClip,
+  collapsed,
+  onToggle
 }) {
-  const trackIcons = {
-    audio: Music,
-    video: Image,
-    caption: Type,
-    overlay: Layers
-  };
-  
   const trackColors = {
-    audio: '#4f46e5',
-    video: '#059669',
-    caption: '#d97706',
-    overlay: '#7c3aed'
+    video: { bg: '#059669', border: '#10b981' },
+    audio: { bg: '#4f46e5', border: '#6366f1' },
+    caption: { bg: '#d97706', border: '#f59e0b' },
+    music: { bg: '#16a34a', border: '#22c55e' }
   };
 
-  const Icon = trackIcons[track.type] || Layers;
-  const color = trackColors[track.type] || '#6b7280';
+  const colors = trackColors[track.type] || trackColors.video;
+  const Icon = track.type === 'video' ? Image : track.type === 'audio' ? Mic : track.type === 'caption' ? Type : Music;
 
   return (
-    <div className={`flex border-b border-gray-800 ${collapsed ? 'h-8' : ''}`}>
+    <div className="flex border-b border-gray-800">
       {/* Track Label */}
-      <div 
-        className="flex-shrink-0 bg-[#12121f] border-r border-gray-800 flex items-center gap-2 px-3"
+      <div
+        className="flex-shrink-0 bg-[#12121f] flex items-center gap-1 px-2 cursor-pointer hover:bg-[#1a1a2e]"
         style={{ width: LABEL_WIDTH }}
+        onClick={onToggle}
       >
-        <button
-          onClick={() => onTrackToggle?.(track.id)}
-          className="text-gray-500 hover:text-white"
-        >
-          {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-        </button>
-        <div 
-          className="w-3 h-3 rounded-sm"
-          style={{ backgroundColor: color }}
-        />
-        <Icon size={14} className="text-gray-400" />
-        <span className="text-xs text-gray-300 truncate flex-1">{track.name}</span>
-        {track.locked ? (
-          <Lock size={12} className="text-gray-600" />
-        ) : (
-          <Unlock size={12} className="text-gray-600 opacity-0 group-hover:opacity-100" />
-        )}
+        <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: colors.bg }} />
+        <Icon size={12} className="text-gray-400" />
+        {collapsed ? <ChevronRight size={10} className="text-gray-600" /> : <ChevronDown size={10} className="text-gray-600" />}
       </div>
-      
+
       {/* Track Content */}
       {!collapsed && (
-        <div 
-          className="flex-1 relative bg-[#0d0d1a]"
-          style={{ 
+        <div
+          className="relative bg-[#0a0a14]"
+          style={{
             height: TRACK_HEIGHT,
-            minWidth: totalDuration * pixelsPerSecond 
+            width: Math.max(totalDuration * pixelsPerSecond, 800)
           }}
         >
-          {/* Grid lines */}
-          <div className="absolute inset-0 opacity-20">
-            {Array.from({ length: Math.ceil(totalDuration / 5) }, (_, i) => (
-              <div
-                key={i}
-                className="absolute top-0 bottom-0 w-px bg-gray-600"
-                style={{ left: i * 5 * pixelsPerSecond }}
-              />
-            ))}
-          </div>
-          
           {/* Clips */}
-          {clips.map(clip => (
-            <TimelineClip
-              key={clip.id}
-              clip={clip}
-              pixelsPerSecond={pixelsPerSecond}
-              trackColor={color}
-              isSelected={selectedClipId === clip.id}
-              onSelect={onSelectClip}
-              onMove={onMoveClip}
-              onResize={onResizeClip}
-              onDoubleClick={onDoubleClickClip}
-            />
-          ))}
-          
-          {/* Playhead line */}
+          {clips.map(clip => {
+            const left = clip.startTime * pixelsPerSecond;
+            const width = Math.max(20, clip.duration * pixelsPerSecond);
+            const isSelected = selectedClipId === clip.id;
+
+            return (
+              <div
+                key={clip.id}
+                className={`absolute top-1 bottom-1 rounded cursor-pointer transition-all overflow-hidden ${
+                  isSelected ? 'ring-2 ring-white z-10' : ''
+                }`}
+                style={{
+                  left,
+                  width,
+                  backgroundColor: colors.bg,
+                  borderLeft: `2px solid ${colors.border}`
+                }}
+                onClick={() => onSelectClip(clip.id)}
+              >
+                {/* Thumbnail for video track */}
+                {track.type === 'video' && clip.thumbnail && (
+                  <img
+                    src={clip.thumbnail}
+                    className="absolute inset-0 w-full h-full object-cover opacity-80"
+                    alt=""
+                  />
+                )}
+
+                {/* Clip info */}
+                <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent p-1.5">
+                  <p className="text-[9px] text-white font-medium truncate">
+                    {clip.label || `Scene ${clip.sceneNumber}`}
+                  </p>
+                  <p className="text-[8px] text-white/70">{clip.duration.toFixed(1)}s</p>
+                </div>
+
+                {/* Beat sync indicator */}
+                {clip.beatSynced && (
+                  <div className="absolute top-1 right-1 w-2 h-2 bg-green-400 rounded-full" title="Synced" />
+                )}
+
+                {/* Resize handles */}
+                <div className="absolute left-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/30" />
+                <div className="absolute right-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/30" />
+              </div>
+            );
+          })}
+
+          {/* Playhead */}
           <div
             className="absolute top-0 bottom-0 w-0.5 bg-red-500 pointer-events-none z-20"
             style={{ left: currentTime * pixelsPerSecond }}
@@ -362,168 +418,147 @@ function TimelineTrack({
   );
 }
 
-// ══════════════════════════════════════════════════════════════════
-// CAPTION DISPLAY (Real-time)
-// ══════════════════════════════════════════════════════════════════
-
-function CaptionDisplay({ captions, currentTime }) {
-  // Find active caption
-  const activeCaption = captions.find(
-    c => currentTime >= c.startTime && currentTime < c.startTime + c.duration
-  );
-
-  if (!activeCaption) return null;
-
-  // Calculate word-by-word highlighting
-  const words = activeCaption.text.split(' ');
-  const wordDuration = activeCaption.duration / words.length;
-  const elapsedInCaption = currentTime - activeCaption.startTime;
-  const activeWordIndex = Math.floor(elapsedInCaption / wordDuration);
-
-  return (
-    <div className="absolute bottom-16 left-1/2 -translate-x-1/2 max-w-[80%] text-center">
-      <div className="bg-black/80 backdrop-blur-sm rounded-lg px-6 py-3">
-        <p className="text-xl font-bold text-white leading-relaxed">
-          {words.map((word, idx) => (
-            <span
-              key={idx}
-              className={`transition-colors duration-100 ${
-                idx < activeWordIndex 
-                  ? 'text-white' 
-                  : idx === activeWordIndex 
-                    ? 'text-yellow-300' 
-                    : 'text-gray-400'
-              }`}
-            >
-              {word}{' '}
-            </span>
-          ))}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
 // MAIN TIMELINE EDITOR
-// ══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════
 
-export default function TimelineEditor({ 
-  scenes = [],
-  projectId,
-  onScenesUpdate,
-  onExport
-}) {
+export default function CapcutTimeline() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get('project_id');
+  const queryClient = useQueryClient();
+
   // ═══ STATE ═══
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [totalDuration, setTotalDuration] = useState(60);
-  const [pixelsPerSecond, setPixelsPerSecond] = useState(20);
+  const [pixelsPerSecond, setPixelsPerSecond] = useState(15);
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
-  
-  const [tracks, setTracks] = useState([
-    { id: 'audio', name: 'Audio / Voiceover', type: 'audio', locked: false },
-    { id: 'video', name: 'Video / Images', type: 'video', locked: false },
-    { id: 'caption', name: 'Captions', type: 'caption', locked: false }
-  ]);
-  const [collapsedTracks, setCollapsedTracks] = useState({});
-  
-  const [clips, setClips] = useState({ audio: [], video: [], caption: [] });
+  const [selectedTab, setSelectedTab] = useState('media');
   const [selectedClipId, setSelectedClipId] = useState(null);
-  
-  const [isAutoSyncing, setIsAutoSyncing] = useState(false);
-  const [syncStatus, setSyncStatus] = useState(null); // 'success' | 'error' | null
-  
-  const timelineRef = useRef(null);
-  const audioRef = useRef(null);
+  const [collapsedTracks, setCollapsedTracks] = useState({});
+
+  // Timeline clips state
+  const [videoClips, setVideoClips] = useState([]);
+  const [audioClips, setAudioClips] = useState([]);
+  const [captionClips, setCaptionClips] = useState([]);
+
+  // AutoSync state
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState(null);
+
+  // Refs
   const playbackRef = useRef(null);
+  const audioRef = useRef(null);
+  const timelineRef = useRef(null);
+
+  // ═══ DATA FETCHING ═══
+  const { data: project, isLoading: projectLoading, refetch: refetchProject } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: async () => {
+      const list = await base44.entities.Projects.filter({ id: projectId });
+      return list[0];
+    },
+    enabled: !!projectId
+  });
+
+  const { data: scenes = [], isLoading: scenesLoading, refetch: refetchScenes } = useQuery({
+    queryKey: ['scenes', projectId],
+    queryFn: async () => {
+      const all = await base44.entities.Scenes.filter({ project_id: projectId });
+      return all.sort((a, b) => (a.scene_number || 0) - (b.scene_number || 0));
+    },
+    enabled: !!projectId
+  });
+
+  const { data: prodSettings = [] } = useQuery({
+    queryKey: ['prod-settings', projectId],
+    queryFn: () => base44.entities.ProductionSettings.filter({ project_id: projectId }),
+    enabled: !!projectId
+  });
+
+  const voiceoverUrl = prodSettings[0]?.voiceover_url;
+  const voiceoverDuration = prodSettings[0]?.voiceover_duration_seconds || 0;
+
+  // ═══ CALCULATE TIMING ═══
+  const scenesWithTiming = React.useMemo(() => {
+    let offset = 0;
+    return scenes.map(scene => {
+      const duration = scene.duration_seconds || scene.audio_duration || 5;
+      const result = {
+        ...scene,
+        startTime: offset,
+        endTime: offset + duration,
+        duration
+      };
+      offset += duration;
+      return result;
+    });
+  }, [scenes]);
+
+  const totalDuration = React.useMemo(() => {
+    if (voiceoverDuration > 0) return voiceoverDuration;
+    return scenesWithTiming.reduce((sum, s) => sum + s.duration, 0) || 60;
+  }, [scenesWithTiming, voiceoverDuration]);
 
   // ═══ INITIALIZE CLIPS FROM SCENES ═══
   useEffect(() => {
-    if (!scenes || scenes.length === 0) return;
+    if (scenesWithTiming.length === 0) return;
 
-    // Sort scenes by scene_number
-    const sortedScenes = [...scenes].sort((a, b) => 
-      (a.scene_number || 0) - (b.scene_number || 0)
-    );
+    const newVideoClips = scenesWithTiming.map(scene => ({
+      id: `video-${scene.id}`,
+      sceneId: scene.id,
+      sceneNumber: scene.scene_number,
+      type: 'video',
+      startTime: scene.startTime,
+      duration: scene.duration,
+      label: `Scene ${scene.scene_number}`,
+      thumbnail: scene.image_url,
+      beatSynced: scene.beat_synced || false
+    }));
 
-    let currentOffset = 0;
-    const audioClips = [];
-    const videoClips = [];
-    const captionClips = [];
+    const newAudioClips = scenesWithTiming.filter(s => s.audio_url).map(scene => ({
+      id: `audio-${scene.id}`,
+      sceneId: scene.id,
+      sceneNumber: scene.scene_number,
+      type: 'audio',
+      startTime: scene.startTime,
+      duration: scene.duration,
+      label: `Audio ${scene.scene_number}`,
+      src: scene.audio_url,
+      beatSynced: scene.beat_synced || false
+    }));
 
-    sortedScenes.forEach((scene, idx) => {
-      // Get duration from scene data or default
-      const duration = scene.audio_duration || scene.duration || 5;
+    const newCaptionClips = [];
+    scenesWithTiming.forEach(scene => {
+      if (!scene.narration_text && !scene.voiceover_text) return;
+      const text = scene.narration_text || scene.voiceover_text;
+      const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+      const sentenceDuration = scene.duration / Math.max(sentences.length, 1);
       
-      // Audio clip
-      if (scene.audio_url) {
-        audioClips.push({
-          id: `audio-${scene.id}`,
+      sentences.forEach((sentence, idx) => {
+        newCaptionClips.push({
+          id: `caption-${scene.id}-${idx}`,
           sceneId: scene.id,
           sceneNumber: scene.scene_number,
-          type: 'audio',
-          startTime: currentOffset,
-          duration,
-          label: `Scene ${scene.scene_number} Audio`,
-          src: scene.audio_url,
-          beatSynced: !!scene.beat_synced
+          type: 'caption',
+          startTime: scene.startTime + (idx * sentenceDuration),
+          duration: sentenceDuration,
+          text: sentence.trim(),
+          label: sentence.trim().slice(0, 30) + '...'
         });
-      }
-
-      // Video/Image clip
-      if (scene.image_url) {
-        videoClips.push({
-          id: `video-${scene.id}`,
-          sceneId: scene.id,
-          sceneNumber: scene.scene_number,
-          type: 'video',
-          startTime: currentOffset,
-          duration,
-          label: `Scene ${scene.scene_number}`,
-          thumbnail: scene.image_url,
-          beatSynced: !!scene.beat_synced
-        });
-      }
-
-      // Caption clips from voiceover text
-      if (scene.voiceover_text) {
-        // Split into sentence-based captions
-        const sentences = scene.voiceover_text.match(/[^.!?]+[.!?]+/g) || [scene.voiceover_text];
-        const sentenceDuration = duration / sentences.length;
-        
-        sentences.forEach((sentence, sIdx) => {
-          captionClips.push({
-            id: `caption-${scene.id}-${sIdx}`,
-            sceneId: scene.id,
-            sceneNumber: scene.scene_number,
-            type: 'caption',
-            startTime: currentOffset + (sIdx * sentenceDuration),
-            duration: sentenceDuration,
-            text: sentence.trim(),
-            label: sentence.trim().slice(0, 30) + '...'
-          });
-        });
-      }
-
-      currentOffset += duration;
+      });
     });
 
-    setClips({
-      audio: audioClips,
-      video: videoClips,
-      caption: captionClips
-    });
-    
-    setTotalDuration(Math.max(currentOffset, 10));
-  }, [scenes]);
+    setVideoClips(newVideoClips);
+    setAudioClips(newAudioClips);
+    setCaptionClips(newCaptionClips);
+  }, [scenesWithTiming]);
 
-  // ═══ PLAYBACK LOGIC ═══
+  // ═══ PLAYBACK ═══
   useEffect(() => {
     if (isPlaying) {
       const startTime = Date.now() - (currentTime * 1000);
-      
       playbackRef.current = setInterval(() => {
         const elapsed = (Date.now() - startTime) / 1000;
         if (elapsed >= totalDuration) {
@@ -532,374 +567,325 @@ export default function TimelineEditor({
         } else {
           setCurrentTime(elapsed);
         }
-      }, 16); // ~60fps
+      }, 33); // ~30fps
     } else {
-      if (playbackRef.current) {
-        clearInterval(playbackRef.current);
-      }
+      if (playbackRef.current) clearInterval(playbackRef.current);
     }
-
     return () => {
-      if (playbackRef.current) {
-        clearInterval(playbackRef.current);
-      }
+      if (playbackRef.current) clearInterval(playbackRef.current);
     };
   }, [isPlaying, totalDuration]);
 
-  // ═══ AUTOSYNC FUNCTION ═══
-  const handleAutoSync = useCallback(async () => {
-    setIsAutoSyncing(true);
+  // Audio sync
+  useEffect(() => {
+    if (voiceoverUrl && audioRef.current) {
+      audioRef.current.currentTime = currentTime;
+      audioRef.current.volume = isMuted ? 0 : volume;
+      if (isPlaying) audioRef.current.play().catch(() => {});
+      else audioRef.current.pause();
+    }
+  }, [isPlaying, voiceoverUrl, volume, isMuted]);
+
+  // ═══ GET CURRENT SCENE ═══
+  const currentScene = React.useMemo(() => {
+    return scenesWithTiming.find(s => currentTime >= s.startTime && currentTime < s.endTime);
+  }, [scenesWithTiming, currentTime]);
+
+  // ═══ AUTOSYNC ═══
+  const handleAutoSync = async () => {
+    setIsSyncing(true);
     setSyncStatus(null);
 
     try {
-      // Calculate proper timing from audio durations
-      const sortedScenes = [...scenes].sort((a, b) => 
-        (a.scene_number || 0) - (b.scene_number || 0)
-      );
+      // Call backend to sync media to audio
+      const result = await base44.functions.invoke('syncMediaToAudio', { project_id: projectId });
+      const data = result.data || result;
 
-      let currentOffset = 0;
-      const newVideoClips = [];
-      const newCaptionClips = [];
-      const updatedScenes = [];
-
-      for (const scene of sortedScenes) {
-        // Get actual audio duration if we have audio
-        let audioDuration = scene.audio_duration || 5;
-        
-        // If we have audio URL, try to get actual duration
-        if (scene.audio_url) {
-          try {
-            const audio = new Audio(scene.audio_url);
-            await new Promise((resolve, reject) => {
-              audio.addEventListener('loadedmetadata', () => {
-                audioDuration = audio.duration;
-                resolve();
-              });
-              audio.addEventListener('error', reject);
-              setTimeout(reject, 5000); // 5s timeout
-            });
-          } catch (e) {
-            console.log('Could not load audio duration, using default');
-          }
-        }
-
-        // Update video clip to match audio
-        if (scene.image_url) {
-          newVideoClips.push({
-            id: `video-${scene.id}`,
-            sceneId: scene.id,
-            sceneNumber: scene.scene_number,
-            type: 'video',
-            startTime: currentOffset,
-            duration: audioDuration,
-            label: `Scene ${scene.scene_number}`,
-            thumbnail: scene.image_url,
-            beatSynced: true
-          });
-        }
-
-        // Update captions with proper word timing
-        if (scene.voiceover_text) {
-          const words = scene.voiceover_text.split(' ');
-          const wordsPerCaption = 8; // Show ~8 words at a time
-          const captionCount = Math.ceil(words.length / wordsPerCaption);
-          const captionDuration = audioDuration / captionCount;
-
-          for (let i = 0; i < captionCount; i++) {
-            const captionWords = words.slice(i * wordsPerCaption, (i + 1) * wordsPerCaption);
-            newCaptionClips.push({
-              id: `caption-${scene.id}-${i}`,
-              sceneId: scene.id,
-              sceneNumber: scene.scene_number,
-              type: 'caption',
-              startTime: currentOffset + (i * captionDuration),
-              duration: captionDuration,
-              text: captionWords.join(' '),
-              label: captionWords.join(' ').slice(0, 30) + '...'
-            });
-          }
-        }
-
-        // Track scene updates
-        updatedScenes.push({
-          ...scene,
-          start_time: currentOffset,
-          duration: audioDuration,
-          audio_duration: audioDuration,
-          beat_synced: true
-        });
-
-        currentOffset += audioDuration;
+      if (data.success) {
+        setSyncStatus('success');
+        refetchScenes();
+      } else {
+        throw new Error(data.error || 'Sync failed');
       }
-
-      // Update clips state
-      setClips(prev => ({
-        ...prev,
-        video: newVideoClips,
-        caption: newCaptionClips
-      }));
-
-      setTotalDuration(currentOffset);
-      setSyncStatus('success');
-
-      // Notify parent of scene updates
-      if (onScenesUpdate) {
-        onScenesUpdate(updatedScenes);
-      }
-
-    } catch (error) {
-      console.error('AutoSync error:', error);
+    } catch (err) {
+      console.error('AutoSync error:', err);
       setSyncStatus('error');
+
+      // Fallback: client-side sync
+      let offset = 0;
+      const updatedClips = scenesWithTiming.map(scene => {
+        const duration = scene.audio_duration || scene.duration_seconds || 5;
+        const clip = {
+          ...videoClips.find(c => c.sceneId === scene.id),
+          startTime: offset,
+          duration,
+          beatSynced: true
+        };
+        offset += duration;
+        return clip;
+      });
+      setVideoClips(updatedClips.filter(Boolean));
     }
 
-    setIsAutoSyncing(false);
-    
-    // Clear status after 3s
+    setIsSyncing(false);
     setTimeout(() => setSyncStatus(null), 3000);
-  }, [scenes, onScenesUpdate]);
-
-  // ═══ CLIP OPERATIONS ═══
-  const handleMoveClip = (clipId, newStartTime) => {
-    setClips(prev => {
-      const newClips = { ...prev };
-      for (const trackId of Object.keys(newClips)) {
-        newClips[trackId] = newClips[trackId].map(clip => 
-          clip.id === clipId ? { ...clip, startTime: newStartTime, beatSynced: false } : clip
-        );
-      }
-      return newClips;
-    });
   };
 
-  const handleResizeClip = (clipId, newStartTime, newDuration) => {
-    setClips(prev => {
-      const newClips = { ...prev };
-      for (const trackId of Object.keys(newClips)) {
-        newClips[trackId] = newClips[trackId].map(clip => 
-          clip.id === clipId 
-            ? { ...clip, startTime: newStartTime, duration: newDuration, beatSynced: false } 
-            : clip
-        );
-      }
-      return newClips;
-    });
+  // ═══ HANDLERS ═══
+  const handleSeek = (time) => {
+    setCurrentTime(Math.max(0, Math.min(totalDuration, time)));
+    if (audioRef.current) audioRef.current.currentTime = time;
   };
 
-  // ═══ ZOOM CONTROLS ═══
-  const handleZoomIn = () => setPixelsPerSecond(prev => Math.min(100, prev * 1.5));
-  const handleZoomOut = () => setPixelsPerSecond(prev => Math.max(2, prev / 1.5));
-
-  // ═══ PLAYBACK CONTROLS ═══
   const handlePlayPause = () => setIsPlaying(!isPlaying);
-  const handleSeek = (time) => setCurrentTime(Math.max(0, Math.min(totalDuration, time)));
   const handleSkipBack = () => handleSeek(currentTime - 5);
   const handleSkipForward = () => handleSeek(currentTime + 5);
 
-  // ═══ TRACK TOGGLE ═══
-  const handleTrackToggle = (trackId) => {
-    setCollapsedTracks(prev => ({ ...prev, [trackId]: !prev[trackId] }));
+  const handleAddToTimeline = (scene) => {
+    // Scene is already in timeline, just select it
+    const clip = videoClips.find(c => c.sceneId === scene.id);
+    if (clip) {
+      setSelectedClipId(clip.id);
+      handleSeek(clip.startTime);
+    }
   };
 
-  // Get all caption clips for display
-  const allCaptions = clips.caption || [];
+  const zoomIn = () => setPixelsPerSecond(prev => Math.min(50, prev * 1.25));
+  const zoomOut = () => setPixelsPerSecond(prev => Math.max(3, prev / 1.25));
+
+  // ═══ LOADING STATE ═══
+  if (projectLoading || scenesLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-[#0a0a14]">
+        <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />
+      </div>
+    );
+  }
+
+  const tracks = [
+    { id: 'video', name: 'Video', type: 'video' },
+    { id: 'audio', name: 'Audio', type: 'audio' },
+    { id: 'caption', name: 'Captions', type: 'caption' }
+  ];
+
+  const trackClips = {
+    video: videoClips,
+    audio: audioClips,
+    caption: captionClips
+  };
 
   return (
-    <div className="flex flex-col h-full bg-[#0a0a14] text-white rounded-xl overflow-hidden">
-      {/* ═══ TOOLBAR ═══ */}
-      <div className="flex items-center justify-between px-4 py-2 bg-[#12121f] border-b border-gray-800">
-        {/* Left: Playback Controls */}
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleSkipBack}
-            className="text-gray-400 hover:text-white"
+    <div className="h-screen flex flex-col bg-[#0a0a14] text-white overflow-hidden">
+      {/* Hidden audio element */}
+      {voiceoverUrl && <audio ref={audioRef} src={voiceoverUrl} preload="auto" />}
+
+      {/* ═══ TOP BAR ═══ */}
+      <div className="flex items-center justify-between px-3 py-2 bg-[#12121f] border-b border-gray-800 flex-shrink-0">
+        {/* Left */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate(createPageUrl('Dashboard'))}
+            className="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white"
           >
-            <SkipBack size={18} />
-          </Button>
-          
-          <Button
-            size="sm"
-            onClick={handlePlayPause}
-            className={`w-10 h-10 rounded-full ${isPlaying ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}
-          >
-            {isPlaying ? <Pause size={20} /> : <Play size={20} className="ml-0.5" />}
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleSkipForward}
-            className="text-gray-400 hover:text-white"
-          >
-            <SkipForward size={18} />
-          </Button>
-          
-          <div className="flex items-center gap-2 ml-4 text-sm font-mono">
-            <span className="text-white">{formatTimeFull(currentTime)}</span>
-            <span className="text-gray-500">/</span>
-            <span className="text-gray-400">{formatTimeFull(totalDuration)}</span>
+            <Home size={18} />
+          </button>
+          <div className="h-4 w-px bg-gray-700" />
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-white truncate max-w-[200px]">
+              {project?.name || 'Untitled Project'}
+            </span>
+            <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded">
+              {scenes.length} scenes
+            </span>
           </div>
         </div>
 
-        {/* Center: AutoSync Button */}
-        <div className="flex items-center gap-3">
-          <Button
-            onClick={handleAutoSync}
-            disabled={isAutoSyncing}
-            className={`gap-2 ${
-              syncStatus === 'success' 
-                ? 'bg-green-600 hover:bg-green-700' 
-                : syncStatus === 'error'
-                  ? 'bg-red-600 hover:bg-red-700'
-                  : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700'
-            }`}
-          >
-            {isAutoSyncing ? (
-              <><Loader2 size={16} className="animate-spin" /> Syncing...</>
-            ) : syncStatus === 'success' ? (
-              <><CheckCircle size={16} /> Synced!</>
-            ) : syncStatus === 'error' ? (
-              <><AlertCircle size={16} /> Retry</>
-            ) : (
-              <><Wand2 size={16} /> AutoSync to Audio</>
-            )}
+        {/* Center - AutoSync */}
+        <Button
+          onClick={handleAutoSync}
+          disabled={isSyncing}
+          className={`gap-2 ${
+            syncStatus === 'success' ? 'bg-green-600' :
+            syncStatus === 'error' ? 'bg-red-600' :
+            'bg-gradient-to-r from-cyan-600 to-purple-600'
+          }`}
+        >
+          {isSyncing ? (
+            <><Loader2 size={16} className="animate-spin" /> Syncing...</>
+          ) : syncStatus === 'success' ? (
+            <><CheckCircle size={16} /> Synced!</>
+          ) : (
+            <><Wand2 size={16} /> AutoSync to Audio</>
+          )}
+        </Button>
+
+        {/* Right */}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="gap-2 border-gray-700">
+            <Download size={14} /> Export
           </Button>
-          
-          {syncStatus === 'success' && (
-            <Badge className="bg-green-900 text-green-300 text-xs">
-              Media aligned to voiceover beats
-            </Badge>
+        </div>
+      </div>
+
+      {/* ═══ MAIN AREA ═══ */}
+      <div className="flex-1 flex min-h-0">
+        {/* Left Panel - Media Browser */}
+        <div className="w-56 flex-shrink-0 border-r border-gray-800">
+          <MediaPanel
+            scenes={scenes}
+            onAddToTimeline={handleAddToTimeline}
+            selectedTab={selectedTab}
+            onTabChange={setSelectedTab}
+          />
+        </div>
+
+        {/* Center - Preview */}
+        <div className="flex-1 min-w-0 flex flex-col">
+          <div className="flex-1 min-h-0">
+            <PreviewPanel
+              currentScene={currentScene}
+              currentTime={currentTime}
+              isPlaying={isPlaying}
+              captions={captionClips}
+              orientation={project?.orientation || 'landscape'}
+            />
+          </div>
+
+          {/* Transport Controls */}
+          <div className="flex items-center justify-center gap-4 py-3 bg-[#12121f] border-t border-gray-800">
+            <button onClick={handleSkipBack} className="p-2 text-gray-400 hover:text-white">
+              <SkipBack size={20} />
+            </button>
+            <button
+              onClick={handlePlayPause}
+              className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                isPlaying ? 'bg-red-600' : 'bg-white'
+              }`}
+            >
+              {isPlaying ? (
+                <Pause size={24} className="text-white" />
+              ) : (
+                <Play size={24} className="text-gray-900 ml-1" />
+              )}
+            </button>
+            <button onClick={handleSkipForward} className="p-2 text-gray-400 hover:text-white">
+              <SkipForward size={20} />
+            </button>
+
+            <div className="flex items-center gap-2 ml-4">
+              <span className="text-sm font-mono text-cyan-400">{formatTimeFull(currentTime)}</span>
+              <span className="text-gray-600">/</span>
+              <span className="text-sm font-mono text-gray-500">{formatTimeFull(totalDuration)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Panel - Properties (optional) */}
+        <div className="w-48 flex-shrink-0 border-l border-gray-800 bg-[#12121f] p-3">
+          <h3 className="text-xs font-medium text-gray-400 mb-3">Properties</h3>
+          {selectedClipId ? (
+            <div className="space-y-3">
+              <div>
+                <label className="text-[10px] text-gray-500">Selected</label>
+                <p className="text-xs text-white">{selectedClipId}</p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-[10px] text-gray-500">Select a clip to edit</p>
           )}
         </div>
+      </div>
 
-        {/* Right: Zoom & Volume */}
-        <div className="flex items-center gap-4">
-          {/* Volume */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsMuted(!isMuted)}
-              className="text-gray-400 hover:text-white"
-            >
-              {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-            </Button>
-            <Slider
-              value={[isMuted ? 0 : volume * 100]}
-              onValueChange={([v]) => { setVolume(v / 100); setIsMuted(v === 0); }}
-              max={100}
-              step={1}
-              className="w-20"
-            />
-          </div>
-          
-          <div className="w-px h-6 bg-gray-700" />
-          
-          {/* Zoom */}
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleZoomOut}
-              className="text-gray-400 hover:text-white"
-            >
-              <ZoomOut size={18} />
-            </Button>
-            <span className="text-xs text-gray-400 w-12 text-center">
-              {Math.round(pixelsPerSecond)}px/s
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleZoomIn}
-              className="text-gray-400 hover:text-white"
-            >
-              <ZoomIn size={18} />
-            </Button>
-          </div>
+      {/* ═══ TOOLBAR ═══ */}
+      <div className="flex items-center justify-between px-3 py-1.5 bg-[#12121f] border-t border-gray-800 flex-shrink-0">
+        {/* Left - Tools */}
+        <div className="flex items-center gap-1">
+          <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10">
+            <Undo2 size={16} />
+          </button>
+          <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10">
+            <Redo2 size={16} />
+          </button>
+          <div className="w-px h-4 bg-gray-700 mx-1" />
+          <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10">
+            <Scissors size={16} />
+          </button>
+          <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10">
+            <Copy size={16} />
+          </button>
+          <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10">
+            <Trash2 size={16} />
+          </button>
+        </div>
+
+        {/* Center - Info */}
+        <div className="flex items-center gap-3 text-xs text-gray-500">
+          <span>{videoClips.length} video</span>
+          <span>{audioClips.length} audio</span>
+          <span>{captionClips.length} captions</span>
+        </div>
+
+        {/* Right - Zoom */}
+        <div className="flex items-center gap-1">
+          <button onClick={zoomOut} className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10">
+            <ZoomOut size={16} />
+          </button>
+          <span className="text-[10px] text-gray-500 w-8 text-center">{Math.round(pixelsPerSecond)}</span>
+          <button onClick={zoomIn} className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10">
+            <ZoomIn size={16} />
+          </button>
+          <div className="w-px h-4 bg-gray-700 mx-1" />
+          <button
+            onClick={() => setIsMuted(!isMuted)}
+            className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10"
+          >
+            {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+          </button>
         </div>
       </div>
 
-      {/* ═══ PREVIEW AREA WITH CAPTIONS ═══ */}
-      <div className="relative h-48 bg-black flex items-center justify-center border-b border-gray-800">
-        {/* Current frame preview */}
-        {clips.video.length > 0 && (
-          <div className="relative w-full h-full">
-            {clips.video.map(clip => {
-              const isVisible = currentTime >= clip.startTime && currentTime < clip.startTime + clip.duration;
-              if (!isVisible) return null;
-              return (
-                <img
-                  key={clip.id}
-                  src={clip.thumbnail}
-                  className="absolute inset-0 w-full h-full object-contain"
-                  alt=""
-                />
-              );
-            })}
-            
-            {/* Real-time Captions */}
-            <CaptionDisplay captions={allCaptions} currentTime={currentTime} />
-          </div>
-        )}
-        
-        {clips.video.length === 0 && (
-          <p className="text-gray-500">No media loaded</p>
-        )}
-      </div>
-
-      {/* ═══ TIMELINE AREA ═══ */}
-      <div className="flex-1 overflow-auto" ref={timelineRef}>
-        <div className="flex">
-          {/* Track Labels Column */}
-          <div className="flex-shrink-0" style={{ width: LABEL_WIDTH }}>
-            <div className="h-8 bg-[#12121f] border-b border-gray-700" /> {/* Ruler spacer */}
-          </div>
-          
-          {/* Timeline Ruler */}
-          <div className="flex-1 overflow-x-auto">
-            <TimelineRuler
-              totalDuration={totalDuration}
-              pixelsPerSecond={pixelsPerSecond}
-              currentTime={currentTime}
-              onSeek={handleSeek}
-            />
-          </div>
-        </div>
+      {/* ═══ TIMELINE ═══ */}
+      <div className="h-52 flex-shrink-0 bg-[#0a0a14] border-t border-gray-700 overflow-x-auto" ref={timelineRef}>
+        {/* Ruler */}
+        <TimelineRuler
+          totalDuration={totalDuration}
+          pixelsPerSecond={pixelsPerSecond}
+          currentTime={currentTime}
+          onSeek={handleSeek}
+        />
 
         {/* Tracks */}
-        <div className="overflow-x-auto">
-          {tracks.map(track => (
-            <TimelineTrack
+        {scenes.length === 0 ? (
+          <div className="flex items-center justify-center h-32 text-gray-500">
+            <div className="text-center">
+              <Layers className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No scenes to display</p>
+              <p className="text-xs text-gray-600">Generate scenes in Content Generation first</p>
+            </div>
+          </div>
+        ) : (
+          tracks.map(track => (
+            <TimelineTrackRow
               key={track.id}
               track={track}
-              clips={clips[track.id] || []}
+              clips={trackClips[track.id] || []}
               pixelsPerSecond={pixelsPerSecond}
               totalDuration={totalDuration}
               currentTime={currentTime}
               selectedClipId={selectedClipId}
               onSelectClip={setSelectedClipId}
-              onMoveClip={handleMoveClip}
-              onResizeClip={handleResizeClip}
-              onTrackToggle={handleTrackToggle}
+              onUpdateClip={() => {}}
               collapsed={collapsedTracks[track.id]}
+              onToggle={() => setCollapsedTracks(prev => ({ ...prev, [track.id]: !prev[track.id] }))}
             />
-          ))}
-        </div>
-      </div>
+          ))
+        )}
 
-      {/* ═══ STATUS BAR ═══ */}
-      <div className="flex items-center justify-between px-4 py-2 bg-[#12121f] border-t border-gray-800 text-xs text-gray-400">
-        <div className="flex items-center gap-4">
-          <span>{scenes.length} scenes</span>
-          <span>{clips.video.length} video clips</span>
-          <span>{clips.caption.length} captions</span>
-        </div>
-        <div className="flex items-center gap-4">
-          <span>Duration: {formatTimeFull(totalDuration)}</span>
-          {selectedClipId && <span>Selected: {selectedClipId}</span>}
-        </div>
+        {/* Playhead */}
+        <div
+          className="absolute top-0 bottom-0 w-0.5 bg-red-500 pointer-events-none z-30"
+          style={{ left: currentTime * pixelsPerSecond + LABEL_WIDTH }}
+        />
       </div>
     </div>
   );
