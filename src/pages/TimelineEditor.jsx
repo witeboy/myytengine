@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
@@ -18,8 +18,7 @@ import {
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Volume1,
   ZoomIn, ZoomOut, Undo2, Redo2, Scissors, Trash2, Copy,
-  Download, Home, ChevronRight, ChevronDown,
-  Image, Music, Type, Layers, Wand2, Film, Mic, Settings,
+  Download, Home, Image, Music, Type, Wand2, Film, Mic, Settings,
   Loader2, CheckCircle, Sparkles, Star, Move,
   LayoutGrid, List, FolderOpen, Plus, X,
   Bold, Italic, Underline,
@@ -28,14 +27,14 @@ import {
 } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════════
-// CAPCUT TIMELINE EDITOR V3 - FULLY FUNCTIONAL
+// TIMELINE EDITOR V4 - ALL FIXES APPLIED
 // ══════════════════════════════════════════════════════════════════
 
 const TRACK_HEIGHT = 56;
 const LABEL_WIDTH = 40;
 
 // ═══════════════════════════════════════════════════════════════════
-// EFFECTS & TRANSITIONS DATA
+// DATA
 // ═══════════════════════════════════════════════════════════════════
 
 const EFFECTS = [
@@ -66,33 +65,14 @@ const TRANSITIONS = [
 
 const TEXT_ANIMATIONS_IN = [
   { id: 'none', name: 'None' },
-  { id: 'golden_dust', name: 'Golden Dust' },
-  { id: 'blur_right', name: 'Blur ...Right' },
-  { id: 'snow_ering', name: 'Snow ...ering' },
-  { id: 'blur_out', name: 'Blur ...m Out' },
-  { id: 'plain_fade', name: 'Plain Fade-In' },
-  { id: 'wiping_in', name: 'Wiping In' },
-  { id: 'wave_in', name: 'Wave in' },
-  { id: 'typewriter', name: 'Typin...ursor' },
-  { id: 'sparkly_vine', name: 'Sparkly Vine' },
-];
-
-const TEXT_ANIMATIONS_OUT = [
-  { id: 'none', name: 'None' },
-  { id: 'fade_out', name: 'Fade Out' },
-  { id: 'blur_out', name: 'Blur Out' },
-  { id: 'slide_out', name: 'Slide Out' },
-];
-
-const TEXT_ANIMATIONS_LOOP = [
-  { id: 'none', name: 'None' },
-  { id: 'pulse', name: 'Pulse' },
-  { id: 'shake', name: 'Shake' },
-  { id: 'glow', name: 'Glow' },
+  { id: 'fade_in', name: 'Fade In' },
+  { id: 'slide_up', name: 'Slide Up' },
+  { id: 'typewriter', name: 'Typewriter' },
+  { id: 'wave', name: 'Wave' },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
-// UTILITY FUNCTIONS
+// UTILITIES
 // ═══════════════════════════════════════════════════════════════════
 
 function formatTime(seconds) {
@@ -112,7 +92,7 @@ function formatTimecode(seconds) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// TOP TOOLBAR (CapCut Style)
+// TOP TOOLBAR
 // ═══════════════════════════════════════════════════════════════════
 
 function TopToolbar({ activePanel, onPanelChange }) {
@@ -149,7 +129,7 @@ function TopToolbar({ activePanel, onPanelChange }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// LEFT PANEL - MEDIA BROWSER
+// LEFT PANEL - MEDIA
 // ═══════════════════════════════════════════════════════════════════
 
 function MediaPanel({ scenes, onSelectScene }) {
@@ -171,7 +151,7 @@ function MediaPanel({ scenes, onSelectScene }) {
 
       <div className="flex-1 overflow-y-auto p-2">
         {scenes.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center">
+          <div className="flex flex-col items-center justify-center h-full">
             <FolderOpen className="w-10 h-10 text-gray-600 mb-2" />
             <p className="text-xs text-gray-500">No media</p>
           </div>
@@ -227,7 +207,7 @@ function EffectsPanel({ selectedClip, onApplyEffect, appliedEffects }) {
     <div className="h-full flex flex-col">
       <div className="px-3 py-2 border-b border-gray-800">
         <p className="text-xs text-gray-400">
-          {selectedClip ? `Scene ${selectedClip.sceneNumber}` : 'Select a clip'}
+          {selectedClip ? `Scene ${selectedClip.sceneNumber}` : 'Select a clip first'}
         </p>
       </div>
 
@@ -246,9 +226,7 @@ function EffectsPanel({ selectedClip, onApplyEffect, appliedEffects }) {
                 key={effect.id}
                 onClick={() => handleApply(effect)}
                 className={`flex flex-col items-center gap-1 p-3 rounded-lg transition-all ${
-                  isApplied
-                    ? 'bg-purple-500/30 ring-1 ring-purple-500'
-                    : 'bg-gray-800/50 hover:bg-purple-500/20'
+                  isApplied ? 'bg-purple-500/30 ring-1 ring-purple-500' : 'bg-gray-800/50 hover:bg-purple-500/20'
                 }`}
               >
                 <effect.icon className="w-5 h-5 text-purple-400" />
@@ -263,10 +241,10 @@ function EffectsPanel({ selectedClip, onApplyEffect, appliedEffects }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// LEFT PANEL - TRANSITIONS
+// LEFT PANEL - TRANSITIONS (FIXED)
 // ═══════════════════════════════════════════════════════════════════
 
-function TransitionsPanel({ onApplyTransition }) {
+function TransitionsPanel({ selectedClipIndex, totalClips, onApplyTransition }) {
   const [search, setSearch] = useState('');
   const [notification, setNotification] = useState(null);
 
@@ -275,16 +253,26 @@ function TransitionsPanel({ onApplyTransition }) {
   );
 
   const handleApply = (transition) => {
-    onApplyTransition(transition);
-    setNotification(`Applied ${transition.name}`);
-    setTimeout(() => setNotification(null), 2000);
+    if (selectedClipIndex === null || selectedClipIndex === undefined) {
+      setNotification('Select a video clip to add transition after it');
+      setTimeout(() => setNotification(null), 2500);
+      return;
+    }
+    if (selectedClipIndex >= totalClips - 1) {
+      setNotification('Cannot add transition after last clip');
+      setTimeout(() => setNotification(null), 2500);
+      return;
+    }
+    onApplyTransition(transition, selectedClipIndex);
+    setNotification(`Added ${transition.name} after Scene ${selectedClipIndex + 1}`);
+    setTimeout(() => setNotification(null), 2500);
   };
 
   return (
     <div className="h-full flex flex-col">
       <div className="px-3 py-2 border-b border-gray-800">
         <Input
-          placeholder="smooth fade"
+          placeholder="Search transitions..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="h-7 text-xs bg-gray-800 border-gray-700"
@@ -297,11 +285,8 @@ function TransitionsPanel({ onApplyTransition }) {
         </div>
       )}
 
-      <div className="px-3 py-2 border-b border-gray-800">
-        <div className="flex items-center gap-2">
-          <button className="px-2 py-1 text-xs bg-gray-800 rounded text-gray-300">Favorites</button>
-          <button className="px-2 py-1 text-xs bg-cyan-500/20 text-cyan-400 rounded">Transitions</button>
-        </div>
+      <div className="px-3 py-2 text-[10px] text-gray-500">
+        Select a clip, then click a transition to add it between clips
       </div>
 
       <div className="flex-1 overflow-y-auto p-2">
@@ -330,7 +315,7 @@ function TransitionsPanel({ onApplyTransition }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// LEFT PANEL - CAPTIONS GENERATOR
+// LEFT PANEL - CAPTIONS
 // ═══════════════════════════════════════════════════════════════════
 
 function CaptionsPanel({ onGenerate, isGenerating, captionCount }) {
@@ -346,7 +331,6 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount }) {
   return (
     <div className="h-full flex flex-col">
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
-        {/* Language */}
         <div>
           <label className="text-[10px] text-gray-400 mb-1 block">Spoken language</label>
           <Select value={settings.language} onValueChange={v => setSettings(s => ({ ...s, language: v }))}>
@@ -357,12 +341,10 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount }) {
               <SelectItem value="auto">Auto detect</SelectItem>
               <SelectItem value="en">English</SelectItem>
               <SelectItem value="es">Spanish</SelectItem>
-              <SelectItem value="fr">French</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        {/* Bilingual */}
         <div>
           <label className="text-[10px] text-gray-400 mb-1 flex items-center gap-1">
             Bilingual captions <span className="text-cyan-400">✦</span>
@@ -375,45 +357,25 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount }) {
               <SelectItem value="none">None</SelectItem>
               <SelectItem value="en">English</SelectItem>
               <SelectItem value="es">Spanish</SelectItem>
-              <SelectItem value="zh">Chinese</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        {/* Toggles */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-300 flex items-center gap-1">
-              Auto highlight keywords <span className="text-cyan-400">✦</span>
-            </span>
-            <Switch
-              checked={settings.highlightKeywords}
-              onCheckedChange={v => setSettings(s => ({ ...s, highlightKeywords: v }))}
-            />
+            <span className="text-xs text-gray-300">Auto highlight keywords</span>
+            <Switch checked={settings.highlightKeywords} onCheckedChange={v => setSettings(s => ({ ...s, highlightKeywords: v }))} />
           </div>
-
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-300 flex items-center gap-1">
-              AI emojis <span className="text-[8px] text-green-400 bg-green-400/20 px-1 rounded">Free</span>
-            </span>
-            <Switch
-              checked={settings.aiEmojis}
-              onCheckedChange={v => setSettings(s => ({ ...s, aiEmojis: v }))}
-            />
+            <span className="text-xs text-gray-300">AI emojis</span>
+            <Switch checked={settings.aiEmojis} onCheckedChange={v => setSettings(s => ({ ...s, aiEmojis: v }))} />
           </div>
-
           <div className="flex items-center justify-between">
-            <span className="text-xs text-gray-300 flex items-center gap-1">
-              Identify filler words <span className="text-cyan-400">✦</span>
-            </span>
-            <Switch
-              checked={settings.identifyFillers}
-              onCheckedChange={v => setSettings(s => ({ ...s, identifyFillers: v }))}
-            />
+            <span className="text-xs text-gray-300">Identify filler words</span>
+            <Switch checked={settings.identifyFillers} onCheckedChange={v => setSettings(s => ({ ...s, identifyFillers: v }))} />
           </div>
         </div>
 
-        {/* Current captions info */}
         {captionCount > 0 && (
           <div className="p-2 bg-gray-800/50 rounded text-xs text-gray-400">
             {captionCount} captions on timeline
@@ -421,7 +383,6 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount }) {
         )}
       </div>
 
-      {/* Generate Button */}
       <div className="p-3 border-t border-gray-800">
         <div className="flex items-center gap-2 mb-3">
           <input
@@ -433,16 +394,8 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount }) {
           />
           <label htmlFor="deleteExisting" className="text-[10px] text-gray-400">Delete current captions</label>
         </div>
-        <Button
-          onClick={() => onGenerate(settings)}
-          disabled={isGenerating}
-          className="w-full bg-cyan-600 hover:bg-cyan-700"
-        >
-          {isGenerating ? (
-            <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Generating...</>
-          ) : (
-            'Generate'
-          )}
+        <Button onClick={() => onGenerate(settings)} disabled={isGenerating} className="w-full bg-cyan-600 hover:bg-cyan-700">
+          {isGenerating ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Generating...</> : 'Generate'}
         </Button>
       </div>
     </div>
@@ -455,7 +408,6 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount }) {
 
 function TextPropertiesPanel({ caption, onUpdate }) {
   const [activeTab, setActiveTab] = useState('text');
-  const [animTab, setAnimTab] = useState('in');
 
   if (!caption) {
     return (
@@ -470,17 +422,12 @@ function TextPropertiesPanel({ caption, onUpdate }) {
 
   return (
     <div className="h-full flex flex-col bg-[#12121f]">
-      {/* Tabs */}
       <div className="flex border-b border-gray-800">
-        {['Text', 'Animation', 'Tracking', 'Text to speech'].map(tab => (
+        {['Text', 'Animation'].map(tab => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab.toLowerCase().replace(/ /g, '_'))}
-            className={`flex-1 py-2 text-[10px] ${
-              activeTab === tab.toLowerCase().replace(/ /g, '_')
-                ? 'text-cyan-400 border-b border-cyan-400'
-                : 'text-gray-400'
-            }`}
+            onClick={() => setActiveTab(tab.toLowerCase())}
+            className={`flex-1 py-2 text-[10px] ${activeTab === tab.toLowerCase() ? 'text-cyan-400 border-b border-cyan-400' : 'text-gray-400'}`}
           >
             {tab}
           </button>
@@ -490,159 +437,52 @@ function TextPropertiesPanel({ caption, onUpdate }) {
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         {activeTab === 'text' && (
           <>
-            {/* Style Tabs */}
-            <div className="flex border rounded border-gray-700 overflow-hidden">
-              <button className="flex-1 py-1.5 text-[10px] bg-gray-800 text-white">Basic</button>
-              <button className="flex-1 py-1.5 text-[10px] text-gray-400 hover:bg-gray-800">Bubble</button>
-              <button className="flex-1 py-1.5 text-[10px] text-gray-400 hover:bg-gray-800">Effects</button>
-            </div>
+            <Textarea value={caption.text} onChange={e => update('text', e.target.value)} className="bg-gray-800 border-gray-700 text-sm" rows={3} />
 
-            {/* Text */}
-            <div>
-              <Textarea
-                value={caption.text}
-                onChange={e => update('text', e.target.value)}
-                className="bg-gray-800 border-gray-700 text-sm"
-                rows={3}
-              />
-              <p className="text-[9px] text-gray-500 mt-1 flex items-center gap-1">
-                <Wand2 className="w-3 h-3" /> AI writer <span className="text-green-400">Free</span>
-              </p>
-            </div>
-
-            {/* Font */}
             <div>
               <label className="text-[10px] text-gray-400 mb-1 block">Font</label>
               <Select value={caption.font || 'System'} onValueChange={v => update('font', v)}>
-                <SelectTrigger className="h-8 text-xs bg-gray-800 border-gray-700">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger className="h-8 text-xs bg-gray-800 border-gray-700"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="System">System</SelectItem>
                   <SelectItem value="Inter">Inter</SelectItem>
                   <SelectItem value="Roboto">Roboto</SelectItem>
-                  <SelectItem value="Montserrat">Montserrat</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            {/* Font Size */}
             <div>
               <label className="text-[10px] text-gray-400 mb-1 block">Font size</label>
               <div className="flex items-center gap-2">
-                <Slider
-                  value={[caption.fontSize || 24]}
-                  onValueChange={([v]) => update('fontSize', v)}
-                  min={10}
-                  max={72}
-                  className="flex-1"
-                />
-                <Input
-                  type="number"
-                  value={caption.fontSize || 24}
-                  onChange={e => update('fontSize', parseInt(e.target.value) || 24)}
-                  className="w-14 h-7 text-xs bg-gray-800 border-gray-700"
-                />
+                <Slider value={[caption.fontSize || 24]} onValueChange={([v]) => update('fontSize', v)} min={10} max={72} className="flex-1" />
+                <Input type="number" value={caption.fontSize || 24} onChange={e => update('fontSize', parseInt(e.target.value) || 24)} className="w-14 h-7 text-xs bg-gray-800 border-gray-700" />
               </div>
             </div>
 
-            {/* Pattern */}
             <div>
-              <label className="text-[10px] text-gray-400 mb-1 block">Pattern</label>
+              <label className="text-[10px] text-gray-400 mb-1 block">Style</label>
               <div className="flex gap-1">
-                <button
-                  onClick={() => update('bold', !caption.bold)}
-                  className={`w-8 h-8 rounded flex items-center justify-center ${caption.bold ? 'bg-cyan-500/20 text-cyan-400' : 'bg-gray-800 text-gray-400'}`}
-                >
-                  <Bold size={14} />
-                </button>
-                <button
-                  onClick={() => update('underline', !caption.underline)}
-                  className={`w-8 h-8 rounded flex items-center justify-center ${caption.underline ? 'bg-cyan-500/20 text-cyan-400' : 'bg-gray-800 text-gray-400'}`}
-                >
-                  <Underline size={14} />
-                </button>
-                <button
-                  onClick={() => update('italic', !caption.italic)}
-                  className={`w-8 h-8 rounded flex items-center justify-center ${caption.italic ? 'bg-cyan-500/20 text-cyan-400' : 'bg-gray-800 text-gray-400'}`}
-                >
-                  <Italic size={14} />
-                </button>
+                <button onClick={() => update('bold', !caption.bold)} className={`w-8 h-8 rounded flex items-center justify-center ${caption.bold ? 'bg-cyan-500/20 text-cyan-400' : 'bg-gray-800 text-gray-400'}`}><Bold size={14} /></button>
+                <button onClick={() => update('italic', !caption.italic)} className={`w-8 h-8 rounded flex items-center justify-center ${caption.italic ? 'bg-cyan-500/20 text-cyan-400' : 'bg-gray-800 text-gray-400'}`}><Italic size={14} /></button>
+                <button onClick={() => update('underline', !caption.underline)} className={`w-8 h-8 rounded flex items-center justify-center ${caption.underline ? 'bg-cyan-500/20 text-cyan-400' : 'bg-gray-800 text-gray-400'}`}><Underline size={14} /></button>
               </div>
             </div>
 
-            {/* Case */}
-            <div>
-              <label className="text-[10px] text-gray-400 mb-1 block">Case</label>
-              <div className="flex gap-1">
-                {[
-                  { label: 'TT', value: 'uppercase' },
-                  { label: 'tt', value: 'lowercase' },
-                  { label: 'Tt', value: 'capitalize' }
-                ].map(c => (
-                  <button
-                    key={c.value}
-                    onClick={() => update('textCase', c.value)}
-                    className={`flex-1 h-8 rounded text-xs ${caption.textCase === c.value ? 'bg-cyan-500/20 text-cyan-400' : 'bg-gray-800 text-gray-400'}`}
-                  >
-                    {c.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Color */}
             <div>
               <label className="text-[10px] text-gray-400 mb-1 block">Color</label>
               <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={caption.color || '#FFFFFF'}
-                  onChange={e => update('color', e.target.value)}
-                  className="w-10 h-8 rounded border-0 cursor-pointer"
-                />
-                <Input
-                  value={caption.color || '#FFFFFF'}
-                  onChange={e => update('color', e.target.value)}
-                  className="flex-1 h-8 text-xs bg-gray-800 border-gray-700"
-                />
+                <input type="color" value={caption.color || '#FFFFFF'} onChange={e => update('color', e.target.value)} className="w-10 h-8 rounded border-0 cursor-pointer" />
+                <Input value={caption.color || '#FFFFFF'} onChange={e => update('color', e.target.value)} className="flex-1 h-8 text-xs bg-gray-800 border-gray-700" />
               </div>
             </div>
 
-            {/* Character & Line spacing */}
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[10px] text-gray-400 mb-1 block">Character</label>
-                <Input
-                  type="number"
-                  value={caption.letterSpacing || 0}
-                  onChange={e => update('letterSpacing', parseInt(e.target.value) || 0)}
-                  className="h-7 text-xs bg-gray-800 border-gray-700"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-400 mb-1 block">Line</label>
-                <Input
-                  type="number"
-                  value={caption.lineHeight || 0}
-                  onChange={e => update('lineHeight', parseInt(e.target.value) || 0)}
-                  className="h-7 text-xs bg-gray-800 border-gray-700"
-                />
-              </div>
-            </div>
-
-            {/* Alignment */}
             <div>
               <label className="text-[10px] text-gray-400 mb-1 block">Alignment</label>
               <div className="flex gap-1">
                 {[AlignLeft, AlignCenter, AlignRight].map((Icon, i) => {
                   const values = ['left', 'center', 'right'];
                   return (
-                    <button
-                      key={i}
-                      onClick={() => update('align', values[i])}
-                      className={`flex-1 h-8 rounded flex items-center justify-center ${caption.align === values[i] ? 'bg-cyan-500/20 text-cyan-400' : 'bg-gray-800 text-gray-400'}`}
-                    >
+                    <button key={i} onClick={() => update('align', values[i])} className={`flex-1 h-8 rounded flex items-center justify-center ${caption.align === values[i] ? 'bg-cyan-500/20 text-cyan-400' : 'bg-gray-800 text-gray-400'}`}>
                       <Icon size={14} />
                     </button>
                   );
@@ -653,51 +493,21 @@ function TextPropertiesPanel({ caption, onUpdate }) {
         )}
 
         {activeTab === 'animation' && (
-          <>
-            {/* Animation Sub-tabs */}
-            <div className="flex gap-1">
-              <button className="flex items-center justify-center w-8 h-8 bg-gray-800 rounded text-gray-400">
-                <Star size={14} />
+          <div className="grid grid-cols-3 gap-2">
+            {TEXT_ANIMATIONS_IN.map(anim => (
+              <button
+                key={anim.id}
+                onClick={() => update('animation', anim.id)}
+                className={`p-2 rounded text-center ${caption.animation === anim.id ? 'bg-cyan-500/20 ring-1 ring-cyan-500' : 'bg-gray-800 hover:bg-gray-700'}`}
+              >
+                <div className="w-full aspect-square rounded bg-gray-700 mb-1 flex items-center justify-center">
+                  <span className="text-[10px] text-white">Aa</span>
+                </div>
+                <p className="text-[8px] text-gray-300 truncate">{anim.name}</p>
               </button>
-              <button className="px-3 py-1.5 text-xs bg-gray-800 rounded text-gray-400">All</button>
-            </div>
-
-            <div className="flex border rounded border-gray-700 overflow-hidden">
-              {['In', 'Out', 'Loop'].map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setAnimTab(tab.toLowerCase())}
-                  className={`flex-1 py-1.5 text-[10px] ${animTab === tab.toLowerCase() ? 'bg-gray-700 text-white' : 'text-gray-400'}`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-
-            {/* Animation Grid */}
-            <div className="grid grid-cols-4 gap-2">
-              {(animTab === 'in' ? TEXT_ANIMATIONS_IN : animTab === 'out' ? TEXT_ANIMATIONS_OUT : TEXT_ANIMATIONS_LOOP).map(anim => (
-                <button
-                  key={anim.id}
-                  onClick={() => update(`anim_${animTab}`, anim.id)}
-                  className={`p-2 rounded text-center ${caption[`anim_${animTab}`] === anim.id ? 'bg-cyan-500/20 ring-1 ring-cyan-500' : 'bg-gray-800 hover:bg-gray-700'}`}
-                >
-                  <div className="w-full aspect-square rounded bg-gray-700 mb-1 flex items-center justify-center">
-                    <span className="text-[10px] text-white">ABC</span>
-                  </div>
-                  <p className="text-[8px] text-gray-300 truncate">{anim.name}</p>
-                </button>
-              ))}
-            </div>
-          </>
+            ))}
+          </div>
         )}
-      </div>
-
-      {/* Save as preset */}
-      <div className="p-3 border-t border-gray-800">
-        <Button variant="outline" size="sm" className="w-full text-xs border-cyan-600 text-cyan-400">
-          Save as preset
-        </Button>
       </div>
     </div>
   );
@@ -723,58 +533,46 @@ function ClipPropertiesPanel({ clip, onUpdate }) {
     <div className="h-full flex flex-col bg-[#12121f] p-3 space-y-4">
       <div className="text-sm font-medium text-white">Scene {clip.sceneNumber}</div>
 
-      {/* Duration */}
       <div>
-        <label className="text-[10px] text-gray-400 mb-1 block">Duration (seconds)</label>
-        <Input
-          type="number"
-          step="0.1"
-          value={clip.duration}
-          onChange={e => update('duration', parseFloat(e.target.value) || 1)}
-          className="h-8 text-xs bg-gray-800 border-gray-700"
-        />
+        <label className="text-[10px] text-gray-400 mb-1 block">Duration (sec)</label>
+        <Input type="number" step="0.1" value={clip.duration} onChange={e => update('duration', parseFloat(e.target.value) || 1)} className="h-8 text-xs bg-gray-800 border-gray-700" />
       </div>
 
-      {/* Effects */}
       {clip.effects?.length > 0 && (
         <div>
-          <label className="text-[10px] text-gray-400 mb-1 block">Applied Effects</label>
+          <label className="text-[10px] text-gray-400 mb-1 block">Effects</label>
           <div className="flex flex-wrap gap-1">
             {clip.effects.map(e => (
               <span key={e} className="text-[9px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded flex items-center gap-1">
                 {e}
-                <X
-                  className="w-3 h-3 cursor-pointer hover:text-red-400"
-                  onClick={() => update('effects', clip.effects.filter(x => x !== e))}
-                />
+                <X className="w-3 h-3 cursor-pointer hover:text-red-400" onClick={() => update('effects', clip.effects.filter(x => x !== e))} />
               </span>
             ))}
           </div>
         </div>
       )}
 
-      {/* Mute Audio */}
+      {clip.transition && (
+        <div>
+          <label className="text-[10px] text-gray-400 mb-1 block">Transition After</label>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-cyan-400">{clip.transition}</span>
+            <button onClick={() => update('transition', null)} className="text-[9px] text-red-400 hover:text-red-300">Remove</button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <span className="text-xs text-gray-300">Mute video audio</span>
-        <Switch
-          checked={clip.audioMuted || false}
-          onCheckedChange={v => update('audioMuted', v)}
-        />
+        <Switch checked={clip.audioMuted || false} onCheckedChange={v => update('audioMuted', v)} />
       </div>
 
-      {/* Volume */}
       {!clip.audioMuted && (
         <div>
           <label className="text-[10px] text-gray-400 mb-1 block">Volume</label>
           <div className="flex items-center gap-2">
             <Volume1 size={14} className="text-gray-400" />
-            <Slider
-              value={[clip.volume || 100]}
-              onValueChange={([v]) => update('volume', v)}
-              min={0}
-              max={200}
-              className="flex-1"
-            />
+            <Slider value={[clip.volume || 100]} onValueChange={([v]) => update('volume', v)} min={0} max={200} className="flex-1" />
             <span className="text-xs text-gray-400 w-8">{clip.volume || 100}%</span>
           </div>
         </div>
@@ -784,155 +582,140 @@ function ClipPropertiesPanel({ clip, onUpdate }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// VIDEO PREVIEW WITH DRAGGABLE CAPTIONS
+// VIDEO PREVIEW
 // ═══════════════════════════════════════════════════════════════════
 
-function VideoPreview({
-  currentScene,
-  currentTime,
-  isPlaying,
-  captions,
-  selectedCaption,
-  onSelectCaption,
-  onUpdateCaption,
-  orientation
-}) {
+function VideoPreview({ currentScene, currentTime, captions, selectedCaption, onSelectCaption, onUpdateCaption, orientation }) {
   const previewRef = useRef(null);
   const [dragging, setDragging] = useState(null);
 
-  // Find active captions at current time
-  const activeCaptions = captions.filter(
-    c => currentTime >= c.startTime && currentTime < c.startTime + c.duration
-  );
+  const activeCaptions = captions.filter(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration);
 
-  // Handle drag start
   const handleMouseDown = (e, caption, action) => {
     e.stopPropagation();
     onSelectCaption(caption);
-    setDragging({
-      id: caption.id,
-      action,
-      startX: e.clientX,
-      startY: e.clientY,
-      initialX: caption.x || 50,
-      initialY: caption.y || 85,
-      initialSize: caption.fontSize || 24
-    });
+    setDragging({ id: caption.id, action, startX: e.clientX, startY: e.clientY, initialX: caption.x || 50, initialY: caption.y || 85, initialSize: caption.fontSize || 24 });
   };
 
-  // Handle drag
   useEffect(() => {
     if (!dragging) return;
-
     const handleMouseMove = (e) => {
       const rect = previewRef.current?.getBoundingClientRect();
       if (!rect) return;
-
       const caption = captions.find(c => c.id === dragging.id);
       if (!caption) return;
-
       if (dragging.action === 'move') {
         const deltaX = ((e.clientX - dragging.startX) / rect.width) * 100;
         const deltaY = ((e.clientY - dragging.startY) / rect.height) * 100;
-        onUpdateCaption({
-          ...caption,
-          x: Math.max(5, Math.min(95, dragging.initialX + deltaX)),
-          y: Math.max(5, Math.min(95, dragging.initialY + deltaY))
-        });
+        onUpdateCaption({ ...caption, x: Math.max(5, Math.min(95, dragging.initialX + deltaX)), y: Math.max(5, Math.min(95, dragging.initialY + deltaY)) });
       } else if (dragging.action === 'resize') {
         const delta = (e.clientX - dragging.startX) / 3;
-        onUpdateCaption({
-          ...caption,
-          fontSize: Math.max(12, Math.min(72, Math.round(dragging.initialSize + delta)))
-        });
+        onUpdateCaption({ ...caption, fontSize: Math.max(12, Math.min(72, Math.round(dragging.initialSize + delta))) });
       }
     };
-
     const handleMouseUp = () => setDragging(null);
-
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
+    return () => { document.removeEventListener('mousemove', handleMouseMove); document.removeEventListener('mouseup', handleMouseUp); };
   }, [dragging, captions, onUpdateCaption]);
 
-  const aspectClass = orientation === 'portrait' ? 'aspect-[9/16]' : 'aspect-video';
-
   return (
-    <div className="h-full flex flex-col bg-[#0a0a14]">
-      {/* Preview */}
-      <div className="flex-1 flex items-center justify-center p-4">
-        <div
-          ref={previewRef}
-          className={`relative ${aspectClass} w-full max-h-full bg-gray-900 rounded overflow-hidden`}
-          onClick={() => onSelectCaption(null)}
-        >
-          {/* Scene image */}
-          {currentScene?.image_url ? (
-            <img src={currentScene.image_url} className="w-full h-full object-contain" alt="" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <Film className="w-12 h-12 text-gray-700" />
-            </div>
-          )}
-
-          {/* Captions - draggable */}
-          {activeCaptions.map(caption => {
-            const isSelected = selectedCaption?.id === caption.id;
-            return (
-              <div
-                key={caption.id}
-                className={`absolute cursor-move select-none transition-shadow ${isSelected ? 'z-20' : 'z-10'}`}
-                style={{
-                  left: `${caption.x || 50}%`,
-                  top: `${caption.y || 85}%`,
-                  transform: 'translate(-50%, -50%)'
-                }}
-                onMouseDown={(e) => handleMouseDown(e, caption, 'move')}
-              >
-                <div
-                  className={`px-4 py-2 rounded transition-all ${isSelected ? 'ring-2 ring-cyan-400' : ''}`}
-                  style={{
-                    backgroundColor: caption.bgColor || 'rgba(0,0,0,0.7)',
-                    color: caption.color || '#FFFFFF',
-                    fontSize: `${caption.fontSize || 24}px`,
-                    fontWeight: caption.bold ? 'bold' : 'normal',
-                    fontStyle: caption.italic ? 'italic' : 'normal',
-                    textDecoration: caption.underline ? 'underline' : 'none',
-                    textAlign: caption.align || 'center',
-                    textTransform: caption.textCase || 'none',
-                    letterSpacing: caption.letterSpacing ? `${caption.letterSpacing}px` : undefined,
-                    lineHeight: caption.lineHeight ? `${caption.lineHeight}px` : undefined
-                  }}
-                >
-                  {caption.text}
-                </div>
-
-                {/* Resize handle */}
-                {isSelected && (
-                  <div
-                    className="absolute -right-2 -bottom-2 w-4 h-4 bg-cyan-400 rounded-full cursor-se-resize border-2 border-white"
-                    onMouseDown={(e) => handleMouseDown(e, caption, 'resize')}
-                  />
-                )}
-              </div>
-            );
-          })}
-
-          {/* Scene indicator */}
-          <div className="absolute top-2 left-2 bg-black/60 px-2 py-1 rounded text-[10px] text-white">
-            Scene {currentScene?.scene_number || '-'}
+    <div className="h-full flex items-center justify-center p-4 bg-[#0a0a14]">
+      <div
+        ref={previewRef}
+        className={`relative ${orientation === 'portrait' ? 'aspect-[9/16]' : 'aspect-video'} w-full max-h-full bg-gray-900 rounded overflow-hidden`}
+        onClick={() => onSelectCaption(null)}
+      >
+        {currentScene?.image_url ? (
+          <img src={currentScene.image_url} className="w-full h-full object-contain" alt="" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Film className="w-12 h-12 text-gray-700" />
           </div>
+        )}
+
+        {activeCaptions.map(caption => {
+          const isSelected = selectedCaption?.id === caption.id;
+          return (
+            <div
+              key={caption.id}
+              className={`absolute cursor-move select-none ${isSelected ? 'z-20' : 'z-10'}`}
+              style={{ left: `${caption.x || 50}%`, top: `${caption.y || 85}%`, transform: 'translate(-50%, -50%)' }}
+              onMouseDown={(e) => handleMouseDown(e, caption, 'move')}
+            >
+              <div
+                className={`px-4 py-2 rounded ${isSelected ? 'ring-2 ring-cyan-400' : ''}`}
+                style={{
+                  backgroundColor: caption.bgColor || 'rgba(0,0,0,0.7)',
+                  color: caption.color || '#FFFFFF',
+                  fontSize: `${caption.fontSize || 24}px`,
+                  fontWeight: caption.bold ? 'bold' : 'normal',
+                  fontStyle: caption.italic ? 'italic' : 'normal',
+                  textDecoration: caption.underline ? 'underline' : 'none',
+                  textAlign: caption.align || 'center',
+                }}
+              >
+                {caption.text}
+              </div>
+              {isSelected && (
+                <div className="absolute -right-2 -bottom-2 w-4 h-4 bg-cyan-400 rounded-full cursor-se-resize border-2 border-white" onMouseDown={(e) => handleMouseDown(e, caption, 'resize')} />
+              )}
+            </div>
+          );
+        })}
+
+        <div className="absolute top-2 left-2 bg-black/60 px-2 py-1 rounded text-[10px] text-white">
+          Scene {currentScene?.scene_number || '-'}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// TRANSPORT CONTROLS (FIXED - NOW VISIBLE)
+// ═══════════════════════════════════════════════════════════════════
+
+function TransportControls({ isPlaying, onPlayPause, currentTime, totalDuration, onSeek }) {
+  return (
+    <div className="flex items-center justify-center gap-4 py-3 px-4 bg-[#12121f] border-t border-gray-800">
+      {/* Skip Back */}
+      <button
+        onClick={() => onSeek(Math.max(0, currentTime - 5))}
+        className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+      >
+        <SkipBack size={20} />
+      </button>
+
+      {/* Play/Pause - BIG AND VISIBLE */}
+      <button
+        onClick={onPlayPause}
+        className={`w-14 h-14 rounded-full flex items-center justify-center transition-all shadow-lg ${
+          isPlaying
+            ? 'bg-red-600 hover:bg-red-700'
+            : 'bg-white hover:bg-gray-200'
+        }`}
+      >
+        {isPlaying ? (
+          <Pause size={28} className="text-white" />
+        ) : (
+          <Play size={28} className="text-gray-900 ml-1" />
+        )}
+      </button>
+
+      {/* Skip Forward */}
+      <button
+        onClick={() => onSeek(Math.min(totalDuration, currentTime + 5))}
+        className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+      >
+        <SkipForward size={20} />
+      </button>
 
       {/* Timecode */}
-      <div className="flex items-center justify-center py-2 bg-[#12121f] border-t border-gray-800">
+      <div className="ml-4 flex items-center gap-2">
         <span className="text-sm font-mono text-cyan-400">{formatTimecode(currentTime)}</span>
-        <span className="text-sm font-mono text-gray-500 mx-2">/</span>
-        <span className="text-sm font-mono text-gray-500">{formatTimecode(0)}</span>
+        <span className="text-gray-600">/</span>
+        <span className="text-sm font-mono text-gray-500">{formatTimecode(totalDuration)}</span>
       </div>
     </div>
   );
@@ -995,17 +778,13 @@ function TimelineTrack({ type, clips, pixelsPerSecond, totalDuration, currentTim
         onUpdateClip({ ...clip, duration: Math.max(0.5, dragging.initialDuration + delta) });
       } else if (dragging.action === 'resize-left') {
         const newStart = Math.max(0, dragging.initialStart + delta);
-        const newDur = Math.max(0.5, dragging.initialDuration - delta);
-        onUpdateClip({ ...clip, startTime: newStart, duration: newDur });
+        onUpdateClip({ ...clip, startTime: newStart, duration: Math.max(0.5, dragging.initialDuration - delta) });
       }
     };
     const handleMouseUp = () => setDragging(null);
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
+    return () => { document.removeEventListener('mousemove', handleMouseMove); document.removeEventListener('mouseup', handleMouseUp); };
   }, [dragging, clips, pixelsPerSecond, onUpdateClip]);
 
   return (
@@ -1050,7 +829,7 @@ function TimelineTrack({ type, clips, pixelsPerSecond, totalDuration, currentTim
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════
 
-export default function TimelineEditorV3() {
+export default function TimelineEditorV4() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get('project_id');
@@ -1065,7 +844,7 @@ export default function TimelineEditorV3() {
   // Clips
   const [videoClips, setVideoClips] = useState([]);
   const [audioClips, setAudioClips] = useState([]);
-  const [captionClips, setCaptionClips] = useState([]); // Start empty - no auto-captions
+  const [captionClips, setCaptionClips] = useState([]);
 
   // Selection
   const [selectedVideoClipId, setSelectedVideoClipId] = useState(null);
@@ -1073,13 +852,14 @@ export default function TimelineEditorV3() {
 
   // Status
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncStatus, setSyncStatus] = useState(null);
   const [isGeneratingCaptions, setIsGeneratingCaptions] = useState(false);
 
   // Refs
   const playbackRef = useRef(null);
   const audioRef = useRef(null);
 
-  // Data fetching
+  // Data
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
     queryFn: async () => (await base44.entities.Projects.filter({ id: projectId }))[0],
@@ -1104,7 +884,7 @@ export default function TimelineEditorV3() {
   const voiceoverUrl = prodSettings[0]?.voiceover_url;
   const voiceoverDuration = prodSettings[0]?.voiceover_duration_seconds || 0;
 
-  // Calculate timing
+  // Timing
   const scenesWithTiming = useMemo(() => {
     let offset = 0;
     return scenes.map(scene => {
@@ -1119,7 +899,7 @@ export default function TimelineEditorV3() {
     return voiceoverDuration > 0 ? voiceoverDuration : scenesWithTiming.reduce((sum, s) => sum + s.duration, 0) || 60;
   }, [scenesWithTiming, voiceoverDuration]);
 
-  // Initialize video clips from scenes
+  // Init clips
   useEffect(() => {
     if (scenesWithTiming.length === 0) return;
     setVideoClips(scenesWithTiming.map(scene => ({
@@ -1133,7 +913,8 @@ export default function TimelineEditorV3() {
       thumbnail: scene.image_url,
       effects: [],
       audioMuted: false,
-      volume: 100
+      volume: 100,
+      transition: null
     })));
 
     if (voiceoverUrl) {
@@ -1160,7 +941,7 @@ export default function TimelineEditorV3() {
     return () => { if (playbackRef.current) clearInterval(playbackRef.current); };
   }, [isPlaying, totalDuration]);
 
-  // Audio sync
+  // Audio
   useEffect(() => {
     if (voiceoverUrl && audioRef.current) {
       if (Math.abs(audioRef.current.currentTime - currentTime) > 0.3) {
@@ -1177,17 +958,21 @@ export default function TimelineEditorV3() {
     return scenesWithTiming.find(s => currentTime >= s.startTime && currentTime < s.startTime + s.duration);
   }, [scenesWithTiming, currentTime]);
 
-  // ═══ AUTOSYNC ═══
+  // AutoSync
   const handleAutoSync = async () => {
     setIsSyncing(true);
+    setSyncStatus(null);
 
     try {
       const result = await base44.functions.invoke('syncMediaToAudio', { project_id: projectId });
       if (result?.success || result?.data?.success) {
+        setSyncStatus('success');
         await refetchScenes();
+      } else {
+        throw new Error('Sync failed');
       }
     } catch (err) {
-      // Fallback: client-side sync
+      // Fallback
       if (voiceoverDuration > 0 && videoClips.length > 0) {
         const perScene = voiceoverDuration / videoClips.length;
         setVideoClips(prev => prev.map((clip, idx) => ({
@@ -1195,30 +980,27 @@ export default function TimelineEditorV3() {
           startTime: idx * perScene,
           duration: perScene
         })));
+        setSyncStatus('success');
+      } else {
+        setSyncStatus('error');
       }
     }
 
     setIsSyncing(false);
+    setTimeout(() => setSyncStatus(null), 3000);
   };
 
-  // ═══ GENERATE CAPTIONS ═══
+  // Generate captions
   const handleGenerateCaptions = async (settings) => {
     setIsGeneratingCaptions(true);
+    if (settings.deleteExisting) setCaptionClips([]);
 
-    // Clear existing if requested
-    if (settings.deleteExisting) {
-      setCaptionClips([]);
-    }
-
-    // Generate from narration
     const newCaptions = [];
     scenesWithTiming.forEach(scene => {
       const text = scene.narration_text || scene.voiceover_text;
       if (!text) return;
-
       const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
       const sentenceDur = scene.duration / Math.max(sentences.length, 1);
-
       sentences.forEach((sentence, idx) => {
         newCaptions.push({
           id: `caption-${scene.id}-${idx}-${Date.now()}`,
@@ -1229,17 +1011,8 @@ export default function TimelineEditorV3() {
           duration: sentenceDur,
           text: sentence.trim(),
           label: sentence.trim().slice(0, 20) + '...',
-          x: 50,
-          y: 85,
-          fontSize: 20,
-          color: '#FFFFFF',
-          bgColor: 'rgba(0,0,0,0.7)',
-          font: 'System',
-          bold: false,
-          italic: false,
-          underline: false,
-          align: 'center',
-          textCase: 'none'
+          x: 50, y: 85, fontSize: 20, color: '#FFFFFF', bgColor: 'rgba(0,0,0,0.7)',
+          font: 'System', bold: false, italic: false, underline: false, align: 'center'
         });
       });
     });
@@ -1248,19 +1021,19 @@ export default function TimelineEditorV3() {
     setIsGeneratingCaptions(false);
   };
 
-  // Apply effect
+  // Effects
   const handleApplyEffect = (effect) => {
     if (!selectedVideoClipId) return;
     setVideoClips(prev => prev.map(clip =>
-      clip.id === selectedVideoClipId
-        ? { ...clip, effects: [...(clip.effects || []), effect.id] }
-        : clip
+      clip.id === selectedVideoClipId ? { ...clip, effects: [...(clip.effects || []), effect.id] } : clip
     ));
   };
 
-  // Apply transition
-  const handleApplyTransition = (transition) => {
-    console.log('Apply transition:', transition);
+  // Transitions
+  const handleApplyTransition = (transition, clipIndex) => {
+    setVideoClips(prev => prev.map((clip, idx) =>
+      idx === clipIndex ? { ...clip, transition: transition.name } : clip
+    ));
   };
 
   // Handlers
@@ -1272,11 +1045,11 @@ export default function TimelineEditorV3() {
   const zoomIn = () => setPixelsPerSecond(p => Math.min(50, p * 1.25));
   const zoomOut = () => setPixelsPerSecond(p => Math.max(3, p / 1.25));
 
-  // Selected objects
+  // Selected
   const selectedVideoClip = videoClips.find(c => c.id === selectedVideoClipId);
   const selectedCaption = captionClips.find(c => c.id === selectedCaptionId);
+  const selectedClipIndex = videoClips.findIndex(c => c.id === selectedVideoClipId);
 
-  // ═══ RENDER ═══
   return (
     <div className="h-screen flex flex-col bg-[#0a0a14] text-white overflow-hidden">
       {voiceoverUrl && <audio ref={audioRef} src={voiceoverUrl} preload="auto" />}
@@ -1288,20 +1061,20 @@ export default function TimelineEditorV3() {
         <div className="w-56 flex-shrink-0 border-r border-gray-800 bg-[#12121f]">
           {activePanel === 'media' && <MediaPanel scenes={scenes} onSelectScene={(s) => handleSeek(scenesWithTiming.find(x => x.id === s.id)?.startTime || 0)} />}
           {activePanel === 'effects' && <EffectsPanel selectedClip={selectedVideoClip} onApplyEffect={handleApplyEffect} appliedEffects={selectedVideoClip?.effects} />}
-          {activePanel === 'transitions' && <TransitionsPanel onApplyTransition={handleApplyTransition} />}
+          {activePanel === 'transitions' && <TransitionsPanel selectedClipIndex={selectedClipIndex >= 0 ? selectedClipIndex : null} totalClips={videoClips.length} onApplyTransition={handleApplyTransition} />}
           {activePanel === 'captions' && <CaptionsPanel onGenerate={handleGenerateCaptions} isGenerating={isGeneratingCaptions} captionCount={captionClips.length} />}
           {!['media', 'effects', 'transitions', 'captions'].includes(activePanel) && (
             <div className="flex items-center justify-center h-full text-xs text-gray-500">Coming soon</div>
           )}
         </div>
 
-        {/* Center - Preview */}
+        {/* Center */}
         <div className="flex-1 min-w-0 flex flex-col border-r border-gray-800">
+          {/* Preview */}
           <div className="flex-1 min-h-0">
             <VideoPreview
               currentScene={currentScene}
               currentTime={currentTime}
-              isPlaying={isPlaying}
               captions={captionClips}
               selectedCaption={selectedCaption}
               onSelectCaption={(c) => { setSelectedCaptionId(c?.id || null); setSelectedVideoClipId(null); }}
@@ -1310,15 +1083,14 @@ export default function TimelineEditorV3() {
             />
           </div>
 
-          {/* Transport */}
-          <div className="flex items-center justify-center gap-3 py-2 bg-[#12121f] border-t border-gray-800">
-            <button onClick={() => handleSeek(currentTime - 5)} className="p-1.5 text-gray-400 hover:text-white"><SkipBack size={18} /></button>
-            <button onClick={() => setIsPlaying(!isPlaying)} className={`w-10 h-10 rounded-full flex items-center justify-center ${isPlaying ? 'bg-red-600' : 'bg-white'}`}>
-              {isPlaying ? <Pause size={20} className="text-white" /> : <Play size={20} className="text-gray-900 ml-0.5" />}
-            </button>
-            <button onClick={() => handleSeek(currentTime + 5)} className="p-1.5 text-gray-400 hover:text-white"><SkipForward size={18} /></button>
-            <span className="text-xs text-gray-500 ml-4">{formatTime(currentTime)} / {formatTime(totalDuration)}</span>
-          </div>
+          {/* TRANSPORT CONTROLS - NOW VISIBLE */}
+          <TransportControls
+            isPlaying={isPlaying}
+            onPlayPause={() => setIsPlaying(!isPlaying)}
+            currentTime={currentTime}
+            totalDuration={totalDuration}
+            onSeek={handleSeek}
+          />
         </div>
 
         {/* Right Panel */}
@@ -1333,8 +1105,9 @@ export default function TimelineEditorV3() {
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[#12121f] border-t border-gray-800">
+      {/* BOTTOM TOOLBAR WITH AUTOSYNC BUTTON */}
+      <div className="flex items-center justify-between px-3 py-2 bg-[#12121f] border-t border-gray-800">
+        {/* Left tools */}
         <div className="flex items-center gap-1">
           <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10"><Undo2 size={16} /></button>
           <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10"><Redo2 size={16} /></button>
@@ -1344,11 +1117,27 @@ export default function TimelineEditorV3() {
           <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10"><Trash2 size={16} /></button>
         </div>
 
-        <Button onClick={handleAutoSync} disabled={isSyncing} className="gap-2 bg-gradient-to-r from-cyan-600 to-purple-600">
-          {isSyncing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
-          AutoSync to Audio
+        {/* CENTER - AUTOSYNC BUTTON (BIG AND VISIBLE) */}
+        <Button
+          onClick={handleAutoSync}
+          disabled={isSyncing}
+          size="lg"
+          className={`gap-2 px-6 py-2 text-sm font-medium shadow-lg ${
+            syncStatus === 'success' ? 'bg-green-600 hover:bg-green-700' :
+            syncStatus === 'error' ? 'bg-red-600 hover:bg-red-700' :
+            'bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-700 hover:to-purple-700'
+          }`}
+        >
+          {isSyncing ? (
+            <><Loader2 size={18} className="animate-spin" /> Syncing...</>
+          ) : syncStatus === 'success' ? (
+            <><CheckCircle size={18} /> Synced!</>
+          ) : (
+            <><Wand2 size={18} /> AutoSync to Audio</>
+          )}
         </Button>
 
+        {/* Right - Info & Zoom */}
         <div className="flex items-center gap-3 text-xs text-gray-500">
           <span>{videoClips.length} video</span>
           <span>{audioClips.length} audio</span>
