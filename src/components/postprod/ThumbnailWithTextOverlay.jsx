@@ -1,6 +1,7 @@
 // ══════════════════════════════════════════════════════════════════
-// ThumbnailWithTextOverlay.jsx — V2 COMPLETE
-// Template-based MASSIVE text overlay system
+// ThumbnailWithTextOverlay.jsx — V3 FIXED
+// ✅ Save now works properly
+// ✅ Text size slider added
 // ══════════════════════════════════════════════════════════════════
 // Place in: src/components/postprod/ThumbnailWithTextOverlay.jsx
 // ══════════════════════════════════════════════════════════════════
@@ -8,9 +9,11 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Slider } from '@/components/ui/slider';
 import { 
   Download, RefreshCw, Edit3, Check, X, 
-  ChevronDown, Palette, Type, Layout, Save
+  ChevronDown, Palette, Type, Layout, Save, Loader2,
+  ZoomIn, ZoomOut
 } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════════
@@ -20,7 +23,6 @@ import {
 
 const TEXT_TEMPLATES = {
   // ─── TEMPLATE 1: SHOCK FACE SIDE TEXT ───────────────────────────
-  // Like your Image 1 & 2: "$10 A DAY?" on left side
   shock_side: {
     id: 'shock_side',
     name: 'Shock Side Text',
@@ -32,7 +34,7 @@ const TEXT_TEMPLATES = {
         type: 'primary',
         position: { x: 0.05, y: 0.20 },
         align: 'left',
-        fontSizePercent: 0.14,  // 14% of height = ~150px on 1080p
+        fontSizePercent: 0.14,
         fontWeight: 900,
         fontFamily: 'Impact, Arial Black, sans-serif',
         color: '#FFFFFF',
@@ -46,7 +48,6 @@ const TEXT_TEMPLATES = {
   },
 
   // ─── TEMPLATE 2: CENTERED MASSIVE ───────────────────────────────
-  // Giant centered headline filling top
   centered_massive: {
     id: 'centered_massive',
     name: 'Centered Massive',
@@ -58,7 +59,7 @@ const TEXT_TEMPLATES = {
         type: 'primary',
         position: { x: 0.50, y: 0.18 },
         align: 'center',
-        fontSizePercent: 0.16,  // 16% = ~173px
+        fontSizePercent: 0.16,
         fontWeight: 900,
         fontFamily: 'Impact, Arial Black, sans-serif',
         color: '#FFFFFF',
@@ -72,7 +73,6 @@ const TEXT_TEMPLATES = {
   },
 
   // ─── TEMPLATE 3: YOUTUBE STACKED ────────────────────────────────
-  // Like Image 4: "YOUTUBE" + "THUMBNAIL" + "DESIGN"
   stacked_youtube: {
     id: 'stacked_youtube',
     name: 'YouTube Stacked',
@@ -87,7 +87,7 @@ const TEXT_TEMPLATES = {
         fontSizePercent: 0.15,
         fontWeight: 900,
         fontFamily: 'Impact, Arial Black, sans-serif',
-        color: '#FFD700',  // Gold/Yellow
+        color: '#FFD700',
         strokeColor: '#000000',
         strokeWidth: 0.06,
         shadow: true,
@@ -113,7 +113,6 @@ const TEXT_TEMPLATES = {
   },
 
   // ─── TEMPLATE 4: BEFORE/AFTER SPLIT ─────────────────────────────
-  // Like Image 6 & 7: BEFORE on left (red), AFTER on right (green)
   split_before_after: {
     id: 'split_before_after',
     name: 'Before/After Split',
@@ -128,7 +127,7 @@ const TEXT_TEMPLATES = {
         fontSizePercent: 0.12,
         fontWeight: 900,
         fontFamily: 'Impact, Arial Black, sans-serif',
-        color: '#FF4444',  // Red
+        color: '#FF4444',
         strokeColor: '#000000',
         strokeWidth: 0.06,
         shadow: true,
@@ -144,7 +143,7 @@ const TEXT_TEMPLATES = {
         fontSizePercent: 0.12,
         fontWeight: 900,
         fontFamily: 'Impact, Arial Black, sans-serif',
-        color: '#00FF88',  // Green
+        color: '#00FF88',
         strokeColor: '#000000',
         strokeWidth: 0.06,
         shadow: true,
@@ -156,7 +155,6 @@ const TEXT_TEMPLATES = {
   },
 
   // ─── TEMPLATE 5: INCOME/MONEY REVEAL ────────────────────────────
-  // Massive green dollar amount
   income_reveal: {
     id: 'income_reveal',
     name: 'Income Reveal',
@@ -168,10 +166,10 @@ const TEXT_TEMPLATES = {
         type: 'primary',
         position: { x: 0.05, y: 0.18 },
         align: 'left',
-        fontSizePercent: 0.20,  // 20% = ~216px MASSIVE
+        fontSizePercent: 0.20,
         fontWeight: 900,
         fontFamily: 'Impact, Arial Black, sans-serif',
-        color: '#00FF88',  // Money green
+        color: '#00FF88',
         strokeColor: '#000000',
         strokeWidth: 0.06,
         shadow: true,
@@ -214,7 +212,7 @@ const TEXT_TEMPLATES = {
         fontWeight: 900,
         fontFamily: 'Impact, Arial Black, sans-serif',
         color: '#FFFFFF',
-        strokeColor: '#CC0000',  // Red outline
+        strokeColor: '#CC0000',
         strokeWidth: 0.08,
         shadow: true,
         maxWidth: 0.85,
@@ -266,7 +264,6 @@ const TEXT_TEMPLATES = {
   },
 
   // ─── TEMPLATE 8: METRIC CARDS ───────────────────────────────────
-  // Like Image 3: "YOU CAN DO IT" + floating stat badges
   metric_cards: {
     id: 'metric_cards',
     name: 'Metric Cards',
@@ -327,7 +324,6 @@ const TEXT_TEMPLATES = {
   },
 
   // ─── TEMPLATE 9: DATA EXPLOSION ─────────────────────────────────
-  // Like Image 5: "HIGH CTR" badge + "THUMBNAIL" + stats
   data_explosion: {
     id: 'data_explosion',
     name: 'Data Explosion',
@@ -429,14 +425,17 @@ const TEXT_TEMPLATES = {
 };
 
 // ══════════════════════════════════════════════════════════════════
-// CANVAS TEXT RENDERER — Multi-Layer Support
+// CANVAS TEXT RENDERER — Multi-Layer Support with Size Multiplier
 // ══════════════════════════════════════════════════════════════════
 
-function drawTextLayer(ctx, layer, text, canvasWidth, canvasHeight) {
+function drawTextLayer(ctx, layer, text, canvasWidth, canvasHeight, sizeMultiplier = 1.0) {
   if (!text || !text.trim()) return;
 
   const displayText = layer.uppercase ? text.toUpperCase() : text;
-  const fontSize = Math.round(canvasHeight * layer.fontSizePercent);
+  
+  // Apply size multiplier to font size
+  const baseFontSize = canvasHeight * layer.fontSizePercent;
+  const fontSize = Math.round(baseFontSize * sizeMultiplier);
   const strokeWidth = Math.max(4, Math.round(fontSize * layer.strokeWidth));
   const shadowOffset = Math.max(3, Math.round(fontSize * 0.04));
 
@@ -452,9 +451,9 @@ function drawTextLayer(ctx, layer, text, canvasWidth, canvasHeight) {
     const metrics = ctx.measureText(displayText);
     const textWidth = metrics.width;
     const textHeight = fontSize;
-    const padX = layer.bgPadding?.x || 15;
-    const padY = layer.bgPadding?.y || 8;
-    const radius = layer.borderRadius || 6;
+    const padX = (layer.bgPadding?.x || 15) * sizeMultiplier;
+    const padY = (layer.bgPadding?.y || 8) * sizeMultiplier;
+    const radius = (layer.borderRadius || 6) * sizeMultiplier;
 
     let bgX = x - padX;
     if (layer.align === 'center') bgX = x - textWidth/2 - padX;
@@ -616,10 +615,12 @@ export default function ThumbnailWithTextOverlay({
   const imageRef = useRef(null);
 
   const [isEditing, setIsEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [templateId, setTemplateId] = useState('shock_side');
   const [templateSelectorOpen, setTemplateSelectorOpen] = useState(false);
   const [layerTexts, setLayerTexts] = useState({});
   const [layerColors, setLayerColors] = useState({});
+  const [sizeMultiplier, setSizeMultiplier] = useState(1.0); // NEW: Size control
   const [imageLoaded, setImageLoaded] = useState(false);
   const [error, setError] = useState(null);
 
@@ -641,6 +642,7 @@ export default function ThumbnailWithTextOverlay({
     if (!template) return;
 
     setTemplateId(tplId);
+    setSizeMultiplier(savedConfig.sizeMultiplier || 1.0);
 
     const texts = {};
     const colors = {};
@@ -673,14 +675,14 @@ export default function ThumbnailWithTextOverlay({
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       imageRef.current = img;
 
-      // Draw all layers
+      // Draw all layers with size multiplier
       currentTemplate.layers.forEach(layer => {
         const text = layerTexts[layer.id] || layer.defaultText || '';
         const modifiedLayer = {
           ...layer,
           color: layerColors[layer.id] || layer.color
         };
-        drawTextLayer(ctx, modifiedLayer, text, canvas.width, canvas.height);
+        drawTextLayer(ctx, modifiedLayer, text, canvas.width, canvas.height, sizeMultiplier);
       });
 
       setImageLoaded(true);
@@ -693,29 +695,55 @@ export default function ThumbnailWithTextOverlay({
     };
 
     img.src = imageUrl;
-  }, [imageUrl, currentTemplate, layerTexts, layerColors, concept.image_prompt]);
+  }, [imageUrl, currentTemplate, layerTexts, layerColors, sizeMultiplier, concept.image_prompt]);
 
   useEffect(() => {
     renderCanvas();
   }, [renderCanvas]);
 
-  // Handlers
-  const handleSave = () => {
-    if (onTextChange) {
-      onTextChange({
+  // ════════════════════════════════════════════════════════════════
+  // SAVE HANDLER — FIXED
+  // ════════════════════════════════════════════════════════════════
+  const handleSave = async () => {
+    if (!onTextChange) {
+      console.error('onTextChange prop not provided');
+      setError('Save function not available');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const newConfig = {
         templateId,
         layerTexts,
         layerColors,
+        sizeMultiplier,
         primary_text: layerTexts[currentTemplate.layers[0]?.id] || ''
-      });
+      };
+
+      console.log('Saving text config:', newConfig);
+      
+      // Call the parent's save function and wait for it
+      await onTextChange(newConfig);
+      
+      console.log('Save successful');
+      setIsEditing(false);
+    } catch (e) {
+      console.error('Save failed:', e);
+      setError('Failed to save: ' + (e.message || 'Unknown error'));
+    } finally {
+      setSaving(false);
     }
-    setIsEditing(false);
   };
 
   const handleCancel = () => {
+    // Reset to saved values
     const tplId = savedConfig.templateId || 'shock_side';
     const template = TEXT_TEMPLATES[tplId];
     setTemplateId(tplId);
+    setSizeMultiplier(savedConfig.sizeMultiplier || 1.0);
     
     const texts = {};
     const colors = {};
@@ -726,6 +754,7 @@ export default function ThumbnailWithTextOverlay({
     setLayerTexts(texts);
     setLayerColors(colors);
     setIsEditing(false);
+    setError(null);
   };
 
   const handleDownload = () => {
@@ -757,6 +786,15 @@ export default function ThumbnailWithTextOverlay({
   // Quick color presets
   const colorPresets = ['#FFFFFF', '#FFD700', '#00FF88', '#00FFFF', '#FF4444', '#FF6B00', '#FF00FF'];
 
+  // Size presets
+  const sizePresets = [
+    { value: 0.7, label: 'S' },
+    { value: 1.0, label: 'M' },
+    { value: 1.3, label: 'L' },
+    { value: 1.6, label: 'XL' },
+    { value: 2.0, label: '2X' },
+  ];
+
   return (
     <div className={`relative ${className}`}>
       {/* Canvas */}
@@ -776,7 +814,7 @@ export default function ThumbnailWithTextOverlay({
           </div>
         )}
 
-        {error && (
+        {error && !isEditing && (
           <div className="absolute inset-0 flex items-center justify-center bg-red-900/50">
             <p className="text-red-200 text-sm">{error}</p>
           </div>
@@ -808,7 +846,7 @@ export default function ThumbnailWithTextOverlay({
         {imageLoaded && !isEditing && (
           <div className="absolute bottom-2 left-2">
             <Badge className="bg-black/70 text-white text-[10px]">
-              📐 {currentTemplate.name}
+              📐 {currentTemplate.name} {sizeMultiplier !== 1.0 && `(${Math.round(sizeMultiplier * 100)}%)`}
             </Badge>
           </div>
         )}
@@ -817,6 +855,14 @@ export default function ThumbnailWithTextOverlay({
       {/* Edit Panel */}
       {isEditing && (
         <div className="mt-3 p-4 bg-white rounded-lg border shadow-lg space-y-4">
+          {/* Error Display */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {/* Template Selector */}
           <div>
             <label className="text-xs font-semibold text-gray-700 mb-1.5 block">
               Text Layout Template
@@ -829,6 +875,50 @@ export default function ThumbnailWithTextOverlay({
             />
           </div>
 
+          {/* TEXT SIZE CONTROL — NEW */}
+          <div>
+            <label className="text-xs font-semibold text-gray-700 mb-2 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <ZoomIn className="w-3.5 h-3.5" />
+                Text Size
+              </span>
+              <span className="text-purple-600 font-bold">{Math.round(sizeMultiplier * 100)}%</span>
+            </label>
+            
+            {/* Size Preset Buttons */}
+            <div className="flex gap-1.5 mb-2">
+              {sizePresets.map(preset => (
+                <button
+                  key={preset.value}
+                  onClick={() => setSizeMultiplier(preset.value)}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded transition-all ${
+                    Math.abs(sizeMultiplier - preset.value) < 0.05
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-purple-100'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Fine-tune Slider */}
+            <div className="flex items-center gap-3">
+              <ZoomOut className="w-4 h-4 text-gray-400" />
+              <input
+                type="range"
+                min="0.5"
+                max="2.5"
+                step="0.05"
+                value={sizeMultiplier}
+                onChange={(e) => setSizeMultiplier(parseFloat(e.target.value))}
+                className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600"
+              />
+              <ZoomIn className="w-4 h-4 text-gray-400" />
+            </div>
+          </div>
+
+          {/* Layer Editors */}
           <div className="space-y-2">
             <label className="text-xs font-semibold text-gray-700 block">
               Text Layers ({currentTemplate.layers.length})
@@ -845,6 +935,7 @@ export default function ThumbnailWithTextOverlay({
             ))}
           </div>
 
+          {/* Quick Colors */}
           <div>
             <label className="text-xs font-semibold text-gray-700 mb-1.5 block">
               Quick Colors (Primary)
@@ -868,12 +959,32 @@ export default function ThumbnailWithTextOverlay({
             </div>
           </div>
 
+          {/* Action Buttons */}
           <div className="flex gap-2 pt-2 border-t">
-            <Button size="sm" variant="outline" className="flex-1 h-10" onClick={handleCancel}>
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="flex-1 h-10" 
+              onClick={handleCancel}
+              disabled={saving}
+            >
               <X className="w-4 h-4 mr-1.5" /> Cancel
             </Button>
-            <Button size="sm" className="flex-1 h-10 bg-purple-600 hover:bg-purple-700" onClick={handleSave}>
-              <Save className="w-4 h-4 mr-1.5" /> Save
+            <Button 
+              size="sm" 
+              className="flex-1 h-10 bg-purple-600 hover:bg-purple-700" 
+              onClick={handleSave}
+              disabled={saving}
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4 mr-1.5" /> Save Changes
+                </>
+              )}
             </Button>
           </div>
         </div>
@@ -912,6 +1023,7 @@ export async function downloadAllThumbnails(concepts, prefix = 'thumbnail') {
 
         const templateId = config.templateId || 'shock_side';
         const template = TEXT_TEMPLATES[templateId];
+        const sizeMultiplier = config.sizeMultiplier || 1.0;
         
         if (template) {
           template.layers.forEach(layer => {
@@ -922,7 +1034,7 @@ export async function downloadAllThumbnails(concepts, prefix = 'thumbnail') {
               ...layer,
               color: config.layerColors?.[layer.id] || layer.color
             };
-            drawTextLayer(ctx, modifiedLayer, text, canvas.width, canvas.height);
+            drawTextLayer(ctx, modifiedLayer, text, canvas.width, canvas.height, sizeMultiplier);
           });
         }
 
