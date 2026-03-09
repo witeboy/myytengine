@@ -8,6 +8,8 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import VideoExporter from '@/components/timeline/VideoExporter';
+import useVideoExport from '@/components/timeline/useVideoExport';
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Volume1,
   ZoomIn, ZoomOut, Undo2, Redo2, Scissors, Trash2, Copy,
@@ -247,7 +249,7 @@ function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport,
         <Button onClick={onDownloadAssets} variant="outline" size="sm" className="gap-1.5 text-xs border-gray-700 text-gray-300">
           <Package size={14} /> Assets
         </Button>
-        <Button onClick={onExport} size="sm" className="gap-1.5 text-xs bg-green-600 hover:bg-green-700">
+        <Button onClick={() => setShowExporter(true)} size="sm" className="gap-1.5 text-xs bg-green-600 hover:bg-green-700">
           <FileVideo size={14} /> Export MP4
         </Button>
       </div>
@@ -1054,9 +1056,11 @@ export default function TimelineEditorV9() {
   const [isGenCaptions, setIsGenCaptions] = useState(false);
   const [isApplyingZoom, setIsApplyingZoom] = useState(false);
   const [initialized, setInitialized] = useState(false);
-
+const [showExporter, setShowExporter] = useState(false);
+  const exportHook = useVideoExport();
   const playRef = useRef(null);
   const audioRef = useRef(null);
+  
 
   // Data queries
   const { data: project } = useQuery({
@@ -1737,6 +1741,18 @@ const handleRemoveTransition = () => {
           </>
         )}
       </div>
+      {/* Video Exporter Modal */}
+      <VideoExporter
+        open={showExporter}
+        onClose={() => setShowExporter(false)}
+        scenes={videoClips}
+        orientation={project?.orientation || 'landscape'}
+        voiceoverUrl={voiceoverUrl}
+        musicUrl={musicUrl}
+        musicVolume={1.0}
+        projectName={project?.name || 'Untitled'}
+        exportHook={exportHook}
+      />
     </div>
   );
 }
