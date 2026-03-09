@@ -1147,16 +1147,13 @@ export default function TimelineEditorV9() {
   const audioBeatDurations = useMemo(() => {
     if (scenes.length === 0) return [];
 
-    // ✅ USE BEAT DURATIONS FROM BACKEND SCENE BREAKDOWN
-    // generateSceneBreakdown already distributed the voiceover across scenes
-    // Each scene.duration_seconds is the authoritative beat length
     const durations = scenes.map(scene => {
       const duration = scene.duration_seconds;
-      if (!duration) {
-        console.warn(`Scene ${scene.scene_number} missing duration_seconds — using 5s fallback`);
+      if (duration === null || duration === undefined || duration <= 0) {
+        console.warn(`Scene ${scene.scene_number} missing/invalid duration_seconds — using 5s fallback`);
         return 5;
       }
-      return Math.max(1.5, duration); // Enforce minimum 1.5s
+      return Math.max(1.5, duration);
     });
 
     const totalCalc = durations.reduce((sum, d) => sum + d, 0);
