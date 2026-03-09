@@ -1523,6 +1523,7 @@ const [showExporter, setShowExporter] = useState(false);
   const handleExport = () => alert('Export MP4 coming soon!');
   const handleDownloadAssets = () => alert('Download Assets coming soon!');
   const handleSeek = t => { setCurrentTime(Math.max(0, Math.min(totalDuration, t))); if (audioRef.current) audioRef.current.currentTime = t; };
+  const handleNext = () => navigate(createPageUrl('PostProduction') + `?project_id=${projectId}`);
   const handleApplyEffect = e => { if (!selectedVideoId) return; setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, effects: [...(c.effects || []), e.id] } : c)); };
   
   // Transition handlers
