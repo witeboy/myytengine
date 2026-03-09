@@ -276,7 +276,7 @@ export default function ThumbnailTemplatePicker({ projectId, onTemplatesSelected
             <div className="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-xl px-4 py-3">
               <div>
                 {selected.length < 3
-                  ? <p className="text-sm text-purple-700">Select <span className="font-bold">{3 - selected.length} more</span> template{3 - selected.length > 1 ? 's' : ''} to continue</p>
+                  ? <p className="text-sm text-purple-700">Select <span className="font-bold">{2 - selected.length} more</span> template{2 - selected.length > 1 ? 's' : ''} to continue</p>
                   : <div>
                       <p className="text-sm font-semibold text-purple-900">2 templates locked in ✓</p>
                       <p className="text-xs text-purple-600">One concept will be generated per template</p>
@@ -285,7 +285,7 @@ export default function ThumbnailTemplatePicker({ projectId, onTemplatesSelected
               </div>
               <Button
                 onClick={handleConfirm}
-                disabled={selected.length !== 3}
+                disabled={selected.length !== 2}
                 className="gap-2 bg-purple-600 hover:bg-purple-700"
               >
                 Generate 3 Concepts <ChevronRight className="w-4 h-4" />
