@@ -239,7 +239,7 @@ export default function ThumbnailTemplatePicker({ projectId, onTemplatesSelected
           {/* Selection counter */}
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-gray-700">
-              Pick exactly <span className="text-purple-700 font-bold">3 templates</span> to generate
+              Pick exactly <span className="text-purple-700 font-bold">2 templates</span> to generate
               <span className="ml-2 text-gray-400 font-normal">({selected.length}/3 selected)</span>
             </p>
             {selected.length === 3 && (
@@ -278,7 +278,7 @@ export default function ThumbnailTemplatePicker({ projectId, onTemplatesSelected
                 {selected.length < 3
                   ? <p className="text-sm text-purple-700">Select <span className="font-bold">{3 - selected.length} more</span> template{3 - selected.length > 1 ? 's' : ''} to continue</p>
                   : <div>
-                      <p className="text-sm font-semibold text-purple-900">3 templates locked in ✓</p>
+                      <p className="text-sm font-semibold text-purple-900">2 templates locked in ✓</p>
                       <p className="text-xs text-purple-600">One concept will be generated per template</p>
                     </div>
                 }
