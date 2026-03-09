@@ -671,7 +671,7 @@ function VideoPreview({ currentScene, currentTime, currentClip, captions, select
       progress,
       nextClip
     };
-  };
+
     if (!nextClip) return { isTransitioning: false, transitionType: null, progress: 0, nextClip: null };
     
     // Check if current clip has a transition AND next clip exists
