@@ -47,7 +47,7 @@ async function generateThumbnailImage(apiKey, imagePrompt, negativePrompt, isSho
       prompt: `${imagePrompt}. Ultra high resolution, crisp sharp details, professional quality.`,
       image_size: imageSize, style: "DESIGN", rendering_speed: "QUALITY",
       expand_prompt: false,
-      negative_prompt: negativePrompt || "blurry, low quality, pixelated, watermark, distorted text, small text, cluttered, text in bottom-right, flat lighting, stock photo expression"
+       negative_prompt: (concept.negative_prompt || "") + ", text,letters, numbers, typography, titles, labels, captions, watermark, signature, cluttered, text in bottom-right, flat lighting, stock photo expression"
     });
     const url = await kiePollResult(apiKey, taskId);
     if (url) return { url, model: "ideogram/v3-quality" };
@@ -514,16 +514,9 @@ Generate 10 thumbnails now.`;
         imagePrompt = `${dimensionSpec}, graphic design composition. ${imagePrompt}`;
       }
 
-      // Ensure text overlay is in Ideogram quotation marks
+      // Store text overlay for later compositing (NOT in image prompt — causes text to render in image)
       const textOverlay = t.text_overlay || '';
-      if (textOverlay && !imagePrompt.includes(`"${textOverlay}"`)) {
-        imagePrompt = `"${textOverlay}" in massive bold Impact font with thick black outline and heavy drop shadow, upper-${i%2===0?'left':'center'} position. ${imagePrompt}`;
-      }
-
-      // Reinforce text at end for Ideogram
-      if (textOverlay) {
-        imagePrompt += ` Critical text overlay that MUST appear: "${textOverlay}". Large bold Impact, maximum contrast, thick 6px black outline.`;
-      }
+      // Text will be composited separately — do NOT inject into image prompt
 
       // Add quality markers
       if (!imagePrompt.toLowerCase().includes('crisp') && !imagePrompt.toLowerCase().includes('sharp')) {
