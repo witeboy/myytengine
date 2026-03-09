@@ -1750,17 +1750,32 @@ const handleRemoveTransition = () => {
         )}
       </div>
       {/* Video Exporter Modal */}
-<VideoExporter
-        open={showExporter}
-        onClose={() => setShowExporter(false)}
-        scenes={videoClips}
-        orientation={project?.orientation || 'landscape'}
-        voiceoverUrl={voiceoverUrl}
-        musicUrl={musicUrl}
-        musicVolume={musicVol}
-        projectName={project?.name || 'Untitled'}
-        exportHook={exportHook}
-      />
+      {showExporter && (() => {
+        const exportScenes = videoClips.map(clip => {
+          const scene = scenes.find(s => s.id === clip.sceneId);
+          return {
+            ...clip,
+            image_url: scene?.image_url,
+            video_url: scene?.video_url,
+            narration_text: scene?.narration_text,
+            voiceover_text: scene?.voiceover_text,
+          };
+        });
+        
+        return (
+          <VideoExporter
+            open={showExporter}
+            onClose={() => setShowExporter(false)}
+            scenes={exportScenes}
+            orientation={project?.orientation || 'landscape'}
+            voiceoverUrl={voiceoverUrl}
+            musicUrl={musicUrl}
+            musicVolume={musicVol}
+            projectName={project?.name || 'Untitled'}
+            exportHook={exportHook}
+          />
+        );
+      })()}
     </div>
   );
 }
