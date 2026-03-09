@@ -647,20 +647,29 @@ function VideoPreview({ currentScene, currentTime, currentClip, captions, select
 
   // Detect transition state
   const getTransitionState = () => {
-    if (!currentClip) return { isTransitioning: false, transitionType: null, progress: 0 };
+    if (!currentClip) return { isTransitioning: false, transitionType: null, progress: 0, nextClip: null };
     
     const nextClip = videoClips?.find(c => Math.abs(c.startTime - (currentClip.startTime + currentClip.duration)) < 0.01);
-    if (!nextClip || !currentClip.transition) return { isTransitioning: false, transitionType: null, progress: 0 };
+    if (!nextClip) return { isTransitioning: false, transitionType: null, progress: 0, nextClip: null };
+    
+    // Check if current clip has a transition AND next clip exists
+    if (!currentClip.transition) {
+      return { isTransitioning: false, transitionType: null, progress: 0, nextClip: null };
+    }
     
     const clipEndTime = currentClip.startTime + currentClip.duration;
     const transitionDuration = 0.6; // 600ms transition
     const timeFromClipEnd = currentTime - clipEndTime;
     
+    console.log(`🎬 Transition check: currentTime=${currentTime.toFixed(2)}, clipEnd=${clipEndTime.toFixed(2)}, timeFromEnd=${timeFromClipEnd.toFixed(2)}, transitionType=${currentClip.transition}`);
+    
     if (timeFromClipEnd < 0 || timeFromClipEnd >= transitionDuration) {
-      return { isTransitioning: false, transitionType: null, progress: 0 };
+      return { isTransitioning: false, transitionType: null, progress: 0, nextClip: null };
     }
     
     const progress = timeFromClipEnd / transitionDuration;
+    console.log(`✨ Transition active: ${currentClip.transition} at ${(progress * 100).toFixed(0)}%`);
+    
     return { 
       isTransitioning: true, 
       transitionType: currentClip.transition, 
@@ -833,7 +842,7 @@ function VideoPreview({ currentScene, currentTime, currentClip, captions, select
         </div>
 
         {/* Next image overlay (during transition) */}
-        {isTransitioning && nextScene && (
+        {isTransitioning && nextScene && nextClip && (
           <div className="absolute inset-0 overflow-hidden" style={getTransitionStyle(false)}>
             <img 
               src={nextScene.image_url} 
@@ -1394,11 +1403,15 @@ export default function TimelineEditorV9() {
   const handleGenerateCaptions = (deleteExisting) => {
     setIsGenCaptions(true);
 
+    console.log(`📝 Generating captions with beat durations:`, audioBeatDurations);
+    console.log(`   Start times:`, audioStartTimes);
+    console.log(`   Total duration:`, actualVoiceoverDuration);
+
     const caps = [];
     
-    // Use measured audio duration as source of truth
-    if (actualVoiceoverDuration > 0) {
-      // Generate captions based on audio beat timing (timeline-aware)
+    // CRITICAL: Use the CURRENT beat durations from state, not stored values
+    if (audioBeatDurations.length > 0 && audioStartTimes.length > 0) {
+      // Generate captions based on CURRENT audio beat timing (timeline-aware)
       scenes.forEach((scene, idx) => {
         const text = scene.narration_text || scene.voiceover_text;
         if (!text) return;
@@ -1407,8 +1420,16 @@ export default function TimelineEditorV9() {
         const words = text.trim().split(/\s+/);
         if (words.length === 0) return;
 
+        // Use CURRENT beat data from state (which was loaded from ProductionSettings)
         const beatDuration = audioBeatDurations[idx];
         const beatStartTime = audioStartTimes[idx];
+        
+        if (!beatDuration || !beatStartTime) {
+          console.warn(`⚠️ Scene ${scene.scene_number}: missing beat duration or start time`);
+          return;
+        }
+        
+        console.log(`   Scene ${scene.scene_number}: beat starts at ${beatStartTime.toFixed(1)}s, duration ${beatDuration.toFixed(1)}s`);
         const wordsPerCaption = Math.max(1, Math.ceil(words.length / 4)); // 4 captions per scene roughly
         
         let wordIdx = 0;
@@ -1436,33 +1457,39 @@ export default function TimelineEditorV9() {
             bgColor: 'rgba(0,0,0,0.7)'
           });
           
+          console.log(`   Cap: "${captionText}" @ ${captionStartTime.toFixed(1)}s for ${captionDuration.toFixed(1)}s`);
+          
           wordIdx += wordsPerCaption;
         }
       });
     } else {
-      // Fallback: old sentence-based method if no audio measured
-      scenes.forEach((scene, idx) => {
-        const text = scene.narration_text || scene.voiceover_text;
-        if (!text) return;
+      // Fallback: use beat durations as a safety net (should not reach here)
+      console.warn(`⚠️ No beat durations available for captions! Using fallback.`);
+      
+      if (audioBeatDurations.length > 0) {
+        scenes.forEach((scene, idx) => {
+          const text = scene.narration_text || scene.voiceover_text;
+          if (!text) return;
 
-        const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-        const sceneDuration = audioBeatDurations[idx];
-        const sentenceDuration = sceneDuration / Math.max(sentences.length, 1);
-        const sceneStartTime = audioStartTimes[idx];
+          const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+          const sceneDuration = audioBeatDurations[idx] || 5; // Use beat duration!
+          const sentenceDuration = sceneDuration / Math.max(sentences.length, 1);
+          const sceneStartTime = audioStartTimes[idx] || 0;
 
-        sentences.forEach((sent, i) => {
-          caps.push({
-            id: `cap-${scene.id}-${i}-${Date.now()}`,
-            sceneId: scene.id,
-            type: 'caption',
-            startTime: sceneStartTime + i * sentenceDuration,
-            duration: sentenceDuration,
-            text: sent.trim(),
-            label: sent.trim().slice(0, 15) + '...',
-            x: 50, y: 85, fontSize: 20, color: '#FFFFFF', bgColor: 'rgba(0,0,0,0.7)'
+          sentences.forEach((sent, i) => {
+            caps.push({
+              id: `cap-${scene.id}-${i}-${Date.now()}`,
+              sceneId: scene.id,
+              type: 'caption',
+              startTime: sceneStartTime + i * sentenceDuration,
+              duration: sentenceDuration,
+              text: sent.trim(),
+              label: sent.trim().slice(0, 15) + '...',
+              x: 50, y: 85, fontSize: 20, color: '#FFFFFF', bgColor: 'rgba(0,0,0,0.7)'
+            });
           });
         });
-      });
+      }
     }
 
     setCaptionClips(deleteExisting ? caps : [...captionClips, ...caps]);
