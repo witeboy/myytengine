@@ -13,76 +13,47 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 // Pipeline: Script → [THIS FUNCTION] → Scene Prompts → Image Gen → Animation
 // ══════════════════════════════════════════════════════════════════
 
-async function callLLM(prompt, temperature = 0.7, retries = 3) {
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
-  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
-
-  for (let attempt = 0; attempt < retries; attempt++) {
-    try {
-      const response = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          model: "gpt-4o",
-          messages: [
-            { role: "system", content: "You are a world-class film director. Always respond in valid JSON only. No markdown, no commentary, no code fences — pure JSON." },
-            { role: "user", content: prompt }
-          ],
-          temperature,
-          max_tokens: 16384,
-          response_format: { type: "json_object" }
-        })
-      });
-
-      if (response.status === 429) {
-        const waitMs = Math.pow(2, attempt + 1) * 5000;
-        console.log(`Rate limited, waiting ${waitMs / 1000}s (retry ${attempt + 1}/${retries})...`);
-        await new Promise(r => setTimeout(r, waitMs));
-        continue;
-      }
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(`OpenAI ${response.status}: ${err.error?.message || JSON.stringify(err)}`);
-      }
-
-      const data = await response.json();
-      const text = data.choices?.[0]?.message?.content;
-      if (!text) throw new Error("No content in OpenAI response");
-
-      // 3-stage JSON parsing
-      try { return JSON.parse(text); } catch (_) {}
-
-      let jsonStr = text;
-      if (text.includes("```json")) jsonStr = text.split("```json")[1].split("```")[0].trim();
-      else if (text.includes("```")) jsonStr = text.split("```")[1].split("```")[0].trim();
-      try { return JSON.parse(jsonStr); } catch (_) {}
-
-      // Recovery: find last complete JSON object
-      const lastBrace = text.lastIndexOf('}');
-      if (lastBrace > 0) {
-        const trimmed = text.substring(0, lastBrace + 1);
-        for (const suffix of [']}', '}]}', '']) {
-          try {
-            const parsed = JSON.parse(trimmed + suffix);
-            if (parsed.scenes || parsed.story_analysis) {
-              console.log(`Recovered JSON from truncated response`);
-              return parsed;
-            }
-          } catch (_) {}
-        }
-      }
-
-      throw new Error("Failed to parse OpenAI JSON response");
-
-    } catch (error) {
-      if (attempt === retries - 1) throw error;
-      console.warn(`Attempt ${attempt + 1} failed: ${error.message}, retrying...`);
-      await new Promise(r => setTimeout(r, 2000));
+async function callGemini(prompt, temperature = 0.7) {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature, maxOutputTokens: 16384, responseMimeType: "application/json" }
+      })
     }
+  );
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(`Gemini error: ${err.error?.message || response.status}`);
+  }
+
+  const data = await response.json();
+  if (!data.candidates?.length) throw new Error("No candidates from Gemini");
+  const rawText = data.candidates[0].content.parts[0].text;
+
+  try {
+    return JSON.parse(rawText);
+  } catch (e) {
+    console.log("JSON parse failed, attempting recovery...");
+    const lastBrace = rawText.lastIndexOf('}');
+    if (lastBrace === -1) throw new Error("Cannot recover JSON from Gemini response");
+    const trimmed = rawText.substring(0, lastBrace + 1);
+    const attempts = [trimmed + ']}', trimmed + '}]}', trimmed];
+    for (const attempt of attempts) {
+      try {
+        const parsed = JSON.parse(attempt);
+        if (parsed.scenes && Array.isArray(parsed.scenes)) {
+          console.log(`Recovered ${parsed.scenes.length} scenes from truncated JSON`);
+          return parsed;
+        }
+      } catch (_) {}
+    }
+    throw new Error("Failed to parse Gemini JSON response after recovery attempts");
   }
 }
 
@@ -145,42 +116,8 @@ function normalizeStyleKey(raw) {
 // ══════════════════════════════════════════════════════════════════
 
 function getStyleCharacterDirective(visualStyle) {
-  // ═══ UNIVERSAL CINEMATIC DIRECTION — applies to ALL styles ═══
-  const universalDirective = `
-**🎬 MANDATORY CINEMATIC DIRECTION (ALL VISUAL STYLES):**
-
-1. **ENVIRONMENT-FIRST COMPOSITION**: Every scene starts with the WORLD — describe the location, architecture, weather, time of day, props, textures, and atmosphere BEFORE any character. Characters exist INSIDE environments, not floating in front of them. No blurred/empty backgrounds.
-
-2. **FULL-BODY ACTION FRAMING**: Characters must be shown FULL BODY (head to feet) in 80% of scenes — sitting, walking, kneeling, running, reaching, climbing. Close-ups allowed for 1-2 key emotional beats only. NEVER default to bust/torso crops.
-
-3. **DYNAMIC INTERACTION**: Characters must physically INTERACT with their environment — hands on objects, feet on ground, leaning against walls, sitting in chairs, holding tools, gesturing to people. Static standing poses facing camera are FORBIDDEN. Show mid-action story moments.
-
-4. **POPULATED WORLD**: Include other people, animals, vehicles, or environmental activity in MOST scenes. The world is alive and busy, not empty. Crowds, companions, passersby, workers — the character exists in a living world.
-
-5. **CINEMATIC CAMERA VARIETY**: Use the full director's toolkit across scenes:
-   - LOW ANGLE: Looking up at character for power/drama
-   - HIGH ANGLE/OVERHEAD: God's-eye view for scale/vulnerability
-   - OVER-SHOULDER: From behind character looking at what they see
-   - WIDE ESTABLISHING: Character small in vast landscape
-   - MEDIUM TWO-SHOT: Character with another person, showing relationship
-   - TRACKING: Following character in motion through space
-   - DUTCH ANGLE: Tilted frame for tension/unease
-   - POV: What the character sees (no character visible)
-   NEVER use the same angle/shot type in consecutive scenes.
-
-6. **EMOTIONAL LIGHTING**: Light tells the story — golden hour for hope, harsh overhead for isolation, blue twilight for melancholy, warm firelight for intimacy, cold fluorescent for clinical/corporate. Specify light SOURCE, DIRECTION, and QUALITY in every scene.
-
-7. **FOREGROUND DEPTH**: Every scene has THREE layers — foreground objects (blurred edge items, hands, tools, plants), midground (character + action), background (environment extending into distance). This creates cinematic depth.
-
-8. **CONTINUITY THREADING**: Adjacent scenes share at least ONE visual element — a prop that reappears, a color that shifts, a gesture that echoes, a location that transforms. Scenes are frames in a continuous film, not isolated portraits.
-
-9. **PERSPECTIVE & SCALE**: Vary the character's size in frame — sometimes they fill the shot, sometimes they're tiny against a vast landscape, sometimes we see just their hands working on something. This creates visual rhythm and prevents monotony.
-
-10. **EMOTION THROUGH BODY LANGUAGE**: Characters express emotion through FULL BODY posture — slumped shoulders for defeat, wide stance for confidence, hunched forward for anxiety, arms spread for freedom, hands clasped for prayer/desperation. Face is secondary to body.
-`;
-
   const directives = {
-    skeleton_protagonist: universalDirective + `
+    skeleton_protagonist: `
 **🦴 MANDATORY — SKELETON PROTAGONIST STYLE:**
 
 CHARACTER IDENTITY (consistent across ALL scenes):
@@ -207,7 +144,7 @@ BAD visual_concept: "The transparent skeleton protagonist stands with expressive
 GOOD visual_concept: "Full-body view of the skeleton protagonist kneeling knee-deep in a rushing river, muddy water swirling around his transparent legs, both hands lifting a massive gold nugget above the surface. Behind him, dozens of miners in worn 1849-era clothing pan for gold among sun-bleached boulders. Golden hour light catches the water droplets on his glass skin. A coiled rope and shovel rest on the rocky bank in the foreground."
 `
   };
-  return directives[visualStyle] || universalDirective;
+  return directives[visualStyle] || '';
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -216,6 +153,35 @@ GOOD visual_concept: "Full-body view of the skeleton protagonist kneeling knee-d
 // Instead of hardcoded motifs, these are DIRECTORIAL SENSIBILITIES
 // that guide the AI to think visually for each niche.
 // ══════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════
+// BEAT DURATION CALCULATOR
+// ═══════════════════════════════════════════════════════════════════
+
+function calculateBeatDurations(phases, totalTargetScenes, defaultDuration = 5) {
+  const durations = [];
+  
+  let sceneCounter = 0;
+  for (const phase of phases) {
+    for (let i = 0; i < phase.scenes; i++) {
+      durations.push(defaultDuration);
+      sceneCounter++;
+    }
+  }
+  
+  console.log(`📊 Beat durations calculated: ${durations.length} scenes, avg ${defaultDuration}s each, total ${durations.reduce((a,b)=>a+b,0).toFixed(1)}s`);
+  return durations;
+}
+
+function calculateStartTimes(durations) {
+  const starts = [];
+  let offset = 0;
+  for (const duration of durations) {
+    starts.push(offset);
+    offset += duration;
+  }
+  return starts;
+}
 
 function getNicheDirectorProfile(niche) {
   const profiles = {
@@ -345,7 +311,6 @@ function calculatePhaseAllocation(totalTargetScenes) {
 }
 
 function splitScriptByPhase(script, phases) {
-  const MAX_SCENES_PER_CALL = 25;
   const sentences = script.match(/[^.!?]+[.!?]+[\s]*/g) || [script];
   const totalSentences = sentences.length;
   const totalPhaseScenes = phases.reduce((a, b) => a + b.scenes, 0);
@@ -358,29 +323,15 @@ function splitScriptByPhase(script, phases) {
     const sentenceCount = Math.max(1, Math.round(totalSentences * proportion));
     const isLast = i === phases.length - 1;
     const endCursor = isLast ? totalSentences : Math.min(cursor + sentenceCount, totalSentences);
-    const phaseSentences = sentences.slice(cursor, endCursor);
-    const phaseText = phaseSentences.join("").trim();
+    const segment = sentences.slice(cursor, endCursor).join("").trim();
 
-    if (phaseText.length > 0) {
-      if (phase.scenes > MAX_SCENES_PER_CALL) {
-        const subCount = Math.ceil(phase.scenes / MAX_SCENES_PER_CALL);
-        const sentPerSub = Math.ceil(phaseSentences.length / subCount);
-        let remaining = phase.scenes;
-
-        for (let s = 0; s < subCount; s++) {
-          const subScenes = (s === subCount - 1) ? remaining : Math.min(MAX_SCENES_PER_CALL, remaining);
-          const subStart = s * sentPerSub;
-          const subEnd = (s === subCount - 1) ? phaseSentences.length : subStart + sentPerSub;
-          const subText = phaseSentences.slice(subStart, subEnd).join("").trim();
-
-          if (subText.length > 0) {
-            chunks.push({ phase: phase.name, purpose: phase.purpose, scenes: subScenes, text: subText });
-            remaining -= subScenes;
-          }
-        }
-      } else {
-        chunks.push({ phase: phase.name, purpose: phase.purpose, scenes: phase.scenes, text: phaseText });
-      }
+    if (segment.length > 0) {
+      chunks.push({
+        phase: phase.name,
+        purpose: phase.purpose,
+        scenes: phase.scenes,
+        text: segment
+      });
     }
     cursor = endCursor;
   }
@@ -437,6 +388,26 @@ Deno.serve(async (req) => {
     const phases = calculatePhaseAllocation(totalTargetScenes);
     const scriptChunks = splitScriptByPhase(finalScript, phases);
     const numBatches = scriptChunks.length;
+
+// ═══ Calculate beat durations & start times (one time, batch 0) ═══
+    let beatDurations = [];
+    let beatStartTimes = [];
+
+    if (startBatch === 0) {
+      beatDurations = calculateBeatDurations(phases, totalTargetScenes, MAX_SCENE_SECONDS);
+      beatStartTimes = calculateStartTimes(beatDurations);
+      
+      console.log(`📊 Beat breakdown calculated:`);
+      console.log(`   Durations: [${beatDurations.map(d => d.toFixed(1)).join(', ')}]`);
+      console.log(`   Start times: [${beatStartTimes.map(t => t.toFixed(1)).join(', ')}]`);
+      console.log(`   Total duration: ${beatDurations.reduce((a,b)=>a+b,0).toFixed(1)}s`);
+    } else {
+      // In subsequent batches, re-read blueprint to get beat data
+      if (blueprint && blueprint.beat_durations) {
+        beatDurations = blueprint.beat_durations;
+        beatStartTimes = blueprint.beat_start_times;
+      }
+    }
 
     // ═══ FIX B: In-memory blueprint for batch 0 (race condition fix) ═══
     let blueprint;
@@ -509,7 +480,7 @@ ${finalScript}
       console.log(`🎨 Niche: ${niche}${visualStyle ? ` | 🖼️ Style: ${visualStyle}` : ''}`);
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
-      const analysis = await callLLM(analysisPrompt, 0.6);
+      const analysis = await callGemini(analysisPrompt, 0.6);
 
       const storyAnalysis = analysis.story_analysis || analysis;
 
@@ -531,6 +502,33 @@ ${finalScript}
           : project.character_descriptions
       });
 
+// ═══ SAVE BEAT BREAKDOWN TO PRODUCTION SETTINGS ═══
+      const prodSettingsList = await base44.asServiceRole.entities.ProductionSettings.filter({ 
+        project_id 
+      });
+
+      let prodSettings = prodSettingsList[0];
+      if (prodSettings) {
+        // Update existing
+        await base44.asServiceRole.entities.ProductionSettings.update(prodSettings.id, {
+          beat_durations: JSON.stringify(beatDurations),
+          beat_start_times: JSON.stringify(beatStartTimes),
+        });
+        console.log(`✓ Beat durations saved to ProductionSettings (updated existing record)`);
+      } else {
+        // Create new
+        prodSettings = await base44.asServiceRole.entities.ProductionSettings.create({
+          project_id,
+          beat_durations: JSON.stringify(beatDurations),
+          beat_start_times: JSON.stringify(beatStartTimes),
+        });
+        console.log(`✓ Beat durations saved to ProductionSettings (created new record)`);
+      }
+
+      // Also add to blueprint for in-memory reference
+      blueprint.beat_durations = beatDurations;
+      blueprint.beat_start_times = beatStartTimes;
+
       freshProject = {
         ...project,
         character_descriptions: storyAnalysis.characters
@@ -543,44 +541,12 @@ ${finalScript}
       console.log(`  Characters: ${storyAnalysis.characters?.map(c => c.name).join(', ') || 'None identified'}`);
       console.log(`  Motifs: ${storyAnalysis.recurring_visual_motifs?.join(', ') || 'N/A'}`);
     } else {
+      // Subsequent batches — data has propagated, safe to read from DB
       freshProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
-      
-      // Try reading blueprint — if field didn't persist, reconstruct
-      let blueprintLoaded = false;
-      if (freshProject.scene_blueprint) {
-        try {
-          blueprint = JSON.parse(freshProject.scene_blueprint);
-          blueprintLoaded = true;
-          console.log(`✓ Blueprint loaded from DB (${blueprint.scenes?.length || 0} scenes)`);
-        } catch (_) {
-          console.warn('Blueprint field exists but failed to parse');
-        }
-      }
-
-      if (!blueprintLoaded) {
-        console.warn('⚠️ Blueprint not in DB — reconstructing from available data');
-        const nicheProfile = getNicheDirectorProfile(niche);
-        
-        let characters = [];
-        try { characters = JSON.parse(freshProject.character_descriptions || '[]'); } catch(_) {}
-        
-        // Rebuild minimal story analysis from project data
-        blueprint = {
-          story_analysis: {
-            central_theme: freshProject.name || 'The story',
-            narrative_arc_summary: '',
-            emotional_trajectory: ['curiosity', 'understanding', 'insight', 'resolution'],
-            key_turning_points: [],
-            visual_world: nicheProfile.visual_world,
-            recurring_visual_motifs: [],
-            color_arc: nicheProfile.emotional_palette,
-            characters: characters
-          },
-          phases: phases.map(p => ({ name: p.name, purpose: p.purpose, scene_count: p.scenes })),
-          total_target_scenes: totalTargetScenes,
-          niche_profile: nicheProfile,
-          scenes: []
-        };
+      try {
+        blueprint = JSON.parse(freshProject.scene_blueprint);
+      } catch (e) {
+        return Response.json({ error: 'Scene blueprint not found. Run batch 0 first.' }, { status: 400 });
       }
     }
 
@@ -596,86 +562,24 @@ ${finalScript}
       ? `**ESTABLISHED CHARACTERS (use these EXACT descriptions for consistency):**\n${characters.map(c => `  • ${c.name}: ${c.visual_description || c.description}`).join('\n')}`
       : '';
 
-    // Process 1 chunk per invocation to stay within platform timeout
+    // ═══ FIX C: Loop ALL phases in one call ═══
     let grandTotalCreated = 0;
-    const endBatch = startBatch + 1;
 
-    for (let batchIdx = startBatch; batchIdx < endBatch && batchIdx < scriptChunks.length; batchIdx++) {
+    for (let batchIdx = startBatch; batchIdx < scriptChunks.length; batchIdx++) {
       const existingScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
+      const sceneOffset = existingScenes.length;
 
       const currentChunk = scriptChunks[batchIdx];
       const scenesForBatch = currentChunk.scenes;
-
-      // ═══ FIX: Use EXPECTED offset, not actual count ═══
-      // This prevents retry-duplication: if batch 3 times out but
-      // succeeded, retrying batch 3 would use actual count (too high)
-      // and create duplicate scenes with the same text at new numbers.
-      let expectedBefore = 0;
-      for (let i = 0; i < batchIdx; i++) {
-        expectedBefore += scriptChunks[i].scenes;
-      }
-      const sceneOffset = expectedBefore;
-
-      // ═══ FIX: Skip if this batch was already processed ═══
-      const expectedStart = expectedBefore + 1;
-      const expectedEnd = expectedBefore + scenesForBatch;
-      const existingInRange = existingScenes.filter(s =>
-        s.scene_number >= expectedStart && s.scene_number <= expectedEnd
-      );
-
-      if (existingInRange.length >= Math.floor(scenesForBatch * 0.8)) {
-        console.log(`⏭️ Batch ${batchIdx} already has ${existingInRange.length}/${scenesForBatch} scenes (S${expectedStart}-S${expectedEnd}). Skipping.`);
-        // Add existing scenes to blueprint for continuity
-        for (const es of existingInRange.sort((a, b) => a.scene_number - b.scene_number)) {
-          if (!blueprint.scenes.find(bs => bs.scene_number === es.scene_number)) {
-            blueprint.scenes.push({
-              scene_number: es.scene_number,
-              phase: currentChunk.phase,
-              visual_concept: '',
-              shot_type: '',
-              mood: '',
-              color_palette: '',
-            });
-          }
-        }
-        grandTotalCreated += existingInRange.length;
-        continue;
-      }
-
-      // ═══ FIX: Delete any orphan scenes in this range before re-creating ═══
-      if (existingInRange.length > 0 && existingInRange.length < Math.floor(scenesForBatch * 0.8)) {
-        console.log(`🧹 Partial batch ${batchIdx}: clearing ${existingInRange.length} orphan scenes before regenerating`);
-        for (const orphan of existingInRange) {
-          await base44.asServiceRole.entities.Scenes.delete(orphan.id);
-        }
-      }
 
       const previousScenes = blueprint.scenes.slice(-3);
       const continuityContext = previousScenes.length > 0
         ? `**LAST ${previousScenes.length} SCENES (for visual continuity):**\n${previousScenes.map(s => `  Scene ${s.scene_number}: [${s.shot_type}] ${s.visual_concept} | Mood: ${s.mood} | Palette: ${s.color_palette}`).join('\n')}`
         : '**This is the OPENING — establish the visual world with a strong first impression.**';
 
-      // ═══ FIX: Overlap prevention — show LLM what previous batch already covered ═══
-      let overlapGuard = '';
-      if (batchIdx > 0) {
-        const prevChunk = scriptChunks[batchIdx - 1];
-        const prevSentences = (prevChunk.text || '').match(/[^.!?]+[.!?]+[\s]*/g) || [];
-        const lastFew = prevSentences.slice(-5).join('').trim();
-        if (lastFew) {
-          overlapGuard = `
-**⚠️ CRITICAL — ALREADY COVERED (DO NOT REPEAT):**
-The following text was already covered in the previous batch. Do NOT create scenes for ANY of this content. Your script segment starts AFTER this:
-"${lastFew}"
-
-If any sentence in your script segment below overlaps with the above, SKIP IT and only create scenes for NEW content.
-`;
-        }
-      }
-
       const breakdownPrompt = `
 You are a world-class film director blocking out scenes for a visual narrative.
 ${styleDirective}
-${overlapGuard}
 
 **YOUR STORY ANALYSIS (from your earlier read-through):**
 - Central Theme: ${storyAnalysis.central_theme}
@@ -772,7 +676,7 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
       console.log(`📍 Generating scenes ${sceneOffset + 1}-${sceneOffset + scenesForBatch}`);
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
-      const result = await callLLM(breakdownPrompt, 0.7);
+      const result = await callGemini(breakdownPrompt, 0.7);
 
       let scenesCreated = 0;
       const newBlueprintScenes = [];
@@ -831,31 +735,25 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
 
     } // end phase loop
 
-    const allDone = endBatch >= scriptChunks.length;
+    // All phases done
+    await base44.asServiceRole.entities.Projects.update(project_id, {
+      status: "breakdown_complete",
+      current_step: 5
+    });
 
-    if (allDone) {
-      await base44.asServiceRole.entities.Projects.update(project_id, {
-        status: "breakdown_complete",
-        current_step: 5
-      });
-
-      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-      console.log(`🎉 FULL BREAKDOWN COMPLETE — ${grandTotalCreated} scenes ready for prompt generation`);
-      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    } else {
-      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-      console.log(`⏭️ Processed chunks ${startBatch + 1}-${endBatch}/${scriptChunks.length} — ${grandTotalCreated} scenes this call`);
-      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    }
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`🎉 FULL BREAKDOWN COMPLETE — ${grandTotalCreated} scenes ready for prompt generation`);
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     return Response.json({
       success: true,
-      done: allDone,
+      done: true,
       scenes_created: grandTotalCreated,
-      total_scenes: (await base44.asServiceRole.entities.Scenes.filter({ project_id })).length,
+      total_scenes: grandTotalCreated,
       total_target: totalTargetScenes,
-      total_batches: scriptChunks.length,
-      next_batch: allDone ? null : endBatch
+      total_batches: numBatches,
+      beat_durations: beatDurations,
+      beat_start_times: beatStartTimes
     });
 
   } catch (error) {
