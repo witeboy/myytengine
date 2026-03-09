@@ -14,7 +14,7 @@ import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Volume1,
   ZoomIn, ZoomOut, Undo2, Redo2, Scissors, Trash2, Copy,
   Image, Music, Type, Wand2, Film, Mic, Settings,
-  Loader2, CheckCircle, Sparkles, Star, Move, ArrowLeft, FileVideo,
+  Loader2, CheckCircle, Sparkles, Star, Move, ArrowLeft, ArrowRight, FileVideo,
   LayoutGrid, FolderOpen, X, Package, Camera, AlertCircle,
   Bold, Italic, Underline, Palette,
   Minimize2, Focus, Blend, ArrowUpRight, ArrowDownLeft
