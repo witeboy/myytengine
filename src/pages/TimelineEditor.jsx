@@ -213,7 +213,7 @@ function useHistory(initialState) {
 // TOP TOOLBAR
 // ═══════════════════════════════════════════════════════════════════
 
-function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport, onDownloadAssets }) {
+function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport, onDownloadAssets, onShowExporter }) {
   const panels = [
     { id: 'media', label: 'Media', icon: Film },
     { id: 'audio', label: 'Audio', icon: Music },
@@ -249,7 +249,7 @@ function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport,
         <Button onClick={onDownloadAssets} variant="outline" size="sm" className="gap-1.5 text-xs border-gray-700 text-gray-300">
           <Package size={14} /> Assets
         </Button>
-        <Button onClick={() => setShowExporter(true)} size="sm" className="gap-1.5 text-xs bg-green-600 hover:bg-green-700">
+        <Button onClick={onShowExporter} size="sm" className="gap-1.5 text-xs bg-green-600 hover:bg-green-700">
           <FileVideo size={14} /> Export MP4
         </Button>
       </div>
@@ -1590,8 +1590,7 @@ const handleRemoveTransition = () => {
     <div className="h-screen flex flex-col bg-[#0a0a14] text-white overflow-hidden">
       {voiceoverUrl && <audio ref={audioRef} src={voiceoverUrl} preload="auto" />}
 
-      <TopToolbar activePanel={activePanel} onPanelChange={setActivePanel} projectName={project?.name} onBack={handleBack} onExport={handleExport} onDownloadAssets={handleDownloadAssets} />
-
+      <TopToolbar activePanel={activePanel} onPanelChange={setActivePanel} projectName={project?.name} onBack={handleBack} onExport={handleExport} onDownloadAssets={handleDownloadAssets} onShowExporter={() => setShowExporter(true)} />
       <div className="flex-1 flex min-h-0">
         {/* Left */}
         <div className="w-56 flex-shrink-0 border-r border-gray-800 bg-[#12121f]">
