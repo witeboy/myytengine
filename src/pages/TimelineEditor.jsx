@@ -647,9 +647,31 @@ function VideoPreview({ currentScene, currentTime, currentClip, captions, select
 
   // Detect transition state
   const getTransitionState = () => {
-    if (!currentClip) return { isTransitioning: false, transitionType: null, progress: 0, nextClip: null };
+    if (!currentClip || !currentClip.transition) {
+      return { isTransitioning: false, transitionType: null, progress: 0, nextClip: null };
+    }
     
-    const nextClip = videoClips?.find(c => Math.abs(c.startTime - (currentClip.startTime + currentClip.duration)) < 0.01);
+    const clipEndTime = currentClip.startTime + currentClip.duration;
+    const transitionDuration = 0.6;
+    const timeFromClipEnd = currentTime - clipEndTime;
+    
+    // Transition ONLY plays in the 0.6s window AFTER clip ends
+    if (timeFromClipEnd < 0 || timeFromClipEnd >= transitionDuration) {
+      return { isTransitioning: false, transitionType: null, progress: 0, nextClip: null };
+    }
+    
+    // Find next clip that starts where this one ends
+    const nextClip = videoClips?.find(c => Math.abs(c.startTime - clipEndTime) < 0.01);
+    
+    const progress = timeFromClipEnd / transitionDuration;
+    
+    return { 
+      isTransitioning: true, 
+      transitionType: currentClip.transition, 
+      progress,
+      nextClip
+    };
+  };
     if (!nextClip) return { isTransitioning: false, transitionType: null, progress: 0, nextClip: null };
     
     // Check if current clip has a transition AND next clip exists
