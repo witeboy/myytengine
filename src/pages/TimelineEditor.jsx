@@ -1213,7 +1213,7 @@ export default function TimelineEditorV9() {
     });
   }, [scenes, audioBeatDurations, audioStartTimes]);
 
-  // Initialize video clips
+  // Initialize video clips - only once when scenes first load
   useEffect(() => {
     if (scenes.length === 0 || initialized) return;
 
@@ -1232,16 +1232,17 @@ export default function TimelineEditorV9() {
         effects: [],
         audioMuted: false,
         cinematicMotion: null,
-        transition: null,  // ← ADD THIS
+        transition: null,
         synced: false
       };
       offset += duration;
       return clip;
     });
 
+    console.log('📍 INIT: Setting initial clips from scenes');
     videoHistory.reset(initClips);
     setInitialized(true);
-  }, [scenes, initialized]);
+  }, [scenes.length, initialized]); // ← CHANGED: Only depend on scenes.length, not scenes
 
   // Playback
   useEffect(() => {
