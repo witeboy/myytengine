@@ -252,6 +252,9 @@ function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport,
         <Button onClick={onShowExporter} size="sm" className="gap-1.5 text-xs bg-green-600 hover:bg-green-700">
           <FileVideo size={14} /> Export MP4
         </Button>
+        <Button onClick={onNext} size="sm" className="gap-1.5 text-xs bg-purple-600 hover:bg-purple-700">
+          Post Production <ArrowRight size={14} />
+        </Button>
       </div>
     </div>
   );
