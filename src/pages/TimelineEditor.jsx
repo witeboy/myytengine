@@ -842,15 +842,23 @@ function VideoPreview({ currentScene, currentTime, currentClip, captions, select
         </div>
 
         {/* Next image overlay (during transition) */}
-        {isTransitioning && nextScene && nextClip && (
-          <div className="absolute inset-0 overflow-hidden" style={getTransitionStyle(false)}>
-            <img 
-              src={nextScene.image_url} 
-              className="w-full h-full object-cover"
-              alt="" 
-            />
-          </div>
-        )}
+        {(() => {
+          const { isTransitioning, nextClip: transNextClip } = getTransitionState();
+          if (!isTransitioning || !transNextClip) return null;
+          
+          const nextSceneForTrans = scenes.find(s => s.id === transNextClip.sceneId);
+          if (!nextSceneForTrans?.image_url) return null;
+          
+          return (
+            <div className="absolute inset-0 overflow-hidden" style={getTransitionStyle(false)}>
+              <img 
+                src={nextSceneForTrans.image_url} 
+                className="w-full h-full object-cover"
+                alt="transition" 
+              />
+            </div>
+          );
+        })()}
 
         {/* Captions overlay */}
         {active.map(cap => {
