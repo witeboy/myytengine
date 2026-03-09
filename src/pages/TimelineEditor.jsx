@@ -1590,8 +1590,7 @@ const handleRemoveTransition = () => {
     <div className="h-screen flex flex-col bg-[#0a0a14] text-white overflow-hidden">
       {voiceoverUrl && <audio ref={audioRef} src={voiceoverUrl} preload="auto" />}
 
-      <TopToolbar activePanel={activePanel} onPanelChange={setActivePanel} projectName={project?.name} onBack={handleBack} onExport={handleExport} onDownloadAssets={handleDownloadAssets} onShowExporter={() => setShowExporter(true)} />
-      <div className="flex-1 flex min-h-0">
+      <TopToolbar activePanel={activePanel} onPanelChange={setActivePanel} projectName={project?.name} onBack={handleBack} onExport={handleExport} onDownloadAssets={handleDownloadAssets} onShowExporter={() => setShowExporter(true)} onNext={handleNext} />      <div className="flex-1 flex min-h-0">
         {/* Left */}
         <div className="w-56 flex-shrink-0 border-r border-gray-800 bg-[#12121f]">
           {activePanel === 'media' && <MediaPanel scenes={scenes} audioBeatDurations={audioBeatDurations} onSelectScene={(idx) => handleSeek(audioStartTimes[idx] || 0)} />}
