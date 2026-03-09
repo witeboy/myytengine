@@ -626,10 +626,63 @@ function ClipPropertiesPanel({ clip, audioBeatDuration, onUpdate }) {
 // VIDEO PREVIEW WITH CINEMATIC ZOOM
 // ═══════════════════════════════════════════════════════════════════
 
-function VideoPreview({ currentScene, currentTime, currentClip, captions, selectedCaption, onSelectCaption, onUpdateCaption, orientation }) {
+function VideoPreview({ currentScene, currentTime, currentClip, captions, selectedCaption, onSelectCaption, onUpdateCaption, orientation, videoClips, scenes }) {
   const ref = useRef(null);
   const [drag, setDrag] = useState(null);
   const active = captions.filter(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration);
+
+  // Detect transition state
+  const getTransitionState = () => {
+    if (!currentClip) return { isTransitioning: false, transitionType: null, progress: 0 };
+    
+    const nextClip = videoClips?.find(c => Math.abs(c.startTime - (currentClip.startTime + currentClip.duration)) < 0.01);
+    if (!nextClip || !currentClip.transition) return { isTransitioning: false, transitionType: null, progress: 0 };
+    
+    const clipEndTime = currentClip.startTime + currentClip.duration;
+    const transitionDuration = 0.6; // 600ms transition
+    const timeFromClipEnd = currentTime - clipEndTime;
+    
+    if (timeFromClipEnd < 0 || timeFromClipEnd >= transitionDuration) {
+      return { isTransitioning: false, transitionType: null, progress: 0 };
+    }
+    
+    const progress = timeFromClipEnd / transitionDuration;
+    return { 
+      isTransitioning: true, 
+      transitionType: currentClip.transition, 
+      progress,
+      nextClip
+    };
+  };
+
+  // Generate transition effect styles
+  const getTransitionStyle = (isExiting = true) => {
+    const { isTransitioning, transitionType, progress } = getTransitionState();
+    if (!isTransitioning) return {};
+
+    const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+
+    switch (transitionType) {
+      case 'Gradual Fade':
+        return isExiting ? { opacity: 1 - eased } : { opacity: eased };
+      
+      case 'Black Fade':
+        return isExiting ? { opacity: 1 - eased, filter: `brightness(${1 - eased * 0.3})` } : { opacity: eased };
+      
+      case 'Expand Fade':
+        return isExiting 
+          ? { opacity: 1 - eased, transform: `scale(${1 - eased * 0.2})` } 
+          : { opacity: eased, transform: `scale(${0.8 + eased * 0.2})` };
+      
+      case 'Overlap Fade':
+        return isExiting 
+          ? { opacity: 1 - eased * 0.7, transform: `translateX(${eased * 20}px)` } 
+          : { opacity: eased * 0.9, transform: `translateX(${(1 - eased) * -20}px)` };
+      
+      default:
+        return {};
+    }
+  };
 
   // Calculate cinematic motion transform
   const getMotionStyle = () => {
@@ -684,12 +737,14 @@ function VideoPreview({ currentScene, currentTime, currentClip, captions, select
 
   const motionStyle = getMotionStyle();
   const hasMotion = !!currentClip?.cinematicMotion;
+  const { isTransitioning, nextClip } = getTransitionState();
+  const nextScene = nextClip && scenes ? scenes.find(s => s.id === nextClip.sceneId) : null;
 
   return (
     <div className="h-full flex items-center justify-center p-4 bg-[#0a0a14]">
       <div ref={ref} className={`relative ${orientation === 'portrait' ? 'aspect-[9/16]' : 'aspect-video'} w-full max-h-full bg-gray-900 rounded overflow-hidden`} onClick={() => onSelectCaption(null)}>
-        {/* Image with cinematic motion */}
-        <div className="absolute inset-0 overflow-hidden">
+        {/* Current image with cinematic motion */}
+        <div className="absolute inset-0 overflow-hidden" style={getTransitionStyle(true)}>
           {currentScene?.image_url ? (
             <img 
               src={currentScene.image_url} 
@@ -703,6 +758,17 @@ function VideoPreview({ currentScene, currentTime, currentClip, captions, select
             </div>
           )}
         </div>
+
+        {/* Next image overlay (during transition) */}
+        {isTransitioning && nextScene && (
+          <div className="absolute inset-0 overflow-hidden" style={getTransitionStyle(false)}>
+            <img 
+              src={nextScene.image_url} 
+              className="w-full h-full object-cover"
+              alt="" 
+            />
+          </div>
+        )}
 
         {/* Captions overlay */}
         {active.map(cap => {
@@ -1160,17 +1226,30 @@ export default function TimelineEditorV9() {
   const handleApplyCinematicZoom = () => {
     setIsApplyingZoom(true);
 
-    // Apply varied cinematic motions to each clip
+    // Define motion families with alternating opposites for smooth flow
+    const motionFamilies = [
+      // Family 1: Horizontal pans (left/right alternating)
+      { forward: 'pan_right_zoom', backward: 'pan_left_zoom' },
+      // Family 2: Vertical motions (top/bottom alternating)
+      { forward: 'push_in_top', backward: 'push_in_bottom' },
+      // Family 3: Diagonal motions (opposite directions)
+      { forward: 'diagonal_tl_br', backward: 'diagonal_tr_bl' },
+      // Family 4: Zoom center (in/out alternating)
+      { forward: 'zoom_in_center', backward: 'zoom_out_center' },
+    ];
+
     const withMotion = videoClips.map((clip, idx) => {
-      // Cycle through motion types, but add some variation
-      const motionIndex = idx % CINEMATIC_MOTIONS.length;
-      // Add some pseudo-randomness based on scene number
-      const offset = (clip.sceneNumber * 3) % CINEMATIC_MOTIONS.length;
-      const finalIndex = (motionIndex + offset) % CINEMATIC_MOTIONS.length;
+      // Pick a motion family based on position
+      const familyIndex = Math.floor(idx / 2) % motionFamilies.length;
+      const family = motionFamilies[familyIndex];
+      
+      // Alternate between forward and backward within the family for opposite effect
+      const isEven = idx % 2 === 0;
+      const motionId = isEven ? family.forward : family.backward;
       
       return {
         ...clip,
-        cinematicMotion: CINEMATIC_MOTIONS[finalIndex].id
+        cinematicMotion: motionId
       };
     });
 
@@ -1360,7 +1439,9 @@ const handleRemoveTransition = () => {
               selectedCaption={selectedCaption} 
               onSelectCaption={c => { setSelectedCaptionId(c?.id || null); setSelectedVideoId(null); }} 
               onUpdateCaption={c => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))} 
-              orientation={project?.orientation || 'landscape'} 
+              orientation={project?.orientation || 'landscape'}
+              videoClips={videoClips}
+              scenes={scenes}
             />
           </div>
           <TransportControls isPlaying={isPlaying} onPlayPause={() => setIsPlaying(!isPlaying)} currentTime={currentTime} totalDuration={totalDuration} onSeek={handleSeek} />
