@@ -127,6 +127,20 @@ const CINEMATIC_MOTIONS = [
   },
 ];
 
+// ═══════════════════════════════════════════════════════════════════
+// EASING FUNCTIONS (CapCut-quality smooth transitions)
+// ═══════════════════════════════════════════════════════════════════
+
+const easingFunctions = {
+  easeInOutQuad: (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
+  easeInQuad: (t) => t * t,
+  easeOutQuad: (t) => 1 - (1 - t) * (1 - t),
+  easeInOutCubic: (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2,
+  easeOutCubic: (t) => 1 - Math.pow(1 - t, 3),
+  easeOutExpo: (t) => t === 1 ? 1 : 1 - Math.pow(2, -10 * t),
+};
+
+
 const EFFECTS = [
   { id: 'ken_burns', name: 'Ken Burns', icon: Move },
   { id: 'zoom_in', name: 'Zoom In', icon: ZoomIn },
@@ -655,34 +669,107 @@ function VideoPreview({ currentScene, currentTime, currentClip, captions, select
     };
   };
 
-  // Generate transition effect styles
-  const getTransitionStyle = (isExiting = true) => {
-    const { isTransitioning, transitionType, progress } = getTransitionState();
-    if (!isTransitioning) return {};
+  // ═══════════════════════════════════════════════════════════════════
+// COPY THIS FIRST - Add after CINEMATIC_MOTIONS constant (line ~127)
+// ═══════════════════════════════════════════════════════════════════
 
-    const eased = progress < 0.5 ? 2 * progress * progress : 1 - Math.pow(-2 * progress + 2, 2) / 2;
+const easingFunctions = {
+  easeInOutQuad: (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
+  easeInQuad: (t) => t * t,
+  easeOutQuad: (t) => 1 - (1 - t) * (1 - t),
+  easeInOutCubic: (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2,
+  easeOutCubic: (t) => 1 - Math.pow(1 - t, 3),
+  easeOutExpo: (t) => t === 1 ? 1 : 1 - Math.pow(2, -10 * t),
+};
 
-    switch (transitionType) {
-      case 'Gradual Fade':
-        return isExiting ? { opacity: 1 - eased } : { opacity: eased };
-      
-      case 'Black Fade':
-        return isExiting ? { opacity: 1 - eased, filter: `brightness(${1 - eased * 0.3})` } : { opacity: eased };
-      
-      case 'Expand Fade':
-        return isExiting 
-          ? { opacity: 1 - eased, transform: `scale(${1 - eased * 0.2})` } 
-          : { opacity: eased, transform: `scale(${0.8 + eased * 0.2})` };
-      
-      case 'Overlap Fade':
-        return isExiting 
-          ? { opacity: 1 - eased * 0.7, transform: `translateX(${eased * 20}px)` } 
-          : { opacity: eased * 0.9, transform: `translateX(${(1 - eased) * -20}px)` };
-      
-      default:
-        return {};
-    }
-  };
+// ═══════════════════════════════════════════════════════════════════
+// COPY THIS SECOND - Replace getTransitionStyle inside VideoPreview
+// ═══════════════════════════════════════════════════════════════════
+
+const getTransitionStyle = (isExiting = true) => {
+  const { isTransitioning, transitionType, progress } = getTransitionState();
+  if (!isTransitioning) return { mixBlendMode: 'normal' };
+
+  const t = transitionType;
+
+  // Select easing function based on transition type
+  let easingFn = easingFunctions.easeInOutQuad; // default
+  if (t === 'Black Fade') easingFn = easingFunctions.easeInOutCubic;
+  if (t === 'Expand Fade') easingFn = isExiting ? easingFunctions.easeOutQuad : easingFunctions.easeInQuad;
+  if (t === 'Overlap Fade') easingFn = easingFunctions.easeInOutQuad;
+
+  const eased = easingFn(progress);
+
+  // ═══ GRADUAL FADE (Cross-Dissolve) ═══
+  // Smooth opacity fade with soften blend mode
+  if (t === 'Gradual Fade') {
+    const opacityOut = 1 - eased;
+    const opacityIn = eased;
+    
+    return {
+      opacity: isExiting ? opacityOut : opacityIn,
+      mixBlendMode: isExiting ? 'normal' : 'screen', // incoming uses 'screen' blend for softer overlap
+      filter: isExiting 
+        ? `brightness(${0.95 + eased * 0.05})` 
+        : `brightness(${0.9 + eased * 0.1})`,
+    };
+  }
+
+  // ═══ BLACK FADE (Dip to Black) ═══
+  // Dramatic dip through black with color grading shift
+  if (t === 'Black Fade') {
+    // Create sine wave darkness (0 → 1 → 0 for smooth dip)
+    const darknessPeak = Math.sin(eased * Math.PI);
+    const brightness = 1 - darknessPeak * 0.65; // 1.0 → 0.35 → 1.0
+    const contrast = 1 + darknessPeak * 0.15;
+    
+    return {
+      opacity: isExiting ? (1 - eased * 0.4) : (eased * 0.4),
+      filter: `brightness(${brightness}) contrast(${contrast}) saturate(${1 - darknessPeak * 0.3})`,
+      mixBlendMode: isExiting ? 'normal' : 'multiply',
+    };
+  }
+
+  // ═══ EXPAND FADE (Zoom Pulse with Motion Blur) ═══
+  // Cinematic zoom with dynamic motion blur momentum
+  if (t === 'Expand Fade') {
+    const scaleOut = 1 - eased * 0.18; // 1.0 → 0.82 (push away)
+    const scaleIn = 0.82 + eased * 0.18; // 0.82 → 1.0 (pull in)
+    const scale = isExiting ? scaleOut : scaleIn;
+    
+    // Motion blur increases with velocity (quadratic ramp)
+    const blurAmount = eased * eased * 5; // 0 → 5px
+    
+    // Soften edges during expansion
+    const brightness = isExiting ? (1 - eased * 0.1) : (0.9 + eased * 0.1);
+    
+    return {
+      opacity: isExiting ? (1 - eased * 0.8) : (eased * 0.8),
+      transform: `scale(${scale})`,
+      filter: `blur(${blurAmount}px) brightness(${brightness})`,
+      mixBlendMode: 'overlay',
+    };
+  }
+
+  // ═══ OVERLAP FADE (Whip Pan with Directional Motion Blur) ═══
+  // Fast slide with velocity-based directional blur
+  if (t === 'Overlap Fade') {
+    const slideDistance = eased * eased * 60; // quadratic: 0 → 60px (accelerating)
+    const translateX = isExiting ? slideDistance : -slideDistance;
+    
+    // Directional motion blur (more blur = faster pan)
+    const blurAmount = eased * 6; // 0 → 6px directional blur
+    
+    return {
+      opacity: isExiting ? (1 - eased * 0.7) : (eased * 0.9),
+      transform: `translateX(${translateX}px)`,
+      filter: `blur(${blurAmount}px)`,
+      mixBlendMode: 'lighten',
+    };
+  }
+
+  return { mixBlendMode: 'normal' };
+};
 
   // Calculate cinematic motion transform
   const getMotionStyle = () => {
