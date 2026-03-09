@@ -1147,6 +1147,24 @@ export default function TimelineEditorV9() {
   const audioBeatDurations = useMemo(() => {
     if (scenes.length === 0) return [];
 
+    // Priority 1: Use saved beat durations from ProductionSettings (most accurate!)
+    if (prodSettings?.beat_durations) {
+      try {
+        const saved = JSON.parse(prodSettings.beat_durations);
+        if (Array.isArray(saved) && saved.length === scenes.length) {
+          console.log(`🎵 Using saved beat durations from ProductionSettings`);
+          console.log(`   Durations: [${saved.map(d => d.toFixed(1)).join(', ')}]`);
+          const total = saved.reduce((a, b) => a + b, 0);
+          console.log(`   Total: ${total.toFixed(1)}s`);
+          return saved;
+        }
+      } catch (e) {
+        console.warn('Failed to parse beat_durations:', e);
+      }
+    }
+
+    // Priority 2: Fall back to scene.duration_seconds from database
+    console.log(`📊 Beat durations not found in ProductionSettings, using scene defaults`);
     const durations = scenes.map(scene => {
       const duration = scene.duration_seconds;
       if (duration === null || duration === undefined || duration <= 0) {
@@ -1157,13 +1175,13 @@ export default function TimelineEditorV9() {
     });
 
     const totalCalc = durations.reduce((sum, d) => sum + d, 0);
-    console.log(`✅ Timeline beat sync: ${scenes.length} scenes = ${totalCalc.toFixed(1)}s total (from backend breakdown)`);
+    console.log(`✅ Timeline beat sync: ${scenes.length} scenes = ${totalCalc.toFixed(1)}s total (from scene defaults)`);
     if (scenes.length <= 20) {
       console.log(`   Durations: [${durations.map(d => d.toFixed(1)).join(', ')}]`);
     }
 
     return durations;
-  }, [scenes]);
+  }, [scenes, prodSettings]);
 
   const audioStartTimes = useMemo(() => {
     const starts = [];
@@ -1213,12 +1231,13 @@ export default function TimelineEditorV9() {
   }, [scenes, audioBeatDurations, audioStartTimes]);
 
   // Initialize video clips - only once when scenes first load
-  useEffect(() => {
+ useEffect(() => {
     if (scenes.length === 0 || initialized) return;
 
+    // Use beat durations if available, otherwise scene defaults
     let offset = 0;
-    const initClips = scenes.map((scene) => {
-      const duration = scene.duration_seconds || 5;
+    const initClips = scenes.map((scene, idx) => {
+      const duration = audioBeatDurations[idx] || scene.duration_seconds || 5;
       const clip = {
         id: `video-${scene.id}`,
         sceneId: scene.id,
@@ -1239,9 +1258,10 @@ export default function TimelineEditorV9() {
     });
 
     console.log('📍 INIT: Setting initial clips from scenes');
+    console.log(`   Using beat durations: ${audioBeatDurations.length > 0 ? 'YES ✓' : 'NO'}`);
     videoHistory.reset(initClips);
     setInitialized(true);
-  }, [scenes.length, initialized]); // ← CHANGED: Only depend on scenes.length, not scenes
+  }, [scenes.length, initialized, audioBeatDurations]);
 
   // Playback
   useEffect(() => {
@@ -1515,8 +1535,13 @@ const handleRemoveTransition = () => {
       actualVoiceoverDuration,
       currentTime,
       currentClip: currentClip ? { id: currentClip.id, startTime: currentClip.startTime, duration: currentClip.duration, transition: currentClip.transition } : null,
+      prodSettings: prodSettings ? { 
+        beat_durations: prodSettings.beat_durations ? JSON.parse(prodSettings.beat_durations) : null,
+        beat_start_times: prodSettings.beat_start_times ? JSON.parse(prodSettings.beat_start_times) : null,
+        voiceover_url: prodSettings.voiceover_url
+      } : null,
     };
-  }, [scenes, videoClips, audioStartTimes, audioBeatDurations, totalDuration, actualVoiceoverDuration, currentTime, currentClip]);
+  }, [scenes, videoClips, audioStartTimes, audioBeatDurations, totalDuration, actualVoiceoverDuration, currentTime, currentClip, prodSettings]);
 
   return (
     <div className="h-screen flex flex-col bg-[#0a0a14] text-white overflow-hidden">
