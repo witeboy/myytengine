@@ -192,7 +192,7 @@ const styleMap = {
     negative: "photorealistic, photograph, 3D render, CGI, anime, painterly, watercolor, oil painting, sketch, dark, gritty, horror, film grain, lens flare, bokeh, dramatic shadows, neon, cyberpunk, fantasy, abstract, pixel art, low poly, voxel, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature"
   },
   low_poly_3d_cartoon: {
-    positive: "Stylized low-poly 3D cartoon, all geometry from visible flat-shaded polygons and triangular facets. Exaggerated proportions — oversized heads, angular noses, large round eyes, thick eyebrows. Chunky geometric hair, warm peach-tan skin with polygon-edge shading. Clothing with visible folds and flat polygon faces. Suburban environments — clapboard houses, white picket fences, bright green grass, faceted tree canopies, boxy vehicles. Bright gradient sky, geometric clouds, warm sunlight. Vibrant saturated colors, clean polygon edges, no smoothing, matte clay-toy quality, soft ambient occlusion, Pixar expressiveness with geometric stylization",
+    positive: "Stylized low-poly 3D cartoon, all geometry from visible flat-shaded polygons and triangular facets. correct proportions — heads with angular noses, large round eyes, thick eyebrows. Chunky geometric hair, warm peach-tan skin with polygon-edge shading. Clothing with visible folds and flat polygon faces. Suburban environments — clapboard houses, white picket fences, bright green grass, faceted tree canopies, boxy vehicles. Bright gradient sky, geometric clouds, warm sunlight. Vibrant saturated colors, clean polygon edges, no smoothing, matte clay-toy quality, soft ambient occlusion, Pixar expressiveness with geometric stylization",
     negative: "photorealistic, photograph, smooth high-poly, hyperrealistic, film grain, lens flare, bokeh, anime, cel-shaded, 2D flat, hand-drawn, sketch, watercolor, oil painting, dark horror, neon cyberpunk, abstract, pixel art, voxel art, wireframe, monochrome, desaturated, ray-traced, photogrammetry"
   },
   skeleton_protagonist: {
@@ -238,9 +238,9 @@ function getStyleSceneBodyRules(styleName) {
       rendering: "Cinematic anime language — god rays, volumetric lighting, dramatic color grading, but with anime linework and cel-shading."
     },
     cartoon_2d: {
-      characters: "2D cartoon characters with bold black outlines, flat vibrant color fills, exaggerated proportions, big expressive faces, dynamic poses.",
+      characters: "2D cartoon characters with bold black outlines, flat vibrant color fills, correct proportions, big expressive faces, dynamic poses.",
       environments: "Cartoon backgrounds with bold outlines, flat color fills, playful simplified architecture, bright cheerful colors.",
-      objects: "Cartoon-style objects with clean outlines, flat colors, slightly exaggerated proportions, playful design.",
+      objects: "Cartoon-style objects with clean outlines, flat colors, slightly correct proportions, playful design.",
       rendering: "Cartoon Network / Disney Channel quality. Bold outlines, flat colors, no photorealistic terms."
     },
     picstory_cocomelon: {
@@ -292,7 +292,7 @@ function getStyleSceneBodyRules(styleName) {
       rendering: "YouTube explainer / business education cartoon style — approachable, friendly, professional, visually clean. Even ambient lighting, no harsh shadows, only subtle ground shadows and single-tone darker shading."
     },
     low_poly_3d_cartoon: {
-      characters: "Low-poly 3D characters from visible flat-shaded polygon facets — oversized heads, angular protruding noses, large expressive round eyes, thick geometric eyebrows. Chunky geometric hair. Warm peach-tan skin with polygon-edge shading. Blocky hands. Clothing with visible folds and flat polygon faces.",
+      characters: "Low-poly 3D characters from visible flat-shaded polygon facets —  headswith angular protruding noses, large expressive round eyes, thick geometric eyebrows. Chunky geometric hair. Warm peach-tan skin with polygon-edge shading. Blocky hands. Clothing with visible folds and flat polygon faces.",
       environments: "All surfaces from visible flat-shaded triangular polygons. Suburban houses, porches with white railings, geometric roofs, white picket fences. Bright green grass planes, chunky faceted tree canopies. Sidewalks, asphalt roads. Indoor: wood-paneled walls, modeled monitors, bulletin boards, tiled floors.",
       objects: "All objects as low-poly geometric forms — boxy cars, yellow disc headlights, chrome bumpers, mailboxes, fire hydrants, street lamps. Every surface shows polygon edges and flat-shaded faces. Matte plastic quality like clay toys.",
       rendering: "Clean polygon edges on all surfaces, flat-shaded with no smoothing (signature faceted look). Soft ambient occlusion, gentle directional shadows, no outlines or cel-shading. Bright gradient sky, geometric cloud clusters. Vibrant saturated colors, warm and inviting."
@@ -568,7 +568,7 @@ Deno.serve(async (req) => {
       "3d_whiteboard_cartoon": (desc) =>
       `3D whiteboard cartoon character with ${desc}, realistic adult human proportions with whiteboard stylization, bold consistent black ink outlines around entire body, bright cheerful flat color fills with single-tone cel-shading, normal-sized head proportional to body, defined eyebrows, simple nose, warm peach-brown skin tones, flat-colored casual clothing with subtle fold shading`,
       low_poly_3d_cartoon: (desc) =>
-        `low-poly 3D character with ${desc}, all features built from visible flat-shaded polygon facets and triangular faces, oversized geometric head, angular protruding nose, large round expressive eyes, chunky geometric hair blocks, warm peach-tan skin with polygon-edge shading, blocky hands, clothing with visible polygon folds and flat faces, matte clay-toy quality`,
+        `low-poly 3D character with ${desc}, all features built from visible flat-shaded polygon facets and triangular faces, geometric head, angular protruding nose, large round expressive eyes, chunky geometric hair blocks, warm peach-tan skin with polygon-edge shading, blocky hands, clothing with visible polygon folds and flat faces, matte clay-toy quality`,
       skeleton_protagonist: (desc) =>
         `photorealistic transparent skeleton with clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets, ${desc}, full body head-to-toe, wearing context-appropriate clothing, interacting with photorealistic environment and humans`
     };
