@@ -169,7 +169,7 @@ function ThumbnailTemplatePicker({ projectId, onTemplatesSelected, onSkip }) {
             </div>
             <div>
               <p className="font-semibold text-sm">Template Intelligence</p>
-              <p className="text-xs text-gray-500">AI analyzes your script → suggests 5 best templates → you pick 3</p>
+              <p className="text-xs text-gray-500">AI analyzes your script → suggests 5 best templates → you pick 2</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -235,7 +235,7 @@ function ThumbnailTemplatePicker({ projectId, onTemplatesSelected, onSkip }) {
           <>
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-gray-700">
-                Pick exactly <span className="text-purple-700 font-bold">3 templates</span>
+                Pick exactly <span className="text-purple-700 font-bold">2 templates</span>
                 <span className="ml-2 text-gray-400 font-normal">({selected.length}/3 selected)</span>
               </p>
               {selected.length === 3 && (
@@ -277,7 +277,7 @@ function ThumbnailTemplatePicker({ projectId, onTemplatesSelected, onSkip }) {
                         Select <span className="font-bold">{3 - selected.length} more</span> to continue
                       </p>
                     : <div>
-                        <p className="text-sm font-semibold text-purple-900">3 templates locked ✓</p>
+                        <p className="text-sm font-semibold text-purple-900">2 templates locked ✓</p>
                         <p className="text-xs text-purple-600">One concept generated per template</p>
                       </div>
                   }
@@ -338,7 +338,7 @@ function PipelineStatus({ selectedTitles, selectedNiche, referenceStyle, selecte
 
           <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${hasTemplates ? 'bg-green-100 text-green-800' : 'bg-amber-50 text-amber-700'}`}>
             {hasTemplates ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Zap className="w-3.5 h-3.5" />}
-            {hasTemplates ? '3 templates selected' : 'Pick 3 templates below'}
+            {hasTemplates ? '2 templates selected' : 'Pick 2 templates below'}
           </div>
 
           <ArrowRight className="w-3 h-3 text-gray-300" />
@@ -472,7 +472,7 @@ export default function PostProduction() {
     setGeneratingThumbs(false);
   };
 
-  // Called by template picker when user confirms 3 templates
+  // Called by template picker when user confirms 2 templates
   const handleTemplatesSelected = (templateIds) => {
     setSelectedTemplateIds(templateIds);
     runGeneration(templateIds);
