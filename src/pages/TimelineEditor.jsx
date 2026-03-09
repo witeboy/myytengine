@@ -1041,6 +1041,7 @@ export default function TimelineEditorV9() {
   const [currentTime, setCurrentTime] = useState(0);
   const [pps, setPps] = useState(15);
   const [isMuted, setIsMuted] = useState(false);
+  const [musicVol, setMusicVol] = useState(0.3);
 
   const videoHistory = useHistory([]);
   const captionHistory = useHistory([]);
@@ -1089,6 +1090,14 @@ const [showExporter, setShowExporter] = useState(false);
   });
 
   const voiceoverUrl = prodSettings?.voiceover_url;
+
+  const { data: musicTracks = [] } = useQuery({
+    queryKey: ['music-timeline', projectId],
+    queryFn: () => base44.entities.MusicTracks.filter({ project_id: projectId }),
+    enabled: !!projectId,
+  });
+  const selectedMusic = musicTracks.find(t => t.is_selected);
+  const musicUrl = selectedMusic?.audio_url;
 
   // ═══════════════════════════════════════════════════════════════════
   // MEASURE ACTUAL VOICEOVER DURATION FROM AUDIO FILE
@@ -1742,14 +1751,14 @@ const handleRemoveTransition = () => {
         )}
       </div>
       {/* Video Exporter Modal */}
-      <VideoExporter
+<VideoExporter
         open={showExporter}
         onClose={() => setShowExporter(false)}
         scenes={videoClips}
         orientation={project?.orientation || 'landscape'}
         voiceoverUrl={voiceoverUrl}
         musicUrl={musicUrl}
-        musicVolume={1.0}
+        musicVolume={musicVol}
         projectName={project?.name || 'Untitled'}
         exportHook={exportHook}
       />
