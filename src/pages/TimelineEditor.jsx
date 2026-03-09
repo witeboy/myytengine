@@ -1290,7 +1290,12 @@ export default function TimelineEditorV9() {
     if (!selectedVideoId) return;
     setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transition: t.name } : c));
   };
-  
+
+
+const handleRemoveTransition = () => {
+    if (!selectedVideoId) return;
+    setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transition: null } : c));
+  };
   const handleApplyTransitionToAll = (transition) => {
     setVideoClips(videoClips.map(c => ({ ...c, transition: transition.name })));
   };
