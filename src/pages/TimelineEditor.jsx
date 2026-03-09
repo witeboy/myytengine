@@ -13,22 +13,119 @@ import {
   ZoomIn, ZoomOut, Undo2, Redo2, Scissors, Trash2, Copy,
   Image, Music, Type, Wand2, Film, Mic, Settings,
   Loader2, CheckCircle, Sparkles, Star, Move, ArrowLeft, FileVideo,
-  LayoutGrid, FolderOpen, X, Package,
+  LayoutGrid, FolderOpen, X, Package, Camera, AlertCircle,
   Bold, Italic, Underline, Palette,
   Minimize2, Focus, Blend, ArrowUpRight, ArrowDownLeft
 } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════════
-// TIMELINE EDITOR V7 - FIXED
+// TIMELINE EDITOR V9 - FULL EDITING CAPABILITIES
 // ══════════════════════════════════════════════════════════════════
-// AUDIO BEATS = calculated from voiceover_text (150 wpm) - SOURCE OF TRUTH
-// VIDEO = starts at 5s defaults, AutoSync matches to audio beats
-// CAPTIONS = generated from voiceover text, timed to audio beats
+// FIXED: Loads actual voiceover audio file and measures real duration
+// FIXED: Scales scene beats proportionally to fill actual audio length  
+// FIXED: Transitions now apply to clips (shows in purple on timeline)
+// FIXED: Captions fully editable - resize left/right edges, move, edit timing
+// NEW: Cinematic Zoom automation (Ken Burns effects for images)
 // ══════════════════════════════════════════════════════════════════
 
 const TRACK_HEIGHT = 56;
 const LABEL_WIDTH = 40;
 const MAX_HISTORY = 50;
+
+// ═══════════════════════════════════════════════════════════════════
+// CINEMATIC ZOOM MOTION TYPES
+// ═══════════════════════════════════════════════════════════════════
+
+const CINEMATIC_MOTIONS = [
+  {
+    id: 'zoom_in_center',
+    name: 'Push In (Center)',
+    description: 'Slow zoom toward center',
+    startScale: 1.0,
+    endScale: 1.08,
+    startX: 0,
+    startY: 0,
+    endX: 0,
+    endY: 0,
+  },
+  {
+    id: 'zoom_out_center',
+    name: 'Pull Out (Center)',
+    description: 'Slow zoom out revealing scene',
+    startScale: 1.08,
+    endScale: 1.0,
+    startX: 0,
+    startY: 0,
+    endX: 0,
+    endY: 0,
+  },
+  {
+    id: 'pan_left_zoom',
+    name: 'Pan Left + Zoom',
+    description: 'Drift left while zooming in',
+    startScale: 1.0,
+    endScale: 1.06,
+    startX: 2,
+    startY: 0,
+    endX: -2,
+    endY: 0,
+  },
+  {
+    id: 'pan_right_zoom',
+    name: 'Pan Right + Zoom',
+    description: 'Drift right while zooming in',
+    startScale: 1.0,
+    endScale: 1.06,
+    startX: -2,
+    startY: 0,
+    endX: 2,
+    endY: 0,
+  },
+  {
+    id: 'push_in_top',
+    name: 'Push In (Top)',
+    description: 'Zoom toward top of frame',
+    startScale: 1.0,
+    endScale: 1.07,
+    startX: 0,
+    startY: 1,
+    endX: 0,
+    endY: -1,
+  },
+  {
+    id: 'push_in_bottom',
+    name: 'Push In (Bottom)',
+    description: 'Zoom toward bottom of frame',
+    startScale: 1.0,
+    endScale: 1.07,
+    startX: 0,
+    startY: -1,
+    endX: 0,
+    endY: 1,
+  },
+  {
+    id: 'diagonal_tl_br',
+    name: 'Diagonal Drift (TL→BR)',
+    description: 'Top-left to bottom-right drift',
+    startScale: 1.02,
+    endScale: 1.06,
+    startX: 1.5,
+    startY: 1,
+    endX: -1.5,
+    endY: -1,
+  },
+  {
+    id: 'diagonal_tr_bl',
+    name: 'Diagonal Drift (TR→BL)',
+    description: 'Top-right to bottom-left drift',
+    startScale: 1.02,
+    endScale: 1.06,
+    startX: -1.5,
+    startY: 1,
+    endX: 1.5,
+    endY: -1,
+  },
+];
 
 const EFFECTS = [
   { id: 'ken_burns', name: 'Ken Burns', icon: Move },
@@ -66,19 +163,10 @@ function formatTimecode(seconds) {
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}:${f.toString().padStart(2, '0')}`;
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// CALCULATE AUDIO BEAT DURATION FROM VOICEOVER TEXT
-// This is the SOURCE OF TRUTH - 150 words per minute speaking rate
-// ═══════════════════════════════════════════════════════════════════
-
-function calculateAudioBeatFromText(text) {
-  if (!text || text.trim().length === 0) return 5; // default if no text
-  const words = text.trim().split(/\s+/).filter(w => w.length > 0);
-  const wordCount = words.length;
-  // 150 words per minute = 2.5 words per second
-  // Duration = wordCount / 2.5 seconds
-  const duration = wordCount / 2.5;
-  return Math.max(1.5, Math.round(duration * 10) / 10); // min 1.5s, round to 0.1s
+// Calculate word count from text
+function getWordCount(text) {
+  if (!text) return 0;
+  return text.trim().split(/\s+/).filter(w => w.length > 0).length;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -208,20 +296,59 @@ function EffectsPanel({ selectedClip, onApplyEffect }) {
   );
 }
 
-function TransitionsPanel({ onApplyTransition }) {
+function TransitionsPanel({ selectedClip, onApplyTransition, onRemoveTransition }) {
+  const [msg, setMsg] = useState(null);
+  
+  const apply = (t) => {
+    if (!selectedClip) {
+      setMsg('Select a video clip first');
+      setTimeout(() => setMsg(null), 2000);
+      return;
+    }
+    onApplyTransition(t);
+    setMsg(`Applied "${t.name}" transition`);
+    setTimeout(() => setMsg(null), 2000);
+  };
+
   return (
-    <div className="h-full flex flex-col p-2">
-      <div className="grid grid-cols-2 gap-2">
-        {TRANSITIONS.map(t => (
-          <button key={t.id} onClick={() => onApplyTransition(t)} className="relative aspect-video bg-gray-800 rounded overflow-hidden hover:ring-2 hover:ring-cyan-500">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-600/30 to-purple-600/30 flex items-center justify-center">
-              <Blend className="w-6 h-6 text-white/50" />
-            </div>
-            <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1.5 py-1">
-              <p className="text-[9px] text-white text-center">{t.name}</p>
-            </div>
-          </button>
-        ))}
+    <div className="h-full flex flex-col">
+      <div className="px-3 py-2 border-b border-gray-800">
+        <p className="text-xs text-gray-400">
+          {selectedClip ? `Scene ${selectedClip.sceneNumber}` : 'Select a video clip'}
+        </p>
+        {selectedClip?.transition && (
+          <div className="mt-2 p-2 bg-cyan-500/20 rounded flex items-center justify-between">
+            <span className="text-xs text-cyan-300">Current: {selectedClip.transition}</span>
+            <button onClick={onRemoveTransition} className="text-[10px] text-red-400 hover:text-red-300">Remove</button>
+          </div>
+        )}
+      </div>
+      {msg && (
+        <div className="mx-2 mt-2 px-3 py-2 bg-cyan-500/20 text-cyan-400 text-xs rounded">{msg}</div>
+      )}
+      <div className="flex-1 overflow-y-auto p-2">
+        <p className="text-[10px] text-gray-500 mb-2">Transition plays at the END of the selected clip</p>
+        <div className="grid grid-cols-2 gap-2">
+          {TRANSITIONS.map(t => (
+            <button 
+              key={t.id} 
+              onClick={() => apply(t)} 
+              className={`relative aspect-video bg-gray-800 rounded overflow-hidden hover:ring-2 hover:ring-cyan-500 ${selectedClip?.transition === t.name ? 'ring-2 ring-cyan-400' : ''}`}
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-600/30 to-purple-600/30 flex items-center justify-center">
+                <Blend className="w-6 h-6 text-white/50" />
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1.5 py-1">
+                <p className="text-[9px] text-white text-center">{t.name}</p>
+              </div>
+              {selectedClip?.transition === t.name && (
+                <div className="absolute top-1 right-1">
+                  <CheckCircle size={12} className="text-cyan-400" />
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -252,21 +379,159 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount }) {
 // RIGHT PANELS
 // ═══════════════════════════════════════════════════════════════════
 
-function TextPropertiesPanel({ caption, onUpdate }) {
+function TextPropertiesPanel({ caption, onUpdate, onDelete, onDuplicate }) {
   if (!caption) return <div className="h-full flex items-center justify-center text-xs text-gray-500">Select a caption</div>;
   const u = (k, v) => onUpdate({ ...caption, [k]: v });
+  
   return (
     <div className="h-full flex flex-col bg-[#12121f] p-3 space-y-4 overflow-y-auto">
-      <Textarea value={caption.text} onChange={e => u('text', e.target.value)} className="bg-gray-800 border-gray-700 text-sm" rows={3} />
-      <div>
-        <label className="text-[10px] text-gray-400 mb-1 block">Font size</label>
-        <Slider value={[caption.fontSize || 24]} onValueChange={([v]) => u('fontSize', v)} min={10} max={72} />
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-white">Caption</span>
+        <div className="flex gap-1">
+          <button onClick={onDuplicate} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded" title="Duplicate">
+            <Copy size={14} />
+          </button>
+          <button onClick={onDelete} className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded" title="Delete">
+            <Trash2 size={14} />
+          </button>
+        </div>
       </div>
+
+      {/* Text content */}
       <div>
-        <label className="text-[10px] text-gray-400 mb-1 block">Color</label>
-        <div className="flex gap-2">
-          <input type="color" value={caption.color || '#FFFFFF'} onChange={e => u('color', e.target.value)} className="w-10 h-8 rounded border-0" />
-          <Input value={caption.color || '#FFFFFF'} onChange={e => u('color', e.target.value)} className="flex-1 h-8 text-xs bg-gray-800 border-gray-700" />
+        <label className="text-[10px] text-gray-400 mb-1 block">Text</label>
+        <Textarea 
+          value={caption.text} 
+          onChange={e => u('text', e.target.value)} 
+          className="bg-gray-800 border-gray-700 text-sm" 
+          rows={3} 
+        />
+      </div>
+
+      {/* Timing */}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-[10px] text-gray-400 mb-1 block">Start Time</label>
+          <Input 
+            type="number" 
+            step="0.1" 
+            value={caption.startTime?.toFixed(1)} 
+            onChange={e => u('startTime', Math.max(0, parseFloat(e.target.value) || 0))} 
+            className="h-8 text-xs bg-gray-800 border-gray-700" 
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-400 mb-1 block">Duration</label>
+          <Input 
+            type="number" 
+            step="0.1" 
+            value={caption.duration?.toFixed(1)} 
+            onChange={e => u('duration', Math.max(0.3, parseFloat(e.target.value) || 1))} 
+            className="h-8 text-xs bg-gray-800 border-gray-700" 
+          />
+        </div>
+      </div>
+
+      {/* Font size */}
+      <div>
+        <label className="text-[10px] text-gray-400 mb-1 block">Font Size: {caption.fontSize || 24}px</label>
+        <Slider 
+          value={[caption.fontSize || 24]} 
+          onValueChange={([v]) => u('fontSize', v)} 
+          min={10} 
+          max={72} 
+        />
+      </div>
+
+      {/* Position */}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-[10px] text-gray-400 mb-1 block">X Position: {Math.round(caption.x || 50)}%</label>
+          <Slider 
+            value={[caption.x || 50]} 
+            onValueChange={([v]) => u('x', v)} 
+            min={5} 
+            max={95} 
+          />
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-400 mb-1 block">Y Position: {Math.round(caption.y || 85)}%</label>
+          <Slider 
+            value={[caption.y || 85]} 
+            onValueChange={([v]) => u('y', v)} 
+            min={5} 
+            max={95} 
+          />
+        </div>
+      </div>
+
+      {/* Colors */}
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <label className="text-[10px] text-gray-400 mb-1 block">Text Color</label>
+          <div className="flex gap-1">
+            <input 
+              type="color" 
+              value={caption.color || '#FFFFFF'} 
+              onChange={e => u('color', e.target.value)} 
+              className="w-8 h-8 rounded border-0 cursor-pointer" 
+            />
+            <Input 
+              value={caption.color || '#FFFFFF'} 
+              onChange={e => u('color', e.target.value)} 
+              className="flex-1 h-8 text-xs bg-gray-800 border-gray-700" 
+            />
+          </div>
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-400 mb-1 block">Background</label>
+          <div className="flex gap-1">
+            <input 
+              type="color" 
+              value={caption.bgColor?.replace(/rgba?\([^)]+\)/, '#000000') || '#000000'} 
+              onChange={e => u('bgColor', e.target.value + 'cc')} 
+              className="w-8 h-8 rounded border-0 cursor-pointer" 
+            />
+            <select
+              value={caption.bgColor?.includes('0.7') ? '0.7' : caption.bgColor?.includes('0.5') ? '0.5' : caption.bgColor?.includes('0.9') ? '0.9' : '0.7'}
+              onChange={e => {
+                const opacity = e.target.value;
+                u('bgColor', `rgba(0,0,0,${opacity})`);
+              }}
+              className="flex-1 h-8 text-xs bg-gray-800 border-gray-700 rounded px-2"
+            >
+              <option value="0.5">50%</option>
+              <option value="0.7">70%</option>
+              <option value="0.9">90%</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick position presets */}
+      <div>
+        <label className="text-[10px] text-gray-400 mb-2 block">Quick Position</label>
+        <div className="grid grid-cols-3 gap-1">
+          {[
+            { x: 50, y: 15, label: 'Top' },
+            { x: 50, y: 50, label: 'Center' },
+            { x: 50, y: 85, label: 'Bottom' },
+            { x: 15, y: 50, label: 'Left' },
+            { x: 50, y: 50, label: 'Middle' },
+            { x: 85, y: 50, label: 'Right' },
+          ].map((pos, i) => (
+            <button
+              key={i}
+              onClick={() => { u('x', pos.x); u('y', pos.y); }}
+              className={`px-2 py-1.5 text-[10px] rounded ${
+                Math.abs((caption.x || 50) - pos.x) < 10 && Math.abs((caption.y || 85) - pos.y) < 10
+                  ? 'bg-orange-500/30 text-orange-300'
+                  : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+              }`}
+            >
+              {pos.label}
+            </button>
+          ))}
         </div>
       </div>
     </div>
@@ -278,11 +543,13 @@ function ClipPropertiesPanel({ clip, audioBeatDuration, onUpdate }) {
   const u = (k, v) => onUpdate({ ...clip, [k]: v });
   const isSynced = Math.abs(clip.duration - audioBeatDuration) < 0.1;
 
+  const motion = CINEMATIC_MOTIONS.find(m => m.id === clip.cinematicMotion);
+
   return (
-    <div className="h-full flex flex-col bg-[#12121f] p-3 space-y-4">
+    <div className="h-full flex flex-col bg-[#12121f] p-3 space-y-4 overflow-y-auto">
       <div className="text-sm font-medium text-white">Scene {clip.sceneNumber}</div>
       
-      {/* Audio Beat - Source of Truth */}
+      {/* Audio Beat */}
       <div className="p-3 bg-indigo-500/20 rounded border border-indigo-500/30">
         <div className="flex items-center gap-2 mb-1">
           <Mic size={14} className="text-indigo-400" />
@@ -295,14 +562,36 @@ function ClipPropertiesPanel({ clip, audioBeatDuration, onUpdate }) {
       <div className={`p-3 rounded border ${isSynced ? 'bg-green-500/20 border-green-500/30' : 'bg-yellow-500/20 border-yellow-500/30'}`}>
         <div className="flex items-center justify-between mb-1">
           <label className="text-[10px] text-gray-300">Video Duration</label>
-          {isSynced ? (
-            <span className="text-[9px] text-green-400 flex items-center gap-1"><CheckCircle size={10} /> Synced</span>
-          ) : (
-            <span className="text-[9px] text-yellow-400">Not synced</span>
-          )}
+          {isSynced && <span className="text-[9px] text-green-400 flex items-center gap-1"><CheckCircle size={10} /> Synced</span>}
         </div>
         <Input type="number" step="0.1" value={clip.duration?.toFixed(1)} onChange={e => u('duration', parseFloat(e.target.value) || 1)} className="h-8 text-xs bg-gray-800 border-gray-700" />
       </div>
+
+      {/* Cinematic Motion */}
+      {clip.cinematicMotion && (
+        <div className="p-3 bg-amber-500/20 rounded border border-amber-500/30">
+          <div className="flex items-center gap-2 mb-1">
+            <Camera size={14} className="text-amber-400" />
+            <label className="text-[10px] text-amber-300">Cinematic Motion</label>
+          </div>
+          <p className="text-sm text-white">{motion?.name || clip.cinematicMotion}</p>
+          <p className="text-[10px] text-gray-400 mt-1">{motion?.description}</p>
+          <button onClick={() => u('cinematicMotion', null)} className="text-[10px] text-red-400 mt-2 hover:text-red-300">Remove motion</button>
+        </div>
+      )}
+
+      {/* Transition */}
+      {clip.transition && (
+        <div className="p-3 bg-purple-500/20 rounded border border-purple-500/30">
+          <div className="flex items-center gap-2 mb-1">
+            <Blend size={14} className="text-purple-400" />
+            <label className="text-[10px] text-purple-300">Transition (Out)</label>
+          </div>
+          <p className="text-sm text-white">{clip.transition}</p>
+          <p className="text-[10px] text-gray-400 mt-1">Plays at end of this clip</p>
+          <button onClick={() => u('transition', null)} className="text-[10px] text-red-400 mt-2 hover:text-red-300">Remove transition</button>
+        </div>
+      )}
 
       <div className="flex items-center justify-between">
         <span className="text-xs text-gray-300">Mute audio</span>
@@ -313,13 +602,39 @@ function ClipPropertiesPanel({ clip, audioBeatDuration, onUpdate }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// VIDEO PREVIEW
+// VIDEO PREVIEW WITH CINEMATIC ZOOM
 // ═══════════════════════════════════════════════════════════════════
 
-function VideoPreview({ currentScene, currentTime, captions, selectedCaption, onSelectCaption, onUpdateCaption, orientation }) {
+function VideoPreview({ currentScene, currentTime, currentClip, captions, selectedCaption, onSelectCaption, onUpdateCaption, orientation }) {
   const ref = useRef(null);
   const [drag, setDrag] = useState(null);
   const active = captions.filter(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration);
+
+  // Calculate cinematic motion transform
+  const getMotionStyle = () => {
+    if (!currentClip?.cinematicMotion || !currentClip?.duration) return {};
+    
+    const motion = CINEMATIC_MOTIONS.find(m => m.id === currentClip.cinematicMotion);
+    if (!motion) return {};
+
+    // Calculate progress through the clip (0 to 1)
+    const clipProgress = Math.min(1, Math.max(0, (currentTime - currentClip.startTime) / currentClip.duration));
+    
+    // Ease in-out curve
+    const eased = clipProgress < 0.5 
+      ? 2 * clipProgress * clipProgress 
+      : 1 - Math.pow(-2 * clipProgress + 2, 2) / 2;
+
+    // Interpolate values
+    const scale = motion.startScale + (motion.endScale - motion.startScale) * eased;
+    const x = motion.startX + (motion.endX - motion.startX) * eased;
+    const y = motion.startY + (motion.endY - motion.startY) * eased;
+
+    return {
+      transform: `scale(${scale}) translate(${x}%, ${y}%)`,
+      transition: 'transform 0.1s linear',
+    };
+  };
 
   useEffect(() => {
     if (!drag) return;
@@ -346,10 +661,29 @@ function VideoPreview({ currentScene, currentTime, captions, selectedCaption, on
     setDrag({ id: cap.id, action, sx: e.clientX, sy: e.clientY, ix: cap.x || 50, iy: cap.y || 85, is: cap.fontSize || 24 });
   };
 
+  const motionStyle = getMotionStyle();
+  const hasMotion = !!currentClip?.cinematicMotion;
+
   return (
     <div className="h-full flex items-center justify-center p-4 bg-[#0a0a14]">
       <div ref={ref} className={`relative ${orientation === 'portrait' ? 'aspect-[9/16]' : 'aspect-video'} w-full max-h-full bg-gray-900 rounded overflow-hidden`} onClick={() => onSelectCaption(null)}>
-        {currentScene?.image_url ? <img src={currentScene.image_url} className="w-full h-full object-contain" alt="" /> : <div className="w-full h-full flex items-center justify-center"><Film className="w-12 h-12 text-gray-700" /></div>}
+        {/* Image with cinematic motion */}
+        <div className="absolute inset-0 overflow-hidden">
+          {currentScene?.image_url ? (
+            <img 
+              src={currentScene.image_url} 
+              className="w-full h-full object-cover"
+              style={motionStyle}
+              alt="" 
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <Film className="w-12 h-12 text-gray-700" />
+            </div>
+          )}
+        </div>
+
+        {/* Captions overlay */}
         {active.map(cap => {
           const sel = selectedCaption?.id === cap.id;
           return (
@@ -359,7 +693,16 @@ function VideoPreview({ currentScene, currentTime, captions, selectedCaption, on
             </div>
           );
         })}
-        <div className="absolute top-2 left-2 bg-black/60 px-2 py-1 rounded text-[10px] text-white">Scene {currentScene?.scene_number || '-'}</div>
+
+        {/* Scene info */}
+        <div className="absolute top-2 left-2 bg-black/60 px-2 py-1 rounded text-[10px] text-white flex items-center gap-2">
+          Scene {currentScene?.scene_number || '-'}
+          {hasMotion && (
+            <span className="flex items-center gap-1 text-amber-400">
+              <Camera size={10} /> {CINEMATIC_MOTIONS.find(m => m.id === currentClip?.cinematicMotion)?.name}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -410,8 +753,21 @@ function TimelineTrack({ type, clips, pps, totalDuration, currentTime, selectedI
       const d = (e.clientX - drag.sx) / pps;
       const clip = clips.find(c => c.id === drag.id);
       if (!clip) return;
-      if (drag.action === 'move') onUpdate({ ...clip, startTime: Math.max(0, drag.is + d) });
-      else onUpdate({ ...clip, duration: Math.max(0.5, drag.id2 + d) });
+      
+      if (drag.action === 'move') {
+        // Move the entire clip
+        onUpdate({ ...clip, startTime: Math.max(0, drag.is + d) });
+      } else if (drag.action === 'resize-right') {
+        // Resize from right edge (change duration)
+        const newDuration = Math.max(0.3, drag.id2 + d);
+        onUpdate({ ...clip, duration: newDuration });
+      } else if (drag.action === 'resize-left') {
+        // Resize from left edge (change start time and duration)
+        const newStartTime = Math.max(0, drag.is + d);
+        const deltaStart = newStartTime - drag.is;
+        const newDuration = Math.max(0.3, drag.id2 - deltaStart);
+        onUpdate({ ...clip, startTime: newStartTime, duration: newDuration });
+      }
     };
     const up = () => setDrag(null);
     document.addEventListener('mousemove', move);
@@ -437,16 +793,57 @@ function TimelineTrack({ type, clips, pps, totalDuration, currentTime, selectedI
           const left = clip.startTime * pps;
           const width = Math.max(30, clip.duration * pps);
           const sel = selectedId === clip.id;
+          const hasMotion = type === 'video' && clip.cinematicMotion;
+          const hasTransition = type === 'video' && clip.transition;
+          
+          // Determine clip background color
+          let bgColor = color;
+          if (hasMotion) bgColor = '#b45309'; // amber for motion
+          if (hasTransition) bgColor = '#7c3aed'; // purple for transition
+          if (hasMotion && hasTransition) bgColor = '#be185d'; // pink for both
+          
           return (
-            <div key={clip.id} className={`absolute top-1 bottom-1 rounded overflow-hidden ${editable ? 'cursor-pointer' : 'cursor-default'} ${sel ? 'ring-2 ring-white z-10' : ''}`} style={{ left, width, backgroundColor: color }}>
-              {type === 'video' && clip.thumbnail && <img src={clip.thumbnail} className="absolute inset-0 w-full h-full object-cover opacity-70" alt="" />}
-              <div className="absolute inset-0 flex items-center px-2" onMouseDown={e => down(e, clip, 'move')}>
+            <div 
+              key={clip.id} 
+              className={`absolute top-1 bottom-1 rounded overflow-hidden ${editable ? 'cursor-pointer' : 'cursor-default'} ${sel ? 'ring-2 ring-white z-10' : ''}`} 
+              style={{ left, width, backgroundColor: bgColor }}
+            >
+              {/* Thumbnail for video clips */}
+              {type === 'video' && clip.thumbnail && (
+                <img src={clip.thumbnail} className="absolute inset-0 w-full h-full object-cover opacity-70" alt="" />
+              )}
+              
+              {/* Left resize handle (for captions) */}
+              {editable && type === 'caption' && (
+                <div 
+                  className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 z-10" 
+                  onMouseDown={e => down(e, clip, 'resize-left')} 
+                />
+              )}
+              
+              {/* Main content area - draggable */}
+              <div 
+                className="absolute inset-0 flex items-center px-2" 
+                style={{ left: type === 'caption' ? 8 : 0, right: editable ? 8 : 0 }}
+                onMouseDown={e => down(e, clip, 'move')}
+              >
                 <div className="flex-1 min-w-0">
-                  <p className="text-[9px] text-white font-medium truncate drop-shadow">{clip.label}</p>
+                  <p className="text-[9px] text-white font-medium truncate drop-shadow flex items-center gap-1">
+                    {clip.label}
+                    {hasMotion && <Camera size={8} className="text-amber-200" />}
+                    {hasTransition && <Blend size={8} className="text-purple-200" />}
+                  </p>
                   <p className="text-[8px] text-white/70">{clip.duration.toFixed(1)}s</p>
                 </div>
               </div>
-              {editable && <div className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/30" onMouseDown={e => down(e, clip, 'resize')} />}
+              
+              {/* Right resize handle */}
+              {editable && (
+                <div 
+                  className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 z-10" 
+                  onMouseDown={e => down(e, clip, 'resize-right')} 
+                />
+              )}
             </div>
           );
         })}
@@ -460,7 +857,7 @@ function TimelineTrack({ type, clips, pps, totalDuration, currentTime, selectedI
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════
 
-export default function TimelineEditorV7() {
+export default function TimelineEditorV9() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get('project_id');
@@ -483,6 +880,7 @@ export default function TimelineEditorV7() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
   const [isGenCaptions, setIsGenCaptions] = useState(false);
+  const [isApplyingZoom, setIsApplyingZoom] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
   const playRef = useRef(null);
@@ -504,25 +902,112 @@ export default function TimelineEditorV7() {
     enabled: !!projectId
   });
 
-  const { data: prodSettings = [] } = useQuery({
+  // FIXED: Get actual voiceover duration from ProductionSettings
+  const { data: prodSettings } = useQuery({
     queryKey: ['prod-settings', projectId],
-    queryFn: () => base44.entities.ProductionSettings.filter({ project_id: projectId }),
+    queryFn: async () => {
+      const list = await base44.entities.ProductionSettings.filter({ project_id: projectId });
+      return list[0] || null;
+    },
     enabled: !!projectId
   });
 
-  const voiceoverUrl = prodSettings[0]?.voiceover_url;
+  const voiceoverUrl = prodSettings?.voiceover_url;
 
   // ═══════════════════════════════════════════════════════════════════
-  // AUDIO BEAT DURATIONS - CALCULATED FROM VOICEOVER TEXT (SOURCE OF TRUTH)
+  // MEASURE ACTUAL VOICEOVER DURATION FROM AUDIO FILE
+  // This is the SOURCE OF TRUTH - not estimates!
+  // ═══════════════════════════════════════════════════════════════════
+
+  const [measuredAudioDuration, setMeasuredAudioDuration] = useState(0);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [audioError, setAudioError] = useState(null);
+
+  useEffect(() => {
+    if (!voiceoverUrl) {
+      setMeasuredAudioDuration(0);
+      return;
+    }
+
+    setAudioLoading(true);
+    setAudioError(null);
+
+    // Create a temporary audio element to measure duration
+    const tempAudio = new Audio();
+    
+    const handleLoadedMetadata = () => {
+      const duration = tempAudio.duration;
+      if (duration && isFinite(duration) && duration > 0) {
+        console.log(`🎵 Measured voiceover duration: ${duration.toFixed(1)}s from ${voiceoverUrl.substring(0, 50)}...`);
+        setMeasuredAudioDuration(duration);
+        setAudioError(null);
+      }
+      setAudioLoading(false);
+    };
+
+    const handleError = (e) => {
+      console.warn('Failed to load voiceover audio:', e);
+      setAudioError('Could not load audio file');
+      setAudioLoading(false);
+    };
+
+    const handleCanPlayThrough = () => {
+      // Sometimes loadedmetadata doesn't fire, but canplaythrough does
+      if (!measuredAudioDuration && tempAudio.duration && isFinite(tempAudio.duration)) {
+        console.log(`🎵 Measured voiceover duration (canplaythrough): ${tempAudio.duration.toFixed(1)}s`);
+        setMeasuredAudioDuration(tempAudio.duration);
+      }
+      setAudioLoading(false);
+    };
+
+    tempAudio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    tempAudio.addEventListener('error', handleError);
+    tempAudio.addEventListener('canplaythrough', handleCanPlayThrough);
+    
+    // Set source and start loading
+    tempAudio.preload = 'metadata';
+    tempAudio.src = voiceoverUrl;
+
+    return () => {
+      tempAudio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      tempAudio.removeEventListener('error', handleError);
+      tempAudio.removeEventListener('canplaythrough', handleCanPlayThrough);
+      tempAudio.src = '';
+    };
+  }, [voiceoverUrl]);
+
+  // Actual duration: measured > stored > 0
+  const actualVoiceoverDuration = measuredAudioDuration || prodSettings?.voiceover_duration_seconds || 0;
+
+  // ═══════════════════════════════════════════════════════════════════
+  // AUDIO BEAT DURATIONS - Scaled to ACTUAL voiceover duration
+  // Each scene gets duration proportional to its word count
   // ═══════════════════════════════════════════════════════════════════
 
   const audioBeatDurations = useMemo(() => {
-    return scenes.map(scene => {
-      // ALWAYS calculate from voiceover/narration text - this is the audio beat!
+    if (scenes.length === 0) return [];
+
+    // Calculate word count for each scene
+    const wordCounts = scenes.map(scene => {
       const text = scene.voiceover_text || scene.narration_text || '';
-      return calculateAudioBeatFromText(text);
+      return getWordCount(text);
     });
-  }, [scenes]);
+    const totalWords = wordCounts.reduce((sum, wc) => sum + wc, 0);
+
+    // If we have actual voiceover duration (measured or stored), distribute proportionally
+    if (actualVoiceoverDuration > 0 && totalWords > 0) {
+      console.log(`📊 Distributing ${actualVoiceoverDuration.toFixed(1)}s across ${scenes.length} scenes (${totalWords} words)`);
+      return wordCounts.map((wc, idx) => {
+        const proportion = wc / totalWords;
+        const duration = Math.max(1.5, Math.round(proportion * actualVoiceoverDuration * 10) / 10);
+        return duration;
+      });
+    }
+
+    // Fallback: estimate from text (150 wpm) - but this will be short!
+    console.warn('⚠️ No voiceover duration available - using text estimates (may be inaccurate)');
+    return wordCounts.map(wc => Math.max(1.5, Math.round((wc / 2.5) * 10) / 10));
+  }, [scenes, actualVoiceoverDuration]);
 
   const audioStartTimes = useMemo(() => {
     const starts = [];
@@ -534,14 +1019,13 @@ export default function TimelineEditorV7() {
     return starts;
   }, [audioBeatDurations]);
 
+  // Total duration = actual voiceover duration OR sum of beats
   const totalDuration = useMemo(() => {
+    if (actualVoiceoverDuration > 0) return actualVoiceoverDuration;
     return audioBeatDurations.reduce((sum, d) => sum + d, 0) || 60;
-  }, [audioBeatDurations]);
+  }, [audioBeatDurations, actualVoiceoverDuration]);
 
-  // ═══════════════════════════════════════════════════════════════════
-  // AUDIO CLIPS - From voiceover text (SOURCE OF TRUTH)
-  // ═══════════════════════════════════════════════════════════════════
-
+  // Audio clips
   const audioClips = useMemo(() => {
     return scenes.map((scene, idx) => ({
       id: `audio-${scene.id}`,
@@ -554,15 +1038,10 @@ export default function TimelineEditorV7() {
     }));
   }, [scenes, audioBeatDurations, audioStartTimes]);
 
-  // ═══════════════════════════════════════════════════════════════════
-  // INITIALIZE VIDEO CLIPS (once)
-  // ═══════════════════════════════════════════════════════════════════
-
+  // Initialize video clips
   useEffect(() => {
     if (scenes.length === 0 || initialized) return;
 
-    // Video clips start with current duration_seconds (often 5s default)
-    // User clicks AutoSync to match audio beats
     let offset = 0;
     const initClips = scenes.map((scene) => {
       const duration = scene.duration_seconds || 5;
@@ -577,6 +1056,7 @@ export default function TimelineEditorV7() {
         thumbnail: scene.image_url,
         effects: [],
         audioMuted: false,
+        cinematicMotion: null,
         synced: false
       };
       offset += duration;
@@ -610,21 +1090,23 @@ export default function TimelineEditorV7() {
     }
   }, [isPlaying, currentTime, voiceoverUrl, isMuted]);
 
-  // Current scene
+  // Current scene & clip
+  const currentClip = useMemo(() => {
+    return videoClips.find(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration);
+  }, [videoClips, currentTime]);
+
   const currentScene = useMemo(() => {
-    const clip = videoClips.find(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration);
-    return clip ? scenes.find(s => s.id === clip.sceneId) : null;
-  }, [videoClips, currentTime, scenes]);
+    return currentClip ? scenes.find(s => s.id === currentClip.sceneId) : null;
+  }, [currentClip, scenes]);
 
   // ═══════════════════════════════════════════════════════════════════
-  // AUTOSYNC - Match video clips to audio beat durations
+  // AUTOSYNC
   // ═══════════════════════════════════════════════════════════════════
 
   const handleAutoSync = () => {
     setIsSyncing(true);
     setSyncStatus(null);
 
-    // Sync each video clip to its corresponding audio beat duration
     const synced = scenes.map((scene, idx) => {
       const existing = videoClips.find(c => c.sceneId === scene.id);
       return {
@@ -633,12 +1115,13 @@ export default function TimelineEditorV7() {
         sceneId: scene.id,
         sceneNumber: scene.scene_number,
         type: 'video',
-        startTime: audioStartTimes[idx], // Match audio start time
-        duration: audioBeatDurations[idx], // Match audio beat duration!
+        startTime: audioStartTimes[idx],
+        duration: audioBeatDurations[idx],
         label: `Scene ${scene.scene_number}`,
         thumbnail: scene.image_url,
         effects: existing?.effects || [],
         audioMuted: existing?.audioMuted || false,
+        cinematicMotion: existing?.cinematicMotion || null,
         synced: true
       };
     });
@@ -650,9 +1133,46 @@ export default function TimelineEditorV7() {
   };
 
   // ═══════════════════════════════════════════════════════════════════
-  // GENERATE CAPTIONS - From voiceover text, timed to audio beats
+  // APPLY CINEMATIC ZOOM TO ALL IMAGES
   // ═══════════════════════════════════════════════════════════════════
 
+  const handleApplyCinematicZoom = () => {
+    setIsApplyingZoom(true);
+
+    // Apply varied cinematic motions to each clip
+    const withMotion = videoClips.map((clip, idx) => {
+      // Cycle through motion types, but add some variation
+      const motionIndex = idx % CINEMATIC_MOTIONS.length;
+      // Add some pseudo-randomness based on scene number
+      const offset = (clip.sceneNumber * 3) % CINEMATIC_MOTIONS.length;
+      const finalIndex = (motionIndex + offset) % CINEMATIC_MOTIONS.length;
+      
+      return {
+        ...clip,
+        cinematicMotion: CINEMATIC_MOTIONS[finalIndex].id
+      };
+    });
+
+    setVideoClips(withMotion);
+    setIsApplyingZoom(false);
+  };
+
+  // Remove all cinematic zoom
+  const handleRemoveCinematicZoom = () => {
+    const withoutMotion = videoClips.map(clip => ({
+      ...clip,
+      cinematicMotion: null
+    }));
+    setVideoClips(withoutMotion);
+  };
+
+  // Count clips with cinematic motion
+  const motionCount = videoClips.filter(c => c.cinematicMotion).length;
+  
+  // Count clips with transitions
+  const transitionCount = videoClips.filter(c => c.transition).length;
+
+  // Generate captions
   const handleGenerateCaptions = (deleteExisting) => {
     setIsGenCaptions(true);
 
@@ -661,7 +1181,6 @@ export default function TimelineEditorV7() {
       const text = scene.narration_text || scene.voiceover_text;
       if (!text) return;
 
-      // Split into sentences
       const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
       const sceneDuration = audioBeatDurations[idx];
       const sentenceDuration = sceneDuration / Math.max(sentences.length, 1);
@@ -697,7 +1216,37 @@ export default function TimelineEditorV7() {
   const handleDownloadAssets = () => alert('Download Assets coming soon!');
   const handleSeek = t => { setCurrentTime(Math.max(0, Math.min(totalDuration, t))); if (audioRef.current) audioRef.current.currentTime = t; };
   const handleApplyEffect = e => { if (!selectedVideoId) return; setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, effects: [...(c.effects || []), e.id] } : c)); };
-  const handleApplyTransition = t => console.log('Apply transition:', t);
+  
+  // Transition handlers
+  const handleApplyTransition = (t) => {
+    if (!selectedVideoId) return;
+    setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transition: t.name } : c));
+  };
+  
+  const handleRemoveTransition = () => {
+    if (!selectedVideoId) return;
+    setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transition: null } : c));
+  };
+
+  // Caption handlers
+  const handleDeleteCaption = () => {
+    if (!selectedCaptionId) return;
+    setCaptionClips(captionClips.filter(c => c.id !== selectedCaptionId));
+    setSelectedCaptionId(null);
+  };
+
+  const handleDuplicateCaption = () => {
+    if (!selectedCaptionId) return;
+    const cap = captionClips.find(c => c.id === selectedCaptionId);
+    if (!cap) return;
+    const newCap = {
+      ...cap,
+      id: `cap-dup-${Date.now()}`,
+      startTime: cap.startTime + cap.duration + 0.5,
+    };
+    setCaptionClips([...captionClips, newCap]);
+    setSelectedCaptionId(newCap.id);
+  };
 
   const selectedVideo = videoClips.find(c => c.id === selectedVideoId);
   const selectedCaption = captionClips.find(c => c.id === selectedCaptionId);
@@ -716,7 +1265,13 @@ export default function TimelineEditorV7() {
         <div className="w-56 flex-shrink-0 border-r border-gray-800 bg-[#12121f]">
           {activePanel === 'media' && <MediaPanel scenes={scenes} audioBeatDurations={audioBeatDurations} onSelectScene={(idx) => handleSeek(audioStartTimes[idx] || 0)} />}
           {activePanel === 'effects' && <EffectsPanel selectedClip={selectedVideo} onApplyEffect={handleApplyEffect} />}
-          {activePanel === 'transitions' && <TransitionsPanel onApplyTransition={handleApplyTransition} />}
+          {activePanel === 'transitions' && (
+            <TransitionsPanel 
+              selectedClip={selectedVideo} 
+              onApplyTransition={handleApplyTransition}
+              onRemoveTransition={handleRemoveTransition}
+            />
+          )}
           {activePanel === 'captions' && <CaptionsPanel onGenerate={handleGenerateCaptions} isGenerating={isGenCaptions} captionCount={captionClips.length} />}
           {!['media', 'effects', 'transitions', 'captions'].includes(activePanel) && <div className="flex items-center justify-center h-full text-xs text-gray-500">Coming soon</div>}
         </div>
@@ -724,16 +1279,38 @@ export default function TimelineEditorV7() {
         {/* Center */}
         <div className="flex-1 min-w-0 flex flex-col border-r border-gray-800">
           <div className="flex-1 min-h-0">
-            <VideoPreview currentScene={currentScene} currentTime={currentTime} captions={captionClips} selectedCaption={selectedCaption} onSelectCaption={c => { setSelectedCaptionId(c?.id || null); setSelectedVideoId(null); }} onUpdateCaption={c => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))} orientation={project?.orientation || 'landscape'} />
+            <VideoPreview 
+              currentScene={currentScene} 
+              currentTime={currentTime} 
+              currentClip={currentClip}
+              captions={captionClips} 
+              selectedCaption={selectedCaption} 
+              onSelectCaption={c => { setSelectedCaptionId(c?.id || null); setSelectedVideoId(null); }} 
+              onUpdateCaption={c => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))} 
+              orientation={project?.orientation || 'landscape'} 
+            />
           </div>
           <TransportControls isPlaying={isPlaying} onPlayPause={() => setIsPlaying(!isPlaying)} currentTime={currentTime} totalDuration={totalDuration} onSeek={handleSeek} />
         </div>
 
         {/* Right */}
         <div className="w-64 flex-shrink-0 bg-[#12121f]">
-          {selectedCaption ? <TextPropertiesPanel caption={selectedCaption} onUpdate={c => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))} />
-           : selectedVideo ? <ClipPropertiesPanel clip={selectedVideo} audioBeatDuration={audioBeatDurations[selectedVideoIdx]} onUpdate={c => setVideoClips(videoClips.map(x => x.id === c.id ? c : x))} />
-           : <div className="h-full flex items-center justify-center text-xs text-gray-500">Select a clip or caption</div>}
+          {selectedCaption ? (
+            <TextPropertiesPanel 
+              caption={selectedCaption} 
+              onUpdate={c => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))} 
+              onDelete={handleDeleteCaption}
+              onDuplicate={handleDuplicateCaption}
+            />
+          ) : selectedVideo ? (
+            <ClipPropertiesPanel 
+              clip={selectedVideo} 
+              audioBeatDuration={audioBeatDurations[selectedVideoIdx]} 
+              onUpdate={c => setVideoClips(videoClips.map(x => x.id === c.id ? c : x))} 
+            />
+          ) : (
+            <div className="h-full flex items-center justify-center text-xs text-gray-500">Select a clip or caption</div>
+          )}
         </div>
       </div>
 
@@ -748,14 +1325,35 @@ export default function TimelineEditorV7() {
           <button onClick={handleDelete} disabled={!selectedVideoId && !selectedCaptionId} className={`p-1.5 rounded ${(selectedVideoId || selectedCaptionId) ? 'text-red-400 hover:text-red-300' : 'text-gray-600'}`} title="Delete"><Trash2 size={16} /></button>
         </div>
 
-        <Button onClick={handleAutoSync} disabled={isSyncing} size="lg" className={`gap-2 px-6 shadow-lg ${syncStatus === 'success' ? 'bg-green-600' : 'bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-700 hover:to-purple-700'}`}>
-          {isSyncing ? <><Loader2 size={18} className="animate-spin" /> Syncing...</> : syncStatus === 'success' ? <><CheckCircle size={18} /> Synced!</> : <><Wand2 size={18} /> AutoSync to Audio</>}
-        </Button>
+        {/* Center buttons */}
+        <div className="flex items-center gap-2">
+          <Button onClick={handleAutoSync} disabled={isSyncing} size="default" className={`gap-2 px-4 shadow-lg ${syncStatus === 'success' ? 'bg-green-600' : 'bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-700 hover:to-purple-700'}`}>
+            {isSyncing ? <><Loader2 size={16} className="animate-spin" /> Syncing...</> : syncStatus === 'success' ? <><CheckCircle size={16} /> Synced!</> : <><Wand2 size={16} /> AutoSync</>}
+          </Button>
+
+          {/* Cinematic Zoom Button */}
+          <Button 
+            onClick={motionCount > 0 ? handleRemoveCinematicZoom : handleApplyCinematicZoom} 
+            disabled={isApplyingZoom}
+            size="default" 
+            className={`gap-2 px-4 shadow-lg ${motionCount > 0 ? 'bg-amber-600 hover:bg-amber-700' : 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700'}`}
+          >
+            {isApplyingZoom ? (
+              <><Loader2 size={16} className="animate-spin" /> Applying...</>
+            ) : motionCount > 0 ? (
+              <><X size={16} /> Remove Zoom ({motionCount})</>
+            ) : (
+              <><Camera size={16} /> Cinematic Zoom</>
+            )}
+          </Button>
+        </div>
 
         <div className="flex items-center gap-3 text-xs text-gray-500">
           <span>{videoClips.length} video</span>
           <span>{audioClips.length} audio</span>
           <span>{captionClips.length} captions</span>
+          {motionCount > 0 && <span className="text-amber-400">{motionCount} zooms</span>}
+          {transitionCount > 0 && <span className="text-purple-400">{transitionCount} transitions</span>}
           <div className="w-px h-4 bg-gray-700" />
           <button onClick={() => setPps(p => Math.max(3, p / 1.25))} className="p-1 text-gray-400 hover:text-white"><ZoomOut size={14} /></button>
           <span className="w-6 text-center">{Math.round(pps)}</span>
@@ -764,6 +1362,47 @@ export default function TimelineEditorV7() {
           <button onClick={() => setIsMuted(!isMuted)} className="p-1 text-gray-400 hover:text-white">{isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}</button>
         </div>
       </div>
+
+      {/* Voiceover Info Bar */}
+      {voiceoverUrl && (
+        <div className={`px-3 py-1.5 border-t text-xs flex items-center gap-4 ${
+          audioLoading ? 'bg-amber-900/30 border-amber-800/50 text-amber-300' :
+          audioError ? 'bg-red-900/30 border-red-800/50 text-red-300' :
+          actualVoiceoverDuration > 0 ? 'bg-indigo-900/30 border-indigo-800/50 text-indigo-300' :
+          'bg-gray-800/50 border-gray-700 text-gray-400'
+        }`}>
+          <Mic size={12} />
+          {audioLoading ? (
+            <>
+              <Loader2 size={12} className="animate-spin" />
+              <span>Measuring voiceover duration...</span>
+            </>
+          ) : audioError ? (
+            <>
+              <AlertCircle size={12} />
+              <span>Could not measure audio - using text estimates</span>
+            </>
+          ) : actualVoiceoverDuration > 0 ? (
+            <>
+              <span className="font-medium">Voiceover: {formatTime(actualVoiceoverDuration)} total</span>
+              <span className="text-indigo-400">•</span>
+              <span>{scenes.length} scenes</span>
+              <span className="text-indigo-400">•</span>
+              <span>Avg {(actualVoiceoverDuration / Math.max(scenes.length, 1)).toFixed(1)}s per scene</span>
+              {measuredAudioDuration > 0 && (
+                <>
+                  <span className="text-indigo-400">•</span>
+                  <span className="text-green-400 flex items-center gap-1">
+                    <CheckCircle size={10} /> Measured from audio file
+                  </span>
+                </>
+              )}
+            </>
+          ) : (
+            <span>No voiceover loaded - using text estimates</span>
+          )}
+        </div>
+      )}
 
       {/* Timeline */}
       <div className="h-48 flex-shrink-0 bg-[#0a0a14] border-t border-gray-700 overflow-x-auto">
