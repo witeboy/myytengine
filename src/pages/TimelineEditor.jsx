@@ -646,7 +646,7 @@ function VideoPreview({ currentScene, currentTime, currentClip, captions, select
   const active = captions.filter(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration);
 
   // Detect transition state
-  const getTransitionState = () => {
+ const getTransitionState = () => {
     if (!currentClip || !currentClip.transition) {
       return { isTransitioning: false, transitionType: null, progress: 0, nextClip: null };
     }
@@ -664,33 +664,6 @@ function VideoPreview({ currentScene, currentTime, currentClip, captions, select
     const nextClip = videoClips?.find(c => Math.abs(c.startTime - clipEndTime) < 0.01);
     
     const progress = timeFromClipEnd / transitionDuration;
-    
-    return { 
-      isTransitioning: true, 
-      transitionType: currentClip.transition, 
-      progress,
-      nextClip
-    };
-
-    if (!nextClip) return { isTransitioning: false, transitionType: null, progress: 0, nextClip: null };
-    
-    // Check if current clip has a transition AND next clip exists
-    if (!currentClip.transition) {
-      return { isTransitioning: false, transitionType: null, progress: 0, nextClip: null };
-    }
-    
-    const clipEndTime = currentClip.startTime + currentClip.duration;
-    const transitionDuration = 0.6; // 600ms transition
-    const timeFromClipEnd = currentTime - clipEndTime;
-    
-    console.log(`🎬 Transition check: currentTime=${currentTime.toFixed(2)}, clipEnd=${clipEndTime.toFixed(2)}, timeFromEnd=${timeFromClipEnd.toFixed(2)}, transitionType=${currentClip.transition}`);
-    
-    if (timeFromClipEnd < 0 || timeFromClipEnd >= transitionDuration) {
-      return { isTransitioning: false, transitionType: null, progress: 0, nextClip: null };
-    }
-    
-    const progress = timeFromClipEnd / transitionDuration;
-    console.log(`✨ Transition active: ${currentClip.transition} at ${(progress * 100).toFixed(0)}%`);
     
     return { 
       isTransitioning: true, 
