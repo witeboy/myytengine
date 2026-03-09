@@ -296,8 +296,9 @@ function EffectsPanel({ selectedClip, onApplyEffect }) {
   );
 }
 
-function TransitionsPanel({ selectedClip, onApplyTransition, onRemoveTransition }) {
+function TransitionsPanel({ selectedClip, onApplyTransition, onRemoveTransition, onApplyTransitionToAll }) {
   const [msg, setMsg] = useState(null);
+  const [selectedTransition, setSelectedTransition] = useState(null);
   
   const apply = (t) => {
     if (!selectedClip) {
@@ -305,8 +306,20 @@ function TransitionsPanel({ selectedClip, onApplyTransition, onRemoveTransition 
       setTimeout(() => setMsg(null), 2000);
       return;
     }
+    setSelectedTransition(t);
     onApplyTransition(t);
     setMsg(`Applied "${t.name}" transition`);
+    setTimeout(() => setMsg(null), 2000);
+  };
+
+  const applyToAll = () => {
+    if (!selectedTransition) {
+      setMsg('Select a transition first');
+      setTimeout(() => setMsg(null), 2000);
+      return;
+    }
+    onApplyTransitionToAll(selectedTransition);
+    setMsg(`Applied "${selectedTransition.name}" to all clips`);
     setTimeout(() => setMsg(null), 2000);
   };
 
@@ -328,6 +341,14 @@ function TransitionsPanel({ selectedClip, onApplyTransition, onRemoveTransition 
       )}
       <div className="flex-1 overflow-y-auto p-2">
         <p className="text-[10px] text-gray-500 mb-2">Transition plays at the END of the selected clip</p>
+        {selectedTransition && (
+          <div className="mb-3 p-2 bg-purple-500/20 rounded border border-purple-500/50">
+            <p className="text-[9px] text-purple-300 mb-2">Selected: {selectedTransition.name}</p>
+            <Button onClick={applyToAll} size="sm" className="w-full bg-purple-600 hover:bg-purple-700 text-xs">
+              Apply to All {selectedTransition.name}
+            </Button>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-2">
           {TRANSITIONS.map(t => (
             <button 
@@ -1172,33 +1193,80 @@ export default function TimelineEditorV9() {
   // Count clips with transitions
   const transitionCount = videoClips.filter(c => c.transition).length;
 
-  // Generate captions
+  // Generate captions from timeline voiceover (fresh generation)
   const handleGenerateCaptions = (deleteExisting) => {
     setIsGenCaptions(true);
 
     const caps = [];
-    scenes.forEach((scene, idx) => {
-      const text = scene.narration_text || scene.voiceover_text;
-      if (!text) return;
+    
+    // Use measured audio duration as source of truth
+    if (actualVoiceoverDuration > 0) {
+      // Generate captions based on audio beat timing (timeline-aware)
+      scenes.forEach((scene, idx) => {
+        const text = scene.narration_text || scene.voiceover_text;
+        if (!text) return;
 
-      const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-      const sceneDuration = audioBeatDurations[idx];
-      const sentenceDuration = sceneDuration / Math.max(sentences.length, 1);
-      const sceneStartTime = audioStartTimes[idx];
+        // Split into words to distribute evenly across audio beat duration
+        const words = text.trim().split(/\s+/);
+        if (words.length === 0) return;
 
-      sentences.forEach((sent, i) => {
-        caps.push({
-          id: `cap-${scene.id}-${i}-${Date.now()}`,
-          sceneId: scene.id,
-          type: 'caption',
-          startTime: sceneStartTime + i * sentenceDuration,
-          duration: sentenceDuration,
-          text: sent.trim(),
-          label: sent.trim().slice(0, 15) + '...',
-          x: 50, y: 85, fontSize: 20, color: '#FFFFFF', bgColor: 'rgba(0,0,0,0.7)'
+        const beatDuration = audioBeatDurations[idx];
+        const beatStartTime = audioStartTimes[idx];
+        const wordsPerCaption = Math.max(1, Math.ceil(words.length / 4)); // 4 captions per scene roughly
+        
+        let wordIdx = 0;
+        while (wordIdx < words.length) {
+          const captionWords = words.slice(wordIdx, wordIdx + wordsPerCaption);
+          const captionText = captionWords.join(' ');
+          const proportionStart = wordIdx / words.length;
+          const proportionEnd = Math.min(1, (wordIdx + wordsPerCaption) / words.length);
+          
+          const captionStartTime = beatStartTime + proportionStart * beatDuration;
+          const captionDuration = (proportionEnd - proportionStart) * beatDuration;
+
+          caps.push({
+            id: `cap-${scene.id}-${wordIdx}-${Date.now()}`,
+            sceneId: scene.id,
+            type: 'caption',
+            startTime: captionStartTime,
+            duration: Math.max(0.5, captionDuration),
+            text: captionText,
+            label: captionText.slice(0, 15) + '...',
+            x: 50, 
+            y: 85, 
+            fontSize: 20, 
+            color: '#FFFFFF', 
+            bgColor: 'rgba(0,0,0,0.7)'
+          });
+          
+          wordIdx += wordsPerCaption;
+        }
+      });
+    } else {
+      // Fallback: old sentence-based method if no audio measured
+      scenes.forEach((scene, idx) => {
+        const text = scene.narration_text || scene.voiceover_text;
+        if (!text) return;
+
+        const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+        const sceneDuration = audioBeatDurations[idx];
+        const sentenceDuration = sceneDuration / Math.max(sentences.length, 1);
+        const sceneStartTime = audioStartTimes[idx];
+
+        sentences.forEach((sent, i) => {
+          caps.push({
+            id: `cap-${scene.id}-${i}-${Date.now()}`,
+            sceneId: scene.id,
+            type: 'caption',
+            startTime: sceneStartTime + i * sentenceDuration,
+            duration: sentenceDuration,
+            text: sent.trim(),
+            label: sent.trim().slice(0, 15) + '...',
+            x: 50, y: 85, fontSize: 20, color: '#FFFFFF', bgColor: 'rgba(0,0,0,0.7)'
+          });
         });
       });
-    });
+    }
 
     setCaptionClips(deleteExisting ? caps : [...captionClips, ...caps]);
     setIsGenCaptions(false);
@@ -1223,9 +1291,8 @@ export default function TimelineEditorV9() {
     setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transition: t.name } : c));
   };
   
-  const handleRemoveTransition = () => {
-    if (!selectedVideoId) return;
-    setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transition: null } : c));
+  const handleApplyTransitionToAll = (transition) => {
+    setVideoClips(videoClips.map(c => ({ ...c, transition: transition.name })));
   };
 
   // Caption handlers
@@ -1270,6 +1337,7 @@ export default function TimelineEditorV9() {
               selectedClip={selectedVideo} 
               onApplyTransition={handleApplyTransition}
               onRemoveTransition={handleRemoveTransition}
+              onApplyTransitionToAll={handleApplyTransitionToAll}
             />
           )}
           {activePanel === 'captions' && <CaptionsPanel onGenerate={handleGenerateCaptions} isGenerating={isGenCaptions} captionCount={captionClips.length} />}
