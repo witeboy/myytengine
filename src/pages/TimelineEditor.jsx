@@ -1074,27 +1074,24 @@ export default function TimelineEditorV9() {
   const audioBeatDurations = useMemo(() => {
     if (scenes.length === 0) return [];
 
-    // Calculate word count for each scene
-    const wordCounts = scenes.map(scene => {
-      const text = scene.voiceover_text || scene.narration_text || '';
-      return getWordCount(text);
+    // ✅ USE ACTUAL SCENE DURATIONS FROM DATABASE
+    // During scene breakdown, the backend distributed the voiceover proportionally
+    // across scenes based on word count AND narrative arc. Each scene.duration_seconds
+    // is the authoritative beat length. This ensures perfect alignment with how
+    // images and videos were generated.
+    const durations = scenes.map(scene => {
+      const duration = scene.duration_seconds || 5;
+      return Math.max(1.5, duration);
     });
-    const totalWords = wordCounts.reduce((sum, wc) => sum + wc, 0);
 
-    // If we have actual voiceover duration (measured or stored), distribute proportionally
-    if (actualVoiceoverDuration > 0 && totalWords > 0) {
-      console.log(`📊 Distributing ${actualVoiceoverDuration.toFixed(1)}s across ${scenes.length} scenes (${totalWords} words)`);
-      return wordCounts.map((wc, idx) => {
-        const proportion = wc / totalWords;
-        const duration = Math.max(1.5, Math.round(proportion * actualVoiceoverDuration * 10) / 10);
-        return duration;
-      });
+    const totalCalc = durations.reduce((sum, d) => sum + d, 0);
+    console.log(`✅ Timeline beat sync: ${scenes.length} scenes = ${totalCalc.toFixed(1)}s total`);
+    if (scenes.length <= 20) {
+      console.log(`   Durations: [${durations.map(d => d.toFixed(1)).join(', ')}]`);
     }
 
-    // Fallback: estimate from text (150 wpm) - but this will be short!
-    console.warn('⚠️ No voiceover duration available - using text estimates (may be inaccurate)');
-    return wordCounts.map(wc => Math.max(1.5, Math.round((wc / 2.5) * 10) / 10));
-  }, [scenes, actualVoiceoverDuration]);
+    return durations;
+  }, [scenes]);
 
   const audioStartTimes = useMemo(() => {
     const starts = [];
@@ -1108,21 +1105,39 @@ export default function TimelineEditorV9() {
 
   // Total duration = actual voiceover duration OR sum of beats
   const totalDuration = useMemo(() => {
-    if (actualVoiceoverDuration > 0) return actualVoiceoverDuration;
-    return audioBeatDurations.reduce((sum, d) => sum + d, 0) || 60;
+    // Priority 1: Measured voiceover audio (most accurate)
+    if (actualVoiceoverDuration > 0) {
+      console.log(`⏱️ Total duration: ${actualVoiceoverDuration.toFixed(1)}s (from measured audio)`);
+      return actualVoiceoverDuration;
+    }
+
+    // Priority 2: Sum of scene durations (from backend breakdown)
+    const sceneSum = audioBeatDurations.reduce((sum, d) => sum + d, 0);
+    if (sceneSum > 0) {
+      console.log(`⏱️ Total duration: ${sceneSum.toFixed(1)}s (from scene durations)`);
+      return sceneSum;
+    }
+
+    // Fallback
+    console.warn('⚠️ No duration source available — using 60s default');
+    return 60;
   }, [audioBeatDurations, actualVoiceoverDuration]);
 
   // Audio clips
   const audioClips = useMemo(() => {
-    return scenes.map((scene, idx) => ({
-      id: `audio-${scene.id}`,
-      sceneId: scene.id,
-      sceneNumber: scene.scene_number,
-      type: 'audio',
-      startTime: audioStartTimes[idx] || 0,
-      duration: audioBeatDurations[idx] || 5,
-      label: `${(audioBeatDurations[idx] || 5).toFixed(1)}s`
-    }));
+    return scenes.map((scene, idx) => {
+      // Use scene duration directly from database (authoritative source)
+      const duration = scene.duration_seconds || audioBeatDurations[idx] || 5;
+      return {
+        id: `audio-${scene.id}`,
+        sceneId: scene.id,
+        sceneNumber: scene.scene_number,
+        type: 'audio',
+        startTime: audioStartTimes[idx] || 0,
+        duration: duration,
+        label: `${duration.toFixed(1)}s`
+      };
+    });
   }, [scenes, audioBeatDurations, audioStartTimes]);
 
   // Initialize video clips
