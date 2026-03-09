@@ -1147,18 +1147,20 @@ export default function TimelineEditorV9() {
   const audioBeatDurations = useMemo(() => {
     if (scenes.length === 0) return [];
 
-    // ✅ USE ACTUAL SCENE DURATIONS FROM DATABASE
-    // During scene breakdown, the backend distributed the voiceover proportionally
-    // across scenes based on word count AND narrative arc. Each scene.duration_seconds
-    // is the authoritative beat length. This ensures perfect alignment with how
-    // images and videos were generated.
+    // ✅ USE BEAT DURATIONS FROM BACKEND SCENE BREAKDOWN
+    // generateSceneBreakdown already distributed the voiceover across scenes
+    // Each scene.duration_seconds is the authoritative beat length
     const durations = scenes.map(scene => {
-      const duration = scene.duration_seconds || 5;
-      return Math.max(1.5, duration);
+      const duration = scene.duration_seconds;
+      if (!duration) {
+        console.warn(`Scene ${scene.scene_number} missing duration_seconds — using 5s fallback`);
+        return 5;
+      }
+      return Math.max(1.5, duration); // Enforce minimum 1.5s
     });
 
     const totalCalc = durations.reduce((sum, d) => sum + d, 0);
-    console.log(`✅ Timeline beat sync: ${scenes.length} scenes = ${totalCalc.toFixed(1)}s total`);
+    console.log(`✅ Timeline beat sync: ${scenes.length} scenes = ${totalCalc.toFixed(1)}s total (from backend breakdown)`);
     if (scenes.length <= 20) {
       console.log(`   Durations: [${durations.map(d => d.toFixed(1)).join(', ')}]`);
     }
