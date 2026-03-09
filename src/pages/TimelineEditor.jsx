@@ -683,7 +683,7 @@ function VideoPreview({ currentScene, currentTime, currentClip, captions, select
 // Generate transition effect styles with easing & blend modes
   const getTransitionStyle = (isExiting = true) => {
     const { isTransitioning, transitionType, progress } = getTransitionState();
-    if (!isTransitioning) return { mixBlendMode: 'normal' };
+    if (!isTransitioning) return {}; // Return empty object, not mixBlendMode
 
     const t = transitionType;
 
