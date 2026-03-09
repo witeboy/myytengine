@@ -8,7 +8,7 @@ import { Sparkles, Loader2, CheckCircle2, ChevronRight, Zap, Brain, TrendingUp }
 // ══════════════════════════════════════════════════════════════════
 // THUMBNAIL TEMPLATE PICKER
 // 1. Suggests 5 best templates for the script
-// 2. User picks exactly 3
+// 2. User picks exactly 2
 // 3. Calls onTemplatesSelected([id1, id2, id3])
 // ══════════════════════════════════════════════════════════════════
 
