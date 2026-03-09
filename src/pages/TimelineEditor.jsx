@@ -1521,22 +1521,6 @@ const handleRemoveTransition = () => {
     };
   }, [scenes, videoClips, audioStartTimes, audioBeatDurations, totalDuration, actualVoiceoverDuration, currentTime, currentClip]);
 
-  return 
-
-  // DEBUG: Expose to console
-  useEffect(() => {
-    window.DEBUG = {
-      scenes: scenes.length,
-      videoClips: videoClips.length,
-      audioStartTimes,
-      audioBeatDurations,
-      totalDuration,
-      actualVoiceoverDuration,
-      currentTime,
-      currentClip: currentClip ? { id: currentClip.id, startTime: currentClip.startTime, duration: currentClip.duration, transition: currentClip.transition } : null,
-    };
-  }, [scenes, videoClips, audioStartTimes, audioBeatDurations, totalDuration, actualVoiceoverDuration, currentTime, currentClip]);
-
   return (
     <div className="h-screen flex flex-col bg-[#0a0a14] text-white overflow-hidden">
       {voiceoverUrl && <audio ref={audioRef} src={voiceoverUrl} preload="auto" />}
