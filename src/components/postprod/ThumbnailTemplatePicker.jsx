@@ -240,9 +240,9 @@ export default function ThumbnailTemplatePicker({ projectId, onTemplatesSelected
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium text-gray-700">
               Pick exactly <span className="text-purple-700 font-bold">2 templates</span> to generate
-              <span className="ml-2 text-gray-400 font-normal">({selected.length}/3 selected)</span>
+              <span className="ml-2 text-gray-400 font-normal">({selected.length}/2 selected)</span>
             </p>
-            {selected.length === 3 && (
+            {selected.length === 2 && (
               <div className="flex gap-1">
                 {selected.map((s, i) => (
                   <Badge key={s.template_id} className="text-[10px] bg-purple-100 text-purple-700">
@@ -275,7 +275,7 @@ export default function ThumbnailTemplatePicker({ projectId, onTemplatesSelected
           {selected.length > 0 && (
             <div className="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-xl px-4 py-3">
               <div>
-                {selected.length < 3
+                {selected.length < 2
                   ? <p className="text-sm text-purple-700">Select <span className="font-bold">{2 - selected.length} more</span> template{2 - selected.length > 1 ? 's' : ''} to continue</p>
                   : <div>
                       <p className="text-sm font-semibold text-purple-900">2 templates locked in ✓</p>
@@ -288,7 +288,7 @@ export default function ThumbnailTemplatePicker({ projectId, onTemplatesSelected
                 disabled={selected.length !== 2}
                 className="gap-2 bg-purple-600 hover:bg-purple-700"
               >
-                Generate 3 Concepts <ChevronRight className="w-4 h-4" />
+                Generate 2 Concepts <ChevronRight className="w-4 h-4" />
               </Button>
             </div>
           )}
