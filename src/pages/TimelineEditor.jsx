@@ -213,7 +213,7 @@ function useHistory(initialState) {
 // TOP TOOLBAR
 // ═══════════════════════════════════════════════════════════════════
 
-function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport, onDownloadAssets, onShowExporter }) {
+function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport, onDownloadAssets, onShowExporter, onNext }) {
   const panels = [
     { id: 'media', label: 'Media', icon: Film },
     { id: 'audio', label: 'Audio', icon: Music },
