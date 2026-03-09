@@ -160,7 +160,7 @@ const styleMap = {
     negative: "photorealistic, photograph, 3D render, anime, sketch, rough, painterly, dark, gritty, horror, complex textures, film grain"
   },
   picstory_cocomelon: {
-    positive: "Adorable 3D rendered children's animation style, CoComelon and Pixar Junior quality, soft rounded characters with big expressive eyes, pastel color palette with bright accents, smooth plastic-like textures, warm studio lighting, cheerful and friendly atmosphere, child-safe wholesome imagery, toy-like proportions, gentle soft shadows, nursery rhyme aesthetic",
+    positive: "Adorable 3D rendered children's animation style, CoComelon and Pixar Junior quality, soft rounded characters with big expressive eyes, pastel color palette with bright accents, smooth plastic-like textures, warm studio lighting, cheerful and friendly atmosphere, child-safe wholesome imagery, gentle soft shadows, nursery rhyme aesthetic",
     negative: "photorealistic, scary, dark, horror, sharp edges, complex, adult themes, violence, anime, sketch, painterly, gritty"
   },
   cinematic_picstory: {
@@ -188,8 +188,8 @@ const styleMap = {
     negative: "modern, contemporary, bright fluorescent, cartoon, anime, flat colors, minimalist, sci-fi, futuristic, clinical, sterile"
   },
   "3d_whiteboard_cartoon": {
-    positive: "Clean 3D whiteboard cartoon, bold consistent black ink outlines, bright cheerful flat color fills with single-tone cel shading. Characters with friendly exaggerated proportions — larger heads, expressive eyes, thick eyebrows, simple noses, casual clothing in flat color with fold shading. Clean isometric environments — green grass, gradient blue skies, brick buildings, tiled floors. All objects with bold outlines and flat color. Sky blue and teal environments, warm browns and peach skin. Even ambient lighting, no harsh shadows, YouTube explainer style, approachable professional",
-    negative: "photorealistic, photograph, 3D render, CGI, anime, painterly, watercolor, oil painting, sketch, dark, gritty, horror, film grain, lens flare, bokeh, dramatic shadows, neon, cyberpunk, fantasy, abstract, pixel art, low poly, voxel"
+    positive: "Clean 3D whiteboard cartoon, bold consistent black ink outlines, bright cheerful flat color fills with single-tone cel shading. Casual clothing rendered in flat color with fold shading. Warm browns and peach skin tones. Clean isometric environments — green grass, gradient blue skies, brick buildings, tiled floors. All objects with bold outlines and flat color. Sky blue and teal environments, warm browns and peach skin. Even ambient lighting, no harsh shadows, YouTube explainer style, approachable professional",
+    negative: "photorealistic, photograph, 3D render, CGI, anime, painterly, watercolor, oil painting, sketch, dark, gritty, horror, film grain, lens flare, bokeh, dramatic shadows, neon, cyberpunk, fantasy, abstract, pixel art, low poly, voxel, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature"
   },
   low_poly_3d_cartoon: {
     positive: "Stylized low-poly 3D cartoon, all geometry from visible flat-shaded polygons and triangular facets. Exaggerated proportions — oversized heads, angular noses, large round eyes, thick eyebrows. Chunky geometric hair, warm peach-tan skin with polygon-edge shading. Clothing with visible folds and flat polygon faces. Suburban environments — clapboard houses, white picket fences, bright green grass, faceted tree canopies, boxy vehicles. Bright gradient sky, geometric clouds, warm sunlight. Vibrant saturated colors, clean polygon edges, no smoothing, matte clay-toy quality, soft ambient occlusion, Pixar expressiveness with geometric stylization",
@@ -244,7 +244,7 @@ function getStyleSceneBodyRules(styleName) {
       rendering: "Cartoon Network / Disney Channel quality. Bold outlines, flat colors, no photorealistic terms."
     },
     picstory_cocomelon: {
-      characters: "Soft rounded 3D characters with big expressive eyes, plastic-smooth skin, pastel clothing, toy-like proportions, cheerful expressions.",
+     characters: "Soft rounded 3D characters with plastic-smooth skin, pastel clothing, cheerful expressions. Character proportions defined per-character inline.",
       environments: "Bright pastel 3D environments — soft rounded architecture, gentle lighting, toy-like world, child-safe wholesome settings.",
       objects: "Smooth plastic-textured 3D objects, rounded edges, bright pastel colors, toy-like quality.",
       rendering: "CoComelon/Pixar Junior 3D rendering — soft shadows, warm studio lighting, smooth plastic textures."
@@ -286,7 +286,7 @@ function getStyleSceneBodyRules(styleName) {
       rendering: "Fantasy concept art — warm candlelight, gothic textures, magical particles, jewel-tone color palette."
     },
     "3d_whiteboard_cartoon": {
-      characters: "Characters with bold consistent black ink outlines, flat color fills with single-tone cel-shading, friendly exaggerated proportions — larger heads, expressive cartoon eyes, thick eyebrows, simple noses. Clothing rendered as flat color with subtle darker-tone fold shading (plaid flannel shirts, jeans, work boots, hard hats). Skin in warm browns and peach tones.",
+     characters: "Characters with bold consistent black ink outlines, flat color fills with single-tone cel-shading. Clothing rendered as flat color with subtle darker-tone fold shading. Character proportions defined per-character inline.",
       environments: "Clean isometric/oblique perspective environments — simplified but recognizable settings. Green grass fields with bright yellow-green, gradient blue skies, brick buildings with clean window outlines, indoor rooms with tiled floors and flat-colored walls. Sky blue, steel blue, teal for environments.",
       objects: "ALL objects rendered with bold black outlines and flat color fills — vending machines, storage units, vehicles, furniture. Clearly identifiable with labeled visual metaphors. Information callout bubbles and thought bubbles as part of the visual language.",
       rendering: "YouTube explainer / business education cartoon style — approachable, friendly, professional, visually clean. Even ambient lighting, no harsh shadows, only subtle ground shadows and single-tone darker shading."
@@ -549,10 +549,10 @@ Deno.serve(async (req) => {
         `anime-style character with ${desc}, large expressive detailed eyes with highlight reflections, clean sharp linework, cel-shaded smooth skin, stylized colorful flowing hair, anime proportions with slightly elongated limbs`,
       cinematic_anime: (desc) =>
         `cinematic anime character with ${desc}, Makoto Shinkai quality rendering, sharp detailed linework with subtle cel-shading gradients, dramatic volumetric lighting on face and hair, flowing hair interacting with light and wind, rich color depth on skin and clothing`,
-      cartoon_2d: (desc) =>
-        `2D cartoon character with ${desc}, bold clean black outlines around entire body, flat vibrant color fills with subtle gradient shading, exaggerated friendly proportions with larger head, big expressive eyes with thick outlines, dynamic pose`,
-      picstory_cocomelon: (desc) =>
-        `adorable 3D rendered character with ${desc}, soft rounded plastic-smooth features, big sparkly expressive eyes, pastel-colored clothing with smooth toy-like texture, toy-like chunky proportions, cheerful warm expression, CoComelon animation quality`,
+     cartoon_2d: (desc) =>
+      `2D cartoon character with ${desc}, realistic adult human proportions with cartoon stylization, bold clean black outlines around entire body, flat vibrant color fills with subtle gradient shading, normal-sized head proportional to body, expressive eyes with clean outlines, dynamic pose`,
+     picstory_cocomelon: (desc) =>
+      `adorable 3D rendered character with ${desc}, realistic human proportions with soft 3D stylization, soft rounded plastic-smooth features, expressive eyes, pastel-colored clothing with smooth texture, normal-sized head proportional to body, warm expression, Pixar animation quality`,
       cinematic_picstory: (desc) =>
         `Pixar-quality 3D animated character with ${desc}, subsurface scattering on skin giving warm translucent glow, detailed clothing with fabric physics and subtle wrinkles, expressive stylized features with realistic proportions, dramatic studio rim lighting`,
       oil_painting: (desc) =>
@@ -566,7 +566,7 @@ Deno.serve(async (req) => {
       harry_potter: (desc) =>
         `fantasy character with ${desc}, warm candlelit skin tones with amber glow, weathered textured robes and wizard attire, magical golden particle effects around edges, gothic atmosphere, jewel-tone color palette of deep burgundy and emerald on clothing`,
       "3d_whiteboard_cartoon": (desc) =>
-        `3D whiteboard cartoon character with ${desc}, bold consistent black ink outlines around entire body, bright cheerful flat color fills with single-tone cel-shading, friendly exaggerated proportions with larger head, thick expressive eyebrows, simple rounded nose, warm peach-brown skin tones, flat-colored casual clothing with subtle fold shading`,
+      `3D whiteboard cartoon character with ${desc}, realistic adult human proportions with whiteboard stylization, bold consistent black ink outlines around entire body, bright cheerful flat color fills with single-tone cel-shading, normal-sized head proportional to body, defined eyebrows, simple nose, warm peach-brown skin tones, flat-colored casual clothing with subtle fold shading`,
       low_poly_3d_cartoon: (desc) =>
         `low-poly 3D character with ${desc}, all features built from visible flat-shaded polygon facets and triangular faces, oversized geometric head, angular protruding nose, large round expressive eyes, chunky geometric hair blocks, warm peach-tan skin with polygon-edge shading, blocky hands, clothing with visible polygon folds and flat faces, matte clay-toy quality`,
       skeleton_protagonist: (desc) =>
