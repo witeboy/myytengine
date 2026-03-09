@@ -1232,6 +1232,7 @@ export default function TimelineEditorV9() {
         effects: [],
         audioMuted: false,
         cinematicMotion: null,
+        transition: null,  // ← ADD THIS
         synced: false
       };
       offset += duration;
@@ -1282,9 +1283,14 @@ export default function TimelineEditorV9() {
     setIsSyncing(true);
     setSyncStatus(null);
 
+    console.log('🔄 AUTOSYNC: Starting...');
+    console.log('   Current clips:', videoClips.map(c => ({ id: c.id, duration: c.duration, startTime: c.startTime })));
+    console.log('   Audio beats:', audioBeatDurations);
+    console.log('   Start times:', audioStartTimes);
+
     const synced = scenes.map((scene, idx) => {
       const existing = videoClips.find(c => c.sceneId === scene.id);
-      return {
+      const newClip = {
         ...(existing || {}),
         id: `video-${scene.id}`,
         sceneId: scene.id,
@@ -1297,10 +1303,14 @@ export default function TimelineEditorV9() {
         effects: existing?.effects || [],
         audioMuted: existing?.audioMuted || false,
         cinematicMotion: existing?.cinematicMotion || null,
+        transition: existing?.transition || null,
         synced: true
       };
+      console.log(`   Scene ${scene.scene_number}: ${newClip.startTime} → duration ${newClip.duration}`);
+      return newClip;
     });
 
+    console.log('🔄 AUTOSYNC: Setting new clips:', synced.map(c => ({ id: c.id, duration: c.duration, startTime: c.startTime })));
     setVideoClips(synced);
     setSyncStatus('success');
     setIsSyncing(false);
