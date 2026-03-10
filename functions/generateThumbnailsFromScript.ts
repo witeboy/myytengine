@@ -213,9 +213,7 @@ CRITICAL REQUIREMENTS:
 - NO TEXT, NO WORDS, NO LETTERS, NO NUMBERS IN THE IMAGE
 - Leave clean negative space in ${composition.textZone} for text overlay
 - Expression must be READABLE at 120px thumbnail size
-- Photorealistic, high contrast, saturated colors
-
-VIDEO CONTEXT: ${title}`;
+- Photorealistic, high contrast, saturated colors`;
 }
 
 function selectTemplatesForNiche(niche, selectedTemplateIds = null) {
