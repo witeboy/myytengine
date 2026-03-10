@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
         prompt: prompt.substring(0, 2000) + ". Ultra high resolution, crisp sharp details, professional quality.",
         image_size: imageSize, style: "DESIGN", rendering_speed: "QUALITY",
         expand_prompt: false,
-        negative_prompt: concept.negative_prompt || "blurry, low quality, pixelated, watermark, distorted text, small text"
+        negative_prompt: "no text, no words, no letters, no numbers, no typography, no titles, no labels, no captions, no watermark, no signature, " + (concept.negative_prompt || "blurry, low quality, pixelated, distorted")
       });
       url = await kiePoll(KIE_KEY, tid);
       if (url) model = "ideogram-v3-quality";
