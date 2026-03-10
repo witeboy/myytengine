@@ -13,7 +13,7 @@ import {
   ArrowLeft, Search, Shield, Lightbulb, Pencil, Image
 } from 'lucide-react';
 import ProjectTemplates from '@/components/templates/ProjectTemplates';
-import MakeThumbnail from '@/components/thumbnail/MakeThumbnail';
+import MakeThumbnail from '@/components/production/MakeThumbnail';
 
 const TONE_OPTIONS = [
   { value: 'dramatic',      label: '🎭 Dramatic' },
