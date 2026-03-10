@@ -103,7 +103,7 @@ Generate JSON with this EXACT structure:
   "descriptions": [
     {
       "style": "hook_heavy",
-      "description": "Full description 400-600 words. Start with compelling hook. Include timestamps placeholder [TIMESTAMPS]. Include CTA. Natural keyword integration.",
+      "description": "Full description 400-600 words. Start with compelling hook. Include CTA. Natural keyword integration.",
       "word_count": 500
     },
     {
@@ -121,7 +121,7 @@ Generate JSON with this EXACT structure:
 
 RULES:
 - Each description MUST be 400-600 words
-- Include [TIMESTAMPS] placeholder in each
+- Do NOT include any placeholder text like [TIMESTAMPS]
 - First 150 characters are crucial (shown in search)
 - Include relevant keywords naturally
 - End each with a call-to-action
