@@ -185,27 +185,30 @@ function drawWordStack(ctx, text, canvasW, canvasH, template, style, isSecondary
   const lineGap = canvasH * (style.lineGap || 0.02);
   const sizeScale = isSecondary ? 0.45 : 1.0;
 
+  // Enable sub-pixel antialiasing
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
   let currentY = startY;
 
   for (const word of words) {
-    // Find font size that makes this word fill the column width
+    // Measure at a reference size then scale to fit column
     let fontSize = Math.round(canvasH * 0.10 * style.sizeMultiplier * sizeScale);
     ctx.font = `${fontOption.weight} ${fontSize}px ${fontOption.stack}`;
-    let measured = ctx.measureText(word).width;
+    const measured = ctx.measureText(word).width;
 
-    // Scale to fill column
     if (measured > 0) {
       fontSize = Math.round(fontSize * (colW / measured));
     }
 
-    // Clamp sizes
     const maxFontSize = Math.round(canvasH * 0.28 * style.sizeMultiplier * sizeScale);
     const minFontSize = Math.round(canvasH * 0.05 * style.sizeMultiplier * sizeScale);
     fontSize = Math.min(maxFontSize, Math.max(minFontSize, fontSize));
 
     ctx.font = `${fontOption.weight} ${fontSize}px ${fontOption.stack}`;
 
-    const strokeW = Math.max(2, Math.round(fontSize * style.strokeWidthFactor));
+    // Stroke width — keep modest so round joins don't bulk up
+    const strokeW = Math.max(2, fontSize * style.strokeWidthFactor);
     const shadowOff = Math.round(fontSize * style.shadowOffsetFactor);
 
     let drawX = startX;
@@ -225,32 +228,48 @@ function drawWordStack(ctx, text, canvasW, canvasH, template, style, isSecondary
     ctx.textBaseline = 'middle';
     ctx.textAlign = template.align;
 
-    // Hard drop shadow
+    // ── PASS 1: Drop shadow using native ctx.shadow (smooth, no manual offset fill) ──
     if (style.shadowEnabled) {
-      ctx.fillStyle = style.shadowColor;
-      ctx.globalAlpha = 0.85;
-      ctx.shadowBlur = style.shadowBlur || 0;
+      ctx.save();
       ctx.shadowColor = style.shadowColor;
-      ctx.fillText(word, drawX + shadowOff, drawY + shadowOff);
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = 1.0;
+      ctx.shadowBlur = style.shadowBlur > 0 ? style.shadowBlur : 4; // tiny blur softens the edge even at "0"
+      ctx.shadowOffsetX = shadowOff;
+      ctx.shadowOffsetY = shadowOff;
+      ctx.fillStyle = style.shadowColor;
+      ctx.globalAlpha = 0.75;
+      ctx.fillText(word, drawX, drawY);
+      ctx.restore();
     }
 
-    // Smooth stroke
-    ctx.strokeStyle = style.strokeColor;
-    ctx.lineWidth = strokeW;
+    // ── PASS 2: Wide outer stroke (feathered edge — draw thick then thin on top) ──
+    // This layered approach is the key to smooth, non-jaggy outlines
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
-    ctx.miterLimit = 2;
+    ctx.miterLimit = 1.5;
+
+    // Outer glow / soft edge
+    ctx.strokeStyle = style.strokeColor;
+    ctx.lineWidth = strokeW * 1.6;
+    ctx.globalAlpha = 0.35;
     ctx.strokeText(word, drawX, drawY);
 
-    // Fill
+    // Mid stroke
+    ctx.lineWidth = strokeW * 1.15;
+    ctx.globalAlpha = 0.7;
+    ctx.strokeText(word, drawX, drawY);
+
+    // Crisp inner stroke
+    ctx.lineWidth = strokeW * 0.75;
+    ctx.globalAlpha = 1.0;
+    ctx.strokeText(word, drawX, drawY);
+
+    // ── PASS 3: Fill on top ──
     ctx.fillStyle = style.color;
+    ctx.globalAlpha = 1.0;
     ctx.fillText(word, drawX, drawY);
 
     ctx.restore();
 
-    // Advance Y by actual line height + gap
     currentY += fontSize * 1.05 + lineGap;
   }
 }
@@ -403,11 +422,17 @@ export default function ThumbnailWithTextOverlay({
 
     img.onload = () => {
       const isShorts = concept.image_prompt?.includes('9:16') || img.height > img.width * 1.3;
-      canvas.width = isShorts ? 1080 : 1920;
-      canvas.height = isShorts ? 1920 : 1080;
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      // Draw at 2x resolution — CSS scales it down, giving free anti-aliasing
+      const SCALE = 2;
+      const baseW = isShorts ? 1080 : 1920;
+      const baseH = isShorts ? 1920 : 1080;
+      canvas.width = baseW * SCALE;
+      canvas.height = baseH * SCALE;
+      canvas.style.width = '100%';
+      canvas.style.height = 'auto';
+      ctx.scale(SCALE, SCALE);
+      ctx.clearRect(0, 0, baseW, baseH);
+      ctx.drawImage(img, 0, 0, baseW, baseH);
 
       currentTemplate.layers.forEach(layer => {
         const text = layerTexts[layer.id] || layer.defaultText || '';
@@ -421,9 +446,9 @@ export default function ThumbnailWithTextOverlay({
             columnWidth: 0.40,
             align: 'left',
           };
-          drawWordStack(ctx, text, canvas.width, canvas.height, secondaryTemplate, style, true);
+          drawWordStack(ctx, text, baseW, baseH, secondaryTemplate, style, true);
         } else {
-          drawWordStack(ctx, text, canvas.width, canvas.height, currentTemplate, style, false);
+          drawWordStack(ctx, text, baseW, baseH, currentTemplate, style, false);
         }
       });
 
