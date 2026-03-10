@@ -146,9 +146,20 @@ RULES:
       status: 'complete'
     });
 
+    // Transform to match frontend expected format
+    const formattedDescriptions = (parsed.descriptions || []).map((d, i) => ({
+      label: d.style === 'hook_heavy' ? 'Hook-Heavy' : 
+             d.style === 'seo_optimized' ? 'SEO-Optimized' : 
+             d.style === 'storytelling' ? 'Storytelling' : `Version ${i + 1}`,
+      content: d.description,
+      primary_keywords: tags.slice(0, 3),
+      long_tail_keywords: tags.slice(3, 6),
+      word_count: d.word_count
+    }));
+
     return Response.json({
       success: true,
-      descriptions: parsed.descriptions
+      descriptions: formattedDescriptions
     });
 
   } catch (error) {
