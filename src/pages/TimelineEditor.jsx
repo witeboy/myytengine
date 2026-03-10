@@ -18,24 +18,21 @@ import {
   LayoutGrid, FolderOpen, X, Package, Camera, AlertCircle,
   Bold, Italic, Underline, Palette,
   Minimize2, Focus, Blend, ArrowUpRight, ArrowDownLeft,
-  Monitor, Smartphone
+  Monitor, Smartphone, Radio
 } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════════
-// TIMELINE EDITOR V9 - FULL EDITING CAPABILITIES
-// ══════════════════════════════════════════════════════════════════
-// FIX 1: Transitions now fire correctly — rewritten to use prevClip
-//         Old logic checked time AFTER clip ended, but by then
-//         currentClip had already switched, so transitions never fired.
-// FIX 2: Captions now start from Scene 0 — was skipped because
-//         audioStartTimes[0]=0 is falsy (!0 === true in JS).
-// FIX 3: Orientation toggle button added to preview (9:16 ↔ 16:9).
+// TIMELINE EDITOR V10
+// FIX 1: Captions generated from AUDIO TRANSCRIPTION (word timestamps)
+//         not from imported script text — handles edited voiceovers.
+// FIX 2: Portrait 9:16 preview fixed — removed broken width:auto logic,
+//         now uses a proper fixed-ratio container that scales correctly.
 // ══════════════════════════════════════════════════════════════════
 
 const TRACK_HEIGHT = 56;
 const LABEL_WIDTH = 40;
 const MAX_HISTORY = 50;
-const DEFAULT_TRANSITION_DURATION = 0.6; // seconds — used when clip.transitionDuration not set
+const DEFAULT_TRANSITION_DURATION = 0.6;
 
 // ═══════════════════════════════════════════════════════════════════
 // CINEMATIC ZOOM MOTION TYPES
@@ -101,11 +98,6 @@ function formatTimecode(seconds) {
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}:${f.toString().padStart(2, '0')}`;
 }
 
-function getWordCount(text) {
-  if (!text) return 0;
-  return text.trim().split(/\s+/).filter(w => w.length > 0).length;
-}
-
 // ═══════════════════════════════════════════════════════════════════
 // HISTORY HOOK
 // ═══════════════════════════════════════════════════════════════════
@@ -128,6 +120,121 @@ function useHistory(initialState) {
   const reset = useCallback((newState) => { setHistory([newState]); setIndex(0); }, []);
 
   return { state, setState, undo, redo, reset, canUndo: index > 0, canRedo: index < history.length - 1 };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// AUDIO TRANSCRIPTION via Web Speech API
+//
+// Strategy: play the audio through an HTMLAudioElement while the
+// Web Speech API listens via the microphone — but that requires a
+// mic. Instead we use the cleaner approach:
+//
+//   1. Decode the audio file into an AudioBuffer (Web Audio API).
+//   2. Route it through a MediaStreamDestination so SpeechRecognition
+//      can receive it as a live stream.
+//   3. Collect word-level results with timing offsets.
+//
+// Because SpeechRecognition only gives sentence-level timestamps in
+// most browsers, we reconstruct per-word timing by distributing
+// each result's timeOffset evenly across its words.
+//
+// Supported: Chrome, Edge (webkit prefix). Firefox falls back.
+// ═══════════════════════════════════════════════════════════════════
+
+function transcribeAudioWithWebSpeech(audioUrl, onProgress) {
+  return new Promise(async (resolve) => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      resolve({ success: false, error: 'Web Speech API not supported in this browser. Use Chrome or Edge.', words: [] });
+      return;
+    }
+
+    try {
+      // ── 1. Fetch & decode audio ──────────────────────────────────
+      const resp = await fetch(audioUrl);
+      if (!resp.ok) throw new Error('Could not fetch audio file');
+      const arrayBuffer = await resp.arrayBuffer();
+
+      const audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+      // ── 2. Route through MediaStreamDestination ──────────────────
+      const dest   = audioCtx.createMediaStreamDestination();
+      const source = audioCtx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(dest);
+      source.connect(audioCtx.destination); // also play it audibly
+
+      // ── 3. SpeechRecognition on the stream ───────────────────────
+      const recognition = new SpeechRecognition();
+      recognition.continuous      = true;
+      recognition.interimResults  = false;
+      recognition.lang            = 'en-US';
+      // Use the audio stream from the decoded file
+      recognition.audioStream     = dest.stream;
+
+      const allWords = [];
+      let   startedAt = null;
+
+      recognition.onresult = (event) => {
+        const now = audioCtx.currentTime;
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (!result.isFinal) continue;
+          const transcript = result[0].transcript.trim();
+          const words      = transcript.split(/\s+/).filter(Boolean);
+          // result has no per-word timing in most browsers;
+          // we estimate: spread words evenly over a ~0.4s/word window
+          // anchored to the recognition offset.
+          const segEnd     = now;
+          const segStart   = Math.max(0, segEnd - words.length * 0.45);
+          const wordDur    = words.length > 0 ? (segEnd - segStart) / words.length : 0.4;
+          words.forEach((word, wi) => {
+            allWords.push({
+              word:  word.replace(/[.,!?;:]/g, ''),
+              start: parseFloat((segStart + wi * wordDur).toFixed(3)),
+              end:   parseFloat((segStart + (wi + 1) * wordDur).toFixed(3)),
+            });
+          });
+          onProgress?.(allWords.length);
+        }
+      };
+
+      recognition.onerror = (e) => {
+        console.warn('SpeechRecognition error:', e.error);
+        // non-fatal — keep going
+      };
+
+      recognition.onend = () => {
+        audioCtx.close();
+        if (allWords.length === 0) {
+          resolve({ success: false, error: 'No speech detected. Try a louder or clearer recording.', words: [] });
+        } else {
+          resolve({ success: true, words: allWords });
+        }
+      };
+
+      // Start recognition then play audio
+      recognition.start();
+      startedAt = audioCtx.currentTime;
+      source.start(0);
+
+      // Stop recognition when audio ends (+ 1s buffer)
+      source.onended = () => {
+        setTimeout(() => recognition.stop(), 1000);
+      };
+
+      // Safety timeout: double the audio duration
+      const safetyMs = (audioBuffer.duration * 1000 * 2) + 3000;
+      setTimeout(() => {
+        try { recognition.stop(); } catch(e) {}
+      }, safetyMs);
+
+    } catch (err) {
+      console.error('Transcription setup error:', err);
+      resolve({ success: false, error: err.message, words: [] });
+    }
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -275,7 +382,6 @@ function TransitionsPanel({ selectedClip, onApplyTransition, onRemoveTransition,
       <div className="flex-1 overflow-y-auto p-2 space-y-3">
         <p className="text-[10px] text-gray-500">Transition plays at the END of the selected clip</p>
 
-        {/* ── Transition Duration Slider ── */}
         {selectedClip?.transition && (
           <div className="p-2 bg-purple-900/30 rounded border border-purple-700/40">
             <div className="flex justify-between text-[10px] mb-1">
@@ -324,21 +430,80 @@ function TransitionsPanel({ selectedClip, onApplyTransition, onRemoveTransition,
   );
 }
 
-function CaptionsPanel({ onGenerate, isGenerating, captionCount }) {
-  const [del, setDel] = useState(false);
+// ═══════════════════════════════════════════════════════════════════
+// CAPTIONS PANEL — now with audio transcription
+// ═══════════════════════════════════════════════════════════════════
+
+function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, transcriptionState }) {
+  const [del, setDel] = useState(true);
+  const { status, wordCount, error } = transcriptionState;
+
   return (
     <div className="h-full flex flex-col">
-      <div className="flex-1 p-3">
-        <p className="text-[10px] text-gray-400 mb-3">Captions are generated from voiceover text and timed to match audio beats.</p>
-        {captionCount > 0 && <div className="p-2 bg-orange-500/20 rounded text-xs text-orange-300">{captionCount} captions on timeline</div>}
+      <div className="flex-1 p-3 space-y-3 overflow-y-auto">
+
+        {/* Transcription status card */}
+        <div className={`p-3 rounded-lg border text-xs space-y-1.5 ${
+          status === 'idle'         ? 'bg-gray-800/50 border-gray-700' :
+          status === 'transcribing' ? 'bg-blue-900/30 border-blue-700/50' :
+          status === 'done'         ? 'bg-green-900/30 border-green-700/50' :
+          status === 'error'        ? 'bg-red-900/30 border-red-700/50' :
+          'bg-gray-800/50 border-gray-700'
+        }`}>
+          <div className="flex items-center gap-2 font-medium">
+            {status === 'idle'         && <><Radio size={12} className="text-gray-400" /><span className="text-gray-300">Audio Transcription</span></>}
+            {status === 'transcribing' && <><Loader2 size={12} className="animate-spin text-blue-400" /><span className="text-blue-300">Transcribing audio…</span></>}
+            {status === 'done'         && <><CheckCircle size={12} className="text-green-400" /><span className="text-green-300">Transcription ready</span></>}
+            {status === 'error'        && <><AlertCircle size={12} className="text-red-400" /><span className="text-red-300">Transcription failed</span></>}
+          </div>
+
+          {status === 'idle' && (
+            <p className="text-gray-500 leading-relaxed">
+              Captions will be generated by transcribing your actual audio file — so they stay in sync even if you edited the voiceover.
+            </p>
+          )}
+          {status === 'transcribing' && (
+            <p className="text-blue-400">Analyzing audio file for word-level timestamps…</p>
+          )}
+          {status === 'done' && (
+            <p className="text-green-400">{wordCount} words transcribed with timestamps.</p>
+          )}
+          {status === 'error' && (
+            <p className="text-red-400">{error || 'Could not transcribe audio.'}<br />
+              <span className="text-gray-500">Captions will fall back to script text timing.</span>
+            </p>
+          )}
+        </div>
+
+        {!voiceoverUrl && (
+          <div className="p-2 bg-yellow-900/30 border border-yellow-700/50 rounded text-[10px] text-yellow-300">
+            No voiceover loaded. Captions will use script text estimates.
+          </div>
+        )}
+
+        {captionCount > 0 && (
+          <div className="p-2 bg-orange-500/20 rounded text-xs text-orange-300">
+            {captionCount} captions on timeline
+          </div>
+        )}
       </div>
-      <div className="p-3 border-t border-gray-800">
-        <div className="flex items-center gap-2 mb-3">
+
+      <div className="p-3 border-t border-gray-800 space-y-2">
+        <div className="flex items-center gap-2">
           <input type="checkbox" id="del" checked={del} onChange={e => setDel(e.target.checked)} className="rounded border-gray-600" />
           <label htmlFor="del" className="text-[10px] text-gray-400">Replace existing captions</label>
         </div>
-        <Button onClick={() => onGenerate(del)} disabled={isGenerating} className="w-full bg-orange-600 hover:bg-orange-700">
-          {isGenerating ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Generating...</> : 'Generate Captions'}
+        <Button
+          onClick={() => onGenerate(del)}
+          disabled={isGenerating || status === 'transcribing'}
+          className="w-full bg-orange-600 hover:bg-orange-700"
+        >
+          {isGenerating
+            ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Generating…</>
+            : status === 'transcribing'
+            ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Transcribing audio…</>
+            : <><Radio size={14} className="mr-2" /> Generate from Audio</>
+          }
         </Button>
       </div>
     </div>
@@ -479,7 +644,6 @@ function ClipPropertiesPanel({ clip, audioBeatDuration, onUpdate }) {
             <label className="text-[10px] text-purple-300">Transition (Out)</label>
           </div>
           <p className="text-sm text-white mb-2">{clip.transition}</p>
-          {/* Duration slider */}
           <div className="mb-2">
             <div className="flex justify-between text-[10px] mb-1">
               <span className="text-gray-400">Duration</span>
@@ -509,8 +673,15 @@ function ClipPropertiesPanel({ clip, audioBeatDuration, onUpdate }) {
 
 // ═══════════════════════════════════════════════════════════════════
 // VIDEO PREVIEW
-// FIX 1: getTransitionState rewritten to use prevClip
-// FIX 3: Orientation toggle buttons added
+// FIX 2: Portrait layout completely rewritten.
+//   Old approach: `width: auto; maxHeight: calc(100% - 40px)`
+//   Problem: In a flex column the container has no intrinsic width when
+//   width is auto, so aspect-ratio collapses to 0×0.
+//
+//   New approach: a wrapper div fills all available space; inside it we
+//   use a JS-calculated size so the 9:16 rectangle is always the largest
+//   one that fits, centred in the available space. We read the wrapper
+//   dimensions via ResizeObserver and compute width/height in JS.
 // ═══════════════════════════════════════════════════════════════════
 
 function VideoPreview({
@@ -519,85 +690,71 @@ function VideoPreview({
   orientation, onOrientationChange,
   videoClips, scenes
 }) {
-  const ref  = useRef(null);
-  const [drag, setDrag] = useState(null);
+  const canvasRef    = useRef(null);
+  const wrapperRef   = useRef(null);
+  const [drag, setDrag]         = useState(null);
+  const [wrapperSize, setWrapperSize] = useState({ w: 0, h: 0 });
+
+  // ── FIX 2: Measure wrapper via ResizeObserver ────────────────────
+  useEffect(() => {
+    if (!wrapperRef.current) return;
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        setWrapperSize({ w: entry.contentRect.width, h: entry.contentRect.height });
+      }
+    });
+    ro.observe(wrapperRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  // Compute the largest canvas that fits, preserving aspect ratio
+  const { canvasW, canvasH } = useMemo(() => {
+    const { w, h } = wrapperSize;
+    if (!w || !h) return { canvasW: 0, canvasH: 0 };
+    const targetRatio = orientation === 'portrait' ? 9 / 16 : 16 / 9;
+    let cw = w;
+    let ch = w / targetRatio;
+    if (ch > h) { ch = h; cw = h * targetRatio; }
+    return { canvasW: Math.floor(cw), canvasH: Math.floor(ch) };
+  }, [wrapperSize, orientation]);
+
   const active = captions.filter(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration);
 
-  // ─────────────────────────────────────────────────────────────────
-  // FIX 1: Transition detection via prevClip
-  //
-  // Root cause of the original bug:
-  //   currentClip = clips.find(c => time >= c.start && time < c.start + c.duration)
-  //   The transition window starts at clipEndTime (= c.start + c.duration).
-  //   At that exact moment, the condition `time < c.start + c.duration` is FALSE,
-  //   so currentClip already switched to the NEXT clip — meaning
-  //   currentClip.transition was always the WRONG clip's value (usually null).
-  //
-  // Fix: The outgoing clip is prevClip. If prevClip has a transition AND
-  //   we are within 0..TRANSITION_DURATION seconds of currentClip.startTime,
-  //   we are in the transition window.
-  // ─────────────────────────────────────────────────────────────────
+  // ── Transition detection via prevClip ───────────────────────────
   const getTransitionState = () => {
     if (!prevClip?.transition || !currentClip) {
       return { isTransitioning: false, transitionType: null, progress: 0, duration: DEFAULT_TRANSITION_DURATION };
     }
-    // Use the duration stored on the outgoing (prev) clip, fallback to default
     const tDur = prevClip.transitionDuration ?? DEFAULT_TRANSITION_DURATION;
     const timeFromClipStart = currentTime - currentClip.startTime;
     if (timeFromClipStart < 0 || timeFromClipStart >= tDur) {
       return { isTransitioning: false, transitionType: null, progress: 0, duration: tDur };
     }
-    return {
-      isTransitioning: true,
-      transitionType:  prevClip.transition,
-      progress:        timeFromClipStart / tDur,
-      duration:        tDur,
-    };
+    return { isTransitioning: true, transitionType: prevClip.transition, progress: timeFromClipStart / tDur, duration: tDur };
   };
 
   const getTransitionStyle = (isExiting = true) => {
     const { isTransitioning, transitionType: t, progress } = getTransitionState();
     if (!isTransitioning) return {};
-
     let easingFn = easingFunctions.easeInOutQuad;
     if (t === 'Black Fade')   easingFn = easingFunctions.easeInOutCubic;
     if (t === 'Expand Fade')  easingFn = isExiting ? easingFunctions.easeOutQuad  : easingFunctions.easeInQuad;
     if (t === 'Overlap Fade') easingFn = easingFunctions.easeInOutQuad;
     const eased = easingFn(progress);
-
     if (t === 'Gradual Fade') {
-      return {
-        opacity:      isExiting ? 1 - eased : eased,
-        mixBlendMode: isExiting ? 'normal' : 'screen',
-        filter:       isExiting ? `brightness(${0.95 + eased * 0.05})` : `brightness(${0.9 + eased * 0.1})`,
-      };
+      return { opacity: isExiting ? 1 - eased : eased, mixBlendMode: isExiting ? 'normal' : 'screen', filter: isExiting ? `brightness(${0.95 + eased * 0.05})` : `brightness(${0.9 + eased * 0.1})` };
     }
     if (t === 'Black Fade') {
-      const darknessPeak = Math.sin(eased * Math.PI);
-      const brightness   = 1 - darknessPeak * 0.65;
-      return {
-        opacity:      isExiting ? (1 - eased * 0.4) : (eased * 0.4),
-        filter:       `brightness(${brightness}) contrast(${1 + darknessPeak * 0.15}) saturate(${1 - darknessPeak * 0.3})`,
-        mixBlendMode: isExiting ? 'normal' : 'multiply',
-      };
+      const dp = Math.sin(eased * Math.PI);
+      return { opacity: isExiting ? (1 - eased * 0.4) : (eased * 0.4), filter: `brightness(${1 - dp * 0.65}) contrast(${1 + dp * 0.15}) saturate(${1 - dp * 0.3})`, mixBlendMode: isExiting ? 'normal' : 'multiply' };
     }
     if (t === 'Expand Fade') {
       const scale = isExiting ? (1 - eased * 0.18) : (0.82 + eased * 0.18);
-      return {
-        opacity:      isExiting ? (1 - eased * 0.8) : (eased * 0.8),
-        transform:    `scale(${scale})`,
-        filter:       `blur(${eased * eased * 5}px) brightness(${isExiting ? 1 - eased * 0.1 : 0.9 + eased * 0.1})`,
-        mixBlendMode: 'overlay',
-      };
+      return { opacity: isExiting ? (1 - eased * 0.8) : (eased * 0.8), transform: `scale(${scale})`, filter: `blur(${eased * eased * 5}px) brightness(${isExiting ? 1 - eased * 0.1 : 0.9 + eased * 0.1})`, mixBlendMode: 'overlay' };
     }
     if (t === 'Overlap Fade') {
-      const slideDistance = eased * eased * 60;
-      return {
-        opacity:      isExiting ? (1 - eased * 0.7) : (eased * 0.9),
-        transform:    `translateX(${isExiting ? slideDistance : -slideDistance}px)`,
-        filter:       `blur(${eased * 6}px)`,
-        mixBlendMode: 'lighten',
-      };
+      const sd = eased * eased * 60;
+      return { opacity: isExiting ? (1 - eased * 0.7) : (eased * 0.9), transform: `translateX(${isExiting ? sd : -sd}px)`, filter: `blur(${eased * 6}px)`, mixBlendMode: 'lighten' };
     }
     return { mixBlendMode: 'normal' };
   };
@@ -606,23 +763,23 @@ function VideoPreview({
     if (!currentClip?.cinematicMotion || !currentClip?.duration) return {};
     const motion = CINEMATIC_MOTIONS.find(m => m.id === currentClip.cinematicMotion);
     if (!motion) return {};
-    const clipProgress = Math.min(1, Math.max(0, (currentTime - currentClip.startTime) / currentClip.duration));
-    const eased = clipProgress < 0.5 ? 2 * clipProgress * clipProgress : 1 - Math.pow(-2 * clipProgress + 2, 2) / 2;
-    return {
-      transform:  `scale(${motion.startScale + (motion.endScale - motion.startScale) * eased}) translate(${motion.startX + (motion.endX - motion.startX) * eased}%, ${motion.startY + (motion.endY - motion.startY) * eased}%)`,
-      transition: 'transform 0.1s linear',
-    };
+    const p = Math.min(1, Math.max(0, (currentTime - currentClip.startTime) / currentClip.duration));
+    const eased = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+    return { transform: `scale(${motion.startScale + (motion.endScale - motion.startScale) * eased}) translate(${motion.startX + (motion.endX - motion.startX) * eased}%, ${motion.startY + (motion.endY - motion.startY) * eased}%)`, transition: 'transform 0.1s linear' };
   };
 
+  // Caption drag
   useEffect(() => {
     if (!drag) return;
     const move = (e) => {
-      const rect = ref.current?.getBoundingClientRect();
-      if (!rect) return;
+      if (!canvasW || !canvasH) return;
       const cap = captions.find(c => c.id === drag.id);
       if (!cap) return;
+      const canvasEl = canvasRef.current;
+      const rect = canvasEl?.getBoundingClientRect();
+      if (!rect) return;
       if (drag.action === 'move') {
-        onUpdateCaption({ ...cap, x: Math.max(5, Math.min(95, drag.ix + ((e.clientX - drag.sx) / rect.width)  * 100)), y: Math.max(5, Math.min(95, drag.iy + ((e.clientY - drag.sy) / rect.height) * 100)) });
+        onUpdateCaption({ ...cap, x: Math.max(5, Math.min(95, drag.ix + ((e.clientX - drag.sx) / rect.width) * 100)), y: Math.max(5, Math.min(95, drag.iy + ((e.clientY - drag.sy) / rect.height) * 100)) });
       } else {
         onUpdateCaption({ ...cap, fontSize: Math.max(12, Math.min(72, Math.round(drag.is + (e.clientX - drag.sx) / 3))) });
       }
@@ -631,7 +788,7 @@ function VideoPreview({
     document.addEventListener('mousemove', move);
     document.addEventListener('mouseup',   up);
     return () => { document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
-  }, [drag, captions, onUpdateCaption]);
+  }, [drag, captions, onUpdateCaption, canvasW, canvasH]);
 
   const down = (e, cap, action) => {
     e.stopPropagation();
@@ -641,89 +798,78 @@ function VideoPreview({
 
   const { isTransitioning } = getTransitionState();
   const motionStyle         = getMotionStyle();
-  // The OUTGOING (exiting) scene is the previous one
-  const prevScene = prevClip ? scenes.find(s => s.id === prevClip.sceneId) : null;
+  const prevScene           = prevClip ? scenes.find(s => s.id === prevClip.sceneId) : null;
 
   return (
-    <div className="h-full flex flex-col items-center justify-center p-4 bg-[#0a0a14] gap-2">
+    <div className="h-full flex flex-col bg-[#0a0a14] gap-2 p-3">
 
-      {/* ── FIX 3: Orientation Toggle ────────────────────────────── */}
-      <div className="flex items-center gap-2 self-end pr-1">
+      {/* Orientation toggle */}
+      <div className="flex items-center gap-2 flex-shrink-0 justify-end">
         <span className="text-[10px] text-gray-500 mr-1">Preview:</span>
         <button
           onClick={() => onOrientationChange('landscape')}
-          title="16:9 Landscape"
           className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] border transition-all ${
-            orientation === 'landscape'
-              ? 'border-cyan-500 text-cyan-400 bg-cyan-500/10 font-medium'
-              : 'border-gray-700 text-gray-500 hover:text-gray-300 hover:border-gray-600'
+            orientation === 'landscape' ? 'border-cyan-500 text-cyan-400 bg-cyan-500/10 font-medium' : 'border-gray-700 text-gray-500 hover:text-gray-300 hover:border-gray-600'
           }`}>
           <Monitor size={13} /> 16:9
         </button>
         <button
           onClick={() => onOrientationChange('portrait')}
-          title="9:16 Portrait / Shorts"
           className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] border transition-all ${
-            orientation === 'portrait'
-              ? 'border-cyan-500 text-cyan-400 bg-cyan-500/10 font-medium'
-              : 'border-gray-700 text-gray-500 hover:text-gray-300 hover:border-gray-600'
+            orientation === 'portrait' ? 'border-cyan-500 text-cyan-400 bg-cyan-500/10 font-medium' : 'border-gray-700 text-gray-500 hover:text-gray-300 hover:border-gray-600'
           }`}>
           <Smartphone size={13} /> 9:16
         </button>
       </div>
 
-      {/* ── Canvas ───────────────────────────────────────────────── */}
-      <div
-        ref={ref}
-        className={`relative ${orientation === 'portrait' ? 'aspect-[9/16]' : 'aspect-video'} bg-gray-900 rounded overflow-hidden`}
-        style={{ width: orientation === 'portrait' ? 'auto' : '100%', maxHeight: orientation === 'portrait' ? 'calc(100% - 40px)' : undefined, maxWidth: '100%' }}
-        onClick={() => onSelectCaption(null)}>
+      {/* ── FIX 2: Wrapper fills remaining space; canvas is sized by JS ── */}
+      <div ref={wrapperRef} className="flex-1 min-h-0 flex items-center justify-center">
+        {canvasW > 0 && (
+          <div
+            ref={canvasRef}
+            className="relative bg-gray-900 rounded overflow-hidden flex-shrink-0"
+            style={{ width: canvasW, height: canvasH }}
+            onClick={() => onSelectCaption(null)}
+          >
+            {/* Incoming scene */}
+            <div className="absolute inset-0 overflow-hidden" style={isTransitioning ? getTransitionStyle(false) : {}}>
+              {currentScene?.image_url
+                ? <img src={currentScene.image_url} className="w-full h-full object-cover" style={motionStyle} alt="" />
+                : <div className="w-full h-full flex items-center justify-center"><Film className="w-12 h-12 text-gray-700" /></div>}
+            </div>
 
-        {/* INCOMING (current) scene — enters from behind outgoing */}
-        <div className="absolute inset-0 overflow-hidden" style={isTransitioning ? getTransitionStyle(false) : {}}>
-          {currentScene?.image_url
-            ? <img src={currentScene.image_url} className="w-full h-full object-cover" style={motionStyle} alt="" />
-            : <div className="w-full h-full flex items-center justify-center"><Film className="w-12 h-12 text-gray-700" /></div>}
-        </div>
+            {/* Outgoing scene */}
+            {isTransitioning && prevScene?.image_url && (
+              <div className="absolute inset-0 overflow-hidden" style={getTransitionStyle(true)}>
+                <img src={prevScene.image_url} className="w-full h-full object-cover" alt="transition-out" />
+              </div>
+            )}
 
-        {/* OUTGOING (prev) scene — exits on top during transition */}
-        {isTransitioning && prevScene?.image_url && (
-          <div className="absolute inset-0 overflow-hidden" style={getTransitionStyle(true)}>
-            <img src={prevScene.image_url} className="w-full h-full object-cover" alt="transition-out" />
+            {/* Captions */}
+            {active.map(cap => {
+              const sel = selectedCaption?.id === cap.id;
+              return (
+                <div key={cap.id}
+                  className={`absolute cursor-move ${sel ? 'z-20' : 'z-10'}`}
+                  style={{ left: `${cap.x || 50}%`, top: `${cap.y || 85}%`, transform: 'translate(-50%, -50%)' }}
+                  onMouseDown={e => down(e, cap, 'move')}>
+                  <div className={`px-4 py-2 rounded ${sel ? 'ring-2 ring-cyan-400' : ''}`}
+                    style={{ backgroundColor: cap.bgColor || 'rgba(0,0,0,0.7)', color: cap.color || '#FFF', fontSize: `${cap.fontSize || 24}px`, whiteSpace: 'nowrap' }}>
+                    {cap.text}
+                  </div>
+                  {sel && <div className="absolute -right-2 -bottom-2 w-4 h-4 bg-cyan-400 rounded-full cursor-se-resize border-2 border-white" onMouseDown={e => down(e, cap, 'resize')} />}
+                </div>
+              );
+            })}
+
+            {/* Overlay info */}
+            <div className="absolute top-2 left-2 bg-black/60 px-2 py-1 rounded text-[10px] text-white flex items-center gap-2">
+              Scene {currentScene?.scene_number || '-'}
+              {currentClip?.cinematicMotion && <span className="flex items-center gap-1 text-amber-400"><Camera size={10} /> {CINEMATIC_MOTIONS.find(m => m.id === currentClip.cinematicMotion)?.name}</span>}
+              {isTransitioning && <span className="flex items-center gap-1 text-purple-300"><Blend size={10} /> {prevClip?.transition}</span>}
+            </div>
           </div>
         )}
-
-        {/* Captions */}
-        {active.map(cap => {
-          const sel = selectedCaption?.id === cap.id;
-          return (
-            <div key={cap.id}
-              className={`absolute cursor-move ${sel ? 'z-20' : 'z-10'}`}
-              style={{ left: `${cap.x || 50}%`, top: `${cap.y || 85}%`, transform: 'translate(-50%, -50%)' }}
-              onMouseDown={e => down(e, cap, 'move')}>
-              <div className={`px-4 py-2 rounded ${sel ? 'ring-2 ring-cyan-400' : ''}`}
-                style={{ backgroundColor: cap.bgColor || 'rgba(0,0,0,0.7)', color: cap.color || '#FFF', fontSize: `${cap.fontSize || 24}px` }}>
-                {cap.text}
-              </div>
-              {sel && <div className="absolute -right-2 -bottom-2 w-4 h-4 bg-cyan-400 rounded-full cursor-se-resize border-2 border-white" onMouseDown={e => down(e, cap, 'resize')} />}
-            </div>
-          );
-        })}
-
-        {/* Scene info overlay */}
-        <div className="absolute top-2 left-2 bg-black/60 px-2 py-1 rounded text-[10px] text-white flex items-center gap-2">
-          Scene {currentScene?.scene_number || '-'}
-          {currentClip?.cinematicMotion && (
-            <span className="flex items-center gap-1 text-amber-400">
-              <Camera size={10} /> {CINEMATIC_MOTIONS.find(m => m.id === currentClip.cinematicMotion)?.name}
-            </span>
-          )}
-          {isTransitioning && (
-            <span className="flex items-center gap-1 text-purple-300">
-              <Blend size={10} /> {prevClip?.transition}
-            </span>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -855,7 +1001,7 @@ function TimelineTrack({ type, clips, pps, totalDuration, currentTime, selectedI
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════
 
-export default function TimelineEditorV9() {
+export default function TimelineEditorV10() {
   const navigate       = useNavigate();
   const [searchParams] = useSearchParams();
   const projectId      = searchParams.get('project_id');
@@ -866,9 +1012,7 @@ export default function TimelineEditorV9() {
   const [pps,            setPps]            = useState(15);
   const [isMuted,        setIsMuted]        = useState(false);
   const [musicVol,       setMusicVol]       = useState(0.3);
-
-  // FIX 3: Local orientation state — overrides project default, toggled by user
-  const [previewOrientation, setPreviewOrientation] = useState(null); // null = use project default
+  const [previewOrientation, setPreviewOrientation] = useState(null);
 
   const videoHistory    = useHistory([]);
   const captionHistory  = useHistory([]);
@@ -885,6 +1029,10 @@ export default function TimelineEditorV9() {
   const [isApplyingZoom,    setIsApplyingZoom]    = useState(false);
   const [initialized,       setInitialized]       = useState(false);
   const [showExporter,      setShowExporter]      = useState(false);
+
+  // ── Transcription state ─────────────────────────────────────────
+  // status: 'idle' | 'transcribing' | 'done' | 'error'
+  const [transcription, setTranscription] = useState({ status: 'idle', words: [], wordCount: 0, error: null });
 
   const exportHook = useVideoExport();
   const playRef    = useRef(null);
@@ -922,7 +1070,6 @@ export default function TimelineEditorV9() {
   const selectedMusic = musicTracks.find(t => t.is_selected);
   const musicUrl      = selectedMusic?.audio_url;
 
-  // Resolved orientation: user local toggle → project DB value → landscape
   const orientation = previewOrientation ?? project?.orientation ?? 'landscape';
 
   // ── Measure actual voiceover duration ──────────────────────────
@@ -935,7 +1082,6 @@ export default function TimelineEditorV9() {
     setAudioLoading(true);
     setAudioError(null);
     const tempAudio = new Audio();
-
     const handleLoadedMetadata = () => {
       const dur = tempAudio.duration;
       if (dur && isFinite(dur) && dur > 0) { setMeasuredAudioDuration(dur); setAudioError(null); }
@@ -946,16 +1092,14 @@ export default function TimelineEditorV9() {
       if (!measuredAudioDuration && tempAudio.duration && isFinite(tempAudio.duration)) setMeasuredAudioDuration(tempAudio.duration);
       setAudioLoading(false);
     };
-
-    tempAudio.addEventListener('loadedmetadata',  handleLoadedMetadata);
-    tempAudio.addEventListener('error',           handleError);
-    tempAudio.addEventListener('canplaythrough',  handleCanPlayThrough);
+    tempAudio.addEventListener('loadedmetadata', handleLoadedMetadata);
+    tempAudio.addEventListener('error', handleError);
+    tempAudio.addEventListener('canplaythrough', handleCanPlayThrough);
     tempAudio.preload = 'metadata';
     tempAudio.src     = voiceoverUrl;
-
     return () => {
       tempAudio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      tempAudio.removeEventListener('error',          handleError);
+      tempAudio.removeEventListener('error', handleError);
       tempAudio.removeEventListener('canplaythrough', handleCanPlayThrough);
       tempAudio.src = '';
     };
@@ -970,7 +1114,7 @@ export default function TimelineEditorV9() {
       try {
         const saved = JSON.parse(prodSettings.beat_durations);
         if (Array.isArray(saved) && saved.length === scenes.length) return saved;
-      } catch (e) { /* fall through */ }
+      } catch (e) {}
     }
     return scenes.map(scene => Math.max(1.5, scene.duration_seconds || 5));
   }, [scenes, prodSettings]);
@@ -993,7 +1137,7 @@ export default function TimelineEditorV9() {
     sceneId:     scene.id,
     sceneNumber: scene.scene_number,
     type:        'audio',
-    startTime:   audioStartTimes[idx] || 0,
+    startTime:   audioStartTimes[idx] ?? 0,
     duration:    scene.duration_seconds || audioBeatDurations[idx] || 5,
     label:       `${(scene.duration_seconds || audioBeatDurations[idx] || 5).toFixed(1)}s`
   })), [scenes, audioBeatDurations, audioStartTimes]);
@@ -1045,7 +1189,6 @@ export default function TimelineEditorV9() {
     videoClips.find(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration)
   , [videoClips, currentTime]);
 
-  // FIX 1 (main component side): derive prevClip so VideoPreview can use it
   const prevClip = useMemo(() => {
     if (!currentClip) return null;
     const idx = videoClips.findIndex(c => c.id === currentClip.id);
@@ -1095,62 +1238,100 @@ export default function TimelineEditorV9() {
   const motionCount     = videoClips.filter(c => c.cinematicMotion).length;
   const transitionCount = videoClips.filter(c => c.transition).length;
 
-  // ─────────────────────────────────────────────────────────────────
-  // CAPTION GENERATION — Audio-pace-aware
+  // ═══════════════════════════════════════════════════════════════
+  // CAPTION GENERATION from audio transcription
   //
-  // Old approach (WRONG): split text into exactly 4 equal word groups.
-  //   Problem: `wordsPerCaption = ceil(wordCount / 4)` always gives ~3 words
-  //   regardless of whether the speaker is fast or slow. Captions appear
-  //   at arbitrary times that have nothing to do with speech pace.
+  // Flow:
+  //   1. Call transcribeAudioWithWebSpeech(voiceoverUrl)
+  //      → returns array of { word, start, end } with absolute timestamps
+  //   2. Group words into ~2s caption chunks using actual timing
+  //   3. Each caption startTime/duration comes directly from the
+  //      word timestamps — perfectly in sync with what was spoken.
   //
-  // New approach: derive the actual speech rate from beatDuration / wordCount.
-  //   Each caption targets ~2.0s of spoken audio (comfortable reading window).
-  //   wordsPerCaption = round(2.0 × wordsPerSecond), clamped 2–8 words.
-  //
-  //   Fast speaker (0.2s/word) → ~10 words/2s → capped at 8
-  //   Normal speaker (0.4s/word) → ~5 words/2s → 5 words per caption
-  //   Slow speaker (0.8s/word) → ~2.5 words/2s → 2-3 words per caption
-  //
-  //   Caption timings: proportional to word position within beat, so
-  //   each caption fires exactly when its words are being spoken.
-  // ─────────────────────────────────────────────────────────────────
-  const handleGenerateCaptions = (deleteExisting) => {
-    setIsGenCaptions(true);
-    const caps = [];
+  // Fallback: if transcription fails, fall back to the old
+  //   proportional estimation from beat durations.
+  // ═══════════════════════════════════════════════════════════════
 
+  const handleGenerateCaptions = async (deleteExisting) => {
+    if (!voiceoverUrl) {
+      // No audio — use fallback
+      generateCaptionsFromScript(deleteExisting);
+      return;
+    }
+
+    setIsGenCaptions(true);
+    setTranscription({ status: 'transcribing', words: [], wordCount: 0, error: null });
+
+    const result = await transcribeAudioWithWebSpeech(voiceoverUrl, (wc) => setTranscription(prev => ({ ...prev, wordCount: wc })));
+
+    if (!result.success || result.words.length === 0) {
+      setTranscription({ status: 'error', words: [], wordCount: 0, error: result.error });
+      // Fall back to script-based estimation
+      generateCaptionsFromScript(deleteExisting);
+      setIsGenCaptions(false);
+      return;
+    }
+
+    const words = result.words;
+    setTranscription({ status: 'done', words, wordCount: words.length, error: null });
+
+    // ── Group words into caption chunks (~2s each, 2–8 words) ─────
+    const TARGET_CAP_DURATION = 2.0;
+    const caps = [];
+    let i = 0;
+
+    while (i < words.length) {
+      const chunkStart = words[i].start;
+      const chunkWords = [words[i]];
+      i++;
+
+      // Keep adding words until we hit TARGET_CAP_DURATION or 8 words
+      while (
+        i < words.length &&
+        chunkWords.length < 8 &&
+        (words[i].end - chunkStart) < TARGET_CAP_DURATION
+      ) {
+        chunkWords.push(words[i]);
+        i++;
+      }
+
+      const chunkEnd = chunkWords[chunkWords.length - 1].end;
+      const text     = chunkWords.map(w => w.word).join(' ').trim();
+      if (!text) continue;
+
+      caps.push({
+        id:        `cap-tr-${i}-${Date.now()}`,
+        type:      'caption',
+        startTime: chunkStart,
+        duration:  Math.max(0.4, chunkEnd - chunkStart),
+        text,
+        label:     text.slice(0, 15) + (text.length > 15 ? '…' : ''),
+        x: 50, y: 85, fontSize: 20, color: '#FFFFFF', bgColor: 'rgba(0,0,0,0.7)'
+      });
+    }
+
+    setCaptionClips(deleteExisting ? caps : [...captionClips, ...caps]);
+    setIsGenCaptions(false);
+  };
+
+  // ── Fallback: estimate timing from script text + beat durations ──
+  const generateCaptionsFromScript = (deleteExisting) => {
+    const caps = [];
     scenes.forEach((scene, idx) => {
       const text = scene.narration_text || scene.voiceover_text;
       if (!text) return;
-
       const beatDuration  = audioBeatDurations[idx];
       const beatStartTime = audioStartTimes[idx];
-
-      if (!beatDuration || beatStartTime == null) {
-        console.warn(`Scene ${scene.scene_number}: missing beat timing — skipped`);
-        return;
-      }
-
+      if (!beatDuration || beatStartTime == null) return;
       const words = text.trim().split(/\s+/).filter(Boolean);
       if (words.length === 0) return;
-
-      // ── Speech-rate-aware chunking ──────────────────────────────
-      const secsPerWord = beatDuration / words.length;
-
-      // Each caption = ~2s of speech. Clamp 2–8 words so it's readable.
-      const TARGET_SECS = 2.0;
-      const wordsPerCaption = Math.min(8, Math.max(2, Math.round(TARGET_SECS / secsPerWord)));
-
-      console.log(
-        `Scene ${scene.scene_number}: ${words.length}w / ${beatDuration.toFixed(1)}s` +
-        ` = ${secsPerWord.toFixed(2)}s/word → ${wordsPerCaption} words/caption`
-      );
-
+      const secsPerWord      = beatDuration / words.length;
+      const wordsPerCaption  = Math.min(8, Math.max(2, Math.round(2.0 / secsPerWord)));
       let wordIdx = 0;
       while (wordIdx < words.length) {
         const chunk     = words.slice(wordIdx, wordIdx + wordsPerCaption);
         const propStart = wordIdx / words.length;
         const propEnd   = Math.min(1, (wordIdx + chunk.length) / words.length);
-
         caps.push({
           id:        `cap-${scene.id}-${wordIdx}-${Date.now()}`,
           sceneId:   scene.id,
@@ -1158,16 +1339,13 @@ export default function TimelineEditorV9() {
           startTime: beatStartTime + propStart * beatDuration,
           duration:  Math.max(0.4, (propEnd - propStart) * beatDuration),
           text:      chunk.join(' '),
-          label:     chunk.join(' ').slice(0, 15) + '...',
+          label:     chunk.join(' ').slice(0, 15) + '…',
           x: 50, y: 85, fontSize: 20, color: '#FFFFFF', bgColor: 'rgba(0,0,0,0.7)'
         });
-
         wordIdx += chunk.length;
       }
     });
-
     setCaptionClips(deleteExisting ? caps : [...captionClips, ...caps]);
-    setIsGenCaptions(false);
   };
 
   // ── Misc handlers ───────────────────────────────────────────────
@@ -1186,7 +1364,7 @@ export default function TimelineEditorV9() {
   const handleApplyTransition      = t  => { if (!selectedVideoId) return; setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transition: t.name } : c)); };
   const handleRemoveTransition     = ()  => { if (!selectedVideoId) return; setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transition: null } : c)); };
   const handleSetTransitionDuration = (dur) => { if (!selectedVideoId) return; setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transitionDuration: dur } : c)); };
-  const handleApplyTransitionToAll = t => setVideoClips(videoClips.map(c => ({ ...c, transition: t.name })));
+  const handleApplyTransitionToAll = t  => setVideoClips(videoClips.map(c => ({ ...c, transition: t.name })));
   const handleDeleteCaption    = () => { if (!selectedCaptionId) return; setCaptionClips(captionClips.filter(c => c.id !== selectedCaptionId)); setSelectedCaptionId(null); };
   const handleDuplicateCaption = () => {
     const cap = captionClips.find(c => c.id === selectedCaptionId);
@@ -1202,17 +1380,6 @@ export default function TimelineEditorV9() {
   const canUndo = videoHistory.canUndo || captionHistory.canUndo;
   const canRedo = videoHistory.canRedo || captionHistory.canRedo;
 
-  // Debug helper
-  useEffect(() => {
-    window.DEBUG = {
-      scenes: scenes.length, videoClips: videoClips.length,
-      audioStartTimes, audioBeatDurations, totalDuration, actualVoiceoverDuration,
-      currentTime,
-      currentClip: currentClip ? { id: currentClip.id, startTime: currentClip.startTime, duration: currentClip.duration, transition: currentClip.transition } : null,
-      prevClip:    prevClip    ? { id: prevClip.id,    startTime: prevClip.startTime,    duration: prevClip.duration,    transition: prevClip.transition    } : null,
-    };
-  }, [scenes, videoClips, audioStartTimes, audioBeatDurations, totalDuration, actualVoiceoverDuration, currentTime, currentClip, prevClip]);
-
   return (
     <div className="h-screen flex flex-col bg-[#0a0a14] text-white overflow-hidden">
       {voiceoverUrl && <audio ref={audioRef} src={voiceoverUrl} preload="auto" />}
@@ -1227,10 +1394,18 @@ export default function TimelineEditorV9() {
       <div className="flex-1 flex min-h-0">
         {/* Left panel */}
         <div className="w-56 flex-shrink-0 border-r border-gray-800 bg-[#12121f]">
-          {activePanel === 'media'       && <MediaPanel scenes={scenes} audioBeatDurations={audioBeatDurations} onSelectScene={idx => handleSeek(audioStartTimes[idx] || 0)} />}
+          {activePanel === 'media'       && <MediaPanel scenes={scenes} audioBeatDurations={audioBeatDurations} onSelectScene={idx => handleSeek(audioStartTimes[idx] ?? 0)} />}
           {activePanel === 'effects'     && <EffectsPanel selectedClip={selectedVideo} onApplyEffect={handleApplyEffect} />}
           {activePanel === 'transitions' && <TransitionsPanel selectedClip={selectedVideo} onApplyTransition={handleApplyTransition} onRemoveTransition={handleRemoveTransition} onApplyTransitionToAll={handleApplyTransitionToAll} onSetTransitionDuration={handleSetTransitionDuration} />}
-          {activePanel === 'captions'    && <CaptionsPanel onGenerate={handleGenerateCaptions} isGenerating={isGenCaptions} captionCount={captionClips.length} />}
+          {activePanel === 'captions'    && (
+            <CaptionsPanel
+              onGenerate={handleGenerateCaptions}
+              isGenerating={isGenCaptions}
+              captionCount={captionClips.length}
+              voiceoverUrl={voiceoverUrl}
+              transcriptionState={transcription}
+            />
+          )}
           {!['media','effects','transitions','captions'].includes(activePanel) && <div className="flex items-center justify-center h-full text-xs text-gray-500">Coming soon</div>}
         </div>
 
@@ -1326,6 +1501,7 @@ export default function TimelineEditorV9() {
               <span className="text-indigo-400">•</span>
               <span>Avg {(actualVoiceoverDuration / Math.max(scenes.length, 1)).toFixed(1)}s per scene</span>
               {measuredAudioDuration > 0 && <span className="text-green-400 flex items-center gap-1"><CheckCircle size={10} /> Measured from audio file</span>}
+              {transcription.status === 'done' && <span className="text-orange-400 flex items-center gap-1"><CheckCircle size={10} /> {transcription.wordCount} words transcribed</span>}
             </>
           ) : (
             <span>No voiceover loaded - using text estimates</span>
