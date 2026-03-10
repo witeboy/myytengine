@@ -819,7 +819,7 @@ const handleGenerateSeo = async () => {
                       <ImageIcon className="w-3 h-3" /> Phase 2: Composing visuals with template DNA
                     </div>
                     <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 rounded px-3 py-1.5">
-                      <Sparkles className="w-3 h-3" /> Phase 3: Engineering image prompts & generating 3 images
+                      <Sparkles className="w-3 h-3" /> Phase 3: Engineering image prompts & generating 1 images
                     </div>
                   </div>
                   <p className="text-xs text-gray-400 mt-4">This takes 1–2 minutes</p>
