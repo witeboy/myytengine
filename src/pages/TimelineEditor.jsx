@@ -123,118 +123,56 @@ function useHistory(initialState) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// AUDIO TRANSCRIPTION via Web Speech API
+// SMART CAPTION TIMING via Claude API
 //
-// Strategy: play the audio through an HTMLAudioElement while the
-// Web Speech API listens via the microphone — but that requires a
-// mic. Instead we use the cleaner approach:
-//
-//   1. Decode the audio file into an AudioBuffer (Web Audio API).
-//   2. Route it through a MediaStreamDestination so SpeechRecognition
-//      can receive it as a live stream.
-//   3. Collect word-level results with timing offsets.
-//
-// Because SpeechRecognition only gives sentence-level timestamps in
-// most browsers, we reconstruct per-word timing by distributing
-// each result's timeOffset evenly across its words.
-//
-// Supported: Chrome, Edge (webkit prefix). Firefox falls back.
+// No mic, no transcription service needed. We already have the exact
+// script text in scene.narration_text. We send each scene's text +
+// its exact audio beat duration to Claude and ask it to produce
+// realistic word-level timestamps accounting for:
+//   - natural speech rhythm (stressed syllables take longer)
+//   - punctuation pauses (comma ~0.15s, period ~0.35s)
+//   - sentence-initial words spoken slightly slower
+//   - short function words (the, a, is) spoken faster
+// Returns [{word, start, end}] with times relative to scene start.
 // ═══════════════════════════════════════════════════════════════════
 
-function transcribeAudioWithWebSpeech(audioUrl, onProgress) {
-  return new Promise(async (resolve) => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      resolve({ success: false, error: 'Web Speech API not supported in this browser. Use Chrome or Edge.', words: [] });
-      return;
-    }
+async function getSmartWordTimings(sceneText, beatDuration, sceneNumber) {
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
+        system: `You are a speech timing expert. Given a voiceover script and its exact audio duration, assign realistic word-level timestamps.
 
-    try {
-      // ── 1. Fetch & decode audio ──────────────────────────────────
-      const resp = await fetch(audioUrl);
-      if (!resp.ok) throw new Error('Could not fetch audio file');
-      const arrayBuffer = await resp.arrayBuffer();
+Rules:
+- Total duration MUST fit within the given seconds (last word end <= duration)
+- Short function words (a, the, is, in, of, to, and) = 0.15-0.20s
+- Normal content words = 0.25-0.40s
+- Long or stressed words = 0.40-0.60s
+- Add ~0.15s gap after commas, ~0.30s after periods/question marks
+- Return ONLY a raw JSON array, no markdown, no extra text
 
-      const audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
-      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+Format: [{"word":"hello","start":0.00,"end":0.35},{"word":"world","start":0.38,"end":0.75}]`,
+        messages: [{
+          role: 'user',
+          content: `Scene ${sceneNumber} voiceover: "${sceneText}"\nAudio duration: ${beatDuration.toFixed(2)}s\n\nReturn word timing JSON array:`
+        }]
+      })
+    });
 
-      // ── 2. Route through MediaStreamDestination ──────────────────
-      const dest   = audioCtx.createMediaStreamDestination();
-      const source = audioCtx.createBufferSource();
-      source.buffer = audioBuffer;
-      source.connect(dest);
-      source.connect(audioCtx.destination); // also play it audibly
-
-      // ── 3. SpeechRecognition on the stream ───────────────────────
-      const recognition = new SpeechRecognition();
-      recognition.continuous      = true;
-      recognition.interimResults  = false;
-      recognition.lang            = 'en-US';
-      // Use the audio stream from the decoded file
-      recognition.audioStream     = dest.stream;
-
-      const allWords = [];
-      let   startedAt = null;
-
-      recognition.onresult = (event) => {
-        const now = audioCtx.currentTime;
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const result = event.results[i];
-          if (!result.isFinal) continue;
-          const transcript = result[0].transcript.trim();
-          const words      = transcript.split(/\s+/).filter(Boolean);
-          // result has no per-word timing in most browsers;
-          // we estimate: spread words evenly over a ~0.4s/word window
-          // anchored to the recognition offset.
-          const segEnd     = now;
-          const segStart   = Math.max(0, segEnd - words.length * 0.45);
-          const wordDur    = words.length > 0 ? (segEnd - segStart) / words.length : 0.4;
-          words.forEach((word, wi) => {
-            allWords.push({
-              word:  word.replace(/[.,!?;:]/g, ''),
-              start: parseFloat((segStart + wi * wordDur).toFixed(3)),
-              end:   parseFloat((segStart + (wi + 1) * wordDur).toFixed(3)),
-            });
-          });
-          onProgress?.(allWords.length);
-        }
-      };
-
-      recognition.onerror = (e) => {
-        console.warn('SpeechRecognition error:', e.error);
-        // non-fatal — keep going
-      };
-
-      recognition.onend = () => {
-        audioCtx.close();
-        if (allWords.length === 0) {
-          resolve({ success: false, error: 'No speech detected. Try a louder or clearer recording.', words: [] });
-        } else {
-          resolve({ success: true, words: allWords });
-        }
-      };
-
-      // Start recognition then play audio
-      recognition.start();
-      startedAt = audioCtx.currentTime;
-      source.start(0);
-
-      // Stop recognition when audio ends (+ 1s buffer)
-      source.onended = () => {
-        setTimeout(() => recognition.stop(), 1000);
-      };
-
-      // Safety timeout: double the audio duration
-      const safetyMs = (audioBuffer.duration * 1000 * 2) + 3000;
-      setTimeout(() => {
-        try { recognition.stop(); } catch(e) {}
-      }, safetyMs);
-
-    } catch (err) {
-      console.error('Transcription setup error:', err);
-      resolve({ success: false, error: err.message, words: [] });
-    }
-  });
+    if (!response.ok) throw new Error(`API ${response.status}`);
+    const data = await response.json();
+    const raw  = (data.content || []).map(b => b.text || '').join('');
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const words = JSON.parse(clean);
+    if (!Array.isArray(words) || words.length === 0) throw new Error('Empty response');
+    return { success: true, words };
+  } catch (err) {
+    console.warn(`Scene ${sceneNumber} timing failed:`, err.message);
+    return { success: false, words: [] };
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -451,22 +389,22 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, t
           'bg-gray-800/50 border-gray-700'
         }`}>
           <div className="flex items-center gap-2 font-medium">
-            {status === 'idle'         && <><Radio size={12} className="text-gray-400" /><span className="text-gray-300">Audio Transcription</span></>}
-            {status === 'transcribing' && <><Loader2 size={12} className="animate-spin text-blue-400" /><span className="text-blue-300">Transcribing audio…</span></>}
+            {status === 'idle'         && <><Radio size={12} className="text-gray-400" /><span className="text-gray-300">AI Caption Timing</span></>}
+            {status === 'transcribing' && <><Loader2 size={12} className="animate-spin text-blue-400" /><span className="text-blue-300">Analyzing speech timing…</span></>}
             {status === 'done'         && <><CheckCircle size={12} className="text-green-400" /><span className="text-green-300">Transcription ready</span></>}
             {status === 'error'        && <><AlertCircle size={12} className="text-red-400" /><span className="text-red-300">Transcription failed</span></>}
           </div>
 
           {status === 'idle' && (
             <p className="text-gray-500 leading-relaxed">
-              Captions will be generated by transcribing your actual audio file — so they stay in sync even if you edited the voiceover.
+              Claude analyzes your script text + beat durations to assign realistic word-level timestamps — no mic needed, fully automatic.
             </p>
           )}
           {status === 'transcribing' && (
             <p className="text-blue-400">Analyzing audio file for word-level timestamps…</p>
           )}
           {status === 'done' && (
-            <p className="text-green-400">{wordCount} words transcribed with timestamps.</p>
+            <p className="text-green-400">{wordCount} words timed with AI speech analysis.</p>
           )}
           {status === 'error' && (
             <p className="text-red-400">{error || 'Could not transcribe audio.'}<br />
@@ -501,8 +439,8 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, t
           {isGenerating
             ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Generating…</>
             : status === 'transcribing'
-            ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Transcribing audio…</>
-            : <><Radio size={14} className="mr-2" /> Generate from Audio</>
+            ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Analyzing timing…</>
+            : <><Radio size={14} className="mr-2" /> Generate Captions (AI)</>
           }
         </Button>
       </div>
@@ -1239,59 +1177,76 @@ export default function TimelineEditorV10() {
   const transitionCount = videoClips.filter(c => c.transition).length;
 
   // ═══════════════════════════════════════════════════════════════
-  // CAPTION GENERATION from audio transcription
+  // CAPTION GENERATION — Claude smart timing
   //
-  // Flow:
-  //   1. Call transcribeAudioWithWebSpeech(voiceoverUrl)
-  //      → returns array of { word, start, end } with absolute timestamps
-  //   2. Group words into ~2s caption chunks using actual timing
-  //   3. Each caption startTime/duration comes directly from the
-  //      word timestamps — perfectly in sync with what was spoken.
-  //
-  // Fallback: if transcription fails, fall back to the old
-  //   proportional estimation from beat durations.
+  // For each scene: sends the script text + beat duration to Claude
+  // via the Anthropic API. Claude returns word-level timestamps that
+  // account for natural speech rhythm and punctuation pauses.
+  // Scenes are processed in parallel (Promise.all) for speed.
+  // Falls back to simple linear math if the API call fails.
   // ═══════════════════════════════════════════════════════════════
 
   const handleGenerateCaptions = async (deleteExisting) => {
-    if (!voiceoverUrl) {
-      // No audio — use fallback
-      generateCaptionsFromScript(deleteExisting);
-      return;
-    }
-
     setIsGenCaptions(true);
     setTranscription({ status: 'transcribing', words: [], wordCount: 0, error: null });
 
-    const result = await transcribeAudioWithWebSpeech(voiceoverUrl, (wc) => setTranscription(prev => ({ ...prev, wordCount: wc })));
+    const scenesWithText = scenes.filter(s => (s.narration_text || s.voiceover_text)?.trim());
 
-    if (!result.success || result.words.length === 0) {
-      setTranscription({ status: 'error', words: [], wordCount: 0, error: result.error });
-      // Fall back to script-based estimation
-      generateCaptionsFromScript(deleteExisting);
+    if (scenesWithText.length === 0) {
+      setTranscription({ status: 'error', words: [], wordCount: 0, error: 'No script text found on any scene.' });
       setIsGenCaptions(false);
       return;
     }
 
-    const words = result.words;
-    setTranscription({ status: 'done', words, wordCount: words.length, error: null });
+    // ── Call Claude for each scene in parallel ───────────────────
+    const results = await Promise.all(
+      scenesWithText.map(async (scene) => {
+        const idx         = scenes.indexOf(scene);
+        const text        = (scene.narration_text || scene.voiceover_text).trim();
+        const beatDur     = audioBeatDurations[idx] || scene.duration_seconds || 5;
+        const beatStart   = audioStartTimes[idx] ?? 0;
+        const result      = await getSmartWordTimings(text, beatDur, scene.scene_number);
 
-    // ── Group words into caption chunks (~2s each, 2–8 words) ─────
+        if (result.success) {
+          // Offset word times by scene start time
+          return result.words.map(w => ({
+            ...w,
+            start: parseFloat((beatStart + w.start).toFixed(3)),
+            end:   parseFloat((beatStart + w.end).toFixed(3)),
+          }));
+        }
+
+        // ── Per-scene fallback: linear spread ───────────────────
+        const words       = text.split(/\s+/).filter(Boolean);
+        const secsPerWord = beatDur / words.length;
+        return words.map((word, wi) => ({
+          word,
+          start: parseFloat((beatStart + wi * secsPerWord).toFixed(3)),
+          end:   parseFloat((beatStart + (wi + 1) * secsPerWord).toFixed(3)),
+        }));
+      })
+    );
+
+    // Flatten all scene word arrays into one timeline
+    const allWords = results.flat();
+    setTranscription({ status: 'done', words: allWords, wordCount: allWords.length, error: null });
+
+    // ── Group words into ~2s caption chunks ──────────────────────
     const TARGET_CAP_DURATION = 2.0;
     const caps = [];
     let i = 0;
 
-    while (i < words.length) {
-      const chunkStart = words[i].start;
-      const chunkWords = [words[i]];
+    while (i < allWords.length) {
+      const chunkStart = allWords[i].start;
+      const chunkWords = [allWords[i]];
       i++;
 
-      // Keep adding words until we hit TARGET_CAP_DURATION or 8 words
       while (
-        i < words.length &&
+        i < allWords.length &&
         chunkWords.length < 8 &&
-        (words[i].end - chunkStart) < TARGET_CAP_DURATION
+        (allWords[i].end - chunkStart) < TARGET_CAP_DURATION
       ) {
-        chunkWords.push(words[i]);
+        chunkWords.push(allWords[i]);
         i++;
       }
 
@@ -1300,7 +1255,7 @@ export default function TimelineEditorV10() {
       if (!text) continue;
 
       caps.push({
-        id:        `cap-tr-${i}-${Date.now()}`,
+        id:        `cap-ai-${i}-${Date.now()}`,
         type:      'caption',
         startTime: chunkStart,
         duration:  Math.max(0.4, chunkEnd - chunkStart),
@@ -1312,40 +1267,6 @@ export default function TimelineEditorV10() {
 
     setCaptionClips(deleteExisting ? caps : [...captionClips, ...caps]);
     setIsGenCaptions(false);
-  };
-
-  // ── Fallback: estimate timing from script text + beat durations ──
-  const generateCaptionsFromScript = (deleteExisting) => {
-    const caps = [];
-    scenes.forEach((scene, idx) => {
-      const text = scene.narration_text || scene.voiceover_text;
-      if (!text) return;
-      const beatDuration  = audioBeatDurations[idx];
-      const beatStartTime = audioStartTimes[idx];
-      if (!beatDuration || beatStartTime == null) return;
-      const words = text.trim().split(/\s+/).filter(Boolean);
-      if (words.length === 0) return;
-      const secsPerWord      = beatDuration / words.length;
-      const wordsPerCaption  = Math.min(8, Math.max(2, Math.round(2.0 / secsPerWord)));
-      let wordIdx = 0;
-      while (wordIdx < words.length) {
-        const chunk     = words.slice(wordIdx, wordIdx + wordsPerCaption);
-        const propStart = wordIdx / words.length;
-        const propEnd   = Math.min(1, (wordIdx + chunk.length) / words.length);
-        caps.push({
-          id:        `cap-${scene.id}-${wordIdx}-${Date.now()}`,
-          sceneId:   scene.id,
-          type:      'caption',
-          startTime: beatStartTime + propStart * beatDuration,
-          duration:  Math.max(0.4, (propEnd - propStart) * beatDuration),
-          text:      chunk.join(' '),
-          label:     chunk.join(' ').slice(0, 15) + '…',
-          x: 50, y: 85, fontSize: 20, color: '#FFFFFF', bgColor: 'rgba(0,0,0,0.7)'
-        });
-        wordIdx += chunk.length;
-      }
-    });
-    setCaptionClips(deleteExisting ? caps : [...captionClips, ...caps]);
   };
 
   // ── Misc handlers ───────────────────────────────────────────────
@@ -1501,7 +1422,7 @@ export default function TimelineEditorV10() {
               <span className="text-indigo-400">•</span>
               <span>Avg {(actualVoiceoverDuration / Math.max(scenes.length, 1)).toFixed(1)}s per scene</span>
               {measuredAudioDuration > 0 && <span className="text-green-400 flex items-center gap-1"><CheckCircle size={10} /> Measured from audio file</span>}
-              {transcription.status === 'done' && <span className="text-orange-400 flex items-center gap-1"><CheckCircle size={10} /> {transcription.wordCount} words transcribed</span>}
+              {transcription.status === 'done' && <span className="text-orange-400 flex items-center gap-1"><CheckCircle size={10} /> {transcription.wordCount} words AI-timed</span>}
             </>
           ) : (
             <span>No voiceover loaded - using text estimates</span>
