@@ -109,66 +109,69 @@ const TEXT_TEMPLATES = {
 // ══════════════════════════════════════════════════════════════════
 
 function renderSmoothText(ctx, word, drawX, drawY, fontSize, fontOption, zoneStyle) {
-  const OVER = 4; // oversample factor
+  const OVER = 8; // 8x oversample — render huge, blit tiny = maximum AA
   const strokeW = Math.max(1, fontSize * zoneStyle.strokeWidthFactor);
-  const pad = Math.ceil(strokeW * OVER * 2);
+  const pad = Math.ceil(strokeW * OVER * 2.5);
 
-  // Measure at oversampled size
-  const offCtx = document.createElement('canvas').getContext('2d');
-  offCtx.font = `${fontOption.weight} ${fontSize * OVER}px ${fontOption.stack}`;
-  const metrics = offCtx.measureText(word);
+  // ── Render at 8x onto offscreen canvas ─────────────────────────
+  const hi = document.createElement('canvas');
+  const hiCtx = hi.getContext('2d');
+
+  // Measure first
+  hiCtx.font = `${fontOption.weight} ${fontSize * OVER}px ${fontOption.stack}`;
+  const metrics = hiCtx.measureText(word);
   const textW = Math.ceil(metrics.width);
-  const textH = Math.ceil(fontSize * OVER * 1.4);
+  const textH = Math.ceil(fontSize * OVER * 1.5);
 
-  const oc = offCtx.canvas;
-  oc.width  = textW + pad * 2;
-  oc.height = textH + pad * 2;
+  hi.width  = textW + pad * 2;
+  hi.height = textH + pad * 2;
 
-  offCtx.font = `${fontOption.weight} ${fontSize * OVER}px ${fontOption.stack}`;
-  offCtx.textBaseline = 'middle';
-  offCtx.textAlign = 'left';
+  // Re-set font after canvas resize (resize clears state)
+  hiCtx.font = `${fontOption.weight} ${fontSize * OVER}px ${fontOption.stack}`;
+  hiCtx.textBaseline = 'middle';
+  hiCtx.textAlign = 'left';
 
   const tx = pad;
-  const ty = oc.height / 2;
+  const ty = hi.height / 2;
 
-  // Shadow
+  // Shadow at 8x — tiny blur = perfectly smooth when downscaled
   if (zoneStyle.shadowEnabled) {
     const sOff = Math.round(fontSize * OVER * zoneStyle.shadowOffsetFactor);
-    offCtx.save();
-    offCtx.shadowColor = 'rgba(0,0,0,0.9)';
-    offCtx.shadowBlur = fontSize * OVER * 0.03;
-    offCtx.shadowOffsetX = sOff;
-    offCtx.shadowOffsetY = sOff;
-    offCtx.fillStyle = '#000000';
-    offCtx.globalAlpha = 0.8;
-    offCtx.fillText(word, tx, ty);
-    offCtx.restore();
+    hiCtx.save();
+    hiCtx.shadowColor   = 'rgba(0,0,0,1)';
+    hiCtx.shadowBlur    = fontSize * OVER * 0.04;
+    hiCtx.shadowOffsetX = sOff;
+    hiCtx.shadowOffsetY = sOff;
+    hiCtx.fillStyle     = '#000000';
+    hiCtx.globalAlpha   = 0.85;
+    hiCtx.fillText(word, tx, ty);
+    hiCtx.restore();
   }
 
-  // Stroke — single clean pass at full opacity (smooth because it's 4x)
-  offCtx.lineJoin = 'round';
-  offCtx.lineCap  = 'round';
-  offCtx.miterLimit = 2;
-  offCtx.strokeStyle = zoneStyle.strokeColor;
-  offCtx.lineWidth = strokeW * OVER;
-  offCtx.globalAlpha = 1.0;
-  offCtx.strokeText(word, tx, ty);
+  // Stroke — single clean pass (smooth because it's 8x)
+  hiCtx.lineJoin    = 'round';
+  hiCtx.lineCap     = 'round';
+  hiCtx.miterLimit  = 2;
+  hiCtx.strokeStyle = zoneStyle.strokeColor;
+  hiCtx.lineWidth   = strokeW * OVER;
+  hiCtx.globalAlpha = 1.0;
+  hiCtx.strokeText(word, tx, ty);
 
   // Fill
-  offCtx.fillStyle = zoneStyle.color;
-  offCtx.fillText(word, tx, ty);
+  hiCtx.fillStyle   = zoneStyle.color;
+  hiCtx.globalAlpha = 1.0;
+  hiCtx.fillText(word, tx, ty);
 
-  // Blit downscaled onto main canvas — browser AA handles the rest
-  ctx.save();
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-
-  const destW = oc.width  / OVER;
-  const destH = oc.height / OVER;
+  // ── Blit down to main canvas — browser bicubic/Lanczos handles AA ──
+  const destW = hi.width  / OVER;
+  const destH = hi.height / OVER;
   const destX = drawX - pad / OVER;
   const destY = drawY - destH / 2;
 
-  ctx.drawImage(oc, destX, destY, destW, destH);
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(hi, destX, destY, destW, destH);
   ctx.restore();
 }
 
@@ -222,18 +225,27 @@ function drawZone(ctx, zone, text, canvasW, canvasH, zoneStyle) {
       currentY += fs * 1.0 + lineGap;
     }
   } else {
-    // ── INLINE: all words on one line, scale to fit column ──
+    // ── INLINE: all words on one line ──
+    // sizeMultiplier controls the HEIGHT of the text (as % of canvas height).
+    // The text is then scaled horizontally to fit the column — but never taller
+    // than the sizeMultiplier cap. This means the slider directly controls size.
     const line = text.toUpperCase().trim();
 
-    let fs = canvasH * 0.10 * zoneStyle.sizeMultiplier;
+    // Target font height = sizeMultiplier * some base height
+    const targetFontH = canvasH * 0.22 * zoneStyle.sizeMultiplier;
+    const maxFs = Math.min(canvasH * 0.35, targetFontH);
+    const minFs = canvasH * 0.04;
+
+    // Start at target height, then shrink to fit column width if needed
+    let fs = maxFs;
     const tmp = document.createElement('canvas').getContext('2d');
     tmp.font = `${fontOption.weight} ${fs}px ${fontOption.stack}`;
-    const m = tmp.measureText(line).width;
-    if (m > 0) fs = fs * (colW / m);
-
-    const maxFs = canvasH * 0.30 * zoneStyle.sizeMultiplier;
-    const minFs = canvasH * 0.04 * zoneStyle.sizeMultiplier;
-    fs = Math.min(maxFs, Math.max(minFs, fs));
+    const mW = tmp.measureText(line).width;
+    // Only shrink, never grow — so size slider always reduces when pulled down
+    if (mW > colW) {
+      fs = fs * (colW / mW);
+    }
+    fs = Math.max(minFs, fs);
 
     let drawX = startX;
     if (zone.align === 'center') drawX = canvasW * zone.startX;
