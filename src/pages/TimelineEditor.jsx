@@ -1572,38 +1572,95 @@ export default function TimelineEditorV10() {
         });
       }
 
-      // ── Step 2: Word counts per scene ──────────────────────────
-      const wordCounts = scenes.map(scene => {
-        const text = (scene.narration_text || scene.voiceover_text || '').trim();
-        return Math.max(1, text.split(/\s+/).filter(Boolean).length);
-      });
-      const totalWords = wordCounts.reduce((s, w) => s + w, 0);
+      // ── Step 2: Syllable-weighted speech duration per scene ───────
+      //
+      // Raw word count is inaccurate because:
+      //   • "extraordinary" takes ~4× longer to say than "a"
+      //   • Punctuation creates natural pauses between scenes
+      //   • Function words (the, a, is) are spoken fast
+      //
+      // Instead we model each scene's spoken duration using the same
+      // syllable-weighting system as the caption engine:
+      //   • Count syllables per word (vowel-cluster heuristic)
+      //   • Discount common function words by 40%
+      //   • Add punctuation pause weight at sentence boundaries
+      //   • Add a fixed inter-scene breath gap (SCENE_GAP_SECS) that
+      //     represents the natural pause between scenes in the recording
+      //
+      // We then normalise all scene weights so they sum to 1.0 and
+      // multiply by the total audio duration — giving each scene exactly
+      // its proportional share of the real recording time.
 
-      // ── Step 3: Compute new beat durations ─────────────────────
+      const countSyllables = (word) => {
+        const w = word.toLowerCase().replace(/[^a-z]/g, '');
+        if (!w || w.length <= 2) return 1;
+        const stripped = w.replace(/(?:[^laeiouy]es|[^laeiouy]ed|[aeiou]es?)$/, '').replace(/^y/, '');
+        const clusters = stripped.match(/[aeiouy]{1,2}/g);
+        return Math.max(1, clusters ? clusters.length : 1);
+      };
+
+      const FAST_WORDS = new Set([
+        'a','an','the','and','or','but','in','on','at','to','for','of','with',
+        'is','it','its','be','as','by','he','she','we','they','this','that',
+        'was','are','has','have','had','do','did','not','so','if','up','out',
+        'from','into','than','then','when','where','who','which','i','you',
+        'my','your','our','their','its',
+      ]);
+
+      const SECS_PER_SYL  = 0.165;  // avg syllable duration at normal pace
+      const FAST_DISCOUNT = 0.60;   // function words spoken 40% faster
+      const SCENE_GAP_SECS = 0.20;  // natural breath/pause between scenes
+
+      const sceneWeights = scenes.map(scene => {
+        const text   = (scene.narration_text || scene.voiceover_text || '').trim();
+        const tokens = text.split(/\s+/).filter(Boolean);
+        if (tokens.length === 0) return SCENE_GAP_SECS; // silent scene gets gap only
+
+        let weight = SCENE_GAP_SECS; // start with inter-scene breath
+        tokens.forEach(token => {
+          const clean = token.toLowerCase().replace(/[^a-z]/g, '');
+          const syls  = countSyllables(clean);
+          const fast  = FAST_WORDS.has(clean);
+          const base  = Math.max(0.10, syls * SECS_PER_SYL * (fast ? FAST_DISCOUNT : 1.0));
+          // Add punctuation pause after the word
+          const pause = /[.!?]$/.test(token) ? 0.30 : /[,;:]$/.test(token) ? 0.14 : 0;
+          weight += base + pause;
+        });
+        return weight;
+      });
+
+      const totalWeight = sceneWeights.reduce((s, w) => s + w, 0);
+
+      // ── Step 3: Scale weights to real audio duration ────────────
       let newBeatDurations;
 
-      if (audioDuration > 0 && totalWords > 0) {
-        // Proportional by word count, scaled to real audio duration
-        // Apply a minimum of 0.5s per scene then scale remainder
-        const MIN_PER_SCENE = 0.5;
-        const reservedTime  = MIN_PER_SCENE * scenes.length;
-        const flexTime      = Math.max(0, audioDuration - reservedTime);
-
-        newBeatDurations = wordCounts.map(wc =>
-          parseFloat((MIN_PER_SCENE + (wc / totalWords) * flexTime).toFixed(3))
+      if (audioDuration > 0 && totalWeight > 0) {
+        // Scale syllable weights proportionally to actual recording time
+        newBeatDurations = sceneWeights.map(w =>
+          parseFloat(((w / totalWeight) * audioDuration).toFixed(3))
         );
 
-        // Clamp total to exact audio duration (fix floating point drift)
-        const sum   = newBeatDurations.reduce((s, d) => s + d, 0);
-        const drift = audioDuration - sum;
+        // Enforce minimum 0.8s per scene (even silent scenes need a beat)
+        const MIN_PER_SCENE = 0.8;
+        newBeatDurations = newBeatDurations.map(d => Math.max(MIN_PER_SCENE, d));
+
+        // Re-scale to preserve exact total after minimum enforcement
+        const scaledSum  = newBeatDurations.reduce((s, d) => s + d, 0);
+        const scaleFactor = audioDuration / scaledSum;
+        newBeatDurations = newBeatDurations.map(d =>
+          parseFloat((d * scaleFactor).toFixed(3))
+        );
+
+        // Correct floating-point drift on last scene
+        const drift = audioDuration - newBeatDurations.reduce((s, d) => s + d, 0);
         newBeatDurations[newBeatDurations.length - 1] =
           parseFloat((newBeatDurations[newBeatDurations.length - 1] + drift).toFixed(3));
 
       } else {
-        // No audio — fall back to word-count proportional with 5s/100words rate
-        const WORDS_PER_SEC = 100 / 5; // ~20 words/sec average speech
-        newBeatDurations = wordCounts.map(wc =>
-          parseFloat(Math.max(1.5, wc / WORDS_PER_SEC).toFixed(3))
+        // No audio — use raw syllable weights at natural speech pace
+        // (weights are already in seconds at SECS_PER_SYL rate)
+        newBeatDurations = sceneWeights.map(w =>
+          parseFloat(Math.max(1.5, w).toFixed(3))
         );
       }
 
@@ -1826,6 +1883,11 @@ export default function TimelineEditorV10() {
       const text      = (scene.narration_text || scene.voiceover_text).trim();
       const beatDur   = audioBeatDurations[idx] ?? scene.duration_seconds ?? 5;
       const beatStart = audioStartTimes[idx] ?? 0;
+      // Hard ceiling: no word can end past this point.
+      // The 0.12s margin ensures the last caption clears before the scene cut,
+      // preventing the "first 2 words of next scene" bleed problem.
+      const SCENE_END_MARGIN = 0.12;
+      const beatEnd   = beatStart + beatDur - SCENE_END_MARGIN;
 
       const tokens = text.split(/\s+/).filter(Boolean);
       if (tokens.length === 0) return;
@@ -1834,8 +1896,10 @@ export default function TimelineEditorV10() {
       const weights = tokens.map(t => wordWeight(t) + pauseAfter(t));
       const rawSum  = weights.reduce((s, w) => s + w, 0);
 
-      // ── 2. Scale to fit exactly in beatDur ───────────────────
-      const scale = beatDur / rawSum;
+      // ── 2. Scale to fit within the usable beat window ─────────
+      // Scale to (beatDur - margin) so last word always ends before the cut
+      const usableDur = beatDur - SCENE_END_MARGIN;
+      const scale     = usableDur / rawSum;
 
       // ── 3. Build word timeline ────────────────────────────────
       let cursor = beatStart;
@@ -1843,11 +1907,14 @@ export default function TimelineEditorV10() {
         const dur  = weights[wi] * scale;
         const word = token.replace(/[.,!?;:""'']/g, '').trim();
         if (!word) { cursor += dur; return; }
+        // Hard clamp — never let a caption bleed into the next scene
+        if (cursor >= beatEnd) return;
+        const wordEnd = Math.min(cursor + dur, beatEnd);
         allWords.push({
           word,
-          raw:   token,          // keep original for punctuation detection
-          start: parseFloat(cursor.toFixed(3)),
-          end:   parseFloat((cursor + dur).toFixed(3)),
+          raw:      token,
+          start:    parseFloat(cursor.toFixed(3)),
+          end:      parseFloat(wordEnd.toFixed(3)),
           sceneIdx: idx,
         });
         cursor += dur;
