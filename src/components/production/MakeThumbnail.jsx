@@ -5,6 +5,9 @@ import {
   RefreshCw, Wand2, Users, Star, ChevronRight, Image as ImageIcon,
   CheckCircle, AlertCircle, Eye, Zap, Target, Palette
 } from 'lucide-react';
+import ThumbnailTemplatePicker from './ThumbnailTemplatePicker';
+import { buildTemplatePrompt } from './thumbnailTemplates';
+import { TEMPLATE_IMAGES } from './thumbnailReferenceImages';
 
 // ═══════════════════════════════════════════════════════════════════════
 // MOOD ENGINE — maps title+summary → visual DNA
@@ -636,568 +639,713 @@ function StepDots({ current, total }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// CONCEPT CARD — one card per AI-generated concept from backend
+// ═══════════════════════════════════════════════════════════════════════
+function ConceptCard({ concept, isSelected, onSelect, onGenerate, generating }) {
+  const ctr = concept.ctr_score || 7;
+  const ctrColor = ctr >= 9 ? '#22c55e' : ctr >= 7 ? '#f59e0b' : '#9ca3af';
+  const templateName = (concept.visual_metaphor || concept.concept_type || '').replace(/_/g, ' ');
+
+  return (
+    <div
+      onClick={() => onSelect(concept)}
+      style={{
+        border: isSelected ? '2px solid #7c3aed' : '2px solid #1f2937',
+        borderRadius: 12, background: isSelected ? 'rgba(124,58,237,0.1)' : '#0b0b1a',
+        cursor: 'pointer', transition: 'border 0.15s, background 0.15s, box-shadow 0.15s',
+        overflow: 'hidden',
+        boxShadow: isSelected ? '0 0 24px rgba(124,58,237,0.35)' : 'none',
+      }}
+    >
+      {/* Preview area — shows generated image or placeholder */}
+      <div style={{
+        aspectRatio: '16/9', background: '#070711', position: 'relative',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+      }}>
+        {concept.image_url ? (
+          <img src={concept.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (
+          <div style={{ textAlign: 'center', padding: '12px 16px' }}>
+            {concept.text_overlay && (
+              <div style={{
+                fontFamily: 'Impact, Arial Black, sans-serif', fontWeight: 900,
+                fontSize: 18, color: '#fff', letterSpacing: '0.05em',
+                textShadow: '2px 2px 0 #000', marginBottom: 6, lineHeight: 1.1,
+              }}>
+                "{concept.text_overlay}"
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              {templateName || 'thumbnail concept'}
+            </div>
+          </div>
+        )}
+        {/* Rank badge */}
+        <div style={{
+          position: 'absolute', top: 8, left: 8, background: 'rgba(0,0,0,0.8)',
+          borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 700, color: '#fff',
+        }}>#{concept.rank || 1}</div>
+        {/* CTR badge */}
+        <div style={{
+          position: 'absolute', top: 8, right: 8, background: ctrColor,
+          borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 700, color: '#fff',
+        }}>⭐ {ctr}/10</div>
+      </div>
+
+      <div style={{ padding: '10px 12px' }}>
+        {/* Template name */}
+        {templateName && (
+          <div style={{ fontSize: 10, color: '#7c3aed', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 4 }}>
+            {templateName}
+          </div>
+        )}
+
+        {/* Text overlay */}
+        {concept.text_overlay && (
+          <div style={{ fontFamily: 'Impact, Arial Black', fontWeight: 900, fontSize: 16, color: '#fff', letterSpacing: '0.04em', marginBottom: 5 }}>
+            "{concept.text_overlay}"
+          </div>
+        )}
+
+        {/* Description snippet */}
+        <div style={{ color: '#6b7280', fontSize: 11, lineHeight: 1.45, marginBottom: 8 }}>
+          {(concept.why_it_stops_scrolling || concept.concept_description || '')
+            .replace(/^\[.*?\]\s*/, '')
+            .substring(0, 90)}…
+        </div>
+
+        {/* Color scheme tag */}
+        {concept.color_scheme && (
+          <div style={{ fontSize: 10, color: '#4b5563', background: '#1f2937', borderRadius: 4, padding: '2px 7px', display: 'inline-block', marginBottom: isSelected ? 10 : 0 }}>
+            {concept.color_scheme.split('|')[0].trim().substring(0, 40)}
+          </div>
+        )}
+
+        {/* Generate button — only when selected */}
+        {isSelected && (
+          <button
+            onClick={e => { e.stopPropagation(); onGenerate(concept); }}
+            disabled={generating}
+            style={{
+              width: '100%', marginTop: 10, padding: '10px', borderRadius: 8, border: 'none',
+              background: generating ? '#374151' : 'linear-gradient(135deg, #7c3aed, #db2777)',
+              color: '#fff', cursor: generating ? 'not-allowed' : 'pointer',
+              fontWeight: 700, fontSize: 13,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}
+          >
+            {generating
+              ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Rendering with Ideogram V3…</>
+              : <><Sparkles size={14} /> Generate This Thumbnail</>
+            }
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
+// ─────────────────────────────────────────────────────────────────────
+// FLOW:
+//   Step 0 — User enters title + optional summary + character count/photos
+//   Step 1 — Loading: create Project → call generateThumbnailConcepts
+//             → Gemini builds 10 concepts using 26-template DNA vault
+//             → Display 10 ConceptCards for user to choose from
+//   Step 2 — Loading: call generateThumbnailImage(concept_id)
+//             → Kie/Ideogram V3 renders → polls → returns image_url
+//   Step 3 — Show final image, download, try other concepts
 // ═══════════════════════════════════════════════════════════════════════
 export default function MakeThumbnail({ onBack }) {
-  const [step, setStep] = useState(0); // 0=setup 1=templates 2=generating 3=result
-  const [title, setTitle] = useState('');
+  // Navigation
+  const [step, setStep] = useState(0);
+
+  // Step 0 inputs
+  const [title, setTitle]     = useState('');
   const [summary, setSummary] = useState('');
-  const [overlayText, setOverlayText] = useState('');
   const [charCount, setCharCount] = useState(2);
-  const [chars, setChars] = useState([null, null, null]);
-  const [mood, setMood] = useState(null);
-  const [selectedTemplate, setSelectedTemplate] = useState(null);
-  const [aiAnalysis, setAiAnalysis] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [chars, setChars]     = useState([null, null, null]);
+  const [selectedUserTemplate, setSelectedUserTemplate] = useState(null); // user-picked reference template
+
+  // Step 1 data
+  const [loadingConcepts, setLoadingConcepts] = useState(false);
+  const [loadingPhase, setLoadingPhase]       = useState('');
+  const [concepts, setConcepts]               = useState([]);
+  const [selectedConcept, setSelectedConcept] = useState(null);
+  const [templateMeta, setTemplateMeta]       = useState(null);
+  const [projectId, setProjectId]             = useState(null);
+
+  // Step 2/3 data
+  const [generating, setGenerating]   = useState(false);
   const [generatedUrl, setGeneratedUrl] = useState(null);
-  const [error, setError] = useState(null);
-  const resultCanvasRef = useRef(null);
+  const [error, setError]             = useState(null);
 
-  const profile = MOODS[mood || 'drama'];
-
-  const handleCharCount = (n) => {
+  // ── helpers ─────────────────────────────────────────────────────
+  const handleCharCount = n => {
     setCharCount(n);
-    setChars(prev => {
-      const a = [...prev]; while (a.length < 3) a.push(null);
-      return a;
-    });
+    setChars(prev => { const a = [...prev]; while (a.length < 3) a.push(null); return a; });
   };
-
   const handleUpload = (i, file) => {
     const url = URL.createObjectURL(file);
     setChars(prev => { const a = [...prev]; a[i] = { file, url, name: file.name }; return a; });
   };
-
-  const handleRemove = (i) => {
+  const handleRemove = i => {
     setChars(prev => { const a = [...prev]; a[i] = null; return a; });
   };
 
-  // Step 0 → 1: Analyse
-  const handleAnalyse = async () => {
+  // ── Step 0 → 1 ──────────────────────────────────────────────────
+  // 1. Create a Project record so backend has a project_id
+  // 2. Call generateThumbnailConcepts — Gemini designs 10 concepts
+  //    using its 26-template DNA vault, saves to ThumbnailConcepts entity
+  // 3. Fetch saved records and show them as concept cards
+  const handleGenerateConcepts = async () => {
     if (!title.trim()) return;
-    setLoading(true);
+    setLoadingConcepts(true);
     setError(null);
-    const detectedMood = detectMood(title, summary);
-    setMood(detectedMood);
+    setConcepts([]);
+    setSelectedConcept(null);
+    setGeneratedUrl(null);
+    setStep(1);
 
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 500,
-          system: `You are a world-class YouTube thumbnail strategist with deep knowledge of what drives clicks. Analyse the video title and summary, return ONLY valid JSON with no markdown:
-{
-  "mood": "crime|drama|nollywood|comedy|finance|inspirational|educational",
-  "moodReason": "one sentence",
-  "overlayOptions": ["3-4 ALL CAPS options, max 3 words each"],
-  "bestTemplate": "split_reaction|hero_dominant|movie_poster|versus|closeup_shock|documentary",
-  "templateReason": "one sentence",
-  "ctrTips": ["tip 1", "tip 2"]
-}`,
-          messages: [{ role: 'user', content: `Title: "${title}"\nSummary: "${summary || 'none'}"` }],
-        }),
-      });
-      const data = await response.json();
-      const text = data.content?.[0]?.text || '{}';
-      const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-      setAiAnalysis(parsed);
-      if (parsed.mood && MOODS[parsed.mood]) setMood(parsed.mood);
-      if (parsed.overlayOptions?.[0]) setOverlayText(parsed.overlayOptions[0]);
-      const rec = TEMPLATES.find(t => t.id === parsed.bestTemplate);
-      if (rec) setSelectedTemplate(rec);
-    } catch {
-      // Fallback local
-      setAiAnalysis({ overlayOptions: OVERLAY_SUGGESTIONS[detectedMood] || [] });
-      const rec = TEMPLATES.find(t => t.bestFor.includes(detectedMood));
-      if (rec) setSelectedTemplate(rec);
-      if (OVERLAY_SUGGESTIONS[detectedMood]?.[0]) setOverlayText(OVERLAY_SUGGESTIONS[detectedMood][0]);
+      // ── 1. Create project ────────────────────────────────────────
+      setLoadingPhase('Creating project…');
+      let pid;
+      try {
+        const proj = await base44.entities.Projects.create({
+          name: title.trim(),
+          niche: summary.trim() || title.trim(),
+          status: 'thumbnail_only',
+          current_step: 0,
+        });
+        pid = proj?.id;
+        if (!pid) throw new Error('Project.create returned no id');
+        setProjectId(pid);
+      } catch (e) {
+        throw new Error(`Could not create Project record: ${e.message}. Check your Projects entity exists.`);
+      }
+
+      // ── 2. Call generateThumbnailConcepts ────────────────────────
+      // Backend: project_id + video_title → Gemini → 10 ThumbnailConcept records
+      // Returns: { success, concept_ids[], template_selection{} }
+      setLoadingPhase('Gemini is designing 10 thumbnail concepts using the 26-template DNA vault…');
+      let conceptsResult;
+      try {
+        // Build template context — include actual base64 image so Gemini can SEE the reference
+        const templateContext = selectedUserTemplate ? (() => {
+          const refImg = TEMPLATE_IMAGES[selectedUserTemplate.id];
+          return {
+            reference_template_id:   selectedUserTemplate.id,
+            reference_template_name: selectedUserTemplate.name,
+            reference_psychology:    selectedUserTemplate.psychology,
+            reference_text_strategy: selectedUserTemplate.textStrategy,
+            reference_layout:        JSON.stringify(selectedUserTemplate.layout || {}),
+            reference_image_prompt:  buildTemplatePrompt(selectedUserTemplate, {
+              title: title.trim(),
+              overlayText: '',
+              charCount,
+              charDescriptions: chars.filter(Boolean).map(c => c.name || 'uploaded character photo'),
+            }),
+            // Pass the actual reference image so Gemini Vision can see it
+            reference_b64:  refImg?.b64  ?? null,
+            reference_mime: refImg?.mime ?? null,
+          };
+        })() : {};
+
+        conceptsResult = await base44.functions.invoke('generateThumbnailConcepts', {
+          project_id: pid,
+          video_title: title.trim(),
+          ...templateContext,
+        });
+      } catch (e) {
+        throw new Error(`generateThumbnailConcepts function error: ${e.message}`);
+      }
+
+      if (conceptsResult?.error) {
+        throw new Error(`generateThumbnailConcepts: ${conceptsResult.error}`);
+      }
+      if (!conceptsResult?.concept_ids?.length) {
+        throw new Error('Gemini returned no concepts. Check GEMINI_API_KEY is set in your environment.');
+      }
+
+      // Store template selection metadata for display
+      if (conceptsResult.template_selection) setTemplateMeta(conceptsResult.template_selection);
+
+      // ── 3. Load saved concepts from DB ───────────────────────────
+      setLoadingPhase('Loading your 10 concepts…');
+      let saved = [];
+      try {
+        saved = await base44.entities.ThumbnailConcepts.filter({ project_id: pid });
+      } catch (e) {
+        throw new Error(`Could not load concepts from database: ${e.message}`);
+      }
+
+      if (!saved.length) {
+        throw new Error('Concepts were generated but could not be fetched. Check ThumbnailConcepts entity has project_id field.');
+      }
+
+      const sorted = [...saved].sort((a, b) => (a.rank || 99) - (b.rank || 99));
+      setConcepts(sorted);
+      setSelectedConcept(sorted[0] || null);
+
+    } catch (e) {
+      console.error('handleGenerateConcepts error:', e);
+      setError(e.message);
     }
 
-    setLoading(false);
-    setStep(1);
+    setLoadingPhase('');
+    setLoadingConcepts(false);
   };
 
-  // Step 1 → 3: Generate
-  const handleGenerate = async () => {
-    if (!selectedTemplate) return;
-    setStep(2);
-    setLoading(true);
+  // ── Step 1 → 2 → 3 ──────────────────────────────────────────────
+  // Call generateThumbnailImage with the chosen concept_id
+  // Backend: reads concept.image_prompt → Kie/Ideogram V3 → polls → saves image_url
+  const handleGenerateImage = async concept => {
+    if (!concept?.id) return;
+    setSelectedConcept(concept);
+    setGenerating(true);
     setError(null);
     setGeneratedUrl(null);
-
-    const moodProfile = MOODS[mood] || MOODS.drama;
-    const uploadedChars = chars.filter(Boolean).slice(0, charCount);
-
-    // Build detailed Ideogram prompt
-    const moodVisuals = {
-      crime: 'dark desaturated grayscale color grade, deep crimson red accents, dramatic noir shadows, high contrast, police investigation aesthetic',
-      drama: 'intense blue-dark gradient background, vivid emotional contrast, dramatic studio lighting, cinematic color grade',
-      nollywood: 'vibrant rich saturated African movie poster, warm amber-orange-gold tones, bold cinematic Nigerian film style, high energy',
-      comedy: 'explosive bright yellow-orange gradient, high saturation pop-art energy, maximum contrast, playful bold colors',
-      finance: 'sleek dark tech background, emerald green money accents, professional clean aesthetic, subtle gold highlights',
-      inspirational: 'beautiful purple-gold gradient, radiant light rays, uplifting warm glow, premium cinematic feel',
-      educational: 'deep blue academic background, clean white accents, clear informational layout, professional look',
-    };
-
-    const layoutPrompts = {
-      split_reaction: 'two people split vertically down the center of frame, one on each side, both facing slightly inward, dramatic lighting separating them',
-      hero_dominant: 'single person filling 65% of frame, centered, looking directly at camera with strong expression',
-      movie_poster: 'movie poster arrangement, main character large in center, two flanking characters slightly smaller on each side',
-      versus: 'two people on opposite sides of frame facing each other, tension between them, bold contrast',
-      closeup_shock: 'extreme close-up of one face filling 80% of frame, exaggerated shocked or dramatic expression',
-      documentary: 'documentary-style layout, main subject large on left, secondary photo/image smaller on right, slightly overlapping',
-    };
-
-    const prompt = `Ultra high-quality professional YouTube thumbnail, 1280x720 pixels, 16:9 aspect ratio.
-
-GENRE: ${moodProfile.label}
-VISUAL STYLE: ${moodVisuals[mood] || moodVisuals.drama}
-CHARACTER LAYOUT: ${layoutPrompts[selectedTemplate.id] || layoutPrompts.split_reaction}
-${uploadedChars.length > 0 ? `CHARACTERS: ${uploadedChars.length} real people, backgrounds removed, seamlessly composited into the scene` : 'CHARACTERS: 2-3 diverse photorealistic people with appropriate expressions for the content'}
-
-REQUIRED ELEMENTS:
-- Bold text at bottom reading: "${title.toUpperCase()}" in thick Impact/Arial Black font
-- ${overlayText ? `Accent badge in top-right corner with text: "${overlayText}" on ${moodProfile.badgeBg} background` : 'No additional text badge'}
-- ${mood === 'crime' ? 'Large subtle question marks in background, hint of red/blood accents' : ''}
-- ${mood === 'nollywood' ? 'Lightning bolt decorative elements, warm glow effects' : ''}
-- ${mood === 'drama' ? 'Red arrow pointing, bold dividing line if two characters' : ''}
-- Strong vignette around edges, professional depth-of-field
-- Dramatic lighting that matches the ${moodProfile.label} theme
-- No watermarks, no borders, no text except the title and badge
-
-TECHNICAL: Hyper-realistic photography composite, cinematic quality, maximum visual impact for thumbnail CTR`;
+    setStep(2);
 
     try {
-      const result = await base44.functions.invoke('generateThumbnail', {
-        prompt,
-        title,
-        mood,
-        template: selectedTemplate.id,
-        overlay_text: overlayText,
-        character_count: charCount,
-        character_images: uploadedChars.map(c => c.url),
+      const result = await base44.functions.invoke('generateThumbnailImage', {
+        concept_id: concept.id,
       });
 
-      if (result?.image_url || result?.url || result?.data?.url) {
-        setGeneratedUrl(result.image_url || result.url || result.data?.url);
+      if (result?.image_url) {
+        setGeneratedUrl(result.image_url);
+      } else if (result?.error) {
+        throw new Error(result.error);
       } else {
-        throw new Error('No image URL in response');
+        throw new Error('No image_url returned. Verify KIE_API_KEY is set in your Deno environment variables.');
       }
     } catch (e) {
-      console.error('Generation error:', e);
-      setError('AI generation failed — showing canvas preview instead. You can download the canvas version below.');
+      console.error('handleGenerateImage error:', e);
+      setError(e.message);
     }
 
-    setLoading(false);
+    setGenerating(false);
     setStep(3);
   };
 
   const handleDownload = () => {
-    if (generatedUrl) {
-      const a = document.createElement('a');
-      a.href = generatedUrl;
-      a.download = `thumbnail-${title.replace(/\s+/g,'-').toLowerCase()}.png`;
-      a.click();
-    } else {
-      // Download canvas
-      const canvas = document.querySelector('canvas');
-      if (canvas) {
-        const a = document.createElement('a');
-        a.href = canvas.toDataURL('image/png');
-        a.download = `thumbnail-${title.replace(/\s+/g,'-').toLowerCase()}.png`;
-        a.click();
-      }
-    }
+    const url = generatedUrl || selectedConcept?.image_url;
+    if (!url) return;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `thumbnail-${title.replace(/\s+/g, '-').toLowerCase()}.png`;
+    a.click();
   };
 
-  const ctrScore = selectedTemplate
-    ? ((profile.ctrBase || 8.5) + (selectedTemplate.ctrBonus || 0)).toFixed(1)
-    : (profile?.ctrBase || 8.5).toFixed(1);
+  // ════════════════════════════════════════════════════════════════
+  // STEP 0 — Setup
+  // ════════════════════════════════════════════════════════════════
+  if (step === 0) return (
+    <div style={{ minHeight: '100vh', background: '#070711', color: '#fff' }}>
+      {/* Header */}
+      <div style={{ borderBottom: '1px solid #1f2937', padding: '15px 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
+          <ArrowLeft size={16} /> Back
+        </button>
+        <div style={{ width: 1, height: 20, background: '#1f2937' }} />
+        <div style={{ fontSize: 15, fontWeight: 700 }}>🎯 AI Thumbnail Maker</div>
+      </div>
 
-  // ── STEP 0: Setup ──────────────────────────────────────────────────
-  if (step === 0) {
-    return (
-      <div style={{ minHeight: '100vh', background: '#070711', color: '#fff', padding: '0' }}>
-        {/* Header bar */}
-        <div style={{ borderBottom: '1px solid #1f2937', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={onBack} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, padding: '6px 10px', borderRadius: 8, hover: 'background:#1f2937' }}>
-            <ArrowLeft size={16} /> Back
-          </button>
-          <div style={{ width: 1, height: 20, background: '#1f2937' }} />
-          <div style={{ fontSize: 15, fontWeight: 700 }}>🎯 AI Thumbnail Maker</div>
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 16px' }}>
+        <StepDots current={0} total={4} />
+
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div style={{ fontSize: 25, fontWeight: 800, marginBottom: 8 }}>Create a World-Class Thumbnail</div>
+          <div style={{ color: '#6b7280', fontSize: 14, lineHeight: 1.6 }}>
+            Gemini analyses your title using a 26-template DNA vault, then Ideogram V3 renders the final image
+          </div>
         </div>
 
-        <div style={{ maxWidth: 680, margin: '0 auto', padding: '32px 16px' }}>
-          <StepDots current={0} total={4} />
+        {/* Title */}
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 8 }}>
+            Video Title *
+          </label>
+          <input
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && title.trim() && handleGenerateConcepts()}
+            placeholder='e.g. "GRANDMA EXPLODES After Finding Out The Truth!"'
+            style={{ width: '100%', padding: '13px 16px', background: '#0f172a', border: '1px solid #1f2937', borderRadius: 10, color: '#fff', fontSize: 15, outline: 'none', boxSizing: 'border-box' }}
+          />
+        </div>
 
-          <div style={{ textAlign: 'center', marginBottom: 36 }}>
-            <div style={{ fontSize: 26, fontWeight: 800, marginBottom: 8 }}>Create a World-Class Thumbnail</div>
-            <div style={{ color: '#6b7280', fontSize: 14, lineHeight: 1.6 }}>
-              Tell AI about your video — it will detect the mood, choose perfect colors, and build a high-CTR thumbnail
-            </div>
+        {/* Summary */}
+        <div style={{ marginBottom: 22 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 8 }}>
+            Video Summary <span style={{ color: '#4b5563', fontWeight: 400, textTransform: 'none' }}>— optional but greatly improves concepts</span>
+          </label>
+          <textarea
+            value={summary}
+            onChange={e => setSummary(e.target.value)}
+            placeholder="What's the video about? Gemini uses this to extract visual anchors, key moments and emotional hooks"
+            rows={3}
+            style={{ width: '100%', padding: '11px 16px', background: '#0f172a', border: '1px solid #1f2937', borderRadius: 10, color: '#fff', fontSize: 14, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5 }}
+          />
+        </div>
+
+        {/* Character count */}
+        <div style={{ marginBottom: 26 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 10 }}>
+            Characters
+          </label>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+            {[1, 2, 3].map(n => (
+              <button key={n} onClick={() => handleCharCount(n)} style={{
+                flex: 1, padding: '11px 8px', borderRadius: 10,
+                border: charCount === n ? '2px solid #7c3aed' : '2px solid #1f2937',
+                background: charCount === n ? 'rgba(124,58,237,0.15)' : '#0f172a',
+                color: charCount === n ? '#a78bfa' : '#4b5563',
+                cursor: 'pointer', fontWeight: 700, fontSize: 13, transition: 'all 0.15s',
+              }}>
+                {n === 1 ? '👤 Solo' : n === 2 ? '👥 Duo' : '👨‍👩‍👦 Trio'}
+              </button>
+            ))}
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${charCount}, 1fr)`, gap: 12, maxWidth: charCount === 1 ? 160 : charCount === 2 ? 300 : '100%' }}>
+            {Array.from({ length: charCount }, (_, i) => (
+              <CharSlot key={i} index={i} label={`Character ${i + 1}`} char={chars[i]} onUpload={handleUpload} onRemove={handleRemove} />
+            ))}
+          </div>
+          <p style={{ color: '#374151', fontSize: 11, marginTop: 8 }}>
+            💡 Photos optional — skip to let Gemini generate characters that match your content
+          </p>
+        </div>
 
-          {/* Title */}
-          <div style={{ marginBottom: 18 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 8 }}>
-              Video Title *
+        {/* ── TEMPLATE PICKER ── */}
+        <div style={{ marginBottom: 26 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <label style={{ fontSize: 12, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Choose a Reference Template
             </label>
-            <input
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && title.trim() && handleAnalyse()}
-              placeholder='e.g. "GRANDMA EXPLODES After Finding Out The Truth!"'
-              style={{ width: '100%', padding: '14px 16px', background: '#0f172a', border: '1px solid #1f2937', borderRadius: 10, color: '#fff', fontSize: 15, outline: 'none', boxSizing: 'border-box' }}
-            />
+            <span style={{ fontSize: 10, color: '#4b5563', background: '#1f2937', borderRadius: 4, padding: '2px 6px' }}>
+              Optional
+            </span>
           </div>
+          <p style={{ color: '#4b5563', fontSize: 12, marginBottom: 14, lineHeight: 1.5 }}>
+            Pick a proven layout — AI recreates it verbatim using your characters &amp; title.
+            Includes full <strong style={{ color: '#6b7280' }}>Beast Formula</strong>: rim lights, skin treatment, color grade, composition.
+          </p>
+          <ThumbnailTemplatePicker
+            selectedTemplate={selectedUserTemplate}
+            onSelect={setSelectedUserTemplate}
+            detectedMood={detectMood(title, summary)}
+          />
+        </div>
 
-          {/* Summary */}
-          <div style={{ marginBottom: 20 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 8 }}>
-              Video Summary <span style={{ color: '#374151', fontWeight: 400, textTransform: 'none' }}>— optional, greatly improves AI accuracy</span>
-            </label>
-            <textarea
-              value={summary}
-              onChange={e => setSummary(e.target.value)}
-              placeholder="What is the video about? Story, plot, topic... AI uses this to pick the right mood, lighting, colors & elements"
-              rows={3}
-              style={{ width: '100%', padding: '12px 16px', background: '#0f172a', border: '1px solid #1f2937', borderRadius: 10, color: '#fff', fontSize: 14, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5 }}
-            />
-          </div>
+        <button
+          onClick={handleGenerateConcepts}
+          disabled={!title.trim()}
+          style={{
+            width: '100%', padding: '15px', borderRadius: 12, border: 'none',
+            background: title.trim() ? 'linear-gradient(135deg, #7c3aed, #db2777)' : '#1f2937',
+            color: '#fff', cursor: title.trim() ? 'pointer' : 'not-allowed',
+            fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          }}
+        >
+          <Wand2 size={18} />
+          {selectedUserTemplate
+            ? `Recreate "${selectedUserTemplate.name}" with My Content`
+            : 'Generate 10 AI Thumbnail Concepts'}
+        </button>
+      </div>
+      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
 
-          {/* Characters */}
-          <div style={{ marginBottom: 18 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 12 }}>
-              Characters in Thumbnail
-            </label>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-              {[1, 2, 3].map(n => (
-                <button key={n} onClick={() => handleCharCount(n)} style={{
-                  flex: 1, padding: '12px 8px', borderRadius: 10,
-                  border: charCount === n ? '2px solid #7c3aed' : '2px solid #1f2937',
-                  background: charCount === n ? 'rgba(124,58,237,0.15)' : '#0f172a',
-                  color: charCount === n ? '#a78bfa' : '#4b5563',
-                  cursor: 'pointer', fontWeight: 700, fontSize: 13, transition: 'all 0.15s',
-                }}>
-                  {n === 1 ? '👤 Solo' : n === 2 ? '👥 Duo' : '👨‍👩‍👦 Trio'}
-                </button>
-              ))}
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${charCount}, 1fr)`, gap: 12, maxWidth: charCount === 1 ? 180 : charCount === 2 ? 320 : '100%' }}>
-              {Array.from({ length: charCount }, (_, i) => (
-                <CharSlot key={i} index={i} label={`Character ${i + 1}`} char={chars[i]} onUpload={handleUpload} onRemove={handleRemove} />
-              ))}
-            </div>
-            <p style={{ color: '#374151', fontSize: 11, marginTop: 8 }}>
-              💡 Upload portrait/headshot photos — AI removes backgrounds & composites them perfectly. Or skip to use AI-generated characters.
-            </p>
-          </div>
-
-          <button
-            onClick={handleAnalyse}
-            disabled={!title.trim() || loading}
-            style={{
-              width: '100%', padding: '15px', borderRadius: 12, border: 'none',
-              background: title.trim() && !loading ? 'linear-gradient(135deg, #7c3aed, #db2777)' : '#1f2937',
-              color: '#fff', cursor: title.trim() && !loading ? 'pointer' : 'not-allowed',
-              fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-              transition: 'opacity 0.2s',
-            }}
-          >
-            {loading
-              ? <><Loader2 size={18} className="animate-spin" /> Analysing mood & building style...</>
-              : <><Wand2 size={18} /> Analyse Title & Select Templates</>}
-          </button>
+  // ════════════════════════════════════════════════════════════════
+  // STEP 1 — Loading concepts / Pick a concept
+  // ════════════════════════════════════════════════════════════════
+  if (step === 1) return (
+    <div style={{ minHeight: '100vh', background: '#070711', color: '#fff' }}>
+      {/* Header */}
+      <div style={{ borderBottom: '1px solid #1f2937', padding: '15px 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button
+          onClick={() => { setStep(0); setError(null); }}
+          disabled={loadingConcepts}
+          style={{ background: 'none', border: 'none', color: loadingConcepts ? '#374151' : '#6b7280', cursor: loadingConcepts ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}
+        >
+          <ArrowLeft size={16} /> Back
+        </button>
+        <div style={{ width: 1, height: 20, background: '#1f2937' }} />
+        <div style={{ fontSize: 15, fontWeight: 700 }}>
+          {loadingConcepts ? '🧠 Generating Concepts…' : `Pick a Concept — ${concepts.length} generated`}
         </div>
       </div>
-    );
-  }
 
-  // ── STEP 1: Template Selection ──────────────────────────────────────
-  if (step === 1) {
-    const overlaySugs = aiAnalysis?.overlayOptions || OVERLAY_SUGGESTIONS[mood] || [];
-    const sortedTemplates = [...TEMPLATES].sort((a, b) => {
-      const aFit = a.bestFor.includes(mood) ? 1 : 0;
-      const bFit = b.bestFor.includes(mood) ? 1 : 0;
-      const aRec = aiAnalysis?.bestTemplate === a.id ? 2 : 0;
-      const bRec = aiAnalysis?.bestTemplate === b.id ? 2 : 0;
-      return (bFit + bRec) - (aFit + aRec);
-    });
-
-    return (
-      <div style={{ minHeight: '100vh', background: '#070711', color: '#fff' }}>
-        <div style={{ borderBottom: '1px solid #1f2937', padding: '16px 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button onClick={() => setStep(0)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 14 }}>
-            <ArrowLeft size={16} /> Back
-          </button>
-          <div style={{ width: 1, height: 20, background: '#1f2937' }} />
-          <div style={{ fontSize: 15, fontWeight: 700 }}>Choose Layout & Style</div>
+      {/* ── Loading state ── */}
+      {loadingConcepts && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 56px)' }}>
+          <div style={{ textAlign: 'center', maxWidth: 460, padding: 24 }}>
+            <div style={{
+              width: 76, height: 76, borderRadius: '50%',
+              background: 'linear-gradient(135deg, #7c3aed, #db2777)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 22px', animation: 'pulse 1.5s ease-in-out infinite',
+            }}>
+              <Sparkles size={30} color="#fff" />
+            </div>
+            <h2 style={{ fontSize: 19, fontWeight: 800, marginBottom: 8 }}>Designing 10 Thumbnail Concepts</h2>
+            <p style={{ color: '#6b7280', fontSize: 13, lineHeight: 1.6, marginBottom: 22 }}>
+              {loadingPhase || 'Gemini is running your title through the 26-template DNA vault…'}
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[
+                'Detecting niche, emotional hooks & keywords',
+                'Scoring 26 templates against your content',
+                'Selecting top 3 templates by CTR potential',
+                'Building 10 unique thumbnail concepts',
+                'Writing 400-word Ideogram prompts per concept',
+                'Saving to database…',
+              ].map((phase, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#0f172a', borderRadius: 8, padding: '9px 14px' }}>
+                  <Loader2 size={13} style={{ flexShrink: 0, color: '#7c3aed', animation: `spin ${0.7 + i * 0.12}s linear infinite` }} />
+                  <span style={{ color: '#6b7280', fontSize: 12 }}>{phase}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
+      )}
 
-        <div style={{ maxWidth: 900, margin: '0 auto', padding: '28px 16px' }}>
+      {/* ── Error state ── */}
+      {!loadingConcepts && error && (
+        <div style={{ maxWidth: 580, margin: '40px auto', padding: '0 16px' }}>
+          <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 12, padding: 20 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <AlertCircle size={16} color="#f87171" style={{ flexShrink: 0, marginTop: 1 }} />
+              <div style={{ fontWeight: 700, fontSize: 14, color: '#f87171' }}>Generation Failed</div>
+            </div>
+            <div style={{ fontSize: 13, color: '#fca5a5', lineHeight: 1.6, marginBottom: 16 }}>{error}</div>
+            <button onClick={() => { setStep(0); setError(null); }} style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: '#7c3aed', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+              ← Try Again
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Concepts grid ── */}
+      {!loadingConcepts && !error && concepts.length > 0 && (
+        <div style={{ maxWidth: 1160, margin: '0 auto', padding: '22px 16px' }}>
           <StepDots current={1} total={4} />
 
-          {/* Mood result card */}
-          <div style={{
-            background: `linear-gradient(135deg, ${profile.accent}18, ${profile.accent}08)`,
-            border: `1px solid ${profile.accent}35`,
-            borderRadius: 14, padding: '16px 20px', marginBottom: 24,
-            display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'flex-start',
-          }}>
-            <div style={{ flex: '0 0 auto' }}>
-              <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Detected Mood</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 22 }}>{profile.emoji}</span>
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: 15, color: profile.accent }}>{profile.label}</div>
-                  {aiAnalysis?.moodReason && <div style={{ color: '#9ca3af', fontSize: 12 }}>{aiAnalysis.moodReason}</div>}
-                </div>
-              </div>
-            </div>
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Visual DNA</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {['Bg: ' + profile.bgStyle.substring(0,20)+'…', 'Accent: '+profile.accent, 'Font: Impact'].map(tag => (
-                  <span key={tag} style={{ background: `${profile.accent}15`, border: `1px solid ${profile.accent}30`, color: profile.accent, borderRadius: 20, padding: '2px 9px', fontSize: 10, fontWeight: 600 }}>{tag}</span>
-                ))}
-              </div>
-            </div>
-            {aiAnalysis?.ctrTips?.length > 0 && (
-              <div style={{ width: '100%', borderTop: `1px solid ${profile.accent}20`, paddingTop: 10 }}>
-                {aiAnalysis.ctrTips.map((tip, i) => (
-                  <div key={i} style={{ color: '#86efac', fontSize: 12, display: 'flex', gap: 6, marginBottom: 3 }}>
-                    <span style={{ color: '#22c55e' }}>✓</span>{tip}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Overlay text picker */}
-          <div style={{ marginBottom: 24 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 10 }}>
-              Overlay Badge Text
-            </label>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-              {overlaySugs.map(s => (
-                <button key={s} onClick={() => setOverlayText(s)} style={{
-                  padding: '6px 14px', borderRadius: 20, fontWeight: 700, fontSize: 12, cursor: 'pointer',
-                  border: overlayText === s ? `2px solid ${profile.accent}` : '2px solid #1f2937',
-                  background: overlayText === s ? `${profile.accent}20` : '#0f172a',
-                  color: overlayText === s ? profile.accent : '#6b7280', transition: 'all 0.15s',
-                }}>{s}</button>
-              ))}
-              <button onClick={() => setOverlayText('')} style={{ padding: '6px 14px', borderRadius: 20, fontWeight: 600, fontSize: 12, cursor: 'pointer', border: '2px solid #1f2937', background: '#0f172a', color: !overlayText ? '#9ca3af' : '#374151' }}>
-                None
-              </button>
-            </div>
-            <input
-              value={overlayText}
-              onChange={e => setOverlayText(e.target.value.toUpperCase())}
-              placeholder="Custom badge text..."
-              maxLength={18}
-              style={{ width: '100%', padding: '10px 14px', background: '#0f172a', border: '1px solid #1f2937', borderRadius: 8, color: '#fff', fontSize: 13, outline: 'none', boxSizing: 'border-box', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}
-            />
-          </div>
-
-          {/* Template grid */}
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>Layout Templates</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14, marginBottom: 28 }}>
-            {sortedTemplates.map(tmpl => {
-              const isSelected = selectedTemplate?.id === tmpl.id;
-              const isRec = aiAnalysis?.bestTemplate === tmpl.id;
-              const isFit = tmpl.bestFor.includes(mood);
-              return (
-                <div key={tmpl.id} onClick={() => setSelectedTemplate(tmpl)} style={{
-                  border: isSelected ? `2px solid ${profile.accent}` : '2px solid #1f2937',
-                  borderRadius: 12, overflow: 'hidden', background: isSelected ? `${profile.accent}0d` : '#0b0b1a',
-                  cursor: 'pointer', transition: 'all 0.15s',
-                  boxShadow: isSelected ? `0 0 24px ${profile.accent}30` : 'none',
+          {/* Template selection banner */}
+          {templateMeta && (
+            <div style={{
+              background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.25)',
+              borderRadius: 12, padding: '12px 16px', marginBottom: 18,
+              display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center',
+            }}>
+              <span style={{ fontSize: 12, color: '#9ca3af' }}>AI selected templates:</span>
+              {(templateMeta.all_templates || []).map((t, i) => (
+                <span key={t.id} style={{
+                  background: i === 0 ? '#7c3aed' : '#1f2937', color: '#fff',
+                  borderRadius: 8, padding: '3px 10px', fontSize: 11, fontWeight: 700,
                 }}>
-                  {/* Live mini canvas preview */}
-                  <div style={{ padding: 8, background: '#07070f' }}>
-                    <ThumbnailCanvas
-                      mood={mood}
-                      template={tmpl}
-                      chars={chars.slice(0, charCount)}
-                      title={title}
-                      overlayText={overlayText}
-                      width={320}
-                      height={180}
-                    />
-                  </div>
-                  <div style={{ padding: '10px 14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-                      <div style={{ fontWeight: 700, fontSize: 13 }}>{tmpl.name}</div>
-                      <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                        {isRec && <span style={{ background: '#7c3aed', color: '#fff', borderRadius: 8, padding: '1px 7px', fontSize: 10, fontWeight: 700 }}>AI PICK</span>}
-                        {isFit && !isRec && <span style={{ background: `${profile.accent}25`, color: profile.accent, borderRadius: 8, padding: '1px 7px', fontSize: 10, fontWeight: 700 }}>GREAT FIT</span>}
-                        <span style={{ color: '#fbbf24', fontSize: 11, fontWeight: 700 }}>⭐{((profile.ctrBase||8.5)+(tmpl.ctrBonus||0)).toFixed(1)}</span>
-                      </div>
-                    </div>
-                    <div style={{ color: '#4b5563', fontSize: 11, lineHeight: 1.4 }}>{tmpl.desc}</div>
-                  </div>
-                </div>
-              );
-            })}
+                  {i === 0 ? '★ ' : ''}{t.name} · {t.ctr}
+                </span>
+              ))}
+              {templateMeta.is_shorts && <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 700 }}>📱 Shorts 9:16</span>}
+              {templateMeta.detected_niche && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#4b5563' }}>Niche: {templateMeta.detected_niche}</span>}
+            </div>
+          )}
+
+          <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 14 }}>
+            Click a concept to select it, then hit <strong style={{ color: '#fff' }}>Generate This Thumbnail</strong> — Ideogram V3 renders it in ~60s
           </div>
 
-          <button
-            onClick={handleGenerate}
-            disabled={!selectedTemplate}
-            style={{
-              width: '100%', padding: '15px', borderRadius: 12, border: 'none',
-              background: selectedTemplate ? `linear-gradient(135deg, ${profile.accent}, #7c3aed)` : '#1f2937',
-              color: '#fff', cursor: selectedTemplate ? 'pointer' : 'not-allowed',
-              fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            }}
-          >
-            <Sparkles size={18} /> Generate Thumbnail with AI
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── STEP 2: Generating ──────────────────────────────────────────────
-  if (step === 2) {
-    return (
-      <div style={{ minHeight: '100vh', background: '#070711', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center', maxWidth: 420, padding: 24 }}>
-          <div style={{
-            width: 80, height: 80, borderRadius: '50%',
-            background: `linear-gradient(135deg, ${profile.accent}, #7c3aed)`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 24px', animation: 'thumbPulse 1.5s ease-in-out infinite',
-          }}>
-            <Sparkles size={32} color="#fff" />
-          </div>
-          <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Building Your Thumbnail</h2>
-          <p style={{ color: '#6b7280', fontSize: 13, lineHeight: 1.6, marginBottom: 24 }}>
-            Removing backgrounds, applying {profile.label} color grade, compositing characters, adding effects...
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[
-              { icon: '🖼', label: 'Processing character images' },
-              { icon: '✂️', label: 'Removing backgrounds' },
-              { icon: '🎨', label: `Applying ${profile.label} color grade` },
-              { icon: '✍️', label: 'Adding typography & overlays' },
-              { icon: '⚡', label: 'Optimizing for CTR' },
-            ].map((item, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#0f172a', borderRadius: 8, padding: '10px 14px' }}>
-                <span style={{ fontSize: 16 }}>{item.icon}</span>
-                <span style={{ color: '#9ca3af', fontSize: 13 }}>{item.label}</span>
-                <Loader2 size={13} style={{ marginLeft: 'auto', color: profile.accent, animation: `spin ${0.8 + i*0.1}s linear infinite` }} />
-              </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
+            {concepts.map(c => (
+              <ConceptCard
+                key={c.id}
+                concept={c}
+                isSelected={selectedConcept?.id === c.id}
+                onSelect={setSelectedConcept}
+                onGenerate={handleGenerateImage}
+                generating={generating}
+              />
             ))}
           </div>
         </div>
-        <style>{`
-          @keyframes thumbPulse { 0%,100%{box-shadow:0 0 0 0 ${profile.accent}50} 50%{box-shadow:0 0 0 20px transparent} }
-          @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
-        `}</style>
-      </div>
-    );
-  }
+      )}
 
-  // ── STEP 3: Result ──────────────────────────────────────────────────
+      <style>{`
+        @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+        @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(124,58,237,0.5)}50%{box-shadow:0 0 0 18px transparent}}
+      `}</style>
+    </div>
+  );
+
+  // ════════════════════════════════════════════════════════════════
+  // STEP 2 — Generating image
+  // ════════════════════════════════════════════════════════════════
+  if (step === 2) return (
+    <div style={{ minHeight: '100vh', background: '#070711', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ textAlign: 'center', maxWidth: 420, padding: 24 }}>
+        <div style={{
+          width: 80, height: 80, borderRadius: '50%',
+          background: 'linear-gradient(135deg, #7c3aed, #db2777)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          margin: '0 auto 22px', animation: 'pulse 1.5s ease-in-out infinite',
+        }}>
+          <Sparkles size={32} color="#fff" />
+        </div>
+        <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Rendering with Ideogram V3</h2>
+
+        {/* Selected concept text */}
+        {selectedConcept?.text_overlay && (
+          <div style={{
+            fontFamily: 'Impact, Arial Black', fontSize: 22, fontWeight: 900,
+            color: '#fff', letterSpacing: '0.05em', textShadow: '2px 2px 0 #000',
+            background: '#0f172a', borderRadius: 8, padding: '10px 16px',
+            marginBottom: 16, display: 'inline-block',
+          }}>
+            "{selectedConcept.text_overlay}"
+          </div>
+        )}
+        <p style={{ color: '#6b7280', fontSize: 13, lineHeight: 1.6, marginBottom: 22 }}>
+          Ideogram V3 Quality is rendering at 1920×1080. This typically takes 45–90 seconds…
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+          {[
+            { icon: '🧠', label: 'Reading 400-word image prompt' },
+            { icon: '🎨', label: 'Rendering photorealistic scene with Ideogram V3' },
+            { icon: '💡', label: 'Applying cinematic lighting & color grade' },
+            { icon: '🔍', label: 'Upscaling to 1920×1080' },
+            { icon: '💾', label: 'Saving to your library' },
+          ].map((item, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#0f172a', borderRadius: 8, padding: '10px 14px' }}>
+              <span style={{ fontSize: 15 }}>{item.icon}</span>
+              <span style={{ color: '#9ca3af', fontSize: 12 }}>{item.label}</span>
+              <Loader2 size={12} style={{ marginLeft: 'auto', color: '#7c3aed', animation: `spin ${0.8 + i * 0.1}s linear infinite` }} />
+            </div>
+          ))}
+        </div>
+
+        {selectedConcept?.ctr_score && (
+          <div style={{ marginTop: 18, background: '#0f172a', borderRadius: 10, padding: '10px 16px', display: 'flex', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 12, color: '#4b5563' }}>Predicted CTR</span>
+            <span style={{ fontSize: 16, fontWeight: 800, color: '#22c55e' }}>{selectedConcept.ctr_score}/10</span>
+          </div>
+        )}
+      </div>
+      <style>{`
+        @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+        @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(124,58,237,0.5)}50%{box-shadow:0 0 0 18px transparent}}
+      `}</style>
+    </div>
+  );
+
+  // ════════════════════════════════════════════════════════════════
+  // STEP 3 — Result
+  // ════════════════════════════════════════════════════════════════
+  const finalUrl  = generatedUrl || selectedConcept?.image_url;
+  const ctrScore  = selectedConcept?.ctr_score || 8;
+  const ctrColor  = ctrScore >= 9 ? '#22c55e' : ctrScore >= 7 ? '#f59e0b' : '#9ca3af';
+
   return (
     <div style={{ minHeight: '100vh', background: '#070711', color: '#fff' }}>
+      {/* Header */}
       <div style={{ borderBottom: '1px solid #1f2937', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button onClick={() => setStep(1)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
-            <ArrowLeft size={15} /> Back
+          <button
+            onClick={() => { setStep(1); setGeneratedUrl(null); setError(null); }}
+            style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}
+          >
+            <ArrowLeft size={15} /> Back to concepts
           </button>
           <div style={{ fontWeight: 700, fontSize: 14 }}>Your Thumbnail</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
-            onClick={() => { setStep(1); setGeneratedUrl(null); setError(null); }}
+            onClick={() => selectedConcept && handleGenerateImage(selectedConcept)}
+            disabled={!selectedConcept}
             style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #1f2937', background: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
           >
-            <RefreshCw size={13} /> Regenerate
+            <RefreshCw size={13} /> Re-render
           </button>
-          <button
-            onClick={handleDownload}
-            style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: profile.accent, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}
-          >
-            <Download size={13} /> Download
-          </button>
+          {finalUrl && (
+            <button onClick={handleDownload} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#7c3aed', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Download size={13} /> Download
+            </button>
+          )}
         </div>
       </div>
 
-      <div style={{ maxWidth: 860, margin: '0 auto', padding: '28px 16px' }}>
+      <div style={{ maxWidth: 900, margin: '0 auto', padding: '22px 16px' }}>
         <StepDots current={3} total={4} />
 
+        {/* Error banner */}
         {error && (
           <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, color: '#fca5a5', fontSize: 13, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-            <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1 }} /> {error}
+            <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>{error}</span>
           </div>
         )}
 
-        {/* Main thumbnail */}
-        <div style={{ marginBottom: 20, boxShadow: `0 24px 64px rgba(0,0,0,0.7)`, borderRadius: 12, overflow: 'hidden' }}>
-          {generatedUrl ? (
-            <img src={generatedUrl} alt="Generated thumbnail" style={{ width: '100%', display: 'block' }} />
-          ) : (
-            <ThumbnailCanvas
-              mood={mood}
-              template={selectedTemplate}
-              chars={chars.slice(0, charCount)}
-              title={title}
-              overlayText={overlayText}
-              width={1280}
-              height={720}
-            />
-          )}
-        </div>
+        {/* Main image */}
+        {finalUrl ? (
+          <div style={{ borderRadius: 12, overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.7)', marginBottom: 18 }}>
+            <img src={finalUrl} alt="Generated thumbnail" style={{ width: '100%', display: 'block' }} />
+          </div>
+        ) : (
+          <div style={{ aspectRatio: '16/9', background: '#0f172a', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 18, border: '2px dashed #1f2937' }}>
+            <div style={{ textAlign: 'center', color: '#4b5563' }}>
+              <ImageIcon size={32} style={{ margin: '0 auto 8px' }} />
+              <div style={{ fontSize: 13 }}>No image yet</div>
+            </div>
+          </div>
+        )}
 
         {/* Stats row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
           {[
-            { label: 'Predicted CTR', value: `${ctrScore}%`, color: '#22c55e', icon: Target },
-            { label: 'Mood', value: profile.emoji + ' ' + profile.label.split('/')[0], color: profile.accent, icon: Palette },
-            { label: 'Layout', value: selectedTemplate?.name || '-', color: '#7c3aed', icon: ImageIcon },
-            { label: 'Characters', value: charCount + ' person' + (charCount > 1 ? 's' : ''), color: '#f59e0b', icon: Users },
-          ].map(stat => {
-            const Icon = stat.icon;
-            return (
-              <div key={stat.label} style={{ background: '#0f172a', borderRadius: 10, padding: '12px 14px', textAlign: 'center' }}>
-                <Icon size={14} color={stat.color} style={{ margin: '0 auto 6px' }} />
-                <div style={{ fontSize: 10, color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>{stat.label}</div>
-                <div style={{ fontWeight: 800, fontSize: 13, color: stat.color, lineHeight: 1.2 }}>{stat.value}</div>
-              </div>
-            );
-          })}
+            { label: 'CTR Score', value: `${ctrScore}/10`, color: ctrColor },
+            { label: 'Template', value: (selectedConcept?.visual_metaphor || selectedConcept?.concept_type || 'AI').replace(/_/g,' '), color: '#7c3aed' },
+            { label: 'Text Overlay', value: selectedConcept?.text_overlay || '—', color: '#f59e0b' },
+          ].map(s => (
+            <div key={s.label} style={{ background: '#0f172a', borderRadius: 10, padding: '12px 14px', textAlign: 'center' }}>
+              <div style={{ fontSize: 10, color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{s.label}</div>
+              <div style={{ fontWeight: 800, fontSize: 13, color: s.color, lineHeight: 1.2, wordBreak: 'break-word' }}>{s.value}</div>
+            </div>
+          ))}
         </div>
 
-        {/* Quick variations */}
-        <div style={{ background: '#0b0b1a', border: '1px solid #1f2937', borderRadius: 12, padding: '16px 18px' }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>Quick Variations</div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 12, color: '#374151', marginRight: 4, alignSelf: 'center' }}>Try badge:</div>
-            {(aiAnalysis?.overlayOptions || OVERLAY_SUGGESTIONS[mood] || []).map(opt => (
-              <button key={opt} onClick={() => { setOverlayText(opt); setStep(1); }}
-                style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${profile.accent}35`, background: `${profile.accent}10`, color: profile.accent, cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
-                "{opt}"
-              </button>
-            ))}
-            <div style={{ width: '100%', height: 1, background: '#1f2937', margin: '8px 0' }} />
-            <div style={{ fontSize: 12, color: '#374151', marginRight: 4, alignSelf: 'center' }}>Try layout:</div>
-            {TEMPLATES.filter(t => t.id !== selectedTemplate?.id).slice(0, 3).map(t => (
-              <button key={t.id} onClick={() => { setSelectedTemplate(t); setStep(1); }}
-                style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #1f2937', background: '#0f172a', color: '#6b7280', cursor: 'pointer', fontSize: 12 }}>
-                {t.name}
-              </button>
-            ))}
+        {/* Why it works */}
+        {selectedConcept?.why_it_stops_scrolling && (
+          <div style={{ background: '#0b0b1a', border: '1px solid #1f2937', borderRadius: 12, padding: '13px 16px', marginBottom: 14 }}>
+            <div style={{ fontSize: 11, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Why this achieves 10M+ views</div>
+            <div style={{ fontSize: 13, color: '#9ca3af', lineHeight: 1.5 }}>{selectedConcept.why_it_stops_scrolling}</div>
           </div>
-        </div>
+        )}
+
+        {/* Try other concepts */}
+        {concepts.filter(c => c.id !== selectedConcept?.id).length > 0 && (
+          <div style={{ background: '#0b0b1a', border: '1px solid #1f2937', borderRadius: 12, padding: '13px 16px' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Try Another Concept</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {concepts.filter(c => c.id !== selectedConcept?.id).slice(0, 6).map(c => (
+                <button key={c.id} onClick={() => handleGenerateImage(c)}
+                  style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #1f2937', background: '#0f172a', color: '#9ca3af', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <Sparkles size={11} />
+                  #{c.rank} {c.text_overlay ? `"${c.text_overlay}"` : (c.concept_type || 'concept').replace(/_/g,' ')}
+                  <span style={{ color: '#22c55e', fontSize: 10 }}>⭐{c.ctr_score}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
-      <style>{`@keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }`}</style>
+      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 }
