@@ -14,23 +14,151 @@ const PORTRAIT_PRESETS = {
   '480p':  { width: 480,  height: 854,  bitrate: 1_500_000 },
 };
 
-// MessageChannel yield — not throttled in background tabs unlike setTimeout
+const DEFAULT_TRANSITION_DURATION = 0.6;
+
+// ── Easing functions — mirrors timeline preview exactly ───────────────────
+const ease = {
+  easeInOutQuad:  t => t < 0.5 ? 2*t*t : -1+(4-2*t)*t,
+  easeInQuad:     t => t*t,
+  easeOutQuad:    t => 1-(1-t)*(1-t),
+  easeInOutCubic: t => t < 0.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2,
+  easeOutSine:    t => Math.sin((t*Math.PI)/2),
+};
+
+// ── Cinematic motion definitions — mirrors CINEMATIC_MOTIONS in timeline ──
+const CINEMATIC_MOTIONS = [
+  { id: 'zoom_in_center',  startScale:1.0,  endScale:1.10, startX:0,    startY:0,    endX:0,    endY:0    },
+  { id: 'zoom_out_center', startScale:1.10, endScale:1.0,  startX:0,    startY:0,    endX:0,    endY:0    },
+  { id: 'pan_right_zoom',  startScale:1.0,  endScale:1.08, startX:-1.5, startY:0,    endX:1.5,  endY:0    },
+  { id: 'pan_left_zoom',   startScale:1.0,  endScale:1.08, startX:1.5,  startY:0,    endX:-1.5, endY:0    },
+  { id: 'push_in_top',     startScale:1.0,  endScale:1.08, startX:0,    startY:1.2,  endX:0,    endY:-1.2 },
+  { id: 'push_in_bottom',  startScale:1.0,  endScale:1.08, startX:0,    startY:-1.2, endX:0,    endY:1.2  },
+  { id: 'diagonal_tl_br',  startScale:1.0,  endScale:1.08, startX:1.5,  startY:1.0,  endX:-1.5, endY:-1.0 },
+  { id: 'diagonal_tr_bl',  startScale:1.0,  endScale:1.08, startX:-1.5, startY:1.0,  endX:1.5,  endY:-1.0 },
+];
+
 const yieldToMain = () => new Promise(r => {
   const ch = new MessageChannel();
   ch.port1.onmessage = r;
   ch.port2.postMessage(null);
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CINEMATIC MOTION TRANSFORM
+// Returns { scale, tx_px, ty_px } to apply via ctx.setTransform().
+// Mirrors getMotionStyle() in VideoPreview exactly.
+// ═══════════════════════════════════════════════════════════════════════════
+function getMotionTransform(clip, elapsedInClip, W, H) {
+  if (!clip?.cinematicMotion) return null;
+  const motion = CINEMATIC_MOTIONS.find(m => m.id === clip.cinematicMotion);
+  if (!motion) return null;
+  const speed        = clip.motionSpeed     ?? 1.0;
+  const intensity    = clip.motionIntensity ?? 1.0;
+  const activeWindow = (clip.duration ?? 5) / speed;
+  const p            = Math.min(1, Math.max(0, elapsedInClip / activeWindow));
+  const eased        = ease.easeOutSine(p);
+  const scale   = motion.startScale + (motion.endScale - motion.startScale) * intensity * eased;
+  const tx_px   = ((motion.startX + (motion.endX - motion.startX) * intensity * eased) / 100) * W;
+  const ty_px   = ((motion.startY + (motion.endY - motion.startY) * intensity * eased) / 100) * H;
+  return { scale, tx_px, ty_px };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DRAW MEDIA FRAME WITH OPTIONAL CINEMATIC MOTION
+// Bakes scale+translate into canvas pixels via ctx.save/setTransform/restore.
+// ═══════════════════════════════════════════════════════════════════════════
+function drawMediaFrame(ctx, W, H, media, mediaType, mxform) {
+  const sw = mediaType === 'video' ? (media.videoWidth  || media.width  || 1) : (media.naturalWidth  || media.width  || 1);
+  const sh = mediaType === 'video' ? (media.videoHeight || media.height || 1) : (media.naturalHeight || media.height || 1);
+  const fitScale = Math.min(W/sw, H/sh);
+  const dw = sw*fitScale, dh = sh*fitScale;
+  const dx = (W-dw)/2,   dy = (H-dh)/2;
+  ctx.save();
+  if (mxform) {
+    ctx.translate(W/2, H/2);
+    ctx.scale(mxform.scale, mxform.scale);
+    ctx.translate(-W/2 + mxform.tx_px, -H/2 + mxform.ty_px);
+  }
+  try { ctx.drawImage(media, dx, dy, dw, dh); } catch(e) { /* CORS tainted */ }
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMPOSITE TRANSITION FRAME
+// Draws outgoing + incoming bitmaps composited at `progress` (0..1).
+// Mirrors getTransitionStyle() in VideoPreview exactly.
+// ═══════════════════════════════════════════════════════════════════════════
+function compositeTransitionFrame(ctx, W, H, outBitmap, inBitmap, type, progress) {
+  ctx.clearRect(0, 0, W, H);
+
+  let easeFn = ease.easeInOutQuad;
+  if (type === 'Black Fade')   easeFn = ease.easeInOutCubic;
+  if (type === 'Expand Fade')  easeFn = ease.easeOutQuad;
+  if (type === 'Overlap Fade') easeFn = ease.easeInOutQuad;
+  const e2 = easeFn(progress);
+
+  if (type === 'Gradual Fade') {
+    ctx.globalAlpha = 1 - e2;
+    ctx.drawImage(outBitmap, 0, 0, W, H);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = e2;
+    ctx.filter = `brightness(${0.9 + e2*0.1})`;
+    ctx.drawImage(inBitmap, 0, 0, W, H);
+
+  } else if (type === 'Black Fade') {
+    const dp = Math.sin(e2 * Math.PI);
+    ctx.globalAlpha = 1 - e2*0.4;
+    ctx.filter = `brightness(${1-dp*0.65}) contrast(${1+dp*0.15}) saturate(${1-dp*0.3})`;
+    ctx.drawImage(outBitmap, 0, 0, W, H);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.globalAlpha = e2*0.4;
+    ctx.filter = `brightness(${1-dp*0.65})`;
+    ctx.drawImage(inBitmap, 0, 0, W, H);
+
+  } else if (type === 'Expand Fade') {
+    const blur = e2*e2*5;
+    ctx.globalAlpha = 1 - e2*0.8;
+    ctx.filter = `blur(${blur}px) brightness(${1-e2*0.1})`;
+    ctx.save(); ctx.translate(W/2,H/2); ctx.scale(1-e2*0.18,1-e2*0.18); ctx.translate(-W/2,-H/2);
+    ctx.drawImage(outBitmap, 0, 0, W, H); ctx.restore();
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.globalAlpha = e2*0.8;
+    ctx.filter = `blur(${(1-e2)*3}px) brightness(${0.9+e2*0.1})`;
+    ctx.save(); ctx.translate(W/2,H/2); ctx.scale(0.82+e2*0.18,0.82+e2*0.18); ctx.translate(-W/2,-H/2);
+    ctx.drawImage(inBitmap, 0, 0, W, H); ctx.restore();
+
+  } else if (type === 'Overlap Fade') {
+    const slide = e2*e2*60;
+    ctx.globalAlpha = 1 - e2*0.7;
+    ctx.filter = `blur(${e2*6}px)`;
+    ctx.drawImage(outBitmap, slide, 0, W, H);
+    ctx.globalCompositeOperation = 'lighten';
+    ctx.globalAlpha = e2*0.9;
+    ctx.filter = `blur(${(1-e2)*4}px)`;
+    ctx.drawImage(inBitmap, -slide, 0, W, H);
+
+  } else {
+    // Simple cross-fade fallback for unknown types
+    ctx.globalAlpha = 1 - e2;
+    ctx.drawImage(outBitmap, 0, 0, W, H);
+    ctx.globalAlpha = e2;
+    ctx.drawImage(inBitmap, 0, 0, W, H);
+  }
+
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.filter = 'none';
+}
+
 export default function useVideoExport() {
   const [exporting,  setExporting]  = useState(false);
   const [progress,   setProgress]   = useState(0);
   const [phase,      setPhase]      = useState('');
   const [error,      setError]      = useState(null);
-  const cancelledRef  = useRef(false);
-  const encoderRef    = useRef(null);
-  const wakeLockRef   = useRef(null);
+  const cancelledRef = useRef(false);
+  const encoderRef   = useRef(null);
+  const wakeLockRef  = useRef(null);
 
-  // ── Wake lock ──────────────────────────────────────────────────
   const acquireWakeLock = async () => {
     try {
       if ('wakeLock' in navigator) {
@@ -50,24 +178,22 @@ export default function useVideoExport() {
     wakeLockRef.current = null;
   };
 
-  // ── Codec check ────────────────────────────────────────────────
   const checkSupport = useCallback(async (quality, orientation) => {
     if (!('VideoEncoder' in window)) {
       return { supported: false, warning: false, reason: 'Your browser does not support WebCodecs. Please use Chrome 94+ or Edge 94+.' };
     }
     const presets = orientation === 'portrait' ? PORTRAIT_PRESETS : QUALITY_PRESETS;
     const preset  = presets[quality];
-    const profiles = ['avc1.42001e', 'avc1.4d001e', 'avc1.640028', 'avc1.42001f'];
+    const profiles = ['avc1.42001e','avc1.4d001e','avc1.640028','avc1.42001f'];
     for (const codec of profiles) {
       try {
         const s = await VideoEncoder.isConfigSupported({ codec, width: preset.width, height: preset.height, bitrate: preset.bitrate });
         if (s.supported) return { supported: true, warning: false, codec };
       } catch {}
     }
-    return { supported: true, warning: true, reason: `${quality} H.264 encoding may not be fully supported. Try a lower quality if export fails.`, codec: profiles[0] };
+    return { supported: true, warning: true, reason: `${quality} H.264 encoding may not be fully supported.`, codec: profiles[0] };
   }, []);
 
-  // ── CORS-safe image loader ─────────────────────────────────────
   const loadImage = async (url) => {
     try {
       const resp = await fetch(url, { mode: 'cors' });
@@ -80,7 +206,7 @@ export default function useVideoExport() {
         const bytes = Uint8Array.from(atob(data.data), c => c.charCodeAt(0));
         return await createImageBitmap(new Blob([bytes], { type: data.content_type || 'image/png' }));
       }
-    } catch (e) { console.warn(`Proxy image failed: ${url.substring(0, 60)} — ${e.message}`); }
+    } catch (e) { console.warn(`Proxy failed: ${url.substring(0,60)} — ${e.message}`); }
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
@@ -90,404 +216,302 @@ export default function useVideoExport() {
     });
   };
 
-  // ── CORS-safe video loader ─────────────────────────────────────
   const loadVideoElement = async (url) => {
     let blobUrl = null;
     try {
       const resp = await fetch(url, { mode: 'cors' });
       if (resp.ok) blobUrl = URL.createObjectURL(await resp.blob());
     } catch {}
-
     if (!blobUrl) {
       return new Promise((resolve, reject) => {
-        const video = document.createElement('video');
-        video.crossOrigin = 'anonymous';
-        video.muted = true; video.playsInline = true; video.preload = 'auto';
-        const timer = setTimeout(() => reject(new Error('Video load timeout')), 30000);
-        video.onloadeddata = () => { clearTimeout(timer); resolve(video); };
-        video.onerror      = () => { clearTimeout(timer); reject(new Error('Failed to load video')); };
-        video.src = url;
+        const v = document.createElement('video');
+        v.crossOrigin = 'anonymous'; v.muted = true; v.playsInline = true; v.preload = 'auto';
+        const t = setTimeout(() => reject(new Error('timeout')), 30000);
+        v.onloadeddata = () => { clearTimeout(t); resolve(v); };
+        v.onerror      = () => { clearTimeout(t); reject(new Error('failed')); };
+        v.src = url;
       });
     }
-
     return new Promise((resolve, reject) => {
-      const video = document.createElement('video');
-      video.muted = true; video.playsInline = true; video.preload = 'auto';
-      const timer = setTimeout(() => { URL.revokeObjectURL(blobUrl); reject(new Error('timeout')); }, 30000);
-      video.onloadeddata = () => { clearTimeout(timer); video._blobUrl = blobUrl; resolve(video); };
-      video.onerror      = () => { clearTimeout(timer); URL.revokeObjectURL(blobUrl); reject(new Error('load failed')); };
-      video.src = blobUrl;
+      const v = document.createElement('video');
+      v.muted = true; v.playsInline = true; v.preload = 'auto';
+      const t = setTimeout(() => { URL.revokeObjectURL(blobUrl); reject(new Error('timeout')); }, 30000);
+      v.onloadeddata = () => { clearTimeout(t); v._blobUrl = blobUrl; resolve(v); };
+      v.onerror      = () => { clearTimeout(t); URL.revokeObjectURL(blobUrl); reject(new Error('failed')); };
+      v.src = blobUrl;
     });
   };
 
-  // ── Precise video seek ─────────────────────────────────────────
-  const seekVideo = (video, time) => new Promise((resolve) => {
-    const dur    = video.duration || 0;
-    const target = Math.max(0, Math.min(time, dur > 0 ? dur - 0.01 : 0));
+  const seekVideo = (video, time) => new Promise(resolve => {
+    const target = Math.max(0, Math.min(time, (video.duration||0) > 0 ? video.duration-0.01 : 0));
     if (Math.abs(video.currentTime - target) < 0.04) { resolve(); return; }
-    const timer = setTimeout(resolve, 500);
-    video.onseeked = () => { clearTimeout(timer); resolve(); };
+    const t = setTimeout(resolve, 500);
+    video.onseeked = () => { clearTimeout(t); resolve(); };
     video.currentTime = target;
   });
 
-  // ── Canvas draw helper ─────────────────────────────────────────
-  const drawFrame = (ctx, canvas, media, mediaType) => {
-    const w = canvas.width, h = canvas.height;
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, w, h);
-    if (!media) return;
-    const sw = mediaType === 'video'
-      ? (media.videoWidth  || media.width  || 1)
-      : (media.naturalWidth || media.width || 1);
-    const sh = mediaType === 'video'
-      ? (media.videoHeight || media.height || 1)
-      : (media.naturalHeight || media.height || 1);
-    const scale = Math.min(w / sw, h / sh);
-    const dw = sw * scale, dh = sh * scale;
-    try { ctx.drawImage(media, (w - dw) / 2, (h - dh) / 2, dw, dh); }
-    catch (e) { console.warn('drawFrame failed (CORS tainted?):', e.message); }
-  };
-
-  // ── Audio decode ───────────────────────────────────────────────
   const decodeAudio = async (url) => {
     const resp = await fetch(url);
     const buf  = await resp.arrayBuffer();
     const actx = new AudioContext({ sampleRate: 48000 });
-    const decoded = await actx.decodeAudioData(buf);
+    const dec  = await actx.decodeAudioData(buf);
     await actx.close();
-    return decoded;
+    return dec;
   };
 
-  // ══════════════════════════════════════════════════════════════
-  // MAIN EXPORT FUNCTION
-  // ══════════════════════════════════════════════════════════════
-  //
-  // Each `scene` object is a merged clip+scene record with these fields:
-  //
-  //   scene.duration         — clip duration in the timeline (real-time seconds)
-  //   scene.duration_seconds — same (fallback)
-  //   scene.mediaType        — 'video' | 'image'  (set by user or AutoSync)
-  //   scene.videoUrl / scene.video_url — URL of generated video clip
-  //   scene.imageUrl / scene.image_url — URL of scene image
-  //   scene.playbackRate     — speed factor (0.25–2.0, default 1.0)
-  //                            < 1.0 = slow-mo (video stretched to fill beat)
-  //                            > 1.0 = fast forward (video ends early)
-  //   scene.videoDuration    — actual file duration in seconds (measured by AutoSync)
-  //
-  // HOW PLAYBACK RATE AFFECTS ENCODING:
-  //
-  //   At rate R, frame F of the OUTPUT maps to position (F * R / fps) in the
-  //   SOURCE video file.
-  //
-  //   Examples:
-  //     R=1.0: output frame 30 → source position 1.00s  (normal)
-  //     R=0.7: output frame 30 → source position 0.70s  (slow-mo, video stretched)
-  //     R=2.0: output frame 30 → source position 2.00s  (fast forward)
-  //
-  //   If the source position exceeds the video's actual duration, we hold the
-  //   last frame for the remainder of the clip (freeze-frame at end).
-  //
-  // ══════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════
+  // MAIN EXPORT
+  // ═══════════════════════════════════════════════════════════════════════
   const exportVideo = useCallback(async (scenes, opts) => {
-    const {
-      quality      = '720p',
-      orientation  = 'landscape',
-      fps          = 30,
-      voiceoverUrl,
-      musicUrl,
-      musicVolume  = 0.3,
-    } = opts || {};
+    const { quality='720p', orientation='landscape', fps=30, voiceoverUrl, musicUrl, musicVolume=0.3 } = opts||{};
 
     cancelledRef.current = false;
-    setExporting(true);
-    setProgress(0);
-    setPhase('checking');
-    setError(null);
-
+    setExporting(true); setProgress(0); setPhase('checking'); setError(null);
     await acquireWakeLock();
 
     try {
       const presets = orientation === 'portrait' ? PORTRAIT_PRESETS : QUALITY_PRESETS;
-      const preset  = presets[quality];
-      const W = preset.width, H = preset.height, BR = preset.bitrate;
+      const { width: W, height: H, bitrate: BR } = presets[quality];
 
-      // ── Normalise scene fields ─────────────────────────────────
-      // Accept both clip-style (duration, videoUrl, imageUrl, mediaType)
-      // and scene-style (duration_seconds, video_url, image_url) keys.
-      const normalisedScenes = scenes.map(s => ({
-        duration:      s.duration      || s.duration_seconds || 8,
-        mediaType:     s.mediaType     || (s.video_url?.startsWith('http') ? 'video' : 'image'),
-        videoUrl:      s.videoUrl      || s.video_url  || '',
-        imageUrl:      s.imageUrl      || s.image_url  || '',
-        playbackRate:  s.playbackRate  ?? 1.0,
-        videoDuration: s.videoDuration ?? null,  // null = not yet measured
+      // Normalise clip fields
+      const clips = scenes.map((s, i) => ({
+        index:              i,
+        duration:           s.duration           || s.duration_seconds || 8,
+        mediaType:          s.mediaType          || (s.video_url?.startsWith('http') ? 'video' : 'image'),
+        videoUrl:           s.videoUrl           || s.video_url  || '',
+        imageUrl:           s.imageUrl           || s.image_url  || '',
+        playbackRate:       s.playbackRate        ?? 1.0,
+        videoDuration:      s.videoDuration       ?? null,
+        cinematicMotion:    s.cinematicMotion     || null,
+        motionSpeed:        s.motionSpeed         ?? 1.0,
+        motionIntensity:    s.motionIntensity     ?? 1.0,
+        // Transition stored on OUTGOING clip, plays at START of next clip
+        transition:         s.transition          || null,
+        transitionDuration: s.transitionDuration  ?? DEFAULT_TRANSITION_DURATION,
+        startTime:          0, // filled below
       }));
 
-      const totalDuration = normalisedScenes.reduce((sum, s) => sum + s.duration, 0);
+      // Compute absolute start times
+      let off = 0;
+      clips.forEach(c => { c.startTime = off; off += c.duration; });
+
+      const totalDuration = off;
       const totalFrames   = Math.ceil(totalDuration * fps);
       const hasAudio      = !!(voiceoverUrl || musicUrl);
 
-      // ── Find working H.264 codec ───────────────────────────────
+      // Find H.264 codec
       let videoCodec = 'avc1.42001e';
-      for (const c of ['avc1.42001e', 'avc1.4d001e', 'avc1.640028']) {
+      for (const c of ['avc1.42001e','avc1.4d001e','avc1.640028']) {
         try {
           const s = await VideoEncoder.isConfigSupported({ codec: c, width: W, height: H, bitrate: BR });
           if (s.supported) { videoCodec = c; break; }
         } catch {}
       }
 
-      // ── Setup muxer ────────────────────────────────────────────
-      const muxCfg = {
-        target:     new ArrayBufferTarget(),
-        video:      { codec: 'avc', width: W, height: H },
-        fastStart:  'in-memory',
-      };
-      if (hasAudio) {
-        muxCfg.audio = { codec: 'aac', sampleRate: 48000, numberOfChannels: 2 };
-      }
+      // Muxer
+      const muxCfg = { target: new ArrayBufferTarget(), video: { codec:'avc', width:W, height:H }, fastStart:'in-memory' };
+      if (hasAudio) muxCfg.audio = { codec:'aac', sampleRate:48000, numberOfChannels:2 };
       const muxer = new Muxer(muxCfg);
 
-      // ── Video encoder ──────────────────────────────────────────
       let encodeError = null;
       const videoEncoder = new VideoEncoder({
         output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-        error:  (e) => { encodeError = e; },
+        error:  e => { encodeError = e; },
       });
       encoderRef.current = videoEncoder;
       videoEncoder.configure({ codec: videoCodec, width: W, height: H, bitrate: BR, framerate: fps });
 
-      // ── Audio encoder ──────────────────────────────────────────
       let audioEncoder = null;
       if (hasAudio) {
         audioEncoder = new AudioEncoder({
           output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
-          error:  (e) => { console.warn('Audio encode error:', e); },
+          error:  e => console.warn('Audio encode error:', e),
         });
-        audioEncoder.configure({ codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2, bitrate: 128_000 });
+        audioEncoder.configure({ codec:'mp4a.40.2', sampleRate:48000, numberOfChannels:2, bitrate:128_000 });
       }
 
       const canvas = new OffscreenCanvas(W, H);
       const ctx    = canvas.getContext('2d');
 
-      // ═══════════════════════════════════════════════════════════
-      // PHASE 1 — Load all media
-      // For each scene:
-      //   • If mediaType === 'video' → load video element
-      //   • Else → load image bitmap
-      //   • Also measure actual video duration for playbackRate clamping
-      // ═══════════════════════════════════════════════════════════
+      // ─── PHASE 1: Load all media ──────────────────────────────────
       setPhase('loading');
-      const sceneMedia = [];
+      const clipMedia = [];
 
-      for (let i = 0; i < normalisedScenes.length; i++) {
+      for (let i = 0; i < clips.length; i++) {
         if (cancelledRef.current) throw new Error('cancelled');
-        setProgress(Math.round((i / normalisedScenes.length) * 15));
-
-        const scene = normalisedScenes[i];
+        setProgress(Math.round((i / clips.length) * 15));
+        const clip = clips[i];
         let media = null, mediaType = 'image', measuredVideoDur = null;
-
-        const wantsVideo = scene.mediaType === 'video' && scene.videoUrl?.startsWith('http');
-        const hasImg     = scene.imageUrl?.startsWith('http');
-
+        const wantsVideo = clip.mediaType === 'video' && clip.videoUrl?.startsWith('http');
+        const hasImg     = clip.imageUrl?.startsWith('http');
         if (wantsVideo) {
           try {
-            media = await loadVideoElement(scene.videoUrl);
+            media = await loadVideoElement(clip.videoUrl);
             mediaType = 'video';
-            // Measure actual duration now (needed for clamp calculation)
-            measuredVideoDur = (media.duration && isFinite(media.duration))
-              ? media.duration
-              : (scene.videoDuration ?? 6);
-          } catch (e) {
-            console.warn(`Scene ${i} video load failed, falling back to image:`, e.message);
-            if (hasImg) try { media = await loadImage(scene.imageUrl); } catch {}
+            measuredVideoDur = (media.duration && isFinite(media.duration)) ? media.duration : (clip.videoDuration ?? 6);
+          } catch(e) {
+            console.warn(`Clip ${i} video failed, using image:`, e.message);
+            if (hasImg) try { media = await loadImage(clip.imageUrl); } catch {}
           }
         } else if (hasImg) {
-          try { media = await loadImage(scene.imageUrl); } catch {}
+          try { media = await loadImage(clip.imageUrl); } catch {}
         }
-
-        sceneMedia.push({ media, mediaType, measuredVideoDur });
+        clipMedia.push({ media, mediaType, measuredVideoDur });
       }
 
-      // ═══════════════════════════════════════════════════════════
-      // PHASE 2 — Pre-render image bitmaps for image-only scenes
-      // (one bitmap per image scene, reused for every frame)
-      // ═══════════════════════════════════════════════════════════
       setPhase('encoding');
-      const imageBitmapCache = new Map(); // sceneIndex → ImageBitmap
 
-      for (let si = 0; si < normalisedScenes.length; si++) {
-        const { media, mediaType } = sceneMedia[si];
-        if (media && mediaType === 'image') {
-          drawFrame(ctx, canvas, media, 'image');
-          imageBitmapCache.set(si, await createImageBitmap(canvas));
+      // ─── Helper: draw one clip's frame into canvas ────────────────
+      // elapsedInClip = real seconds elapsed since the clip's startTime
+      // Applies cinematic motion transform + handles video seek/freeze
+      const lastVideoFrame = new Map(); // clipIndex → ImageBitmap (freeze-frame)
+
+      const drawClipFrame = async (ci, elapsedInClip) => {
+        const clip   = clips[ci];
+        const { media, mediaType, measuredVideoDur } = clipMedia[ci];
+        const mxform = getMotionTransform(clip, elapsedInClip, W, H);
+
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, W, H);
+
+        if (!media) return;
+
+        if (mediaType === 'image') {
+          drawMediaFrame(ctx, W, H, media, 'image', mxform);
+        } else if (mediaType === 'video') {
+          const rate    = clip.playbackRate ?? 1.0;
+          const maxSrc  = (measuredVideoDur ?? clip.videoDuration ?? 999) - 0.02;
+          const srcTime = Math.min((elapsedInClip * rate), maxSrc);
+
+          if (srcTime >= maxSrc) {
+            // Past video end → freeze on last frame
+            const frozen = lastVideoFrame.get(ci);
+            if (frozen) drawMediaFrame(ctx, W, H, frozen, 'image', mxform);
+          } else {
+            await seekVideo(media, srcTime);
+            drawMediaFrame(ctx, W, H, media, 'video', mxform);
+            // Cache last good frame for freeze-frame
+            const bm = await createImageBitmap(canvas);
+            lastVideoFrame.get(ci)?.close();
+            lastVideoFrame.set(ci, bm);
+          }
         }
-      }
+      };
 
-      // ═══════════════════════════════════════════════════════════
-      // PHASE 3 — Encode frames
-      //
-      // For VIDEO scenes:
-      //   rate     = scene.playbackRate  (e.g. 0.7 for slow-mo)
-      //   srcTime  = frameInClip * rate / fps
-      //              → the position in the SOURCE video file
-      //   Clamp srcTime to measuredVideoDur so we freeze on last
-      //   frame rather than looping when rate < 1 fills past the
-      //   video's actual end.
-      //
-      // For IMAGE scenes:
-      //   Draw the cached bitmap every frame (no seeking needed).
-      // ═══════════════════════════════════════════════════════════
-      let globalFrame      = 0;
-      const FLUSH_EVERY    = fps * 3; // flush encoder every ~3s of video
+      // ─── PHASE 3: Encode frame by frame ───────────────────────────
       let framesSinceFlush = 0;
-      let lastVideoFrame   = new Map(); // si → last good bitmap (freeze-frame)
+      const FLUSH_EVERY    = fps * 3;
 
-      for (let si = 0; si < normalisedScenes.length; si++) {
+      for (let f = 0; f < totalFrames; f++) {
         if (cancelledRef.current) throw new Error('cancelled');
         if (encodeError)           throw encodeError;
 
-        const scene           = normalisedScenes[si];
-        const clipDuration    = scene.duration;              // real-time seconds
-        const rate            = scene.playbackRate;          // speed multiplier
-        const sceneFrames     = Math.ceil(clipDuration * fps);
-        const { media, mediaType, measuredVideoDur } = sceneMedia[si];
-        const cachedBitmap    = imageBitmapCache.get(si);
-        const maxSrcTime      = measuredVideoDur ?? (scene.videoDuration ?? 999);
+        const absTime = f / fps;
 
-        for (let f = 0; f < sceneFrames; f++) {
-          if (cancelledRef.current) throw new Error('cancelled');
-          if (encodeError)           throw encodeError;
+        // Find which clip this frame belongs to
+        let ci = clips.length - 1;
+        for (let i = 0; i < clips.length; i++) {
+          if (absTime < clips[i].startTime + clips[i].duration) { ci = i; break; }
+        }
+        const clip        = clips[ci];
+        const elapsed     = absTime - clip.startTime;
+        const prevClip    = ci > 0 ? clips[ci-1] : null;
 
-          if (cachedBitmap) {
-            // ── Image clip — draw cached bitmap ─────────────────
-            ctx.drawImage(cachedBitmap, 0, 0);
+        // Check transition: previous clip's transition plays at start of this clip
+        const tType    = prevClip?.transition || null;
+        const tDur     = prevClip?.transitionDuration ?? DEFAULT_TRANSITION_DURATION;
+        const tProg    = tType ? Math.min(1, elapsed / tDur) : 0;
+        const inTrans  = tType && elapsed < tDur;
 
-          } else if (media && mediaType === 'video') {
-            // ── Video clip — seek to scaled position ─────────────
-            // srcTime = position in the original video file
-            //   • At rate=0.7: frame 21 → srcTime = 21 * 0.7 / 30 = 0.49s
-            //   • At rate=1.0: frame 21 → srcTime = 21 * 1.0 / 30 = 0.70s
-            //   • At rate=1.5: frame 21 → srcTime = 21 * 1.5 / 30 = 1.05s
-            const srcTime = Math.min((f * rate) / fps, maxSrcTime - 0.02);
+        if (inTrans) {
+          // ── Transition: composite outgoing + incoming ─────────────
+          // Draw incoming (current clip at its current elapsed position)
+          await drawClipFrame(ci, elapsed);
+          const inBitmap = await createImageBitmap(canvas);
 
-            if (srcTime >= maxSrcTime - 0.02) {
-              // Past the end of the source video → freeze on last frame
-              const frozen = lastVideoFrame.get(si);
-              if (frozen) ctx.drawImage(frozen, 0, 0);
-              else { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); }
-            } else {
-              await seekVideo(media, srcTime);
-              drawFrame(ctx, canvas, media, 'video');
-              // Cache the bitmap for freeze-frame fallback
-              const bm = await createImageBitmap(canvas);
-              lastVideoFrame.get(si)?.close();
-              lastVideoFrame.set(si, bm);
-            }
+          // Draw outgoing (prev clip frozen at its very last moment)
+          await drawClipFrame(ci-1, prevClip.duration);
+          const outBitmap = await createImageBitmap(canvas);
 
-          } else {
-            // ── No media — black frame ────────────────────────────
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, W, H);
-          }
+          // Composite into final canvas
+          ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+          compositeTransitionFrame(ctx, W, H, outBitmap, inBitmap, tType, tProg);
+          inBitmap.close();
+          outBitmap.close();
+        } else {
+          // ── Normal frame ──────────────────────────────────────────
+          await drawClipFrame(ci, elapsed);
+        }
 
-          // ── Encode the frame ───────────────────────────────────
-          const timestamp = Math.round(globalFrame * (1_000_000 / fps));
-          const vframe    = new VideoFrame(canvas, { timestamp });
-          videoEncoder.encode(vframe, { keyFrame: globalFrame % (fps * 2) === 0 });
-          vframe.close();
-          globalFrame++;
-          framesSinceFlush++;
+        // Encode
+        const timestamp = Math.round(f * (1_000_000 / fps));
+        const vframe    = new VideoFrame(canvas, { timestamp });
+        videoEncoder.encode(vframe, { keyFrame: f % (fps*2) === 0 });
+        vframe.close();
+        framesSinceFlush++;
 
-          // Periodic encoder flush to keep codec alive
-          if (framesSinceFlush >= FLUSH_EVERY) {
-            await videoEncoder.flush();
-            framesSinceFlush = 0;
-          }
-
-          // Yield every 8 frames to keep UI responsive
-          if (globalFrame % 8 === 0) {
-            setProgress(15 + Math.round((globalFrame / totalFrames) * 60));
-            await yieldToMain();
-          }
+        if (framesSinceFlush >= FLUSH_EVERY) {
+          await videoEncoder.flush();
+          framesSinceFlush = 0;
+        }
+        if (f % 8 === 0) {
+          setProgress(15 + Math.round((f / totalFrames) * 60));
+          await yieldToMain();
         }
       }
 
-      // Free caches
-      for (const bm of imageBitmapCache.values()) bm.close();
-      imageBitmapCache.clear();
+      // Cleanup
       for (const bm of lastVideoFrame.values()) bm.close();
       lastVideoFrame.clear();
-
-      // Free video blob URLs
-      for (const { media } of sceneMedia) {
+      for (const { media } of clipMedia) {
         if (media?._blobUrl) URL.revokeObjectURL(media._blobUrl);
       }
 
       if (cancelledRef.current) throw new Error('cancelled');
 
-      // ═══════════════════════════════════════════════════════════
-      // PHASE 4 — Audio mix
-      // Mix voiceover + music into a single stereo AAC track.
-      // Audio is NOT affected by video playbackRate — the voiceover
-      // is the master timeline (it was already synced by AutoSync).
-      // ═══════════════════════════════════════════════════════════
+      // ─── PHASE 4: Audio ───────────────────────────────────────────
       if (hasAudio && audioEncoder) {
-        setPhase('audio');
-        setProgress(78);
-
+        setPhase('audio'); setProgress(78);
         const sampleRate   = 48000;
         const totalSamples = Math.ceil(totalDuration * sampleRate);
-        const mixedL       = new Float32Array(totalSamples);
-        const mixedR       = new Float32Array(totalSamples);
+        const mixedL = new Float32Array(totalSamples);
+        const mixedR = new Float32Array(totalSamples);
 
-        const audioSources = [];
-        if (voiceoverUrl) try { audioSources.push({ buf: await decodeAudio(voiceoverUrl), vol: 1.0,          loop: false }); } catch (e) { console.warn('Voiceover decode failed:', e); }
-        if (musicUrl)     try { audioSources.push({ buf: await decodeAudio(musicUrl),     vol: musicVolume,  loop: true  }); } catch (e) { console.warn('Music decode failed:', e); }
+        const sources = [];
+        if (voiceoverUrl) try { sources.push({ buf: await decodeAudio(voiceoverUrl), vol:1.0,         loop:false }); } catch(e) { console.warn('Voiceover failed:', e); }
+        if (musicUrl)     try { sources.push({ buf: await decodeAudio(musicUrl),     vol:musicVolume, loop:true  }); } catch(e) { console.warn('Music failed:', e); }
 
-        for (const { buf, vol, loop } of audioSources) {
-          const chCount = Math.min(buf.numberOfChannels, 2);
-          const chData  = [];
-          for (let c = 0; c < chCount; c++) chData.push(buf.getChannelData(c));
+        for (const { buf, vol, loop } of sources) {
+          const chN = Math.min(buf.numberOfChannels, 2);
+          const ch  = Array.from({length:chN}, (_,i) => buf.getChannelData(i));
           for (let i = 0; i < totalSamples; i++) {
-            const srcIdx = loop ? (i % buf.length) : i;
-            if (srcIdx >= buf.length) break;
-            mixedL[i] += chData[0][srcIdx] * vol;
-            mixedR[i] += chData[Math.min(1, chCount - 1)][srcIdx] * vol;
+            const si = loop ? (i % buf.length) : i;
+            if (si >= buf.length) break;
+            mixedL[i] += ch[0][si] * vol;
+            mixedR[i] += ch[Math.min(1,chN-1)][si] * vol;
           }
         }
-
-        // Clamp to [-1, 1] (prevent clipping)
         for (let i = 0; i < totalSamples; i++) {
           mixedL[i] = Math.max(-1, Math.min(1, mixedL[i]));
           mixedR[i] = Math.max(-1, Math.min(1, mixedR[i]));
         }
 
-        // Encode in 1-second chunks
         const CHUNK = sampleRate;
-        for (let offset = 0; offset < totalSamples; offset += CHUNK) {
+        for (let o = 0; o < totalSamples; o += CHUNK) {
           if (cancelledRef.current) throw new Error('cancelled');
-          const len    = Math.min(CHUNK, totalSamples - offset);
+          const len    = Math.min(CHUNK, totalSamples - o);
           const planar = new Float32Array(len * 2);
-          planar.set(mixedL.subarray(offset, offset + len), 0);
-          planar.set(mixedR.subarray(offset, offset + len), len);
-          const audioData = new AudioData({
-            format: 'f32-planar', sampleRate,
-            numberOfFrames: len, numberOfChannels: 2,
-            timestamp: Math.round((offset / sampleRate) * 1_000_000),
-            data: planar,
-          });
-          audioEncoder.encode(audioData);
-          audioData.close();
+          planar.set(mixedL.subarray(o, o+len), 0);
+          planar.set(mixedR.subarray(o, o+len), len);
+          const ad = new AudioData({ format:'f32-planar', sampleRate, numberOfFrames:len, numberOfChannels:2, timestamp:Math.round((o/sampleRate)*1_000_000), data:planar });
+          audioEncoder.encode(ad);
+          ad.close();
         }
         setProgress(90);
       }
 
-      // ═══════════════════════════════════════════════════════════
-      // PHASE 5 — Finalise
-      // ═══════════════════════════════════════════════════════════
-      setPhase('finalizing');
-      setProgress(95);
-
+      // ─── PHASE 5: Finalise ────────────────────────────────────────
+      setPhase('finalizing'); setProgress(95);
       await videoEncoder.flush();
       if (audioEncoder) await audioEncoder.flush();
       muxer.finalize();
@@ -495,10 +519,8 @@ export default function useVideoExport() {
       audioEncoder?.close();
       encoderRef.current = null;
 
-      const blob = new Blob([muxer.target.buffer], { type: 'video/mp4' });
-      setProgress(100);
-      setPhase('done');
-      setExporting(false);
+      const blob = new Blob([muxer.target.buffer], { type:'video/mp4' });
+      setProgress(100); setPhase('done'); setExporting(false);
       releaseWakeLock();
       return blob;
 
@@ -506,14 +528,10 @@ export default function useVideoExport() {
       try { encoderRef.current?.close(); } catch {}
       encoderRef.current = null;
       releaseWakeLock();
-
       if (e.message === 'cancelled') {
-        setExporting(false);
-        setPhase('');
-        setProgress(0);
+        setExporting(false); setPhase(''); setProgress(0);
         return null;
       }
-
       console.error('Export failed:', e);
       setError(e.message || 'Export failed unexpectedly');
       setExporting(false);
@@ -526,10 +544,7 @@ export default function useVideoExport() {
     try { encoderRef.current?.close(); } catch {}
     encoderRef.current = null;
     releaseWakeLock();
-    setExporting(false);
-    setPhase('');
-    setProgress(0);
-    setError(null);
+    setExporting(false); setPhase(''); setProgress(0); setError(null);
   }, []);
 
   return { exporting, progress, phase, error, exportVideo, checkSupport, cancel, QUALITY_PRESETS, PORTRAIT_PRESETS };
