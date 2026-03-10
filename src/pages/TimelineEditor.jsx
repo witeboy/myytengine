@@ -971,6 +971,9 @@ export default function TimelineEditorV10() {
   // ── Transcription state ─────────────────────────────────────────
   // status: 'idle' | 'transcribing' | 'done' | 'error'
   const [transcription, setTranscription] = useState({ status: 'idle', words: [], wordCount: 0, error: null });
+  // Overrides beat durations after AutoSync re-calculates from real audio.
+  // null = use DB/scene values; array = use these recalculated values.
+  const [overrideBeatDurations, setOverrideBeatDurations] = useState(null);
 
   const exportHook = useVideoExport();
   const playRef    = useRef(null);
@@ -1048,14 +1051,20 @@ export default function TimelineEditorV10() {
   // ── Audio beat durations ─────────────────────────────────────────
   const audioBeatDurations = useMemo(() => {
     if (scenes.length === 0) return [];
+    // Priority 1: live override from AutoSync (recalculated from real audio)
+    if (overrideBeatDurations && overrideBeatDurations.length === scenes.length) {
+      return overrideBeatDurations;
+    }
+    // Priority 2: saved beat_durations from ProductionSettings DB
     if (prodSettings?.beat_durations) {
       try {
         const saved = JSON.parse(prodSettings.beat_durations);
         if (Array.isArray(saved) && saved.length === scenes.length) return saved;
       } catch (e) {}
     }
+    // Priority 3: scene.duration_seconds set during breakdown (AI estimate)
     return scenes.map(scene => Math.max(1.5, scene.duration_seconds || 5));
-  }, [scenes, prodSettings]);
+  }, [scenes, prodSettings, overrideBeatDurations]);
 
   const audioStartTimes = useMemo(() => {
     const starts = [];
@@ -1137,24 +1146,121 @@ export default function TimelineEditorV10() {
     currentClip ? scenes.find(s => s.id === currentClip.sceneId) : null
   , [currentClip, scenes]);
 
-  // ── AutoSync ────────────────────────────────────────────────────
-  const handleAutoSync = () => {
+  // ── AutoSync — Re-sync beats to actual audio then snap clips ───
+  //
+  // Step 1: Measure real voiceover duration from the audio file.
+  //         (already done via measuredAudioDuration state)
+  // Step 2: Count words in each scene's narration text.
+  // Step 3: Distribute the total audio duration across scenes
+  //         proportionally by word count — scenes with more words
+  //         get more time, scenes with fewer words get less.
+  //         Minimum 0.5s per scene so nothing collapses to zero.
+  // Step 4: Recompute start offsets and snap all video clips to
+  //         the new beat grid.
+  // Step 5: Save the new beat_durations to ProductionSettings so
+  //         they persist and captions stay in sync on next open.
+  // ─────────────────────────────────────────────────────────────
+  const handleAutoSync = async () => {
     setIsSyncing(true);
-    const synced = scenes.map((scene, idx) => {
-      const existing = videoClips.find(c => c.sceneId === scene.id);
-      return {
-        ...(existing || {}),
-        id: `video-${scene.id}`, sceneId: scene.id, sceneNumber: scene.scene_number,
-        type: 'video', startTime: audioStartTimes[idx], duration: audioBeatDurations[idx],
-        label: `Scene ${scene.scene_number}`, thumbnail: scene.image_url,
-        effects: existing?.effects || [], audioMuted: existing?.audioMuted || false,
-        cinematicMotion: existing?.cinematicMotion || null, transition: existing?.transition || null, synced: true
-      };
-    });
-    setVideoClips(synced);
-    setSyncStatus('success');
+    setSyncStatus(null);
+
+    try {
+      // ── Step 1: Get actual audio duration ──────────────────────
+      // measuredAudioDuration is already loaded from the audio file.
+      // If not yet available, try to measure it now.
+      let audioDuration = measuredAudioDuration;
+
+      if (!audioDuration && voiceoverUrl) {
+        audioDuration = await new Promise((resolve) => {
+          const tmp = new Audio();
+          tmp.addEventListener('loadedmetadata', () => resolve(tmp.duration || 0));
+          tmp.addEventListener('error', () => resolve(0));
+          tmp.preload = 'metadata';
+          tmp.src = voiceoverUrl;
+          setTimeout(() => resolve(0), 8000); // 8s timeout
+        });
+      }
+
+      // ── Step 2: Word counts per scene ──────────────────────────
+      const wordCounts = scenes.map(scene => {
+        const text = (scene.narration_text || scene.voiceover_text || '').trim();
+        return Math.max(1, text.split(/\s+/).filter(Boolean).length);
+      });
+      const totalWords = wordCounts.reduce((s, w) => s + w, 0);
+
+      // ── Step 3: Compute new beat durations ─────────────────────
+      let newBeatDurations;
+
+      if (audioDuration > 0 && totalWords > 0) {
+        // Proportional by word count, scaled to real audio duration
+        // Apply a minimum of 0.5s per scene then scale remainder
+        const MIN_PER_SCENE = 0.5;
+        const reservedTime  = MIN_PER_SCENE * scenes.length;
+        const flexTime      = Math.max(0, audioDuration - reservedTime);
+
+        newBeatDurations = wordCounts.map(wc =>
+          parseFloat((MIN_PER_SCENE + (wc / totalWords) * flexTime).toFixed(3))
+        );
+
+        // Clamp total to exact audio duration (fix floating point drift)
+        const sum   = newBeatDurations.reduce((s, d) => s + d, 0);
+        const drift = audioDuration - sum;
+        newBeatDurations[newBeatDurations.length - 1] =
+          parseFloat((newBeatDurations[newBeatDurations.length - 1] + drift).toFixed(3));
+
+      } else {
+        // No audio — fall back to word-count proportional with 5s/100words rate
+        const WORDS_PER_SEC = 100 / 5; // ~20 words/sec average speech
+        newBeatDurations = wordCounts.map(wc =>
+          parseFloat(Math.max(1.5, wc / WORDS_PER_SEC).toFixed(3))
+        );
+      }
+
+      // ── Step 4: Recompute start offsets ────────────────────────
+      const newStartTimes = [];
+      let offset = 0;
+      newBeatDurations.forEach(dur => { newStartTimes.push(offset); offset += dur; });
+
+      // ── Step 5: Snap all video clips to new beat grid ──────────
+      const synced = scenes.map((scene, idx) => {
+        const existing = videoClips.find(c => c.sceneId === scene.id);
+        return {
+          ...(existing || {}),
+          id: `video-${scene.id}`, sceneId: scene.id, sceneNumber: scene.scene_number,
+          type: 'video',
+          startTime: newStartTimes[idx],
+          duration:  newBeatDurations[idx],
+          label: `Scene ${scene.scene_number}`, thumbnail: scene.image_url,
+          effects: existing?.effects || [], audioMuted: existing?.audioMuted || false,
+          cinematicMotion: existing?.cinematicMotion || null,
+          transition: existing?.transition || null,
+          synced: true,
+        };
+      });
+      setVideoClips(synced);
+
+      // Also update the live audioBeatDurations so captions use the new values
+      setOverrideBeatDurations(newBeatDurations);
+
+      // ── Step 6: Persist to ProductionSettings ──────────────────
+      if (prodSettings?.id) {
+        try {
+          await base44.entities.ProductionSettings.update(prodSettings.id, {
+            beat_durations: JSON.stringify(newBeatDurations),
+          });
+        } catch (e) {
+          console.warn('Could not save beat_durations to DB:', e.message);
+        }
+      }
+
+      setSyncStatus(audioDuration > 0 ? 'audio' : 'words');
+    } catch (err) {
+      console.error('AutoSync failed:', err);
+      setSyncStatus('error');
+    }
+
     setIsSyncing(false);
-    setTimeout(() => setSyncStatus(null), 3000);
+    setTimeout(() => setSyncStatus(null), 4000);
   };
 
   // ── Cinematic zoom ──────────────────────────────────────────────
@@ -1376,10 +1482,41 @@ export default function TimelineEditorV10() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button onClick={handleAutoSync} disabled={isSyncing} size="default"
-            className={`gap-2 px-4 shadow-lg ${syncStatus === 'success' ? 'bg-green-600' : 'bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-700 hover:to-purple-700'}`}>
-            {isSyncing ? <><Loader2 size={16} className="animate-spin" /> Syncing...</> : syncStatus === 'success' ? <><CheckCircle size={16} /> Synced!</> : <><Wand2 size={16} /> AutoSync</>}
-          </Button>
+          <div className="flex flex-col items-center gap-0.5">
+            <Button onClick={handleAutoSync} disabled={isSyncing} size="default"
+              title="Measures real audio duration, redistributes scene beats by word count, then snaps all clips to the new grid"
+              className={`gap-2 px-4 shadow-lg ${
+                syncStatus === 'audio'  ? 'bg-green-600' :
+                syncStatus === 'words' ? 'bg-teal-600' :
+                syncStatus === 'error'  ? 'bg-red-600' :
+                'bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-700 hover:to-purple-700'
+              }`}>
+              {isSyncing
+                ? <><Loader2 size={16} className="animate-spin" /> Re-syncing beats…</>
+                : syncStatus === 'audio'
+                ? <><CheckCircle size={16} /> Synced to Audio!</>
+                : syncStatus === 'words'
+                ? <><CheckCircle size={16} /> Synced by Words!</>
+                : syncStatus === 'error'
+                ? <><AlertCircle size={16} /> Sync Failed</>
+                : <><Wand2 size={16} /> AutoSync Beats</>
+              }
+            </Button>
+            {!isSyncing && !syncStatus && (
+              <span className="text-[9px] text-gray-600">
+                {measuredAudioDuration > 0 ? `🎙 ${formatTime(measuredAudioDuration)} audio detected` : 'no audio — uses word count'}
+              </span>
+            )}
+            {isSyncing && (
+              <span className="text-[9px] text-cyan-400">measuring audio & redistributing beats…</span>
+            )}
+            {syncStatus === 'audio' && (
+              <span className="text-[9px] text-green-400">beats redistributed from real audio ✓</span>
+            )}
+            {syncStatus === 'words' && (
+              <span className="text-[9px] text-teal-400">beats redistributed by word count ✓</span>
+            )}
+          </div>
           <Button onClick={motionCount > 0 ? handleRemoveCinematicZoom : handleApplyCinematicZoom} disabled={isApplyingZoom} size="default"
             className={`gap-2 px-4 shadow-lg ${motionCount > 0 ? 'bg-amber-600 hover:bg-amber-700' : 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700'}`}>
             {isApplyingZoom ? <><Loader2 size={16} className="animate-spin" /> Applying...</> : motionCount > 0 ? <><X size={16} /> Remove Zoom ({motionCount})</> : <><Camera size={16} /> Cinematic Zoom</>}
