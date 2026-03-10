@@ -8,17 +8,21 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createPageUrl } from '@/utils';
-import { Loader2, Sparkles, Film, Users, RefreshCw, ArrowRight, ArrowLeft, Search, Shield, Lightbulb, Pencil } from 'lucide-react';
+import {
+  Loader2, Sparkles, Film, Users, RefreshCw, ArrowRight,
+  ArrowLeft, Search, Shield, Lightbulb, Pencil, Image
+} from 'lucide-react';
 import ProjectTemplates from '@/components/templates/ProjectTemplates';
+import MakeThumbnail from '@/components/thumbnail/MakeThumbnail';
 
 const TONE_OPTIONS = [
-  { value: 'dramatic', label: '🎭 Dramatic' },
-  { value: 'educational', label: '📚 Educational' },
-  { value: 'humorous', label: '😂 Humorous' },
-  { value: 'conversational', label: '💬 Conversational' },
+  { value: 'dramatic',      label: '🎭 Dramatic' },
+  { value: 'educational',   label: '📚 Educational' },
+  { value: 'humorous',      label: '😂 Humorous' },
+  { value: 'conversational',label: '💬 Conversational' },
   { value: 'inspirational', label: '✨ Inspirational' },
-  { value: 'suspenseful', label: '🔥 Suspenseful' },
-  { value: 'sarcastic', label: '😏 Sarcastic' },
+  { value: 'suspenseful',   label: '🔥 Suspenseful' },
+  { value: 'sarcastic',     label: '😏 Sarcastic' },
 ];
 
 const PROJECT_TYPES = [
@@ -30,6 +34,16 @@ const PROJECT_TYPES = [
     color: 'from-blue-500 to-indigo-600',
     bgColor: 'bg-blue-50 border-blue-200 hover:border-blue-400',
     emoji: '🎬',
+  },
+  {
+    id: 'thumbnail',
+    name: 'Make Thumbnail',
+    description: 'AI creates world-class CTR thumbnails from your title, mood & character photos.',
+    icon: Image,
+    color: 'from-fuchsia-500 to-pink-600',
+    bgColor: 'bg-fuchsia-50 border-fuchsia-200 hover:border-fuchsia-400',
+    emoji: '🎯',
+    badge: 'NEW',
   },
   {
     id: 'ugc',
@@ -61,7 +75,7 @@ const PROJECT_TYPES = [
   {
     id: 'audit',
     name: 'Channel Auditor',
-    description: 'Deep-dive monetized channels for CTR, retention, and profit signals. Not keywords — real data.',
+    description: 'Deep-dive monetized channels for CTR, retention, and profit signals.',
     icon: Shield,
     color: 'from-amber-500 to-orange-600',
     bgColor: 'bg-amber-50 border-amber-200 hover:border-amber-400',
@@ -72,7 +86,7 @@ const PROJECT_TYPES = [
 export default function NewProject() {
   const navigate = useNavigate();
   const [selectedType, setSelectedType] = useState(null);
-  const [mode, setMode] = useState(null); // 'niche' or 'topic'
+  const [mode, setMode] = useState(null);
   const [niche, setNiche] = useState('');
   const [customTopic, setCustomTopic] = useState('');
   const [tone, setTone] = useState('dramatic');
@@ -82,7 +96,6 @@ export default function NewProject() {
   const handleCreateFromNiche = async () => {
     if (!niche.trim()) return;
     setLoading(true);
-
     const project = await base44.entities.Projects.create({
       name: niche.trim(),
       niche: niche.trim(),
@@ -91,21 +104,18 @@ export default function NewProject() {
       status: 'created',
       current_step: 0,
     });
-
     await base44.functions.invoke('generateTopics', {
       project_id: project.id,
       niche: niche.trim(),
       tone,
       target_audience: targetAudience.trim() || undefined,
     });
-
     navigate(createPageUrl(`StoryTopics?project_id=${project.id}`));
   };
 
   const handleCreateFromTopic = async () => {
     if (!customTopic.trim()) return;
     setLoading(true);
-
     const project = await base44.entities.Projects.create({
       name: customTopic.trim(),
       niche: customTopic.trim(),
@@ -114,8 +124,6 @@ export default function NewProject() {
       status: 'created',
       current_step: 0,
     });
-
-    // Create a single refined topic and auto-select it
     await base44.functions.invoke('generateTopics', {
       project_id: project.id,
       niche: customTopic.trim(),
@@ -123,8 +131,6 @@ export default function NewProject() {
       tone,
       target_audience: targetAudience.trim() || undefined,
     });
-
-    // Auto-select the top ranked topic
     const topics = await base44.entities.Topics.filter({ project_id: project.id });
     const sorted = topics.sort((a, b) => a.rank - b.rank);
     if (sorted.length > 0) {
@@ -141,7 +147,12 @@ export default function NewProject() {
     }
   };
 
-  // If no type selected, show type picker
+  // ── Thumbnail mode — render full-screen ──────────────────────────────
+  if (selectedType === 'thumbnail') {
+    return <MakeThumbnail onBack={() => setSelectedType(null)} />;
+  }
+
+  // ── Project type picker ──────────────────────────────────────────────
   if (!selectedType) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
@@ -155,21 +166,27 @@ export default function NewProject() {
             {PROJECT_TYPES.map(type => (
               <Card
                 key={type.id}
-                className={`cursor-pointer transition-all duration-200 border-2 ${type.bgColor} hover:shadow-lg group`}
+                className={`cursor-pointer transition-all duration-200 border-2 ${type.bgColor} hover:shadow-lg group relative`}
                 onClick={() => {
-                  if (type.id === 'ugc') {
-                    navigate(createPageUrl('UGCPipeline'));
-                  } else if (type.id === 'repurpose') {
-                    navigate(createPageUrl('ContentRepurpose'));
-                  } else if (type.id === 'niche') {
-                    navigate(createPageUrl('ResearchTerminal'));
-                  } else if (type.id === 'audit') {
-                    navigate(createPageUrl('ChannelAuditor'));
-                  } else {
-                    setSelectedType(type.id);
-                  }
+                  if (type.id === 'ugc')       navigate(createPageUrl('UGCPipeline'));
+                  else if (type.id === 'repurpose') navigate(createPageUrl('ContentRepurpose'));
+                  else if (type.id === 'niche')    navigate(createPageUrl('ResearchTerminal'));
+                  else if (type.id === 'audit')    navigate(createPageUrl('ChannelAuditor'));
+                  else setSelectedType(type.id);
                 }}
               >
+                {/* NEW badge for thumbnail */}
+                {type.badge && (
+                  <div style={{
+                    position: 'absolute', top: 12, right: 12,
+                    background: 'linear-gradient(135deg, #d946ef, #ec4899)',
+                    color: '#fff', borderRadius: 6, padding: '2px 8px',
+                    fontSize: 11, fontWeight: 800, letterSpacing: '0.05em',
+                    boxShadow: '0 2px 8px rgba(217,70,239,0.4)',
+                  }}>
+                    {type.badge}
+                  </div>
+                )}
                 <CardContent className="p-6 text-center space-y-4">
                   <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${type.color} flex items-center justify-center mx-auto shadow-lg`}>
                     <span className="text-3xl">{type.emoji}</span>
@@ -190,7 +207,7 @@ export default function NewProject() {
     );
   }
 
-  // Faceless video creation flow
+  // ── Faceless video creation flow ────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
       <div className="max-w-5xl mx-auto space-y-8 py-8">
@@ -263,40 +280,19 @@ export default function NewProject() {
                   <Select value={tone} onValueChange={setTone}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {TONE_OPTIONS.map(t => (
-                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                      ))}
+                      {TONE_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500 mb-1 block">Target Audience <span className="text-gray-400">(optional)</span></label>
-                  <Input
-                    placeholder="e.g. young adults 18-25"
-                    value={targetAudience}
-                    onChange={e => setTargetAudience(e.target.value)}
-                    disabled={loading}
-                  />
+                  <Input placeholder="e.g. young adults 18-25" value={targetAudience} onChange={e => setTargetAudience(e.target.value)} disabled={loading} />
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setMode(null)} disabled={loading}>
-                  Back
-                </Button>
-                <Button
-                  onClick={handleCreateFromTopic}
-                  disabled={!customTopic.trim() || loading}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700"
-                  size="lg"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      Refining & Creating...
-                    </>
-                  ) : (
-                    'Create Project'
-                  )}
+                <Button variant="outline" onClick={() => setMode(null)} disabled={loading}>Back</Button>
+                <Button onClick={handleCreateFromTopic} disabled={!customTopic.trim() || loading} className="flex-1 bg-blue-600 hover:bg-blue-700" size="lg">
+                  {loading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Refining & Creating...</> : 'Create Project'}
                 </Button>
               </div>
             </CardContent>
@@ -326,40 +322,19 @@ export default function NewProject() {
                   <Select value={tone} onValueChange={setTone}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {TONE_OPTIONS.map(t => (
-                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                      ))}
+                      {TONE_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500 mb-1 block">Target Audience <span className="text-gray-400">(optional)</span></label>
-                  <Input
-                    placeholder="e.g. tech enthusiasts, parents"
-                    value={targetAudience}
-                    onChange={e => setTargetAudience(e.target.value)}
-                    disabled={loading}
-                  />
+                  <Input placeholder="e.g. tech enthusiasts, parents" value={targetAudience} onChange={e => setTargetAudience(e.target.value)} disabled={loading} />
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setMode(null)} disabled={loading}>
-                  Back
-                </Button>
-                <Button
-                  onClick={handleCreateFromNiche}
-                  disabled={!niche.trim() || loading}
-                  className="flex-1 bg-purple-600 hover:bg-purple-700"
-                  size="lg"
-                >
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                      Generating Topics...
-                    </>
-                  ) : (
-                    'Generate 5 Topic Ideas'
-                  )}
+                <Button variant="outline" onClick={() => setMode(null)} disabled={loading}>Back</Button>
+                <Button onClick={handleCreateFromNiche} disabled={!niche.trim() || loading} className="flex-1 bg-purple-600 hover:bg-purple-700" size="lg">
+                  {loading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Generating Topics...</> : 'Generate 5 Topic Ideas'}
                 </Button>
               </div>
             </CardContent>
