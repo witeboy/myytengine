@@ -643,7 +643,7 @@ function ClipPropertiesPanel({ clip, audioBeatDuration, onUpdate }) {
         </div>
         {isVideo && hasVideo && (
           <p className="text-[9px] text-purple-300 flex items-center gap-1">
-            <Film size={9} /> Playing generated video · loops within clip
+            <Film size={9} /> Playing generated video · speed auto-matched to beat
           </p>
         )}
         {!hasVideo && (
@@ -660,6 +660,127 @@ function ClipPropertiesPanel({ clip, audioBeatDuration, onUpdate }) {
         </div>
         <p className="text-xl text-white font-mono">{audioBeatDuration?.toFixed(1)}s</p>
       </div>
+
+      {/* ── Video Speed Control (video clips only) ──────────────── */}
+      {isVideo && hasVideo && (() => {
+        const rate    = clip.playbackRate ?? 1.0;
+        const vidDur  = clip.videoDuration || 6;
+        const beatDur = audioBeatDuration ?? clip.duration;
+        // effectiveDur = how many real seconds the video takes to fully play
+        // At rate=0.8: a 5s video takes 5/0.8 = 6.25s of real time
+        const effectiveDur = parseFloat((vidDur / rate).toFixed(2));
+        // Auto rate = what AutoSync would set (vidDur / beatDur, clamped)
+        const autoRate = beatDur > vidDur
+          ? Math.max(0.25, parseFloat((vidDur / beatDur).toFixed(3)))
+          : 1.0;
+        const isManual = clip.manualSpeed === true;
+
+        const applyRate = (r, manual = true) => {
+          // effectiveDur at new rate
+          const newEffective = vidDur / r;
+          // If slowing: clip duration = min(effectiveDur, beatDur) — no overflow past beat
+          // If speeding: keep beat duration, video just ends early (last frame holds)
+          const newDur = r <= 1.0
+            ? Math.min(newEffective, beatDur)
+            : beatDur;
+          onUpdate({ ...clip, playbackRate: parseFloat(r.toFixed(3)), duration: parseFloat(newDur.toFixed(3)), manualSpeed: manual });
+        };
+
+        return (
+          <div className="p-3 bg-[#0d1a2e] rounded border border-blue-800/50 space-y-3">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Film size={13} className="text-blue-400" />
+                <label className="text-[10px] text-blue-300 font-medium uppercase tracking-wide">Video Speed</label>
+              </div>
+              {isManual && (
+                <button
+                  onClick={() => applyRate(autoRate, false)}
+                  className="text-[9px] text-cyan-400 hover:text-cyan-300 underline"
+                >
+                  ↺ Reset to auto ({autoRate.toFixed(2)}×)
+                </button>
+              )}
+            </div>
+
+            {/* Big rate display + duration info */}
+            <div className="flex items-end justify-between">
+              <div>
+                <span className="text-3xl font-mono text-white font-bold">{rate.toFixed(2)}</span>
+                <span className="text-lg text-gray-400 ml-0.5">×</span>
+                {isManual && <span className="ml-2 text-[9px] text-amber-400 bg-amber-900/30 px-1.5 py-0.5 rounded">manual</span>}
+                {!isManual && <span className="ml-2 text-[9px] text-cyan-400 bg-cyan-900/30 px-1.5 py-0.5 rounded">auto</span>}
+              </div>
+              <div className="text-right">
+                <p className="text-[9px] text-gray-500">Source · Effective play</p>
+                <p className="text-xs font-mono text-white">
+                  {vidDur.toFixed(1)}s → <span className="text-cyan-300">{Math.min(effectiveDur, beatDur).toFixed(1)}s</span>
+                  {effectiveDur > beatDur && <span className="text-orange-400 ml-1">✂ trimmed</span>}
+                </p>
+              </div>
+            </div>
+
+            {/* Slider */}
+            <div>
+              <input
+                type="range"
+                min={0.25} max={2.0} step={0.05}
+                value={rate}
+                onChange={e => applyRate(parseFloat(e.target.value))}
+                className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+              />
+              <div className="flex justify-between text-[9px] text-gray-600 mt-0.5">
+                <span>0.25× slow-mo</span>
+                <span>1× normal</span>
+                <span>2× fast</span>
+              </div>
+            </div>
+
+            {/* Presets matching CapCut's speed steps */}
+            <div>
+              <p className="text-[9px] text-gray-500 mb-1">Presets</p>
+              <div className="grid grid-cols-6 gap-1">
+                {[0.25, 0.5, 0.75, 1.0, 1.5, 2.0].map(r => (
+                  <button
+                    key={r}
+                    onClick={() => applyRate(r)}
+                    className={`py-1 rounded text-[9px] font-mono font-bold transition-all ${
+                      Math.abs(rate - r) < 0.03
+                        ? 'bg-blue-600 text-white ring-1 ring-blue-400'
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
+                    }`}
+                  >
+                    {r}×
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Status messages */}
+            {rate < 1.0 && effectiveDur <= beatDur && (
+              <p className="text-[9px] text-blue-300 bg-blue-900/20 px-2 py-1 rounded">
+                🐢 Slow-mo: {vidDur.toFixed(1)}s video stretched to {effectiveDur.toFixed(1)}s — fits beat perfectly
+              </p>
+            )}
+            {rate < 1.0 && effectiveDur > beatDur && (
+              <p className="text-[9px] text-orange-300 bg-orange-900/20 px-2 py-1 rounded">
+                ✂ Slow-mo: playing {beatDur.toFixed(1)}s of {effectiveDur.toFixed(1)}s effective — trimmed to beat
+              </p>
+            )}
+            {rate > 1.0 && (
+              <p className="text-[9px] text-amber-300 bg-amber-900/20 px-2 py-1 rounded">
+                ⚡ Fast-forward: {vidDur.toFixed(1)}s video plays in {(vidDur/rate).toFixed(1)}s · last frame holds for rest of beat
+              </p>
+            )}
+            {rate === 1.0 && vidDur < beatDur - 0.2 && (
+              <p className="text-[9px] text-orange-300 bg-orange-900/20 px-2 py-1 rounded">
+                ⚠ Video ({vidDur.toFixed(1)}s) is shorter than beat ({beatDur.toFixed(1)}s) — run AutoSync or slow down
+              </p>
+            )}
+          </div>
+        );
+      })()}
       <div className={`p-3 rounded border ${isSynced ? 'bg-green-500/20 border-green-500/30' : 'bg-yellow-500/20 border-yellow-500/30'}`}>
         <div className="flex items-center justify-between mb-1">
           <label className="text-[10px] text-gray-300">Video Duration</label>
@@ -811,20 +932,28 @@ function VideoPreview({
     return () => ro.disconnect();
   }, []);
 
-  // ── Sync video playback position to timeline currentTime ────────
-  // When the clip is a video, keep the <video> element in lock-step
-  // with the playback clock. We offset into the video by how far we
-  // are into the clip (currentTime - clip.startTime), clamped to the
-  // video's own duration so short 6s videos loop visually.
+  // ── Sync video playback to timeline ─────────────────────────────
+  // video.playbackRate = rate already makes the browser slow/speed the video.
+  // So the position in the VIDEO file after `elapsed` real seconds is:
+  //   videoTime = elapsed × rate
+  // e.g. rate=0.5: after 2s real time → 1s into video file (slow-mo ✓)
+  //      rate=1.0: after 2s real time → 2s into video file (normal ✓)
+  // We seek when:
+  //   a) The clip changes (remount handles this via key= too)
+  //   b) The user scrubs (|expected - actual| > threshold)
+  // We DON'T seek on every tick during normal play — the browser tracks it.
   useEffect(() => {
     if (!videoRef.current || !currentClip?.videoUrl) return;
-    const el       = videoRef.current;
-    const elapsed  = currentTime - (currentClip.startTime ?? 0);
-    const vidDur   = el.duration || 6;
-    const target   = elapsed % vidDur;          // loop within video duration
-    if (Math.abs(el.currentTime - target) > 0.25) {
-      el.currentTime = target;
-    }
+    const el   = videoRef.current;
+    const rate = currentClip.playbackRate ?? 1.0;
+    // Always keep playbackRate in sync
+    if (Math.abs(el.playbackRate - rate) > 0.005) el.playbackRate = rate;
+    // Calculate where in the video file we should be
+    const elapsed  = Math.max(0, currentTime - (currentClip.startTime ?? 0));
+    const vidPos   = Math.min(elapsed * rate, (el.duration && el.duration < Infinity ? el.duration : 99) - 0.05);
+    // Only seek if we're more than 0.5s off (scrub detection)
+    // During normal autoplay the browser handles frame advancement
+    if (Math.abs(el.currentTime - vidPos) > 0.5) el.currentTime = vidPos;
   }, [currentTime, currentClip]);
 
   // Compute the largest canvas that fits, preserving aspect ratio
@@ -982,16 +1111,15 @@ function VideoPreview({
             {/* ── Incoming scene — video or image ──────────────────── */}
             <div className="absolute inset-0 overflow-hidden" style={isTransitioning ? getTransitionStyle(false) : {}}>
               {currentClip?.mediaType === 'video' && currentClip?.videoUrl ? (
-                // Video clip: muted (voiceover is separate), loops within its duration
+                // Video clip: muted (voiceover is separate), playbackRate set to fill beat without looping
                 <video
-                  key={currentClip.videoUrl}   // remount when URL changes
+                  key={`${currentClip.videoUrl}-${currentClip.playbackRate ?? 1}`}
                   ref={videoRef}
                   src={currentClip.videoUrl}
                   className="w-full h-full object-cover"
                   style={motionStyle}
                   muted
                   playsInline
-                  loop
                   autoPlay
                 />
               ) : currentScene?.image_url ? (
@@ -1011,7 +1139,7 @@ function VideoPreview({
                     ref={prevVideoRef}
                     src={prevClip.videoUrl}
                     className="w-full h-full object-cover"
-                    muted playsInline loop autoPlay
+                    muted playsInline autoPlay
                   />
                 ) : prevScene?.image_url ? (
                   <img src={prevScene.image_url} className="w-full h-full object-cover" alt="transition-out" />
@@ -1361,6 +1489,8 @@ export default function TimelineEditorV10() {
         effects: [], audioMuted: false, cinematicMotion: null,
         transition: null, transitionDuration: null, synced: false,
         motionSpeed: 1.0, motionIntensity: 1.0,
+        playbackRate: 1.0,      // will be auto-calculated by AutoSync
+        videoDuration: null,    // measured lazily
       };
       offset += duration;
       return clip;
@@ -1513,10 +1643,47 @@ export default function TimelineEditorV10() {
           transitionDuration: existing?.transitionDuration ?? null,
           motionSpeed:      existing?.motionSpeed      ?? 1.0,
           motionIntensity:  existing?.motionIntensity  ?? 1.0,
+          // playbackRate is recalculated in Step 5b — preserve manual override flag
+          playbackRate:     existing?.playbackRate     ?? 1.0,
+          videoDuration:    existing?.videoDuration    ?? null,
+          manualSpeed:      existing?.manualSpeed      ?? false,
           synced: true,
         };
       });
-      setVideoClips(synced);
+      // ── Step 5b: Calculate playbackRate for video clips ──────────
+      // If a clip has a video and its beat duration > video file duration,
+      // we slow the video down so it fills the beat without looping.
+      // Formula: playbackRate = videoDuration / beatDuration
+      //   e.g. 5s video in a 7s beat → rate = 5/7 = 0.714x (slow mo)
+      //        5s video in a 3s beat → rate = 1.0  (plays at full speed, ends early — fine)
+      // We cap the slowdown at 0.25x (4× slower) to avoid extreme slo-mo.
+      // Video durations are measured by creating a temporary Audio element.
+      const videoDurationCache = {};
+      const measureVideoDur = (url) => {
+        if (videoDurationCache[url]) return Promise.resolve(videoDurationCache[url]);
+        return new Promise(resolve => {
+          const v = document.createElement('video');
+          v.preload = 'metadata';
+          v.onloadedmetadata = () => { videoDurationCache[url] = v.duration || 6; resolve(videoDurationCache[url]); };
+          v.onerror = () => resolve(6); // fallback 6s
+          setTimeout(() => resolve(6), 4000);
+          v.src = url;
+        });
+      };
+
+      const syncedWithRates = await Promise.all(synced.map(async (clip) => {
+        if (clip.mediaType !== 'video' || !clip.videoUrl) return clip;
+        const vidDur  = await measureVideoDur(clip.videoUrl);
+        const beatDur = clip.duration;
+        // Only slow down if beat is longer than the video
+        // If user manually set the speed, don't override it
+        if (clip.manualSpeed) return { ...clip, videoDuration: vidDur };
+        const rate = beatDur > vidDur
+          ? Math.max(0.25, parseFloat((vidDur / beatDur).toFixed(3)))
+          : 1.0;
+        return { ...clip, playbackRate: rate, videoDuration: vidDur };
+      }));
+      setVideoClips(syncedWithRates);
 
       // Also update the live audioBeatDurations so captions use the new values
       setOverrideBeatDurations(newBeatDurations);
@@ -1898,7 +2065,7 @@ export default function TimelineEditorV10() {
               <span className="text-[9px] text-cyan-400">resizing clips to match speech pace…</span>
             )}
             {syncStatus === 'audio' && (
-              <span className="text-[9px] text-green-400">✓ clips resized · scene changes match audio</span>
+              <span className="text-[9px] text-green-400">✓ clips resized · video speeds auto-matched · scene changes match audio</span>
             )}
             {syncStatus === 'words' && (
               <span className="text-[9px] text-teal-400">✓ clips resized by word count</span>
@@ -1971,7 +2138,24 @@ export default function TimelineEditorV10() {
       {showExporter && (() => {
         const exportScenes = videoClips.map(clip => {
           const scene = scenes.find(s => s.id === clip.sceneId);
-          return { ...clip, image_url: scene?.image_url, video_url: scene?.video_url, narration_text: scene?.narration_text, voiceover_text: scene?.voiceover_text };
+          return {
+            ...clip,
+            // Scene source data
+            image_url:       clip.imageUrl  || scene?.image_url,
+            video_url:       clip.videoUrl  || scene?.video_url,
+            narration_text:  scene?.narration_text,
+            voiceover_text:  scene?.voiceover_text,
+            // Playback control — used by exporter to set video speed
+            mediaType:       clip.mediaType    || 'image',
+            playbackRate:    clip.playbackRate ?? 1.0,
+            videoDuration:   clip.videoDuration ?? null,
+            // All effects
+            cinematicMotion: clip.cinematicMotion  || null,
+            motionSpeed:     clip.motionSpeed      ?? 1.0,
+            motionIntensity: clip.motionIntensity  ?? 1.0,
+            transition:      clip.transition       || null,
+            transitionDuration: clip.transitionDuration ?? DEFAULT_TRANSITION_DURATION,
+          };
         });
         return (
           <VideoExporter
