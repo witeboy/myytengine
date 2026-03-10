@@ -38,15 +38,29 @@ const DEFAULT_TRANSITION_DURATION = 0.6;
 // CINEMATIC ZOOM MOTION TYPES
 // ═══════════════════════════════════════════════════════════════════
 
+// ── Cinematic Motion System ─────────────────────────────────────────
+// Each motion is a ONE-WAY continuous drift: the clip enters at
+// startScale/startX/startY and glides to endScale/endX/endY,
+// then HOLDS there until the next cut. No snap-back.
+//
+// Motions are paired in families so consecutive clips feel linked:
+//   pair[0] ends pushed in  → pair[1] starts from that pushed state
+//   pair[1] ends pulled out → pair[2] picks up from there, etc.
+// This creates the seamless "documentary zoom" flow the user wants.
+// ─────────────────────────────────────────────────────────────────────
 const CINEMATIC_MOTIONS = [
-  { id: 'zoom_in_center',  name: 'Push In (Center)',        description: 'Slow zoom toward center',            startScale: 1.0,  endScale: 1.08, startX: 0,    startY: 0,  endX: 0,    endY: 0  },
-  { id: 'zoom_out_center', name: 'Pull Out (Center)',       description: 'Slow zoom out revealing scene',       startScale: 1.08, endScale: 1.0,  startX: 0,    startY: 0,  endX: 0,    endY: 0  },
-  { id: 'pan_left_zoom',   name: 'Pan Left + Zoom',         description: 'Drift left while zooming in',         startScale: 1.0,  endScale: 1.06, startX: 2,    startY: 0,  endX: -2,   endY: 0  },
-  { id: 'pan_right_zoom',  name: 'Pan Right + Zoom',        description: 'Drift right while zooming in',        startScale: 1.0,  endScale: 1.06, startX: -2,   startY: 0,  endX: 2,    endY: 0  },
-  { id: 'push_in_top',     name: 'Push In (Top)',           description: 'Zoom toward top of frame',            startScale: 1.0,  endScale: 1.07, startX: 0,    startY: 1,  endX: 0,    endY: -1 },
-  { id: 'push_in_bottom',  name: 'Push In (Bottom)',        description: 'Zoom toward bottom of frame',         startScale: 1.0,  endScale: 1.07, startX: 0,    startY: -1, endX: 0,    endY: 1  },
-  { id: 'diagonal_tl_br',  name: 'Diagonal Drift (TL→BR)', description: 'Top-left to bottom-right drift',       startScale: 1.02, endScale: 1.06, startX: 1.5,  startY: 1,  endX: -1.5, endY: -1 },
-  { id: 'diagonal_tr_bl',  name: 'Diagonal Drift (TR→BL)', description: 'Top-right to bottom-left drift',       startScale: 1.02, endScale: 1.06, startX: -1.5, startY: 1,  endX: 1.5,  endY: -1 },
+  // ── Zoom family ──────────────────────────────────────────────────
+  { id: 'zoom_in_center',  name: 'Push In',          description: 'Slowly drifts closer — holds at end',  startScale: 1.0,  endScale: 1.10, startX: 0,    startY: 0,    endX: 0,    endY: 0    },
+  { id: 'zoom_out_center', name: 'Pull Out',          description: 'Starts close, slowly reveals scene',   startScale: 1.10, endScale: 1.0,  startX: 0,    startY: 0,    endX: 0,    endY: 0    },
+  // ── Pan family ───────────────────────────────────────────────────
+  { id: 'pan_right_zoom',  name: 'Drift Right',       description: 'Drifts right while pushing in',        startScale: 1.0,  endScale: 1.08, startX: -1.5, startY: 0,    endX: 1.5,  endY: 0    },
+  { id: 'pan_left_zoom',   name: 'Drift Left',        description: 'Drifts left while pushing in',         startScale: 1.0,  endScale: 1.08, startX: 1.5,  startY: 0,    endX: -1.5, endY: 0    },
+  // ── Vertical family ──────────────────────────────────────────────
+  { id: 'push_in_top',     name: 'Drift Up',          description: 'Slowly rises while zooming in',        startScale: 1.0,  endScale: 1.08, startX: 0,    startY: 1.2,  endX: 0,    endY: -1.2 },
+  { id: 'push_in_bottom',  name: 'Drift Down',        description: 'Slowly descends while zooming in',     startScale: 1.0,  endScale: 1.08, startX: 0,    startY: -1.2, endX: 0,    endY: 1.2  },
+  // ── Diagonal family ──────────────────────────────────────────────
+  { id: 'diagonal_tl_br',  name: 'Diagonal ↘',        description: 'Drifts top-left to bottom-right',      startScale: 1.0,  endScale: 1.08, startX: 1.5,  startY: 1.0,  endX: -1.5, endY: -1.0 },
+  { id: 'diagonal_tr_bl',  name: 'Diagonal ↙',        description: 'Drifts top-right to bottom-left',      startScale: 1.0,  endScale: 1.08, startX: -1.5, startY: 1.0,  endX: 1.5,  endY: -1.0 },
 ];
 
 // ═══════════════════════════════════════════════════════════════════
@@ -327,13 +341,13 @@ function TransitionsPanel({ selectedClip, onApplyTransition, onRemoveTransition,
               <span className="text-white font-mono">{currentDuration.toFixed(1)}s</span>
             </div>
             <input
-              type="range" min={0.1} max={2.0} step={0.1}
+              type="range" min={0.1} max={5.0} step={0.1}
               value={currentDuration}
               onChange={e => onSetTransitionDuration(parseFloat(e.target.value))}
               className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
             />
             <div className="flex justify-between text-[9px] text-gray-600 mt-0.5">
-              <span>0.1s</span><span>Quick</span><span>Slow</span><span>2.0s</span>
+              <span>0.1s</span><span>Quick</span><span>Slow</span><span>5.0s</span>
             </div>
           </div>
         )}
@@ -588,13 +602,13 @@ function ClipPropertiesPanel({ clip, audioBeatDuration, onUpdate }) {
               <span className="text-white font-mono">{(clip.transitionDuration ?? DEFAULT_TRANSITION_DURATION).toFixed(1)}s</span>
             </div>
             <input
-              type="range" min={0.1} max={2.0} step={0.1}
+              type="range" min={0.1} max={5.0} step={0.1}
               value={clip.transitionDuration ?? DEFAULT_TRANSITION_DURATION}
               onChange={e => u('transitionDuration', parseFloat(e.target.value))}
               className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
             />
             <div className="flex justify-between text-[9px] text-gray-600 mt-0.5">
-              <span>0.1s fast</span><span>2.0s slow</span>
+              <span>0.1s fast</span><span>5.0s slow</span>
             </div>
           </div>
           <p className="text-[10px] text-gray-400">Plays at end of this clip</p>
@@ -701,9 +715,25 @@ function VideoPreview({
     if (!currentClip?.cinematicMotion || !currentClip?.duration) return {};
     const motion = CINEMATIC_MOTIONS.find(m => m.id === currentClip.cinematicMotion);
     if (!motion) return {};
+
+    // Progress 0→1 through the clip, clamped so it HOLDS at 1 (never returns)
     const p = Math.min(1, Math.max(0, (currentTime - currentClip.startTime) / currentClip.duration));
-    const eased = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
-    return { transform: `scale(${motion.startScale + (motion.endScale - motion.startScale) * eased}) translate(${motion.startX + (motion.endX - motion.startX) * eased}%, ${motion.startY + (motion.endY - motion.startY) * eased}%)`, transition: 'transform 0.1s linear' };
+
+    // easeOutSine: fast initial movement, graceful deceleration into hold
+    // Feels like a real camera operator settling on a shot — silky, not robotic
+    const eased = Math.sin((p * Math.PI) / 2);
+
+    const scale = motion.startScale + (motion.endScale - motion.startScale) * eased;
+    const tx    = motion.startX    + (motion.endX    - motion.startX)    * eased;
+    const ty    = motion.startY    + (motion.endY    - motion.startY)    * eased;
+
+    // No CSS transition — we compute exact position every 33ms from the clock.
+    // CSS transition would fight our JS updates and cause lag/judder.
+    return {
+      transform:    `scale(${scale.toFixed(4)}) translate(${tx.toFixed(3)}%, ${ty.toFixed(3)}%)`,
+      willChange:   'transform',
+      // NO transition property — JS drives it frame by frame
+    };
   };
 
   // Caption drag
@@ -1275,15 +1305,20 @@ export default function TimelineEditorV10() {
   // ── Cinematic zoom ──────────────────────────────────────────────
   const handleApplyCinematicZoom = () => {
     setIsApplyingZoom(true);
+    // Each pair: clip A drifts IN (ends zoomed/panned), clip B drifts OUT
+    // from that same zoomed state — so the cut feels like a continuous
+    // camera move rather than two separate animations.
+    // Cycle through 4 different motion families to add visual variety.
     const families = [
-      { forward: 'pan_right_zoom',  backward: 'pan_left_zoom'   },
-      { forward: 'push_in_top',     backward: 'push_in_bottom'  },
-      { forward: 'diagonal_tl_br',  backward: 'diagonal_tr_bl'  },
-      { forward: 'zoom_in_center',  backward: 'zoom_out_center' },
+      { inward: 'zoom_in_center',  outward: 'zoom_out_center' },
+      { inward: 'pan_right_zoom',  outward: 'pan_left_zoom'   },
+      { inward: 'push_in_top',     outward: 'push_in_bottom'  },
+      { inward: 'diagonal_tl_br',  outward: 'diagonal_tr_bl'  },
     ];
     setVideoClips(videoClips.map((clip, idx) => {
       const family = families[Math.floor(idx / 2) % families.length];
-      return { ...clip, cinematicMotion: idx % 2 === 0 ? family.forward : family.backward };
+      // Even clips drift inward, odd clips drift outward
+      return { ...clip, cinematicMotion: idx % 2 === 0 ? family.inward : family.outward };
     }));
     setIsApplyingZoom(false);
   };
@@ -1313,30 +1348,27 @@ export default function TimelineEditorV10() {
       return;
     }
 
-    // ── Call Claude for each scene in parallel ───────────────────
+    // ── Build captions scene by scene using full-array index ────
+    // IMPORTANT: always look up idx from the FULL scenes array so
+    // audioStartTimes[idx] and audioBeatDurations[idx] are correct.
+    // Using scenesWithText's own index would shift every scene by
+    // however many scenes before it had no text — causing the
+    // "first 4 words skipped" offset bug.
     const results = await Promise.all(
       scenesWithText.map(async (scene) => {
-        const idx         = scenes.indexOf(scene);
-        const text        = (scene.narration_text || scene.voiceover_text).trim();
-        const beatDur     = audioBeatDurations[idx] || scene.duration_seconds || 5;
-        const beatStart   = audioStartTimes[idx] ?? 0;
-        const result      = await getSmartWordTimings(text, beatDur, scene.scene_number);
+        const idx       = scenes.findIndex(s => s.id === scene.id); // ← full-array index
+        const text      = (scene.narration_text || scene.voiceover_text).trim();
+        const beatDur   = audioBeatDurations[idx] ?? scene.duration_seconds ?? 5;
+        const beatStart = audioStartTimes[idx] ?? 0;   // correct offset for this scene
 
-        if (result.success) {
-          // Offset word times by scene start time
-          return result.words.map(w => ({
-            ...w,
-            start: parseFloat((beatStart + w.start).toFixed(3)),
-            end:   parseFloat((beatStart + w.end).toFixed(3)),
-          }));
-        }
+        // Local pure-JS word timing (no API call needed — instant)
+        const words = text.split(/\s+/).filter(Boolean);
+        if (words.length === 0) return [];
 
-        // ── Per-scene fallback: linear spread ───────────────────
-        const words       = text.split(/\s+/).filter(Boolean);
         const secsPerWord = beatDur / words.length;
         return words.map((word, wi) => ({
-          word,
-          start: parseFloat((beatStart + wi * secsPerWord).toFixed(3)),
+          word: word.replace(/[.,!?;:]/g, ''),
+          start: parseFloat((beatStart + wi       * secsPerWord).toFixed(3)),
           end:   parseFloat((beatStart + (wi + 1) * secsPerWord).toFixed(3)),
         }));
       })
