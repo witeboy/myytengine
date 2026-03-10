@@ -47,8 +47,7 @@ async function generateThumbnailImage(apiKey, imagePrompt, negativePrompt, isSho
       prompt: `${imagePrompt}. Ultra high resolution, crisp sharp details, professional quality.`,
       image_size: imageSize, style: "DESIGN", rendering_speed: "QUALITY",
       expand_prompt: false,
-       negative_prompt: (concept.negative_prompt || "") + ", text,letters, numbers, typography, titles, labels, captions, watermark, signature, cluttered, text in bottom-right, flat lighting, stock photo expression"
-    });
+       negative_prompt: "text, letters, numbers, typography, titles, labels, captions, watermark, signature, cluttered, text in bottom-right, flat lighting, stock photo expression"    });
     const url = await kiePollResult(apiKey, taskId);
     if (url) return { url, model: "ideogram/v3-quality" };
   } catch (e) { console.warn(`Ideogram V3 failed: ${e.message}`); }
