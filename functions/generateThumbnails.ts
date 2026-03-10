@@ -464,8 +464,7 @@ OUTPUT FORMAT
       "ctr_score": 9,
       "why_it_achieves_10M_views": "Specific psychological mechanism that makes this irresistible",
       "script_anchor_used": "specific element from script that anchors this thumbnail",
-      "image_prompt": "400+ word Ideogram prompt. Starts with '${dimensionSpec}, graphic design composition.' Text in DOUBLE QUOTATION MARKS. Uses named colors only. Describes complete scene in ${visualStyle} style. Ends with: 'Critical text overlay: [text in quotes]'",
-      "negative_prompt": "blurry, low quality, pixelated, watermark, distorted text, misspelled text, small text, cluttered, text in bottom-right, text at bottom edge, low contrast text, muted colors, flat expression, stock photo smile, generic pose"
+      "image_prompt": "400+ word Ideogram prompt. Starts with '${dimensionSpec}, graphic design composition.' Uses named colors only. Describes complete scene in ${visualStyle} style. CRITICAL: Do NOT include any text, words, letters, or numbers in the image. Leave clean empty space for text overlay to be added separately.",      "negative_prompt": "blurry, low quality, pixelated, watermark, distorted text, misspelled text, small text, cluttered, text in bottom-right, text at bottom edge, low contrast text, muted colors, flat expression, stock photo smile, generic pose"
     }
   ]
 }
