@@ -35,7 +35,7 @@ import {
 const TRACK_HEIGHT = 56;
 const LABEL_WIDTH = 40;
 const MAX_HISTORY = 50;
-const TRANSITION_DURATION = 0.6; // seconds — shared constant
+const DEFAULT_TRANSITION_DURATION = 0.6; // seconds — used when clip.transitionDuration not set
 
 // ═══════════════════════════════════════════════════════════════════
 // CINEMATIC ZOOM MOTION TYPES
@@ -240,9 +240,10 @@ function EffectsPanel({ selectedClip, onApplyEffect }) {
   );
 }
 
-function TransitionsPanel({ selectedClip, onApplyTransition, onRemoveTransition, onApplyTransitionToAll }) {
+function TransitionsPanel({ selectedClip, onApplyTransition, onRemoveTransition, onApplyTransitionToAll, onSetTransitionDuration }) {
   const [msg, setMsg] = useState(null);
   const [selectedTransition, setSelectedTransition] = useState(null);
+  const currentDuration = selectedClip?.transitionDuration ?? DEFAULT_TRANSITION_DURATION;
 
   const apply = (t) => {
     if (!selectedClip) { setMsg('Select a video clip first'); setTimeout(() => setMsg(null), 2000); return; }
@@ -271,16 +272,37 @@ function TransitionsPanel({ selectedClip, onApplyTransition, onRemoveTransition,
         )}
       </div>
       {msg && <div className="mx-2 mt-2 px-3 py-2 bg-cyan-500/20 text-cyan-400 text-xs rounded">{msg}</div>}
-      <div className="flex-1 overflow-y-auto p-2">
-        <p className="text-[10px] text-gray-500 mb-2">Transition plays at the END of the selected clip</p>
+      <div className="flex-1 overflow-y-auto p-2 space-y-3">
+        <p className="text-[10px] text-gray-500">Transition plays at the END of the selected clip</p>
+
+        {/* ── Transition Duration Slider ── */}
+        {selectedClip?.transition && (
+          <div className="p-2 bg-purple-900/30 rounded border border-purple-700/40">
+            <div className="flex justify-between text-[10px] mb-1">
+              <span className="text-purple-300 font-medium">Duration</span>
+              <span className="text-white font-mono">{currentDuration.toFixed(1)}s</span>
+            </div>
+            <input
+              type="range" min={0.1} max={2.0} step={0.1}
+              value={currentDuration}
+              onChange={e => onSetTransitionDuration(parseFloat(e.target.value))}
+              className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+            />
+            <div className="flex justify-between text-[9px] text-gray-600 mt-0.5">
+              <span>0.1s</span><span>Quick</span><span>Slow</span><span>2.0s</span>
+            </div>
+          </div>
+        )}
+
         {selectedTransition && (
-          <div className="mb-3 p-2 bg-purple-500/20 rounded border border-purple-500/50">
+          <div className="p-2 bg-purple-500/20 rounded border border-purple-500/50">
             <p className="text-[9px] text-purple-300 mb-2">Selected: {selectedTransition.name}</p>
             <Button onClick={applyToAll} size="sm" className="w-full bg-purple-600 hover:bg-purple-700 text-xs">
-              Apply to All {selectedTransition.name}
+              Apply to All Clips
             </Button>
           </div>
         )}
+
         <div className="grid grid-cols-2 gap-2">
           {TRANSITIONS.map(t => (
             <button key={t.id} onClick={() => apply(t)}
@@ -452,12 +474,28 @@ function ClipPropertiesPanel({ clip, audioBeatDuration, onUpdate }) {
       )}
       {clip.transition && (
         <div className="p-3 bg-purple-500/20 rounded border border-purple-500/30">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-2">
             <Blend size={14} className="text-purple-400" />
             <label className="text-[10px] text-purple-300">Transition (Out)</label>
           </div>
-          <p className="text-sm text-white">{clip.transition}</p>
-          <p className="text-[10px] text-gray-400 mt-1">Plays at end of this clip</p>
+          <p className="text-sm text-white mb-2">{clip.transition}</p>
+          {/* Duration slider */}
+          <div className="mb-2">
+            <div className="flex justify-between text-[10px] mb-1">
+              <span className="text-gray-400">Duration</span>
+              <span className="text-white font-mono">{(clip.transitionDuration ?? DEFAULT_TRANSITION_DURATION).toFixed(1)}s</span>
+            </div>
+            <input
+              type="range" min={0.1} max={2.0} step={0.1}
+              value={clip.transitionDuration ?? DEFAULT_TRANSITION_DURATION}
+              onChange={e => u('transitionDuration', parseFloat(e.target.value))}
+              className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+            />
+            <div className="flex justify-between text-[9px] text-gray-600 mt-0.5">
+              <span>0.1s fast</span><span>2.0s slow</span>
+            </div>
+          </div>
+          <p className="text-[10px] text-gray-400">Plays at end of this clip</p>
           <button onClick={() => u('transition', null)} className="text-[10px] text-red-400 mt-2 hover:text-red-300">Remove transition</button>
         </div>
       )}
@@ -501,16 +539,19 @@ function VideoPreview({
   // ─────────────────────────────────────────────────────────────────
   const getTransitionState = () => {
     if (!prevClip?.transition || !currentClip) {
-      return { isTransitioning: false, transitionType: null, progress: 0 };
+      return { isTransitioning: false, transitionType: null, progress: 0, duration: DEFAULT_TRANSITION_DURATION };
     }
+    // Use the duration stored on the outgoing (prev) clip, fallback to default
+    const tDur = prevClip.transitionDuration ?? DEFAULT_TRANSITION_DURATION;
     const timeFromClipStart = currentTime - currentClip.startTime;
-    if (timeFromClipStart < 0 || timeFromClipStart >= TRANSITION_DURATION) {
-      return { isTransitioning: false, transitionType: null, progress: 0 };
+    if (timeFromClipStart < 0 || timeFromClipStart >= tDur) {
+      return { isTransitioning: false, transitionType: null, progress: 0, duration: tDur };
     }
     return {
       isTransitioning: true,
       transitionType:  prevClip.transition,
-      progress:        timeFromClipStart / TRANSITION_DURATION,
+      progress:        timeFromClipStart / tDur,
+      duration:        tDur,
     };
   };
 
@@ -1055,14 +1096,23 @@ export default function TimelineEditorV9() {
   const transitionCount = videoClips.filter(c => c.transition).length;
 
   // ─────────────────────────────────────────────────────────────────
-  // FIX 2: Generate captions — scene 0 was always skipped
+  // CAPTION GENERATION — Audio-pace-aware
   //
-  // Original guard:  if (!beatDuration || !beatStartTime)
-  // For scene 0:     audioStartTimes[0] = 0
-  //                  !0 === true  →  condition fires  →  scene skipped!
+  // Old approach (WRONG): split text into exactly 4 equal word groups.
+  //   Problem: `wordsPerCaption = ceil(wordCount / 4)` always gives ~3 words
+  //   regardless of whether the speaker is fast or slow. Captions appear
+  //   at arbitrary times that have nothing to do with speech pace.
   //
-  // Fix: use  beatStartTime == null  (strict null/undefined check).
-  // 0 is a valid start time and must not be treated as falsy.
+  // New approach: derive the actual speech rate from beatDuration / wordCount.
+  //   Each caption targets ~2.0s of spoken audio (comfortable reading window).
+  //   wordsPerCaption = round(2.0 × wordsPerSecond), clamped 2–8 words.
+  //
+  //   Fast speaker (0.2s/word) → ~10 words/2s → capped at 8
+  //   Normal speaker (0.4s/word) → ~5 words/2s → 5 words per caption
+  //   Slow speaker (0.8s/word) → ~2.5 words/2s → 2-3 words per caption
+  //
+  //   Caption timings: proportional to word position within beat, so
+  //   each caption fires exactly when its words are being spoken.
   // ─────────────────────────────────────────────────────────────────
   const handleGenerateCaptions = (deleteExisting) => {
     setIsGenCaptions(true);
@@ -1075,7 +1125,6 @@ export default function TimelineEditorV9() {
       const beatDuration  = audioBeatDurations[idx];
       const beatStartTime = audioStartTimes[idx];
 
-      // FIXED: was `!beatStartTime` which evaluates true for 0 (scene 0)
       if (!beatDuration || beatStartTime == null) {
         console.warn(`Scene ${scene.scene_number}: missing beat timing — skipped`);
         return;
@@ -1084,29 +1133,36 @@ export default function TimelineEditorV9() {
       const words = text.trim().split(/\s+/).filter(Boolean);
       if (words.length === 0) return;
 
-      const wordsPerCaption = Math.max(1, Math.ceil(words.length / 4));
-      let wordIdx = 0;
+      // ── Speech-rate-aware chunking ──────────────────────────────
+      const secsPerWord = beatDuration / words.length;
 
+      // Each caption = ~2s of speech. Clamp 2–8 words so it's readable.
+      const TARGET_SECS = 2.0;
+      const wordsPerCaption = Math.min(8, Math.max(2, Math.round(TARGET_SECS / secsPerWord)));
+
+      console.log(
+        `Scene ${scene.scene_number}: ${words.length}w / ${beatDuration.toFixed(1)}s` +
+        ` = ${secsPerWord.toFixed(2)}s/word → ${wordsPerCaption} words/caption`
+      );
+
+      let wordIdx = 0;
       while (wordIdx < words.length) {
-        const captionWords   = words.slice(wordIdx, wordIdx + wordsPerCaption);
-        const captionText    = captionWords.join(' ');
-        const proportionStart = wordIdx / words.length;
-        const proportionEnd   = Math.min(1, (wordIdx + wordsPerCaption) / words.length);
-        const captionStart    = beatStartTime + proportionStart * beatDuration;
-        const captionDur      = (proportionEnd - proportionStart) * beatDuration;
+        const chunk     = words.slice(wordIdx, wordIdx + wordsPerCaption);
+        const propStart = wordIdx / words.length;
+        const propEnd   = Math.min(1, (wordIdx + chunk.length) / words.length);
 
         caps.push({
           id:        `cap-${scene.id}-${wordIdx}-${Date.now()}`,
           sceneId:   scene.id,
           type:      'caption',
-          startTime: captionStart,
-          duration:  Math.max(0.5, captionDur),
-          text:      captionText,
-          label:     captionText.slice(0, 15) + '...',
+          startTime: beatStartTime + propStart * beatDuration,
+          duration:  Math.max(0.4, (propEnd - propStart) * beatDuration),
+          text:      chunk.join(' '),
+          label:     chunk.join(' ').slice(0, 15) + '...',
           x: 50, y: 85, fontSize: 20, color: '#FFFFFF', bgColor: 'rgba(0,0,0,0.7)'
         });
 
-        wordIdx += wordsPerCaption;
+        wordIdx += chunk.length;
       }
     });
 
@@ -1127,8 +1183,9 @@ export default function TimelineEditorV9() {
   const handleSeek             = t  => { const ct = Math.max(0, Math.min(totalDuration, t)); setCurrentTime(ct); if (audioRef.current) audioRef.current.currentTime = ct; };
   const handleNext             = () => navigate(createPageUrl('PostProduction') + `?project_id=${projectId}`);
   const handleApplyEffect      = e  => { if (!selectedVideoId) return; setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, effects: [...(c.effects || []), e.id] } : c)); };
-  const handleApplyTransition  = t  => { if (!selectedVideoId) return; setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transition: t.name } : c)); };
-  const handleRemoveTransition = () => { if (!selectedVideoId) return; setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transition: null } : c)); };
+  const handleApplyTransition      = t  => { if (!selectedVideoId) return; setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transition: t.name } : c)); };
+  const handleRemoveTransition     = ()  => { if (!selectedVideoId) return; setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transition: null } : c)); };
+  const handleSetTransitionDuration = (dur) => { if (!selectedVideoId) return; setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transitionDuration: dur } : c)); };
   const handleApplyTransitionToAll = t => setVideoClips(videoClips.map(c => ({ ...c, transition: t.name })));
   const handleDeleteCaption    = () => { if (!selectedCaptionId) return; setCaptionClips(captionClips.filter(c => c.id !== selectedCaptionId)); setSelectedCaptionId(null); };
   const handleDuplicateCaption = () => {
@@ -1172,7 +1229,7 @@ export default function TimelineEditorV9() {
         <div className="w-56 flex-shrink-0 border-r border-gray-800 bg-[#12121f]">
           {activePanel === 'media'       && <MediaPanel scenes={scenes} audioBeatDurations={audioBeatDurations} onSelectScene={idx => handleSeek(audioStartTimes[idx] || 0)} />}
           {activePanel === 'effects'     && <EffectsPanel selectedClip={selectedVideo} onApplyEffect={handleApplyEffect} />}
-          {activePanel === 'transitions' && <TransitionsPanel selectedClip={selectedVideo} onApplyTransition={handleApplyTransition} onRemoveTransition={handleRemoveTransition} onApplyTransitionToAll={handleApplyTransitionToAll} />}
+          {activePanel === 'transitions' && <TransitionsPanel selectedClip={selectedVideo} onApplyTransition={handleApplyTransition} onRemoveTransition={handleRemoveTransition} onApplyTransitionToAll={handleApplyTransitionToAll} onSetTransitionDuration={handleSetTransitionDuration} />}
           {activePanel === 'captions'    && <CaptionsPanel onGenerate={handleGenerateCaptions} isGenerating={isGenCaptions} captionCount={captionClips.length} />}
           {!['media','effects','transitions','captions'].includes(activePanel) && <div className="flex items-center justify-center h-full text-xs text-gray-500">Coming soon</div>}
         </div>
