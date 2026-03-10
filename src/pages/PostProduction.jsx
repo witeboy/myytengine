@@ -237,7 +237,7 @@ function ThumbnailTemplatePicker({ projectId, onTemplatesSelected, onSkip }) {
                 Pick <span className="text-purple-700 font-bold">1 or more templates</span>
                 <span className="ml-2 text-gray-400 font-normal">({selected.length} selected)</span>
               </p>
-              {selected.length === 3 && (
+              {selected.length === 0 && (
                 <div className="flex gap-1 flex-wrap justify-end">
                   {selected.map((s, i) => (
                     <Badge key={s.template_id} className="text-[10px] bg-purple-100 text-purple-700 gap-1">
@@ -307,7 +307,7 @@ function ThumbnailTemplatePicker({ projectId, onTemplatesSelected, onSkip }) {
 function PipelineStatus({ selectedTitles, selectedNiche, referenceStyle, selectedTemplateIds, onGoToTitles }) {
   const hasTitles = selectedTitles.length > 0;
   const hasStyle = !!selectedNiche || !!referenceStyle;
-  const hasTemplates = selectedTemplateIds.length === 3;
+  const hasTemplates = selectedTemplateIds.length === 0;
 
   return (
     <Card className="bg-gradient-to-r from-slate-50 to-slate-100 border-slate-200">
@@ -430,7 +430,7 @@ export default function PostProduction() {
         niche_dna: selectedNiche?.synthesized_dna || undefined,
         niche_name: selectedNiche?.name || undefined,
         selected_title: selectedTitles.length > 0 ? selectedTitles.map(t => t.title).join(' | ') : undefined,
-        selected_templates: templateIds?.length === 3 ? templateIds : undefined,
+        selected_templates: templateIds?.length === 0 ? templateIds : undefined,
       });
 
       const data = res.data || res;
@@ -474,7 +474,7 @@ export default function PostProduction() {
 
   // Called by "Auto-Generate" skip button — uses whatever templates are selected or none
   const handleAutoGenerate = () => {
-    runGeneration(selectedTemplateIds.length === 3 ? selectedTemplateIds : undefined);
+    runGeneration(selectedTemplateIds.length === 0 ? selectedTemplateIds : undefined);
   };
 
  // ══════════════════════════════════════════════════════════════════
@@ -750,7 +750,7 @@ const handleGenerateSeo = async () => {
             />
 
             {/* Already selected templates strip — shown after selection */}
-            {selectedTemplateIds.length === 3 && !generatingThumbs && (
+            {selectedTemplateIds.length === 0 && !generatingThumbs && (
               <Card className="border-green-200 bg-green-50">
                 <CardContent className="py-3 px-4 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -799,7 +799,7 @@ const handleGenerateSeo = async () => {
                 <CardContent className="py-12 text-center">
                   <Loader2 className="w-8 h-8 animate-spin text-purple-600 mx-auto mb-3" />
                   <p className="text-gray-500 font-medium">Creating 3 scroll-stopping thumbnail designs...</p>
-                  {selectedTemplateIds.length === 3 && (
+                  {selectedTemplateIds.length === 0 && (
                     <div className="flex justify-center gap-2 mt-3 flex-wrap">
                       {selectedTemplateIds.map((id, i) => (
                         <Badge key={id} className="bg-purple-100 text-purple-700 text-xs">
