@@ -1074,20 +1074,29 @@ export default function TimelineEditorV10() {
   }, [audioBeatDurations]);
 
   const totalDuration = useMemo(() => {
+    // If AutoSync has redistributed beats from real audio, the beat sum
+    // IS the audio duration (they were computed from it), so use it directly.
+    // This keeps the timeline ruler exactly as wide as the content.
+    const beatSum = audioBeatDurations.reduce((s, d) => s + d, 0);
+    if (overrideBeatDurations) return beatSum > 0 ? beatSum : 60;
     if (actualVoiceoverDuration > 0) return actualVoiceoverDuration;
-    const sceneSum = audioBeatDurations.reduce((s, d) => s + d, 0);
-    return sceneSum > 0 ? sceneSum : 60;
-  }, [audioBeatDurations, actualVoiceoverDuration]);
+    return beatSum > 0 ? beatSum : 60;
+  }, [audioBeatDurations, actualVoiceoverDuration, overrideBeatDurations]);
 
-  const audioClips = useMemo(() => scenes.map((scene, idx) => ({
-    id:          `audio-${scene.id}`,
-    sceneId:     scene.id,
-    sceneNumber: scene.scene_number,
-    type:        'audio',
-    startTime:   audioStartTimes[idx] ?? 0,
-    duration:    scene.duration_seconds || audioBeatDurations[idx] || 5,
-    label:       `${(scene.duration_seconds || audioBeatDurations[idx] || 5).toFixed(1)}s`
-  })), [scenes, audioBeatDurations, audioStartTimes]);
+  // audioClips always reflects the current beat grid — same source of truth
+  // as video clips so the two tracks stay pixel-perfectly aligned.
+  const audioClips = useMemo(() => scenes.map((scene, idx) => {
+    const dur = audioBeatDurations[idx] || scene.duration_seconds || 5;
+    return {
+      id:          `audio-${scene.id}`,
+      sceneId:     scene.id,
+      sceneNumber: scene.scene_number,
+      type:        'audio',
+      startTime:   audioStartTimes[idx] ?? 0,
+      duration:    dur,
+      label:       `${dur.toFixed(1)}s`,
+    };
+  }), [scenes, audioBeatDurations, audioStartTimes]);
 
   // ── Initialize video clips once ────────────────────────────────
   useEffect(() => {
@@ -1503,18 +1512,20 @@ export default function TimelineEditorV10() {
               }
             </Button>
             {!isSyncing && !syncStatus && (
-              <span className="text-[9px] text-gray-600">
-                {measuredAudioDuration > 0 ? `🎙 ${formatTime(measuredAudioDuration)} audio detected` : 'no audio — uses word count'}
+              <span className="text-[9px] text-gray-500">
+                {measuredAudioDuration > 0
+                  ? `🎙 ${formatTime(measuredAudioDuration)} · clips will resize to word count`
+                  : 'no audio · clips sized by word count'}
               </span>
             )}
             {isSyncing && (
-              <span className="text-[9px] text-cyan-400">measuring audio & redistributing beats…</span>
+              <span className="text-[9px] text-cyan-400">resizing clips to match speech pace…</span>
             )}
             {syncStatus === 'audio' && (
-              <span className="text-[9px] text-green-400">beats redistributed from real audio ✓</span>
+              <span className="text-[9px] text-green-400">✓ clips resized · scene changes match audio</span>
             )}
             {syncStatus === 'words' && (
-              <span className="text-[9px] text-teal-400">beats redistributed by word count ✓</span>
+              <span className="text-[9px] text-teal-400">✓ clips resized by word count</span>
             )}
           </div>
           <Button onClick={motionCount > 0 ? handleRemoveCinematicZoom : handleApplyCinematicZoom} disabled={isApplyingZoom} size="default"
