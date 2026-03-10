@@ -809,80 +809,47 @@ export default function MakeThumbnail({ onBack }) {
     setStep(1);
 
     try {
-      // ── 1. Create project ────────────────────────────────────────
-      setLoadingPhase('Creating project…');
-      let pid;
-      try {
-        const proj = await base44.entities.Projects.create({
-          name: title.trim(),
-          niche: summary.trim() || title.trim(),
-          status: 'thumbnail_only',
-          current_step: 0,
-        });
-        pid = proj?.id;
-        if (!pid) throw new Error('Project.create returned no id');
-        setProjectId(pid);
-      } catch (e) {
-        throw new Error(`Could not create Project record: ${e.message}. Check your Projects entity exists.`);
-      }
+      // ── Call newThumbnailConcept ──────────────────────────────────
+      // Standalone function — no Projects/Scripts/Topics dependency.
+      // Sends: video_title + optional summary
+      // Returns: { success, concept_ids[], project_id (session), template_selection{} }
+      setLoadingPhase('Gemini is designing 10 thumbnail concepts…');
 
-      // ── 2. Call generateThumbnailConcepts ────────────────────────
-      // Backend: project_id + video_title → Gemini → 10 ThumbnailConcept records
-      // Returns: { success, concept_ids[], template_selection{} }
-      setLoadingPhase('Gemini is designing 10 thumbnail concepts using the 26-template DNA vault…');
       let conceptsResult;
       try {
-        // Build template context — include actual base64 image so Gemini can SEE the reference
-        const templateContext = selectedUserTemplate ? (() => {
-          const refImg = TEMPLATE_IMAGES[selectedUserTemplate.id];
-          return {
-            reference_template_id:   selectedUserTemplate.id,
-            reference_template_name: selectedUserTemplate.name,
-            reference_psychology:    selectedUserTemplate.psychology,
-            reference_text_strategy: selectedUserTemplate.textStrategy,
-            reference_layout:        JSON.stringify(selectedUserTemplate.layout || {}),
-            reference_image_prompt:  buildTemplatePrompt(selectedUserTemplate, {
-              title: title.trim(),
-              overlayText: '',
-              charCount,
-              charDescriptions: chars.filter(Boolean).map(c => c.name || 'uploaded character photo'),
-            }),
-            // Pass the actual reference image so Gemini Vision can see it
-            reference_b64:  refImg?.b64  ?? null,
-            reference_mime: refImg?.mime ?? null,
-          };
-        })() : {};
-
-        conceptsResult = await base44.functions.invoke('generateThumbnailConcepts', {
-          project_id: pid,
+        conceptsResult = await base44.functions.invoke('newThumbnailConcept', {
           video_title: title.trim(),
-          ...templateContext,
+          summary: summary.trim() || '',
         });
       } catch (e) {
-        throw new Error(`generateThumbnailConcepts function error: ${e.message}`);
+        throw new Error(`newThumbnailConcept function error: ${e.message}`);
       }
 
       if (conceptsResult?.error) {
-        throw new Error(`generateThumbnailConcepts: ${conceptsResult.error}`);
+        throw new Error(conceptsResult.error);
       }
       if (!conceptsResult?.concept_ids?.length) {
-        throw new Error('Gemini returned no concepts. Check GEMINI_API_KEY is set in your environment.');
+        throw new Error('No concepts returned. Check GEMINI_API_KEY is set in your environment variables.');
       }
+
+      // Store the session project_id so generateThumbnailImage can use it
+      const sessionId = conceptsResult.project_id;
+      setProjectId(sessionId);
 
       // Store template selection metadata for display
       if (conceptsResult.template_selection) setTemplateMeta(conceptsResult.template_selection);
 
-      // ── 3. Load saved concepts from DB ───────────────────────────
+      // ── Load saved concepts from DB ──────────────────────────────
       setLoadingPhase('Loading your 10 concepts…');
       let saved = [];
       try {
-        saved = await base44.entities.ThumbnailConcepts.filter({ project_id: pid });
+        saved = await base44.entities.ThumbnailConcepts.filter({ project_id: sessionId });
       } catch (e) {
-        throw new Error(`Could not load concepts from database: ${e.message}`);
+        throw new Error(`Could not load concepts: ${e.message}. Check ThumbnailConcepts entity has a project_id field.`);
       }
 
       if (!saved.length) {
-        throw new Error('Concepts were generated but could not be fetched. Check ThumbnailConcepts entity has project_id field.');
+        throw new Error('Concepts saved but could not be fetched. Check ThumbnailConcepts entity fields.');
       }
 
       const sorted = [...saved].sort((a, b) => (a.rank || 99) - (b.rank || 99));
@@ -892,6 +859,7 @@ export default function MakeThumbnail({ onBack }) {
     } catch (e) {
       console.error('handleGenerateConcepts error:', e);
       setError(e.message);
+      setStep(0);
     }
 
     setLoadingPhase('');
