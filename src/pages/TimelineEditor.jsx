@@ -244,27 +244,69 @@ function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport,
 // LEFT PANELS
 // ═══════════════════════════════════════════════════════════════════
 
-function MediaPanel({ scenes, audioBeatDurations, onSelectScene }) {
+function MediaPanel({ scenes, audioBeatDurations, videoClips, onSelectScene, onSetAllMediaType }) {
+  const videoSceneCount = scenes.filter(s =>
+    s.video_url && s.video_url.startsWith('http') &&
+    !s.video_url.startsWith('veo_task:') && !s.video_url.startsWith('grok_vid_task:')
+  ).length;
+
   return (
     <div className="h-full flex flex-col">
-      <div className="px-3 py-2 border-b border-gray-800">
-        <span className="text-xs text-gray-400">{scenes.length} scenes</span>
+      <div className="px-3 py-2 border-b border-gray-800 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-gray-400">{scenes.length} scenes</span>
+          {videoSceneCount > 0 && (
+            <span className="text-[9px] text-purple-400">{videoSceneCount} with video</span>
+          )}
+        </div>
+        {/* Bulk media type controls */}
+        {videoSceneCount > 0 && (
+          <div className="space-y-1">
+            <p className="text-[9px] text-gray-500">Set all clips to:</p>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => onSetAllMediaType('image')}
+                className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[10px] bg-cyan-900/40 text-cyan-300 hover:bg-cyan-800/60 border border-cyan-800/50"
+              >
+                <Image size={10} /> All Image
+              </button>
+              <button
+                onClick={() => onSetAllMediaType('video')}
+                className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[10px] bg-purple-900/40 text-purple-300 hover:bg-purple-800/60 border border-purple-800/50"
+              >
+                <Film size={10} /> All Video
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       <div className="flex-1 overflow-y-auto p-2">
         <div className="grid grid-cols-2 gap-2">
-          {scenes.map((scene, idx) => (
-            <div key={scene.id}
-              className="group relative aspect-video bg-gray-800 rounded overflow-hidden cursor-pointer hover:ring-2 hover:ring-cyan-500"
-              onClick={() => onSelectScene(idx)}>
-              {scene.image_url
-                ? <img src={scene.image_url} className="w-full h-full object-cover" alt="" />
-                : <div className="w-full h-full flex items-center justify-center"><Image className="w-5 h-5 text-gray-600" /></div>}
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 p-1">
-                <p className="text-[9px] text-white">Scene {scene.scene_number}</p>
-                <p className="text-[8px] text-cyan-300">🎵 {audioBeatDurations[idx]?.toFixed(1)}s</p>
+          {scenes.map((scene, idx) => {
+            const clip = videoClips.find(c => c.sceneId === scene.id);
+            const isVideo = clip?.mediaType === 'video' && clip?.videoUrl;
+            const hasVideo = !!(scene.video_url && scene.video_url.startsWith('http') &&
+              !scene.video_url.startsWith('veo_task:') && !scene.video_url.startsWith('grok_vid_task:'));
+            return (
+              <div key={scene.id}
+                className={`group relative aspect-video bg-gray-800 rounded overflow-hidden cursor-pointer hover:ring-2 hover:ring-cyan-500 ${isVideo ? 'ring-1 ring-purple-500/50' : ''}`}
+                onClick={() => onSelectScene(idx)}>
+                {scene.image_url
+                  ? <img src={scene.image_url} className="w-full h-full object-cover" alt="" />
+                  : <div className="w-full h-full flex items-center justify-center"><Image className="w-5 h-5 text-gray-600" /></div>}
+                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 p-1">
+                  <p className="text-[9px] text-white">Scene {scene.scene_number}</p>
+                  <p className="text-[8px] text-cyan-300">🎵 {audioBeatDurations[idx]?.toFixed(1)}s</p>
+                </div>
+                {/* Badge: video or image */}
+                <div className={`absolute top-1 right-1 px-1 py-0.5 rounded text-[8px] font-bold ${
+                  isVideo ? 'bg-purple-600 text-white' : hasVideo ? 'bg-gray-700/80 text-gray-300' : 'bg-gray-800/80 text-gray-500'
+                }`}>
+                  {isVideo ? '🎬' : hasVideo ? '🖼' : '📷'}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
@@ -403,22 +445,22 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, t
           'bg-gray-800/50 border-gray-700'
         }`}>
           <div className="flex items-center gap-2 font-medium">
-            {status === 'idle'         && <><Radio size={12} className="text-gray-400" /><span className="text-gray-300">AI Caption Timing</span></>}
-            {status === 'transcribing' && <><Loader2 size={12} className="animate-spin text-blue-400" /><span className="text-blue-300">Analyzing speech timing…</span></>}
-            {status === 'done'         && <><CheckCircle size={12} className="text-green-400" /><span className="text-green-300">Transcription ready</span></>}
-            {status === 'error'        && <><AlertCircle size={12} className="text-red-400" /><span className="text-red-300">Transcription failed</span></>}
+            {status === 'idle'         && <><Radio size={12} className="text-gray-400" /><span className="text-gray-300">Syllable-Weighted Timing</span></>}
+            {status === 'transcribing' && <><Loader2 size={12} className="animate-spin text-blue-400" /><span className="text-blue-300">Calculating word timings…</span></>}
+            {status === 'done'         && <><CheckCircle size={12} className="text-green-400" /><span className="text-green-300">Captions timed</span></>}
+            {status === 'error'        && <><AlertCircle size={12} className="text-red-400" /><span className="text-red-300">No script text found</span></>}
           </div>
 
           {status === 'idle' && (
             <p className="text-gray-500 leading-relaxed">
-              Claude analyzes your script text + beat durations to assign realistic word-level timestamps — no mic needed, fully automatic.
+              Times each word by syllable count — short words like "a" and "the" get less time, longer words get more. Breaks captions at natural sentence and clause boundaries.
             </p>
           )}
           {status === 'transcribing' && (
-            <p className="text-blue-400">Analyzing audio file for word-level timestamps…</p>
+            <p className="text-blue-400">Calculating syllable-weighted word timings…</p>
           )}
           {status === 'done' && (
-            <p className="text-green-400">{wordCount} words timed with AI speech analysis.</p>
+            <p className="text-green-400">{wordCount} words timed by syllable weight.</p>
           )}
           {status === 'error' && (
             <p className="text-red-400">{error || 'Could not transcribe audio.'}<br />
@@ -454,7 +496,7 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, t
             ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Generating…</>
             : status === 'transcribing'
             ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Analyzing timing…</>
-            : <><Radio size={14} className="mr-2" /> Generate Captions (AI)</>
+            : <><Radio size={14} className="mr-2" /> Generate Captions</>
           }
         </Button>
       </div>
@@ -558,12 +600,59 @@ function TextPropertiesPanel({ caption, onUpdate, onDelete, onDuplicate }) {
 function ClipPropertiesPanel({ clip, audioBeatDuration, onUpdate }) {
   if (!clip) return <div className="h-full flex items-center justify-center text-xs text-gray-500">Select a clip</div>;
   const u = (k, v) => onUpdate({ ...clip, [k]: v });
-  const isSynced = Math.abs(clip.duration - audioBeatDuration) < 0.1;
-  const motion = CINEMATIC_MOTIONS.find(m => m.id === clip.cinematicMotion);
+  const isSynced  = Math.abs(clip.duration - audioBeatDuration) < 0.1;
+  const motion    = CINEMATIC_MOTIONS.find(m => m.id === clip.cinematicMotion);
+  const hasVideo  = !!clip.videoUrl;
+  const isVideo   = clip.mediaType === 'video';
 
   return (
     <div className="h-full flex flex-col bg-[#12121f] p-3 space-y-4 overflow-y-auto">
+
+      {/* Scene header */}
       <div className="text-sm font-medium text-white">Scene {clip.sceneNumber}</div>
+
+      {/* ── Media Type Toggle ──────────────────────────────────── */}
+      <div className="p-3 bg-gray-800/60 rounded border border-gray-700 space-y-2">
+        <label className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">Media Source</label>
+        <div className="flex gap-2">
+          {/* Image button */}
+          <button
+            onClick={() => u('mediaType', 'image')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded text-xs font-medium transition-all ${
+              !isVideo
+                ? 'bg-cyan-600 text-white'
+                : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
+            }`}
+          >
+            <Image size={12} /> Image
+          </button>
+          {/* Video button — only enabled if clip has a video */}
+          <button
+            onClick={() => hasVideo && u('mediaType', 'video')}
+            title={hasVideo ? 'Use generated video' : 'No video generated for this scene'}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded text-xs font-medium transition-all ${
+              isVideo
+                ? 'bg-purple-600 text-white'
+                : hasVideo
+                ? 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
+                : 'bg-gray-800 text-gray-600 cursor-not-allowed'
+            }`}
+          >
+            <Film size={12} /> Video {!hasVideo && <span className="text-[9px]">(none)</span>}
+          </button>
+        </div>
+        {isVideo && hasVideo && (
+          <p className="text-[9px] text-purple-300 flex items-center gap-1">
+            <Film size={9} /> Playing generated video · loops within clip
+          </p>
+        )}
+        {!hasVideo && (
+          <p className="text-[9px] text-gray-500">
+            Generate a video in Content Generation to enable video mode.
+          </p>
+        )}
+      </div>
+
       <div className="p-3 bg-indigo-500/20 rounded border border-indigo-500/30">
         <div className="flex items-center gap-2 mb-1">
           <Mic size={14} className="text-indigo-400" />
@@ -705,6 +794,8 @@ function VideoPreview({
 }) {
   const canvasRef    = useRef(null);
   const wrapperRef   = useRef(null);
+  const videoRef     = useRef(null);   // ref for the active video element
+  const prevVideoRef = useRef(null);   // ref for the outgoing video (transition)
   const [drag, setDrag]         = useState(null);
   const [wrapperSize, setWrapperSize] = useState({ w: 0, h: 0 });
 
@@ -719,6 +810,22 @@ function VideoPreview({
     ro.observe(wrapperRef.current);
     return () => ro.disconnect();
   }, []);
+
+  // ── Sync video playback position to timeline currentTime ────────
+  // When the clip is a video, keep the <video> element in lock-step
+  // with the playback clock. We offset into the video by how far we
+  // are into the clip (currentTime - clip.startTime), clamped to the
+  // video's own duration so short 6s videos loop visually.
+  useEffect(() => {
+    if (!videoRef.current || !currentClip?.videoUrl) return;
+    const el       = videoRef.current;
+    const elapsed  = currentTime - (currentClip.startTime ?? 0);
+    const vidDur   = el.duration || 6;
+    const target   = elapsed % vidDur;          // loop within video duration
+    if (Math.abs(el.currentTime - target) > 0.25) {
+      el.currentTime = target;
+    }
+  }, [currentTime, currentClip]);
 
   // Compute the largest canvas that fits, preserving aspect ratio
   const { canvasW, canvasH } = useMemo(() => {
@@ -872,17 +979,43 @@ function VideoPreview({
             style={{ width: canvasW, height: canvasH }}
             onClick={() => onSelectCaption(null)}
           >
-            {/* Incoming scene */}
+            {/* ── Incoming scene — video or image ──────────────────── */}
             <div className="absolute inset-0 overflow-hidden" style={isTransitioning ? getTransitionStyle(false) : {}}>
-              {currentScene?.image_url
-                ? <img src={currentScene.image_url} className="w-full h-full object-cover" style={motionStyle} alt="" />
-                : <div className="w-full h-full flex items-center justify-center"><Film className="w-12 h-12 text-gray-700" /></div>}
+              {currentClip?.mediaType === 'video' && currentClip?.videoUrl ? (
+                // Video clip: muted (voiceover is separate), loops within its duration
+                <video
+                  key={currentClip.videoUrl}   // remount when URL changes
+                  ref={videoRef}
+                  src={currentClip.videoUrl}
+                  className="w-full h-full object-cover"
+                  style={motionStyle}
+                  muted
+                  playsInline
+                  loop
+                  autoPlay
+                />
+              ) : currentScene?.image_url ? (
+                // Image clip (default)
+                <img src={currentScene.image_url} className="w-full h-full object-cover" style={motionStyle} alt="" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center"><Film className="w-12 h-12 text-gray-700" /></div>
+              )}
             </div>
 
-            {/* Outgoing scene */}
-            {isTransitioning && prevScene?.image_url && (
+            {/* ── Outgoing scene during transition ─────────────────── */}
+            {isTransitioning && (
               <div className="absolute inset-0 overflow-hidden" style={getTransitionStyle(true)}>
-                <img src={prevScene.image_url} className="w-full h-full object-cover" alt="transition-out" />
+                {prevClip?.mediaType === 'video' && prevClip?.videoUrl ? (
+                  <video
+                    key={`prev-${prevClip.videoUrl}`}
+                    ref={prevVideoRef}
+                    src={prevClip.videoUrl}
+                    className="w-full h-full object-cover"
+                    muted playsInline loop autoPlay
+                  />
+                ) : prevScene?.image_url ? (
+                  <img src={prevScene.image_url} className="w-full h-full object-cover" alt="transition-out" />
+                ) : null}
               </div>
             )}
 
@@ -999,9 +1132,10 @@ function TimelineTrack({ type, clips, pps, totalDuration, currentTime, selectedI
           const sel           = selectedId === clip.id;
           const hasMotion     = type === 'video' && clip.cinematicMotion;
           const hasTransition = type === 'video' && clip.transition;
-          let bgColor = color;
+          const isVideoClip   = type === 'video' && clip.mediaType === 'video' && clip.videoUrl;
+          let bgColor = isVideoClip ? '#7c3aed' : color; // purple for video clips
           if (hasMotion)                  bgColor = '#b45309';
-          if (hasTransition)              bgColor = '#7c3aed';
+          if (hasTransition && !hasMotion) bgColor = '#6d28d9';
           if (hasMotion && hasTransition) bgColor = '#be185d';
 
           return (
@@ -1020,6 +1154,7 @@ function TimelineTrack({ type, clips, pps, totalDuration, currentTime, selectedI
                 <div className="flex-1 min-w-0">
                   <p className="text-[9px] text-white font-medium truncate drop-shadow flex items-center gap-1">
                     {clip.label}
+                    {isVideoClip   && <Film   size={8} className="text-purple-200" />}
                     {hasMotion     && <Camera size={8} className="text-amber-200" />}
                     {hasTransition && <Blend  size={8} className="text-purple-200" />}
                   </p>
@@ -1202,16 +1337,30 @@ export default function TimelineEditorV10() {
   }), [scenes, audioBeatDurations, audioStartTimes]);
 
   // ── Initialize video clips once ────────────────────────────────
+  // Each clip stores both imageUrl AND videoUrl so users can mix
+  // video clips and image clips on the same timeline.
+  // mediaType: 'video' if a valid video_url exists, else 'image'.
+  // Users can toggle this per-clip in ClipPropertiesPanel.
   useEffect(() => {
     if (scenes.length === 0 || initialized) return;
     let offset = 0;
     const initClips = scenes.map((scene, idx) => {
-      const duration = audioBeatDurations[idx] || scene.duration_seconds || 5;
+      const duration  = audioBeatDurations[idx] || scene.duration_seconds || 5;
+      const hasVideo  = scene.video_url &&
+                        scene.video_url.startsWith('http') &&
+                        !scene.video_url.startsWith('veo_task:') &&
+                        !scene.video_url.startsWith('grok_vid_task:');
       const clip = {
         id: `video-${scene.id}`, sceneId: scene.id, sceneNumber: scene.scene_number,
         type: 'video', startTime: offset, duration,
-        label: `Scene ${scene.scene_number}`, thumbnail: scene.image_url,
-        effects: [], audioMuted: false, cinematicMotion: null, transition: null, synced: false
+        label:     `Scene ${scene.scene_number}`,
+        thumbnail: scene.image_url,   // always keep image for timeline thumb
+        imageUrl:  scene.image_url,   // explicit image source
+        videoUrl:  hasVideo ? scene.video_url : null,
+        mediaType: hasVideo ? 'video' : 'image', // 'video' | 'image'
+        effects: [], audioMuted: false, cinematicMotion: null,
+        transition: null, transitionDuration: null, synced: false,
+        motionSpeed: 1.0, motionIntensity: 1.0,
       };
       offset += duration;
       return clip;
@@ -1344,6 +1493,21 @@ export default function TimelineEditorV10() {
           duration:  newBeatDurations[idx],
           label: `Scene ${scene.scene_number}`, thumbnail: scene.image_url,
           effects: existing?.effects || [], audioMuted: existing?.audioMuted || false,
+          imageUrl:         existing?.imageUrl  || scene.image_url || null,
+          videoUrl:         existing?.videoUrl  || (
+                              scene.video_url &&
+                              scene.video_url.startsWith('http') &&
+                              !scene.video_url.startsWith('veo_task:') &&
+                              !scene.video_url.startsWith('grok_vid_task:')
+                                ? scene.video_url : null
+                            ),
+          mediaType:        existing?.mediaType || (
+                              scene.video_url &&
+                              scene.video_url.startsWith('http') &&
+                              !scene.video_url.startsWith('veo_task:') &&
+                              !scene.video_url.startsWith('grok_vid_task:')
+                                ? 'video' : 'image'
+                            ),
           cinematicMotion:  existing?.cinematicMotion  || null,
           transition:       existing?.transition       || null,
           transitionDuration: existing?.transitionDuration ?? null,
@@ -1412,9 +1576,72 @@ export default function TimelineEditorV10() {
   // Falls back to simple linear math if the API call fails.
   // ═══════════════════════════════════════════════════════════════
 
-  const handleGenerateCaptions = async (deleteExisting) => {
+  // ─────────────────────────────────────────────────────────────────
+  // CAPTION GENERATION — syllable-weighted local timing
+  //
+  // Core insight: a word's spoken duration correlates strongly with its
+  // syllable count.  "a" = 1 syllable ≈ 0.12s.  "beautiful" = 3 syllables
+  // ≈ 0.42s.  Punctuation adds pause time on top.
+  //
+  // Algorithm per scene:
+  //   1. Count syllables in every word using a vowel-cluster heuristic.
+  //   2. Add punctuation weight (period/! → +0.30s, comma → +0.15s).
+  //   3. Normalise so the total weight sums to exactly beatDuration.
+  //   4. Derive {start, end} for each word from cumulative weights.
+  //
+  // This runs instantly (no API), works offline, and produces timing
+  // that tracks the audio much more closely than equal-duration math.
+  //
+  // Caption chunks respect clause boundaries:
+  //   - Hard break after sentence-ending punctuation (. ! ?)
+  //   - Soft break after commas when chunk already has ≥4 words
+  //   - Never exceed MAX_CHUNK_WORDS (6) or MAX_CHUNK_SECS (2.5s)
+  // ─────────────────────────────────────────────────────────────────
+
+  const handleGenerateCaptions = (deleteExisting) => {
     setIsGenCaptions(true);
     setTranscription({ status: 'transcribing', words: [], wordCount: 0, error: null });
+
+    // ── Syllable counter (vowel-cluster heuristic) ────────────────
+    const countSyllables = (word) => {
+      const w = word.toLowerCase().replace(/[^a-z]/g, '');
+      if (!w) return 1;
+      if (w.length <= 3) return 1;
+      // Strip silent trailing e, then count vowel clusters
+      const stripped = w
+        .replace(/(?:[^laeiouy]es|[^laeiouy]ed|[aeiou]es?)$/, '')
+        .replace(/^y/, '');
+      const clusters = stripped.match(/[aeiouy]{1,2}/g);
+      return Math.max(1, clusters ? clusters.length : 1);
+    };
+
+    // ── Function words spoken quickly ────────────────────────────
+    const FAST_WORDS = new Set([
+      'a','an','the','and','or','but','in','on','at','to','for',
+      'of','with','is','it','its','be','as','by','he','she','we',
+      'they','this','that','was','are','has','have','had','do',
+      'did','not','so','if','up','out','from','into','than','then',
+      'when','where','who','which','i','you','my','your','our',
+    ]);
+
+    // ── Base duration per word (seconds) ─────────────────────────
+    // syllable weight × seconds-per-syllable, with fast-word discount
+    const SECS_PER_SYL  = 0.165; // average syllable duration at normal pace
+    const FAST_DISCOUNT = 0.60;  // function words spoken 40% faster
+
+    const wordWeight = (raw) => {
+      const clean = raw.toLowerCase().replace(/[^a-z]/g, '');
+      const syls  = countSyllables(clean);
+      const fast  = FAST_WORDS.has(clean);
+      return Math.max(0.10, syls * SECS_PER_SYL * (fast ? FAST_DISCOUNT : 1.0));
+    };
+
+    // ── Punctuation pause added AFTER the word ────────────────────
+    const pauseAfter = (raw) => {
+      if (/[.!?]$/.test(raw)) return 0.32;
+      if (/[,;:]$/.test(raw)) return 0.16;
+      return 0;
+    };
 
     const scenesWithText = scenes.filter(s => (s.narration_text || s.voiceover_text)?.trim());
 
@@ -1424,69 +1651,98 @@ export default function TimelineEditorV10() {
       return;
     }
 
-    // ── Build captions scene by scene using full-array index ────
-    // IMPORTANT: always look up idx from the FULL scenes array so
-    // audioStartTimes[idx] and audioBeatDurations[idx] are correct.
-    // Using scenesWithText's own index would shift every scene by
-    // however many scenes before it had no text — causing the
-    // "first 4 words skipped" offset bug.
-    const results = await Promise.all(
-      scenesWithText.map(async (scene) => {
-        const idx       = scenes.findIndex(s => s.id === scene.id); // ← full-array index
-        const text      = (scene.narration_text || scene.voiceover_text).trim();
-        const beatDur   = audioBeatDurations[idx] ?? scene.duration_seconds ?? 5;
-        const beatStart = audioStartTimes[idx] ?? 0;   // correct offset for this scene
+    const allWords = [];
 
-        // Local pure-JS word timing (no API call needed — instant)
-        const words = text.split(/\s+/).filter(Boolean);
-        if (words.length === 0) return [];
+    scenesWithText.forEach((scene) => {
+      // Always use full-array index so beat timings are correct
+      const idx       = scenes.findIndex(s => s.id === scene.id);
+      const text      = (scene.narration_text || scene.voiceover_text).trim();
+      const beatDur   = audioBeatDurations[idx] ?? scene.duration_seconds ?? 5;
+      const beatStart = audioStartTimes[idx] ?? 0;
 
-        const secsPerWord = beatDur / words.length;
-        return words.map((word, wi) => ({
-          word: word.replace(/[.,!?;:]/g, ''),
-          start: parseFloat((beatStart + wi       * secsPerWord).toFixed(3)),
-          end:   parseFloat((beatStart + (wi + 1) * secsPerWord).toFixed(3)),
-        }));
-      })
-    );
+      const tokens = text.split(/\s+/).filter(Boolean);
+      if (tokens.length === 0) return;
 
-    // Flatten all scene word arrays into one timeline
-    const allWords = results.flat();
+      // ── 1. Raw weights ────────────────────────────────────────
+      const weights = tokens.map(t => wordWeight(t) + pauseAfter(t));
+      const rawSum  = weights.reduce((s, w) => s + w, 0);
+
+      // ── 2. Scale to fit exactly in beatDur ───────────────────
+      const scale = beatDur / rawSum;
+
+      // ── 3. Build word timeline ────────────────────────────────
+      let cursor = beatStart;
+      tokens.forEach((token, wi) => {
+        const dur  = weights[wi] * scale;
+        const word = token.replace(/[.,!?;:""'']/g, '').trim();
+        if (!word) { cursor += dur; return; }
+        allWords.push({
+          word,
+          raw:   token,          // keep original for punctuation detection
+          start: parseFloat(cursor.toFixed(3)),
+          end:   parseFloat((cursor + dur).toFixed(3)),
+          sceneIdx: idx,
+        });
+        cursor += dur;
+      });
+    });
+
     setTranscription({ status: 'done', words: allWords, wordCount: allWords.length, error: null });
 
-    // ── Group words into ~2s caption chunks ──────────────────────
-    const TARGET_CAP_DURATION = 2.0;
+    // ── 4. Group into caption chunks ─────────────────────────────
+    // Rules:
+    //   • Hard break after sentence-end punctuation (. ! ?)
+    //   • Soft break after comma/semicolon when chunk ≥ 4 words
+    //   • Hard break when chunk hits MAX_CHUNK_WORDS
+    //   • Hard break when chunk duration hits MAX_CHUNK_SECS
+    //   • Hard break at scene boundaries (sceneIdx changes)
+    const MAX_CHUNK_WORDS = 6;
+    const MAX_CHUNK_SECS  = 2.5;
+
     const caps = [];
-    let i = 0;
+    let chunk  = [];
+    let ci     = 0;
 
-    while (i < allWords.length) {
-      const chunkStart = allWords[i].start;
-      const chunkWords = [allWords[i]];
-      i++;
-
-      while (
-        i < allWords.length &&
-        chunkWords.length < 8 &&
-        (allWords[i].end - chunkStart) < TARGET_CAP_DURATION
-      ) {
-        chunkWords.push(allWords[i]);
-        i++;
-      }
-
-      const chunkEnd = chunkWords[chunkWords.length - 1].end;
-      const text     = chunkWords.map(w => w.word).join(' ').trim();
-      if (!text) continue;
-
+    const flushChunk = () => {
+      if (chunk.length === 0) return;
+      const text = chunk.map(w => w.word).join(' ').trim();
+      if (!text) { chunk = []; return; }
       caps.push({
-        id:        `cap-ai-${i}-${Date.now()}`,
+        id:        `cap-${ci++}-${Date.now()}`,
         type:      'caption',
-        startTime: chunkStart,
-        duration:  Math.max(0.4, chunkEnd - chunkStart),
+        startTime: chunk[0].start,
+        duration:  Math.max(0.35, chunk[chunk.length - 1].end - chunk[0].start),
         text,
-        label:     text.slice(0, 15) + (text.length > 15 ? '…' : ''),
+        label:     text.slice(0, 18) + (text.length > 18 ? '…' : ''),
         x: 50, y: 85, fontSize: 20, color: '#FFFFFF', bgColor: 'rgba(0,0,0,0.7)'
       });
-    }
+      chunk = [];
+    };
+
+    allWords.forEach((w, wi) => {
+      const chunkDur = chunk.length > 0 ? w.end - chunk[0].start : 0;
+      const sceneBreak = chunk.length > 0 && w.sceneIdx !== chunk[chunk.length - 1].sceneIdx;
+
+      // Decide whether to flush BEFORE adding this word
+      if (sceneBreak) {
+        flushChunk();
+      } else if (chunk.length >= MAX_CHUNK_WORDS) {
+        flushChunk();
+      } else if (chunkDur >= MAX_CHUNK_SECS) {
+        flushChunk();
+      }
+
+      chunk.push(w);
+
+      // Decide whether to flush AFTER adding this word
+      const isSentenceEnd = /[.!?]$/.test(w.raw);
+      const isClauseEnd   = /[,;:]$/.test(w.raw) && chunk.length >= 4;
+
+      if (isSentenceEnd || isClauseEnd) {
+        flushChunk();
+      }
+    });
+    flushChunk(); // flush any remainder
 
     setCaptionClips(deleteExisting ? caps : [...captionClips, ...caps]);
     setIsGenCaptions(false);
@@ -1538,7 +1794,19 @@ export default function TimelineEditorV10() {
       <div className="flex-1 flex min-h-0">
         {/* Left panel */}
         <div className="w-56 flex-shrink-0 border-r border-gray-800 bg-[#12121f]">
-          {activePanel === 'media'       && <MediaPanel scenes={scenes} audioBeatDurations={audioBeatDurations} onSelectScene={idx => handleSeek(audioStartTimes[idx] ?? 0)} />}
+          {activePanel === 'media'       && <MediaPanel
+            scenes={scenes}
+            audioBeatDurations={audioBeatDurations}
+            videoClips={videoClips}
+            onSelectScene={idx => handleSeek(audioStartTimes[idx] ?? 0)}
+            onSetAllMediaType={(type) => {
+              setVideoClips(videoClips.map(clip => ({
+                ...clip,
+                // Only switch to 'video' if this clip actually has a video URL
+                mediaType: type === 'video' && clip.videoUrl ? 'video' : 'image',
+              })));
+            }}
+          />}
           {activePanel === 'effects'     && <EffectsPanel selectedClip={selectedVideo} onApplyEffect={handleApplyEffect} />}
           {activePanel === 'transitions' && <TransitionsPanel selectedClip={selectedVideo} onApplyTransition={handleApplyTransition} onRemoveTransition={handleRemoveTransition} onApplyTransitionToAll={handleApplyTransitionToAll} onSetTransitionDuration={handleSetTransitionDuration} />}
           {activePanel === 'captions'    && (
@@ -1643,7 +1911,7 @@ export default function TimelineEditorV10() {
         </div>
 
         <div className="flex items-center gap-3 text-xs text-gray-500">
-          <span>{videoClips.length} video</span>
+          <span>{videoClips.filter(c => c.mediaType === 'video' && c.videoUrl).length}🎬 video / {videoClips.filter(c => c.mediaType !== 'video').length}🖼 image</span>
           <span>{audioClips.length} audio</span>
           <span>{captionClips.length} captions</span>
           {motionCount     > 0 && <span className="text-amber-400">{motionCount} zooms</span>}
