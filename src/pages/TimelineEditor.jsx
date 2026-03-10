@@ -579,14 +579,75 @@ function ClipPropertiesPanel({ clip, audioBeatDuration, onUpdate }) {
         <Input type="number" step="0.1" value={clip.duration?.toFixed(1)} onChange={e => u('duration', parseFloat(e.target.value) || 1)} className="h-8 text-xs bg-gray-800 border-gray-700" />
       </div>
       {clip.cinematicMotion && (
-        <div className="p-3 bg-amber-500/20 rounded border border-amber-500/30">
-          <div className="flex items-center gap-2 mb-1">
-            <Camera size={14} className="text-amber-400" />
-            <label className="text-[10px] text-amber-300">Cinematic Motion</label>
+        <div className="p-3 bg-amber-500/20 rounded border border-amber-500/30 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Camera size={14} className="text-amber-400" />
+              <label className="text-[10px] text-amber-300 font-medium">Cinematic Motion</label>
+            </div>
+            <button onClick={() => u('cinematicMotion', null)} className="text-[10px] text-red-400 hover:text-red-300">Remove</button>
           </div>
-          <p className="text-sm text-white">{motion?.name || clip.cinematicMotion}</p>
-          <p className="text-[10px] text-gray-400 mt-1">{motion?.description}</p>
-          <button onClick={() => u('cinematicMotion', null)} className="text-[10px] text-red-400 mt-2 hover:text-red-300">Remove motion</button>
+
+          <div>
+            <p className="text-sm text-white font-medium">{motion?.name || clip.cinematicMotion}</p>
+            <p className="text-[10px] text-gray-400">{motion?.description}</p>
+          </div>
+
+          {/* Speed slider */}
+          <div>
+            <div className="flex justify-between text-[10px] mb-1">
+              <span className="text-amber-300 font-medium">Speed</span>
+              <span className="text-white font-mono">
+                {clip.motionSpeed == null || clip.motionSpeed === 1.0
+                  ? 'Normal'
+                  : clip.motionSpeed < 1.0
+                  ? `${(1 / clip.motionSpeed).toFixed(1)}× slower`
+                  : `${clip.motionSpeed.toFixed(1)}× faster`}
+              </span>
+            </div>
+            <input
+              type="range" min={0.1} max={3.0} step={0.05}
+              value={clip.motionSpeed ?? 1.0}
+              onChange={e => u('motionSpeed', parseFloat(e.target.value))}
+              className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
+            />
+            <div className="flex justify-between text-[9px] text-gray-600 mt-0.5">
+              <span>Very slow</span><span>Normal</span><span>Fast</span>
+            </div>
+          </div>
+
+          {/* Intensity slider */}
+          <div>
+            <div className="flex justify-between text-[10px] mb-1">
+              <span className="text-amber-300 font-medium">Intensity</span>
+              <span className="text-white font-mono">
+                {clip.motionIntensity == null || clip.motionIntensity === 1.0
+                  ? 'Normal'
+                  : clip.motionIntensity < 1.0
+                  ? `${Math.round(clip.motionIntensity * 100)}% subtle`
+                  : `${Math.round(clip.motionIntensity * 100)}% strong`}
+              </span>
+            </div>
+            <input
+              type="range" min={0.1} max={2.5} step={0.05}
+              value={clip.motionIntensity ?? 1.0}
+              onChange={e => u('motionIntensity', parseFloat(e.target.value))}
+              className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
+            />
+            <div className="flex justify-between text-[9px] text-gray-600 mt-0.5">
+              <span>Subtle</span><span>Normal</span><span>Dramatic</span>
+            </div>
+          </div>
+
+          {/* Reset button */}
+          {((clip.motionSpeed != null && clip.motionSpeed !== 1.0) || (clip.motionIntensity != null && clip.motionIntensity !== 1.0)) && (
+            <button
+              onClick={() => onUpdate({ ...clip, motionSpeed: 1.0, motionIntensity: 1.0 })}
+              className="text-[10px] text-amber-400 hover:text-amber-300"
+            >
+              Reset to defaults
+            </button>
+          )}
         </div>
       )}
       {clip.transition && (
@@ -716,23 +777,35 @@ function VideoPreview({
     const motion = CINEMATIC_MOTIONS.find(m => m.id === currentClip.cinematicMotion);
     if (!motion) return {};
 
-    // Progress 0→1 through the clip, clamped so it HOLDS at 1 (never returns)
-    const p = Math.min(1, Math.max(0, (currentTime - currentClip.startTime) / currentClip.duration));
+    // ── Speed control ───────────────────────────────────────────
+    // motionSpeed 0.25 = very slow (uses full clip duration × 4)
+    //             1.0  = default  (completes exactly at clip end)
+    //             2.0  = fast     (completes at half clip duration, holds rest)
+    // We divide clip duration by speed to get the "active window".
+    // After the active window p stays clamped at 1 → holds end state.
+    const speed       = currentClip.motionSpeed     ?? 1.0;
+    const intensity   = currentClip.motionIntensity ?? 1.0;
+    const activeWindow = currentClip.duration / speed;
+    const elapsed     = currentTime - currentClip.startTime;
+    const p           = Math.min(1, Math.max(0, elapsed / activeWindow));
 
-    // easeOutSine: fast initial movement, graceful deceleration into hold
-    // Feels like a real camera operator settling on a shot — silky, not robotic
+    // easeOutSine: confident start, graceful deceleration into hold
     const eased = Math.sin((p * Math.PI) / 2);
 
-    const scale = motion.startScale + (motion.endScale - motion.startScale) * eased;
-    const tx    = motion.startX    + (motion.endX    - motion.startX)    * eased;
-    const ty    = motion.startY    + (motion.endY    - motion.startY)    * eased;
+    // ── Intensity control ───────────────────────────────────────
+    // Multiplies the DELTA (not the base scale) so intensity=0 = static,
+    // intensity=2 = double the zoom/pan range.
+    const scaleDelta = (motion.endScale - motion.startScale) * intensity;
+    const txDelta    = (motion.endX    - motion.startX)    * intensity;
+    const tyDelta    = (motion.endY    - motion.startY)    * intensity;
 
-    // No CSS transition — we compute exact position every 33ms from the clock.
-    // CSS transition would fight our JS updates and cause lag/judder.
+    const scale = motion.startScale + scaleDelta * eased;
+    const tx    = motion.startX    + txDelta    * eased;
+    const ty    = motion.startY    + tyDelta    * eased;
+
     return {
-      transform:    `scale(${scale.toFixed(4)}) translate(${tx.toFixed(3)}%, ${ty.toFixed(3)}%)`,
-      willChange:   'transform',
-      // NO transition property — JS drives it frame by frame
+      transform:  `scale(${scale.toFixed(4)}) translate(${tx.toFixed(3)}%, ${ty.toFixed(3)}%)`,
+      willChange: 'transform',
     };
   };
 
@@ -1271,8 +1344,11 @@ export default function TimelineEditorV10() {
           duration:  newBeatDurations[idx],
           label: `Scene ${scene.scene_number}`, thumbnail: scene.image_url,
           effects: existing?.effects || [], audioMuted: existing?.audioMuted || false,
-          cinematicMotion: existing?.cinematicMotion || null,
-          transition: existing?.transition || null,
+          cinematicMotion:  existing?.cinematicMotion  || null,
+          transition:       existing?.transition       || null,
+          transitionDuration: existing?.transitionDuration ?? null,
+          motionSpeed:      existing?.motionSpeed      ?? 1.0,
+          motionIntensity:  existing?.motionIntensity  ?? 1.0,
           synced: true,
         };
       });
