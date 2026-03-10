@@ -217,7 +217,7 @@ CRITICAL REQUIREMENTS:
 }
 
 function selectTemplatesForNiche(niche, selectedTemplateIds = null) {
-  if (selectedTemplateIds && selectedTemplateIds.length === 3) {
+  if (selectedTemplateIds && selectedTemplateIds.length === 0) {
     return selectedTemplateIds;
   }
   
