@@ -146,17 +146,16 @@ function ThumbnailTemplatePicker({ projectId, onTemplatesSelected, onSkip }) {
     setSelected(prev => {
       const exists = prev.find(s => s.template_id === template.template_id);
       if (exists) return prev.filter(s => s.template_id !== template.template_id);
-      if (prev.length >= 3) return prev;
       return [...prev, template];
     });
   };
 
   const handleConfirm = () => {
-    if (selected.length !== 3) return;
+    if (selected.length === 0) return;
     onTemplatesSelected(selected.map(s => s.template_id));
   };
 
-  const isMaxed = selected.length >= 3;
+  const isMaxed = false; // No limit on template selection
 
   return (
     <Card className="border-purple-200 bg-gradient-to-br from-purple-50/50 to-white">
@@ -235,8 +234,8 @@ function ThumbnailTemplatePicker({ projectId, onTemplatesSelected, onSkip }) {
           <>
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-gray-700">
-                Pick exactly <span className="text-purple-700 font-bold">2 templates</span>
-                <span className="ml-2 text-gray-400 font-normal">({selected.length}/3 selected)</span>
+                Pick <span className="text-purple-700 font-bold">1 or more templates</span>
+                <span className="ml-2 text-gray-400 font-normal">({selected.length} selected)</span>
               </p>
               {selected.length === 3 && (
                 <div className="flex gap-1 flex-wrap justify-end">
@@ -272,22 +271,17 @@ function ThumbnailTemplatePicker({ projectId, onTemplatesSelected, onSkip }) {
             {selected.length > 0 && (
               <div className="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-xl px-4 py-3">
                 <div>
-                  {selected.length < 3
-                    ? <p className="text-sm text-purple-700">
-                        Select <span className="font-bold">{3 - selected.length} more</span> to continue
-                      </p>
-                    : <div>
-                        <p className="text-sm font-semibold text-purple-900">2 templates locked ✓</p>
-                        <p className="text-xs text-purple-600">One concept generated per template</p>
-                      </div>
-                  }
+                 <div>
+                  <p className="text-sm font-semibold text-purple-900">{selected.length} template{selected.length !== 1 ? 's' : ''} selected ✓</p>
+                  <p className="text-xs text-purple-600">One concept generated per template</p>
+                </div>
                 </div>
                 <Button
                   onClick={handleConfirm}
-                  disabled={selected.length !== 3}
+                  disabled={selected.length === 0}
                   className="gap-2 bg-purple-600 hover:bg-purple-700"
                 >
-                  Generate 3 Concepts <ChevronRight className="w-4 h-4" />
+                  Generate {selected.length} Concept{selected.length !== 1 ? 's' : ''} <ChevronRight className="w-4 h-4" />
                 </Button>
               </div>
             )}
