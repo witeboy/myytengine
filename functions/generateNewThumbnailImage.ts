@@ -130,53 +130,50 @@ TECHNICAL REQUIREMENTS:
     console.log('Parts count:', parts.length, '| Has char photos:', hasCharPhotos);
 
     // 4. Call Gemini image generation
-    // Model: gemini-2.0-flash-preview-image-generation supports image output with vision input
-    const geminiModel = 'gemini-2.0-flash-preview-image-generation';
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${GEMINI_API_KEY}`;
+    // Try models in order — both support responseModalities IMAGE + vision input
+    const imageGenModels = [
+      'gemini-2.0-flash-exp',                       // original exp — confirmed working, same key as concept generation
+      'gemini-2.5-flash-image',                     // newer dedicated image model (2025/2026)
+      'gemini-2.0-flash-exp-image-generation',      // alternate name used in some docs
+      'gemini-2.0-flash-preview-image-generation',  // preview alias
+    ];
 
-    const geminiRes = await fetch(geminiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts }],
-        generationConfig: {
-          responseModalities: ['TEXT', 'IMAGE'],
-        },
-      }),
-    });
+    const geminiPayload = {
+      contents: [{ role: 'user', parts }],
+      generationConfig: {
+        responseModalities: ['TEXT', 'IMAGE'],
+      },
+    };
 
-    const geminiText = await geminiRes.text();
-    console.log('Gemini HTTP status:', geminiRes.status);
+    let geminiData = null;
 
-    if (!geminiRes.ok) {
-      console.error('Gemini error response:', geminiText.substring(0, 500));
+    for (const model of imageGenModels) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+      console.log('Trying Gemini model:', model);
 
-      // If model not found, try fallback model
-      if (geminiRes.status === 404 || geminiText.includes('not found') || geminiText.includes('404')) {
-        console.log('Trying fallback model: gemini-2.0-flash-exp');
-        const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`;
-        const fallbackRes = await fetch(fallbackUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts }],
-            generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
-          }),
-        });
-        if (fallbackRes.ok) {
-          const fallbackData = await fallbackRes.json();
-          return await extractAndSaveImage(fallbackData, concept_id, base44, textOverlay);
-        }
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(geminiPayload),
+      });
+
+      const text = await res.text();
+      console.log(`  → HTTP ${res.status}: ${text.substring(0, 120)}`);
+
+      if (res.ok) {
+        try { geminiData = JSON.parse(text); } catch (_) {}
+        if (geminiData) { console.log('Success with model:', model); break; }
       }
 
-      throw new Error(`Gemini API error ${geminiRes.status}: ${geminiText.substring(0, 300)}`);
+      // 404 = model not available, try next
+      if (res.status === 404) continue;
+
+      // Any other error — throw immediately with details
+      throw new Error(`Gemini API error ${res.status} (${model}): ${text.substring(0, 300)}`);
     }
 
-    let geminiData;
-    try {
-      geminiData = JSON.parse(geminiText);
-    } catch (_) {
-      throw new Error('Could not parse Gemini response JSON');
+    if (!geminiData) {
+      throw new Error('No Gemini image generation model available on this API key. Ensure your key has access to gemini-2.0-flash-exp-image-generation.');
     }
 
     return await extractAndSaveImage(geminiData, concept_id, base44, textOverlay);
