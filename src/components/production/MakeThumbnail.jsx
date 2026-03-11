@@ -916,7 +916,7 @@ export default function MakeThumbnail({ onBack }) {
     setStep(2);
 
     try {
-      const raw = await base44.functions.invoke('generateThumbnailImage', {
+      const raw = await base44.functions.invoke('generateNewThumbnailImage', {
         concept_id: concept.id,
       });
 
@@ -929,8 +929,8 @@ export default function MakeThumbnail({ onBack }) {
       } else if (result?.error) {
         throw new Error(result.error);
       } else {
-        console.error('generateThumbnailImage raw response:', JSON.stringify(raw));
-        throw new Error('No image_url returned. Raw response logged to console.');
+        console.error('generateNewThumbnailImage raw response:', JSON.stringify(raw));
+        throw new Error('No image_url in response. Check function logs for details.');
       }
     } catch (e) {
       console.error('handleGenerateImage error:', e);
