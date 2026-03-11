@@ -134,7 +134,34 @@ Concepts 1, 2, and 3 in your output MUST recreate this EXACT composition. Use th
       ? `Reference template "${template_name}" shown above. Concepts 1-3 must recreate that exact layout with user's characters and title.`
       : `Auto-selected templates:\n${autoTemplates.map((t,i) => `${i+1}. ${t.name}: ${t.face_emotion} | ${t.text_formula} | Colors: ${t.color}`).join('\n')}`;
 
-    contentParts.push({ text: `Generate exactly 10 YouTube thumbnail concepts for this video.
+    // ── Hooksmith: extract title words for Zero-Overlap enforcement ──
+    const titleWords = video_title.toLowerCase()
+      .replace(/[^a-z0-9\s]/g, '')
+      .split(/\s+/)
+      .filter(w => w.length > 2);
+
+    // ── Hooksmith: detect title sentiment polarity ──────────────
+    const positiveSignals = ['best','easy','how to','guide','tips','success','win','grow','profit','gain','make','start','build','secret','hack','trick','free','simple'];
+    const negativeSignals = ['quit','lost','failed','broke','mistake','wrong','stop','avoid','danger','warning','never','worst','scam','lie','truth','exposed'];
+    const vagueSignals    = ['my','i','routine','day','life','story','week','month','year','journey','experience'];
+
+    const titleLower = video_title.toLowerCase();
+    let titleSentiment = 'neutral';
+    if (positiveSignals.some(w => titleLower.includes(w))) titleSentiment = 'positive';
+    else if (negativeSignals.some(w => titleLower.includes(w))) titleSentiment = 'negative';
+    else if (vagueSignals.some(w => titleLower.includes(w))) titleSentiment = 'vague';
+
+    // ── Hooksmith: determine Sentiment Pivot instruction ─────────
+    const sentimentPivot =
+      titleSentiment === 'positive'
+        ? 'Title is POSITIVE — thumbnail text must create TENSION by being a warning or negative counter-signal. e.g. if title says "Best way to X", hook says "STOP DOING X" or "BIGGEST MISTAKE".'
+      : titleSentiment === 'negative'
+        ? 'Title is NEGATIVE — thumbnail text must AMPLIFY the stakes. Make it feel even more urgent, shocking, or consequential.'
+      : titleSentiment === 'vague'
+        ? 'Title is VAGUE — thumbnail text must add SPECIFIC DATA or a concrete anchor to make it feel real. e.g. a number, time, amount, or name.'
+        : 'Title is NEUTRAL — thumbnail text should trigger one of: Fear, Greed, Shock, or Curiosity.';
+
+    contentParts.push({ text: `You are the world's #1 YouTube thumbnail strategist. Generate exactly 10 thumbnail concepts for this video.
 
 VIDEO TITLE: "${video_title}"
 ${summary ? `SUMMARY: "${summary}"` : ''}
@@ -143,25 +170,67 @@ CHARACTER RULE: ${charRule}
 
 TEMPLATE/LAYOUT RULE: ${templateRule}
 
-TEXT RULES:
-- MAX 4 WORDS ALL CAPS
-- Must use keywords from the video title
-- BANNED: "YOU WON'T BELIEVE", "SHOCKING", "MUST WATCH"
-- Text position: upper-left or bottom-center ONLY (never bottom-right)
-- Thick 6px black outline on all text
+════════════════════════════════════
+THE HOOKSMITH — 3 LAWS OF VIRAL TEXT
+════════════════════════════════════
 
-IMAGE PROMPT RULES (critical):
+LAW 1 — ZERO OVERLAP RULE (NON-NEGOTIABLE):
+The thumbnail text overlay MUST NOT repeat or paraphrase the video title.
+It is a COMPANION phrase, not a summary.
+BANNED words (taken directly from this title): ${titleWords.join(', ')}
+If any output text_overlay contains these words, it FAILS. Regenerate until none appear.
+Good examples:
+  Title: "I Quit My High Paying Job"  → Hook: "BIG MISTAKE?"
+  Title: "Review of the New iPhone 17" → Hook: "DON'T BUY IT"
+  Title: "How to Run a Marathon"       → Hook: "WEEK 4 IS HELL"
+
+LAW 2 — MOBILE-FIRST DENSITY (NON-NEGOTIABLE):
+Thumbnails render at ~168x94px on mobile. More than 4 words = unreadable gray blur.
+HARD LIMIT: text_overlay must be MAX 4 WORDS. ALL CAPS only.
+Font must be Bebas Neue or Impact — high x-height, readable at tiny size.
+Preferred: 2-3 words for maximum impact. Never a full sentence.
+
+LAW 3 — SENTIMENT PIVOT (NON-NEGOTIABLE):
+${sentimentPivot}
+The hook must trigger a HIGH-AROUSAL emotion: Fear, Greed, Shock, or Curiosity.
+BANNED generic phrases: "YOU WON'T BELIEVE", "SHOCKING", "MUST WATCH", "INCREDIBLE", "AMAZING"
+
+════════════════════════════════════
+TEXT POSITION RULE:
+- Upper-left or bottom-center ONLY
+- NEVER bottom-right (YouTube timestamp covers it)
+- Thick 6px black outline + heavy drop shadow
+════════════════════════════════════
+
+IMAGE PROMPT RULES:
 - Start every image_prompt with: "1920x1080 Full HD 16:9 YouTube thumbnail, photorealistic DSLR photograph, professional studio lighting"
 - 300+ words per prompt
 - Describe exact character pose, expression, clothing, position in frame
 - Describe lighting: key light direction, rim light colors (cyan/magenta/gold), intensity
 - Describe background: blurred, colors, elements, depth
 - If character photos provided: write "person matching the reference photo exactly - same face, skin tone, hair"
-- If template selected: write "layout matching the ${template_name || 'reference'} composition - same character positions and spatial arrangement"
-- CRITICAL: NO text/letters/numbers in the image itself - leave clean space for text overlay
+- If template selected: write "layout matching the ${template_name || 'reference'} composition - same character positions"
+- CRITICAL: NO text/letters/numbers in the image - leave clean empty space where text overlay will appear
 
-Return ONLY a valid JSON array of exactly 10 objects:
-[{"rank":1,"concept_type":"string","concept_description":"string","psychological_trigger":"string","text_overlay":"MAX 4 WORDS","focal_point":"string","visual_metaphor":"string","color_scheme":"string","text_style":"white | 6px black outline | upper-left | Impact","style_reference":"cinematic","ctr_score":9,"why_it_stops_scrolling":"string","faceless_adaptation":"string","image_prompt":"300+ word detailed prompt","negative_prompt":"text, letters, numbers, watermark, blurry, low quality, distorted faces, generic stock photo people"}]` });
+Return ONLY a valid JSON array of exactly 10 objects. No markdown, no explanation:
+[{
+  "rank": 1,
+  "concept_type": "string",
+  "concept_description": "string",
+  "psychological_trigger": "Fear|Greed|Shock|Curiosity",
+  "text_overlay": "MAX 4 WORDS — must not contain title words",
+  "hook_law_check": "explain why this hook obeys all 3 laws",
+  "focal_point": "string",
+  "visual_metaphor": "string",
+  "color_scheme": "Primary | Accent | Background",
+  "text_style": "white | thick 6px black outline | upper-left | Bebas Neue",
+  "style_reference": "cinematic",
+  "ctr_score": 9,
+  "why_it_stops_scrolling": "string",
+  "faceless_adaptation": "string",
+  "image_prompt": "300+ word detailed prompt starting with 1920x1080...",
+  "negative_prompt": "text, letters, numbers, watermark, blurry, low quality, distorted faces"
+}]` });
 
     // gemini-2.0-flash supports both text and vision (images)
     const geminiModel = 'gemini-2.0-flash';
