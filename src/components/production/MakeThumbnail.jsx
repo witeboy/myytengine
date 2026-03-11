@@ -832,24 +832,21 @@ export default function MakeThumbnail({ onBack }) {
         throw new Error('No concepts returned. Check GEMINI_API_KEY is set in your environment variables.');
       }
 
-      // Store the session project_id so generateThumbnailImage can use it
-      const sessionId = conceptsResult.project_id;
-      setProjectId(sessionId);
-
       // Store template selection metadata for display
       if (conceptsResult.template_selection) setTemplateMeta(conceptsResult.template_selection);
 
-      // ── Load saved concepts from DB ──────────────────────────────
-      setLoadingPhase('Loading your 10 concepts…');
-      let saved = [];
-      try {
-        saved = await base44.entities.ThumbnailConcepts.filter({ project_id: sessionId });
-      } catch (e) {
-        throw new Error(`Could not load concepts: ${e.message}. Check ThumbnailConcepts entity has a project_id field.`);
+      // Load saved concepts by ID — avoids any project_id field type issues
+      setLoadingPhase('Loading your 10 concepts...');
+      const conceptIds = conceptsResult.concept_ids;
+      const saved = [];
+      for (const id of conceptIds) {
+        try {
+          const record = await base44.entities.ThumbnailConcepts.get(id);
+          if (record) saved.push(record);
+        } catch (_) {}
       }
-
       if (!saved.length) {
-        throw new Error('Concepts saved but could not be fetched. Check ThumbnailConcepts entity fields.');
+        throw new Error('Concepts were saved but could not be loaded. Check ThumbnailConcepts entity exists.');
       }
 
       const sorted = [...saved].sort((a, b) => (a.rank || 99) - (b.rank || 99));
