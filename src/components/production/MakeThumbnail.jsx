@@ -815,11 +815,45 @@ export default function MakeThumbnail({ onBack }) {
       // Returns: { success, concept_ids[], project_id (session), template_selection{} }
       setLoadingPhase('Gemini is designing 10 thumbnail concepts…');
 
+      // ── Convert uploaded character photos to base64 ─────────────
+      setLoadingPhase('Preparing your character photos…');
+      const charPhotos = [];
+      for (const char of chars.filter(Boolean)) {
+        if (char?.file) {
+          try {
+            const b64 = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result.split(',')[1]);
+              reader.onerror = reject;
+              reader.readAsDataURL(char.file);
+            });
+            const mime = char.file.type || 'image/jpeg';
+            charPhotos.push({ b64, mime, name: char.name || 'character' });
+          } catch (_) {}
+        }
+      }
+
+      // ── Build template context ────────────────────────────────
+      const templateContext = selectedUserTemplate ? {
+        template_id:          selectedUserTemplate.id,
+        template_name:        selectedUserTemplate.name,
+        template_psychology:  selectedUserTemplate.psychology,
+        template_text_strategy: selectedUserTemplate.textStrategy,
+        template_layout:      JSON.stringify(selectedUserTemplate.layout || {}),
+        template_ctr:         selectedUserTemplate.ctrScore,
+        template_b64:         TEMPLATE_IMAGES[selectedUserTemplate.id]?.b64  ?? null,
+        template_mime:        TEMPLATE_IMAGES[selectedUserTemplate.id]?.mime ?? null,
+      } : {};
+
+      setLoadingPhase('Gemini is designing 10 thumbnail concepts…');
       let conceptsResult;
       try {
         conceptsResult = await base44.functions.invoke('newThumbnailConcept', {
-          video_title: title.trim(),
-          summary: summary.trim() || '',
+          video_title:   title.trim(),
+          summary:       summary.trim() || '',
+          char_count:    charCount,
+          char_photos:   charPhotos,   // base64 photos of uploaded characters
+          ...templateContext,
         });
       } catch (e) {
         throw new Error(`newThumbnailConcept function error: ${e.message}`);
