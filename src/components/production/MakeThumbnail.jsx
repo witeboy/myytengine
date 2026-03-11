@@ -825,19 +825,26 @@ export default function MakeThumbnail({ onBack }) {
         throw new Error(`newThumbnailConcept function error: ${e.message}`);
       }
 
-      if (conceptsResult?.error) {
-        throw new Error(conceptsResult.error);
+      // base44 sometimes wraps the response in a .data property
+      const result = conceptsResult?.data ?? conceptsResult;
+
+      if (result?.error) {
+        throw new Error(result.error);
       }
-      if (!conceptsResult?.concept_ids?.length) {
-        throw new Error('No concepts returned. Check GEMINI_API_KEY is set in your environment variables.');
+
+      const conceptIds = result?.concept_ids || result?.data?.concept_ids || [];
+      if (!conceptIds.length) {
+        // Log what we actually got to help debug
+        console.error('newThumbnailConcept raw response:', JSON.stringify(conceptsResult));
+        throw new Error('No concept_ids returned. Raw response logged to console.');
       }
 
       // Store template selection metadata for display
-      if (conceptsResult.template_selection) setTemplateMeta(conceptsResult.template_selection);
+      const templateSel = result?.template_selection || result?.data?.template_selection;
+      if (templateSel) setTemplateMeta(templateSel);
 
       // Load saved concepts by ID — avoids any project_id field type issues
       setLoadingPhase('Loading your 10 concepts...');
-      const conceptIds = conceptsResult.concept_ids;
       const saved = [];
       for (const id of conceptIds) {
         try {
