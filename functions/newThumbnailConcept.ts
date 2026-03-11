@@ -286,6 +286,48 @@ Return ONLY a valid JSON array of exactly 10 objects. No markdown, no explanatio
           imagePrompt += ` Recreate the exact spatial composition of the "${template_name}" reference layout - same character positions, same background zones, same color energy and lighting style.`;
         }
 
+        // ── BAKE OVERLAY TEXT INTO PROMPT ─────────────────────────
+        // Extract text style/position from concept or template
+        const overlayText    = c.text_overlay || '';
+        const rawTextStyle   = c.text_style || '';
+        const textPosition   = rawTextStyle.toLowerCase().includes('upper-left')  ? 'upper-left'
+                             : rawTextStyle.toLowerCase().includes('bottom-center') ? 'bottom-center'
+                             : rawTextStyle.toLowerCase().includes('center')      ? 'center'
+                             : hasUserTemplate ? 'as shown in the template reference image'
+                             : 'upper-left';
+
+        // Parse font from text_style field
+        const fontMatch = rawTextStyle.match(/bebas neue|impact|montserrat|roboto|arial black/i);
+        const font      = fontMatch ? fontMatch[0].toUpperCase() : 'BEBAS NEUE';
+
+        // Parse color from text_style field
+        const colorMatch = rawTextStyle.match(/white|yellow|red|gold|black|orange/i);
+        const textColor  = colorMatch ? colorMatch[0].toLowerCase() : 'white';
+
+        // Parse text strategy from template if available
+        const textStrategyHint = template_text_strategy
+          ? `Follow this text strategy: ${template_text_strategy}`
+          : '';
+
+        if (overlayText) {
+          imagePrompt += `
+
+TEXT OVERLAY — RENDER THIS TEXT IN THE IMAGE:
+Text: "${overlayText.toUpperCase()}"
+Font: ${font} (bold, heavy weight, high x-height)
+Color: ${textColor} with thick 6px black outline/stroke and heavy drop shadow (black, 4px offset)
+Size: Very large — text should be readable even at 168x94px mobile thumbnail size (approx 15-20% of frame height per line)
+Position: ${textPosition}
+${textPosition === 'upper-left' ? 'Align text to upper-left corner, 40px padding from edges, stacked vertically if multiple words' : ''}
+${textPosition === 'bottom-center' ? 'Full-width black bar at bottom 20% of frame, text centered in white on black bar' : ''}
+${textPosition === 'center' ? 'Text centered horizontally and vertically in the clean zone' : ''}
+${hasUserTemplate ? `Match the EXACT text position, size, and style shown in the "${template_name}" template reference image above` : ''}
+${textStrategyHint}
+Letter spacing: tight/condensed
+Line breaks: split into max 2 lines if more than 2 words
+Text must be crisp, sharp, fully legible — this is the most important element of the thumbnail`;
+        }
+
         // Serialize char photos for storage (keep b64 + mime, drop heavy duplicates)
         const charPhotosForStorage = hasCharPhotos
           ? char_photos
@@ -316,9 +358,13 @@ Return ONLY a valid JSON array of exactly 10 objects. No markdown, no explanatio
           image_url:              null,
           title:                  video_title,
           status:                 'pending',
-          // Store char photos so render function can pass them to Gemini image generation
+          // Store char photos + template so render function can pass them to image API
           char_photos_json:       charPhotosForStorage.length > 0
                                     ? JSON.stringify(charPhotosForStorage)
+                                    : null,
+          // Store template reference image for render-time use
+          template_ref_json:      hasUserTemplate && template_b64
+                                    ? JSON.stringify({ b64: template_b64, mime: template_mime || 'image/jpeg', name: template_name })
                                     : null,
         });
 
