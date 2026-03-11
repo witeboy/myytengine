@@ -286,6 +286,13 @@ Return ONLY a valid JSON array of exactly 10 objects. No markdown, no explanatio
           imagePrompt += ` Recreate the exact spatial composition of the "${template_name}" reference layout - same character positions, same background zones, same color energy and lighting style.`;
         }
 
+        // Serialize char photos for storage (keep b64 + mime, drop heavy duplicates)
+        const charPhotosForStorage = hasCharPhotos
+          ? char_photos
+              .filter(p => p?.b64)
+              .map(p => ({ b64: p.b64, mime: p.mime || 'image/jpeg' }))
+          : [];
+
         const record = await base44.entities.ThumbnailConcepts.create({
           project_id:             sessionId,
           rank:                   c.rank ?? (i + 1),
@@ -309,6 +316,10 @@ Return ONLY a valid JSON array of exactly 10 objects. No markdown, no explanatio
           image_url:              null,
           title:                  video_title,
           status:                 'pending',
+          // Store char photos so render function can pass them to Gemini image generation
+          char_photos_json:       charPhotosForStorage.length > 0
+                                    ? JSON.stringify(charPhotosForStorage)
+                                    : null,
         });
 
         console.log(`Saved #${c.rank ?? i+1}: "${c.text_overlay}" CTR:${c.ctr_score}`);
