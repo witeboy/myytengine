@@ -60,31 +60,78 @@ Deno.serve(async (req) => {
       }
     }
 
-    const hasCharPhotos = charPhotos.length > 0;
-
-    // 3. Build prompt — if we have character photos, instruct Nano Banana to use them
-    let fullPrompt = concept.image_prompt;
-
-    if (hasCharPhotos) {
-      fullPrompt = `Using the provided reference photo(s) as the character(s), generate the following scene. 
-CRITICAL: The people in this image must exactly match the reference photos — same face, skin tone, hair, and recognizable features. Do not substitute different people.
-
-SCENE:
-${concept.image_prompt}
-
-NO text, letters, words, or numbers anywhere in the image. Leave the ${concept.text_style?.includes('upper-left') ? 'upper-left area' : 'bottom center area'} visually clean for text overlay.`;
+    // 2b. Parse stored template reference
+    let templateRef = null;
+    if (concept.template_ref_json) {
+      try {
+        templateRef = JSON.parse(concept.template_ref_json);
+        console.log('Loaded template ref:', templateRef.name);
+      } catch (e) {
+        console.warn('Could not parse template_ref_json:', e.message);
+      }
     }
 
-    // 4. Build image_input array from base64 character photos
-    // Nano Banana accepts base64 strings in image_input array
-    const imageInput = hasCharPhotos
-      ? charPhotos
-          .filter(p => p?.b64)
-          .map(p => `data:${p.mime || 'image/jpeg'};base64,${p.b64}`)
-      : [];
+    const hasCharPhotos = charPhotos.length > 0;
+    const hasTemplateRef = !!templateRef?.b64;
 
-    console.log('image_input count:', imageInput.length);
-    console.log('Prompt length:', fullPrompt.length);
+    // 3. Build prompt
+    let fullPrompt = concept.image_prompt;
+    const promptAdditions = [];
+
+    if (hasCharPhotos) {
+      promptAdditions.push(`CRITICAL: The people in this image must exactly match the character reference photo(s) provided — same face, skin tone, hair, and recognizable features. Do not substitute different people.`);
+    }
+    if (hasTemplateRef) {
+      promptAdditions.push(`LAYOUT: Recreate the exact spatial composition shown in the template reference image — same character positions, same background zones, same color energy.`);
+    }
+    // Bake overlay text into the image with full style/position spec
+    if (concept.text_overlay) {
+      const rawStyle    = concept.text_style || '';
+      const position    = rawStyle.toLowerCase().includes('upper-left')    ? 'upper-left corner, 40px from edges'
+                        : rawStyle.toLowerCase().includes('bottom-center') ? 'bottom-center in a full-width black bar'
+                        : rawStyle.toLowerCase().includes('center')        ? 'center of the clean zone'
+                        : hasTemplateRef ? `exactly as positioned in the "${templateRef?.name}" template reference image`
+                        : 'upper-left corner';
+      const fontMatch   = rawStyle.match(/bebas neue|impact|montserrat|roboto|arial/i);
+      const font        = fontMatch ? fontMatch[0] : 'Bebas Neue';
+      const colorMatch  = rawStyle.match(/white|yellow|gold|red|black|orange/i);
+      const color       = colorMatch ? colorMatch[0] : 'white';
+      const templateTextHint = hasTemplateRef
+        ? `Match the EXACT text size, weight, position and style visible in the template reference image.`
+        : '';
+
+      promptAdditions.push(`
+TEXT OVERLAY — RENDER THIS TEXT IN THE IMAGE:
+• Text: "${concept.text_overlay.toUpperCase()}"
+• Font: ${font}, ultra-bold, condensed, high x-height
+• Color: ${color} fill + 6px solid black stroke/outline + black drop shadow (4px offset, 60% opacity)
+• Size: Extremely large — each line should be 15-20% of frame height so it reads at 168x94px mobile size
+• Position: ${position}
+• Line breaks: split at natural word breaks, max 2 lines
+• Letter spacing: tight/condensed (-2px)
+• This text is the #1 most important element — it must be sharp, dominant, and instantly readable
+• ${templateTextHint}`);
+    } else {
+      promptAdditions.push(`Leave the ${concept.text_style?.includes('upper-left') ? 'upper-left area' : 'bottom area'} visually clean.`);
+    }
+
+    if (promptAdditions.length) {
+      fullPrompt = `${concept.image_prompt}\n\n${promptAdditions.join('\n')}`;
+    }
+
+    // 4. Build image_input — template first (layout reference), then char photos (face reference)
+    const imageInput = [];
+
+    if (hasTemplateRef) {
+      imageInput.push(`data:${templateRef.mime || 'image/jpeg'};base64,${templateRef.b64}`);
+      console.log('Added template reference image to input');
+    }
+
+    for (const p of charPhotos.filter(p => p?.b64)) {
+      imageInput.push(`data:${p.mime || 'image/jpeg'};base64,${p.b64}`);
+    }
+
+    console.log('image_input count:', imageInput.length, '(template + chars)');
 
     // 5. Submit to Kie Nano Banana
     const kieHeaders = {
