@@ -163,7 +163,8 @@ IMAGE PROMPT RULES (critical):
 Return ONLY a valid JSON array of exactly 10 objects:
 [{"rank":1,"concept_type":"string","concept_description":"string","psychological_trigger":"string","text_overlay":"MAX 4 WORDS","focal_point":"string","visual_metaphor":"string","color_scheme":"string","text_style":"white | 6px black outline | upper-left | Impact","style_reference":"cinematic","ctr_score":9,"why_it_stops_scrolling":"string","faceless_adaptation":"string","image_prompt":"300+ word detailed prompt","negative_prompt":"text, letters, numbers, watermark, blurry, low quality, distorted faces, generic stock photo people"}]` });
 
-    const geminiModel = (hasCharPhotos || hasUserTemplate) ? 'gemini-1.5-flash' : 'gemini-2.0-flash';
+    // gemini-2.0-flash supports both text and vision (images)
+    const geminiModel = 'gemini-2.0-flash';
     console.log('Gemini model:', geminiModel, '| content parts:', contentParts.length);
 
     const geminiRes = await fetch(
@@ -173,7 +174,7 @@ Return ONLY a valid JSON array of exactly 10 objects:
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: contentParts }],
-          generationConfig: { temperature: 0.9, maxOutputTokens: 8192, responseMimeType: 'application/json' },
+          generationConfig: { temperature: 0.9, maxOutputTokens: 8192 },
         }),
       }
     );
