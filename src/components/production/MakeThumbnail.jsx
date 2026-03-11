@@ -882,16 +882,21 @@ export default function MakeThumbnail({ onBack }) {
     setStep(2);
 
     try {
-      const result = await base44.functions.invoke('generateThumbnailImage', {
+      const raw = await base44.functions.invoke('generateThumbnailImage', {
         concept_id: concept.id,
       });
 
-      if (result?.image_url) {
-        setGeneratedUrl(result.image_url);
+      // base44 wraps responses in .data
+      const result = raw?.data ?? raw;
+      const imageUrl = result?.image_url || result?.data?.image_url;
+
+      if (imageUrl) {
+        setGeneratedUrl(imageUrl);
       } else if (result?.error) {
         throw new Error(result.error);
       } else {
-        throw new Error('No image_url returned. Verify KIE_API_KEY is set in your Deno environment variables.');
+        console.error('generateThumbnailImage raw response:', JSON.stringify(raw));
+        throw new Error('No image_url returned. Raw response logged to console.');
       }
     } catch (e) {
       console.error('handleGenerateImage error:', e);
