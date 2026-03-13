@@ -601,10 +601,25 @@ ${finalScript}
         scenes: []
       };
 
+      // ── Slim blueprint for DB save — niche_profile and beat arrays are bulky ──
+      // niche_profile can be re-derived from project.niche on read.
+      // beat_durations/start_times are already saved to ProductionSettings.
+      // Keep only what subsequent batches NEED: story_analysis + phases + scenes.
+      const slimBlueprint = {
+        story_analysis: storyAnalysis,
+        phases: blueprint.phases,
+        total_target_scenes: totalTargetScenes,
+        niche: niche, // store key, re-derive profile on read
+        scenes: []
+      };
+
+      const blueprintJson = JSON.stringify(slimBlueprint);
+      console.log(`📦 Blueprint size: ${blueprintJson.length} chars (slim, no niche_profile/beats)`);
+
       await base44.asServiceRole.entities.Projects.update(project_id, {
         status: "scene_breakdown",
         current_step: 5,
-        scene_blueprint: JSON.stringify(blueprint),
+        scene_blueprint: blueprintJson,
         character_descriptions: storyAnalysis.characters
           ? JSON.stringify(storyAnalysis.characters)
           : project.character_descriptions
@@ -701,15 +716,31 @@ ${finalScript}
 
     // ══════════════════════════════════════════════════════════════
     // At this point we're in batch 1+ (phase processing).
-    // blueprint is loaded from DB.
-    // Phase index = batch_index - 1 (because batch 0 was analysis-only)
+    // blueprint is loaded from DB (slim version — no niche_profile or beats).
+    // Re-derive niche_profile from the stored niche key.
+    // Re-read beat arrays from ProductionSettings.
     // ══════════════════════════════════════════════════════════════
 
-    const beatDurations = blueprint.beat_durations || [];
-    const beatStartTimes = blueprint.beat_start_times || [];
+    // Re-derive niche profile (stripped from blueprint to save space)
+    const storedNiche = blueprint.niche || niche;
+    const nicheProfile = blueprint.niche_profile || getNicheDirectorProfile(storedNiche);
+
+    // Re-read beat arrays from ProductionSettings (stripped from blueprint)
+    let beatDurations = blueprint.beat_durations || [];
+    let beatStartTimes = blueprint.beat_start_times || [];
+    if (beatDurations.length === 0) {
+      try {
+        const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
+        if (psList[0]?.beat_durations) {
+          beatDurations = JSON.parse(psList[0].beat_durations);
+          beatStartTimes = JSON.parse(psList[0].beat_start_times || '[]');
+        }
+      } catch (_) {
+        console.warn('⚠️ Could not read beat arrays from ProductionSettings');
+      }
+    }
 
     const storyAnalysis = blueprint.story_analysis;
-    const nicheProfile = blueprint.niche_profile;
 
     let characters = [];
     if (freshProject.character_descriptions) {
