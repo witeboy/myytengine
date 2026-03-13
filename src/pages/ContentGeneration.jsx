@@ -559,7 +559,7 @@ export default function ContentGeneration() {
         try {
           // Longer delay after batch 0 (analysis) to let DB propagate blueprint
 if (nextBatch > 0) {
-  const delay = nextBatch === 1 ? 6000 : 3000;
+  const delay = nextBatch === 1 ? 8000 : 3000;
   await new Promise(r => setTimeout(r, delay));
 }
 
