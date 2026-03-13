@@ -1,54 +1,96 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
-async function callGemini(prompt, temperature = 0.7) {
+function repairJSON(str) {
+  return str
+    .replace(/[\x00-\x1F\x7F]/g, c => c === '\n' || c === '\r' || c === '\t' ? ' ' : ' ')
+    .replace(/  +/g, ' ')
+    .replace(/,\s*([}\]])/g, '$1')       // trailing commas
+    .replace(/(["\w\d])\s*\n\s*"/g, '$1, "');  // missing commas between fields
+}
+
+async function callGemini(prompt, temperature = 0.7, retries = 3) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: 8192 }
-      })
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature,
+              maxOutputTokens: 8192,
+              responseMimeType: "application/json"  // Forces Gemini to output valid JSON
+            }
+          })
+        }
+      );
+
+      if (response.status === 429) {
+        const waitMs = Math.pow(2, attempt + 1) * 3000;
+        console.warn(`⏳ Rate limited, waiting ${waitMs / 1000}s (attempt ${attempt + 1}/${retries})`);
+        await new Promise(r => setTimeout(r, waitMs));
+        continue;
+      }
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(`Gemini API Error ${response.status}: ${err.error?.message || "Unknown"}`);
+      }
+
+      const data = await response.json();
+      if (!data.candidates || data.candidates.length === 0) {
+        throw new Error("Gemini returned no candidates");
+      }
+
+      const rawText = data.candidates[0].content.parts[0].text;
+
+      // Try direct parse first (responseMimeType should make this work most of the time)
+      try { return JSON.parse(rawText); } catch (_) {}
+
+      // Try with repair
+      try { return JSON.parse(repairJSON(rawText)); } catch (_) {}
+
+      // Try extracting from markdown code blocks
+      let jsonStr = rawText;
+      if (rawText.includes("```json")) {
+        jsonStr = rawText.split("```json")[1].split("```")[0].trim();
+      } else if (rawText.includes("```")) {
+        jsonStr = rawText.split("```")[1].split("```")[0].trim();
+      }
+      try { return JSON.parse(repairJSON(jsonStr)); } catch (_) {}
+
+      // Try extracting just the JSON object
+      const objMatch = jsonStr.match(/\{[\s\S]*\}/);
+      if (objMatch) {
+        try { return JSON.parse(repairJSON(objMatch[0])); } catch (_) {}
+      }
+
+      // Truncation recovery: find last complete batch in a truncated array
+      const lastBrace = rawText.lastIndexOf('}');
+      if (lastBrace > 0) {
+        const trimmed = rawText.substring(0, lastBrace + 1);
+        for (const suffix of [']}', '}]}', '']) {
+          try {
+            const parsed = JSON.parse(trimmed + suffix);
+            if (parsed.batches && Array.isArray(parsed.batches) && parsed.batches.length > 0) {
+              console.log(`⚠️ Recovered ${parsed.batches.length} batches from truncated JSON (attempt ${attempt + 1})`);
+              return parsed;
+            }
+          } catch (_) {}
+        }
+      }
+
+      throw new Error("Failed to parse Gemini JSON after all recovery attempts");
+
+    } catch (error) {
+      if (attempt === retries - 1) throw error;
+      console.warn(`⚠️ Attempt ${attempt + 1} failed: ${error.message}, retrying...`);
+      await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
     }
-  );
-
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(`Gemini API Error ${response.status}: ${err.error?.message || "Unknown"}`);
-  }
-
-  const data = await response.json();
-  if (!data.candidates || data.candidates.length === 0) {
-    throw new Error("Gemini returned no candidates");
-  }
-
-  let text = data.candidates[0].content.parts[0].text;
-
-  // Extract JSON from markdown code blocks if present
-  if (text.includes("```json")) {
-    text = text.split("```json")[1].split("```")[0].trim();
-  } else if (text.includes("```")) {
-    text = text.split("```")[1].split("```")[0].trim();
-  }
-
-  // Replace literal newlines/tabs/carriage returns inside JSON strings with spaces
-  // First pass: collapse all control chars to spaces
-  text = text.replace(/[\x00-\x1F\x7F]/g, ' ');
-  // Collapse multiple spaces
-  text = text.replace(/  +/g, ' ');
-
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    // Last resort: try to extract JSON object from the text
-    const match = text.match(/\{[\s\S]*\}/);
-    if (match) {
-      return JSON.parse(match[0]);
-    }
-    throw new Error("Failed to parse Gemini JSON: " + e.message);
   }
 }
 
@@ -72,10 +114,15 @@ Create exactly ${numBatches} batches, each ~${wordsPerBatch} words (150 words pe
 
 For each batch write a DETAILED synopsis (5-8 sentences, 150-200 words, no newlines inside the string). Include specific narrative beats, facts, names, events, anecdotes, emotional turning points, and how the segment should open and close. The more detail, the better the final script.
 
-Respond with ONLY a JSON object (no markdown, no code fences):
-{"storytelling_format": "Format Name", "batches": [{"batch_number": 1, "story_segment": "Segment Title", "focus_area": "Focus description", "target_words": ${wordsPerBatch}, "synopsis": "Two to three sentences describing this batch."}]}`;
+Respond with ONLY valid JSON:
+{"storytelling_format": "Format Name", "batches": [{"batch_number": 1, "story_segment": "Segment Title", "focus_area": "Focus description", "target_words": ${wordsPerBatch}, "synopsis": "Detailed synopsis here."}]}`;
 
     const outline = await callGemini(prompt, 0.7);
+
+    // Validate we got usable batches
+    if (!outline.batches || !Array.isArray(outline.batches) || outline.batches.length === 0) {
+      throw new Error("Gemini returned an outline with no batches");
+    }
 
     // Delete any old batches for this project
     const oldBatches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
