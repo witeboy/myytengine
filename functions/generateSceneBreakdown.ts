@@ -669,10 +669,31 @@ ${finalScript}
         }).join('\n')}`
       : '';
 
-    // ═══ FIX C: Loop ALL phases in one call ═══
+    // ═══ PROCESS ONE PHASE PER CALL ═══
+    // Base44 serverless has a ~30s timeout. Each phase = 1 Gemini call + DB writes.
+    // The frontend calls with batch_index=0, then 1, 2, 3 until done=true.
     let grandTotalCreated = 0;
+    const batchIdx = startBatch;
 
-    for (let batchIdx = startBatch; batchIdx < scriptChunks.length; batchIdx++) {
+    if (batchIdx >= scriptChunks.length) {
+      // All phases already done (edge case: frontend called with stale batch_index)
+      await base44.asServiceRole.entities.Projects.update(project_id, {
+        status: "breakdown_complete",
+        current_step: 5
+      });
+      return Response.json({
+        success: true,
+        done: true,
+        scenes_created: 0,
+        total_scenes: blueprint.scenes.length,
+        total_target: totalTargetScenes,
+        total_batches: numBatches,
+        beat_durations: beatDurations,
+        beat_start_times: beatStartTimes
+      });
+    }
+
+    {
       const existingScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
       const sceneOffset = existingScenes.length;
 
@@ -862,32 +883,41 @@ NEVER describe what text appears on any surface. NEVER include dollar amounts, n
       blueprint.scenes = [...blueprint.scenes, ...newBlueprintScenes];
       grandTotalCreated += scenesCreated;
 
-      // Save after each phase — progress persists even if later phase times out
+      // Save after this phase — progress persists
       await base44.asServiceRole.entities.Projects.update(project_id, {
         scene_blueprint: JSON.stringify(blueprint)
       });
 
-      console.log(`✓ Phase ${currentChunk.phase} complete — ${scenesCreated} scenes | Running total: ${grandTotalCreated}/${totalTargetScenes}`);
+      console.log(`✓ Phase ${currentChunk.phase} complete — ${scenesCreated} scenes | Running total: ${blueprint.scenes.length}/${totalTargetScenes}`);
 
-    } // end phase loop
+    } // end single-phase block
 
-    // All phases done
-    await base44.asServiceRole.entities.Projects.update(project_id, {
-      status: "breakdown_complete",
-      current_step: 5
-    });
+    // Check if there are more phases to process
+    const nextBatch = batchIdx + 1;
+    const allPhasesComplete = nextBatch >= scriptChunks.length;
 
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`🎉 FULL BREAKDOWN COMPLETE — ${grandTotalCreated} scenes ready for prompt generation`);
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    if (allPhasesComplete) {
+      await base44.asServiceRole.entities.Projects.update(project_id, {
+        status: "breakdown_complete",
+        current_step: 5
+      });
+
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`🎉 FULL BREAKDOWN COMPLETE — ${blueprint.scenes.length} scenes ready for prompt generation`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    } else {
+      console.log(`⏩ Phase ${batchIdx + 1}/${numBatches} done — next call: batch_index=${nextBatch}`);
+    }
 
     return Response.json({
       success: true,
-      done: true,
+      done: allPhasesComplete,
+      next_batch: allPhasesComplete ? null : nextBatch,
       scenes_created: grandTotalCreated,
-      total_scenes: grandTotalCreated,
+      total_scenes: blueprint.scenes.length,
       total_target: totalTargetScenes,
       total_batches: numBatches,
+      current_batch: batchIdx,
       beat_durations: beatDurations,
       beat_start_times: beatStartTimes
     });
