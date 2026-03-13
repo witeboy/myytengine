@@ -137,6 +137,16 @@ function cleanPromptForGrok(rawPrompt) {
   p = p
 
     // ── DIGITAL SCREENS ──
+    // Direct UI/app/menu references (NOT dependent on "screen showing" pattern)
+    // Catches: "iPhone settings menu", "open iPhone settings", "settings menu on a display"
+    .replace(/\b(open\s+)?(iphone|phone|android|smartphone|tablet|ipad)\s+(settings|home\s*screen|lock\s*screen|notifications?|messages?|app\s*store|control\s*center|safari|browser)/gi,
+      'phone held in hand')
+    // "settings menu on a digital display" / "settings screen" / "home screen"
+    .replace(/\b(settings|notifications?|messages?|home)\s+(menu|screen|page|interface|panel|app)\s+(on\s+)?(a\s+)?(digital\s+)?(display|screen|phone|device)/gi,
+      'phone glowing softly')
+    // "tap/scroll/swipe a setting on the phone" — action on UI element
+    .replace(/\b(tap|tapping|scroll|scrolling|swipe|swiping|click|clicking|press|pressing|toggle|toggling)\s+(a\s+)?(setting|option|button|toggle|switch|menu\s+item|notification|link|icon)\s+(on|in)\s+(the\s+)?(phone|screen|device|display|iphone|tablet)/gi,
+      'interacting with the phone')
     // Phone/tablet screen content: "screen showing X" / "screen displaying X"
     .replace(/\b(phone|iphone|smartphone|tablet|ipad|mobile)\s+(screen|display)\s+(showing|displaying|with|reading|open\s+to)\s+[^,.]{5,80}[.,]/gi, 
       'phone screen glowing with soft blue-white light,')
@@ -151,6 +161,8 @@ function cleanPromptForGrok(rawPrompt) {
       'a glowing interface.')
     // Specific app names
     .replace(/\b(Settings\s+app|Messages\s+app|Gmail|Instagram|Twitter|TikTok|YouTube|Facebook|Safari|Chrome)\b/gi, 'app interface')
+    // "on a digital display" / "on the phone screen" — orphaned after earlier stripping
+    .replace(/\bon\s+a\s+digital\s+(display|screen)\b/gi, '')
 
     // ── PAPER DOCUMENTS ──
     // Paper docs with "showing/displaying/that reads" content
@@ -212,15 +224,61 @@ function cleanPromptForGrok(rawPrompt) {
     .replace(/\*/g, '')
     .replace(/#{1,3}\s*/g, '');
 
-  // 6. Clean up artifacts (double commas, double spaces, leading commas/periods, stray quotes)
+  // 6. Clean up artifacts from all prior stripping/replacement
   p = p
     .replace(/\.['''""][\s]*/g, '. ')   // "softly.' The" → "softly. The"
+    .replace(/\ban\s+(phone|document|receipt|bill|laptop|screen)\b/gi, 'a $1')  // "an phone" → "a phone"
+    .replace(/\bto\s+(interacting|holding|reaching|tapping)\b/gi, '$1')  // "to interacting" → "interacting"
+    .replace(/\ba\s+menu\b/gi, '')      // orphaned "a menu" after settings stripping
+    .replace(/\bshowing\s+an?\s+(phone\s+)?held\s+in\s+hand\s+(menu|screen|page)?\s*/gi, 'in ')  // "showing an phone held in hand menu" → "in"
     .replace(/,\s*,/g, ',')
     .replace(/\.\s*\./g, '.')
     .replace(/,\s*\./g, '.')
     .replace(/\s{2,}/g, ' ')
     .replace(/^[\s,.]+/, '')
     .trim();
+
+  // ══════════════════════════════════════════════════════════════
+  // 6.25 DEDUP — strip repeated descriptions (works for ALL styles)
+  // ══════════════════════════════════════════════════════════════
+  // LLM description + identity tag injection + style suffix can produce
+  // the same character/environment described 2-3 times. We split into
+  // sentences, normalize, and strip duplicates (keeping the first).
+  // ══════════════════════════════════════════════════════════════
+  
+  const sentences = p.split(/(?<=\.)\s+/).filter(s => s.length > 0);
+  if (sentences.length > 3) {
+    const kept = [];
+    const seenNormalized = [];
+    
+    for (const sentence of sentences) {
+      // Normalize: lowercase, strip punctuation, collapse spaces → word bag
+      const words = sentence.toLowerCase().replace(/[^a-z\s]/g, '').split(/\s+/).filter(w => w.length > 3);
+      
+      // Check if this sentence substantially overlaps with any kept sentence
+      let isDupe = false;
+      for (const prevWords of seenNormalized) {
+        if (prevWords.length < 5 || words.length < 5) continue; // Skip short sentences
+        const overlap = words.filter(w => prevWords.includes(w)).length;
+        const overlapRatio = overlap / Math.min(words.length, prevWords.length);
+        if (overlapRatio >= 0.7 && overlap >= 5) {
+          isDupe = true;
+          break;
+        }
+      }
+      
+      if (!isDupe) {
+        kept.push(sentence);
+        seenNormalized.push(words);
+      }
+    }
+    
+    if (kept.length < sentences.length) {
+      const removed = sentences.length - kept.length;
+      p = kept.join(' ').trim();
+      console.log(`🔄 Dedup: removed ${removed} duplicate sentence(s), ${sentences.length} → ${kept.length}`);
+    }
+  }
 
   // ══════════════════════════════════════════════════════════════
   // 6.5 OBJECT CLOSE-UP REFRAME
