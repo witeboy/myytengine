@@ -430,10 +430,16 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
 
 function getArcAnimationGuidance(arcPosition) {
   const map = {
+    // ── Map both legacy arc_position AND phase names ──
+    // Legacy arc_position values
     setup: "SLOW, RESTRAINED motion. Wider compositions. Gentle drift or slow pan. Establish atmosphere. Camera breathes.",
     rising: "BUILDING motion energy. Gradual push-ins, steady tracking. More dynamic than setup. Momentum increasing.",
     climax: "STRONGEST motion. Tight framing, assertive camera. Quick push-ins, dramatic angles. Peak emotional energy.",
-    resolution: "SOFTENED motion. Pull-back, gentle. Wider, contemplative. The emotional exhale. Calm and resolved."
+    resolution: "SOFTENED motion. Pull-back, gentle. Wider, contemplative. The emotional exhale. Calm and resolved.",
+    // Phase names from breakdown (cold_open, rising_tension, emotional_core, resolution)
+    cold_open: "SHARP, IMMEDIATE motion. Quick cuts, dynamic angles, assertive camera. Grab attention — this is the hook. Punchy energy.",
+    rising_tension: "BUILDING motion energy. Gradual push-ins, steady tracking. More dynamic with each beat. Momentum increasing, stakes rising.",
+    emotional_core: "STRONGEST, most DELIBERATE motion. Camera lingers on faces, slow meaningful push-ins, dramatic holds. Peak emotional weight — let moments breathe.",
   };
   return map[arcPosition] || map.rising;
 }
@@ -530,20 +536,32 @@ Deno.serve(async (req) => {
     if (project.character_descriptions) {
       try { characters = JSON.parse(project.character_descriptions); } catch (_) {}
     }
+
+    // ═══ CHARACTER IDENTITY SYSTEM ═══
+    // Split character data into IMMUTABLE identity (face, body, hair, skin, eyes, marks)
+    // and MUTABLE appearance (clothing, accessories, pose).
+    // Only identity_core gets force-injected into every prompt.
+    // Clothing is left to the LLM per-scene.
+
     const characterBlock = characters.length > 0
-      ? `**CHARACTERS (embed FULL physical description into every prompt where they appear):**\n${characters.map(c => `• ${c.name}: ${c.visual_description || c.description || ''}`).join('\n')}`
+      ? `**CHARACTERS — IDENTITY DNA (these features are PERMANENT and NEVER change between scenes):**\n${characters.map(c => {
+          const identity = c.identity_core || c.visual_description || c.description || '';
+          const clothing = c.default_clothing || '';
+          return `• ${c.name}:\n  IDENTITY (permanent): ${identity}${clothing ? `\n  DEFAULT CLOTHING (can change per scene): ${clothing}` : ''}`;
+        }).join('\n')}\n\n**RULE: You MUST embed the FULL identity description for EVERY character in EVERY image_prompt. The image generator has ZERO memory — each prompt is a fresh start. Name alone means NOTHING to the renderer.**`
       : '';
 
 
     // ═══ CHARACTER IDENTITY TAGS — style-aware, force-injected into EVERY prompt post-LLM ═══
-    // Each character gets a description rendered in the visual language of the chosen style
+    // Uses ONLY identity_core (immutable features) — NOT clothing/accessories.
+    // Clothing is handled per-scene by the LLM.
 
 
     const styleCharacterRules = {
       cinematic_realistic: (desc) =>
-        `photorealistic human with ${desc}, natural skin texture with visible pores, real fabric clothing with realistic wrinkles and material weight, natural hair with individual strand detail, cinematic three-point lighting on face`,
+        `photorealistic human with ${desc}, natural skin texture with visible pores, natural hair with individual strand detail, cinematic three-point lighting on face`,
       photorealistic_4k: (desc) =>
-        `DSLR-quality photorealistic person with ${desc}, razor-sharp skin detail, real fabric textures, natural hair strands, authentic micro-expressions, editorial photography lighting`,
+        `DSLR-quality photorealistic person with ${desc}, razor-sharp skin detail, natural hair strands, authentic micro-expressions, editorial photography lighting`,
       anime: (desc) =>
         `anime-style character with ${desc}, large expressive detailed eyes with highlight reflections, clean sharp linework, cel-shaded smooth skin, stylized colorful flowing hair, anime proportions with slightly elongated limbs`,
       cinematic_anime: (desc) =>
@@ -551,25 +569,25 @@ Deno.serve(async (req) => {
      cartoon_2d: (desc) =>
       `2D cartoon character with ${desc}, realistic adult human proportions with cartoon stylization, bold clean black outlines around entire body, flat vibrant color fills with subtle gradient shading, normal-sized head proportional to body, expressive eyes with clean outlines, dynamic pose`,
      picstory_cocomelon: (desc) =>
-      `adorable 3D rendered character with ${desc}, realistic human proportions with soft 3D stylization, soft rounded plastic-smooth features, expressive eyes, pastel-colored clothing with smooth texture, normal-sized head proportional to body, warm expression, Pixar animation quality`,
+      `adorable 3D rendered character with ${desc}, realistic human proportions with soft 3D stylization, soft rounded plastic-smooth features, expressive eyes, normal-sized head proportional to body, warm expression, Pixar animation quality`,
       cinematic_picstory: (desc) =>
-        `Pixar-quality 3D animated character with ${desc}, subsurface scattering on skin giving warm translucent glow, detailed clothing with fabric physics and subtle wrinkles, expressive stylized features with realistic proportions, dramatic studio rim lighting`,
+        `Pixar-quality 3D animated character with ${desc}, subsurface scattering on skin giving warm translucent glow, expressive stylized features with realistic proportions, dramatic studio rim lighting`,
       oil_painting: (desc) =>
-        `oil-painted character with ${desc}, visible impasto brushstrokes on skin in warm pigment tones, classical portrait lighting with Rembrandt chiaroscuro, soft painterly edges on hair and clothing, rich varnish glow, canvas texture visible on face`,
+        `oil-painted character with ${desc}, visible impasto brushstrokes on skin in warm pigment tones, classical portrait lighting with Rembrandt chiaroscuro, soft painterly edges on hair, rich varnish glow, canvas texture visible on face`,
       watercolor: (desc) =>
-        `watercolor-rendered character with ${desc}, soft translucent color washes for skin with paper grain showing through, delicate wet-on-wet blending on hair, gentle bleeding edges on clothing silhouette, luminous transparency where white paper peeks through`,
+        `watercolor-rendered character with ${desc}, soft translucent color washes for skin with paper grain showing through, delicate wet-on-wet blending on hair, gentle bleeding edges, luminous transparency where white paper peeks through`,
       comic_book: (desc) =>
-        `comic book character with ${desc}, bold black ink outlines, halftone dot shading on skin and clothing, vibrant saturated flat colors with dramatic shadow areas, dynamic foreshortened pose, Ben-Day dot pattern on mid-tones, Marvel/DC art quality`,
+        `comic book character with ${desc}, bold black ink outlines, halftone dot shading on skin, vibrant saturated flat colors with dramatic shadow areas, dynamic foreshortened pose, Ben-Day dot pattern on mid-tones, Marvel/DC art quality`,
       humpty_dumpty: (desc) =>
         `whimsical storybook character with ${desc}, rounded friendly soft shapes, gentle watercolor wash coloring, warm nostalgic fairy tale proportions, delicate cross-hatching for shading, vintage children's book illustration charm, golden warm lighting`,
       harry_potter: (desc) =>
-        `fantasy character with ${desc}, warm candlelit skin tones with amber glow, weathered textured robes and wizard attire, magical golden particle effects around edges, gothic atmosphere, jewel-tone color palette of deep burgundy and emerald on clothing`,
+        `fantasy character with ${desc}, warm candlelit skin tones with amber glow, magical golden particle effects around edges, gothic atmosphere, jewel-tone color palette`,
       "3d_whiteboard_cartoon": (desc) =>
-      `3D whiteboard cartoon character with ${desc}, realistic adult human proportions with whiteboard stylization, bold consistent black ink outlines around entire body, bright cheerful flat color fills with single-tone cel-shading, normal-sized head proportional to body, defined eyebrows, simple nose, warm peach-brown skin tones, flat-colored casual clothing with subtle fold shading`,
+      `3D whiteboard cartoon character with ${desc}, realistic adult human proportions with whiteboard stylization, bold consistent black ink outlines around entire body, bright cheerful flat color fills with single-tone cel-shading, normal-sized head proportional to body, defined eyebrows, simple nose, warm peach-brown skin tones`,
      low_poly_3d_cartoon: (desc) =>
-        `low-poly 3D character with ${desc}, realistic adult human proportions with all features built from visible flat-shaded polygon facets and triangular faces, normal-sized head proportional to body, angular geometric nose, expressive eyes, geometric hair, warm peach-tan skin with polygon-edge shading, hands with polygon faces, clothing with visible polygon folds and flat faces, matte clay-toy quality`,
+        `low-poly 3D character with ${desc}, realistic adult human proportions with all features built from visible flat-shaded polygon facets and triangular faces, normal-sized head proportional to body, angular geometric nose, expressive eyes, geometric hair, warm peach-tan skin with polygon-edge shading, matte clay-toy quality`,
       skeleton_protagonist: (desc) =>
-        `photorealistic transparent skeleton with clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets, ${desc},  wearing context-appropriate clothing, interacting with photorealistic environment and humans`
+        `photorealistic transparent skeleton with clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets, ${desc}, interacting with photorealistic environment and humans`
     };
 
 
@@ -577,20 +595,30 @@ Deno.serve(async (req) => {
 
 
     const characterIdentityTags = {};
+    const characterReferencePrompts = {}; // For hero image generation
     const styleTransform = styleCharacterRules[visualStyle] || defaultStyleTransform;
 
 
     for (const c of characters) {
       const name = (c.name || '').toLowerCase().trim();
-      const rawDesc = c.visual_description || c.description || '';
-      if (name && rawDesc) {
-        // Transform the raw description into style-specific rendering language
-        const styledDesc = styleTransform(rawDesc);
-        // Cap at 400 chars to stay within prompt budget
-        characterIdentityTags[name] = styledDesc.length > 400 ? styledDesc.substring(0, 400).trim() : styledDesc;
+      // Use identity_core (new, immutable only) or fall back to visual_description (old, mixed)
+      const identityDesc = c.identity_core || c.visual_description || c.description || '';
+      if (name && identityDesc) {
+        // Transform ONLY the immutable identity into style-specific rendering language
+        const styledDesc = styleTransform(identityDesc);
+        // Cap at 500 chars — identity needs room since clothing is excluded
+        characterIdentityTags[name] = styledDesc.length > 500 ? styledDesc.substring(0, 500).trim() : styledDesc;
+
+        // Store reference prompt for hero image generation (used by image gen pipeline)
+        if (c.reference_prompt) {
+          characterReferencePrompts[name] = c.reference_prompt;
+        }
       }
     }
-    console.log(`👤 Style-aware character tags (${visualStyle}) built for: ${Object.keys(characterIdentityTags).join(', ') || 'none'}`);
+    console.log(`👤 Character identity tags (${visualStyle}) built for: ${Object.keys(characterIdentityTags).join(', ') || 'none'}`);
+    if (Object.keys(characterReferencePrompts).length > 0) {
+      console.log(`📸 Reference prompts available for: ${Object.keys(characterReferencePrompts).join(', ')}`);
+    }
 
 
     let storyContext = '';
@@ -685,17 +713,28 @@ animation_prompt: "${(s.animation_prompt || '').substring(0, 200)}"
         if (!director) {
           director = extractDirectorNotes(scene.image_prompt);
         }
-        return { scene_number: scene.scene_number, scene_id: scene.id, narration_text: scene.narration_text, director };
+        return {
+          scene_number: scene.scene_number,
+          scene_id: scene.id,
+          narration_text: scene.narration_text,
+          duration_seconds: scene.duration_seconds || 5,
+          director
+        };
       });
 
 
       const sceneDirections = scenesWithNotes.map(s => {
-        const arcAnim = getArcAnimationGuidance(s.director?.arc_position || 'rising');
+        // Resolve arc position: prefer director.phase (from breakdown), fall back to arc_position, then 'rising'
+        const arcPosition = s.director?.phase || s.director?.arc_position || 'rising';
+        const arcAnim = getArcAnimationGuidance(arcPosition);
+        const sceneDuration = s.duration_seconds;
+
         if (!s.director) {
-          return `Scene ${s.scene_number}: (No director notes — generate from narration)\n  Narration: "${s.narration_text}"\n  Arc Animation: ${arcAnim}`;
+          return `Scene ${s.scene_number}: (No director notes — generate from narration)\n  Narration: "${s.narration_text}"\n  Duration: ${sceneDuration}s\n  Arc Phase: ${arcPosition}\n  Arc Animation: ${arcAnim}`;
         }
         return `Scene ${s.scene_number}:
   Narration: "${s.narration_text}"
+  Duration: ${sceneDuration}s
   Visual Concept: ${s.director.visual_concept}
   Shot Type: ${s.director.shot_type}
   Camera Angle: ${s.director.camera_angle}
@@ -707,7 +746,7 @@ animation_prompt: "${(s.animation_prompt || '').substring(0, 200)}"
   Niche Element: ${s.director.niche_visual_element || 'N/A'}
   Continuity: ${s.director.continuity_bridge || 'N/A'}
   Intensity: ${s.director.emotional_intensity || 0.5}
-  Arc Position: ${s.director.arc_position || 'rising'}
+  Arc Phase: ${arcPosition}
   Arc Animation: ${arcAnim}`;
       }).join('\n\n');
 
@@ -779,8 +818,9 @@ ${sceneDirections}
    - End with: "ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image"
 
 
-2. **animation_prompt** — RICH, CINEMATIC ${CLIP_DURATION}-second motion direction:
-   - NOT a simple camera instruction — a FULL MOTION POEM describing everything that moves over ${CLIP_DURATION} seconds.
+2. **animation_prompt** — RICH, CINEMATIC motion direction for the EXACT duration of each scene (see Duration field per scene):
+   - NOT a simple camera instruction — a FULL MOTION POEM describing everything that moves over the scene's duration.
+   - **IMPORTANT: Each scene has its own duration.** A 3.5s scene needs TIGHT, PUNCHY motion. A 7s scene can BREATHE. Match the motion density to the seconds available.
    - **Include ALL layers:**
      a) **CAMERA MOTION**: Specific movement with speed, direction, framing change
      b) **ATMOSPHERIC MOTION**: Dust motes, fog, light shifting, rain, leaves, fabric rippling, steam
@@ -789,9 +829,9 @@ ${sceneDirections}
      e) **DEPTH SHIFTS**: Rack focus, DOF breathing, focus pulls revealing detail
      f) **EMOTIONAL QUALITY**: "heavy and reluctant" vs "urgent and searching" vs "tender and hesitant"
    - **ARC POSITION**: ${orientationConfig.animation}
-     • SETUP: Slow, contemplative. Camera observes with patience.
-     • RISING: Building momentum. Camera grows bolder.
-     • CLIMAX: Peak intensity. Dynamic camera. Every element vibrates.
+     • COLD_OPEN / SETUP: Sharp, immediate. Camera grabs attention — quick cuts, assertive angles.
+     • RISING_TENSION / RISING: Building momentum. Camera grows bolder. Push-ins, tracking.
+     • EMOTIONAL_CORE / CLIMAX: Peak intensity but DELIBERATE. Camera lingers. Meaningful holds. Let moments breathe.
      • RESOLUTION: Exhale. Camera pulls back gently. Peace settles.
    - **MINIMUM 3-4 rich sentences** — NEVER generic "slow pan right"
 
@@ -802,7 +842,7 @@ ${sceneDirections}
     {
       "scene_number": 1,
       "image_prompt": "[style prefix]. [ENVIRONMENT FIRST, then character mid-action within it, using style-specific rules]",
-      "animation_prompt": "[motion direction]"
+      "animation_prompt": "[motion direction for this scene's specific duration]"
     }
   ]
 }`;
@@ -830,6 +870,8 @@ ${sceneDirections}
         if (generated) {
           let rawPrompt = generated.image_prompt || '';
 
+          // Use per-scene duration from breakdown, not the old hardcoded CLIP_DURATION
+          const sceneDuration = s.duration_seconds;
 
           // ═══ QUALITY GATE — catch lazy/thin prompts ═══
           const promptWords = rawPrompt.split(/\s+/).filter(w => w.length > 0).length;
@@ -902,9 +944,8 @@ Respond with ONLY the image_prompt text, no JSON, no labels.`;
 
           if (sceneCast.length > 0) {
             // Step 3: Budget per character based on count
-            // Total char budget for ALL characters: ~500 chars
-            // Ensures prompt doesn't bloat past Grok's sweet spot
-            const totalCharBudget = 500;
+            // Total char budget for ALL characters: ~600 chars (increased since we only inject identity, not clothing)
+            const totalCharBudget = 600;
             const perCharBudget = Math.floor(totalCharBudget / sceneCast.length);
 
 
@@ -913,7 +954,6 @@ Respond with ONLY the image_prompt text, no JSON, no labels.`;
             for (const c of sceneCast) {
               let desc = c.desc || '';
               if (desc.length > perCharBudget) {
-                // Trim to budget at a natural comma break
                 const lastComma = desc.lastIndexOf(',', perCharBudget);
                 desc = lastComma > perCharBudget * 0.5
                   ? desc.substring(0, lastComma).trim()
@@ -923,8 +963,9 @@ Respond with ONLY the image_prompt text, no JSON, no labels.`;
             }
 
 
-            // Step 5: Replace FIRST occurrence of each name with name + inline description
-            // Subsequent occurrences keep just the name (Grok has visual context by then)
+            // Step 5: ALWAYS inject canonical identity — NEVER skip
+            // The LLM's description is unreliable for consistency.
+            // We strip whatever the LLM wrote and replace with our identity_core tag.
             let modifiedPrompt = rawPrompt;
 
 
@@ -932,26 +973,21 @@ Respond with ONLY the image_prompt text, no JSON, no labels.`;
               if (!desc) continue;
               const escapedName = charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-
-              // Check if LLM already gave a decent description (40+ chars after name)
-              const descCheck = new RegExp(
-                `\\b${escapedName}\\b[,\\s]+[^.]{40,}`, 'gi'
-              );
-              if (descCheck.test(modifiedPrompt)) {
-                // LLM already described this character — skip injection
-                console.log(`👤 Scene ${s.scene_number}: "${charName}" already described by LLM — skipping`);
-                continue;
-              }
-
-
-              // Also strip any short LLM parentheticals like "Elena (a young woman)"
+              // Strip any LLM parentheticals like "Elena (a young woman with dark hair)"
               const nameWithParens = new RegExp(
                 `\\b${escapedName}\\b\\s*\\([^)]{5,}\\)`, 'gi'
               );
               modifiedPrompt = modifiedPrompt.replace(nameWithParens, charName);
 
+              // Strip any LLM inline description after name:
+              // "Elena, a tall woman with flowing dark hair and green eyes, reaches..."
+              // → "Elena reaches..." (so we can inject our canonical version)
+              const nameWithInlineDesc = new RegExp(
+                `\\b${escapedName}\\b,\\s*a\\s[^,]{10,}(?:,\\s*[^,]{5,}){0,4},\\s*`, 'gi'
+              );
+              modifiedPrompt = modifiedPrompt.replace(nameWithInlineDesc, `${charName}, `);
 
-              // Replace FIRST occurrence: "Elena crouches" → "a [full desc] crouches"
+              // Replace FIRST occurrence: "Elena, reaches..." → "a [canonical identity], reaches..."
               const firstOccurrence = new RegExp(`\\b${escapedName}\\b`, 'i');
               const match = modifiedPrompt.match(firstOccurrence);
               if (match) {
@@ -960,8 +996,7 @@ Respond with ONLY the image_prompt text, no JSON, no labels.`;
                 const after = modifiedPrompt.substring(idx + match[0].length);
                 modifiedPrompt = `${before}a ${desc}${after}`;
 
-
-                console.log(`👤 Scene ${s.scene_number}: inlined "${charName}" (${desc.length} chars)`);
+                console.log(`👤 Scene ${s.scene_number}: INJECTED "${charName}" identity (${desc.length} chars)`);
               }
             }
 
@@ -994,15 +1029,16 @@ Respond with ONLY the image_prompt text, no JSON, no labels.`;
           );
           animationPrompt = generated.animation_prompt || '';
           if (animationPrompt.length < 80) {
-            const arc = s.director?.arc_position || 'rising';
+            const arcPosition = s.director?.phase || s.director?.arc_position || 'rising';
             const mood = s.director?.mood || 'contemplative';
             const movement = s.director?.camera_movement || 'slow drift forward';
-            animationPrompt = `${movement} over ${CLIP_DURATION} seconds. ${getArcAnimationGuidance(arc)} Atmospheric particles drift lazily through the frame. Subtle breathing motion on subject. Light shifts gradually, casting evolving shadows. The mood is ${mood} — every micro-movement reflects this emotional weight.`;
+            animationPrompt = `${movement} over ${sceneDuration} seconds. ${getArcAnimationGuidance(arcPosition)} Atmospheric particles drift lazily through the frame. Subtle breathing motion on subject. Light shifts gradually, casting evolving shadows. The mood is ${mood} — every micro-movement reflects this emotional weight.`;
           }
         } else {
           console.warn(`⚠️ Scene ${s.scene_number} missing from response — building fallback`);
           totalWarnings++;
 
+          const sceneDuration = s.duration_seconds;
 
           let fallback = `${promptPrefix}. `;
           if (s.director) {
@@ -1015,10 +1051,10 @@ Respond with ONLY the image_prompt text, no JSON, no labels.`;
 
 
           imagePrompt = validateAndEnhancePrompt(fallback, styleConfig, orientationConfig, s.scene_number, visualStyle);
-          const arc = s.director?.arc_position || 'rising';
+          const arcPosition = s.director?.phase || s.director?.arc_position || 'rising';
           const mood = s.director?.mood || 'contemplative';
           const movement = s.director?.camera_movement || 'slow drift forward';
-          animationPrompt = `${movement} over ${CLIP_DURATION} seconds. ${getArcAnimationGuidance(arc)} Fine dust particles float through volumetric light beams, drifting with invisible air currents. Subject exhibits subtle breathing rhythm — chest rises and falls gently, fabric settles. Light evolves slowly across the frame, warm tones shifting and shadows deepening. The emotional quality is ${mood} — motion feels weighted with this energy. Shallow depth of field breathes subtly, bokeh orbs pulse with ambient light.`;
+          animationPrompt = `${movement} over ${sceneDuration} seconds. ${getArcAnimationGuidance(arcPosition)} Fine dust particles float through volumetric light beams, drifting with invisible air currents. Subject exhibits subtle breathing rhythm — chest rises and falls gently, fabric settles. Light evolves slowly across the frame, warm tones shifting and shadows deepening. The emotional quality is ${mood} — motion feels weighted with this energy. Shallow depth of field breathes subtly, bokeh orbs pulse with ambient light.`;
         }
 
 
@@ -1068,7 +1104,13 @@ Respond with ONLY the image_prompt text, no JSON, no labels.`;
       quality_warnings: totalWarnings,
       total_batches: totalBatches,
       remaining_scenes: remainingScenes,
-      total_scenes: pendingScenes.length
+      total_scenes: pendingScenes.length,
+      // Character reference prompts for hero image generation
+      // The image gen pipeline should generate ONE reference image per character
+      // BEFORE generating scene images, and pass it as character_reference/cref
+      character_reference_prompts: Object.keys(characterReferencePrompts).length > 0
+        ? characterReferencePrompts
+        : undefined
     });
 
 
@@ -1077,8 +1119,3 @@ Respond with ONLY the image_prompt text, no JSON, no labels.`;
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
-
-
-
-
-
