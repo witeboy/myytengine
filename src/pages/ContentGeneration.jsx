@@ -557,7 +557,11 @@ export default function ContentGeneration() {
 
       while (!breakdownDone) {
         try {
-          if (nextBatch > 0) await new Promise(r => setTimeout(r, 3000));
+          // Longer delay after batch 0 (analysis) to let DB propagate blueprint
+if (nextBatch > 0) {
+  const delay = nextBatch === 1 ? 6000 : 3000;
+  await new Promise(r => setTimeout(r, delay));
+}
 
           const bdResult = await base44.functions.invoke('generateSceneBreakdown', {
             project_id: projectId,
