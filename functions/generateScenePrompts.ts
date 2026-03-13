@@ -194,7 +194,7 @@ const styleMap = {
     positive: "Stylized low-poly 3D cartoon, all geometry from visible flat-shaded polygons and triangular facets. Realistic human proportions with geometric stylization. Angular facial features, expressive eyes, defined eyebrows. Geometric hair, warm peach-tan skin with polygon-edge shading. Clothing with visible folds and flat polygon faces. All environments built from flat-shaded polygons. Vibrant saturated colors, clean polygon edges, no smoothing, matte clay-toy quality, soft ambient occlusion, sharp focused background with all elements in focus, deep depth of field, Pixar expressiveness with geometric stylization",
    negative: "photorealistic, photograph, smooth high-poly, hyperrealistic, film grain, lens flare, bokeh, blurred background, shallow depth of field, out of focus background, anime, cel-shaded, 2D flat, hand-drawn, sketch, watercolor, oil painting, dark horror, neon cyberpunk, abstract, pixel art, voxel art, wireframe, monochrome, desaturated, ray-traced, photogrammetry, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature, funko pop"  },
   skeleton_protagonist: {
-   positive: "Full body wide shot showing complete scene from head to feet, photorealistic detailed environment with sharp background, multiple people in frame, cinematic establishing shot composition, the main character is a transparent glass-bodied skeleton with ivory bones and expressive brown amber eyeballs, character shown full body anatomy in a richly detailed real-world location interacting with photorealistic humans, golden hour volumetric lighting, HDR cinematic lens, 4K detail, warm amber grading",
+   positive: " wide shot showing complete scene, photorealistic detailed environment with sharp background, multiple people in frame, cinematic establishing shot composition, the main character is a transparent glass-bodied skeleton with ivory bones and expressive brown amber eyeballs, character shown full anatomy in a richly detailed real-world location interacting with photorealistic humans, golden hour volumetric lighting, HDR cinematic lens, 4K detail, warm amber grading",
    negative: "cartoon skeleton, halloween decoration, flat 2D, anime, comic, x-ray medical, horror gore, neon, plastic toy, low quality, blurry, abstract, minimalist, sketch, painting, chibi, dia de los muertos, empty dark eye sockets, bare bones without transparent body, scary horror skeleton, torso only, bust shot, head and shoulders only, cropped at waist, isolated character on blank background, portrait crop, close-up, macro, extreme close-up, chest detail, upper body only, dark background, black background"
   }
 };
@@ -297,10 +297,10 @@ function getStyleSceneBodyRules(styleName) {
       rendering: "Clean polygon edges on all surfaces, flat-shaded with no smoothing (signature faceted look). Soft ambient occlusion, gentle directional shadows, no outlines or cel-shading. Bright gradient sky, geometric cloud clusters. Vibrant saturated colors, warm and inviting."
     },
     skeleton_protagonist: {
-      characters: "Protagonist in EVERY scene: photorealistic transparent skeleton with clear glass-like body shell, glossy ivory bones visible through translucent torso, big round expressive brown/amber EYEBALLS in skull sockets. MUST be shown FULL BODY head-to-toe in most scenes according to director's notes — standing, sitting, kneeling, walking, running. Wears context-appropriate clothing. Must be DOING an action (holding objects, gesturing, interacting with people). Other characters are photorealistic normal humans shown alongside or interacting with the skeleton.",
+      characters: "Protagonist in EVERY scene: photorealistic transparent skeleton with clear glass-like body shell, glossy ivory bones visible through translucent torso, big round expressive brown/amber EYEBALLS in skull sockets. MUST be shown according to director's notes — standing, sitting, kneeling, walking, running. Wears context-appropriate clothing. Must be DOING an action (holding objects, gesturing, interacting with people). Other characters are photorealistic normal humans shown alongside or interacting with the skeleton.",
       environments: "Photorealistic DETAILED real-world environments shown in SHARP FOCUS — NOT blurred bokeh backgrounds. Every scene has a specific location with visible architecture, landscape features, props, furniture, tools, weather effects. The skeleton exists INSIDE this world, not floating in front of it. Include foreground elements for depth.",
       objects: "Photorealistic props the skeleton is actively interacting with — tools in hand, objects being held or carried, furniture being used, vehicles, food, weapons, documents. Props tell the story and connect scenes together.",
-      rendering: "Cinematic wide-to-medium framing showing full body within environment. HDR cinematic lens, warm amber grading, dramatic volumetric golden hour lighting, strong rim light separating skeleton from background. Sharp detailed backgrounds. Favor 9:16 vertical framing with character full body visible."
+      rendering: "Cinematic wide-to-medium framing showing within environment. HDR cinematic lens, warm amber grading, dramatic volumetric golden hour lighting, strong rim light separating skeleton from background. Sharp detailed backgrounds. Favor 9:16 vertical framing with character visible."
     }
   };
 
@@ -308,7 +308,7 @@ function getStyleSceneBodyRules(styleName) {
   // ═══ UNIVERSAL FRAMING — appended to ALL styles ═══
   const base = rules[styleName] || null;
   if (base) {
-    base.rendering = (base.rendering || '') + ' Frame characters full body head-to-toe in most scenes. Show detailed sharp environments with visible props and architecture, not empty blurred backgrounds. Characters should be mid-action interacting with environment and other people.';
+    base.rendering = (base.rendering || '') + ' Frame characters shown. Show detailed sharp environments with visible props and architecture, not empty blurred backgrounds. Characters should be mid-action interacting with environment and other people.';
   }
   return base;
 }
@@ -328,7 +328,7 @@ function getStyleReinforcementInstruction(visualStyle) {
 ENVIRONMENT-FIRST: Every image_prompt must describe the LOCATION and SETTING in the first 1-2 sentences BEFORE mentioning any character. Include: specific place, architecture/landscape, weather/time of day, foreground props, atmospheric details.
 
 
-FULL-BODY ACTION: Characters shown FULL BODY (head to feet) in 80% of scenes. They must be DOING an action — walking, sitting, reaching, holding, kneeling, gesturing. NEVER static standing portrait facing camera. Close-ups allowed for max 2 scenes.
+FULL-BODY ACTION: Characters shown. They must be DOING an action — walking, sitting, reaching, holding, kneeling, gesturing. NEVER static standing portrait facing camera. Close-ups allowed for max 2 scenes.
 
 
 CAMERA DIRECTION: Each image_prompt must specify a SHOT TYPE (wide, medium, low angle, overhead, OTS, tracking, dutch angle, POV) and it must DIFFER from adjacent scenes.
@@ -357,7 +357,7 @@ The protagonist in EVERY image prompt must be described as: "a photorealistic tr
 
 
 MANDATORY FRAMING:
-- Show the skeleton FULL BODY (head to feet) in MOST scenes — NOT torso-only, NOT bust shots
+- Show the skeleton  — NOT torso-only, NOT bust shots
 - Describe the ENVIRONMENT in detail FIRST (location, props, weather, textures) THEN place the skeleton within it
 - The skeleton must be DOING an action — holding, reaching, kneeling, walking — NOT standing static
 - Include other photorealistic humans in most scenes — crowds, companions, onlookers
@@ -509,20 +509,20 @@ Deno.serve(async (req) => {
       orientationConfig = {
         format: 'portrait',
         directive: "PORTRAIT VERTICAL 9:16 format, tall vertical framing",
-        composition: "Compose for VERTICAL 9:16 mobile frame: tall compositions, full body characters visible head to toe, vertical depth stacking, environment visible above and below character",
+        composition: "Compose for VERTICAL 9:16 mobile frame: tall compositions, characters visible , vertical depth stacking, environment visible above and below character",
         animation: "vertical 9:16 — tilt up/down, vertical reveals, close-up push-ins, portrait motion"
       };
     } else {
       orientationConfig = {
         format: 'landscape',
         directive: "LANDSCAPE HORIZONTAL 16:9 widescreen, wide cinematic framing",
-        composition: "Compose for WIDESCREEN 16:9: wide establishing shots, rule of thirds, horizontal leading lines, foreground/midground/background depth, full body characters within environment",
+        composition: "Compose for WIDESCREEN 16:9: wide establishing shots, rule of thirds, horizontal leading lines, foreground/midground/background depth, characters within environment",
         animation: "widescreen 16:9 — horizontal pans, dolly forward/back, crane shots, lateral parallax"
       };
     }
 
 
-    const framingPrefix = "Full body wide shot showing complete scene from head to feet, detailed sharp environment with visible props and architecture, character mid-action in a populated world";
+    const framingPrefix = "charater wide shot showing complete scene , detailed sharp environment with visible props and architecture, character mid-action in a populated world";
     const promptPrefix = `${framingPrefix}, ${styleConfig.positive}`;
 
 
@@ -569,7 +569,7 @@ Deno.serve(async (req) => {
      low_poly_3d_cartoon: (desc) =>
         `low-poly 3D character with ${desc}, realistic adult human proportions with all features built from visible flat-shaded polygon facets and triangular faces, normal-sized head proportional to body, angular geometric nose, expressive eyes, geometric hair, warm peach-tan skin with polygon-edge shading, hands with polygon faces, clothing with visible polygon folds and flat faces, matte clay-toy quality`,
       skeleton_protagonist: (desc) =>
-        `photorealistic transparent skeleton with clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets, ${desc}, full body head-to-toe, wearing context-appropriate clothing, interacting with photorealistic environment and humans`
+        `photorealistic transparent skeleton with clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets, ${desc},  wearing context-appropriate clothing, interacting with photorealistic environment and humans`
     };
 
 
@@ -744,7 +744,7 @@ ${styleBodyBlock}
 
 
 **UNIVERSAL FRAMING RULES (apply to ALL visual styles):**
-- Show characters FULL BODY (head to feet) in most scenes — NOT torso-only or bust crops unless specifically an ECU emotional beat
+- Show characters FULL where needed — NOT torso-only or bust crops unless specifically an ECU emotional beat
 - Describe the ENVIRONMENT in detail FIRST (location, architecture, props, weather, textures) THEN place characters within it doing an ACTION
 - Characters must be DOING something — holding, reaching, walking, gesturing, interacting — NOT standing static facing camera
 - Backgrounds must be SHARP and DETAILED with visible props and architecture, not blurred to nothing
@@ -765,7 +765,7 @@ ${sceneDirections}
    - START with the style prefix: "${styleConfig.positive}."
    - Then write the SCENE BODY describing what's actually in the frame (do NOT include orientation, aspect ratio, or resolution words — those are handled separately):
      • Describe the ENVIRONMENT and SETTING first — location, weather, architecture, props, atmosphere
-     • Then place characters FULL BODY within that environment, doing a specific ACTION
+     • Then place characters within that environment, doing a specific ACTION
      • Use the style body rules above to describe characters, environments, and objects
      • The scene body is WHERE the visual style really shows — describe characters with the style's specific features
      • Embed shot type and composition from director notes
@@ -801,7 +801,7 @@ ${sceneDirections}
   "prompts": [
     {
       "scene_number": 1,
-      "image_prompt": "[style prefix]. [ENVIRONMENT FIRST, then FULL BODY character mid-action within it, using style-specific rules]",
+      "image_prompt": "[style prefix]. [ENVIRONMENT FIRST, then character mid-action within it, using style-specific rules]",
       "animation_prompt": "[motion direction]"
     }
   ]
@@ -854,7 +854,7 @@ ${s.director ? `Visual Concept: ${s.director.visual_concept}\nShot: ${s.director
 **REQUIREMENTS:**
 - Minimum 80 words describing the complete scene
 - Start with ENVIRONMENT (location, architecture, weather, props, atmosphere)
-- Then place characters FULL BODY mid-action with complete physical descriptions
+- Then place characters mid-action with complete physical descriptions
 - Include camera angle, lighting direction, color palette, mood
 - End with composition details and depth layers
 
