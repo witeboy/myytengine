@@ -8,7 +8,6 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 
 const BASE_BATCH_SIZE = 12;
-const CLIP_DURATION = 5;
 const PARALLEL_PROMPT_BATCHES = 3; // Run 3 Gemini prompt calls concurrently
 
 
@@ -194,7 +193,7 @@ const styleMap = {
     positive: "Stylized low-poly 3D cartoon, all geometry from visible flat-shaded polygons and triangular facets. Realistic human proportions with geometric stylization. Angular facial features, expressive eyes, defined eyebrows. Geometric hair, warm peach-tan skin with polygon-edge shading. Clothing with visible folds and flat polygon faces. All environments built from flat-shaded polygons. Vibrant saturated colors, clean polygon edges, no smoothing, matte clay-toy quality, soft ambient occlusion, sharp focused background with all elements in focus, deep depth of field, Pixar expressiveness with geometric stylization",
    negative: "photorealistic, photograph, smooth high-poly, hyperrealistic, film grain, lens flare, bokeh, blurred background, shallow depth of field, out of focus background, anime, cel-shaded, 2D flat, hand-drawn, sketch, watercolor, oil painting, dark horror, neon cyberpunk, abstract, pixel art, voxel art, wireframe, monochrome, desaturated, ray-traced, photogrammetry, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature, funko pop"  },
   skeleton_protagonist: {
-   positive: " wide shot showing complete scene, photorealistic detailed environment with sharp background, multiple people in frame, cinematic establishing shot composition, the main character is a transparent glass-bodied skeleton with ivory bones and expressive brown amber eyeballs, character shown full anatomy in a richly detailed real-world location interacting with photorealistic humans, golden hour volumetric lighting, HDR cinematic lens, 4K detail, warm amber grading",
+   positive: "wide shot showing complete scene, photorealistic detailed environment with sharp focused background, multiple people in frame, cinematic establishing shot composition, golden hour volumetric lighting, HDR cinematic lens, warm amber grading, masterpiece quality",
    negative: "cartoon skeleton, halloween decoration, flat 2D, anime, comic, x-ray medical, horror gore, neon, plastic toy, low quality, blurry, abstract, minimalist, sketch, painting, chibi, dia de los muertos, empty dark eye sockets, bare bones without transparent body, scary horror skeleton, torso only, bust shot, head and shoulders only, cropped at waist, isolated character on blank background, portrait crop, close-up, macro, extreme close-up, chest detail, upper body only, dark background, black background"
   }
 };
@@ -943,27 +942,25 @@ ${sceneDirections}
             // Critically thin — LLM got lazy on this scene. Regenerate solo.
             console.warn(`⚠️ Scene ${s.scene_number}: only ${promptWords} words — regenerating...`);
             try {
+              const bodyRules = getStyleSceneBodyRules(visualStyle);
               const soloPrompt = `Generate ONE detailed image prompt for this scene.
 
-
-**VISUAL STYLE:** "${visualStyle}" — ${styleConfig.positive}
-${getStyleSceneBodyRules(visualStyle) ? `**Characters:** ${getStyleSceneBodyRules(visualStyle).characters}\n**Environments:** ${getStyleSceneBodyRules(visualStyle).environments}` : ''}
-
+${bodyRules ? `**STYLE RENDERING RULES:**\n**Characters:** ${bodyRules.characters}\n**Environments:** ${bodyRules.environments}` : ''}
 
 **SCENE ${s.scene_number}:**
 Narration: "${s.narration_text}"
 ${s.director ? `Visual Concept: ${s.director.visual_concept}\nShot: ${s.director.shot_type} | Angle: ${s.director.camera_angle} | Lighting: ${s.director.lighting} | Mood: ${s.director.mood}` : ''}
 
+**STRUCTURE (follow this order EXACTLY):**
+1. FIRST sentence: Shot framing — "Full body wide shot showing..." or "Medium shot of..."
+2. NEXT 1-2 sentences: Environment — location, architecture, weather, props, atmosphere
+3. NEXT 1-2 sentences: Character BODY-FIRST (build, height, posture, action), then face features as compact clause
+4. FINAL sentence: Mood, lighting, then style quality: "${styleConfig.positive.substring(0, 100)}"
 
-**REQUIREMENTS:**
-- Minimum 80 words describing the complete scene
-- Start with ENVIRONMENT (location, architecture, weather, props, atmosphere)
-- Then place characters mid-action with complete physical descriptions
-- Include camera angle, lighting direction, color palette, mood
-- End with composition details and depth layers
+**FORBIDDEN:** text/words/numbers on any surface, screen content descriptions, dollar amounts, close-ups of hands holding objects.
+If the scene mentions a phone/document/receipt, describe the CHARACTER'S REACTION to it, not the content on it.
 
-
-Respond with ONLY the image_prompt text, no JSON, no labels.`;
+Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
 
 
               const soloResult = await callGemini(soloPrompt, 0.8, 4096);
