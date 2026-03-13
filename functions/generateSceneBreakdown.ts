@@ -128,7 +128,7 @@ CHARACTER IDENTITY (consistent across ALL scenes):
 
 **🎬 CRITICAL FRAMING RULES — READ CAREFULLY:**
 
-1. **FULL BODY HEAD-TO-TOE**: The skeleton must be shown as a FULL HUMAN-SIZED figure in MOST scenes. Frame him head to feet — like a real person standing, sitting, kneeling, walking, running. Show his FULL body interacting with the world. NEVER default to torso-only or bust shots. Close-ups of face/hands are allowed ONLY for 1-2 key emotional beats, not as the default.
+1. **FULL CHARACTER**: The skeleton must be shown as a FULL HUMAN-SIZED figure in MOST scenes. Frame him head to feet — like a real person standing, sitting, kneeling, walking, running. Show his character interacting with the world. NEVER default to torso-only or bust shots. Close-ups of face/hands are allowed ONLY for 1-2 key emotional beats, not as the default.
 
 2. **ENVIRONMENT FIRST**: Every scene is a WORLD, not a portrait. Describe the environment in detail BEFORE the character — the room, landscape, weather, crowd, props, textures, architecture. The skeleton lives INSIDE a rich, detailed, photorealistic world. Blurred backgrounds are BANNED for this style.
 
@@ -641,7 +641,7 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
     {
       "scene_number": ${sceneOffset + 1},
       "narration_text": "EXACT words from the script segment that play during this scene.",
-      "visual_concept": "A rich, specific, CINEMATIC description of what we SEE. 2-4 sentences. MUST describe: (1) the FULL environment/location with specific details, (2) the character shown FULL BODY head-to-toe doing a specific ACTION, (3) other people or elements in the scene, (4) atmospheric details like weather/light/props. Think like a DP describing a film frame.",
+      "visual_concept": "A rich, specific, CINEMATIC description of what we SEE. 2-4 sentences. MUST describe: (1) the FULL environment/location with specific details, (2) the character shown doing a specific ACTION, (3) other people or elements in the scene, (4) atmospheric details like weather/light/props. Think like a DP describing a film frame.",
       "shot_type": "e.g. 'ECU — Extreme Close-Up'",
       "camera_angle": "e.g. 'Low angle, 15 degrees, slightly left of center'",
       "camera_movement": "e.g. 'Slow push-in over 5 seconds, from MS to MCU'",
@@ -664,7 +664,7 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
 - NO added narration — use ONLY the provided script words
 - visual_concept must NEVER describe text, charts, graphs, or readable content on screen
 - visual_concept must describe the FULL SCENE: environment FIRST, then full-body character action, then other people, then atmosphere
-- Characters must be shown FULL BODY (head to feet) in most scenes — torso-only crops are BANNED unless specifically an ECU emotional beat
+- Characters must be shown in scenes accordingly — torso-only crops are BANNED unless specifically an ECU emotional beat
 - Every scene must contain a CONTINUITY ELEMENT that visually bridges to the next scene (shared prop, color shift, gesture echo, location transform)
 - Adjacent scenes MUST use different shot types
 - emotional_intensity should generally escalate through the phase
