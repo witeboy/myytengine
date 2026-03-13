@@ -654,8 +654,8 @@ ${finalScript}
       // ── Subsequent batches (1+): blueprint already persisted, read from DB ──
       // Base44's DB is eventually consistent — the write from batch 0 may not
       // have propagated yet. Retry up to 3 times with increasing delays.
-      const MAX_READ_RETRIES = 3;
-      const READ_DELAY_MS = [2000, 4000, 6000]; // escalating wait
+      const MAX_READ_RETRIES = 6;
+      const READ_DELAY_MS = [500, 1000, 1500, 2000, 2500, 3000]; // fast polls, total 10.5s max
 
       for (let readAttempt = 0; readAttempt < MAX_READ_RETRIES; readAttempt++) {
         freshProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
