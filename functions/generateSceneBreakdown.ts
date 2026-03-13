@@ -743,7 +743,20 @@ Adjacent scenes should share at least ONE visual element that creates a bridge.
 🎬 **RULE 6: ABSTRACT → CONCRETE**
 When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
 
-🎬 **RULE 7: NICHE VISUAL LANGUAGE**
+🎬 **RULE 7: OBJECT INTERACTION — SHOW THE PERSON, NOT THE OBJECT**
+AI image generators CANNOT render readable text on screens, papers, signs, or documents. They CANNOT render realistic hand-object grip physics in close-up. They CANNOT render dollar amounts, numbers, or any written content.
+When the narration mentions a phone, laptop, document, receipt, bill, letter, contract, or any object with text:
+- WRONG: "Close-up of an iPhone screen showing the Settings app with Battery and Privacy options" ← garbled nonsense text
+- WRONG: "Tight shot of a medical bill showing $45,000 in outstanding charges" ← garbled numbers and letters
+- WRONG: "Insert shot of a receipt displaying the total amount" ← unreadable scribbles
+- WRONG: "Detail shot of a letter that reads 'Your application has been approved'" ← random text artifacts
+- RIGHT: "Medium wide shot of a woman at her kitchen table, an ominous stack of medical bills fanned out before her, her face pale under the overhead light, one hand pressing against her forehead. A coffee mug sits untouched, cold."
+- RIGHT: "Over-the-shoulder shot of a man holding a crumpled receipt at a gas station counter, his jaw tightening, fluorescent light harsh on his face. The attendant watches from behind scratched plexiglass."
+- RIGHT: "Wide shot of a woman clutching an opened letter on her apartment steps, tears streaming, her dog pressing against her knee. Scattered mail on the concrete beside her."
+The visual should show the CHARACTER'S EMOTIONAL REACTION to the document — their face, body language, posture — from a distance where text on the paper is naturally too small to read. The document is a PROP in their hands, not the subject of the shot.
+NEVER describe what text appears on any surface. NEVER include dollar amounts, names, dates, or words that would appear on the object.
+
+🎬 **RULE 8: NICHE VISUAL LANGUAGE**
 - Visual World: ${nicheProfile.visual_world}
 - Signature Shots: ${nicheProfile.signature_shots}
 - Metaphor Language: ${nicheProfile.metaphor_language}
