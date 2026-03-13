@@ -630,40 +630,146 @@ Deno.serve(async (req) => {
     const defaultStyleTransform = (bodyDesc, faceDesc) => `${bodyDesc} shown full body in the scene, ${faceDesc}`;
 
 
-    const characterIdentityTags = {};
-    const characterReferencePrompts = {}; // For hero image generation
+    // ══════════════════════════════════════════════════════════════
+    // IDENTITY TIER SYSTEM — shot-type-aware character depth
+    // ══════════════════════════════════════════════════════════════
+    // Not every scene needs a 500-char character description.
+    // A wide city street shot where the character is tiny needs just
+    // "a woman with a dark-brown bob in a lavender jacket."
+    // A close-up emotional beat needs the full casting-sheet identity.
+    //
+    // MINIMAL: Wide/environmental shots — silhouette identifiers only
+    // MODERATE: Medium/action shots — add skin tone, key features
+    // FULL: Close-up/emotional — complete identity for face consistency
+    // ══════════════════════════════════════════════════════════════
+
+    function getIdentityTier(shotType) {
+      if (!shotType) return 'moderate'; // safe default
+      const st = shotType.toLowerCase();
+      // FULL: close-ups where face matters
+      if (/\b(ecu|extreme\s*close|mcu|medium\s*close|cu\b|close[\s-]*up|insert|detail|pov)\b/.test(st)) return 'full';
+      // MINIMAL: wide shots where character is small in frame
+      if (/\b(ews|extreme\s*wide|ws\b|wide\s*shot|mws|medium\s*wide|high\s*angle|overhead|god.?s?\s*eye|establishing|aerial|drone|bird.?s?\s*eye)\b/.test(st)) return 'minimal';
+      // MODERATE: everything else (MS, low angle, OTS, tracking, dutch)
+      return 'moderate';
+    }
+
+    const characterTieredTags = {};  // name → { minimal, moderate, full }
+    const characterReferencePrompts = {};
     const styleTransform = styleCharacterRules[visualStyle] || defaultStyleTransform;
 
 
     for (const c of characters) {
       const name = (c.name || '').toLowerCase().trim();
       const identityDesc = c.identity_core || c.visual_description || c.description || '';
+      const clothing = c.default_clothing || '';
       if (name && identityDesc) {
-        // Split the casting-sheet identity into body (framing) and face (identification)
         const { body, face } = splitIdentity(identityDesc);
         const bodyDesc = body || 'adult character';
 
-        // Compress face description — keep only the most identifying features
-        // Trim to ~200 chars at a comma break (face details beyond that add diminishing returns
-        // and increase portrait-mode risk)
-        let compactFace = face;
-        if (compactFace.length > 200) {
-          const cut = compactFace.lastIndexOf(',', 200);
-          compactFace = cut > 100 ? compactFace.substring(0, cut).trim() : compactFace.substring(0, 200).trim();
-        }
+        // Extract just hair color+length for minimal tier
+        const hairMatch = face.match(/\b([\w-]+\s+)?(hair|bob|ponytail|bun|braids?|curls?|locs|afro)\b[^,]*/i);
+        const hairShort = hairMatch ? hairMatch[0].trim() : '';
+        // Extract just skin tone for moderate tier
+        const skinMatch = face.match(/\b[\w-]+\s+skin\b[^,]*/i);
+        const skinShort = skinMatch ? skinMatch[0].trim() : '';
 
-        const styledDesc = styleTransform(bodyDesc, compactFace);
-        // Cap at 500 chars total
-        characterIdentityTags[name] = styledDesc.length > 500 ? styledDesc.substring(0, 500).trim() : styledDesc;
+        // ── MINIMAL: silhouette only (wide shots — character is small in frame)
+        // Just enough to recognize "that's our character" at a distance
+        const minimalDesc = `a ${bodyDesc}${hairShort ? ', ' + hairShort : ''}${clothing ? ', wearing ' + clothing.substring(0, 60) : ''}`;
+
+        // ── MODERATE: action-level (medium shots — body visible, face not dominant)
+        // Body + hair + skin + clothing — no detailed facial features
+        let compactFaceMod = face;
+        if (compactFaceMod.length > 100) {
+          const cut = compactFaceMod.lastIndexOf(',', 100);
+          compactFaceMod = cut > 50 ? compactFaceMod.substring(0, cut).trim() : compactFaceMod.substring(0, 100).trim();
+        }
+        const moderateDesc = styleTransform(bodyDesc, compactFaceMod);
+
+        // ── FULL: portrait-level (close-ups — face is the subject)
+        let compactFaceFull = face;
+        if (compactFaceFull.length > 200) {
+          const cut = compactFaceFull.lastIndexOf(',', 200);
+          compactFaceFull = cut > 100 ? compactFaceFull.substring(0, cut).trim() : compactFaceFull.substring(0, 200).trim();
+        }
+        const fullDesc = styleTransform(bodyDesc, compactFaceFull);
+
+        characterTieredTags[name] = {
+          minimal: minimalDesc.length > 150 ? minimalDesc.substring(0, 150).trim() : minimalDesc,
+          moderate: moderateDesc.length > 300 ? moderateDesc.substring(0, 300).trim() : moderateDesc,
+          full: fullDesc.length > 500 ? fullDesc.substring(0, 500).trim() : fullDesc
+        };
 
         if (c.reference_prompt) {
           characterReferencePrompts[name] = c.reference_prompt;
         }
       }
     }
-    console.log(`👤 Character identity tags (${visualStyle}) built for: ${Object.keys(characterIdentityTags).join(', ') || 'none'}`);
+
+    // Backward-compat: keep characterIdentityTags pointing to moderate tier
+    const characterIdentityTags = {};
+    for (const [name, tiers] of Object.entries(characterTieredTags)) {
+      characterIdentityTags[name] = tiers.moderate;
+    }
+
+    console.log(`👤 Character identity tiers (${visualStyle}) built for: ${Object.keys(characterTieredTags).join(', ') || 'none'}`);
+    for (const [name, tiers] of Object.entries(characterTieredTags)) {
+      console.log(`   ${name}: minimal=${tiers.minimal.length}ch | moderate=${tiers.moderate.length}ch | full=${tiers.full.length}ch`);
+    }
     if (Object.keys(characterReferencePrompts).length > 0) {
       console.log(`📸 Reference prompts available for: ${Object.keys(characterReferencePrompts).join(', ')}`);
+    }
+
+
+    // ══════════════════════════════════════════════════════════════
+    // PROP EXTRACTOR — named objects from narration
+    // ══════════════════════════════════════════════════════════════
+    // The narration says "iPhone" but the LLM might write "phone" or
+    // even "laptop." We extract specific nouns from narration and
+    // inject them into the scene directions so Gemini uses them.
+    // Props are PART of the scene — never the SUBJECT.
+    // ══════════════════════════════════════════════════════════════
+
+    function extractNamedProps(narrationText) {
+      if (!narrationText) return [];
+      const props = [];
+      // Devices (specific beats generic)
+      const deviceMap = [
+        [/\biphone\b/i, 'an iPhone'],
+        [/\bipad\b/i, 'an iPad'],
+        [/\bmacbook\b/i, 'a MacBook'],
+        [/\bandroid\s*(phone|device)?\b/i, 'an Android phone'],
+        [/\bsamsung\b/i, 'a Samsung phone'],
+        [/\bgalaxy\b/i, 'a Samsung Galaxy'],
+        [/\blaptop\b/i, 'a laptop'],
+        [/\bcomputer\b/i, 'a computer'],
+        [/\btablet\b/i, 'a tablet'],
+        [/\bkindle\b/i, 'a Kindle'],
+      ];
+      // Vehicles
+      const vehicleMap = [
+        [/\btesla\b/i, 'a Tesla'],
+        [/\bporsche\b/i, 'a Porsche'],
+        [/\bbmw\b/i, 'a BMW'],
+        [/\buber\b/i, 'an Uber car'],
+      ];
+      // Brands/places
+      const brandMap = [
+        [/\bstarbucks\b/i, 'a Starbucks cup'],
+        [/\bamazon\s*package\b/i, 'an Amazon package'],
+        [/\bnetflix\b/i, 'a screen'],
+      ];
+      
+      for (const mapList of [deviceMap, vehicleMap, brandMap]) {
+        for (const [pattern, replacement] of mapList) {
+          if (pattern.test(narrationText)) {
+            props.push(replacement);
+            break; // one per category
+          }
+        }
+      }
+      return props;
     }
 
 
@@ -774,15 +880,26 @@ animation_prompt: "${(s.animation_prompt || '').substring(0, 200)}"
         const arcPosition = s.director?.phase || s.director?.arc_position || 'rising';
         const arcAnim = getArcAnimationGuidance(arcPosition);
         const sceneDuration = s.duration_seconds;
+        
+        // Extract named props from narration for prop fidelity
+        const namedProps = extractNamedProps(s.narration_text);
+        const propsLine = namedProps.length > 0
+          ? `\n  Named Props (use these EXACT names, as background props NOT subjects): ${namedProps.join(', ')}`
+          : '';
+
+        // Determine character description depth from shot type
+        const shotType = s.director?.shot_type || 'MS — Medium Shot';
+        const identityTier = getIdentityTier(shotType);
 
         if (!s.director) {
-          return `Scene ${s.scene_number}: (No director notes — generate from narration)\n  Narration: "${s.narration_text}"\n  Duration: ${sceneDuration}s\n  Arc Phase: ${arcPosition}\n  Arc Animation: ${arcAnim}`;
+          return `Scene ${s.scene_number}: (No director notes — generate from narration)\n  Narration: "${s.narration_text}"\n  Duration: ${sceneDuration}s\n  Character Detail Level: ${identityTier.toUpperCase()} (match description depth to this)\n  Arc Phase: ${arcPosition}\n  Arc Animation: ${arcAnim}${propsLine}`;
         }
         return `Scene ${s.scene_number}:
   Narration: "${s.narration_text}"
   Duration: ${sceneDuration}s
   Visual Concept: ${s.director.visual_concept}
   Shot Type: ${s.director.shot_type}
+  Character Detail Level: ${identityTier.toUpperCase()} (${identityTier === 'minimal' ? 'wide shot — silhouette only, NO face details' : identityTier === 'moderate' ? 'medium shot — body + hair + skin, brief features' : 'close-up — full identity for face consistency'})
   Camera Angle: ${s.director.camera_angle}
   Camera Movement: ${s.director.camera_movement}
   Lighting: ${s.director.lighting}
@@ -793,7 +910,7 @@ animation_prompt: "${(s.animation_prompt || '').substring(0, 200)}"
   Continuity: ${s.director.continuity_bridge || 'N/A'}
   Intensity: ${s.director.emotional_intensity || 0.5}
   Arc Phase: ${arcPosition}
-  Arc Animation: ${arcAnim}`;
+  Arc Animation: ${arcAnim}${propsLine}`;
       }).join('\n\n');
 
 
@@ -856,11 +973,27 @@ ${sceneDirections}
    Describe the COMPLETE environment: location, architecture, weather, time of day, foreground props, background depth.
    Example: "...a rain-slicked Tokyo street at dusk, neon signs reflecting in puddles between parked cars, steam rising from a ramen cart in the foreground, office towers vanishing into low clouds behind."
 
-   **STEP C — CHARACTER IN ACTION (next 1-2 sentences):**
-   Describe the character BODY-FIRST: build, height, posture, what they're wearing, what action they're doing. Then add identifying features (hair, skin, eyes) as a compact clause — NOT a portrait-style feature-by-feature breakdown.
-   GOOD: "A 5ft5 woman with an average build strides through the crosswalk clutching an iPhone, her shoulder-length dark brown hair with red highlights catching the neon light, light beige skin with rosy undertones, almond-shaped light brown eyes scanning the crowd."
-   BAD: "A woman with light beige skin tone with rosy undertones, oval face with soft features, almond-shaped light brown eyes with long lashes, slightly upturned nose with a delicate bridge, full lips with a natural pink hue, shoulder-length straight dark brown hair..." ← THIS IS A PORTRAIT CASTING SHEET. The image generator will render a portrait.
-   The character description must be EMBEDDED in action, not listed as a catalog of facial features.
+   **STEP C — CHARACTER (depth depends on shot type):**
+   The amount of character detail must match the shot framing. Over-describing a character in a wide shot causes the image generator to zoom into their face.
+
+   **WIDE/ENVIRONMENTAL shots (WS, EWS, MWS, HIGH ANGLE, OVERHEAD, ESTABLISHING):**
+   Character is SMALL in frame. Use MINIMAL description — just silhouette identifiers:
+   "A woman with a dark-brown bob in a lavender jacket walks through the crosswalk, phone in hand."
+   NO face details, NO eye color, NO skin texture. The character is a figure in a landscape.
+
+   **MEDIUM/ACTION shots (MS, LOW ANGLE, OTS, TRACKING, DUTCH):**
+   Character is visible but environment shares the frame. Use MODERATE description — body, hair, skin tone, action:
+   "A 5ft4 woman with dark-brown hair strides through the crowd, light-beige skin catching the neon glow, clutching her phone mid-step."
+   Brief identifying features WOVEN INTO ACTION — not a feature catalog.
+
+   **CLOSE-UP shots (CU, MCU, ECU, POV, INSERT):**
+   Character's face IS the subject. Use FULL description for consistency:
+   "Extreme close-up of a woman's face — light-beige skin with warm undertones, wide-set light-brown eyes glistening with unshed tears, her dark-brown hair falling across her forehead."
+
+   **PROP FIDELITY:**
+   When the narration mentions a specific device or object (iPhone, MacBook, Tesla, Starbucks cup), use that EXACT name in the prompt — NOT a generic replacement. But the prop is part of the scene, never the subject. The character and environment dominate; the prop is in their hand or nearby.
+   GOOD: "...clutching her iPhone as she crosses the street"
+   BAD: "...a close-up of an iPhone screen showing settings" ← prop became the subject
 
    **STEP D — ATMOSPHERE + STYLE (final sentence):**
    End with mood, lighting, and the style quality suffix.
@@ -869,7 +1002,8 @@ ${sceneDirections}
    **THE GOLDEN RULE:** If the image generator only renders the first 200 characters of your prompt, would it produce a SCENE or a PORTRAIT? It MUST produce a scene. That means FRAMING + ENVIRONMENT must come first, ALWAYS.
 
    Additional rules:
-     • If a character appears → include their physical description EVERY TIME, but in the body-first action format shown above — NOT as a portrait feature list
+     • Character description depth MUST match shot type — wide shots get minimal, medium gets moderate, close-ups get full. NEVER dump a full casting-sheet description into a wide shot.
+     • If the narration mentions a specific prop (iPhone, MacBook, Tesla, etc.), use that exact name — but keep it as a prop in the character's hand or environment, NOT the visual subject.
      • ${orientationConfig.composition}
    - FORBIDDEN: text, words, letters, numbers, charts, graphs, signs in the image
    - FORBIDDEN: Describing what's ON a screen, phone, laptop, book, receipt, bill, letter, contract, or any document. The image generator WILL try to render it as garbled text. Instead, show the character's emotional reaction to the object from a wider angle. Example: "crumpled bill clutched in trembling hands, face pale under harsh light" NOT "medical bill showing $45,000 in charges"
@@ -975,109 +1109,107 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
           }
 
 
-          // ═══ INLINE CHARACTER IDENTITY INJECTION ═══
-          // Image gen models don't do name resolution — "Elena" in a cast block
-          // won't connect to "Elena" in the body. We must inline descriptions
-          // directly where each character is mentioned.
+          // ═══ SHOT-TYPE-AWARE CHARACTER IDENTITY INJECTION ═══
+          // The amount of character detail injected depends on the shot type.
+          // Wide shots: minimal (silhouette). Medium: moderate. Close-ups: full.
+          // This prevents the floating-head problem where detailed face descriptions
+          // in wide shots cause Grok to zoom into the face.
 
+          const shotType = s.director?.shot_type || 'MS — Medium Shot';
+          const identityTier = getIdentityTier(shotType);
 
-          // Step 1: Count how many known characters appear in this scene
+          // Step 1: Find which known characters appear in this scene
           const sceneCast = [];
-          for (const [charName, charDesc] of Object.entries(characterIdentityTags)) {
+          for (const [charName] of Object.entries(characterTieredTags)) {
             const namePattern = new RegExp(`\\b${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
             if (namePattern.test(rawPrompt)) {
-              sceneCast.push({ name: charName, desc: charDesc });
+              sceneCast.push({ name: charName, tiers: characterTieredTags[charName] });
             }
           }
-
 
           // Step 2: Check for generic references → map to primary character
           const genericRefs = /\b(the protagonist|the main character|the character|the figure|the hero|the narrator)\b/gi;
           if (genericRefs.test(rawPrompt) && characters.length > 0) {
             const primaryName = (characters[0].name || '').toLowerCase().trim();
-            if (primaryName && !sceneCast.find(c => c.name === primaryName)) {
-              sceneCast.unshift({ name: primaryName, desc: characterIdentityTags[primaryName] || '' });
+            if (primaryName && characterTieredTags[primaryName] && !sceneCast.find(c => c.name === primaryName)) {
+              sceneCast.unshift({ name: primaryName, tiers: characterTieredTags[primaryName] });
             }
           }
 
-
           if (sceneCast.length > 0) {
-            // Step 3: Budget per character based on count
-            // Total char budget for ALL characters: ~600 chars (increased since we only inject identity, not clothing)
-            const totalCharBudget = 600;
-            const perCharBudget = Math.floor(totalCharBudget / sceneCast.length);
-
-
-            // Step 4: Build compact inline descriptions
-            const inlineDescs = {};
-            for (const c of sceneCast) {
-              let desc = c.desc || '';
-              if (desc.length > perCharBudget) {
-                const lastComma = desc.lastIndexOf(',', perCharBudget);
-                desc = lastComma > perCharBudget * 0.5
-                  ? desc.substring(0, lastComma).trim()
-                  : desc.substring(0, perCharBudget).trim();
-              }
-              inlineDescs[c.name] = desc;
-            }
-
-
-            // Step 5: ALWAYS inject canonical identity — NEVER skip
-            // The LLM's description is unreliable for consistency.
-            // We strip whatever the LLM wrote and replace with our identity_core tag.
             let modifiedPrompt = rawPrompt;
 
-
-            for (const [charName, desc] of Object.entries(inlineDescs)) {
+            for (const c of sceneCast) {
+              // Pick the right tier based on shot type
+              const desc = c.tiers[identityTier] || c.tiers.moderate;
               if (!desc) continue;
-              const escapedName = charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-              // Strip any LLM parentheticals like "Elena (a young woman with dark hair)"
-              const nameWithParens = new RegExp(
-                `\\b${escapedName}\\b\\s*\\([^)]{5,}\\)`, 'gi'
+              const escapedName = c.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+              // Strip any LLM-generated descriptions (parentheticals + inline)
+              modifiedPrompt = modifiedPrompt.replace(
+                new RegExp(`\\b${escapedName}\\b\\s*\\([^)]{5,}\\)`, 'gi'), c.name
               );
-              modifiedPrompt = modifiedPrompt.replace(nameWithParens, charName);
-
-              // Strip any LLM inline description after name:
-              // "Elena, a tall woman with flowing dark hair and green eyes, reaches..."
-              // → "Elena reaches..." (so we can inject our canonical version)
-              const nameWithInlineDesc = new RegExp(
-                `\\b${escapedName}\\b,\\s*a\\s[^,]{10,}(?:,\\s*[^,]{5,}){0,4},\\s*`, 'gi'
+              modifiedPrompt = modifiedPrompt.replace(
+                new RegExp(`\\b${escapedName}\\b,\\s*a\\s[^,]{10,}(?:,\\s*[^,]{5,}){0,4},\\s*`, 'gi'), `${c.name}, `
               );
-              modifiedPrompt = modifiedPrompt.replace(nameWithInlineDesc, `${charName}, `);
 
-              // Replace FIRST occurrence: "Elena, reaches..." → "a [canonical identity], reaches..."
-              const firstOccurrence = new RegExp(`\\b${escapedName}\\b`, 'i');
-              const match = modifiedPrompt.match(firstOccurrence);
-              if (match) {
-                const idx = modifiedPrompt.indexOf(match[0]);
+              // Inject the tier-appropriate description at first name occurrence
+              const firstOcc = modifiedPrompt.match(new RegExp(`\\b${escapedName}\\b`, 'i'));
+              if (firstOcc) {
+                const idx = modifiedPrompt.indexOf(firstOcc[0]);
                 const before = modifiedPrompt.substring(0, idx);
-                const after = modifiedPrompt.substring(idx + match[0].length);
-                modifiedPrompt = `${before}a ${desc}${after}`;
-
-                console.log(`👤 Scene ${s.scene_number}: INJECTED "${charName}" identity (${desc.length} chars)`);
+                const after = modifiedPrompt.substring(idx + firstOcc[0].length);
+                modifiedPrompt = `${before}${desc}${after}`;
+                console.log(`👤 Scene ${s.scene_number}: ${identityTier.toUpperCase()} identity for "${c.name}" (${desc.length} chars)`);
               }
             }
 
-
-            // Step 6: Replace generic references with primary character description
+            // Replace generic "the protagonist" etc with primary character's tiered description
             if (characters.length > 0) {
               const primaryName = (characters[0].name || '').toLowerCase().trim();
-              const primaryDesc = inlineDescs[primaryName];
-              if (primaryDesc) {
-                modifiedPrompt = modifiedPrompt.replace(genericRefs, `a ${primaryDesc}`);
+              const primaryTiers = characterTieredTags[primaryName];
+              if (primaryTiers) {
+                const primaryDesc = primaryTiers[identityTier] || primaryTiers.moderate;
+                modifiedPrompt = modifiedPrompt.replace(genericRefs, primaryDesc);
 
-
-                // Also handle "the man"/"the woman" only if single character in scene
+                // "the man"/"the woman" → minimal desc only (these are always background references)
                 if (sceneCast.length === 1) {
-                  modifiedPrompt = modifiedPrompt
-                    .replace(/\bthe (man|woman|boy|girl|person)\b/gi, `the ${primaryDesc.split(',').slice(0, 3).join(',')}`);
+                  modifiedPrompt = modifiedPrompt.replace(
+                    /\bthe (man|woman|boy|girl|person)\b/gi,
+                    primaryTiers.minimal
+                  );
                 }
               }
             }
 
-
             rawPrompt = modifiedPrompt;
+          }
+
+          // ═══ PROP FIDELITY — inject named props from narration ═══
+          // If narration says "iPhone" but LLM wrote "phone", fix it
+          const namedProps = extractNamedProps(s.narration_text);
+          if (namedProps.length > 0) {
+            for (const prop of namedProps) {
+              const genericProp = prop.replace(/^an?\s+/i, ''); // "an iPhone" → "iPhone"
+              // Only inject if a generic version exists in the prompt
+              const genericPatterns = {
+                'iPhone': /\b(her|his|the|a)\s+phone\b/i,
+                'iPad': /\b(her|his|the|a)\s+tablet\b/i,
+                'MacBook': /\b(her|his|the|a)\s+laptop\b/i,
+                'Android phone': /\b(her|his|the|a)\s+phone\b/i,
+                'Samsung phone': /\b(her|his|the|a)\s+phone\b/i,
+                'Samsung Galaxy': /\b(her|his|the|a)\s+phone\b/i,
+                'Tesla': /\b(her|his|the|a)\s+(car|vehicle)\b/i,
+                'Porsche': /\b(her|his|the|a)\s+(car|vehicle|sports\s+car)\b/i,
+                'BMW': /\b(her|his|the|a)\s+(car|vehicle)\b/i,
+              };
+              const pattern = genericPatterns[genericProp];
+              if (pattern && pattern.test(rawPrompt)) {
+                rawPrompt = rawPrompt.replace(pattern, `$1 ${genericProp}`);
+                console.log(`📱 Scene ${s.scene_number}: prop "${genericProp}" injected (replaced generic)`);
+              }
+            }
           }
 
 
