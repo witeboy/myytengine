@@ -873,6 +873,9 @@ ${sceneDirections}
      • If a character appears → include their physical description EVERY TIME, but in the body-first action format shown above — NOT as a portrait feature list
      • ${orientationConfig.composition}
    - FORBIDDEN: text, words, letters, numbers, charts, graphs, signs in the image
+   - FORBIDDEN: Describing what's ON a screen, phone, laptop, book, receipt, bill, letter, contract, or any document. The image generator WILL try to render it as garbled text. Instead, show the character's emotional reaction to the object from a wider angle. Example: "crumpled bill clutched in trembling hands, face pale under harsh light" NOT "medical bill showing $45,000 in charges"
+   - FORBIDDEN: Dollar amounts ($X), percentages, dates, names, or any specific text that would appear on a prop. These render as random garbled characters.
+   - When a character holds or uses an object (phone, document, tool, weapon, cup), describe it from a MEDIUM or WIDER shot. Close-ups of hand-object interaction produce broken physics (fingers clipping through objects, impossible grips). Let the object be PART of the scene, not the SUBJECT of it.
    - Abstract concepts → PHYSICAL METAPHORS
    - End with: "ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image"
 
