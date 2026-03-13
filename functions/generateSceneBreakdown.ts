@@ -494,17 +494,8 @@ Deno.serve(async (req) => {
     if (startBatch === 0) {
       // ── Batch 0: wipe old scenes, run story analysis, build blueprint from scratch ──
       const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-      if (oldScenes.length > 0) {
-        console.log(`🗑️ Deleting ${oldScenes.length} old scenes...`);
-        // Delete in parallel batches of 10 instead of one-by-one
-        for (let i = 0; i < oldScenes.length; i += 10) {
-          await Promise.all(
-            oldScenes.slice(i, i + 10).map(s => 
-              base44.asServiceRole.entities.Scenes.delete(s.id).catch(_ => {})
-            )
-          );
-        }
-        console.log(`✓ Old scenes deleted`);
+      for (const s of oldScenes) {
+        await base44.asServiceRole.entities.Scenes.delete(s.id);
       }
 
       const nicheProfile = getNicheDirectorProfile(niche);
@@ -590,7 +581,7 @@ ${finalScript}
       console.log(`   Start times: [${beatStartTimes.map(t => t.toFixed(1)).join(', ')}]`);
       console.log(`   Total duration: ${beatDurations.reduce((a,b)=>a+b,0).toFixed(1)}s`);
 
-      // Build blueprint in memory — avoids stale re-read after update
+      // Build FULL blueprint in memory (for use within this call)
       blueprint = {
         story_analysis: storyAnalysis,
         phases: phases.map(p => ({ name: p.name, purpose: p.purpose, scene_count: p.scenes })),
@@ -601,20 +592,22 @@ ${finalScript}
         scenes: []
       };
 
-      // ── Slim blueprint for DB save — niche_profile and beat arrays are bulky ──
-      // niche_profile can be re-derived from project.niche on read.
-      // beat_durations/start_times are already saved to ProductionSettings.
-      // Keep only what subsequent batches NEED: story_analysis + phases + scenes.
+      // Build SLIM version for DB save — strip everything that exists elsewhere:
+      // - niche_profile: re-derived from getNicheDirectorProfile(niche) 
+      // - beat arrays: saved to ProductionSettings
+      // - characters: saved to project.character_descriptions
+      const slimStoryAnalysis = { ...storyAnalysis };
+      delete slimStoryAnalysis.characters;  // saved separately in character_descriptions field
+
       const slimBlueprint = {
-        story_analysis: storyAnalysis,
+        story_analysis: slimStoryAnalysis,
         phases: blueprint.phases,
         total_target_scenes: totalTargetScenes,
-        niche: niche, // store key, re-derive profile on read
+        niche: niche,
         scenes: []
       };
-
       const blueprintJson = JSON.stringify(slimBlueprint);
-      console.log(`📦 Blueprint size: ${blueprintJson.length} chars (slim, no niche_profile/beats)`);
+      console.log(`📦 Blueprint size for DB: ${blueprintJson.length} chars`);
 
       await base44.asServiceRole.entities.Projects.update(project_id, {
         status: "scene_breakdown",
@@ -658,16 +651,16 @@ ${finalScript}
       console.log(`  Characters: ${storyAnalysis.characters?.map(c => c.name).join(', ') || 'None identified'}`);
       console.log(`  Motifs: ${storyAnalysis.recurring_visual_motifs?.join(', ') || 'N/A'}`);
 
-      // ── Verify the blueprint actually persisted before telling frontend to proceed ──
+      // ── Verify the blueprint actually saved ──
       const verifyProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
       if (!verifyProject?.scene_blueprint) {
-        console.error('❌ Blueprint save verification FAILED — field is empty after write');
-        // Return error so frontend retries batch 0, NOT proceeds to batch 1
-        return Response.json({ error: 'Blueprint save failed — please retry' }, { status: 500 });
+        console.error(`❌ Blueprint verification FAILED — field empty after write (tried ${blueprintJson.length} chars)`);
+        return Response.json({ error: 'Blueprint save failed — field may have a size limit. Please retry.' }, { status: 500 });
       }
-      console.log(`✓ Blueprint verified in DB (${verifyProject.scene_blueprint.length} chars)`);
+      console.log(`✓ Blueprint verified in DB (${verifyProject.scene_blueprint.length} chars saved)`);
 
       // ── Batch 0 DONE — return immediately. Phases start at batch_index=1 ──
+      // This keeps batch 0 under the timeout (delete + Gemini analysis + saves ≈ 15s)
       return Response.json({
         success: true,
         done: false,
@@ -686,8 +679,8 @@ ${finalScript}
       // ── Subsequent batches (1+): blueprint already persisted, read from DB ──
       // Base44's DB is eventually consistent — the write from batch 0 may not
       // have propagated yet. Retry up to 3 times with increasing delays.
-      const MAX_READ_RETRIES = 6;
-      const READ_DELAY_MS = [500, 1000, 1500, 2000, 2500, 3000]; // fast polls, total 10.5s max
+      const MAX_READ_RETRIES = 3;
+      const READ_DELAY_MS = [2000, 4000, 6000]; // escalating wait
 
       for (let readAttempt = 0; readAttempt < MAX_READ_RETRIES; readAttempt++) {
         freshProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
@@ -716,31 +709,29 @@ ${finalScript}
 
     // ══════════════════════════════════════════════════════════════
     // At this point we're in batch 1+ (phase processing).
-    // blueprint is loaded from DB (slim version — no niche_profile or beats).
-    // Re-derive niche_profile from the stored niche key.
-    // Re-read beat arrays from ProductionSettings.
+    // Blueprint is SLIM — no niche_profile or beat arrays.
+    // Re-derive them from their original sources.
     // ══════════════════════════════════════════════════════════════
 
-    // Re-derive niche profile (stripped from blueprint to save space)
-    const storedNiche = blueprint.niche || niche;
-    const nicheProfile = blueprint.niche_profile || getNicheDirectorProfile(storedNiche);
-
-    // Re-read beat arrays from ProductionSettings (stripped from blueprint)
-    let beatDurations = blueprint.beat_durations || [];
-    let beatStartTimes = blueprint.beat_start_times || [];
-    if (beatDurations.length === 0) {
-      try {
-        const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
-        if (psList[0]?.beat_durations) {
-          beatDurations = JSON.parse(psList[0].beat_durations);
-          beatStartTimes = JSON.parse(psList[0].beat_start_times || '[]');
-        }
-      } catch (_) {
-        console.warn('⚠️ Could not read beat arrays from ProductionSettings');
-      }
-    }
-
     const storyAnalysis = blueprint.story_analysis;
+
+    // Re-derive niche profile from the niche key (stripped from blueprint to save space)
+    const storedNiche = blueprint.niche || niche;
+    const nicheProfile = getNicheDirectorProfile(storedNiche);
+
+    // Re-read beat arrays from ProductionSettings (stripped from blueprint to save space)
+    let beatDurations = [];
+    let beatStartTimes = [];
+    try {
+      const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
+      if (psList[0]?.beat_durations) {
+        beatDurations = JSON.parse(psList[0].beat_durations);
+        beatStartTimes = JSON.parse(psList[0].beat_start_times || '[]');
+        console.log(`✓ Beat arrays loaded from ProductionSettings (${beatDurations.length} durations)`);
+      }
+    } catch (_) {
+      console.warn('⚠️ Could not read beat arrays from ProductionSettings — using empty');
+    }
 
     let characters = [];
     if (freshProject.character_descriptions) {
@@ -934,11 +925,28 @@ NEVER describe what text appears on any surface. NEVER include dollar amounts, n
             || scene.duration_seconds 
             || 5;
 
+          // Store director data on the Scene record itself (not just in blueprint)
+          // The prompt generator reads this via extractDirectorNotes() fallback
+          const directorNotes = {
+            visual_concept: scene.visual_concept,
+            shot_type: scene.shot_type,
+            camera_angle: scene.camera_angle,
+            camera_movement: scene.camera_movement,
+            lighting: scene.lighting,
+            color_palette: scene.color_palette,
+            mood: scene.mood,
+            depth_of_field: scene.depth_of_field,
+            niche_visual_element: scene.niche_visual_element,
+            continuity_bridge: scene.continuity_bridge,
+            emotional_intensity: scene.emotional_intensity || 0.5,
+            phase: currentChunk.phase
+          };
+
           await base44.asServiceRole.entities.Scenes.create({
             project_id,
             scene_number: sceneNum,
             narration_text: cleanedNarration,
-            image_prompt: "",
+            image_prompt: `DIRECTOR_NOTES:${JSON.stringify(directorNotes)}`,
             animation_prompt: "",
             duration_seconds: targetDuration,
             status: "breakdown_ready"
@@ -968,9 +976,26 @@ NEVER describe what text appears on any surface. NEVER include dollar amounts, n
       blueprint.scenes = [...blueprint.scenes, ...newBlueprintScenes];
       grandTotalCreated += scenesCreated;
 
-      // Save after this phase — progress persists
+      // Save SLIM blueprint — only last 5 scenes for continuity (prompt generator reads last 3)
+      // Strip characters (in character_descriptions field) and full scene history
+      const slimSave = {
+        story_analysis: (() => { const sa = { ...blueprint.story_analysis }; delete sa.characters; return sa; })(),
+        phases: blueprint.phases,
+        total_target_scenes: blueprint.total_target_scenes || totalTargetScenes,
+        niche: blueprint.niche || niche,
+        scenes: blueprint.scenes.slice(-5).map(s => ({
+          scene_number: s.scene_number, phase: s.phase,
+          visual_concept: s.visual_concept, shot_type: s.shot_type,
+          mood: s.mood, color_palette: s.color_palette,
+          continuity_bridge: s.continuity_bridge
+        })),
+        total_scenes_created: blueprint.scenes.length
+      };
+      const saveJson = JSON.stringify(slimSave);
+      console.log(`📦 Phase save: ${saveJson.length} chars (${blueprint.scenes.length} total scenes, last 5 kept)`);
+
       await base44.asServiceRole.entities.Projects.update(project_id, {
-        scene_blueprint: JSON.stringify(blueprint)
+        scene_blueprint: saveJson
       });
 
       console.log(`✓ Phase ${currentChunk.phase} complete — ${scenesCreated} scenes | Running total: ${blueprint.scenes.length}/${totalTargetScenes}`);
