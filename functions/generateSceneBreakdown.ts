@@ -494,8 +494,17 @@ Deno.serve(async (req) => {
     if (startBatch === 0) {
       // ── Batch 0: wipe old scenes, run story analysis, build blueprint from scratch ──
       const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-      for (const s of oldScenes) {
-        await base44.asServiceRole.entities.Scenes.delete(s.id);
+      if (oldScenes.length > 0) {
+        console.log(`🗑️ Deleting ${oldScenes.length} old scenes...`);
+        // Delete in parallel batches of 10 instead of one-by-one
+        for (let i = 0; i < oldScenes.length; i += 10) {
+          await Promise.all(
+            oldScenes.slice(i, i + 10).map(s => 
+              base44.asServiceRole.entities.Scenes.delete(s.id).catch(_ => {})
+            )
+          );
+        }
+        console.log(`✓ Old scenes deleted`);
       }
 
       const nicheProfile = getNicheDirectorProfile(niche);
@@ -634,8 +643,16 @@ ${finalScript}
       console.log(`  Characters: ${storyAnalysis.characters?.map(c => c.name).join(', ') || 'None identified'}`);
       console.log(`  Motifs: ${storyAnalysis.recurring_visual_motifs?.join(', ') || 'N/A'}`);
 
+      // ── Verify the blueprint actually persisted before telling frontend to proceed ──
+      const verifyProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
+      if (!verifyProject?.scene_blueprint) {
+        console.error('❌ Blueprint save verification FAILED — field is empty after write');
+        // Return error so frontend retries batch 0, NOT proceeds to batch 1
+        return Response.json({ error: 'Blueprint save failed — please retry' }, { status: 500 });
+      }
+      console.log(`✓ Blueprint verified in DB (${verifyProject.scene_blueprint.length} chars)`);
+
       // ── Batch 0 DONE — return immediately. Phases start at batch_index=1 ──
-      // This keeps batch 0 under the timeout (delete + Gemini analysis + saves ≈ 15s)
       return Response.json({
         success: true,
         done: false,
