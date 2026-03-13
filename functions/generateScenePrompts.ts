@@ -382,10 +382,11 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
   enhanced = enhanced.replace(/\b\d{3,4}\s*[x×]\s*\d{3,4}\s*(pixels?|px)?\s*\.?\s*/gi, '');
 
 
-  // Ensure style prefix is present
+  // Ensure style quality suffix is present — APPEND at END, never prepend
+  // The first 200 chars of the prompt must be FRAMING + ENVIRONMENT, not style language
   const styleCheck = styleConfig.positive.substring(0, 30).toLowerCase();
   if (!enhanced.toLowerCase().includes(styleCheck.substring(0, 20))) {
-    enhanced = `${styleConfig.positive}. ${enhanced}`;
+    enhanced = `${enhanced}. ${styleConfig.positive}`;
   }
 
 
@@ -528,8 +529,8 @@ Deno.serve(async (req) => {
     }
 
 
-    const framingPrefix = "charater wide shot showing complete scene , detailed sharp environment with visible props and architecture, character mid-action in a populated world";
-    const promptPrefix = `${framingPrefix}, ${styleConfig.positive}`;
+    const framingPrefix = "Full body wide shot showing complete scene with detailed sharp environment, visible architecture and props, character shown head to feet mid-action in a populated world";
+    const promptPrefix = `${framingPrefix}. `;
 
 
     let characters = [];
@@ -553,45 +554,81 @@ Deno.serve(async (req) => {
 
 
     // ═══ CHARACTER IDENTITY TAGS — style-aware, force-injected into EVERY prompt post-LLM ═══
-    // Uses ONLY identity_core (immutable features) — NOT clothing/accessories.
-    // Clothing is handled per-scene by the LLM.
+    // CRITICAL: Tags are structured BODY-FIRST to prevent Grok from rendering portraits.
+    // The identity_core from breakdown is a face-first casting sheet (great for consistency)
+    // but when injected verbatim, Grok reads "oval face, almond eyes, upturned nose..."
+    // and commits to rendering a portrait. We restructure it here:
+    //   → body/build/height/posture FIRST (sets "this is a person in a scene" framing)
+    //   → face/hair as a COMPACT trailing clause (maintains identity without triggering portrait mode)
 
 
+    // Split identity_core into body traits vs face traits
+    function splitIdentity(rawDesc) {
+      // Body keywords: anything about build, height, body shape, posture
+      const bodyPatterns = /\b(\d+\s*ft\s*\d+|\d+\s*cm|\d+'?\d*"?|tall|short|petite|average build|athletic build|slim build|heavy build|lean|stocky|slender|muscular|broad shoulders|narrow shoulders|long neck|long legs|curvy|hourglass|lanky|heavyset|medium build|thin build|stout|wide hips|narrow hips|prominent collarbones|small frame|large frame)\b/gi;
+      // Age keywords
+      const agePatterns = /\b(\d{1,2}\s*years?\s*old|\d{1,2}-year-old|in\s+(?:her|his|their)\s+(?:early|mid|late)\s+\d{2}s|young\s+(?:woman|man)|middle[\s-]aged|elderly|teenage)\b/gi;
+      // Gender
+      const genderPatterns = /\b(female|male|woman|man|non[\s-]binary)\b/gi;
+
+      const bodyTraits = [];
+      const ageMatches = rawDesc.match(agePatterns) || [];
+      const genderMatches = rawDesc.match(genderPatterns) || [];
+      const bodyMatches = rawDesc.match(bodyPatterns) || [];
+
+      bodyTraits.push(...ageMatches.slice(0, 1), ...genderMatches.slice(0, 1), ...bodyMatches);
+
+      // Everything else is face/hair (the identifying features)
+      let faceDesc = rawDesc;
+      for (const trait of bodyTraits) {
+        faceDesc = faceDesc.replace(trait, '');
+      }
+      // Clean up leftover commas and spaces
+      faceDesc = faceDesc.replace(/,\s*,/g, ',').replace(/^\s*,\s*/, '').replace(/\s*,\s*$/, '').replace(/\s{2,}/g, ' ').trim();
+
+      return {
+        body: bodyTraits.join(', ').trim(),
+        face: faceDesc
+      };
+    }
+
+    // Style transforms — now structured BODY-FIRST
+    // Pattern: "[style] [body build + action framing], [compressed face/hair clause]"
     const styleCharacterRules = {
-      cinematic_realistic: (desc) =>
-        `photorealistic human with ${desc}, natural skin texture with visible pores, natural hair with individual strand detail, cinematic three-point lighting on face`,
-      photorealistic_4k: (desc) =>
-        `DSLR-quality photorealistic person with ${desc}, razor-sharp skin detail, natural hair strands, authentic micro-expressions, editorial photography lighting`,
-      anime: (desc) =>
-        `anime-style character with ${desc}, large expressive detailed eyes with highlight reflections, clean sharp linework, cel-shaded smooth skin, stylized colorful flowing hair, anime proportions with slightly elongated limbs`,
-      cinematic_anime: (desc) =>
-        `cinematic anime character with ${desc}, Makoto Shinkai quality rendering, sharp detailed linework with subtle cel-shading gradients, dramatic volumetric lighting on face and hair, flowing hair interacting with light and wind, rich color depth on skin and clothing`,
-     cartoon_2d: (desc) =>
-      `2D cartoon character with ${desc}, realistic adult human proportions with cartoon stylization, bold clean black outlines around entire body, flat vibrant color fills with subtle gradient shading, normal-sized head proportional to body, expressive eyes with clean outlines, dynamic pose`,
-     picstory_cocomelon: (desc) =>
-      `adorable 3D rendered character with ${desc}, realistic human proportions with soft 3D stylization, soft rounded plastic-smooth features, expressive eyes, normal-sized head proportional to body, warm expression, Pixar animation quality`,
-      cinematic_picstory: (desc) =>
-        `Pixar-quality 3D animated character with ${desc}, subsurface scattering on skin giving warm translucent glow, expressive stylized features with realistic proportions, dramatic studio rim lighting`,
-      oil_painting: (desc) =>
-        `oil-painted character with ${desc}, visible impasto brushstrokes on skin in warm pigment tones, classical portrait lighting with Rembrandt chiaroscuro, soft painterly edges on hair, rich varnish glow, canvas texture visible on face`,
-      watercolor: (desc) =>
-        `watercolor-rendered character with ${desc}, soft translucent color washes for skin with paper grain showing through, delicate wet-on-wet blending on hair, gentle bleeding edges, luminous transparency where white paper peeks through`,
-      comic_book: (desc) =>
-        `comic book character with ${desc}, bold black ink outlines, halftone dot shading on skin, vibrant saturated flat colors with dramatic shadow areas, dynamic foreshortened pose, Ben-Day dot pattern on mid-tones, Marvel/DC art quality`,
-      humpty_dumpty: (desc) =>
-        `whimsical storybook character with ${desc}, rounded friendly soft shapes, gentle watercolor wash coloring, warm nostalgic fairy tale proportions, delicate cross-hatching for shading, vintage children's book illustration charm, golden warm lighting`,
-      harry_potter: (desc) =>
-        `fantasy character with ${desc}, warm candlelit skin tones with amber glow, magical golden particle effects around edges, gothic atmosphere, jewel-tone color palette`,
-      "3d_whiteboard_cartoon": (desc) =>
-      `3D whiteboard cartoon character with ${desc}, realistic adult human proportions with whiteboard stylization, bold consistent black ink outlines around entire body, bright cheerful flat color fills with single-tone cel-shading, normal-sized head proportional to body, defined eyebrows, simple nose, warm peach-brown skin tones`,
-     low_poly_3d_cartoon: (desc) =>
-        `low-poly 3D character with ${desc}, realistic adult human proportions with all features built from visible flat-shaded polygon facets and triangular faces, normal-sized head proportional to body, angular geometric nose, expressive eyes, geometric hair, warm peach-tan skin with polygon-edge shading, matte clay-toy quality`,
-      skeleton_protagonist: (desc) =>
-        `photorealistic transparent skeleton with clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets, ${desc}, interacting with photorealistic environment and humans`
+      cinematic_realistic: (bodyDesc, faceDesc) =>
+        `photorealistic ${bodyDesc} shown full body in the scene, ${faceDesc}, natural skin texture, cinematic lighting`,
+      photorealistic_4k: (bodyDesc, faceDesc) =>
+        `DSLR-quality photorealistic ${bodyDesc} shown full body, ${faceDesc}, razor-sharp detail, editorial photography`,
+      anime: (bodyDesc, faceDesc) =>
+        `anime-style ${bodyDesc} shown full figure, ${faceDesc}, large expressive eyes with highlight reflections, clean linework, cel-shaded`,
+      cinematic_anime: (bodyDesc, faceDesc) =>
+        `cinematic anime ${bodyDesc} shown full body, ${faceDesc}, Makoto Shinkai quality, dramatic volumetric lighting, flowing hair`,
+     cartoon_2d: (bodyDesc, faceDesc) =>
+        `2D cartoon ${bodyDesc} shown full body with bold outlines, ${faceDesc}, flat vibrant colors, dynamic pose, normal proportions`,
+     picstory_cocomelon: (bodyDesc, faceDesc) =>
+        `3D rendered ${bodyDesc} shown full body, ${faceDesc}, soft rounded plastic-smooth features, pastel colors, Pixar Junior quality`,
+      cinematic_picstory: (bodyDesc, faceDesc) =>
+        `Pixar-quality 3D animated ${bodyDesc} shown full body in the scene, ${faceDesc}, subsurface scattering on skin, expressive features, dramatic studio rim lighting`,
+      oil_painting: (bodyDesc, faceDesc) =>
+        `oil-painted ${bodyDesc} shown full figure, ${faceDesc}, visible impasto brushstrokes, Rembrandt chiaroscuro lighting`,
+      watercolor: (bodyDesc, faceDesc) =>
+        `watercolor-rendered ${bodyDesc} shown full figure, ${faceDesc}, soft translucent washes, paper grain showing through`,
+      comic_book: (bodyDesc, faceDesc) =>
+        `comic book ${bodyDesc} shown full body in dynamic pose, ${faceDesc}, bold black ink outlines, halftone shading, Marvel/DC quality`,
+      humpty_dumpty: (bodyDesc, faceDesc) =>
+        `storybook ${bodyDesc} shown full figure, ${faceDesc}, rounded friendly shapes, gentle watercolor washes, fairy tale warmth`,
+      harry_potter: (bodyDesc, faceDesc) =>
+        `fantasy ${bodyDesc} shown full body, ${faceDesc}, warm candlelit tones, magical golden particles, gothic atmosphere`,
+      "3d_whiteboard_cartoon": (bodyDesc, faceDesc) =>
+        `3D whiteboard cartoon ${bodyDesc} shown full body with bold outlines, ${faceDesc}, flat color fills, normal proportions, warm peach-brown skin`,
+     low_poly_3d_cartoon: (bodyDesc, faceDesc) =>
+        `low-poly 3D ${bodyDesc} shown full body from flat-shaded polygons, ${faceDesc}, angular geometric features, matte clay-toy quality`,
+      skeleton_protagonist: (bodyDesc, faceDesc) =>
+        `photorealistic transparent skeleton with clear glass-like body shell shown full body in the scene, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets, ${faceDesc}`
     };
 
 
-    const defaultStyleTransform = (desc) => `character with ${desc}, detailed and consistent appearance`;
+    const defaultStyleTransform = (bodyDesc, faceDesc) => `${bodyDesc} shown full body in the scene, ${faceDesc}`;
 
 
     const characterIdentityTags = {};
@@ -601,15 +638,25 @@ Deno.serve(async (req) => {
 
     for (const c of characters) {
       const name = (c.name || '').toLowerCase().trim();
-      // Use identity_core (new, immutable only) or fall back to visual_description (old, mixed)
       const identityDesc = c.identity_core || c.visual_description || c.description || '';
       if (name && identityDesc) {
-        // Transform ONLY the immutable identity into style-specific rendering language
-        const styledDesc = styleTransform(identityDesc);
-        // Cap at 500 chars — identity needs room since clothing is excluded
+        // Split the casting-sheet identity into body (framing) and face (identification)
+        const { body, face } = splitIdentity(identityDesc);
+        const bodyDesc = body || 'adult character';
+
+        // Compress face description — keep only the most identifying features
+        // Trim to ~200 chars at a comma break (face details beyond that add diminishing returns
+        // and increase portrait-mode risk)
+        let compactFace = face;
+        if (compactFace.length > 200) {
+          const cut = compactFace.lastIndexOf(',', 200);
+          compactFace = cut > 100 ? compactFace.substring(0, cut).trim() : compactFace.substring(0, 200).trim();
+        }
+
+        const styledDesc = styleTransform(bodyDesc, compactFace);
+        // Cap at 500 chars total
         characterIdentityTags[name] = styledDesc.length > 500 ? styledDesc.substring(0, 500).trim() : styledDesc;
 
-        // Store reference prompt for hero image generation (used by image gen pipeline)
         if (c.reference_prompt) {
           characterReferencePrompts[name] = c.reference_prompt;
         }
@@ -777,7 +824,7 @@ ${qualityAnchors}
 **ORIENTATION:** ${orientationConfig.format}
 
 
-**STYLE PREFIX (prepended automatically — you still MUST start each image_prompt with it):**
+**STYLE QUALITY SUFFIX (append at the END of each image_prompt, NOT the beginning):**
 "${styleConfig.positive}"
 ${styleBodyBlock}
 
@@ -800,18 +847,30 @@ ${sceneDirections}
 **YOUR TASK — for EACH scene produce:**
 
 
-1. **image_prompt** — Production-ready AI image generation prompt:
-   - START with the style prefix: "${styleConfig.positive}."
-   - Then write the SCENE BODY describing what's actually in the frame (do NOT include orientation, aspect ratio, or resolution words — those are handled separately):
-     • Describe the ENVIRONMENT and SETTING first — location, weather, architecture, props, atmosphere
-     • Then place characters within that environment, doing a specific ACTION
-     • Use the style body rules above to describe characters, environments, and objects
-     • The scene body is WHERE the visual style really shows — describe characters with the style's specific features
-     • Embed shot type and composition from director notes
-     • If a character appears → you MUST include their COMPLETE physical description EVERY TIME, even if they appeared in previous scenes. NEVER shorten to just a name or "the woman" or "he". ALWAYS write the full appearance: hair color, hair style, skin tone, eye color, build, clothing, distinguishing features. Treat each image_prompt as if the image generator has NEVER seen this character before — because it hasn't.
-     • Use this EXACT pattern: "[Character name], [full physical description from character list], [what they're wearing in THIS scene], [what action they're doing]"
-     • Example: "Elena, a tall woman in her early 30s with long straight black hair, olive skin, sharp green eyes, athletic build, wearing a navy business suit with rolled sleeves, reaching across the conference table to grab a document"
-     • NEVER write just "Elena walks in" or "the protagonist" or "she sits down" — the image generator doesn't know who that is
+1. **image_prompt** — Production-ready AI image generation prompt. The image generator renders whatever it reads FIRST as the dominant element. STRUCTURE MATTERS:
+
+   **STEP A — SHOT FRAMING (first sentence, most important):**
+   Start EVERY prompt with the shot type and composition: "Full body wide shot showing..." or "Medium shot from waist up showing..." or "Low angle shot looking up at..."
+   This MUST be the very first thing in the prompt. The image generator commits to this framing before reading anything else.
+
+   **STEP B — ENVIRONMENT (next 1-2 sentences):**
+   Describe the COMPLETE environment: location, architecture, weather, time of day, foreground props, background depth.
+   Example: "...a rain-slicked Tokyo street at dusk, neon signs reflecting in puddles between parked cars, steam rising from a ramen cart in the foreground, office towers vanishing into low clouds behind."
+
+   **STEP C — CHARACTER IN ACTION (next 1-2 sentences):**
+   Describe the character BODY-FIRST: build, height, posture, what they're wearing, what action they're doing. Then add identifying features (hair, skin, eyes) as a compact clause — NOT a portrait-style feature-by-feature breakdown.
+   GOOD: "A 5ft5 woman with an average build strides through the crosswalk clutching an iPhone, her shoulder-length dark brown hair with red highlights catching the neon light, light beige skin with rosy undertones, almond-shaped light brown eyes scanning the crowd."
+   BAD: "A woman with light beige skin tone with rosy undertones, oval face with soft features, almond-shaped light brown eyes with long lashes, slightly upturned nose with a delicate bridge, full lips with a natural pink hue, shoulder-length straight dark brown hair..." ← THIS IS A PORTRAIT CASTING SHEET. The image generator will render a portrait.
+   The character description must be EMBEDDED in action, not listed as a catalog of facial features.
+
+   **STEP D — ATMOSPHERE + STYLE (final sentence):**
+   End with mood, lighting, and the style quality suffix.
+   Example: "...warm golden hour backlight casting long shadows, volumetric dust in the air. ${styleConfig.positive.substring(0, 80)}."
+
+   **THE GOLDEN RULE:** If the image generator only renders the first 200 characters of your prompt, would it produce a SCENE or a PORTRAIT? It MUST produce a scene. That means FRAMING + ENVIRONMENT must come first, ALWAYS.
+
+   Additional rules:
+     • If a character appears → include their physical description EVERY TIME, but in the body-first action format shown above — NOT as a portrait feature list
      • ${orientationConfig.composition}
    - FORBIDDEN: text, words, letters, numbers, charts, graphs, signs in the image
    - Abstract concepts → PHYSICAL METAPHORS
@@ -841,7 +900,7 @@ ${sceneDirections}
   "prompts": [
     {
       "scene_number": 1,
-      "image_prompt": "[style prefix]. [ENVIRONMENT FIRST, then character mid-action within it, using style-specific rules]",
+      "image_prompt": "[SHOT FRAMING first]. [ENVIRONMENT]. [CHARACTER body-first in action with compact identity]. [ATMOSPHERE + style quality suffix]",
       "animation_prompt": "[motion direction for this scene's specific duration]"
     }
   ]
