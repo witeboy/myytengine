@@ -529,7 +529,9 @@ ${finalScript}
     "characters": [
       {
         "name": "Character name or archetype (e.g. 'The Father', 'Sarah')",
-        "visual_description": "Exact physical description: age range, gender, ethnicity, build, hair color/style, clothing style, distinguishing features. Be SPECIFIC enough to maintain consistency across all scenes.",
+        "identity_core": "IMMUTABLE physical identity — the features that NEVER change across scenes. Must include ALL of: (1) exact age like '34 years old', (2) gender, (3) ethnicity/skin tone with specific shade like 'warm olive-tan' not just 'olive', (4) face shape (oval/square/round/heart), (5) exact eye color and shape like 'deep-set hazel eyes with hooded lids', (6) nose specifics like 'strong Roman nose with slight bump on bridge', (7) lip shape, (8) exact hair: color, length, texture, style like 'shoulder-length wavy auburn hair with copper highlights, usually parted left', (9) body build with height like '5ft10 lean athletic build with broad shoulders', (10) 2-3 distinguishing marks like 'small scar through left eyebrow, visible crow's feet when smiling, prominent collarbones'. This must read like a casting sheet — specific enough that 20 artists would draw recognizably the SAME person.",
+        "default_clothing": "Typical clothing style and palette — what they'd wear on an average day. This CAN change per scene.",
+        "reference_prompt": "A standalone prompt to generate ONE hero reference portrait of this character: neutral 3/4 angle, shoulders-up, clean studio lighting, plain gray background, character looking slightly off-camera with a natural expression. Include the FULL identity_core description. This image will be used as a visual reference for ALL subsequent scenes.",
         "emotional_arc": "How this character changes emotionally through the story"
       }
     ]
@@ -541,8 +543,15 @@ ${finalScript}
 - "visual_world" should be SPECIFIC and sensory, not generic.
 - "recurring_visual_motifs" are visual threads that stitch scenes together.
 - "color_arc" creates subliminal emotional continuity.
-- "characters" must be described precisely enough that if 20 different artists drew them, they'd all look recognizably the same person.
 - "key_turning_points" should be EMOTIONAL shifts, not just topic changes.
+
+**CHARACTER CASTING RULES — READ CAREFULLY:**
+- "identity_core" is the IMMUTABLE DNA — face, body, skin, hair, eyes, distinguishing marks. This NEVER changes between scenes. Clothing is NOT part of identity_core.
+- "default_clothing" is what they typically wear — this CAN change per scene based on context.
+- "reference_prompt" must be a complete standalone prompt that could generate a recognizable portrait of this character in isolation.
+- BAD identity_core: "A woman in her 30s with dark hair and green eyes" ← TOO VAGUE, matches thousands of people
+- GOOD identity_core: "34-year-old woman, warm olive-tan skin, oval face with high cheekbones, deep-set emerald green eyes with thick dark lashes, straight narrow nose with slight upturn at tip, full lips with defined cupid's bow, shoulder-length wavy dark chestnut hair with auburn highlights parted left, 5ft6 slender build with long neck, small beauty mark above right lip, slight dimple on left cheek when smiling"
+- The test: could a sketch artist draw this person from your description alone? If not, add more detail.
 
 **NICHE VISUAL SENSIBILITY for ${niche}:**
 - Visual World: ${nicheProfile.visual_world}
@@ -653,7 +662,11 @@ ${finalScript}
     }
 
     const characterBlock = characters.length > 0
-      ? `**ESTABLISHED CHARACTERS (use these EXACT descriptions for consistency):**\n${characters.map(c => `  • ${c.name}: ${c.visual_description || c.description}`).join('\n')}`
+      ? `**ESTABLISHED CHARACTERS (use these EXACT descriptions for consistency):**\n${characters.map(c => {
+          const identity = c.identity_core || c.visual_description || c.description || '';
+          const clothing = c.default_clothing ? ` | Default clothing: ${c.default_clothing}` : '';
+          return `  • ${c.name}: ${identity}${clothing}`;
+        }).join('\n')}`
       : '';
 
     // ═══ FIX C: Loop ALL phases in one call ═══
