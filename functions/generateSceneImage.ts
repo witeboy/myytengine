@@ -132,6 +132,62 @@ function cleanPromptForGrok(rawPrompt) {
     .replace(/,?\s*NO\s+text,?\s*words,?\s*letters[\s\S]{0,80}?(in the image|of any kind)[.\s]*/gi, '')
     .replace(/,?\s*FORBIDDEN:?\s*text[\s\S]{0,80}?(in the image|of any kind)[.\s]*/gi, '');
 
+  // 2.5 Strip readable content descriptions — Grok renders ALL text as garbled nonsense
+  // This covers BOTH digital screens AND physical paper documents.
+  p = p
+
+    // ── DIGITAL SCREENS ──
+    // Phone/tablet screen content: "screen showing X" / "screen displaying X"
+    .replace(/\b(phone|iphone|smartphone|tablet|ipad|mobile)\s+(screen|display)\s+(showing|displaying|with|reading|open\s+to)\s+[^,.]{5,80}[.,]/gi, 
+      'phone screen glowing with soft blue-white light,')
+    // Laptop/computer screen content
+    .replace(/\b(laptop|computer|monitor|desktop|macbook)\s+(screen|display)\s+(showing|displaying|with|open\s+to)\s+[^,.]{5,80}[.,]/gi,
+      'laptop screen casting cool light,')
+    // Generic "screen displaying/showing"
+    .replace(/\b(screen|display)\s+(showing|displaying|that\s+reads|reading|with\s+the\s+text|with\s+text)\s+[^,.]{5,80}[.,]/gi,
+      'screen glowing softly,')
+    // "a list of options including X, Y, Z" — UI descriptions
+    .replace(/\ba\s+list\s+of\s+(options|items|settings|menu\s+items)\s*,?\s*including\s+[^.]{5,100}\./gi,
+      'a glowing interface.')
+    // Specific app names
+    .replace(/\b(Settings\s+app|Messages\s+app|Gmail|Instagram|Twitter|TikTok|YouTube|Facebook|Safari|Chrome)\b/gi, 'app interface')
+
+    // ── PAPER DOCUMENTS ──
+    // Paper docs with "showing/displaying/that reads" content
+    .replace(/\b(receipt|bill|invoice|statement|contract|form|report|check|cheque|notice|certificate|diploma|ticket|prescription|memo|letter|document|page|note|card|paper|flyer|brochure|foreclosure\s+notice|eviction\s+notice|medical\s+bill|bank\s+statement|tax\s+return)\s+(showing|displaying|that\s+reads|that\s+says|reading|with\s+the\s+text|with\s+text|with\s+the\s+words|stamped\s+with|marked\s+with|printed\s+with)\s+[^,.]{3,100}[.,]/gi,
+      '$1 clutched tightly,')
+    // "open to a page about/showing/that reads..."
+    .replace(/\b(book|document|letter|newspaper|folder|file|binder)\s+(open\s+to|showing|reading|displaying|that\s+reads|with\s+the\s+text)\s+[^,.]{5,80}[.,]/gi,
+      '$1 visible in the scene,')
+    // "fine print" / "small text" / "handwritten text" — describes readable content
+    .replace(/\b(fine\s+print|small\s+text|printed\s+text|handwritten\s+text|typed\s+text|the\s+words|the\s+text|legible\s+text|readable\s+text)\b/gi,
+      'visible markings')
+    // "signature line" / "dotted line" — pen-and-paper details that produce artifacts
+    .replace(/\b(signature\s+line|dotted\s+line\s+for|sign\s+here|printed\s+name|date\s+line)\b/gi,
+      'document details')
+
+    // ── DOLLAR AMOUNTS / NUMBERS AS TEXT ──
+    // "$45,000" / "$12.99" / "$2,300" — Grok renders these as visible garbled numbers
+    .replace(/\$[\d,]+\.?\d*\s*(in\s+)?(outstanding|owed|due|remaining|total|balance|charges?|debt|worth|dollars?)?\s*/gi, '')
+    // "total amount of $X" / "balance of $X" / "sum of $X"
+    .replace(/\b(total|balance|sum|amount|cost|price|fee|charge|payment|debt)\s+of\s+\$[\d,]+\.?\d*/gi, 'significant amount')
+    // "declining balance from $X to $Y" — narrative number descriptions
+    .replace(/\b(from|between)\s+\$[\d,]+\.?\d*\s*(to|and)\s+\$[\d,]+\.?\d*/gi, 'changing dramatically')
+    // "X percent" / "X%" — numbers Grok renders
+    .replace(/\b\d+\.?\d*\s*(%|percent)\b/gi, '')
+
+    // ── UNIVERSAL "THAT READS" / "SAYING" PATTERNS ──
+    // Catches ANY object + "that reads/says 'text here'"
+    .replace(/\bthat\s+(reads|says)\s+['''""][^''""\n]{3,100}['''""][.,]?\s*/gi, '')
+    // "with the words 'text here'" 
+    .replace(/\bwith\s+the\s+words?\s+['''""][^''""\n]{3,100}['''""][.,]?\s*/gi, '')
+
+    // ── LISTED ITEMS ──
+    // "including 'X,' 'Y,' and 'Z.'" 
+    .replace(/,?\s*(including|such\s+as|like)\s+['''""]?[A-Z][^.]{3,80}\./gi, '.')
+    // Remaining quoted items: 'Battery,' 'Privacy,' etc
+    .replace(/['''""][A-Z][a-z]+[,'''""][\s'''""]*/g, '');
+
   // 3. Strip resolution/quality metadata that leaks as text
   p = p
     .replace(/\b\d{3,4}\s*[x×]\s*\d{3,4}\s*(pixels?|px)?\b/gi, '')
@@ -156,14 +212,56 @@ function cleanPromptForGrok(rawPrompt) {
     .replace(/\*/g, '')
     .replace(/#{1,3}\s*/g, '');
 
-  // 6. Clean up artifacts (double commas, double spaces, leading commas/periods)
+  // 6. Clean up artifacts (double commas, double spaces, leading commas/periods, stray quotes)
   p = p
+    .replace(/\.['''""][\s]*/g, '. ')   // "softly.' The" → "softly. The"
     .replace(/,\s*,/g, ',')
     .replace(/\.\s*\./g, '.')
     .replace(/,\s*\./g, '.')
     .replace(/\s{2,}/g, ' ')
     .replace(/^[\s,.]+/, '')
     .trim();
+
+  // ══════════════════════════════════════════════════════════════
+  // 6.5 OBJECT CLOSE-UP REFRAME
+  // ══════════════════════════════════════════════════════════════
+  // Detect prompts that focus on an OBJECT (phone, laptop, document)
+  // rather than the CHARACTER. These produce broken hand physics
+  // and garbled screen text. Reframe to medium shot showing character.
+  // ══════════════════════════════════════════════════════════════
+
+  // Two-part pattern:
+  // Part 1: "Close-up shot of a medical bill" (the shot type + object)
+  // Part 2: "showing $45,000 in outstanding charges." (the content clause we need to eat)
+  // We eat BOTH and replace with a clean character-focused reframe.
+  const objectFocusPattern = /^(close[\s-]*up|tight|macro|detail|insert)\s+(shot\s+)?(of|on|showing)\s+(an?\s+)?(iphone|phone|smartphone|tablet|laptop|computer|screen|document|book|letter|newspaper|sign|menu|interface|settings|dashboard|receipt|bill|invoice|statement|contract|form|report|check|cheque|notice|certificate|diploma|ticket|prescription|note|memo|flyer|brochure|pamphlet|paper|page|card|postcard|telegram|bank\s+statement|medical\s+bill|foreclosure|eviction|tax\s+return)/i;
+
+  if (objectFocusPattern.test(p)) {
+    // Extract just the object name for the replacement
+    const objectMatch = p.match(objectFocusPattern);
+    const objectName = objectMatch[5] || 'document'; // The captured object type
+
+    // Eat the entire first sentence (object + its content description)
+    // Find the real sentence end: period followed by space + capital letter
+    // (avoids breaking on decimal points like "$12.99")
+    let firstSentenceEnd = -1;
+    for (let i = objectMatch[0].length; i < p.length - 1; i++) {
+      if (p[i] === '.' && i + 2 < p.length && p[i + 1] === ' ' && /[A-Z]/.test(p[i + 2])) {
+        firstSentenceEnd = i;
+        break;
+      }
+    }
+    // Fallback: if no clear sentence boundary found, find last period
+    if (firstSentenceEnd === -1) {
+      firstSentenceEnd = p.indexOf('.', objectMatch[0].length);
+    }
+    if (firstSentenceEnd > 0) {
+      p = `Medium shot showing the character holding a ${objectName}, ${p.substring(firstSentenceEnd + 2).trim()}`;
+    } else {
+      p = `Medium shot showing the character holding a ${objectName}.`;
+    }
+    console.log(`🔄 Reframed object close-up → character medium shot (object: ${objectName})`);
+  }
 
   // ══════════════════════════════════════════════════════════════
   // 7. FRAMING ANCHOR — safety net for prompt structure
