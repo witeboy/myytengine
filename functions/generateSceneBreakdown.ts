@@ -158,18 +158,87 @@ GOOD visual_concept: "Full-body view of the skeleton protagonist kneeling knee-d
 // BEAT DURATION CALCULATOR
 // ═══════════════════════════════════════════════════════════════════
 
-function calculateBeatDurations(phases, totalTargetScenes, defaultDuration = 5) {
+function calculateBeatDurations(phases, totalTargetScenes, defaultDuration = 5, durationMinutes = 3) {
+  // ═══════════════════════════════════════════════════════════════
+  // DURATION-AWARE PACING
+  // ═══════════════════════════════════════════════════════════════
+  // Short videos (1-3 min)  → tight, punchy cuts (social/YT Shorts energy)
+  // Medium videos (4-10 min) → balanced rhythm (standard YouTube)
+  // Long videos (11-30 min) → cinematic holds, scenes breathe
+  // Epic videos (30-60+ min) → documentary pacing, long holds
+  //
+  // The scale factor linearly interpolates between these tiers
+  // and multiplies the base durations per phase.
+  // ═══════════════════════════════════════════════════════════════
+
+  // Pacing scale: maps durationMinutes → multiplier
+  // 1 min → 0.7x (snappy), 5 min → 1.0x (baseline), 15 min → 1.4x, 30 min → 1.7x, 60 min → 2.0x
+  const pacingAnchors = [
+    { minutes: 1,  scale: 0.70 },
+    { minutes: 3,  scale: 0.85 },
+    { minutes: 5,  scale: 1.00 },   // ← baseline
+    { minutes: 10, scale: 1.20 },
+    { minutes: 15, scale: 1.40 },
+    { minutes: 30, scale: 1.70 },
+    { minutes: 60, scale: 2.00 },
+  ];
+
+  function getScaleFactor(mins) {
+    if (mins <= pacingAnchors[0].minutes) return pacingAnchors[0].scale;
+    if (mins >= pacingAnchors[pacingAnchors.length - 1].minutes) return pacingAnchors[pacingAnchors.length - 1].scale;
+    for (let i = 0; i < pacingAnchors.length - 1; i++) {
+      const lo = pacingAnchors[i];
+      const hi = pacingAnchors[i + 1];
+      if (mins >= lo.minutes && mins <= hi.minutes) {
+        const t = (mins - lo.minutes) / (hi.minutes - lo.minutes);
+        return lo.scale + t * (hi.scale - lo.scale);
+      }
+    }
+    return 1.0;
+  }
+
+  const scale = getScaleFactor(durationMinutes);
+
+  // Base pacing (tuned for ~5 minute video — the 1.0x baseline)
+  const basePacing = {
+    cold_open:      { base: 3.5, variance: 0.5 },   // Punchy hook
+    rising_tension: { base: 4.5, variance: 0.8 },   // Building
+    emotional_core: { base: 5.5, variance: 1.0 },   // Breathing room
+    resolution:     { base: 4.5, variance: 0.5 }    // Steady close
+  };
+
+  // Apply scale to get actual pacing for this video length
+  const phasePacing = {};
+  for (const [name, pacing] of Object.entries(basePacing)) {
+    phasePacing[name] = {
+      base: Math.round(pacing.base * scale * 10) / 10,
+      variance: Math.round(pacing.variance * scale * 10) / 10
+    };
+  }
+
   const durations = [];
-  
-  let sceneCounter = 0;
+  const floor = Math.max(2.5, 2.0 * scale);  // floor scales too — long videos never go below ~4s
+
   for (const phase of phases) {
+    const pacing = phasePacing[phase.name] || { base: defaultDuration * scale, variance: 0.5 * scale };
+
     for (let i = 0; i < phase.scenes; i++) {
-      durations.push(defaultDuration);
-      sceneCounter++;
+      // Within each phase, ramp duration slightly toward the end
+      // (scenes build weight as the phase progresses)
+      const progressRatio = phase.scenes > 1 ? i / (phase.scenes - 1) : 0.5;
+      const rampOffset = (progressRatio - 0.5) * pacing.variance;  // -variance/2 → +variance/2
+      const duration = Math.round((pacing.base + rampOffset) * 10) / 10;
+      durations.push(Math.max(floor, duration));
     }
   }
-  
-  console.log(`📊 Beat durations calculated: ${durations.length} scenes, avg ${defaultDuration}s each, total ${durations.reduce((a,b)=>a+b,0).toFixed(1)}s`);
+
+  const totalDuration = durations.reduce((a, b) => a + b, 0);
+  const avgDuration = totalDuration / durations.length;
+
+  console.log(`📊 Beat durations calculated: ${durations.length} scenes | Scale: ${scale.toFixed(2)}x (${durationMinutes} min video)`);
+  console.log(`   Scaled pacing: cold_open=${phasePacing.cold_open.base}s, rising=${phasePacing.rising_tension.base}s, core=${phasePacing.emotional_core.base}s, resolution=${phasePacing.resolution.base}s`);
+  console.log(`   Range: ${Math.min(...durations).toFixed(1)}s – ${Math.max(...durations).toFixed(1)}s | Avg: ${avgDuration.toFixed(1)}s | Total: ${totalDuration.toFixed(1)}s`);
+
   return durations;
 }
 
@@ -382,38 +451,48 @@ Deno.serve(async (req) => {
       console.log(`🦴 Style directive active: ${visualStyle}`);
     }
 
-    // ═══ FIX A: 5-second scenes instead of 8 ═══
-    const MAX_SCENE_SECONDS = 5;
-    const totalTargetScenes = Math.max(8, Math.round((durationMinutes * 60) / MAX_SCENE_SECONDS));
+    // ═══ DURATION-AWARE SCENE DENSITY ═══
+    // Average scene duration scales with video length (same anchors as beat calculator).
+    // Short vids → tight ~4s avg cuts.  Long vids → cinematic ~9-10s avg holds.
+    // This prevents a 60-min video from requesting 720 scenes at 5s each.
+    const pacingAnchors = [
+      { minutes: 1,  avgScene: 3.4 },   // 0.70x scale → ~3.4s avg
+      { minutes: 3,  avgScene: 4.0 },   // 0.85x
+      { minutes: 5,  avgScene: 4.7 },   // 1.00x baseline
+      { minutes: 10, avgScene: 5.6 },   // 1.20x
+      { minutes: 15, avgScene: 6.6 },   // 1.40x
+      { minutes: 30, avgScene: 8.0 },   // 1.70x
+      { minutes: 60, avgScene: 9.4 },   // 2.00x
+    ];
+    function getAvgSceneDuration(mins) {
+      if (mins <= pacingAnchors[0].minutes) return pacingAnchors[0].avgScene;
+      if (mins >= pacingAnchors[pacingAnchors.length - 1].minutes) return pacingAnchors[pacingAnchors.length - 1].avgScene;
+      for (let i = 0; i < pacingAnchors.length - 1; i++) {
+        const lo = pacingAnchors[i], hi = pacingAnchors[i + 1];
+        if (mins >= lo.minutes && mins <= hi.minutes) {
+          const t = (mins - lo.minutes) / (hi.minutes - lo.minutes);
+          return lo.avgScene + t * (hi.avgScene - lo.avgScene);
+        }
+      }
+      return 4.7;
+    }
+    const avgSceneDuration = getAvgSceneDuration(durationMinutes);
+    const totalTargetScenes = Math.max(8, Math.round((durationMinutes * 60) / avgSceneDuration));
+    console.log(`🎯 Scene density: ${durationMinutes}min video → avg ${avgSceneDuration.toFixed(1)}s/scene → ${totalTargetScenes} target scenes`);
+
     const phases = calculatePhaseAllocation(totalTargetScenes);
     const scriptChunks = splitScriptByPhase(finalScript, phases);
     const numBatches = scriptChunks.length;
 
-// ═══ Calculate beat durations & start times (one time, batch 0) ═══
-    let beatDurations = [];
-    let beatStartTimes = [];
-
-    if (startBatch === 0) {
-      beatDurations = calculateBeatDurations(phases, totalTargetScenes, MAX_SCENE_SECONDS);
-      beatStartTimes = calculateStartTimes(beatDurations);
-      
-      console.log(`📊 Beat breakdown calculated:`);
-      console.log(`   Durations: [${beatDurations.map(d => d.toFixed(1)).join(', ')}]`);
-      console.log(`   Start times: [${beatStartTimes.map(t => t.toFixed(1)).join(', ')}]`);
-      console.log(`   Total duration: ${beatDurations.reduce((a,b)=>a+b,0).toFixed(1)}s`);
-    } else {
-      // In subsequent batches, re-read blueprint to get beat data
-      if (blueprint && blueprint.beat_durations) {
-        beatDurations = blueprint.beat_durations;
-        beatStartTimes = blueprint.beat_start_times;
-      }
-    }
-
-    // ═══ FIX B: In-memory blueprint for batch 0 (race condition fix) ═══
+    // ══════════════════════════════════════════════════════════════
+    // RESOLVE BLUEPRINT FIRST — before anything that reads from it
+    // (Fixes race condition: blueprint must exist before beat logic)
+    // ══════════════════════════════════════════════════════════════
     let blueprint;
     let freshProject = project;
 
     if (startBatch === 0) {
+      // ── Batch 0: wipe old scenes, run story analysis, build blueprint from scratch ──
       const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
       for (const s of oldScenes) {
         await base44.asServiceRole.entities.Scenes.delete(s.id);
@@ -484,12 +563,23 @@ ${finalScript}
 
       const storyAnalysis = analysis.story_analysis || analysis;
 
-      // Keep blueprint in memory — avoids stale re-read after update
+      // ── Calculate phase-aware beat durations ──
+      const beatDurations = calculateBeatDurations(phases, totalTargetScenes, avgSceneDuration, durationMinutes);
+      const beatStartTimes = calculateStartTimes(beatDurations);
+
+      console.log(`📊 Beat breakdown calculated:`);
+      console.log(`   Durations: [${beatDurations.map(d => d.toFixed(1)).join(', ')}]`);
+      console.log(`   Start times: [${beatStartTimes.map(t => t.toFixed(1)).join(', ')}]`);
+      console.log(`   Total duration: ${beatDurations.reduce((a,b)=>a+b,0).toFixed(1)}s`);
+
+      // Build blueprint in memory — avoids stale re-read after update
       blueprint = {
         story_analysis: storyAnalysis,
         phases: phases.map(p => ({ name: p.name, purpose: p.purpose, scene_count: p.scenes })),
         total_target_scenes: totalTargetScenes,
         niche_profile: nicheProfile,
+        beat_durations: beatDurations,
+        beat_start_times: beatStartTimes,
         scenes: []
       };
 
@@ -502,21 +592,19 @@ ${finalScript}
           : project.character_descriptions
       });
 
-// ═══ SAVE BEAT BREAKDOWN TO PRODUCTION SETTINGS ═══
+      // ═══ SAVE BEAT BREAKDOWN TO PRODUCTION SETTINGS ═══
       const prodSettingsList = await base44.asServiceRole.entities.ProductionSettings.filter({ 
         project_id 
       });
 
       let prodSettings = prodSettingsList[0];
       if (prodSettings) {
-        // Update existing
         await base44.asServiceRole.entities.ProductionSettings.update(prodSettings.id, {
           beat_durations: JSON.stringify(beatDurations),
           beat_start_times: JSON.stringify(beatStartTimes),
         });
         console.log(`✓ Beat durations saved to ProductionSettings (updated existing record)`);
       } else {
-        // Create new
         prodSettings = await base44.asServiceRole.entities.ProductionSettings.create({
           project_id,
           beat_durations: JSON.stringify(beatDurations),
@@ -524,10 +612,6 @@ ${finalScript}
         });
         console.log(`✓ Beat durations saved to ProductionSettings (created new record)`);
       }
-
-      // Also add to blueprint for in-memory reference
-      blueprint.beat_durations = beatDurations;
-      blueprint.beat_start_times = beatStartTimes;
 
       freshProject = {
         ...project,
@@ -540,8 +624,9 @@ ${finalScript}
       console.log(`  Theme: ${storyAnalysis.central_theme}`);
       console.log(`  Characters: ${storyAnalysis.characters?.map(c => c.name).join(', ') || 'None identified'}`);
       console.log(`  Motifs: ${storyAnalysis.recurring_visual_motifs?.join(', ') || 'N/A'}`);
+
     } else {
-      // Subsequent batches — data has propagated, safe to read from DB
+      // ── Subsequent batches: blueprint already persisted, safe to read from DB ──
       freshProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
       try {
         blueprint = JSON.parse(freshProject.scene_blueprint);
@@ -549,6 +634,15 @@ ${finalScript}
         return Response.json({ error: 'Scene blueprint not found. Run batch 0 first.' }, { status: 400 });
       }
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // At this point `blueprint` is ALWAYS resolved — either built
+    // fresh (batch 0) or parsed from DB (batch > 0).
+    // Beat data lives inside blueprint.beat_durations / beat_start_times.
+    // ══════════════════════════════════════════════════════════════
+
+    const beatDurations = blueprint.beat_durations || [];
+    const beatStartTimes = blueprint.beat_start_times || [];
 
     const storyAnalysis = blueprint.story_analysis;
     const nicheProfile = blueprint.niche_profile;
@@ -577,6 +671,12 @@ ${finalScript}
         ? `**LAST ${previousScenes.length} SCENES (for visual continuity):**\n${previousScenes.map(s => `  Scene ${s.scene_number}: [${s.shot_type}] ${s.visual_concept} | Mood: ${s.mood} | Palette: ${s.color_palette}`).join('\n')}`
         : '**This is the OPENING — establish the visual world with a strong first impression.**';
 
+      // ── Pull per-scene durations for THIS batch from the beat array ──
+      const batchBeatDurations = beatDurations.slice(sceneOffset, sceneOffset + scenesForBatch);
+      const durationGuidance = batchBeatDurations.length > 0
+        ? `**SCENE DURATION TARGETS (seconds per scene, in order):** [${batchBeatDurations.map(d => d.toFixed(1)).join(', ')}]\nThese reflect the narrative pacing for this phase — shorter = punchier cuts, longer = breathing room. Use these as each scene's duration_seconds.`
+        : '';
+
       const breakdownPrompt = `
 You are a world-class film director blocking out scenes for a visual narrative.
 ${styleDirective}
@@ -598,6 +698,8 @@ ${continuityContext}
 Phase Purpose: ${currentChunk.purpose}
 Scenes to create: ${scenesForBatch}
 Scene numbers: ${sceneOffset + 1} through ${sceneOffset + scenesForBatch}
+
+${durationGuidance}
 
 **SCRIPT SEGMENT FOR THIS PHASE:**
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -669,11 +771,13 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
 - Adjacent scenes MUST use different shot types
 - emotional_intensity should generally escalate through the phase
 - NEVER describe the character in isolation against a blank/blurred background — always place them IN a detailed world
+- Use the provided SCENE DURATION TARGETS for each scene's duration_seconds value
 `;
 
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
       console.log(`🎬 SCENE BREAKDOWN — Phase: ${currentChunk.phase} (Batch ${batchIdx + 1}/${numBatches})`);
       console.log(`📍 Generating scenes ${sceneOffset + 1}-${sceneOffset + scenesForBatch}`);
+      console.log(`⏱️ Beat targets: [${batchBeatDurations.map(d => d.toFixed(1)).join(', ')}]s`);
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
       const result = await callGemini(breakdownPrompt, 0.7);
@@ -692,13 +796,19 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
           const sceneNum = sceneOffset + scenesCreated + 1;
           const cleanedNarration = cleanNarrationText(scene.narration_text);
 
+          // Use the pre-calculated beat duration for this scene index,
+          // falling back to whatever Gemini returned, then to 5s default
+          const targetDuration = beatDurations[sceneNum - 1] 
+            || scene.duration_seconds 
+            || 5;
+
           await base44.asServiceRole.entities.Scenes.create({
             project_id,
             scene_number: sceneNum,
             narration_text: cleanedNarration,
             image_prompt: "",
             animation_prompt: "",
-            duration_seconds: scene.duration_seconds || 5,
+            duration_seconds: targetDuration,
             status: "breakdown_ready"
           });
 
@@ -716,7 +826,7 @@ When the narration is abstract, the visual must be CONCRETE and PHYSICAL.
             niche_visual_element: scene.niche_visual_element,
             continuity_bridge: scene.continuity_bridge,
             emotional_intensity: scene.emotional_intensity || 0.5,
-            duration_seconds: scene.duration_seconds || 5
+            duration_seconds: targetDuration
           });
 
           scenesCreated++;
