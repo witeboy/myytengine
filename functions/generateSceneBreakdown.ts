@@ -634,20 +634,58 @@ ${finalScript}
       console.log(`  Characters: ${storyAnalysis.characters?.map(c => c.name).join(', ') || 'None identified'}`);
       console.log(`  Motifs: ${storyAnalysis.recurring_visual_motifs?.join(', ') || 'N/A'}`);
 
+      // ── Batch 0 DONE — return immediately. Phases start at batch_index=1 ──
+      // This keeps batch 0 under the timeout (delete + Gemini analysis + saves ≈ 15s)
+      return Response.json({
+        success: true,
+        done: false,
+        next_batch: 1,
+        scenes_created: 0,
+        total_scenes: 0,
+        total_target: totalTargetScenes,
+        total_batches: numBatches + 1,  // +1 because batch 0 is analysis-only
+        current_batch: 0,
+        phase: 'story_analysis',
+        beat_durations: beatDurations,
+        beat_start_times: beatStartTimes
+      });
+
     } else {
-      // ── Subsequent batches: blueprint already persisted, safe to read from DB ──
-      freshProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
-      try {
-        blueprint = JSON.parse(freshProject.scene_blueprint);
-      } catch (e) {
+      // ── Subsequent batches (1+): blueprint already persisted, read from DB ──
+      // Base44's DB is eventually consistent — the write from batch 0 may not
+      // have propagated yet. Retry up to 3 times with increasing delays.
+      const MAX_READ_RETRIES = 3;
+      const READ_DELAY_MS = [2000, 4000, 6000]; // escalating wait
+
+      for (let readAttempt = 0; readAttempt < MAX_READ_RETRIES; readAttempt++) {
+        freshProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
+        
+        if (freshProject?.scene_blueprint) {
+          try {
+            blueprint = JSON.parse(freshProject.scene_blueprint);
+            if (blueprint?.story_analysis) {
+              console.log(`✓ Blueprint loaded from DB (attempt ${readAttempt + 1})`);
+              break;
+            }
+          } catch (_) {}
+        }
+
+        if (readAttempt < MAX_READ_RETRIES - 1) {
+          const delay = READ_DELAY_MS[readAttempt];
+          console.log(`⏳ Blueprint not ready yet, waiting ${delay / 1000}s (attempt ${readAttempt + 1}/${MAX_READ_RETRIES})...`);
+          await new Promise(r => setTimeout(r, delay));
+        }
+      }
+
+      if (!blueprint?.story_analysis) {
         return Response.json({ error: 'Scene blueprint not found. Run batch 0 first.' }, { status: 400 });
       }
     }
 
     // ══════════════════════════════════════════════════════════════
-    // At this point `blueprint` is ALWAYS resolved — either built
-    // fresh (batch 0) or parsed from DB (batch > 0).
-    // Beat data lives inside blueprint.beat_durations / beat_start_times.
+    // At this point we're in batch 1+ (phase processing).
+    // blueprint is loaded from DB.
+    // Phase index = batch_index - 1 (because batch 0 was analysis-only)
     // ══════════════════════════════════════════════════════════════
 
     const beatDurations = blueprint.beat_durations || [];
@@ -670,13 +708,12 @@ ${finalScript}
       : '';
 
     // ═══ PROCESS ONE PHASE PER CALL ═══
-    // Base44 serverless has a ~30s timeout. Each phase = 1 Gemini call + DB writes.
-    // The frontend calls with batch_index=0, then 1, 2, 3 until done=true.
+    // Phase index = startBatch - 1 (batch 0 = analysis, batch 1 = phase 0, etc.)
+    const phaseIdx = startBatch - 1;
     let grandTotalCreated = 0;
-    const batchIdx = startBatch;
 
-    if (batchIdx >= scriptChunks.length) {
-      // All phases already done (edge case: frontend called with stale batch_index)
+    if (phaseIdx < 0 || phaseIdx >= scriptChunks.length) {
+      // All phases already done
       await base44.asServiceRole.entities.Projects.update(project_id, {
         status: "breakdown_complete",
         current_step: 5
@@ -687,7 +724,7 @@ ${finalScript}
         scenes_created: 0,
         total_scenes: blueprint.scenes.length,
         total_target: totalTargetScenes,
-        total_batches: numBatches,
+        total_batches: numBatches + 1,
         beat_durations: beatDurations,
         beat_start_times: beatStartTimes
       });
@@ -697,7 +734,7 @@ ${finalScript}
       const existingScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
       const sceneOffset = existingScenes.length;
 
-      const currentChunk = scriptChunks[batchIdx];
+      const currentChunk = scriptChunks[phaseIdx];
       const scenesForBatch = currentChunk.scenes;
 
       const previousScenes = blueprint.scenes.slice(-3);
@@ -822,7 +859,7 @@ NEVER describe what text appears on any surface. NEVER include dollar amounts, n
 `;
 
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-      console.log(`🎬 SCENE BREAKDOWN — Phase: ${currentChunk.phase} (Batch ${batchIdx + 1}/${numBatches})`);
+      console.log(`🎬 SCENE BREAKDOWN — Phase: ${currentChunk.phase} (Phase ${phaseIdx + 1}/${numBatches})`);
       console.log(`📍 Generating scenes ${sceneOffset + 1}-${sceneOffset + scenesForBatch}`);
       console.log(`⏱️ Beat targets: [${batchBeatDurations.map(d => d.toFixed(1)).join(', ')}]s`);
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
@@ -893,8 +930,9 @@ NEVER describe what text appears on any surface. NEVER include dollar amounts, n
     } // end single-phase block
 
     // Check if there are more phases to process
-    const nextBatch = batchIdx + 1;
-    const allPhasesComplete = nextBatch >= scriptChunks.length;
+    // Frontend batch_index: 0=analysis, 1=phase0, 2=phase1, etc.
+    const nextBatch = startBatch + 1;
+    const allPhasesComplete = (phaseIdx + 1) >= scriptChunks.length;
 
     if (allPhasesComplete) {
       await base44.asServiceRole.entities.Projects.update(project_id, {
@@ -906,7 +944,7 @@ NEVER describe what text appears on any surface. NEVER include dollar amounts, n
       console.log(`🎉 FULL BREAKDOWN COMPLETE — ${blueprint.scenes.length} scenes ready for prompt generation`);
       console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     } else {
-      console.log(`⏩ Phase ${batchIdx + 1}/${numBatches} done — next call: batch_index=${nextBatch}`);
+      console.log(`⏩ Phase ${phaseIdx + 1}/${scriptChunks.length} done — next call: batch_index=${nextBatch}`);
     }
 
     return Response.json({
@@ -916,8 +954,8 @@ NEVER describe what text appears on any surface. NEVER include dollar amounts, n
       scenes_created: grandTotalCreated,
       total_scenes: blueprint.scenes.length,
       total_target: totalTargetScenes,
-      total_batches: numBatches,
-      current_batch: batchIdx,
+      total_batches: scriptChunks.length + 1,  // +1 for analysis batch
+      current_batch: startBatch,
       beat_durations: beatDurations,
       beat_start_times: beatStartTimes
     });
