@@ -165,7 +165,45 @@ function cleanPromptForGrok(rawPrompt) {
     .replace(/^[\s,.]+/, '')
     .trim();
 
-  // 7. Smart cap — never cut mid-sentence
+  // ══════════════════════════════════════════════════════════════
+  // 7. FRAMING ANCHOR — safety net for prompt structure
+  // ══════════════════════════════════════════════════════════════
+  // The prompt generator now outputs prompts in the correct order:
+  // FRAMING → ENVIRONMENT → CHARACTER → STYLE
+  // This step is a safety net — if the prompt already starts with
+  // framing language, we skip. Otherwise we prepend it.
+  // ══════════════════════════════════════════════════════════════
+
+  const alreadyFramed = /^(full\s+(body|scene)|wide\s+shot|medium\s+(wide\s+)?shot|low\s+angle|high\s+angle|overhead|establishing|tracking|dutch\s+angle|pov\s+shot)/i.test(p);
+
+  if (alreadyFramed) {
+    // Prompt generator already structured correctly — no prepend needed
+  } else {
+    // Detect if this is INTENTIONALLY a close-up (from director breakdown shot_type)
+    const isIntentionalCloseUp = /\b(ecu|extreme\s*close[\s-]*up|ecu\s*—|macro\s*shot)\b/i.test(p);
+    const isIntentionalCU = /\b(cu\s*—|close[\s-]*up\s*—|mcu\s*—|medium\s*close[\s-]*up)\b/i.test(p)
+      && !isIntentionalCloseUp;
+
+    if (isIntentionalCloseUp) {
+      p = `Extreme close-up shot showing face and upper shoulders with detailed background environment visible behind, shallow depth of field. ${p}`;
+    } else if (isIntentionalCU) {
+      p = `Close-up portrait from chest up, showing shoulders and upper body, detailed environment visible in background. ${p}`;
+    } else {
+      // DEFAULT: Strip any close-up/portrait language that leaked in
+      p = p
+        .replace(/\bextreme\s*close[\s-]*up\b/gi, 'medium wide shot')
+        .replace(/\bclose[\s-]*up\s*(shot|portrait|of|showing)?\b/gi, 'medium shot')
+        .replace(/\bheadshot\b/gi, 'medium wide shot')
+        .replace(/\bportrait\s*(shot|crop|of)?\b/gi, 'medium wide shot')
+        .replace(/\bbust\s*shot\b/gi, 'medium wide shot')
+        .replace(/\bface\s*only\b/gi, 'full scene')
+        .replace(/\bfloating\s*head\b/gi, '');
+
+      p = `Full scene wide shot showing the character's complete body head to feet in a detailed environment with visible architecture and props, multiple depth layers with foreground and background elements. ${p}`;
+    }
+  }
+
+  // 8. Smart cap — never cut mid-sentence
   if (p.length > MAX_PROMPT_CHARS) {
     const cutZone = p.substring(MAX_PROMPT_CHARS - 100, MAX_PROMPT_CHARS);
     const lastPeriod = cutZone.lastIndexOf('.');
@@ -197,6 +235,13 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
   }
 
   const finalPrompt = cleanPromptForGrok(scene.image_prompt);
+
+  // Log which framing mode was applied
+  const framingMode = /^Extreme close-up/i.test(finalPrompt) ? 'ECU'
+    : /^Close-up portrait/i.test(finalPrompt) ? 'CU/MCU'
+    : /^Full scene wide/i.test(finalPrompt) ? 'WIDE (anchor)'
+    : 'WIDE (native)';
+  console.log(`📐 Scene ${sceneNum}: framing → ${framingMode} (${finalPrompt.length} chars)`);
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
