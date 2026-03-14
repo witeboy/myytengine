@@ -592,82 +592,42 @@ ${finalScript}
         scenes: []
       };
 
-      // Build SLIM version for DB save — strip everything that exists elsewhere:
-      // - niche_profile: re-derived from getNicheDirectorProfile(niche) 
-      // - beat arrays: saved to ProductionSettings
-      // - characters: saved to project.character_descriptions
-      // Truncate helper — cap strings, shorten arrays
-      const trunc = (s, max = 120) => typeof s === 'string' && s.length > max ? s.substring(0, max).trim() : s;
-      const truncArr = (arr, max = 3, charMax = 80) => Array.isArray(arr) ? arr.slice(0, max).map(s => trunc(s, charMax)) : arr;
+      // ═══ SAVE EVERYTHING TO PRODUCTIONSETTINGS (not scene_blueprint) ═══
+      // Base44's scene_blueprint field has a ~1000 char limit that silently drops data.
+      // ProductionSettings handles large JSON fine (beat arrays already save there).
+      const storyAnalysisForSave = { ...storyAnalysis };
+      delete storyAnalysisForSave.characters; // saved separately in character_descriptions
 
-      const slimBlueprint = {
-        story_analysis: {
-          central_theme: trunc(storyAnalysis.central_theme, 150),
-          narrative_arc_summary: trunc(storyAnalysis.narrative_arc_summary, 200),
-          emotional_trajectory: truncArr(storyAnalysis.emotional_trajectory, 5, 30),
-          key_turning_points: truncArr(storyAnalysis.key_turning_points, 3, 80),
-          visual_world: trunc(storyAnalysis.visual_world, 150),
-          recurring_visual_motifs: truncArr(storyAnalysis.recurring_visual_motifs, 3, 60),
-          color_arc: trunc(storyAnalysis.color_arc, 100)
-        },
-        phases: blueprint.phases.map(p => ({ name: p.name, scenes: p.scene_count })),
-        total_target_scenes: totalTargetScenes,
-        niche: niche,
-        scenes: []
+      const storyAnalysisJson = JSON.stringify(storyAnalysisForSave);
+      console.log(`📦 Story analysis: ${storyAnalysisJson.length} chars → ProductionSettings`);
+
+      const prodSettingsList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
+      const prodPayload = {
+        beat_durations: JSON.stringify(beatDurations),
+        beat_start_times: JSON.stringify(beatStartTimes),
+        story_analysis: storyAnalysisJson
       };
-      const blueprintJson = JSON.stringify(slimBlueprint);
-      console.log(`📦 Blueprint size for DB: ${blueprintJson.length} chars`);
 
-      // If STILL too big, strip to absolute minimum
-      if (blueprintJson.length > 800) {
-        console.warn(`⚠️ Blueprint ${blueprintJson.length} chars — stripping to bare minimum`);
+      let prodSettings = prodSettingsList[0];
+      if (prodSettings) {
+        await base44.asServiceRole.entities.ProductionSettings.update(prodSettings.id, prodPayload);
+        console.log(`✓ Story analysis + beats saved to ProductionSettings (updated)`);
+      } else {
+        prodSettings = await base44.asServiceRole.entities.ProductionSettings.create({ project_id, ...prodPayload });
+        console.log(`✓ Story analysis + beats saved to ProductionSettings (created)`);
       }
 
-      // Use bare blueprint if slim was too big
-      // Always use the smallest possible version — Base44 field limit is tight
-      const finalBlueprintJson = JSON.stringify({
-        sa: {
-          t: trunc(storyAnalysis.central_theme, 80),
-          v: trunc(storyAnalysis.visual_world, 80),
-          c: trunc(storyAnalysis.color_arc, 60),
-          m: truncArr(storyAnalysis.recurring_visual_motifs, 2, 30),
-          a: trunc(storyAnalysis.narrative_arc_summary, 80)
-        },
-        n: niche,
-        ts: totalTargetScenes,
-        s: []
-      });
-      console.log(`📦 Final blueprint for save: ${finalBlueprintJson.length} chars`);
+      // Tiny flag on scene_blueprint — just tells batch 1+ that analysis is done
+      const tinyFlag = `{"ready":true,"niche":"${niche}","ts":${totalTargetScenes}}`;
 
       await base44.asServiceRole.entities.Projects.update(project_id, {
         status: "scene_breakdown",
         current_step: 5,
-        scene_blueprint: finalBlueprintJson,
+        scene_blueprint: tinyFlag,
         character_descriptions: storyAnalysis.characters
           ? JSON.stringify(storyAnalysis.characters)
           : project.character_descriptions
       });
-
-      // ═══ SAVE BEAT BREAKDOWN TO PRODUCTION SETTINGS ═══
-      const prodSettingsList = await base44.asServiceRole.entities.ProductionSettings.filter({ 
-        project_id 
-      });
-
-      let prodSettings = prodSettingsList[0];
-      if (prodSettings) {
-        await base44.asServiceRole.entities.ProductionSettings.update(prodSettings.id, {
-          beat_durations: JSON.stringify(beatDurations),
-          beat_start_times: JSON.stringify(beatStartTimes),
-        });
-        console.log(`✓ Beat durations saved to ProductionSettings (updated existing record)`);
-      } else {
-        prodSettings = await base44.asServiceRole.entities.ProductionSettings.create({
-          project_id,
-          beat_durations: JSON.stringify(beatDurations),
-          beat_start_times: JSON.stringify(beatStartTimes),
-        });
-        console.log(`✓ Beat durations saved to ProductionSettings (created new record)`);
-      }
 
       freshProject = {
         ...project,
@@ -681,13 +641,13 @@ ${finalScript}
       console.log(`  Characters: ${storyAnalysis.characters?.map(c => c.name).join(', ') || 'None identified'}`);
       console.log(`  Motifs: ${storyAnalysis.recurring_visual_motifs?.join(', ') || 'N/A'}`);
 
-      // ── Verify the blueprint actually saved ──
-      const verifyProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
-      if (!verifyProject?.scene_blueprint) {
-        console.error(`❌ Blueprint verification FAILED — field empty after write (tried ${finalBlueprintJson.length} chars)`);
-        return Response.json({ error: 'Blueprint save failed — field may have a size limit. Please retry.' }, { status: 500 });
+      // Verify story analysis saved to ProductionSettings
+      const verifyPS = (await base44.asServiceRole.entities.ProductionSettings.filter({ project_id }))[0];
+      if (!verifyPS?.story_analysis) {
+        console.error(`❌ Story analysis verification FAILED — field empty in ProductionSettings`);
+        return Response.json({ error: 'Story analysis save failed. Please retry.' }, { status: 500 });
       }
-      console.log(`✓ Blueprint verified in DB (${verifyProject.scene_blueprint.length} chars saved)`);
+      console.log(`✓ Story analysis verified in ProductionSettings (${verifyPS.story_analysis.length} chars)`);
 
       // ── Batch 0 DONE — return immediately. Phases start at batch_index=1 ──
       // This keeps batch 0 under the timeout (delete + Gemini analysis + saves ≈ 15s)
@@ -706,72 +666,65 @@ ${finalScript}
       });
 
     } else {
-      // ── Subsequent batches (1+): blueprint already persisted, read from DB ──
-      // Base44's DB is eventually consistent — the write from batch 0 may not
-      // have propagated yet. Retry up to 3 times with increasing delays.
-      const MAX_READ_RETRIES = 3;
-      const READ_DELAY_MS = [2000, 4000, 6000]; // escalating wait
-
-      for (let readAttempt = 0; readAttempt < MAX_READ_RETRIES; readAttempt++) {
-        freshProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
-        
-        if (freshProject?.scene_blueprint) {
-          try {
-            blueprint = JSON.parse(freshProject.scene_blueprint);
-            if (blueprint?.story_analysis) {
-              console.log(`✓ Blueprint loaded from DB (attempt ${readAttempt + 1})`);
-              break;
-            }
-          } catch (_) {}
-        }
-
-        if (readAttempt < MAX_READ_RETRIES - 1) {
-          const delay = READ_DELAY_MS[readAttempt];
-          console.log(`⏳ Blueprint not ready yet, waiting ${delay / 1000}s (attempt ${readAttempt + 1}/${MAX_READ_RETRIES})...`);
-          await new Promise(r => setTimeout(r, delay));
-        }
+      // ── Subsequent batches (1+): read flag from scene_blueprint, data from ProductionSettings ──
+      freshProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
+      
+      try {
+        blueprint = JSON.parse(freshProject.scene_blueprint || '{}');
+      } catch (_) {
+        blueprint = {};
       }
 
-      if (!blueprint?.story_analysis) {
-        return Response.json({ error: 'Scene blueprint not found. Run batch 0 first.' }, { status: 400 });
+      if (!blueprint?.ready) {
+        // Flag not set — batch 0 hasn't completed yet. Retry with delay.
+        const MAX_READ_RETRIES = 4;
+        for (let attempt = 0; attempt < MAX_READ_RETRIES; attempt++) {
+          await new Promise(r => setTimeout(r, 2000));
+          freshProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
+          try { blueprint = JSON.parse(freshProject.scene_blueprint || '{}'); } catch (_) { blueprint = {}; }
+          if (blueprint?.ready) {
+            console.log(`✓ Blueprint flag found (attempt ${attempt + 2})`);
+            break;
+          }
+        }
+        if (!blueprint?.ready) {
+          return Response.json({ error: 'Scene breakdown not initialized. Run batch 0 first.' }, { status: 400 });
+        }
       }
     }
 
     // ══════════════════════════════════════════════════════════════
-    // At this point we're in batch 1+ (phase processing).
-    // Blueprint is SLIM — no niche_profile or beat arrays.
-    // Re-derive them from their original sources.
+    // Load ALL data from ProductionSettings (story analysis + beats)
+    // scene_blueprint only stores a tiny flag + niche + target count.
     // ══════════════════════════════════════════════════════════════
 
-    // Blueprint uses short keys to fit within field size limit
-    // sa.t = central_theme, sa.v = visual_world, sa.c = color_arc, sa.m = motifs, sa.a = arc summary
-    const storyAnalysis = blueprint.story_analysis || {
-      central_theme: blueprint.sa?.t || '',
-      narrative_arc_summary: blueprint.sa?.a || '',
-      visual_world: blueprint.sa?.v || '',
-      color_arc: blueprint.sa?.c || '',
-      recurring_visual_motifs: blueprint.sa?.m || [],
-      emotional_trajectory: [],
-      key_turning_points: []
-    };
+    const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
+    const ps = psList[0];
+    if (!ps?.story_analysis) {
+      return Response.json({ error: 'Story analysis not found in ProductionSettings. Run batch 0 first.' }, { status: 400 });
+    }
 
-    // Re-derive niche profile from the niche key (stripped from blueprint to save space)
+    let storyAnalysis;
+    try { storyAnalysis = JSON.parse(ps.story_analysis); } catch (_) {
+      return Response.json({ error: 'Failed to parse story analysis. Run batch 0 again.' }, { status: 400 });
+    }
+
     const storedNiche = blueprint.niche || niche;
     const nicheProfile = getNicheDirectorProfile(storedNiche);
 
-    // Re-read beat arrays from ProductionSettings (stripped from blueprint to save space)
     let beatDurations = [];
     let beatStartTimes = [];
     try {
-      const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
-      if (psList[0]?.beat_durations) {
-        beatDurations = JSON.parse(psList[0].beat_durations);
-        beatStartTimes = JSON.parse(psList[0].beat_start_times || '[]');
-        console.log(`✓ Beat arrays loaded from ProductionSettings (${beatDurations.length} durations)`);
-      }
-    } catch (_) {
-      console.warn('⚠️ Could not read beat arrays from ProductionSettings — using empty');
-    }
+      if (ps.beat_durations) beatDurations = JSON.parse(ps.beat_durations);
+      if (ps.beat_start_times) beatStartTimes = JSON.parse(ps.beat_start_times);
+    } catch (_) {}
+    console.log(`✓ Loaded from ProductionSettings: story analysis + ${beatDurations.length} beat durations`);
+
+    // Initialize in-memory blueprint with loaded data (scenes starts empty, built per-phase)
+    blueprint.scenes = blueprint.scenes || [];
+    blueprint.story_analysis = storyAnalysis;
+    blueprint.niche_profile = nicheProfile;
+    blueprint.total_target_scenes = blueprint.ts || totalTargetScenes;
 
     let characters = [];
     if (freshProject.character_descriptions) {
@@ -816,17 +769,26 @@ ${finalScript}
       const currentChunk = scriptChunks[phaseIdx];
       const scenesForBatch = currentChunk.scenes;
 
-      // Blueprint uses short keys: s[].n=number, s[].st=shot_type, s[].vc=visual_concept, s[].m=mood, s[].cb=continuity
-      const previousScenes = (blueprint.scenes || blueprint.s || []).slice(-3);
-      const continuityContext = previousScenes.length > 0
-        ? `**LAST ${previousScenes.length} SCENES (for visual continuity):**\n${previousScenes.map(s => {
-            const num = s.scene_number || s.n;
-            const shot = s.shot_type || s.st || 'MS';
-            const vc = s.visual_concept || s.vc || '';
-            const mood = s.mood || s.m || '';
-            return `  Scene ${num}: [${shot}] ${vc} | Mood: ${mood}`;
-          }).join('\n')}`
-        : '**This is the OPENING — establish the visual world with a strong first impression.**';
+      const previousScenes = existingScenes
+        .sort((a, b) => b.scene_number - a.scene_number)
+        .slice(0, 3)
+        .reverse();
+
+      let continuityContext = '**This is the OPENING — establish the visual world with a strong first impression.**';
+      if (previousScenes.length > 0) {
+        const lines = previousScenes.map(s => {
+          let director = null;
+          if (s.image_prompt?.startsWith('DIRECTOR_NOTES:')) {
+            try { director = JSON.parse(s.image_prompt.substring('DIRECTOR_NOTES:'.length)); } catch (_) {}
+          }
+          const shot = director?.shot_type || 'MS';
+          const vc = director?.visual_concept || s.narration_text?.substring(0, 80) || '';
+          const mood = director?.mood || '';
+          const palette = director?.color_palette || '';
+          return `  Scene ${s.scene_number}: [${shot}] ${vc} | Mood: ${mood}`;
+        });
+        continuityContext = `**LAST ${previousScenes.length} SCENES (for visual continuity):**\n${lines.join('\n')}`;
+      }
 
       // ── Pull per-scene durations for THIS batch from the beat array ──
       const batchBeatDurations = beatDurations.slice(sceneOffset, sceneOffset + scenesForBatch);
@@ -1023,32 +985,9 @@ NEVER describe what text appears on any surface. NEVER include dollar amounts, n
       blueprint.scenes = [...blueprint.scenes, ...newBlueprintScenes];
       grandTotalCreated += scenesCreated;
 
-      // Save SLIM blueprint — only last 5 scenes for continuity (prompt generator reads last 3)
-      // Strip characters (in character_descriptions field) and full scene history
-      // Use same short keys as batch 0. Only keep last 3 scenes for continuity.
-      const trunc = (s, max = 80) => typeof s === 'string' && s.length > max ? s.substring(0, max).trim() : s;
-      const slimSave = {
-        sa: {
-          t: trunc(storyAnalysis.central_theme, 80),
-          v: trunc(storyAnalysis.visual_world, 80),
-          c: trunc(storyAnalysis.color_arc, 60),
-          m: (storyAnalysis.recurring_visual_motifs || []).slice(0, 2).map(s => trunc(s, 30)),
-          a: trunc(storyAnalysis.narrative_arc_summary, 80)
-        },
-        n: niche,
-        ts: totalTargetScenes,
-        sc: blueprint.scenes.length,
-        s: blueprint.scenes.slice(-3).map(s => ({
-          n: s.scene_number, st: trunc(s.shot_type, 20),
-          m: trunc(s.mood, 20), cb: trunc(s.continuity_bridge, 40),
-          vc: trunc(s.visual_concept, 60)
-        }))
-      };
-      const saveJson = JSON.stringify(slimSave);
-      console.log(`📦 Phase save: ${saveJson.length} chars (${blueprint.scenes.length} total scenes, last 5 kept)`);
-
+      // Update tiny flag with scene count — all real data is on Scene records + ProductionSettings
       await base44.asServiceRole.entities.Projects.update(project_id, {
-        scene_blueprint: saveJson
+        scene_blueprint: `{"ready":true,"niche":"${storedNiche}","ts":${totalTargetScenes},"sc":${blueprint.scenes.length}}`
       });
 
       console.log(`✓ Phase ${currentChunk.phase} complete — ${scenesCreated} scenes | Running total: ${blueprint.scenes.length}/${totalTargetScenes}`);
