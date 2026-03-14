@@ -618,35 +618,24 @@ ${finalScript}
       const blueprintJson = JSON.stringify(slimBlueprint);
       console.log(`📦 Blueprint size for DB: ${blueprintJson.length} chars`);
 
-      // If STILL too big, strip further
-      if (blueprintJson.length > 2000) {
-        console.warn(`⚠️ Blueprint still ${blueprintJson.length} chars — stripping to bare minimum`);
-        const bareBlueprint = {
-          story_analysis: {
-            central_theme: trunc(storyAnalysis.central_theme, 100),
-            visual_world: trunc(storyAnalysis.visual_world, 100),
-            color_arc: trunc(storyAnalysis.color_arc, 80),
-            recurring_visual_motifs: truncArr(storyAnalysis.recurring_visual_motifs, 2, 40)
-          },
-          niche: niche,
-          total_target_scenes: totalTargetScenes,
-          scenes: []
-        };
-        const bareJson = JSON.stringify(bareBlueprint);
-        console.log(`📦 Bare blueprint: ${bareJson.length} chars`);
+      // If STILL too big, strip to absolute minimum
+      if (blueprintJson.length > 800) {
+        console.warn(`⚠️ Blueprint ${blueprintJson.length} chars — stripping to bare minimum`);
       }
 
       // Use bare blueprint if slim was too big
-      const finalBlueprintJson = blueprintJson.length <= 2000 ? blueprintJson : JSON.stringify({
-        story_analysis: {
-          central_theme: trunc(storyAnalysis.central_theme, 100),
-          visual_world: trunc(storyAnalysis.visual_world, 100),
-          color_arc: trunc(storyAnalysis.color_arc, 80),
-          recurring_visual_motifs: truncArr(storyAnalysis.recurring_visual_motifs, 2, 40)
+      // Always use the smallest possible version — Base44 field limit is tight
+      const finalBlueprintJson = JSON.stringify({
+        sa: {
+          t: trunc(storyAnalysis.central_theme, 80),
+          v: trunc(storyAnalysis.visual_world, 80),
+          c: trunc(storyAnalysis.color_arc, 60),
+          m: truncArr(storyAnalysis.recurring_visual_motifs, 2, 30),
+          a: trunc(storyAnalysis.narrative_arc_summary, 80)
         },
-        niche: niche,
-        total_target_scenes: totalTargetScenes,
-        scenes: []
+        n: niche,
+        ts: totalTargetScenes,
+        s: []
       });
       console.log(`📦 Final blueprint for save: ${finalBlueprintJson.length} chars`);
 
@@ -754,7 +743,17 @@ ${finalScript}
     // Re-derive them from their original sources.
     // ══════════════════════════════════════════════════════════════
 
-    const storyAnalysis = blueprint.story_analysis;
+    // Blueprint uses short keys to fit within field size limit
+    // sa.t = central_theme, sa.v = visual_world, sa.c = color_arc, sa.m = motifs, sa.a = arc summary
+    const storyAnalysis = blueprint.story_analysis || {
+      central_theme: blueprint.sa?.t || '',
+      narrative_arc_summary: blueprint.sa?.a || '',
+      visual_world: blueprint.sa?.v || '',
+      color_arc: blueprint.sa?.c || '',
+      recurring_visual_motifs: blueprint.sa?.m || [],
+      emotional_trajectory: [],
+      key_turning_points: []
+    };
 
     // Re-derive niche profile from the niche key (stripped from blueprint to save space)
     const storedNiche = blueprint.niche || niche;
@@ -817,9 +816,16 @@ ${finalScript}
       const currentChunk = scriptChunks[phaseIdx];
       const scenesForBatch = currentChunk.scenes;
 
-      const previousScenes = blueprint.scenes.slice(-3);
+      // Blueprint uses short keys: s[].n=number, s[].st=shot_type, s[].vc=visual_concept, s[].m=mood, s[].cb=continuity
+      const previousScenes = (blueprint.scenes || blueprint.s || []).slice(-3);
       const continuityContext = previousScenes.length > 0
-        ? `**LAST ${previousScenes.length} SCENES (for visual continuity):**\n${previousScenes.map(s => `  Scene ${s.scene_number}: [${s.shot_type}] ${s.visual_concept} | Mood: ${s.mood} | Palette: ${s.color_palette}`).join('\n')}`
+        ? `**LAST ${previousScenes.length} SCENES (for visual continuity):**\n${previousScenes.map(s => {
+            const num = s.scene_number || s.n;
+            const shot = s.shot_type || s.st || 'MS';
+            const vc = s.visual_concept || s.vc || '';
+            const mood = s.mood || s.m || '';
+            return `  Scene ${num}: [${shot}] ${vc} | Mood: ${mood}`;
+          }).join('\n')}`
         : '**This is the OPENING — establish the visual world with a strong first impression.**';
 
       // ── Pull per-scene durations for THIS batch from the beat array ──
@@ -1019,18 +1025,24 @@ NEVER describe what text appears on any surface. NEVER include dollar amounts, n
 
       // Save SLIM blueprint — only last 5 scenes for continuity (prompt generator reads last 3)
       // Strip characters (in character_descriptions field) and full scene history
+      // Use same short keys as batch 0. Only keep last 3 scenes for continuity.
+      const trunc = (s, max = 80) => typeof s === 'string' && s.length > max ? s.substring(0, max).trim() : s;
       const slimSave = {
-        story_analysis: (() => { const sa = { ...blueprint.story_analysis }; delete sa.characters; return sa; })(),
-        phases: blueprint.phases,
-        total_target_scenes: blueprint.total_target_scenes || totalTargetScenes,
-        niche: blueprint.niche || niche,
-        scenes: blueprint.scenes.slice(-5).map(s => ({
-          scene_number: s.scene_number, phase: s.phase,
-          visual_concept: s.visual_concept, shot_type: s.shot_type,
-          mood: s.mood, color_palette: s.color_palette,
-          continuity_bridge: s.continuity_bridge
-        })),
-        total_scenes_created: blueprint.scenes.length
+        sa: {
+          t: trunc(storyAnalysis.central_theme, 80),
+          v: trunc(storyAnalysis.visual_world, 80),
+          c: trunc(storyAnalysis.color_arc, 60),
+          m: (storyAnalysis.recurring_visual_motifs || []).slice(0, 2).map(s => trunc(s, 30)),
+          a: trunc(storyAnalysis.narrative_arc_summary, 80)
+        },
+        n: niche,
+        ts: totalTargetScenes,
+        sc: blueprint.scenes.length,
+        s: blueprint.scenes.slice(-3).map(s => ({
+          n: s.scene_number, st: trunc(s.shot_type, 20),
+          m: trunc(s.mood, 20), cb: trunc(s.continuity_bridge, 40),
+          vc: trunc(s.visual_concept, 60)
+        }))
       };
       const saveJson = JSON.stringify(slimSave);
       console.log(`📦 Phase save: ${saveJson.length} chars (${blueprint.scenes.length} total scenes, last 5 kept)`);
