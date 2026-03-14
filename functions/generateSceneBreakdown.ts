@@ -421,11 +421,44 @@ ${chunk.text}
 
 **RESPONSE:** {"scenes":[{"scene_number":${offset+1},"narration_text":"EXACT script words","visual_concept":"Rich cinematic description","shot_type":"e.g. WS — Wide Shot","camera_angle":"","camera_movement":"","lighting":"","color_palette":"","mood":"2-3 words","depth_of_field":"","continuity_bridge":"visual thread to next scene","emotional_intensity":0.5,"duration_seconds":5}]}`;
 
-      console.log(`🎬 Phase ${pi+1}/${scriptChunks.length}: ${chunk.phase} — scenes ${offset+1}-${offset+chunk.scenes}`);
-      const result = await callGemini(prompt, 0.7);
+      // Split large phases into sub-batches of max 20 scenes per Gemini call
+      const MAX_SCENES_PER_CALL = 20;
+      const subBatches = [];
+      let remaining = chunk.scenes;
+      let subOffset = offset;
+      while (remaining > 0) {
+        const count = Math.min(remaining, MAX_SCENES_PER_CALL);
+        subBatches.push({ offset: subOffset, count });
+        subOffset += count;
+        remaining -= count;
+      }
 
       let created = 0;
-      if (result.scenes && Array.isArray(result.scenes)) {
+      for (const sub of subBatches) {
+        const elapsed2 = Date.now() - callStart;
+        if (elapsed2 > MAX_WALL_MS && created > 0) {
+          console.log(`⏱️ ${(elapsed2/1000).toFixed(1)}s — saving mid-phase progress`);
+          break;
+        }
+
+        const subBeatDurations = beatDurations.slice(sub.offset, sub.offset + sub.count);
+        const subPrompt = prompt
+          .replace(`exactly ${chunk.scenes} cinematic scenes`, `exactly ${sub.count} cinematic scenes`)
+          .replace(`Scenes ${offset+1} to ${offset+chunk.scenes}`, `Scenes ${sub.offset+1} to ${sub.offset+sub.count}`)
+          .replace(`Duration targets: [${phaseBeatDurations.map(d=>d.toFixed(1)).join(',')}]s`, `Duration targets: [${subBeatDurations.map(d=>d.toFixed(1)).join(',')}]s`)
+          .replace(`"scene_number":${offset+1}`, `"scene_number":${sub.offset+1}`);
+
+        console.log(`🎬 Phase ${pi+1}/${scriptChunks.length}: ${chunk.phase} — scenes ${sub.offset+1}-${sub.offset+sub.count}${subBatches.length>1 ? ` (sub ${subBatches.indexOf(sub)+1}/${subBatches.length})` : ''}`);
+        
+        let result;
+        try {
+          result = await callGemini(subPrompt, 0.7);
+        } catch (err) {
+          console.warn(`⚠️ Sub-batch failed: ${err.message} — skipping`);
+          continue;
+        }
+
+      if (result?.scenes && Array.isArray(result.scenes)) {
         for (const scene of result.scenes) {
           const num = offset + created + 1;
           const dur = beatDurations[num-1] || scene.duration_seconds || 5;
@@ -451,6 +484,9 @@ ${chunk.text}
           created++;
         }
       }
+
+      // end result.scenes check
+      } // end sub-batch loop
 
       grandTotal += created;
       console.log(`✓ ${chunk.phase}: ${created} scenes (total: ${grandTotal}/${totalTargetScenes}) [${((Date.now()-callStart)/1000).toFixed(1)}s]`);
