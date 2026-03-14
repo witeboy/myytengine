@@ -442,20 +442,42 @@ ${chunk.text}
         }
 
         const subBeatDurations = beatDurations.slice(sub.offset, sub.offset + sub.count);
+        // Split script text proportionally for this sub-batch
+        const words = chunk.text.split(/\s+/);
+        const wordsPerScene = Math.ceil(words.length / chunk.scenes);
+        const subStartWord = (sub.offset - offset) * wordsPerScene;
+        const subEndWord = Math.min(subStartWord + sub.count * wordsPerScene, words.length);
+        const subText = words.slice(subStartWord, subEndWord).join(' ');
+
         const subPrompt = prompt
           .replace(`exactly ${chunk.scenes} cinematic scenes`, `exactly ${sub.count} cinematic scenes`)
           .replace(`Scenes ${offset+1} to ${offset+chunk.scenes}`, `Scenes ${sub.offset+1} to ${sub.offset+sub.count}`)
           .replace(`Duration targets: [${phaseBeatDurations.map(d=>d.toFixed(1)).join(',')}]s`, `Duration targets: [${subBeatDurations.map(d=>d.toFixed(1)).join(',')}]s`)
-          .replace(`"scene_number":${offset+1}`, `"scene_number":${sub.offset+1}`);
+          .replace(`"scene_number":${offset+1}`, `"scene_number":${sub.offset+1}`)
+          .replace(chunk.text, subText);
 
         console.log(`🎬 Phase ${pi+1}/${scriptChunks.length}: ${chunk.phase} — scenes ${sub.offset+1}-${sub.offset+sub.count}${subBatches.length>1 ? ` (sub ${subBatches.indexOf(sub)+1}/${subBatches.length})` : ''}`);
         
         let result;
+      
         try {
           result = await callGemini(subPrompt, 0.7);
         } catch (err) {
-          console.warn(`⚠️ Sub-batch failed: ${err.message} — skipping`);
-          continue;
+          console.error(`❌ Sub-batch scenes ${sub.offset+1}-${sub.offset+sub.count} FAILED: ${err.message}`);
+          // Retry once with smaller batch
+          if (sub.count > 10) {
+            console.log(`🔄 Retrying with ${Math.ceil(sub.count/2)} scenes...`);
+            try {
+              const smallerPrompt = subPrompt
+                .replace(`exactly ${sub.count} cinematic scenes`, `exactly ${Math.ceil(sub.count/2)} cinematic scenes`);
+              result = await callGemini(smallerPrompt, 0.7);
+            } catch (retryErr) {
+              console.error(`❌ Retry also failed: ${retryErr.message} — skipping`);
+              continue;
+            }
+          } else {
+            continue;
+          }
         }
 
       if (result?.scenes && Array.isArray(result.scenes)) {
