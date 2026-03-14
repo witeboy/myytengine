@@ -394,38 +394,13 @@ NICHE: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palette} | AVOID:
 
       const phaseBeatDurations = beatDurations.slice(offset, offset+chunk.scenes);
 
-      const prompt = `You are a film director. Break this script segment into exactly ${chunk.scenes} cinematic scenes.
-${styleDirective}
-
-**STORY:** ${storyAnalysis.central_theme} | Visual: ${storyAnalysis.visual_world} | Color: ${storyAnalysis.color_arc} | Motifs: ${(storyAnalysis.recurring_visual_motifs||[]).join(', ')}
-${characterBlock}
-${continuity}
-
-**PHASE: ${chunk.phase.toUpperCase()}** — ${chunk.purpose}
-Scenes ${offset+1} to ${offset+chunk.scenes}
-${phaseBeatDurations.length>0 ? `Duration targets: [${phaseBeatDurations.map(d=>d.toFixed(1)).join(',')}]s` : ''}
-
-**SCRIPT:**
-${chunk.text}
-
-**RULES:**
-1. Scenes are VISUAL BEATS, not sentences. Change scene when the visual changes.
-2. visual_concept: 2-4 sentences. Environment FIRST, then character ACTION, then atmosphere. NEVER describe text/screens/documents/dollar amounts on any surface.
-3. Shot variety: NEVER same shot type consecutively. Cycle WS/EWS/MWS/MS/LOW/HIGH/OTS/MCU/CU/POV/DUTCH.
-4. ALWAYS name specific objects from the narration (cellphone, laptop, bill, receipt, letter, etc.) as PROPS in the scene — "clutching her cellphone", "staring at the overdue bill". But NEVER describe what's ON the screen/paper/document — no text, no UI, no dollar amounts, no app names.
-5. Abstract concepts → PHYSICAL METAPHORS. Use the EXACT nouns from the script (not vague substitutes).
-6. Characters must be IN a detailed environment doing an ACTION — never isolated against blank/blurred background.
-7. Adjacent scenes share a CONTINUITY element (shared prop, color shift, gesture echo).
-8. IMMERSION — every scene must include at least 2 of: (a) foreground element between camera and subject (blurred shoulder, plant leaf, doorframe, steam), (b) sensory texture (steam rising, rain on glass, dust in light beam, wind-blown hair), (c) character micro-action (tapping fingers, adjusting glasses, biting lip, rubbing neck), (d) background detail that tells its own story (half-eaten meal, wilting plant, child's drawing on fridge), (e) specific time-of-day lighting (not just "daytime" — "4AM blue pre-dawn glow" or "golden hour through blinds"), (f) scale contrast (person dwarfed by lobby, single chair in empty warehouse).
-9. NICHE: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palette} | AVOID: ${nicheProfile.avoid}
-
-**RESPONSE:** {"scenes":[{"scene_number":${offset+1},"narration_text":"EXACT script words","visual_concept":"Rich cinematic description","shot_type":"e.g. WS — Wide Shot","camera_angle":"","camera_movement":"","lighting":"","color_palette":"","mood":"2-3 words","depth_of_field":"","continuity_bridge":"visual thread to next scene","emotional_intensity":0.5,"duration_seconds":5}]}`;
-
       // Split large phases into sub-batches of max 20 scenes per Gemini call
       const MAX_SCENES_PER_CALL = 20;
       const subBatches = [];
       let remaining = chunk.scenes;
       let subOffset = offset;
+      const chunkWords = chunk.text.split(/\s+/);
+      const wordsPerScene = Math.ceil(chunkWords.length / chunk.scenes);
       while (remaining > 0) {
         const count = Math.min(remaining, MAX_SCENES_PER_CALL);
         subBatches.push({ offset: subOffset, count });
@@ -441,22 +416,41 @@ ${chunk.text}
           break;
         }
 
-        const subBeatDurations = beatDurations.slice(sub.offset, sub.offset + sub.count);
-        // Split script text proportionally for this sub-batch
-        const words = chunk.text.split(/\s+/);
-        const wordsPerScene = Math.ceil(words.length / chunk.scenes);
+        // Slice script text proportionally for this sub-batch
         const subStartWord = (sub.offset - offset) * wordsPerScene;
-        const subEndWord = Math.min(subStartWord + sub.count * wordsPerScene, words.length);
-        const subText = words.slice(subStartWord, subEndWord).join(' ');
+        const subEndWord = Math.min(subStartWord + sub.count * wordsPerScene, chunkWords.length);
+        const subText = chunkWords.slice(subStartWord, subEndWord).join(' ');
+        const subBeatDurations = beatDurations.slice(sub.offset, sub.offset + sub.count);
 
-        const subPrompt = prompt
-          .replace(`exactly ${chunk.scenes} cinematic scenes`, `exactly ${sub.count} cinematic scenes`)
-          .replace(`Scenes ${offset+1} to ${offset+chunk.scenes}`, `Scenes ${sub.offset+1} to ${sub.offset+sub.count}`)
-          .replace(`Duration targets: [${phaseBeatDurations.map(d=>d.toFixed(1)).join(',')}]s`, `Duration targets: [${subBeatDurations.map(d=>d.toFixed(1)).join(',')}]s`)
-          .replace(`"scene_number":${offset+1}`, `"scene_number":${sub.offset+1}`)
-          .replace(chunk.text, subText);
+        // Build prompt fresh — no string replacement
+        const subPrompt = `You are a film director. Break this script segment into exactly ${sub.count} cinematic scenes.
+${styleDirective}
 
-        console.log(`🎬 Phase ${pi+1}/${scriptChunks.length}: ${chunk.phase} — scenes ${sub.offset+1}-${sub.offset+sub.count}${subBatches.length>1 ? ` (sub ${subBatches.indexOf(sub)+1}/${subBatches.length})` : ''}`);
+**STORY:** ${storyAnalysis.central_theme} | Visual: ${storyAnalysis.visual_world} | Color: ${storyAnalysis.color_arc} | Motifs: ${(storyAnalysis.recurring_visual_motifs||[]).join(', ')}
+${characterBlock}
+${continuity}
+
+**PHASE: ${chunk.phase.toUpperCase()}** — ${chunk.purpose}
+Scenes ${sub.offset+1} to ${sub.offset+sub.count}
+${subBeatDurations.length>0 ? `Duration targets: [${subBeatDurations.map(d=>d.toFixed(1)).join(',')}]s` : ''}
+
+**SCRIPT:**
+${subText}
+
+**RULES:**
+1. Scenes are VISUAL BEATS, not sentences. Change scene when the visual changes.
+2. visual_concept: 2-4 sentences. Environment FIRST, then character ACTION, then atmosphere. NEVER describe text/screens/documents/dollar amounts on any surface.
+3. Shot variety: NEVER same shot type consecutively. Cycle WS/EWS/MWS/MS/LOW/HIGH/OTS/MCU/CU/POV/DUTCH.
+4. ALWAYS name specific objects from the narration (cellphone, laptop, bill, receipt, letter, etc.) as PROPS in the scene — "clutching her cellphone", "staring at the overdue bill". But NEVER describe what's ON the screen/paper/document — no text, no UI, no dollar amounts, no app names.
+5. Abstract concepts → PHYSICAL METAPHORS. Use the EXACT nouns from the script (not vague substitutes).
+6. Characters must be IN a detailed environment doing an ACTION — never isolated against blank/blurred background.
+7. Adjacent scenes share a CONTINUITY element (shared prop, color shift, gesture echo).
+8. IMMERSION — every scene must include at least 2 of: (a) foreground element between camera and subject (blurred shoulder, plant leaf, doorframe, steam), (b) sensory texture (steam rising, rain on glass, dust in light beam, wind-blown hair), (c) character micro-action (tapping fingers, adjusting glasses, biting lip, rubbing neck), (d) background detail that tells its own story (half-eaten meal, wilting plant, child's drawing on fridge), (e) specific time-of-day lighting (not just "daytime" — "4AM blue pre-dawn glow" or "golden hour through blinds"), (f) scale contrast (person dwarfed by lobby, single chair in empty warehouse).
+9. NICHE: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palette} | AVOID: ${nicheProfile.avoid}
+
+**RESPONSE:** {"scenes":[{"scene_number":${sub.offset+1},"narration_text":"EXACT script words","visual_concept":"Rich cinematic description","shot_type":"e.g. WS — Wide Shot","camera_angle":"","camera_movement":"","lighting":"","color_palette":"","mood":"2-3 words","depth_of_field":"","continuity_bridge":"visual thread to next scene","emotional_intensity":0.5,"duration_seconds":5}]}`;
+
+        console.log(`🎬 Phase ${pi+1}/${scriptChunks.length}: ${chunk.phase} — scenes ${sub.offset+1}-${sub.offset+sub.count}${subBatches.length>1 ? ` (sub ${subBatches.indexOf(sub)+1}/${subBatches.length})` : ''} [${subText.split(/\s+/).length} words]`);
         
         let result;
       
