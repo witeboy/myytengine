@@ -416,7 +416,8 @@ ${chunk.text}
 5. Abstract concepts → PHYSICAL METAPHORS. Use the EXACT nouns from the script (not vague substitutes).
 6. Characters must be IN a detailed environment doing an ACTION — never isolated against blank/blurred background.
 7. Adjacent scenes share a CONTINUITY element (shared prop, color shift, gesture echo).
-8. NICHE: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palette} | AVOID: ${nicheProfile.avoid}
+8. IMMERSION — every scene must include at least 2 of: (a) foreground element between camera and subject (blurred shoulder, plant leaf, doorframe, steam), (b) sensory texture (steam rising, rain on glass, dust in light beam, wind-blown hair), (c) character micro-action (tapping fingers, adjusting glasses, biting lip, rubbing neck), (d) background detail that tells its own story (half-eaten meal, wilting plant, child's drawing on fridge), (e) specific time-of-day lighting (not just "daytime" — "4AM blue pre-dawn glow" or "golden hour through blinds"), (f) scale contrast (person dwarfed by lobby, single chair in empty warehouse).
+9. NICHE: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palette} | AVOID: ${nicheProfile.avoid}
 
 **RESPONSE:** {"scenes":[{"scene_number":${offset+1},"narration_text":"EXACT script words","visual_concept":"Rich cinematic description","shot_type":"e.g. WS — Wide Shot","camera_angle":"","camera_movement":"","lighting":"","color_palette":"","mood":"2-3 words","depth_of_field":"","continuity_bridge":"visual thread to next scene","emotional_intensity":0.5,"duration_seconds":5}]}`;
 
