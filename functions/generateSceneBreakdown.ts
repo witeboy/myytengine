@@ -224,7 +224,7 @@ Deno.serve(async (req) => {
 
     // Scene density scales with video length
     const avgScene = (() => {
-      const a=[{m:1,d:3.4},{m:3,d:4.0},{m:5,d:4.7},{m:10,d:5.6},{m:15,d:6.6},{m:30,d:8.0},{m:60,d:9.4}];
+      const a=[{m:1,d:4.2},{m:3,d:5.0},{m:5,d:5.5},{m:8,d:6.0},{m:10,d:6.2},{m:15,d:7.0},{m:30,d:8.0},{m:60,d:9.0}];
       if(durationMinutes<=a[0].m) return a[0].d;
       if(durationMinutes>=a[a.length-1].m) return a[a.length-1].d;
       for(let i=0;i<a.length-1;i++){
