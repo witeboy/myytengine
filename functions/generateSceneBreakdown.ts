@@ -474,8 +474,20 @@ ${subText}
           }
         }
 
-      if (result?.scenes && Array.isArray(result.scenes)) {
-        for (const scene of result.scenes) {
+      // Try to find scenes array under different possible keys
+      let scenesArr = result?.scenes;
+      if (!scenesArr || !Array.isArray(scenesArr)) {
+        // Gemini sometimes nests differently
+        scenesArr = result?.prompts || result?.scene || result?.data?.scenes || null;
+        if (Array.isArray(scenesArr)) {
+          console.warn(`⚠️ Scenes found under non-standard key (${Object.keys(result).join(',')})`);
+        } else {
+          console.error(`❌ No scenes array in response. Keys: ${JSON.stringify(Object.keys(result || {}))}. First 200 chars: ${JSON.stringify(result).substring(0, 200)}`);
+        }
+      }
+
+      if (scenesArr && Array.isArray(scenesArr)) {
+        for (const scene of scenesArr) {
           const num = offset + created + 1;
           const dur = beatDurations[num-1] || scene.duration_seconds || 5;
 
