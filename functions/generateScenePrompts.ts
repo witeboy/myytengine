@@ -774,22 +774,25 @@ Deno.serve(async (req) => {
 
 
     let storyContext = '';
-    let blueprintSceneMap = {}; // scene_number → director data from blueprint
+    let blueprintSceneMap = {}; // scene_number → director data (now read from Scene records, not blueprint)
     try {
-      const blueprint = JSON.parse(project.scene_blueprint);
-      const sa = blueprint.story_analysis;
-      storyContext = `**STORY:** Theme: ${sa.central_theme} | Visual World: ${sa.visual_world} | Color Arc: ${sa.color_arc} | Motifs: ${JSON.stringify(sa.recurring_visual_motifs)}`;
-
-
-      // Build lookup map from blueprint scenes (where breakdown stores director data)
-      if (blueprint.scenes && Array.isArray(blueprint.scenes)) {
-        for (const bs of blueprint.scenes) {
-          if (bs.scene_number) {
-            blueprintSceneMap[bs.scene_number] = bs;
-          }
+      // Story analysis is stored in ProductionSettings (scene_blueprint has a size limit)
+      const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
+      const ps = psList[0];
+      if (ps?.story_analysis) {
+        const sa = JSON.parse(ps.story_analysis);
+        storyContext = `**STORY:** Theme: ${sa.central_theme || ''} | Visual World: ${sa.visual_world || ''} | Color Arc: ${sa.color_arc || ''} | Motifs: ${JSON.stringify(sa.recurring_visual_motifs || [])}`;
+        console.log(`📋 Story analysis loaded from ProductionSettings`);
+      } else {
+        // Fallback: try scene_blueprint (backward compat with older projects)
+        const blueprint = JSON.parse(project.scene_blueprint || '{}');
+        const sa = blueprint.story_analysis || blueprint.sa;
+        if (sa) {
+          storyContext = `**STORY:** Theme: ${sa.central_theme || sa.t || ''} | Visual World: ${sa.visual_world || sa.v || ''} | Color Arc: ${sa.color_arc || sa.c || ''} | Motifs: ${JSON.stringify(sa.recurring_visual_motifs || sa.m || [])}`;
         }
-        console.log(`📋 Loaded ${Object.keys(blueprintSceneMap).length} scenes from blueprint`);
       }
+      // Director notes are now stored on each Scene record (DIRECTOR_NOTES: prefix)
+      // extractDirectorNotes() handles this — blueprintSceneMap stays empty
     } catch (_) {
       storyContext = `**STORY:** Topic: "${project.name}" | Niche: ${project.niche || 'general'}`;
     }
