@@ -430,16 +430,13 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
 
 function getArcAnimationGuidance(arcPosition) {
   const map = {
-    // ── Map both legacy arc_position AND phase names ──
-    // Legacy arc_position values
-    setup: "SLOW, RESTRAINED motion. Wider compositions. Gentle drift or slow pan. Establish atmosphere. Camera breathes.",
-    rising: "BUILDING motion energy. Gradual push-ins, steady tracking. More dynamic than setup. Momentum increasing.",
-    climax: "STRONGEST motion. Tight framing, assertive camera. Quick push-ins, dramatic angles. Peak emotional energy.",
-    resolution: "SOFTENED motion. Pull-back, gentle. Wider, contemplative. The emotional exhale. Calm and resolved.",
-    // Phase names from breakdown (cold_open, rising_tension, emotional_core, resolution)
-    cold_open: "SHARP, IMMEDIATE motion. Quick cuts, dynamic angles, assertive camera. Grab attention — this is the hook. Punchy energy.",
-    rising_tension: "BUILDING motion energy. Gradual push-ins, steady tracking. More dynamic with each beat. Momentum increasing, stakes rising.",
-    emotional_core: "STRONGEST, most DELIBERATE motion. Camera lingers on faces, slow meaningful push-ins, dramatic holds. Peak emotional weight — let moments breathe.",
+    setup: "SLOW, RESTRAINED. Gentle drift or creeping pan. Camera discovers the world — parallax depth as foreground drifts past background. Settling motion like arriving somewhere.",
+    rising: "BUILDING energy. Gradual push-ins with purpose. Handheld micro-shake emerging. Parallax intensifying. Elements in frame start responding — curtains shift, papers flutter, light quickens.",
+    climax: "PEAK intensity but CONTROLLED. Deliberate slow push-in to subject's eyes or hands. Everything else stills. Rack focus snaps. Single dramatic light shift. Hold the moment — let it land.",
+    resolution: "EXHALE. Slow pull-back revealing wider context. Settling dust, calming light, softening focus. Motion decelerates like a heartbeat returning to rest. Warmth enters the frame.",
+    cold_open: "IMMEDIATE and ASSERTIVE. Camera already moving when scene starts — mid-track or mid-push. No easing in. Foreground whips past. Light cuts sharp. Grab the eye in the first frame.",
+    rising_tension: "ESCALATING rhythm. Each motion slightly faster or tighter than the last. Push-ins grow bolder, tracking grows more urgent. Environmental motion picks up — wind, flickering light, shifting shadows. Building toward something.",
+    emotional_core: "DELIBERATE POWER. Camera slows to meaningful crawl. Every inch of movement earns its place. Subject micro-expressions amplified — a swallow, a blink, fingers tightening. Shallow DOF breathes. Light pools and shifts like it's alive. This is the frame viewers remember.",
   };
   return map[arcPosition] || map.rising;
 }
@@ -1226,7 +1223,8 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
             const arcPosition = s.director?.phase || s.director?.arc_position || 'rising';
             const mood = s.director?.mood || 'contemplative';
             const movement = s.director?.camera_movement || 'slow drift forward';
-            animationPrompt = `${movement} over ${sceneDuration} seconds. ${getArcAnimationGuidance(arcPosition)} Atmospheric particles drift lazily through the frame. Subtle breathing motion on subject. Light shifts gradually, casting evolving shadows. The mood is ${mood} — every micro-movement reflects this emotional weight.`;
+            const vc = s.director?.visual_concept || s.narration_text || '';
+            animationPrompt = `${movement} over ${sceneDuration} seconds. ${getArcAnimationGuidance(arcPosition)} Foreground elements shift with parallax depth against the background. Subject's body language carries the emotion — micro-movements in hands, shoulders, breathing rhythm. Environmental details respond: ${vc.includes('rain') ? 'rain streaks down surfaces, pooling light reflections ripple' : vc.includes('wind') ? 'fabric and hair catch the wind, leaves scatter across frame' : vc.includes('night') ? 'shadows crawl across walls, distant lights pulse faintly' : 'ambient textures shift — dust motes, fabric settling, light evolving across surfaces'}. The emotional quality is ${mood} — motion weight and speed match this energy. Shallow depth of field breathes subtly between foreground and subject.`;
           }
         } else {
           console.warn(`⚠️ Scene ${s.scene_number} missing from response — building fallback`);
@@ -1248,6 +1246,7 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
           const arcPosition = s.director?.phase || s.director?.arc_position || 'rising';
           const mood = s.director?.mood || 'contemplative';
           const movement = s.director?.camera_movement || 'slow drift forward';
+          const vc = s.director?.visual_concept || s.narration_text || '';
           animationPrompt = `${movement} over ${sceneDuration} seconds. ${getArcAnimationGuidance(arcPosition)} Fine dust particles float through volumetric light beams, drifting with invisible air currents. Subject exhibits subtle breathing rhythm — chest rises and falls gently, fabric settles. Light evolves slowly across the frame, warm tones shifting and shadows deepening. The emotional quality is ${mood} — motion feels weighted with this energy. Shallow depth of field breathes subtly, bokeh orbs pulse with ambient light.`;
         }
 
