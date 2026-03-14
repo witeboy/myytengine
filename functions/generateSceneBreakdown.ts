@@ -596,12 +596,21 @@ ${finalScript}
       // - niche_profile: re-derived from getNicheDirectorProfile(niche) 
       // - beat arrays: saved to ProductionSettings
       // - characters: saved to project.character_descriptions
-      const slimStoryAnalysis = { ...storyAnalysis };
-      delete slimStoryAnalysis.characters;  // saved separately in character_descriptions field
+      // Truncate helper — cap strings, shorten arrays
+      const trunc = (s, max = 120) => typeof s === 'string' && s.length > max ? s.substring(0, max).trim() : s;
+      const truncArr = (arr, max = 3, charMax = 80) => Array.isArray(arr) ? arr.slice(0, max).map(s => trunc(s, charMax)) : arr;
 
       const slimBlueprint = {
-        story_analysis: slimStoryAnalysis,
-        phases: blueprint.phases,
+        story_analysis: {
+          central_theme: trunc(storyAnalysis.central_theme, 150),
+          narrative_arc_summary: trunc(storyAnalysis.narrative_arc_summary, 200),
+          emotional_trajectory: truncArr(storyAnalysis.emotional_trajectory, 5, 30),
+          key_turning_points: truncArr(storyAnalysis.key_turning_points, 3, 80),
+          visual_world: trunc(storyAnalysis.visual_world, 150),
+          recurring_visual_motifs: truncArr(storyAnalysis.recurring_visual_motifs, 3, 60),
+          color_arc: trunc(storyAnalysis.color_arc, 100)
+        },
+        phases: blueprint.phases.map(p => ({ name: p.name, scenes: p.scene_count })),
         total_target_scenes: totalTargetScenes,
         niche: niche,
         scenes: []
@@ -609,10 +618,42 @@ ${finalScript}
       const blueprintJson = JSON.stringify(slimBlueprint);
       console.log(`📦 Blueprint size for DB: ${blueprintJson.length} chars`);
 
+      // If STILL too big, strip further
+      if (blueprintJson.length > 2000) {
+        console.warn(`⚠️ Blueprint still ${blueprintJson.length} chars — stripping to bare minimum`);
+        const bareBlueprint = {
+          story_analysis: {
+            central_theme: trunc(storyAnalysis.central_theme, 100),
+            visual_world: trunc(storyAnalysis.visual_world, 100),
+            color_arc: trunc(storyAnalysis.color_arc, 80),
+            recurring_visual_motifs: truncArr(storyAnalysis.recurring_visual_motifs, 2, 40)
+          },
+          niche: niche,
+          total_target_scenes: totalTargetScenes,
+          scenes: []
+        };
+        const bareJson = JSON.stringify(bareBlueprint);
+        console.log(`📦 Bare blueprint: ${bareJson.length} chars`);
+      }
+
+      // Use bare blueprint if slim was too big
+      const finalBlueprintJson = blueprintJson.length <= 2000 ? blueprintJson : JSON.stringify({
+        story_analysis: {
+          central_theme: trunc(storyAnalysis.central_theme, 100),
+          visual_world: trunc(storyAnalysis.visual_world, 100),
+          color_arc: trunc(storyAnalysis.color_arc, 80),
+          recurring_visual_motifs: truncArr(storyAnalysis.recurring_visual_motifs, 2, 40)
+        },
+        niche: niche,
+        total_target_scenes: totalTargetScenes,
+        scenes: []
+      });
+      console.log(`📦 Final blueprint for save: ${finalBlueprintJson.length} chars`);
+
       await base44.asServiceRole.entities.Projects.update(project_id, {
         status: "scene_breakdown",
         current_step: 5,
-        scene_blueprint: blueprintJson,
+        scene_blueprint: finalBlueprintJson,
         character_descriptions: storyAnalysis.characters
           ? JSON.stringify(storyAnalysis.characters)
           : project.character_descriptions
@@ -654,7 +695,7 @@ ${finalScript}
       // ── Verify the blueprint actually saved ──
       const verifyProject = (await base44.asServiceRole.entities.Projects.filter({ id: project_id }))[0];
       if (!verifyProject?.scene_blueprint) {
-        console.error(`❌ Blueprint verification FAILED — field empty after write (tried ${blueprintJson.length} chars)`);
+        console.error(`❌ Blueprint verification FAILED — field empty after write (tried ${finalBlueprintJson.length} chars)`);
         return Response.json({ error: 'Blueprint save failed — field may have a size limit. Please retry.' }, { status: 500 });
       }
       console.log(`✓ Blueprint verified in DB (${verifyProject.scene_blueprint.length} chars saved)`);
