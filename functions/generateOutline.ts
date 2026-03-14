@@ -1,11 +1,42 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 function repairJSON(str) {
-  return str
-    .replace(/[\x00-\x1F\x7F]/g, c => c === '\n' || c === '\r' || c === '\t' ? ' ' : ' ')
-    .replace(/  +/g, ' ')
-    .replace(/,\s*([}\]])/g, '$1')       // trailing commas
-    .replace(/(["\w\d])\s*\n\s*"/g, '$1, "');  // missing commas between fields
+  let s = str;
+  // Normalize control chars
+  s = s.replace(/[\x00-\x1F\x7F]/g, ' ').replace(/  +/g, ' ');
+  // Trailing commas
+  s = s.replace(/,\s*([}\]])/g, '$1');
+  // Missing commas between fields
+  s = s.replace(/(["\w\d])\s*\n\s*"/g, '$1, "');
+  // Escape unescaped inner quotes inside string values
+  // Matches: "key": "value with "bad quotes" inside"
+  // Strategy: walk through and fix quotes between key-value pairs
+  s = s.replace(/"([^"]*?)"\s*:\s*"([\s\S]*?)"\s*([,}\]])/g, (match, key, val, end) => {
+    // Escape any unescaped quotes inside the value
+    const fixedVal = val.replace(/(?<!\\)"/g, '\\"');
+    return `"${key}": "${fixedVal}"${end}`;
+  });
+  return s;
+}
+
+function fixUnescapedQuotes(raw) {
+  let result = '', inString = false, prevChar = '';
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw[i];
+    if (c === '"' && prevChar !== '\\') {
+      if (!inString) { inString = true; result += c; }
+      else {
+        let next = '';
+        for (let j = i + 1; j < raw.length; j++) {
+          if (!' \n\r\t'.includes(raw[j])) { next = raw[j]; break; }
+        }
+        if (':,}]'.includes(next)) { inString = false; result += c; }
+        else { result += '\\"'; }
+      }
+    } else { result += c; }
+    prevChar = c;
+  }
+  return result;
 }
 
 async function callGemini(prompt, temperature = 0.7, retries = 3) {
@@ -53,6 +84,10 @@ async function callGemini(prompt, temperature = 0.7, retries = 3) {
 
       // Try with repair
       try { return JSON.parse(repairJSON(rawText)); } catch (_) {}
+
+      // Try fixing unescaped quotes inside string values (e.g. "Storage Almost Full" inside synopsis)
+      try { return JSON.parse(fixUnescapedQuotes(rawText)); } catch (_) {}
+      try { return JSON.parse(repairJSON(fixUnescapedQuotes(rawText))); } catch (_) {}
 
       // Try extracting from markdown code blocks
       let jsonStr = rawText;
