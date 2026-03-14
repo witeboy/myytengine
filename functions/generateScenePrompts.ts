@@ -692,10 +692,22 @@ Deno.serve(async (req) => {
         }
         const fullDesc = styleTransform(bodyDesc, compactFaceFull);
 
+        // Sanitize gender — never "individual", "any gender", "person of any gender"
+        function sanitizeGender(desc) {
+          return desc
+            .replace(/\bany gender\b/gi, 'female')
+            .replace(/\bindividual\b/gi, 'woman')
+            .replace(/\bperson of any gender\b/gi, 'woman')
+            .replace(/\bgender[- ]neutral\b/gi, 'female')
+            .replace(/\ba person\b/gi, 'a woman')
+            .replace(/\bthe person\b/gi, 'the woman')
+            .replace(/\ban adult\b/gi, 'a woman');
+        }
+
         characterTieredTags[name] = {
-          minimal: minimalDesc.length > 150 ? minimalDesc.substring(0, 150).trim() : minimalDesc,
-          moderate: moderateDesc.length > 300 ? moderateDesc.substring(0, 300).trim() : moderateDesc,
-          full: fullDesc.length > 500 ? fullDesc.substring(0, 500).trim() : fullDesc
+          minimal: sanitizeGender(minimalDesc.length > 150 ? minimalDesc.substring(0, 150).trim() : minimalDesc),
+          moderate: sanitizeGender(moderateDesc.length > 300 ? moderateDesc.substring(0, 300).trim() : moderateDesc),
+          full: sanitizeGender(fullDesc.length > 500 ? fullDesc.substring(0, 500).trim() : fullDesc)
         };
 
         if (c.reference_prompt) {
@@ -1154,14 +1166,24 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
                 new RegExp(`\\b${escapedName}\\b,\\s*a\\s[^,]{10,}(?:,\\s*[^,]{5,}){0,4},\\s*`, 'gi'), `${c.name}, `
               );
 
-              // Inject the tier-appropriate description at first name occurrence
+              // Inject the tier-appropriate description WOVEN with the action
+              // "The User is sitting" → "The User, a 30-year-old woman with brown eyes, is sitting"
               const firstOcc = modifiedPrompt.match(new RegExp(`\\b${escapedName}\\b`, 'i'));
               if (firstOcc) {
                 const idx = modifiedPrompt.indexOf(firstOcc[0]);
                 const before = modifiedPrompt.substring(0, idx);
                 const after = modifiedPrompt.substring(idx + firstOcc[0].length);
-                modifiedPrompt = `${before}${desc}${after}`;
-                console.log(`👤 Scene ${s.scene_number}: ${identityTier.toUpperCase()} identity for "${c.name}" (${desc.length} chars)`);
+                // Check if the next word is a verb/action — if so, weave as appositive
+                const afterTrimmed = after.trimStart();
+                const startsWithVerb = /^(is|was|sits|stands|walks|runs|holds|stares|looks|leans|clutch|grip|reach|kneel|crouch|watch|gaze|turn|step|press|scroll|tap|delet|swip)/i.test(afterTrimmed);
+                if (startsWithVerb) {
+                  // Weave: "The User, a 30-year-old woman with brown eyes, is sitting..."
+                  modifiedPrompt = `${before}${firstOcc[0]}, ${desc},${after}`;
+                } else {
+                  // No verb follows — just replace name with description
+                  modifiedPrompt = `${before}${desc}${after}`;
+                }
+                console.log(`👤 Scene ${s.scene_number}: ${identityTier.toUpperCase()} identity for "${c.name}" (${desc.length} chars, woven=${startsWithVerb})`);
               }
             }
 
