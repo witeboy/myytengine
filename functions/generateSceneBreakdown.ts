@@ -412,8 +412,8 @@ ${chunk.text}
 1. Scenes are VISUAL BEATS, not sentences. Change scene when the visual changes.
 2. visual_concept: 2-4 sentences. Environment FIRST, then character ACTION, then atmosphere. NEVER describe text/screens/documents/dollar amounts on any surface.
 3. Shot variety: NEVER same shot type consecutively. Cycle WS/EWS/MWS/MS/LOW/HIGH/OTS/MCU/CU/POV/DUTCH.
-4. When narration mentions phone/laptop/bill/receipt/document — show CHARACTER'S REACTION from medium+ distance, NOT the object content.
-5. Abstract concepts → PHYSICAL METAPHORS (never text/charts/graphs).
+4. ALWAYS name specific objects from the narration (cellphone, laptop, bill, receipt, letter, etc.) as PROPS in the scene — "clutching her cellphone", "staring at the overdue bill". But NEVER describe what's ON the screen/paper/document — no text, no UI, no dollar amounts, no app names.
+5. Abstract concepts → PHYSICAL METAPHORS. Use the EXACT nouns from the script (not vague substitutes).
 6. Characters must be IN a detailed environment doing an ACTION — never isolated against blank/blurred background.
 7. Adjacent scenes share a CONTINUITY element (shared prop, color shift, gesture echo).
 8. NICHE: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palette} | AVOID: ${nicheProfile.avoid}
