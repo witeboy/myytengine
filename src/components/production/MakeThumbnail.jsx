@@ -781,7 +781,7 @@ export default function MakeThumbnail({ onBack }) {
         }}>
           <Sparkles size={32} color="#fff" />
         </div>
-        <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Rendering with Ideogram Character</h2>
+        <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Rendering + Upscaling + Color Grading</h2>
 
         {selectedConcept?.text_overlay && (
           <div style={{
