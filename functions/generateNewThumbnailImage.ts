@@ -180,7 +180,7 @@ Deno.serve(async (req) => {
     // Upload template → this becomes image_url (the BASE the model remixes FROM)
     let templateUrl = null;
     if (hasTemplateRef) {
-      templateUrl = await uploadToKie(
+      templateUrl = await uploadImage(
         templateRef.b64,
         templateRef.mime || 'image/jpeg',
         'template'
@@ -190,7 +190,7 @@ Deno.serve(async (req) => {
     // Upload character photos → these become reference_image_urls (the FACES to inject)
     const referenceImageUrls = [];
     for (const [i, p] of charPhotos.filter(p => p?.b64).entries()) {
-      const url = await uploadToKie(p.b64, p.mime || 'image/jpeg', `char_${i + 1}`);
+      const url = await uploadImage(p.b64, p.mime || 'image/jpeg', `char_${i + 1}`);
       if (url) referenceImageUrls.push(url);
     }
 
