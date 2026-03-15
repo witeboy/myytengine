@@ -658,8 +658,17 @@ Deno.serve(async (req) => {
 
     for (const c of characters) {
       const name = (c.name || '').toLowerCase().trim();
-      const identityDesc = c.identity_core || c.visual_description || c.description || '';
+      let identityDesc = c.identity_core || c.visual_description || c.description || '';
       const clothing = c.default_clothing || '';
+      // Clean junk Gemini echoes back from prompt instructions
+      identityDesc = identityDesc
+        .replace(/^Casting[- ]sheet:?\s*/i, '')
+        .replace(/^IMMUTABLE[^:]*:\s*/i, '')
+        .replace(/^Identity[^:]*:\s*/i, '')
+        .replace(/\bCasting[- ]sheet:?\s*/gi, '')
+        .replace(/\bshown full (?:body|figure)\b/gi, '')
+        .replace(/\bshown full body in the scene\b/gi, '')
+        .replace(/,\s*,/g, ',').replace(/^\s*,/, '').trim();
       if (name && identityDesc) {
         const { body, face } = splitIdentity(identityDesc);
         const bodyDesc = body || 'adult character';
@@ -1164,12 +1173,24 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
 
               const escapedName = c.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-              // Strip any LLM-generated descriptions (parentheticals + inline)
+              // Strip any LLM-generated descriptions (parentheticals, inline, "has" clauses, slash-names)
               modifiedPrompt = modifiedPrompt.replace(
                 new RegExp(`\\b${escapedName}\\b\\s*\\([^)]{5,}\\)`, 'gi'), c.name
               );
               modifiedPrompt = modifiedPrompt.replace(
                 new RegExp(`\\b${escapedName}\\b,\\s*a\\s[^,]{10,}(?:,\\s*[^,]{5,}){0,4},\\s*`, 'gi'), `${c.name}, `
+              );
+              // "Sarah/The Everyperson has light-medium skin..." → remove
+              modifiedPrompt = modifiedPrompt.replace(
+                new RegExp(`\\b${escapedName}(?:\\/[\\w\\s]+)?\\s+has\\s+[^.]{20,}?\\.`, 'gi'), ''
+              );
+              // "Name is a 30-year-old woman with..." → remove
+              modifiedPrompt = modifiedPrompt.replace(
+                new RegExp(`\\b${escapedName}\\s+is\\s+a\\s+\\d{1,2}[^.]{15,}?\\.`, 'gi'), ''
+              );
+              // "Sarah/The Everyperson" → just the name
+              modifiedPrompt = modifiedPrompt.replace(
+                new RegExp(`\\b${escapedName}\\/[\\w\\s]{3,30}\\b`, 'gi'), c.name
               );
 
               // Inject the tier-appropriate description WOVEN with the action
@@ -1181,9 +1202,13 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
                 const after = modifiedPrompt.substring(idx + firstOcc[0].length);
                 // Check if the next word is a verb/action — if so, weave as appositive
                 const afterTrimmed = after.trimStart();
+                const isPossessive = /^'s\b/.test(afterTrimmed);
                 const startsWithVerb = /^(is|was|sits|stands|walks|runs|holds|stares|looks|leans|clutch|grip|reach|kneel|crouch|watch|gaze|turn|step|press|scroll|tap|delet|swip)/i.test(afterTrimmed);
-                if (startsWithVerb) {
-                  // Weave: "The User, a 30-year-old woman with brown eyes, is sitting..."
+                if (isPossessive) {
+                  // "Sarah's hands" → "Sarah, a 30-year-old woman, whose hands"
+                  modifiedPrompt = `${before}${firstOcc[0]}, ${desc}, whose${after.substring(2)}`;
+                } else if (startsWithVerb) {
+                  // "The User, a 30-year-old woman, is sitting..."
                   modifiedPrompt = `${before}${firstOcc[0]}, ${desc},${after}`;
                 } else {
                   // No verb follows — just replace name with description
@@ -1299,6 +1324,17 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
             console.log(`🎬 Scene ${s.scene_number}: injected action "${action}" (no verb detected)`);
           }
 
+          // ═══ STRIP FORBIDDEN CONTENT — screen/UI/text that renders as garbled text ═══
+          rawPrompt = rawPrompt
+            .replace(/\b(?:the\s+)?['"]?storage\s+(?:almost\s+)?full['"]?\s*(?:notification|warning|alert|message|popup|banner)?/gi, 'a warning notification on')
+            .replace(/\bnotification\s+(?:flashes|appears|shows|displays|reads|says)[^.]*\./gi, 'notification glows on the screen.')
+            .replace(/\bscreen\s+(?:showing|displaying|reading|that reads|with)[^.]*\./gi, 'screen glowing.')
+            .replace(/\bsettings?\s+(?:menu|app|page|screen)\b[^.]*\./gi, 'phone screen.')
+            .replace(/\b(?:Battery|Privacy|General|Wi-Fi|Bluetooth|iCloud|Photos|Camera|Safari|Chrome|Gmail|Instagram|TikTok|YouTube|Settings)\s*(?:app|menu|option|setting|page)?\b/gi, '')
+            .replace(/\$[\d,.]+/g, 'a significant amount')
+            .replace(/\d+(?:\.\d+)?%/g, 'a large percentage')
+            .replace(/\s{2,}/g, ' ').replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.');
+
           imagePrompt = validateAndEnhancePrompt(
             rawPrompt, styleConfig, orientationConfig, s.scene_number, visualStyle
           );
@@ -1326,12 +1362,18 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
           }
 
 
-          // Sanitize fallback too
+          // Derive gender for fallback path (same logic as primary)
+          const fbPrimaryChar = characters[0] || {};
+          const fbPrimaryId = (fbPrimaryChar.identity_core || fbPrimaryChar.visual_description || fbPrimaryChar.description || '').toLowerCase();
+          const fbIsMale = /\b(male|man|boy|he|his|father|husband|grandfather|son|brother)\b/.test(fbPrimaryId);
+          const fbGenderNoun = fbIsMale ? 'man' : 'woman';
+          const fbGenderAdj = fbIsMale ? 'male' : 'female';
+
           fallback = fallback
-            .replace(/\bany gender\b/gi, genderAdj)
-            .replace(/\b(an?\s+)?individual\b/gi, `a ${genderNoun}`)
-            .replace(/\bperson of any gender\b/gi, genderNoun)
-            .replace(/\bgender[- ]neutral\b/gi, genderAdj);
+            .replace(/\bany gender\b/gi, fbGenderAdj)
+            .replace(/\b(an?\s+)?individual\b/gi, `a ${fbGenderNoun}`)
+            .replace(/\bperson of any gender\b/gi, fbGenderNoun)
+            .replace(/\bgender[- ]neutral\b/gi, fbGenderAdj);
 
           // Inject primary character into fallback if available
           if (characters.length > 0) {
