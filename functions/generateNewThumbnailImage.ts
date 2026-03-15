@@ -7,7 +7,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 //   Submit: POST https://api.kie.ai/api/v1/jobs/createTask
 //           { model: "nano-banana-pro", input: { prompt, image_input: [], aspect_ratio, resolution, output_format } }
 //   Poll:   GET  https://api.kie.ai/api/v1/jobs/recordInfo?taskId=XXX
-//           { data: { state: "successful"|"failed"|"queuing"|"generating", resultJson: '{"resultUrls":["..."]}' } }
+//           { data: { state: "success"|"fail"|"queuing"|"generating"|"waiting", resultJson: '{"resultUrls":["..."]}' } }
 //
 // Character photos: passed as base64 image_input array — Nano Banana supports reference images
 // so your REAL people will appear in the generated thumbnail
@@ -205,25 +205,49 @@ TEXT OVERLAY — RENDER THIS TEXT IN THE IMAGE:
       'Authorization': `Bearer ${KIE_API_KEY}`,
     };
 
-    // Try nano-banana-pro first, fall back to nano-banana-2
-    const models = ['nano-banana-pro', 'nano-banana-2', 'nano-banana'];
+    // ── FIXED: correct model slugs and per-model input schemas per KIE docs ──
+    const models = [
+      {
+        name: 'nano-banana-pro',
+        input: {
+          prompt: fullPrompt,
+          image_input: imageInput,
+          aspect_ratio: '16:9',
+          resolution: '1K',
+          output_format: 'png',
+        },
+      },
+      {
+        name: 'nano-banana-2',
+        input: {
+          prompt: fullPrompt,
+          image_input: imageInput,
+          aspect_ratio: '16:9',
+          resolution: '1K',
+          output_format: 'png',
+        },
+      },
+      {
+        name: 'google/nano-banana', // ← requires 'google/' prefix per docs
+        input: {
+          prompt: fullPrompt,
+          image_size: '16:9',       // ← 'image_size' not 'aspect_ratio' for this model
+          output_format: 'png',
+        },
+      },
+    ];
+
     let taskId = null;
     let usedModel = null;
 
     for (const model of models) {
-      console.log('Trying model:', model);
+      console.log('Trying model:', model.name);
       const res = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
         method: 'POST',
         headers: kieHeaders,
         body: JSON.stringify({
-          model,
-          input: {
-            prompt: fullPrompt,
-            image_input: imageInput,
-            aspect_ratio: '16:9',
-            resolution: '1K',
-            output_format: 'png',
-          },
+          model: model.name,
+          input: model.input,
         }),
       });
 
@@ -236,7 +260,7 @@ TEXT OVERLAY — RENDER THIS TEXT IN THE IMAGE:
       // Success: task created
       if (data?.code === 200 && data?.data?.taskId) {
         taskId = data.data.taskId;
-        usedModel = model;
+        usedModel = model.name;
         console.log(`Task created! taskId: ${taskId} | model: ${usedModel}`);
         break;
       }
@@ -245,7 +269,7 @@ TEXT OVERLAY — RENDER THIS TEXT IN THE IMAGE:
       if (res.status === 404 || res.status === 400) continue;
 
       // Any other error — log and try next
-      console.warn(`  → model ${model} failed with status ${res.status}`);
+      console.warn(`  → model ${model.name} failed with status ${res.status}`);
     }
 
     if (!taskId) {
@@ -256,8 +280,7 @@ TEXT OVERLAY — RENDER THIS TEXT IN THE IMAGE:
 
     // 6. Poll for result
     // GET /api/v1/jobs/recordInfo?taskId=XXX
-    // state: 'queuing' | 'generating' | 'successful' | 'failed'
-    // resultJson when successful: '{"resultUrls":["https://..."]}'
+    // FIXED states per docs: 'waiting' | 'queuing' | 'generating' | 'success' | 'fail'
     const maxAttempts = 40;
     const pollInterval = 5000;
     let imageUrl = null;
@@ -281,7 +304,7 @@ TEXT OVERLAY — RENDER THIS TEXT IN THE IMAGE:
       const state = pollData?.data?.state || pollData?.state || '';
       console.log(`Poll ${attempt}/${maxAttempts}: state="${state}"`);
 
-      if (state === 'successful' || state === 'success') {
+      if (state === 'success') {
         // Parse resultJson — it's a JSON string containing resultUrls array
         const resultJson = pollData?.data?.resultJson;
         if (resultJson) {
@@ -308,15 +331,15 @@ TEXT OVERLAY — RENDER THIS TEXT IN THE IMAGE:
           console.log('Got image URL:', imageUrl);
           break;
         }
-        console.warn('state=successful but no URL found. data:', JSON.stringify(pollData?.data).substring(0, 300));
+        console.warn('state=success but no URL found. data:', JSON.stringify(pollData?.data).substring(0, 300));
         break;
       }
 
-      if (state === 'failed' || state === 'fail') {
+      if (state === 'fail') {
         const msg = pollData?.data?.failMsg || pollData?.data?.error || 'Generation failed';
         throw new Error(`Nano Banana generation failed: ${msg}`);
       }
-      // queuing / generating — keep polling
+      // waiting / queuing / generating — keep polling
     }
 
     if (!imageUrl) {
