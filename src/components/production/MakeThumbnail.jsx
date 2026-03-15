@@ -463,9 +463,10 @@ export default function MakeThumbnail({ onBack }) {
       }
 
       const raw = await base44.functions.invoke('generateNewThumbnailImage', {
-        concept_id:   concept.id,
+        concept_id:   effectiveConcept.id,
         char_photos:  directCharPhotos.length > 0 ? directCharPhotos : undefined,
         template_ref: directTemplate || undefined,
+        custom_overlay_text: (useCustomOverlay && customOverlay.trim()) ? customOverlay.trim() : undefined,
       });
 
       const result = raw?.data ?? raw;
