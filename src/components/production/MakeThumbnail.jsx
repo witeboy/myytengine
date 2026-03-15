@@ -916,8 +916,36 @@ export default function MakeThumbnail({ onBack }) {
     setStep(2);
 
     try {
+      // Convert current uploaded photos to base64 for direct pass-through
+      // This bypasses the DB storage size limit on char_photos_json
+      const directCharPhotos = [];
+      for (const char of chars.filter(Boolean)) {
+        if (char?.file) {
+          try {
+            const b64 = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result.split(',')[1]);
+              reader.onerror = reject;
+              reader.readAsDataURL(char.file);
+            });
+            directCharPhotos.push({ b64, mime: char.file.type || 'image/jpeg' });
+          } catch (_) {}
+        }
+      }
+
+      // Also pass template reference directly if user selected one
+      const directTemplate = selectedUserTemplate && TEMPLATE_IMAGES[selectedUserTemplate.id]
+        ? {
+            b64: TEMPLATE_IMAGES[selectedUserTemplate.id].b64,
+            mime: TEMPLATE_IMAGES[selectedUserTemplate.id].mime || 'image/jpeg',
+            name: selectedUserTemplate.name,
+          }
+        : null;
+
       const raw = await base44.functions.invoke('generateNewThumbnailImage', {
         concept_id: concept.id,
+        char_photos: directCharPhotos.length > 0 ? directCharPhotos : undefined,
+        template_ref: directTemplate || undefined,
       });
 
       // base44 wraps responses in .data
