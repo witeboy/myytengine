@@ -548,28 +548,31 @@ export default function MakeThumbnail({ onBack }) {
           />
         </div>
 
-        {/* Character Photos (required, min 2) */}
+        {/* Character Photos (required, min 2, max 14) */}
         <div style={{ marginBottom: 26 }}>
           <label style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 10 }}>
-            Key Images from Video <span style={{ color: '#ef4444' }}>* (upload 2-3)</span>
+            Key Images from Video <span style={{ color: '#ef4444' }}>* (min 2, up to {MAX_PHOTOS})</span>
           </label>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-            {[2, 3].map(n => (
-              <button key={n} onClick={() => handleCharCount(n)} style={{
-                flex: 1, padding: '11px 8px', borderRadius: 10,
-                border: charCount === n ? '2px solid #7c3aed' : '2px solid #1f2937',
-                background: charCount === n ? 'rgba(124,58,237,0.15)' : '#0f172a',
-                color: charCount === n ? '#a78bfa' : '#4b5563',
-                cursor: 'pointer', fontWeight: 700, fontSize: 13, transition: 'all 0.15s',
-              }}>
-                {n === 2 ? '👥 2 Photos' : '👨‍👩‍👦 3 Photos'}
-              </button>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 12 }}>
+            {chars.map((char, i) => (
+              <CharSlot key={i} index={i} label={`Photo ${i + 1}`} char={char} onUpload={handleUpload} onRemove={handleRemove} />
             ))}
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${charCount}, 1fr)`, gap: 12, maxWidth: charCount === 2 ? 300 : '100%' }}>
-            {Array.from({ length: charCount }, (_, i) => (
-              <CharSlot key={i} index={i} label={`Photo ${i + 1}`} char={chars[i]} onUpload={handleUpload} onRemove={handleRemove} />
-            ))}
+            {/* Add more button */}
+            {chars.length < MAX_PHOTOS && (
+              <div
+                onClick={handleAddSlot}
+                style={{
+                  border: '2px dashed #374151', borderRadius: 12, aspectRatio: '3/4',
+                  background: '#0f172a', cursor: 'pointer', display: 'flex',
+                  flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                  gap: 6, color: '#4b5563', transition: 'border-color 0.2s',
+                }}
+              >
+                <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#1f2937', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, color: '#6b7280' }}>+</div>
+                <div style={{ fontSize: 11, color: '#4b5563', textAlign: 'center' }}>Add Photo</div>
+                <div style={{ fontSize: 9, color: '#374151' }}>{chars.length}/{MAX_PHOTOS}</div>
+              </div>
+            )}
           </div>
           {uploadedChars.length < 2 && (
             <p style={{ color: '#ef4444', fontSize: 11, marginTop: 8 }}>
@@ -578,7 +581,7 @@ export default function MakeThumbnail({ onBack }) {
           )}
           {uploadedChars.length >= 2 && (
             <p style={{ color: '#22c55e', fontSize: 11, marginTop: 8 }}>
-              ✅ {uploadedChars.length} photo{uploadedChars.length > 1 ? 's' : ''} uploaded — Ideogram will preserve these exact faces
+              ✅ {uploadedChars.length} photo{uploadedChars.length > 1 ? 's' : ''} uploaded — nano-banana-2 will use all {uploadedChars.length} as reference
             </p>
           )}
         </div>
