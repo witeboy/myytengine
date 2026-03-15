@@ -658,8 +658,18 @@ Deno.serve(async (req) => {
 
     for (const c of characters) {
       const name = (c.name || '').toLowerCase().trim();
-      const identityDesc = c.identity_core || c.visual_description || c.description || '';
+      let identityDesc = c.identity_core || c.visual_description || c.description || '';
       const clothing = c.default_clothing || '';
+      // Clean junk Gemini sometimes echoes back from our prompt instructions
+      identityDesc = identityDesc
+        .replace(/^Casting[- ]sheet:?\s*/i, '')
+        .replace(/^IMMUTABLE[^:]*:\s*/i, '')
+        .replace(/^Identity[^:]*:\s*/i, '')
+        .replace(/\bCasting[- ]sheet:?\s*/gi, '')
+        .replace(/\(\s*Beige\s*\d*\s*\)/gi, match => match) // keep but don't duplicate
+        .replace(/\bshown full (?:body|figure)\b/gi, '')     // rendering instruction, not identity
+        .replace(/\bshown full body in the scene\b/gi, '')
+        .trim();
       if (name && identityDesc) {
         const { body, face } = splitIdentity(identityDesc);
         const bodyDesc = body || 'adult character';
@@ -1163,12 +1173,24 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
 
               const escapedName = c.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-              // Strip any LLM-generated descriptions (parentheticals + inline)
+              // Strip any LLM-generated descriptions (parentheticals, inline, "has" clauses, slash-names)
               modifiedPrompt = modifiedPrompt.replace(
                 new RegExp(`\\b${escapedName}\\b\\s*\\([^)]{5,}\\)`, 'gi'), c.name
               );
               modifiedPrompt = modifiedPrompt.replace(
                 new RegExp(`\\b${escapedName}\\b,\\s*a\\s[^,]{10,}(?:,\\s*[^,]{5,}){0,4},\\s*`, 'gi'), `${c.name}, `
+              );
+              // Strip "Sarah/The Everyperson has light-medium skin..." style duplicate descriptions
+              modifiedPrompt = modifiedPrompt.replace(
+                new RegExp(`\\b${escapedName}(?:\\/[\\w\\s]+)?\\s+has\\s+[^.]{20,}?\\.`, 'gi'), ''
+              );
+              // Strip "Name is a 30-year-old woman with..." if LLM wrote one
+              modifiedPrompt = modifiedPrompt.replace(
+                new RegExp(`\\b${escapedName}\\s+is\\s+a\\s+\\d{1,2}[^.]{15,}?\\.`, 'gi'), ''
+              );
+              // Strip slash-name duplicates: "Sarah/The Everyperson" → just the name
+              modifiedPrompt = modifiedPrompt.replace(
+                new RegExp(`\\b${escapedName}\\/[\\w\\s]{3,30}\\b`, 'gi'), c.name
               );
 
               // Inject the tier-appropriate description WOVEN with the action
@@ -1180,9 +1202,14 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
                 const after = modifiedPrompt.substring(idx + firstOcc[0].length);
                 // Check if the next word is a verb/action — if so, weave as appositive
                 const afterTrimmed = after.trimStart();
+                // Check for possessive ('s) or verb after the name
+                const isPossessive = /^'s\b/.test(afterTrimmed);
                 const startsWithVerb = /^(is|was|sits|stands|walks|runs|holds|stares|looks|leans|clutch|grip|reach|kneel|crouch|watch|gaze|turn|step|press|scroll|tap|delet|swip)/i.test(afterTrimmed);
-                if (startsWithVerb) {
-                  // Weave: "The User, a 30-year-old woman with brown eyes, is sitting..."
+                if (isPossessive) {
+                  // "Sarah's hands" → "Sarah, a 30-year-old woman, whose hands"
+                  modifiedPrompt = `${before}${firstOcc[0]}, ${desc}, whose${after.substring(2)}`;
+                } else if (startsWithVerb) {
+                  // "The User is sitting" → "The User, a 30-year-old woman, is sitting"
                   modifiedPrompt = `${before}${firstOcc[0]}, ${desc},${after}`;
                 } else {
                   // No verb follows — just replace name with description
@@ -1294,6 +1321,22 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
             console.log(`🎬 Scene ${s.scene_number}: injected action "${action}" (no verb detected)`);
           }
 
+          // ═══ STRIP FORBIDDEN CONTENT — screen/UI/text that image gen renders as garbled text ═══
+          rawPrompt = rawPrompt
+            // Screen content: "Storage Almost Full notification", "showing settings menu"
+            .replace(/\b(?:the\s+)?['"]?storage\s+(?:almost\s+)?full['"]?\s*(?:notification|warning|alert|message|popup|banner)?/gi, 'a warning notification on')
+            .replace(/\bnotification\s+(?:flashes|appears|shows|displays|reads|says)[^.]*\./gi, 'notification glows on the screen.')
+            .replace(/\bscreen\s+(?:showing|displaying|reading|that reads|with)[^.]*\./gi, 'screen glowing in the dark.')
+            .replace(/\bsettings?\s+(?:menu|app|page|screen)\b[^.]*\./gi, 'phone screen.')
+            // Specific app/UI names
+            .replace(/\b(?:Battery|Privacy|General|Wi-Fi|Bluetooth|iCloud|Photos|Camera|Safari|Chrome|Gmail|Instagram|TikTok|YouTube|Settings)\s*(?:app|menu|option|setting|page)?\b/gi, '')
+            // Dollar amounts and percentages
+            .replace(/\$[\d,.]+/g, 'a significant amount')
+            .replace(/\d+(?:\.\d+)?%/g, 'a large percentage')
+            // Cleanup double spaces and orphaned punctuation
+            .replace(/\s{2,}/g, ' ')
+            .replace(/,\s*,/g, ',')
+            .replace(/\.\s*\./g, '.');
           imagePrompt = validateAndEnhancePrompt(
             rawPrompt, styleConfig, orientationConfig, s.scene_number, visualStyle
           );
