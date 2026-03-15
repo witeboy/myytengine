@@ -396,7 +396,10 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
     enhanced = enhanced.replace(/\b(Kodak|Vision3|film grain texture|chromatic aberration)\b/gi, '');
     enhanced = enhanced.replace(/\bf\/\d+\.?\d*\b/g, '');
     enhanced = enhanced.replace(/\b(bokeh|lens flare)\b/gi, '');
-    enhanced = enhanced.replace(/\s{2,}/g, ' ').replace(/,\s*,/g, ',');
+    enhanced = enhanced// Strip rendering instructions that leaked into prompt
+            .replace(/\bshown full (?:body|figure)\s*(?:in the scene)?\b/gi, '')
+            .replace(/\bshown full body in the scene\b/gi, '')
+            .replace(/\s{2,}/g, ' ').replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.');
   }
 
 
@@ -561,7 +564,7 @@ Deno.serve(async (req) => {
     // Split identity_core into body traits vs face traits
     function splitIdentity(rawDesc) {
       // Body keywords: anything about build, height, body shape, posture
-      const bodyPatterns = /\b(\d+\s*ft\s*\d+|\d+\s*cm|\d+'?\d*"?|tall|short|petite|average build|athletic build|slim build|heavy build|lean|stocky|slender|muscular|broad shoulders|narrow shoulders|long neck|long legs|curvy|hourglass|lanky|heavyset|medium build|thin build|stout|wide hips|narrow hips|prominent collarbones|small frame|large frame)\b/gi;
+      const bodyPatterns = /\b(\d+\s*ft\s*\d+|\d+\s*cm|\d+'?\d*"?\s*(?:height|tall)?|tall|short|petite|average build|athletic build|slim build|slender build|heavy build|lean build|lean|stocky|slender|muscular|broad shoulders|narrow shoulders|long neck|long legs|curvy|hourglass|lanky|heavyset|medium build|thin build|stout|wide hips|narrow hips|prominent collarbones|small frame|large frame)\b/gi;
       // Age keywords
       const agePatterns = /\b(\d{1,2}\s*years?\s*old|\d{1,2}-year-old|in\s+(?:her|his|their)\s+(?:early|mid|late)\s+\d{2}s|young\s+(?:woman|man)|middle[\s-]aged|elderly|teenage)\b/gi;
       // Gender
@@ -620,7 +623,7 @@ Deno.serve(async (req) => {
      low_poly_3d_cartoon: (bodyDesc, faceDesc) =>
         `low-poly 3D ${bodyDesc} shown full body from flat-shaded polygons, ${faceDesc}, angular geometric features, matte clay-toy quality`,
       skeleton_protagonist: (bodyDesc, faceDesc) =>
-        `photorealistic transparent skeleton with clear glass-like body shell shown full body in the scene, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets, ${faceDesc}`
+        `photorealistic transparent skeleton with clear glass-like body shell, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets`
     };
 
 
@@ -1324,7 +1327,8 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
           // ═══ STRIP FORBIDDEN CONTENT — screen/UI/text that image gen renders as garbled text ═══
           rawPrompt = rawPrompt
             // Screen content: "Storage Almost Full notification", "showing settings menu"
-            .replace(/\b(?:the\s+)?['"]?storage\s+(?:almost\s+)?full['"]?\s*(?:notification|warning|alert|message|popup|banner)?/gi, 'a warning notification on')
+            .replace(/\b(?:the\s+)?['"]?storage\s+(?:almost\s+)?full['"]?\s*(?:notification|warning|alert|message|popup|banner)?/gi, 'a notification on')
+            .replace(/\bdisplaying\s+a\s+(?:warning\s+)?notification\s+on\b/gi, 'glowing with a notification')
             .replace(/\bnotification\s+(?:flashes|appears|shows|displays|reads|says)[^.]*\./gi, 'notification glows on the screen.')
             .replace(/\bscreen\s+(?:showing|displaying|reading|that reads|with)[^.]*\./gi, 'screen glowing in the dark.')
             .replace(/\bsettings?\s+(?:menu|app|page|screen)\b[^.]*\./gi, 'phone screen.')
@@ -1333,6 +1337,10 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
             // Dollar amounts and percentages
             .replace(/\$[\d,.]+/g, 'a significant amount')
             .replace(/\d+(?:\.\d+)?%/g, 'a large percentage')
+            // UI elements
+            .replace(/\b(?:the\s+)?['"]?OK['"]?\s*button\b/gi, 'the screen')
+            .replace(/\b(?:tap|press|click|hover)\w*\s+(?:on\s+)?(?:the\s+)?['"]?(?:OK|Cancel|Delete|Accept|Confirm|Submit|Close|Back|Next|Done|Settings|Allow|Deny)['"]?\s*(?:button|option|link)?\b/gi, 'interacting with the phone')
+            .replace(/\bher\s+thumb\s+hovering\s+over\b[^,.]*/gi, 'her fingers gripping the phone tightly')
             // Cleanup double spaces and orphaned punctuation
             .replace(/\s{2,}/g, ' ')
             .replace(/,\s*,/g, ',')
