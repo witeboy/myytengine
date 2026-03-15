@@ -803,8 +803,9 @@ export default function MakeThumbnail({ onBack }) {
             { icon: '📸', label: 'Uploading reference photos to KIE' },
             { icon: '🔒', label: 'Locking in real faces with Ideogram Character' },
             { icon: '🎨', label: 'Rendering cinematic scene at 1920×1080' },
-            { icon: '💡', label: 'Applying lighting, color grade & mood' },
-            { icon: '💾', label: 'Saving to your library' },
+            { icon: '🔍', label: 'Upscaling to 2× resolution + sharpening' },
+            { icon: '🎬', label: 'Applying mood color grade, saturation & vignette' },
+            { icon: '💾', label: 'Saving final enhanced thumbnail' },
           ].map((item, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#0f172a', borderRadius: 8, padding: '10px 14px' }}>
               <span style={{ fontSize: 15 }}>{item.icon}</span>
