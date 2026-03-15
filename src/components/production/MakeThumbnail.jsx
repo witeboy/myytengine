@@ -795,7 +795,7 @@ export default function MakeThumbnail({ onBack }) {
         )}
 
         <p style={{ color: '#6b7280', fontSize: 13, lineHeight: 1.6, marginBottom: 22 }}>
-          Ideogram Character is locking in your real faces and rendering at 1920×1080. This typically takes 45–90 seconds…
+          Ideogram renders → auto-upscale 2× → mood-matched color grade, sharpness, saturation & vignette. Takes 60–120 seconds…
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
