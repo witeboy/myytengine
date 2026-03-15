@@ -454,15 +454,37 @@ export default function MakeThumbnail({ onBack }) {
         }
       }
 
-      // Template reference
+      // Template reference — resize if too large, NEVER skip
+      // character-remix needs template as image_url — skipping = wrong model used
       let directTemplate = null;
       if (selectedUserTemplate && TEMPLATE_IMAGES[selectedUserTemplate.id]?.b64) {
         const tpl = TEMPLATE_IMAGES[selectedUserTemplate.id];
-        if (tpl.b64.length <= 250000) {
-          directTemplate = { b64: tpl.b64, mime: tpl.mime || 'image/jpeg', name: selectedUserTemplate.name };
-        } else {
-          console.warn('Template ref too large, skipping');
+        let tplB64 = tpl.b64;
+
+        if (tplB64.length > 250000) {
+          try {
+            tplB64 = await new Promise((resolve) => {
+              const img = new Image();
+              img.onload = () => {
+                const scale = Math.min(1024 / img.width, 1024 / img.height, 1);
+                const w = Math.round(img.width * scale);
+                const h = Math.round(img.height * scale);
+                const canvas = document.createElement('canvas');
+                canvas.width = w;
+                canvas.height = h;
+                canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                resolve(canvas.toDataURL('image/jpeg', 0.85).split(',')[1]);
+              };
+              img.onerror = () => resolve(tpl.b64);
+              img.src = `data:${tpl.mime || 'image/jpeg'};base64,${tpl.b64}`;
+            });
+            console.log('Template resized for transfer');
+          } catch (_) {
+            tplB64 = tpl.b64;
+          }
         }
+
+        directTemplate = { b64: tplB64, mime: tpl.mime || 'image/jpeg', name: selectedUserTemplate.name };
       }
 
       const raw = await base44.functions.invoke('generateNewThumbnailImage', {
