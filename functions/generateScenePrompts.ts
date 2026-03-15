@@ -692,16 +692,21 @@ Deno.serve(async (req) => {
         }
         const fullDesc = styleTransform(bodyDesc, compactFaceFull);
 
-        // Sanitize gender — never "individual", "any gender", "person of any gender"
+        // Derive gender from THIS character's identity (not hardcoded)
+        const charIdentity = identityDesc.toLowerCase();
+        const charIsMale = /\b(male|man|boy|he|his|father|husband|grandfather|son|brother)\b/.test(charIdentity);
+        const charGN = charIsMale ? 'man' : 'woman';
+        const charGA = charIsMale ? 'male' : 'female';
+
         function sanitizeGender(desc) {
           return desc
-            .replace(/\bany gender\b/gi, 'female')
-            .replace(/\bindividual\b/gi, 'woman')
-            .replace(/\bperson of any gender\b/gi, 'woman')
-            .replace(/\bgender[- ]neutral\b/gi, 'female')
-            .replace(/\ba person\b/gi, 'a woman')
-            .replace(/\bthe person\b/gi, 'the woman')
-            .replace(/\ban adult\b/gi, 'a woman');
+            .replace(/\bany gender\b/gi, charGA)
+            .replace(/\bindividual\b/gi, charGN)
+            .replace(/\bperson of any gender\b/gi, charGN)
+            .replace(/\bgender[- ]neutral\b/gi, charGA)
+            .replace(/\ba person\b/gi, `a ${charGN}`)
+            .replace(/\bthe person\b/gi, `the ${charGN}`)
+            .replace(/\ban adult\b/gi, `a ${charGN}`);
         }
 
         characterTieredTags[name] = {
@@ -1237,6 +1242,58 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
 
 
 
+          // ═══ FINAL PROMPT SANITIZATION — catch anything tier system missed ═══
+          // Derive gender dynamically from primary character
+          const primaryChar = characters[0] || {};
+          const primaryId = (primaryChar.identity_core || primaryChar.visual_description || primaryChar.description || '').toLowerCase();
+          const isMale = /\b(male|man|boy|he|his|father|husband|grandfather|son|brother)\b/.test(primaryId);
+          const genderNoun = isMale ? 'man' : 'woman';
+          const genderAdj = isMale ? 'male' : 'female';
+
+          // Gender: never "individual", "any gender", "a person"
+          rawPrompt = rawPrompt
+            .replace(/\bany gender\b/gi, genderAdj)
+            .replace(/\b(an?\s+)?individual\b/gi, `a ${genderNoun}`)
+            .replace(/\bperson of any gender\b/gi, genderNoun)
+            .replace(/\bgender[- ]neutral\b/gi, genderAdj);
+
+          // If NO character was injected (sceneCast was empty), weave primary character at first human reference
+          if (sceneCast.length === 0 && characters.length > 0) {
+            const pName = (characters[0].name || '').toLowerCase().trim();
+            const pTiers = characterTieredTags[pName];
+            if (pTiers) {
+              const shotType = s.director?.shot_type || 'MS — Medium Shot';
+              const tier = getIdentityTier(shotType);
+              const desc = pTiers[tier] || pTiers.moderate;
+              const genericHuman = /\b(a\s+(?:woman|man|person|figure|character|user|narrator))\b/i;
+              const ghMatch = rawPrompt.match(genericHuman);
+              if (ghMatch) {
+                const ghIdx = rawPrompt.indexOf(ghMatch[0]);
+                const ghBefore = rawPrompt.substring(0, ghIdx);
+                const ghAfter = rawPrompt.substring(ghIdx + ghMatch[0].length);
+                const ghHasVerb = /^\s*(is|was|sits|stands|walks|runs|holds|stares|looks|leans|clutch|grip|reach|kneel|crouch|watch|gaze|turn|step|press|scroll|tap|delet|swip|carry|push|pull|seat|sitting|standing|walking|holding|staring|leaning)/i.test(ghAfter);
+                if (ghHasVerb) {
+                  rawPrompt = `${ghBefore}${ghMatch[0]}, ${desc},${ghAfter}`;
+                } else {
+                  rawPrompt = `${ghBefore}${desc}${ghAfter}`;
+                }
+                console.log(`👤 Scene ${s.scene_number}: injected primary char via generic ref (${tier}, ${desc.length}ch, woven=${ghHasVerb})`);
+              }
+            }
+          }
+
+          // Ensure character is DOING something — inject action if no verb found
+          if (!/\b(is|was|sits|stands|walks|runs|holds|stares|looks|leans|clutch|grip|reach|kneel|crouch|watch|gaze|turn|step|press|scroll|tap|delet|swip|carry|push|pull|lift|throw|pour|eat|drink|read|writ|typ|driv|sitting|standing|walking|holding|staring|leaning|scrolling|tapping|deleting|carrying|pushing)\w*\b/i.test(rawPrompt)) {
+            const mood = s.director?.mood || 'contemplative';
+            const action = mood.includes('tense') ? 'standing rigid with clenched fists'
+              : mood.includes('sad') || mood.includes('despair') || mood.includes('defeat') ? 'sitting hunched with shoulders drawn in'
+              : mood.includes('happy') || mood.includes('relief') ? 'walking with a light stride'
+              : mood.includes('frustrat') ? 'pressing fingers against forehead'
+              : 'pausing mid-step, weight shifting';
+            rawPrompt = rawPrompt.replace(/\b(in the scene|in frame|visible|standing)\b/i, `${action} in the scene`);
+            console.log(`🎬 Scene ${s.scene_number}: injected action "${action}" (no verb detected)`);
+          }
+
           imagePrompt = validateAndEnhancePrompt(
             rawPrompt, styleConfig, orientationConfig, s.scene_number, visualStyle
           );
@@ -1263,6 +1320,40 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
             fallback += `Cinematic scene depicting: ${s.narration_text}. Professional composition. `;
           }
 
+
+          // ═══ FALLBACK SANITIZATION — same fixes as primary path ═══
+          const primaryChar = characters[0] || {};
+          const primaryId = (primaryChar.identity_core || primaryChar.visual_description || primaryChar.description || '').toLowerCase();
+          const isMale = /\b(male|man|boy|he|his|father|husband|grandfather|son|brother)\b/.test(primaryId);
+          const genderNoun = isMale ? 'man' : 'woman';
+          const genderAdj = isMale ? 'male' : 'female';
+
+          fallback = fallback
+            .replace(/\bany gender\b/gi, genderAdj)
+            .replace(/\b(an?\s+)?individual\b/gi, `a ${genderNoun}`)
+            .replace(/\bperson of any gender\b/gi, genderNoun)
+            .replace(/\bgender[- ]neutral\b/gi, genderAdj);
+
+          // Inject primary character into fallback
+          if (characters.length > 0) {
+            const pName = (characters[0].name || '').toLowerCase().trim();
+            const pTiers = characterTieredTags[pName];
+            if (pTiers) {
+              const genericHuman = /\b(a\s+(?:woman|man|person|figure|character))\b/i;
+              const fbMatch = fallback.match(genericHuman);
+              if (fbMatch) {
+                const fbIdx = fallback.indexOf(fbMatch[0]);
+                const fbBefore = fallback.substring(0, fbIdx);
+                const fbAfter = fallback.substring(fbIdx + fbMatch[0].length);
+                const fbHasVerb = /^\s*(is|was|sits|stands|walks|runs|holds|stares|looks|leans|clutch|sitting|standing|walking|holding)/i.test(fbAfter);
+                if (fbHasVerb) {
+                  fallback = `${fbBefore}${fbMatch[0]}, ${pTiers.moderate},${fbAfter}`;
+                } else {
+                  fallback = `${fbBefore}${pTiers.moderate}${fbAfter}`;
+                }
+              }
+            }
+          }
 
           imagePrompt = validateAndEnhancePrompt(fallback, styleConfig, orientationConfig, s.scene_number, visualStyle);
           const arcPosition = s.director?.phase || s.director?.arc_position || 'rising';
