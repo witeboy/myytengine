@@ -3,8 +3,9 @@ import { CheckCircle, ChevronRight, Zap, Eye, X, Info, Star, Upload, Trash2 } fr
 import { THUMBNAIL_TEMPLATES, TEMPLATE_GROUPS, recommendTemplates } from './thumbnailTemplates';
 import { TEMPLATE_IMAGES } from './thumbnailReferenceImages';
 
-// Helper — get image src: prefer base64 (always works), fall back to /uploads/ path
+// Helper — get image src: custom dataUrl > base64 library > /uploads/ path
 function getImgSrc(template) {
+  if (template.customDataUrl) return template.customDataUrl;
   const b64 = TEMPLATE_IMAGES[template.id];
   if (b64?.dataUrl) return b64.dataUrl;
   return `/uploads/${template.previewImageFile}`;
@@ -170,7 +171,7 @@ function PreviewModal({ template, onClose, onSelect, isSelected }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // TEMPLATE CARD
 // ─────────────────────────────────────────────────────────────────────────────
-function TemplateCard({ template, isSelected, onSelect, onPreview }) {
+function TemplateCard({ template, isSelected, onSelect, onPreview, onDelete }) {
   const [imgError, setImgError] = useState(false);
   const [hovered, setHovered] = useState(false);
   const gc = TEMPLATE_GROUPS.find(g => g.id === template.groupLabel);
@@ -239,19 +240,34 @@ function TemplateCard({ template, isSelected, onSelect, onPreview }) {
 
         {/* Preview button — appears on hover */}
         {hovered && (
-          <button
-            onClick={e => { e.stopPropagation(); onPreview(template); }}
-            style={{
-              position: 'absolute', bottom: 8, right: 8,
-              background: 'rgba(0,0,0,0.85)', border: '1px solid rgba(255,255,255,0.15)',
-              borderRadius: 6, padding: '5px 10px', color: '#fff',
-              cursor: 'pointer', fontSize: 11, fontWeight: 600,
-              display: 'flex', alignItems: 'center', gap: 4,
-              backdropFilter: 'blur(6px)',
-            }}
-          >
-            <Eye size={11} /> Full Preview
-          </button>
+          <div style={{ position: 'absolute', bottom: 8, right: 8, display: 'flex', gap: 4 }}>
+            {onDelete && (
+              <button
+                onClick={e => { e.stopPropagation(); onDelete(template.id); }}
+                style={{
+                  background: 'rgba(239,68,68,0.85)', border: 'none',
+                  borderRadius: 6, padding: '5px 8px', color: '#fff',
+                  cursor: 'pointer', fontSize: 11, fontWeight: 600,
+                  display: 'flex', alignItems: 'center', gap: 3,
+                  backdropFilter: 'blur(6px)',
+                }}
+              >
+                <Trash2 size={11} />
+              </button>
+            )}
+            <button
+              onClick={e => { e.stopPropagation(); onPreview(template); }}
+              style={{
+                background: 'rgba(0,0,0,0.85)', border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: 6, padding: '5px 10px', color: '#fff',
+                cursor: 'pointer', fontSize: 11, fontWeight: 600,
+                display: 'flex', alignItems: 'center', gap: 4,
+                backdropFilter: 'blur(6px)',
+              }}
+            >
+              <Eye size={11} /> Full Preview
+            </button>
+          </div>
         )}
 
         {/* Selected checkmark overlay */}
