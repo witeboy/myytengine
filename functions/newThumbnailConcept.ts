@@ -358,12 +358,12 @@ Text must be crisp, sharp, fully legible — this is the most important element 
           image_url:              null,
           title:                  video_title,
           status:                 'pending',
-          // Store char photos + template so render function can pass them to image API
+          // Store char photos so render function can pass them to image generation
           char_photos_json:       charPhotosForStorage.length > 0
                                     ? JSON.stringify(charPhotosForStorage)
                                     : null,
-          // Store template reference image for render-time use
-          template_ref_json:      hasUserTemplate && template_b64
+          // Store template reference so render function can pass it as layout reference
+          template_ref_json:      hasUserTemplate
                                     ? JSON.stringify({ b64: template_b64, mime: template_mime || 'image/jpeg', name: template_name })
                                     : null,
         });
