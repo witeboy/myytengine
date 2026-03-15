@@ -517,7 +517,7 @@ export default function MakeThumbnail({ onBack }) {
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{ fontSize: 25, fontWeight: 800, marginBottom: 8 }}>Create a World-Class Thumbnail</div>
           <div style={{ color: '#6b7280', fontSize: 14, lineHeight: 1.6 }}>
-            Enter your video details, upload 2-3 key photos, pick a template — AI generates 5 overlay texts, then renders a direct replica
+            Enter your video details, upload 2–14 key photos, pick a template — AI generates 5 overlay texts, then renders a direct replica
           </div>
         </div>
 
