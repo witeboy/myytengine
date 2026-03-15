@@ -262,6 +262,8 @@ export default function MakeThumbnail({ onBack }) {
   const [selectedConcept, setSelectedConcept] = useState(null);
   const [templateMeta, setTemplateMeta]       = useState(null);
   const [detectedMood, setDetectedMood]       = useState(null);
+  const [customOverlay, setCustomOverlay]     = useState('');
+  const [useCustomOverlay, setUseCustomOverlay] = useState(false);
 
   // Step 2/3 data
   const [generating, setGenerating]     = useState(false);
@@ -321,14 +323,16 @@ export default function MakeThumbnail({ onBack }) {
       }
 
       // Build template context if user picked one
+      const templateB64 = selectedUserTemplate?.customB64 || TEMPLATE_IMAGES[selectedUserTemplate?.id]?.b64 || null;
+      const templateMime = selectedUserTemplate?.customMime || TEMPLATE_IMAGES[selectedUserTemplate?.id]?.mime || null;
       const templateContext = selectedUserTemplate ? {
         template_id:             selectedUserTemplate.id,
         template_name:           selectedUserTemplate.name,
         template_psychology:     selectedUserTemplate.psychology,
         template_text_strategy:  selectedUserTemplate.textStrategy,
         template_ctr:            selectedUserTemplate.ctrScore,
-        template_b64:            TEMPLATE_IMAGES[selectedUserTemplate.id]?.b64  ?? null,
-        template_mime:           TEMPLATE_IMAGES[selectedUserTemplate.id]?.mime ?? null,
+        template_b64:            templateB64,
+        template_mime:           templateMime,
       } : {};
 
       setLoadingPhase('Gemini is engineering your 5 high-CTR concepts…');
@@ -421,10 +425,11 @@ export default function MakeThumbnail({ onBack }) {
       }
 
       // Template reference — resize if too large, NEVER skip
-      // character-remix needs template as image_url — skipping = wrong model used
       let directTemplate = null;
-      if (selectedUserTemplate && TEMPLATE_IMAGES[selectedUserTemplate.id]?.b64) {
-        const tpl = TEMPLATE_IMAGES[selectedUserTemplate.id];
+      const tplB64Source = selectedUserTemplate?.customB64 || TEMPLATE_IMAGES[selectedUserTemplate?.id]?.b64;
+      const tplMimeSource = selectedUserTemplate?.customMime || TEMPLATE_IMAGES[selectedUserTemplate?.id]?.mime || 'image/jpeg';
+      if (selectedUserTemplate && tplB64Source) {
+        const tpl = { b64: tplB64Source, mime: tplMimeSource };
         let tplB64 = tpl.b64;
 
         if (tplB64.length > 250000) {
