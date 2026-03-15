@@ -40,16 +40,26 @@ YOUR TASK — PRECISE FACE TRANSPLANT
 
 Recreate the EXACT layout and composition from Image 1 (the template), but replace the people in the template with the person(s) from the reference photo(s).
 
-FACE PRESERVATION RULES (CRITICAL — DO NOT VIOLATE):
+PERSON PRESERVATION RULES (CRITICAL — DO NOT VIOLATE):
+
+FACE (highest priority — must be pixel-perfect):
 1. BONE STRUCTURE: Reproduce the exact skull shape, jawline, chin shape, and forehead proportions from the reference photo(s). Do not morph, slim, widen, or reshape any facial bones.
-2. SKIN: Match the exact skin tone, texture, and complexion. If the reference person has dark skin, the result must have the same shade of dark skin. If they have freckles, moles, or scars — include them.
+2. SKIN: Match the exact skin tone, texture, and complexion across face AND body. If the reference person has dark skin, the result must have the same shade everywhere. Include freckles, moles, or scars.
 3. NOSE: Exact same nose — bridge width, nostril shape, tip shape. Do not narrow or reshape.
 4. EYES: Same eye shape, eye color, eyelid crease depth, eyebrow thickness and arch. Do not change eye size or shape.
 5. LIPS: Same lip thickness, shape, and color. Do not thin or reshape.
 6. HAIR: Exact same hair color, texture (straight/curly/coiled/braided), length, and style. Do not change the hairstyle.
 7. EARS: Same ear shape and size if visible.
-8. BODY: Match the body type, build, and proportions from the reference photo.
-9. AGE: The person in the output must appear the SAME age as in the reference photo. Do not age up or age down.
+8. AGE: The person in the output must appear the SAME age as in the reference photo. Do not age up or age down.
+
+BODY (adapt based on what's visible in the reference photo):
+9. BODY BUILD: If the reference photo shows the person's body (full or partial), match their exact build — weight, shoulder width, torso length, arm thickness, body fat distribution. A heavy person must stay heavy. A slim person must stay slim.
+10. BODY COMPLETION: The reference photo may only show a face, head+shoulders, upper body, or full body. Follow these rules:
+    - If FULL BODY is visible: use the person's exact body proportions, build, and frame for the output.
+    - If only UPPER BODY/TORSO is visible: match the visible build, shoulder width, arm size, and skin tone. Complete the lower body proportionally — use the template's pose/stance as a guide, but keep proportions consistent with the visible upper body.
+    - If only HEAD/SHOULDERS or FACE is visible: match the neck width, shoulder hints, and skin tone. Infer a proportional body type from facial fullness and visible cues. Use the template character's pose, stance, and outfit as the body guide, but adjust proportions to look natural for the reference person's face.
+11. CLOTHING: Dress the person in the same type of outfit/costume the template character is wearing (e.g., if the template character wears a nurse uniform, the output person wears a nurse uniform). The clothing must fit the reference person's body type naturally — not too tight on a larger person, not baggy on a smaller person.
+12. HANDS & ARMS: If the reference shows hands/arms, match skin tone and proportions. If not visible, generate hands that match the person's skin tone and body build.
 
 WHAT TO KEEP FROM THE TEMPLATE (Image 1):
 - The overall composition and layout (where people are positioned, the background split, color zones)
