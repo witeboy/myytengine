@@ -15,6 +15,33 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 //   4. Poll for result
 //   5. Save image_url to concept record
 
+// ── Build a precise enhance prompt based on mood profile ──
+function buildEnhancePrompt(mood, grade) {
+  const moodDescriptions = {
+    crime: 'Dark true crime aesthetic. Heavy desaturation with red/crimson tint. Deep black vignette crushing the edges. High contrast, gritty, ominous. Skin slightly desaturated. Dark shadows, minimal highlights.',
+    drama: 'Dramatic cinematic color grade. Cool blue shadows, warm highlights. Medium vignette. Slightly boosted saturation for emotional punch. Film-like contrast with rich midtones.',
+    nollywood: 'Warm vibrant Nollywood color grade. Rich saturated warm tones — golden skin, vivid oranges and reds. Slight warm vignette. High saturation, punchy contrast. African cinema warmth.',
+    comedy: 'Ultra-vibrant candy store MrBeast aesthetic. Maximum color saturation. Bright, punchy, energetic. Minimal vignette. Boosted brightness. Vivid greens, yellows, cyans. Pop art energy.',
+    finance: 'Premium corporate finance aesthetic. Cool blue-teal tint. Desaturated but with green/teal accent pop. Medium dark vignette. Clean, professional, trust-building. Slightly dark and moody.',
+    inspirational: 'Uplifting warm-to-cool gradient grade. Soft purple and gold tones. Light vignette. Slightly dreamy with boosted warm highlights. Aspirational and clean.',
+    educational: 'Clean authoritative blue grade. Cool blue midtones. Medium vignette. Professional, trustworthy. Slight contrast boost for clarity. Sharp and readable.',
+  };
+
+  const desc = moodDescriptions[mood] || moodDescriptions.drama;
+
+  return `ENHANCE this YouTube thumbnail image. Do NOT change the composition, people, text, or layout AT ALL.
+
+ONLY apply these post-production adjustments:
+1. SHARPNESS: Increase edge sharpness significantly — faces and text must be razor crisp at 168x94px mobile preview
+2. COLOR GRADE: ${desc}
+3. SATURATION: ${grade.saturation > 1.3 ? 'Boost vibrancy and color richness significantly' : grade.saturation < 0.9 ? 'Desaturate — muted, gritty tones' : 'Slight saturation boost for punch'}
+4. CONTRAST: ${grade.contrast > 1.2 ? 'High contrast — deep blacks, bright highlights' : 'Medium contrast boost for depth'}
+5. VIGNETTE: ${grade.vignetteStrength > 0.7 ? 'Heavy dark vignette crushing all edges into darkness' : grade.vignetteStrength > 0.4 ? 'Medium subtle vignette around edges' : 'Very light or no vignette'}
+6. BRIGHTNESS: ${grade.brightness < 0.85 ? 'Darken overall — moody and atmospheric' : grade.brightness > 1.05 ? 'Brighten — energetic and vibrant' : 'Maintain current brightness'}
+
+CRITICAL: Preserve ALL faces, text, layout, and composition EXACTLY. Only adjust color, sharpness, contrast, and mood.`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', {
