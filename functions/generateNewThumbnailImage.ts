@@ -1,47 +1,232 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
-// generateNewThumbnailImage
+// generateNewThumbnailImage — Nano Banana 2 Edition
 //
-// Uses ideogram/character-remix — the correct model for template cloning
+// Uses nano-banana-2 (Google) via KIE API
+// Accepts up to 14 images, 4K output, 20K char prompts
 //
-// EXACT FLOW:
-//   1. Upload template image → get public URL (this becomes image_url — the BASE)
-//   2. Upload character photos → get public URLs (these become reference_image_urls — the FACES)
-//   3. Submit to ideogram/character-remix:
-//      - image_url = template (layout master — kept intact)
-//      - reference_image_urls = character photos (faces swapped in)
-//      - prompt = describes the text overlay swap only
-//      - strength = 0.75 (preserve layout, swap faces + text)
+// FLOW:
+//   1. Load concept record (has image_prompt, text_overlay, mood, etc.)
+//   2. Upload template + character photos to KIE → get public URLs
+//   3. Pass ALL images via image_input[] with a surgical face-preservation prompt
 //   4. Poll for result
-//   5. Save image_url to concept record
+//   5. Upscale + save
 
-// ── Build a precise enhance prompt based on mood profile ──
-function buildEnhancePrompt(mood, grade) {
-  const moodDescriptions = {
-    crime: 'Dark true crime aesthetic. Heavy desaturation with red/crimson tint. Deep black vignette crushing the edges. High contrast, gritty, ominous. Skin slightly desaturated. Dark shadows, minimal highlights.',
-    drama: 'Dramatic cinematic color grade. Cool blue shadows, warm highlights. Medium vignette. Slightly boosted saturation for emotional punch. Film-like contrast with rich midtones.',
-    nollywood: 'Warm vibrant Nollywood color grade. Rich saturated warm tones — golden skin, vivid oranges and reds. Slight warm vignette. High saturation, punchy contrast. African cinema warmth.',
-    comedy: 'Ultra-vibrant candy store MrBeast aesthetic. Maximum color saturation. Bright, punchy, energetic. Minimal vignette. Boosted brightness. Vivid greens, yellows, cyans. Pop art energy.',
-    finance: 'Premium corporate finance aesthetic. Cool blue-teal tint. Desaturated but with green/teal accent pop. Medium dark vignette. Clean, professional, trust-building. Slightly dark and moody.',
-    inspirational: 'Uplifting warm-to-cool gradient grade. Soft purple and gold tones. Light vignette. Slightly dreamy with boosted warm highlights. Aspirational and clean.',
-    educational: 'Clean authoritative blue grade. Cool blue midtones. Medium vignette. Professional, trustworthy. Slight contrast boost for clarity. Sharp and readable.',
-  };
+// ── Build the face-preservation prompt ──────────────────────────────────
+// This is the core innovation: Nano Banana has no dedicated "face swap" field,
+// so we engineer the prompt to achieve the same result.
+function buildFaceSwapPrompt({ overlayText, font, textColor, textPosition, hasTemplate, hasPhotos, photoCount, concept }) {
+  const imagePrompt = concept.image_prompt || '';
 
-  const desc = moodDescriptions[mood] || moodDescriptions.drama;
+  if (hasTemplate && hasPhotos) {
+    // ═══════════════════════════════════════════════════════════════════
+    // TEMPLATE + PHOTOS: The most important case
+    // Image 1 = template layout, Images 2+ = character reference photos
+    // ═══════════════════════════════════════════════════════════════════
+    const photoLabels = [];
+    for (let i = 0; i < photoCount; i++) {
+      photoLabels.push(`Image ${i + 2}`);
+    }
 
-  return `ENHANCE this YouTube thumbnail image. Do NOT change the composition, people, text, or layout AT ALL.
+    return `You are a professional YouTube thumbnail compositor. You have been given ${1 + photoCount} images.
 
-ONLY apply these post-production adjustments:
-1. SHARPNESS: Increase edge sharpness significantly — faces and text must be razor crisp at 168x94px mobile preview
-2. COLOR GRADE: ${desc}
-3. SATURATION: ${grade.saturation > 1.3 ? 'Boost vibrancy and color richness significantly' : grade.saturation < 0.9 ? 'Desaturate — muted, gritty tones' : 'Slight saturation boost for punch'}
-4. CONTRAST: ${grade.contrast > 1.2 ? 'High contrast — deep blacks, bright highlights' : 'Medium contrast boost for depth'}
-5. VIGNETTE: ${grade.vignetteStrength > 0.7 ? 'Heavy dark vignette crushing all edges into darkness' : grade.vignetteStrength > 0.4 ? 'Medium subtle vignette around edges' : 'Very light or no vignette'}
-6. BRIGHTNESS: ${grade.brightness < 0.85 ? 'Darken overall — moody and atmospheric' : grade.brightness > 1.05 ? 'Brighten — energetic and vibrant' : 'Maintain current brightness'}
+IMAGE ROLES:
+- Image 1 is the LAYOUT TEMPLATE — a proven high-CTR YouTube thumbnail. This defines the EXACT composition you must recreate: same background, same colors, same lighting, same split/gradient, same decorative elements (arrows, icons, badges), same framing, same camera angles.
+- ${photoLabels.join(', ')} ${photoCount === 1 ? 'is a CHARACTER REFERENCE PHOTO' : 'are CHARACTER REFERENCE PHOTOS'} — ${photoCount === 1 ? 'this shows the real person whose face' : 'these show the real people whose faces'} must appear in the final thumbnail.
 
-CRITICAL: Preserve ALL faces, text, layout, and composition EXACTLY. Only adjust color, sharpness, contrast, and mood.`;
+═══════════════════════════════════════════════
+YOUR TASK — PRECISE FACE TRANSPLANT
+═══════════════════════════════════════════════
+
+Recreate the EXACT layout and composition from Image 1 (the template), but replace the people in the template with the person(s) from the reference photo(s).
+
+FACE PRESERVATION RULES (CRITICAL — DO NOT VIOLATE):
+1. BONE STRUCTURE: Reproduce the exact skull shape, jawline, chin shape, and forehead proportions from the reference photo(s). Do not morph, slim, widen, or reshape any facial bones.
+2. SKIN: Match the exact skin tone, texture, and complexion. If the reference person has dark skin, the result must have the same shade of dark skin. If they have freckles, moles, or scars — include them.
+3. NOSE: Exact same nose — bridge width, nostril shape, tip shape. Do not narrow or reshape.
+4. EYES: Same eye shape, eye color, eyelid crease depth, eyebrow thickness and arch. Do not change eye size or shape.
+5. LIPS: Same lip thickness, shape, and color. Do not thin or reshape.
+6. HAIR: Exact same hair color, texture (straight/curly/coiled/braided), length, and style. Do not change the hairstyle.
+7. EARS: Same ear shape and size if visible.
+8. BODY: Match the body type, build, and proportions from the reference photo.
+9. AGE: The person in the output must appear the SAME age as in the reference photo. Do not age up or age down.
+
+WHAT TO KEEP FROM THE TEMPLATE (Image 1):
+- The overall composition and layout (where people are positioned, the background split, color zones)
+- The background elements, decorative graphics, arrows, icons, badges
+- The lighting style and color temperature
+- The general pose/framing of where people stand (but with the NEW person's body and face)
+- The emotional energy and thumbnail style
+
+WHAT TO CHANGE:
+- Replace ALL people in the template with the person(s) from the reference photo(s)
+- The expression should match what the template person was doing (shocked face → reference person with shocked face, etc.) but with the reference person's REAL facial features
+${overlayText ? `- Add this text overlay: "${overlayText}" in ${font} font, ultra-bold, ${textColor} color with thick black outline/stroke and drop shadow, positioned at ${textPosition}. Text must be SHARP and READABLE at thumbnail size.` : ''}
+
+OUTPUT REQUIREMENTS:
+- YouTube thumbnail aspect ratio 16:9, 1920×1080
+- Photorealistic quality — must look like a real photograph, not AI-generated
+- Faces must be razor-sharp and high-detail
+- The final image must look like the template but starring the reference person(s)
+- Professional studio-grade compositing quality`;
+
+  } else if (hasTemplate && !hasPhotos) {
+    // Template only — just swap text
+    return `You have been given 1 image — a YouTube thumbnail template.
+
+Recreate this EXACT thumbnail with every element identical: same people, same background, same colors, same lighting, same composition, same decorative elements.
+
+THE ONLY CHANGE: ${overlayText ? `Replace any existing text with: "${overlayText}" in ${font} font, ultra-bold, ${textColor} color with thick black outline/stroke and drop shadow, positioned at ${textPosition}. Text must be SHARP and READABLE.` : 'No changes needed — reproduce exactly.'}
+
+Output: YouTube thumbnail 16:9, 1920×1080, photorealistic.`;
+
+  } else if (!hasTemplate && hasPhotos) {
+    // No template — generate from prompt with face reference
+    const photoLabels = [];
+    for (let i = 0; i < photoCount; i++) {
+      photoLabels.push(`Image ${i + 1}`);
+    }
+
+    return `You have been given ${photoCount} CHARACTER REFERENCE PHOTO${photoCount > 1 ? 'S' : ''} (${photoLabels.join(', ')}).
+
+Generate the following YouTube thumbnail scene, but the person(s) in the scene MUST be the exact person(s) from the reference photo(s):
+
+${imagePrompt}
+
+FACE PRESERVATION RULES (CRITICAL):
+1. BONE STRUCTURE: Reproduce the exact skull shape, jawline, chin, forehead from the reference.
+2. SKIN: Exact same skin tone, texture, complexion — no lightening or darkening.
+3. NOSE: Same bridge width, nostril shape, tip shape.
+4. EYES: Same eye shape, color, eyelid crease, eyebrow thickness.
+5. LIPS: Same thickness, shape, color.
+6. HAIR: Exact same color, texture, length, style.
+7. BODY: Match build and proportions from the reference.
+8. AGE: Same apparent age — do not age up or down.
+
+The person in the output must be IMMEDIATELY recognizable as the same person from the reference photo. Anyone who knows this person should be able to identify them instantly.
+
+Output: YouTube thumbnail 16:9, 1920×1080, photorealistic, cinematic quality.`;
+
+  } else {
+    // No template, no photos — pure generation
+    return `${imagePrompt}
+
+Output: YouTube thumbnail 16:9, 1920×1080, photorealistic, cinematic DSLR quality. Razor-sharp faces. Professional compositing.`;
+  }
 }
 
+// ── Enhance prompt builder (for post-processing) ────────────────────────
+function buildEnhancePrompt(mood, grade) {
+  const moodDesc = {
+    crime: 'Dark true crime. Heavy desaturation, red/crimson tint, deep black vignette, high contrast, gritty.',
+    drama: 'Dramatic cinematic. Cool blue shadows, warm highlights, medium vignette, boosted saturation.',
+    nollywood: 'Warm vibrant Nollywood. Rich golden skin tones, vivid oranges/reds, punchy contrast.',
+    comedy: 'Ultra-vibrant MrBeast candy store. Maximum saturation, bright, punchy, energetic.',
+    finance: 'Premium corporate. Cool blue-teal tint, desaturated, medium dark vignette, professional.',
+    inspirational: 'Uplifting warm-to-cool gradient. Soft purple and gold tones, slightly dreamy.',
+    educational: 'Clean authoritative blue. Cool blue midtones, professional, trustworthy.',
+  };
+  return `ENHANCE this image. Do NOT change composition, people, text, or layout.
+Apply: ${moodDesc[mood] || moodDesc.drama}
+Sharpness: increase significantly. Saturation: ${grade.saturation > 1.3 ? 'boost vibrancy' : grade.saturation < 0.9 ? 'desaturate' : 'slight boost'}.
+Contrast: ${grade.contrast > 1.2 ? 'high' : 'medium boost'}. Vignette: ${grade.vignetteStrength > 0.7 ? 'heavy dark' : grade.vignetteStrength > 0.4 ? 'medium' : 'light/none'}.
+Preserve ALL faces, text, layout exactly. Only adjust color, sharpness, contrast, mood.`;
+}
+
+// ── Poll helper ─────────────────────────────────────────────────────────
+async function pollForResult(taskId, apiKey, maxAttempts = 40, interval = 5000) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    await new Promise(r => setTimeout(r, interval));
+    let pollData;
+    try {
+      const res = await fetch(
+        `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${taskId}`,
+        { headers: { 'Authorization': `Bearer ${apiKey}` } }
+      );
+      const text = await res.text();
+      try { pollData = JSON.parse(text); } catch (_) {}
+    } catch (e) {
+      console.warn(`Poll ${attempt}: fetch error: ${e.message}`);
+      continue;
+    }
+    const state = pollData?.data?.state || '';
+    console.log(`Poll ${attempt}/${maxAttempts}: state="${state}"`);
+
+    if (state === 'success') {
+      const rj = pollData?.data?.resultJson;
+      let url = null;
+      if (rj) {
+        try {
+          const p = typeof rj === 'string' ? JSON.parse(rj) : rj;
+          url = p?.resultUrls?.[0] || p?.urls?.[0] || p?.images?.[0] || p?.url;
+        } catch (_) {
+          if (typeof rj === 'string' && rj.startsWith('http')) url = rj;
+        }
+      }
+      if (!url) url = pollData?.data?.imageUrl || pollData?.data?.image_url || pollData?.data?.url;
+      return { success: true, url };
+    }
+    if (state === 'fail') {
+      const msg = pollData?.data?.failMsg || pollData?.data?.error || 'Generation failed';
+      return { success: false, error: msg };
+    }
+  }
+  return { success: false, error: 'Timed out waiting for result' };
+}
+
+// ── Upload image to KIE ─────────────────────────────────────────────────
+async function uploadToKIE(b64, mime, label, apiKey) {
+  const rawB64 = b64.includes(',') ? b64.split(',')[1] : b64;
+  const cleanB64 = rawB64.replace(/[\s\r\n]/g, '');
+  const binaryString = atob(cleanB64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+
+  const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47;
+  const actualMime = isPng ? 'image/png' : 'image/jpeg';
+  const ext = isPng ? 'png' : 'jpg';
+  const fileName = `${label}_${Date.now()}.${ext}`;
+  console.log(`📤 Uploading ${label}: ${(bytes.length / 1024).toFixed(0)}KB`);
+
+  // KIE stream upload
+  try {
+    const blob = new Blob([bytes], { type: actualMime });
+    const formData = new FormData();
+    formData.append('file', blob, fileName);
+    formData.append('uploadPath', 'thumbnails');
+    const res = await fetch('https://kieai.redpandaai.co/api/file-stream-upload', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+      body: formData,
+    });
+    const text = await res.text();
+    let data; try { data = JSON.parse(text); } catch (_) {}
+    const url = data?.data?.fileUrl || data?.data?.downloadUrl || data?.data?.url;
+    if (url) { console.log(`✅ ${label} → ${url}`); return url; }
+    console.warn(`⚠️ ${label} stream: ${text.substring(0, 200)}`);
+  } catch (e) { console.warn(`⚠️ ${label} stream error: ${e.message}`); }
+
+  // Fallback: base64 upload
+  try {
+    const dataUrl = `data:${actualMime};base64,${cleanB64}`;
+    const res = await fetch('https://kieai.redpandaai.co/api/file-base64-upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ base64Data: dataUrl, uploadPath: 'thumbnails', fileName }),
+    });
+    const text = await res.text();
+    let data; try { data = JSON.parse(text); } catch (_) {}
+    const url = data?.data?.fileUrl || data?.data?.downloadUrl || data?.data?.url;
+    if (url) { console.log(`✅ ${label} (b64) → ${url}`); return url; }
+    console.warn(`❌ ${label} b64: ${text.substring(0, 200)}`);
+  } catch (e) { console.warn(`❌ ${label} b64 error: ${e.message}`); }
+
+  return null;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// MAIN HANDLER
+// ════════════════════════════════════════════════════════════════════════
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', {
@@ -64,514 +249,181 @@ Deno.serve(async (req) => {
     const KIE_API_KEY = Deno.env.get('KIE_API_KEY');
     if (!KIE_API_KEY) return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
 
-    console.log('=== generateNewThumbnailImage (character-remix) ===');
-    console.log('concept_id:', concept_id);
+    console.log('=== generateNewThumbnailImage (nano-banana-2) ===');
 
-    // 1. Load concept record
+    // 1. Load concept
     let concept;
-    try {
-      concept = await base44.entities.ThumbnailConcepts.get(concept_id);
-    } catch (e) {
-      return Response.json({ error: `Could not load concept: ${e.message}` }, { status: 404 });
-    }
+    try { concept = await base44.entities.ThumbnailConcepts.get(concept_id); }
+    catch (e) { return Response.json({ error: `Could not load concept: ${e.message}` }, { status: 404 }); }
+    if (!concept?.image_prompt) return Response.json({ error: 'Concept has no image_prompt' }, { status: 400 });
 
-    if (!concept?.image_prompt) {
-      return Response.json({ error: 'Concept has no image_prompt' }, { status: 400 });
-    }
-
-    // 2. Resolve character photos — prefer direct pass from frontend
+    // 2. Resolve character photos
     let charPhotos = [];
     if (Array.isArray(directCharPhotos) && directCharPhotos.some(p => p?.b64)) {
       charPhotos = directCharPhotos.filter(p => p?.b64);
-      console.log('Using DIRECT char photos:', charPhotos.length);
+      console.log('Direct char photos:', charPhotos.length);
     } else if (concept.char_photos_json) {
       try {
         const stored = JSON.parse(concept.char_photos_json);
         charPhotos = stored.filter(p => p?.b64 && !p.truncated);
-        console.log('Using STORED char photos:', charPhotos.length);
-      } catch (e) {
-        console.warn('Could not parse char_photos_json:', e.message);
-      }
+        console.log('Stored char photos:', charPhotos.length);
+      } catch (_) {}
     }
 
-    // 3. Resolve template reference — prefer direct pass from frontend
+    // 3. Resolve template reference
     let templateRef = null;
     if (directTemplateRef?.b64) {
       templateRef = directTemplateRef;
-      console.log('Using DIRECT template ref:', templateRef.name);
+      console.log('Direct template:', templateRef.name);
     } else if (concept.template_ref_json) {
-      try {
-        templateRef = JSON.parse(concept.template_ref_json);
-        console.log('Using STORED template ref:', templateRef.name);
-      } catch (e) {
-        console.warn('Could not parse template_ref_json:', e.message);
-      }
+      try { templateRef = JSON.parse(concept.template_ref_json); } catch (_) {}
     }
 
     const hasCharPhotos = charPhotos.length > 0;
     const hasTemplateRef = !!templateRef?.b64;
+    console.log(`📸 Photos: ${charPhotos.length} | Template: ${hasTemplateRef ? templateRef.name : 'NONE'}`);
 
-    console.log(`📸 Char photos: ${hasCharPhotos ? charPhotos.length : 'NONE'} | Template: ${hasTemplateRef ? templateRef.name : 'NONE'}`);
+    // ── STEP 4: Upload ALL images to KIE ──────────────────────────
+    // For nano-banana-2, everything goes into image_input[]
+    // Order matters: template FIRST (Image 1), then character photos (Image 2, 3, ...)
+    const imageUrls = [];
 
-    // ── STEP 4: Upload all images to KIE File API to get public URLs ──
-    // ideogram/character-remix requires public URLs, not base64
-    const kieHeaders = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${KIE_API_KEY}`,
-    };
-
-    const uploadImage = async (b64, mime, label) => {
-      // Strip any data URI prefix to get raw base64
-      const rawB64 = b64.includes(',') ? b64.split(',')[1] : b64;
-      const cleanB64 = rawB64.replace(/[\s\r\n]/g, '');
-      
-      // Convert base64 to binary bytes
-      const binaryString = atob(cleanB64);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      
-      // Detect actual format from magic bytes
-      const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47;
-      const actualMime = isPng ? 'image/png' : 'image/jpeg';
-      const ext = isPng ? 'png' : 'jpg';
-      const fileName = `${label}_${Date.now()}.${ext}`;
-      
-      console.log(`📤 Uploading ${label}: ${(bytes.length / 1024).toFixed(0)}KB, detected: ${actualMime}`);
-      
-      // Use KIE's file-stream-upload (multipart) — produces URLs their own AI models can fetch
-      // This is the official KIE File Upload API endpoint
-      try {
-        const blob = new Blob([bytes], { type: actualMime });
-        const formData = new FormData();
-        formData.append('file', blob, fileName);
-        formData.append('uploadPath', 'thumbnails');
-        
-        const res = await fetch('https://kieai.redpandaai.co/api/file-stream-upload', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${KIE_API_KEY}` },
-          body: formData,
-        });
-        const text = await res.text();
-        let data;
-        try { data = JSON.parse(text); } catch (_) {}
-        const url = data?.data?.fileUrl || data?.data?.downloadUrl || data?.data?.url;
-        if (url) {
-          console.log(`✅ Uploaded ${label} (KIE stream) → ${url}`);
-          return url;
-        }
-        console.warn(`⚠️ KIE stream upload response for ${label}: HTTP ${res.status} — ${text.substring(0, 300)}`);
-      } catch (e) {
-        console.warn(`⚠️ KIE stream upload error for ${label}: ${e.message}`);
-      }
-      
-      // FALLBACK: KIE base64 upload
-      try {
-        const dataUrl = `data:${actualMime};base64,${cleanB64}`;
-        const res = await fetch('https://kieai.redpandaai.co/api/file-base64-upload', {
-          method: 'POST',
-          headers: kieHeaders,
-          body: JSON.stringify({ base64Data: dataUrl, uploadPath: 'thumbnails', fileName }),
-        });
-        const text = await res.text();
-        let data;
-        try { data = JSON.parse(text); } catch (_) {}
-        const url = data?.data?.fileUrl || data?.data?.downloadUrl || data?.data?.url;
-        if (url) {
-          console.log(`✅ Uploaded ${label} (KIE b64) → ${url}`);
-          return url;
-        }
-        console.warn(`❌ KIE b64 also failed for ${label}: ${text.substring(0, 200)}`);
-      } catch (e) {
-        console.warn(`❌ KIE b64 error for ${label}: ${e.message}`);
-      }
-      
-      return null;
-    };
-
-    // Upload template → this becomes image_url (the BASE the model remixes FROM)
-    let templateUrl = null;
     if (hasTemplateRef) {
-      templateUrl = await uploadImage(
-        templateRef.b64,
-        templateRef.mime || 'image/jpeg',
-        'template'
-      );
+      const url = await uploadToKIE(templateRef.b64, templateRef.mime || 'image/jpeg', 'template', KIE_API_KEY);
+      if (url) imageUrls.push(url);
     }
 
-    // Upload character photos → these become reference_image_urls (the FACES to inject)
-    const referenceImageUrls = [];
-    for (const [i, p] of charPhotos.filter(p => p?.b64).entries()) {
-      const url = await uploadImage(p.b64, p.mime || 'image/jpeg', `char_${i + 1}`);
-      if (url) referenceImageUrls.push(url);
+    for (const [i, p] of charPhotos.entries()) {
+      const url = await uploadToKIE(p.b64, p.mime || 'image/jpeg', `char_${i + 1}`, KIE_API_KEY);
+      if (url) imageUrls.push(url);
     }
 
-    console.log(`Template URL: ${templateUrl ? '✅' : '❌ NONE'}`);
-    console.log(`Reference URLs: ${referenceImageUrls.length}`);
+    console.log(`Uploaded ${imageUrls.length} images to KIE`);
 
-    // ── STEP 5: Build the prompt ──
-    // For character-remix the prompt describes WHAT TO CHANGE.
-    // We only describe the text overlay swap — everything else stays from the template.
+    // ── STEP 5: Build the face-preservation prompt ──────────────
     const overlayText = (concept.text_overlay || '').toUpperCase().trim();
     const rawStyle = concept.text_style || '';
     const fontMatch = rawStyle.match(/bebas neue|impact|montserrat|roboto|arial/i);
     const font = fontMatch ? fontMatch[0] : 'Impact';
     const colorMatch = rawStyle.match(/white|yellow|gold|red|black|orange/i);
     const textColor = colorMatch ? colorMatch[0] : 'white';
-    const positionMatch = rawStyle.toLowerCase().includes('bottom') ? 'bottom-center' : 'upper-left';
+    const textPosition = rawStyle.toLowerCase().includes('bottom') ? 'bottom-center' : 'upper-left';
 
-    let prompt;
+    const prompt = buildFaceSwapPrompt({
+      overlayText,
+      font,
+      textColor,
+      textPosition,
+      hasTemplate: hasTemplateRef && imageUrls.length > 0,
+      hasPhotos: hasCharPhotos,
+      photoCount: charPhotos.length,
+      concept,
+    });
 
-    if (hasTemplateRef && hasCharPhotos) {
-      // TEMPLATE + FACES: swap both people and text
-      prompt = `Keep the EXACT same layout, background, colors, lighting, composition and all graphic elements from the base image. 
-CHANGE 1 — Replace the people in the image with the person(s) from the reference photo(s). Use their exact face, skin tone, hair color and style. Keep the same pose, position and framing as the original people in the template.
-CHANGE 2 — Replace the existing text in the image with: "${overlayText}". Font: ${font}, ultra-bold, condensed. Color: ${textColor} with thick black outline and drop shadow. Position: ${positionMatch}. Text must be sharp, crisp and perfectly readable.
-Do NOT change anything else — same background, same colors, same lighting, same composition, same decorative elements.`;
+    console.log(`Prompt length: ${prompt.length} chars`);
 
-    } else if (hasTemplateRef && !hasCharPhotos) {
-      // TEMPLATE ONLY: just swap the text
-      prompt = `Keep the EXACT same layout, background, colors, lighting, composition and all graphic elements from the base image.
-CHANGE — Replace the existing text in the image with: "${overlayText}". Font: ${font}, ultra-bold, condensed. Color: ${textColor} with thick black outline and drop shadow. Position: ${positionMatch}. Text must be sharp, crisp and perfectly readable.
-Do NOT change anything else — same people, same background, same colors, same lighting.`;
+    // ── STEP 6: Submit to nano-banana-2 ─────────────────────────
+    const model = 'nano-banana-2';
+    const kieHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${KIE_API_KEY}`,
+    };
 
-    } else if (!hasTemplateRef && hasCharPhotos) {
-      // NO TEMPLATE: generate from image_prompt with face reference
-      prompt = `${concept.image_prompt}
-The person(s) in the reference photo(s) MUST appear in this image — same face, skin tone, hair color and style exactly. Do not generate different people.`;
+    const inputPayload = {
+      prompt,
+      image_input: imageUrls.length > 0 ? imageUrls : [],
+      aspect_ratio: '16:9',
+      resolution: '2K',
+      output_format: 'png',
+    };
 
-    } else {
-      // NO TEMPLATE, NO FACES: use image_prompt as-is
-      prompt = concept.image_prompt;
-    }
-
-    // ── STEP 6: Submit to ideogram/character-remix or ideogram/character ──
-    // If we have a template: use character-remix (image_url = template, references = faces)
-    // If no template: use character (references = faces only, generate from prompt)
-    const model = hasTemplateRef ? 'ideogram/character-remix' : 'ideogram/character';
-    console.log(`Submitting to ${model}...`);
-
-    // API spec: reference_image_urls supports only 1 image currently
-    // Do NOT send empty image_urls or empty reference_mask_urls — they cause "File type not supported"
-    const inputPayload = hasTemplateRef
-      ? {
-          prompt,
-          image_url: templateUrl,
-          reference_image_urls: referenceImageUrls.slice(0, 1), // API only supports 1 reference
-          rendering_speed: 'BALANCED',
-          style: 'REALISTIC',
-          expand_prompt: false,
-          num_images: '1',
-          image_size: 'landscape_16_9',
-          strength: 0.8,
-          negative_prompt: 'cartoon, anime, illustration, blurry, low quality, distorted face, wrong person, different person, watermark, logo',
-        }
-      : {
-          prompt,
-          reference_image_urls: referenceImageUrls.slice(0, 1), // API only supports 1 reference
-          rendering_speed: 'BALANCED',
-          style: 'REALISTIC',
-          expand_prompt: false,
-          num_images: '1',
-          image_size: 'landscape_16_9',
-          negative_prompt: 'cartoon, anime, illustration, blurry, low quality, distorted face, wrong person, different person, watermark, logo',
-        };
-
-    // Log the exact payload for debugging
-    const requestBody = { model, input: inputPayload };
-    console.log('Request payload keys:', JSON.stringify({
-      model,
-      input_keys: Object.keys(inputPayload),
-      image_url: inputPayload.image_url ? inputPayload.image_url.substring(0, 80) + '...' : 'NONE',
-      reference_count: inputPayload.reference_image_urls?.length || 0,
-      ref_urls: (inputPayload.reference_image_urls || []).map(u => u.substring(0, 80) + '...'),
-    }));
+    console.log(`Submitting to ${model} | images: ${imageUrls.length} | resolution: 2K`);
 
     const createRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
       method: 'POST',
       headers: kieHeaders,
-      body: JSON.stringify(requestBody),
+      body: JSON.stringify({ model, input: inputPayload }),
     });
-
     const createText = await createRes.text();
     console.log(`${model} → HTTP ${createRes.status}: ${createText.substring(0, 300)}`);
 
     let createData;
     try { createData = JSON.parse(createText); } catch (_) {}
-
     const taskId = createData?.data?.taskId;
     if (!taskId) {
-      return Response.json({
-        error: `Task creation failed (${model}): ${createText.substring(0, 200)}`,
-      }, { status: 500 });
+      return Response.json({ error: `Task creation failed: ${createText.substring(0, 200)}` }, { status: 500 });
     }
+    console.log(`✅ Task: ${taskId}`);
 
-    console.log(`✅ Task created: ${taskId} | model: ${model}`);
+    // ── STEP 7: Poll for result ─────────────────────────────────
+    const result = await pollForResult(taskId, KIE_API_KEY, 40, 5000);
+    if (!result.success) throw new Error(result.error);
+    let imageUrl = result.url;
+    if (!imageUrl) throw new Error('Generation succeeded but no image URL returned');
+    console.log('✅ Generated:', imageUrl);
 
-    // 7. Poll for result
-    // states: 'waiting' | 'queuing' | 'generating' | 'success' | 'fail'
-    const maxAttempts = 40;
-    const pollInterval = 5000;
-    let imageUrl = null;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      await new Promise(r => setTimeout(r, pollInterval));
-
-      let pollData;
-      try {
-        const pollRes = await fetch(
-          `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${taskId}`,
-          { headers: { 'Authorization': `Bearer ${KIE_API_KEY}` } }
-        );
-        const pollText = await pollRes.text();
-        try { pollData = JSON.parse(pollText); } catch (_) {}
-      } catch (e) {
-        console.warn(`Poll ${attempt}: fetch error: ${e.message}`);
-        continue;
-      }
-
-      const state = pollData?.data?.state || pollData?.state || '';
-      console.log(`Poll ${attempt}/${maxAttempts}: state="${state}"`);
-
-      if (state === 'success') {
-        const resultJson = pollData?.data?.resultJson;
-        if (resultJson) {
-          try {
-            const parsed = typeof resultJson === 'string' ? JSON.parse(resultJson) : resultJson;
-            imageUrl = parsed?.resultUrls?.[0]
-              || parsed?.urls?.[0]
-              || parsed?.images?.[0]
-              || parsed?.url;
-          } catch (_) {
-            if (typeof resultJson === 'string' && resultJson.startsWith('http')) {
-              imageUrl = resultJson;
-            }
-          }
-        }
-        if (!imageUrl) {
-          imageUrl = pollData?.data?.imageUrl
-            || pollData?.data?.image_url
-            || pollData?.data?.url;
-        }
-        if (imageUrl) {
-          console.log('✅ Got image URL:', imageUrl);
-          break;
-        }
-        console.warn('state=success but no URL found:', JSON.stringify(pollData?.data).substring(0, 300));
-        break;
-      }
-
-      if (state === 'fail') {
-        const msg = pollData?.data?.failMsg || pollData?.data?.error || 'Generation failed';
-        throw new Error(`${model} failed: ${msg}`);
-      }
-      // waiting / queuing / generating — keep polling
-    }
-
-    if (!imageUrl) {
-      throw new Error('Timed out waiting for image. The task may still be processing — try again.');
-    }
-
-    // ══════════════════════════════════════════════════════════════════
-    // STEP 8: POST-PROCESSING PIPELINE (same call, zero extra AI credits)
-    //   a) Upscale via KIE (uses the same API, sharpens + 2x resolution)
-    //   b) Mood-based color grading via canvas (pure pixel math — free)
-    //      → saturation, vibrancy, sharpness, vignette, color tint
-    // ══════════════════════════════════════════════════════════════════
-
+    // ── STEP 8: Post-processing — Upscale ───────────────────────
     const mood = (concept.mood || concept.visual_metaphor || 'drama').toLowerCase();
-
-    // MOOD GRADING PROFILES — maps mood → pixel-level adjustments
     const MOOD_GRADES = {
-      crime:        { saturation: 0.7,  contrast: 1.35, brightness: 0.75, tintR: 1.15, tintG: 0.85, tintB: 0.85, vignetteStrength: 0.92 },
-      drama:        { saturation: 1.4,  contrast: 1.2,  brightness: 0.95, tintR: 1.0,  tintG: 0.95, tintB: 1.1,  vignetteStrength: 0.75 },
-      nollywood:    { saturation: 1.6,  contrast: 1.2,  brightness: 1.0,  tintR: 1.1,  tintG: 1.0,  tintB: 0.85, vignetteStrength: 0.6  },
-      comedy:       { saturation: 2.0,  contrast: 1.1,  brightness: 1.1,  tintR: 1.05, tintG: 1.05, tintB: 0.9,  vignetteStrength: 0.2  },
-      finance:      { saturation: 1.15, contrast: 1.15, brightness: 0.9,  tintR: 0.9,  tintG: 1.05, tintB: 1.1,  vignetteStrength: 0.65 },
-      inspirational:{ saturation: 1.3,  contrast: 1.05, brightness: 1.05, tintR: 1.0,  tintG: 0.95, tintB: 1.1,  vignetteStrength: 0.3  },
-      educational:  { saturation: 1.15, contrast: 1.15, brightness: 0.95, tintR: 0.95, tintG: 1.0,  tintB: 1.1,  vignetteStrength: 0.55 },
+      crime:        { saturation: 0.7,  contrast: 1.35, brightness: 0.75, vignetteStrength: 0.92 },
+      drama:        { saturation: 1.4,  contrast: 1.2,  brightness: 0.95, vignetteStrength: 0.75 },
+      nollywood:    { saturation: 1.6,  contrast: 1.2,  brightness: 1.0,  vignetteStrength: 0.6  },
+      comedy:       { saturation: 2.0,  contrast: 1.1,  brightness: 1.1,  vignetteStrength: 0.2  },
+      finance:      { saturation: 1.15, contrast: 1.15, brightness: 0.9,  vignetteStrength: 0.65 },
+      inspirational:{ saturation: 1.3,  contrast: 1.05, brightness: 1.05, vignetteStrength: 0.3  },
+      educational:  { saturation: 1.15, contrast: 1.15, brightness: 0.95, vignetteStrength: 0.55 },
     };
     const grade = MOOD_GRADES[mood] || MOOD_GRADES.drama;
-    console.log(`🎨 Post-processing: mood="${mood}" | sat=${grade.saturation} con=${grade.contrast} vig=${grade.vignetteStrength}`);
 
-    // ── 8a. UPSCALE via KIE (2x, sharpens details) ──────────────
     let finalUrl = imageUrl;
+
+    // 8a. Upscale
     try {
-      console.log('🔍 Upscaling via KIE...');
-      const upscaleRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
-        method: 'POST',
-        headers: kieHeaders,
-        body: JSON.stringify({
-          model: 'kie-ai/upscaler',
-          input: {
-            image_url: imageUrl,
-            scale: 2,
-          },
-        }),
+      console.log('🔍 Upscaling...');
+      const upRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
+        method: 'POST', headers: kieHeaders,
+        body: JSON.stringify({ model: 'kie-ai/upscaler', input: { image_url: imageUrl, scale: 2 } }),
       });
-      const upscaleText = await upscaleRes.text();
-      let upscaleData;
-      try { upscaleData = JSON.parse(upscaleText); } catch (_) {}
-      const upscaleTaskId = upscaleData?.data?.taskId;
-
-      if (upscaleTaskId) {
-        console.log(`Upscale task: ${upscaleTaskId}`);
-        // Poll upscale (typically 15-30s)
-        for (let a = 1; a <= 20; a++) {
-          await new Promise(r => setTimeout(r, 4000));
-          try {
-            const pRes = await fetch(
-              `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${upscaleTaskId}`,
-              { headers: { 'Authorization': `Bearer ${KIE_API_KEY}` } }
-            );
-            const pText = await pRes.text();
-            let pData;
-            try { pData = JSON.parse(pText); } catch (_) {}
-            const st = pData?.data?.state || '';
-            console.log(`Upscale poll ${a}/20: state="${st}"`);
-            if (st === 'success') {
-              const rj = pData?.data?.resultJson;
-              let upUrl = null;
-              if (rj) {
-                try {
-                  const p = typeof rj === 'string' ? JSON.parse(rj) : rj;
-                  upUrl = p?.resultUrls?.[0] || p?.urls?.[0] || p?.url;
-                } catch (_) {
-                  if (typeof rj === 'string' && rj.startsWith('http')) upUrl = rj;
-                }
-              }
-              if (!upUrl) upUrl = pData?.data?.imageUrl || pData?.data?.image_url || pData?.data?.url;
-              if (upUrl) {
-                finalUrl = upUrl;
-                console.log('✅ Upscaled:', finalUrl);
-              }
-              break;
-            }
-            if (st === 'fail') {
-              console.warn('Upscale failed — using original');
-              break;
-            }
-          } catch (e) {
-            console.warn(`Upscale poll error: ${e.message}`);
-          }
-        }
-      } else {
-        console.warn('Upscale task not created — using original. Response:', upscaleText.substring(0, 200));
+      const upText = await upRes.text();
+      let upData; try { upData = JSON.parse(upText); } catch (_) {}
+      const upTaskId = upData?.data?.taskId;
+      if (upTaskId) {
+        const upResult = await pollForResult(upTaskId, KIE_API_KEY, 20, 4000);
+        if (upResult.success && upResult.url) { finalUrl = upResult.url; console.log('✅ Upscaled'); }
       }
-    } catch (e) {
-      console.warn('Upscale step error (non-fatal):', e.message);
-    }
+    } catch (e) { console.warn('Upscale error (non-fatal):', e.message); }
 
-    // ── 8b. MOOD COLOR GRADING via canvas pixel manipulation ─────
-    // This is FREE — pure math on the Deno server, no AI API calls
+    // 8b. Color grade
     try {
-      console.log('🎨 Applying mood color grade...');
-      
-      // Fetch the (upscaled) image as raw bytes
-      const imgRes = await fetch(finalUrl);
-      if (!imgRes.ok) throw new Error(`Fetch image failed: ${imgRes.status}`);
-      const imgBytes = new Uint8Array(await imgRes.arrayBuffer());
-      
-      // Use Deno-compatible image processing via ImageMagick-style approach
-      // We'll encode grading instructions into the prompt for a lightweight
-      // "enhance" pass through KIE's image processing if available,
-      // OR apply via a canvas-free server-side approach
-      
-      // Strategy: Use KIE's enhance/filter model if available, 
-      // otherwise bake grading into a second lightweight remix pass
-      
-      // Try KIE enhance endpoint first
+      console.log('🎨 Color grading...');
       const enhancePrompt = buildEnhancePrompt(mood, grade);
-      
-      const enhanceRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
-        method: 'POST',
-        headers: kieHeaders,
-        body: JSON.stringify({
-          model: 'kie-ai/image-enhance',
-          input: {
-            image_url: finalUrl,
-            prompt: enhancePrompt,
-            creativity: 0.15,  // very low — preserve the image, just grade it
-          },
-        }),
+      const enRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
+        method: 'POST', headers: kieHeaders,
+        body: JSON.stringify({ model: 'kie-ai/image-enhance', input: { image_url: finalUrl, prompt: enhancePrompt, creativity: 0.15 } }),
       });
-      
-      const enhanceText = await enhanceRes.text();
-      let enhanceData;
-      try { enhanceData = JSON.parse(enhanceText); } catch (_) {}
-      const enhanceTaskId = enhanceData?.data?.taskId;
-      
-      if (enhanceTaskId) {
-        console.log(`Enhance task: ${enhanceTaskId}`);
-        for (let a = 1; a <= 15; a++) {
-          await new Promise(r => setTimeout(r, 4000));
-          try {
-            const pRes = await fetch(
-              `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${enhanceTaskId}`,
-              { headers: { 'Authorization': `Bearer ${KIE_API_KEY}` } }
-            );
-            const pText = await pRes.text();
-            let pData;
-            try { pData = JSON.parse(pText); } catch (_) {}
-            const st = pData?.data?.state || '';
-            console.log(`Enhance poll ${a}/15: state="${st}"`);
-            if (st === 'success') {
-              const rj = pData?.data?.resultJson;
-              let enUrl = null;
-              if (rj) {
-                try {
-                  const p = typeof rj === 'string' ? JSON.parse(rj) : rj;
-                  enUrl = p?.resultUrls?.[0] || p?.urls?.[0] || p?.url;
-                } catch (_) {
-                  if (typeof rj === 'string' && rj.startsWith('http')) enUrl = rj;
-                }
-              }
-              if (!enUrl) enUrl = pData?.data?.imageUrl || pData?.data?.image_url || pData?.data?.url;
-              if (enUrl) {
-                finalUrl = enUrl;
-                console.log('✅ Enhanced:', finalUrl);
-              }
-              break;
-            }
-            if (st === 'fail') {
-              console.warn('Enhance failed — using upscaled/original');
-              break;
-            }
-          } catch (e) {
-            console.warn(`Enhance poll error: ${e.message}`);
-          }
-        }
-      } else {
-        console.warn('Enhance model not available — skipping color grade. Response:', enhanceText.substring(0, 200));
+      const enText = await enRes.text();
+      let enData; try { enData = JSON.parse(enText); } catch (_) {}
+      const enTaskId = enData?.data?.taskId;
+      if (enTaskId) {
+        const enResult = await pollForResult(enTaskId, KIE_API_KEY, 15, 4000);
+        if (enResult.success && enResult.url) { finalUrl = enResult.url; console.log('✅ Enhanced'); }
       }
-    } catch (e) {
-      console.warn('Color grading step error (non-fatal):', e.message);
-    }
+    } catch (e) { console.warn('Enhance error (non-fatal):', e.message); }
 
-    // 9. Save final image_url to concept record
+    // ── STEP 9: Save ─────────────────────────────────────────────
     try {
       await base44.entities.ThumbnailConcepts.update(concept_id, {
-        image_url: finalUrl,
-        status: 'complete',
-        is_selected: true,
+        image_url: finalUrl, status: 'complete', is_selected: true,
       });
-      console.log('✅ Saved final image_url to concept record');
-    } catch (e) {
-      console.warn('Could not save image_url:', e.message);
-    }
+      console.log('✅ Saved');
+    } catch (e) { console.warn('Save error:', e.message); }
 
-    console.log('=== Done ===');
     return Response.json({
       success: true,
       image_url: finalUrl,
       concept_id,
       model_used: model,
-      post_processing: {
-        upscaled: finalUrl !== imageUrl,
-        mood_graded: mood,
-        original_url: imageUrl,
-      },
+      post_processing: { upscaled: finalUrl !== imageUrl, mood_graded: mood, original_url: imageUrl },
     });
 
   } catch (error) {
