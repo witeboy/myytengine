@@ -278,10 +278,20 @@ The person(s) in the reference photo(s) MUST appear in this image — same face,
           negative_prompt: 'cartoon, anime, illustration, blurry, low quality, distorted face, wrong person, different person, watermark, logo',
         };
 
+    // Log the exact payload for debugging
+    const requestBody = { model, input: inputPayload };
+    console.log('Request payload keys:', JSON.stringify({
+      model,
+      input_keys: Object.keys(inputPayload),
+      image_url: inputPayload.image_url ? inputPayload.image_url.substring(0, 80) + '...' : 'NONE',
+      reference_count: inputPayload.reference_image_urls?.length || 0,
+      ref_urls: (inputPayload.reference_image_urls || []).map(u => u.substring(0, 80) + '...'),
+    }));
+
     const createRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
       method: 'POST',
       headers: kieHeaders,
-      body: JSON.stringify({ model, input: inputPayload }),
+      body: JSON.stringify(requestBody),
     });
 
     const createText = await createRes.text();
