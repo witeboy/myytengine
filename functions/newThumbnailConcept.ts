@@ -366,6 +366,10 @@ Text must be crisp, sharp, fully legible — this is the most important element 
           template_ref_json:      hasUserTemplate
                                     ? JSON.stringify({ b64: template_b64, mime: template_mime || 'image/jpeg', name: template_name })
                                     : null,
+          // Store template reference so render function can pass it as layout reference
+          template_ref_json:      hasUserTemplate
+                                    ? JSON.stringify({ b64: template_b64, mime: template_mime || 'image/jpeg', name: template_name })
+                                    : null,
         });
 
         console.log(`Saved #${c.rank ?? i+1}: "${c.text_overlay}" CTR:${c.ctr_score}`);
