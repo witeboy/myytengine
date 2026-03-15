@@ -88,7 +88,15 @@ OUTPUT REQUIREMENTS:
 
 Recreate this EXACT thumbnail with every element identical: same people, same background, same colors, same lighting, same composition, same decorative elements.
 
-THE ONLY CHANGE: ${overlayText ? `Replace any existing text with: "${overlayText}" in ${font} font, ultra-bold, ${textColor} color with thick black outline/stroke and drop shadow, positioned at ${textPosition}. Text must be SHARP and READABLE.` : 'No changes needed — reproduce exactly.'}
+TEXT REPLACEMENT (CRITICAL):
+- REMOVE every single piece of text from the template: all titles, subtitles, channel names, cast names, studio names, watermarks, badges with text, and any other written words. The output must have ZERO original text.
+${overlayText ? `- Replace ALL removed text with ONLY this single new text: "${overlayText}"
+  • Font: ${font}, ultra-bold, condensed
+  • Color: ${textColor} with thick black outline/stroke (6px+) and strong drop shadow
+  • Size: Match the size of the LARGEST/MAIN title in the original
+  • Position: Place it where the main title was in the original template
+  • Style: Match the 3D/gradient/embossed style of the original title if applicable
+  • This must be the ONLY text in the entire output image` : '- Output must contain NO text at all — completely clean.'}
 
 Output: YouTube thumbnail 16:9, 1920×1080, photorealistic.`;
 
