@@ -916,31 +916,49 @@ export default function MakeThumbnail({ onBack }) {
     setStep(2);
 
     try {
-      // Convert current uploaded photos to base64 for direct pass-through
-      // This bypasses the DB storage size limit on char_photos_json
+      // Resize photos to 512px max before sending — full resolution exceeds payload limits
+      const resizeToBase64 = (file, maxDim = 512) => new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
+          const w = Math.round(img.width * scale);
+          const h = Math.round(img.height * scale);
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          // JPEG at 0.8 quality — small enough for function invoke
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+          resolve(dataUrl.split(',')[1]);
+        };
+        img.onerror = () => resolve(null);
+        img.src = URL.createObjectURL(file);
+      });
+
       const directCharPhotos = [];
       for (const char of chars.filter(Boolean)) {
         if (char?.file) {
           try {
-            const b64 = await new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result.split(',')[1]);
-              reader.onerror = reject;
-              reader.readAsDataURL(char.file);
-            });
-            directCharPhotos.push({ b64, mime: char.file.type || 'image/jpeg' });
+            const b64 = await resizeToBase64(char.file, 512);
+            if (b64) directCharPhotos.push({ b64, mime: 'image/jpeg' });
           } catch (_) {}
         }
       }
 
-      // Also pass template reference directly if user selected one
-      const directTemplate = selectedUserTemplate && TEMPLATE_IMAGES[selectedUserTemplate.id]
-        ? {
-            b64: TEMPLATE_IMAGES[selectedUserTemplate.id].b64,
-            mime: TEMPLATE_IMAGES[selectedUserTemplate.id].mime || 'image/jpeg',
-            name: selectedUserTemplate.name,
-          }
-        : null;
+      // Resize template reference too if needed
+      let directTemplate = null;
+      if (selectedUserTemplate && TEMPLATE_IMAGES[selectedUserTemplate.id]?.b64) {
+        const tpl = TEMPLATE_IMAGES[selectedUserTemplate.id];
+        // Template images from the vault are already reasonable size — just cap at 200KB base64
+        const tplB64 = tpl.b64;
+        if (tplB64.length > 250000) {
+          // Too large — skip (Kie will rely on prompt description)
+          console.warn('Template ref image too large, skipping direct pass');
+        } else {
+          directTemplate = { b64: tplB64, mime: tpl.mime || 'image/jpeg', name: selectedUserTemplate.name };
+        }
+      }
 
       const raw = await base44.functions.invoke('generateNewThumbnailImage', {
         concept_id: concept.id,
