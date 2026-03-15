@@ -79,12 +79,22 @@ Deno.serve(async (req) => {
       }
     }
 
-    const hasCharPhotos = charPhotos.length > 0;
+        const hasCharPhotos = charPhotos.length > 0;
     const hasTemplateRef = !!templateRef?.b64;
+
+    // CLEAN IMAGES: KIE API requires raw base64 (no "data:image/..." prefix)
+    const cleanImageInputs = [];
+    if (hasTemplateRef && templateRef.b64) {
+      cleanImageInputs.push(templateRef.b64.split(',').pop());
+    }
+    charPhotos.forEach(p => {
+      if (p.b64) cleanImageInputs.push(p.b64.split(',').pop());
+    });
 
     console.log(`📸 Photos: ${hasCharPhotos ? charPhotos.length + ' available' : 'NONE'} | Template: ${hasTemplateRef ? templateRef.name : 'NONE'}`);
 
     // 3. Build prompt — TWO MODES: template clone vs freeform
+
     let fullPrompt;
 
     if (hasTemplateRef) {
