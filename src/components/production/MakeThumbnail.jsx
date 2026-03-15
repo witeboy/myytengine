@@ -269,17 +269,24 @@ export default function MakeThumbnail({ onBack }) {
   const [error, setError]               = useState(null);
 
   // ── helpers ──────────────────────────────────────────────────────
-  const handleCharCount = n => {
-    if (n < 2) n = 2; // minimum 2 photos
-    setCharCount(n);
-    setChars(prev => { const a = [...prev]; while (a.length < 3) a.push(null); return a; });
-  };
+  const MAX_PHOTOS = 14; // nano-banana-2 supports up to 14 image inputs
   const handleUpload = (i, file) => {
     const url = URL.createObjectURL(file);
     setChars(prev => { const a = [...prev]; a[i] = { file, url, name: file.name }; return a; });
   };
   const handleRemove = i => {
-    setChars(prev => { const a = [...prev]; a[i] = null; return a; });
+    // Remove the slot entirely (unless it would go below 2 slots)
+    setChars(prev => {
+      const a = [...prev];
+      a.splice(i, 1);
+      while (a.length < 2) a.push(null); // keep minimum 2 slots
+      return a;
+    });
+  };
+  const handleAddSlot = () => {
+    if (chars.length < MAX_PHOTOS) {
+      setChars(prev => [...prev, null]);
+    }
   };
 
   // ── Validation: all required fields ──────────────────────────────
