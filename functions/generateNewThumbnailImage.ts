@@ -195,7 +195,7 @@ The person(s) in the reference photo(s) MUST appear in this image — same face,
           expand_prompt: false,
           num_images: '1',
           image_size: 'landscape_16_9',
-          strength: 0.75,                       // 0.75 = strong template adherence, face swap
+          strength: 0.8,                       // 0.75 = strong template adherence, face swap
           negative_prompt: 'cartoon, anime, illustration, blurry, low quality, distorted face, wrong person, different person, watermark, logo',
           image_urls: [],
           reference_mask_urls: '',
