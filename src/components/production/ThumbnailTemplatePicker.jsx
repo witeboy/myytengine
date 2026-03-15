@@ -515,8 +515,8 @@ export default function ThumbnailTemplatePicker({ selectedTemplate, onSelect, ti
       {/* ── Selected template summary ── */}
       {selectedTemplate && (
         <div style={{
-          background: `${TEMPLATE_GROUPS.find(g => g.id === selectedTemplate.groupLabel)?.color || '#7c3aed'}15`,
-          border: `1px solid ${TEMPLATE_GROUPS.find(g => g.id === selectedTemplate.groupLabel)?.color || '#7c3aed'}40`,
+          background: `${(selectedTemplate.isCustom ? '#7c3aed' : TEMPLATE_GROUPS.find(g => g.id === selectedTemplate.groupLabel)?.color) || '#7c3aed'}15`,
+          border: `1px solid ${(selectedTemplate.isCustom ? '#7c3aed' : TEMPLATE_GROUPS.find(g => g.id === selectedTemplate.groupLabel)?.color) || '#7c3aed'}40`,
           borderRadius: 10, padding: '10px 14px', marginBottom: 14,
           display: 'flex', alignItems: 'center', gap: 10,
         }}>
