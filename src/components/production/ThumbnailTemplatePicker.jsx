@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { CheckCircle, ChevronRight, Zap, Eye, X, Info, Star } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { CheckCircle, ChevronRight, Zap, Eye, X, Info, Star, Upload, Trash2 } from 'lucide-react';
 import { THUMBNAIL_TEMPLATES, TEMPLATE_GROUPS, recommendTemplates } from './thumbnailTemplates';
 import { TEMPLATE_IMAGES } from './thumbnailReferenceImages';
 
@@ -362,6 +362,56 @@ export default function ThumbnailTemplatePicker({ selectedTemplate, onSelect, ti
   const [sortBy, setSortBy]           = useState('recommended');
   const [previewTemplate, setPreviewTemplate] = useState(null);
   const [recommendations, setRecommendations] = useState([]);
+  const [customTemplates, setCustomTemplates] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('custom_thumb_templates') || '[]'); } catch (_) { return []; }
+  });
+  const uploadRef = useRef(null);
+
+  // Persist custom templates
+  useEffect(() => {
+    localStorage.setItem('custom_thumb_templates', JSON.stringify(customTemplates));
+  }, [customTemplates]);
+
+  const handleCustomUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      const b64 = dataUrl.split(',')[1];
+      const mime = file.type || 'image/jpeg';
+      const id = `custom_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
+      const newTpl = {
+        id,
+        name: file.name.replace(/\.[^.]+$/, '').replace(/[_-]/g, ' ').substring(0, 40) || 'Custom Template',
+        genre: 'Custom Upload',
+        groupLabel: 'Custom',
+        psychology: 'User-uploaded reference template. AI will recreate this exact layout with your characters and overlay text.',
+        primaryColor: '#7c3aed',
+        textStrategy: 'AI will determine optimal text placement based on the template layout.',
+        beast_formula: null,
+        imagePromptInstructions: 'Recreate this exact thumbnail layout, composition, background, lighting, and style.',
+        referenceDescription: 'User-uploaded custom template reference.',
+        ctrScore: 8.0,
+        charCount: 2,
+        bestFor: [],
+        signals: [],
+        isCustom: true,
+        customDataUrl: dataUrl,
+        customB64: b64,
+        customMime: mime,
+      };
+      setCustomTemplates(prev => [newTpl, ...prev]);
+      onSelect(newTpl);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleDeleteCustom = (id) => {
+    setCustomTemplates(prev => prev.filter(t => t.id !== id));
+    if (selectedTemplate?.id === id) onSelect(null);
+  };
 
   // Recompute recommendations whenever title/summary changes
   useEffect(() => {
@@ -371,8 +421,11 @@ export default function ThumbnailTemplatePicker({ selectedTemplate, onSelect, ti
     if (recs.length > 0) setSortBy('recommended');
   }, [title, summary]);
 
+  // Merge built-in + custom templates
+  const allTemplates = [...customTemplates, ...THUMBNAIL_TEMPLATES];
+
   // Filter
-  const filtered = THUMBNAIL_TEMPLATES.filter(t =>
+  const filtered = allTemplates.filter(t =>
     activeGroup === 'all' || t.groupLabel === activeGroup
   );
 
@@ -388,7 +441,7 @@ export default function ThumbnailTemplatePicker({ selectedTemplate, onSelect, ti
     return 0;
   });
 
-  const totalCount = THUMBNAIL_TEMPLATES.length;
+  const totalCount = allTemplates.length;
 
   return (
     <div>
@@ -483,8 +536,22 @@ export default function ThumbnailTemplatePicker({ selectedTemplate, onSelect, ti
           All ({totalCount})
         </button>
 
+        {customTemplates.length > 0 && (
+          <button
+            onClick={() => setActiveGroup('Custom')}
+            style={{
+              padding: '6px 14px', borderRadius: 20, border: 'none',
+              background: activeGroup === 'Custom' ? '#7c3aed' : '#1f2937',
+              color: activeGroup === 'Custom' ? '#fff' : '#6b7280',
+              cursor: 'pointer', fontSize: 12, fontWeight: 700, transition: 'all 0.15s',
+            }}
+          >
+            📁 My Templates ({customTemplates.length})
+          </button>
+        )}
+
         {TEMPLATE_GROUPS.map(g => {
-          const count = THUMBNAIL_TEMPLATES.filter(t => t.groupLabel === g.id).length;
+          const count = allTemplates.filter(t => t.groupLabel === g.id).length;
           const isActive = activeGroup === g.id;
           return (
             <button
@@ -523,11 +590,33 @@ export default function ThumbnailTemplatePicker({ selectedTemplate, onSelect, ti
       </div>
 
       {/* ── Template Grid ── */}
+      <input ref={uploadRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleCustomUpload} />
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
         gap: 14,
       }}>
+        {/* Upload custom template card */}
+        <div
+          onClick={() => uploadRef.current?.click()}
+          style={{
+            border: '2px dashed #374151', borderRadius: 14, background: '#0b0b1a',
+            cursor: 'pointer', transition: 'all 0.15s ease', overflow: 'hidden',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            minHeight: 280, gap: 12,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = '#7c3aed'; e.currentTarget.style.background = 'rgba(124,58,237,0.08)'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = '#374151'; e.currentTarget.style.background = '#0b0b1a'; }}
+        >
+          <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#1f2937', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Upload size={22} color="#7c3aed" />
+          </div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: '#a78bfa' }}>Upload Template</div>
+          <div style={{ fontSize: 11, color: '#4b5563', textAlign: 'center', padding: '0 20px', lineHeight: 1.5 }}>
+            Upload any YouTube thumbnail as a reference — AI will recreate its exact layout
+          </div>
+        </div>
+
         {sorted.map(template => (
           <TemplateCard
             key={template.id}
@@ -535,6 +624,7 @@ export default function ThumbnailTemplatePicker({ selectedTemplate, onSelect, ti
             isSelected={selectedTemplate?.id === template.id}
             onSelect={onSelect}
             onPreview={setPreviewTemplate}
+            onDelete={template.isCustom ? handleDeleteCustom : null}
           />
         ))}
       </div>
