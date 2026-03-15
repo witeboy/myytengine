@@ -391,7 +391,11 @@ export default function MakeThumbnail({ onBack }) {
   // ── Step 1 → 2: User selected an overlay text, now render ──────
   const handleGenerateImage = async (concept) => {
     if (!concept?.id) return;
-    setSelectedConcept(concept);
+    // If custom overlay is in use, update the concept's text fields before sending
+    const effectiveConcept = (useCustomOverlay && customOverlay.trim())
+      ? { ...concept, text_overlay: customOverlay.trim() }
+      : concept;
+    setSelectedConcept(effectiveConcept);
     setGenerating(true);
     setError(null);
     setGeneratedUrl(null);
