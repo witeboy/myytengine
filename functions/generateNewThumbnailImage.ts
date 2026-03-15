@@ -94,9 +94,11 @@ Deno.serve(async (req) => {
     };
 
     const uploadToKie = async (b64, mime, label) => {
-      const dataUrl = b64.startsWith('data:')
-        ? b64
-        : `data:${mime || 'image/jpeg'};base64,${b64}`;
+      // Force jpeg — ideogram/character-remix only accepts jpeg/png
+      // Strip any existing data URI prefix then rebuild as jpeg
+      const rawB64 = b64.startsWith('data:') ? b64.split(',')[1] : b64;
+      const safeMime = 'image/jpeg'; // force jpeg regardless of source
+      const dataUrl = `data:${safeMime};base64,${rawB64}`;
       try {
         const res = await fetch('https://kieai.redpandaai.co/api/file-base64-upload', {
           method: 'POST',
@@ -104,6 +106,7 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             base64Data: dataUrl,
             uploadPath: 'images/thumbnails',
+            fileName: `${label}_${Date.now()}.jpg`, // explicit .jpg extension
           }),
         });
         const text = await res.text();
