@@ -243,7 +243,7 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
-    const { concept_id, char_photos: directCharPhotos, template_ref: directTemplateRef } = body;
+    const { concept_id, char_photos: directCharPhotos, template_ref: directTemplateRef, custom_overlay_text } = body;
     if (!concept_id) return Response.json({ error: 'concept_id is required' }, { status: 400 });
 
     const KIE_API_KEY = Deno.env.get('KIE_API_KEY');
@@ -301,7 +301,7 @@ Deno.serve(async (req) => {
     console.log(`Uploaded ${imageUrls.length} images to KIE`);
 
     // ── STEP 5: Build the face-preservation prompt ──────────────
-    const overlayText = (concept.text_overlay || '').toUpperCase().trim();
+    const overlayText = (custom_overlay_text || concept.text_overlay || '').toUpperCase().trim();
     const rawStyle = concept.text_style || '';
     const fontMatch = rawStyle.match(/bebas neue|impact|montserrat|roboto|arial/i);
     const font = fontMatch ? fontMatch[0] : 'Impact';
