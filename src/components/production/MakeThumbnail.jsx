@@ -271,6 +271,7 @@ export default function MakeThumbnail({ onBack }) {
 
   // ── helpers ──────────────────────────────────────────────────────
   const handleCharCount = n => {
+    if (n < 2) n = 2; // minimum 2 photos
     setCharCount(n);
     setChars(prev => { const a = [...prev]; while (a.length < 3) a.push(null); return a; });
   };
@@ -908,16 +909,16 @@ export default function MakeThumbnail({ onBack }) {
           </div>
         )}
 
-        {/* Try other concepts */}
+        {/* Try other overlay texts */}
         {concepts.filter(c => c.id !== selectedConcept?.id).length > 0 && (
           <div style={{ background: '#0b0b1a', border: '1px solid #1f2937', borderRadius: 12, padding: '13px 16px' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Try Another Hook</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Try Another Overlay Text</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {concepts.filter(c => c.id !== selectedConcept?.id).map(c => (
                 <button key={c.id} onClick={() => handleGenerateImage(c)}
                   style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #1f2937', background: '#0f172a', color: '#9ca3af', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 5 }}>
                   <Sparkles size={11} />
-                  #{c.rank} {c.text_overlay || 'concept'}
+                  #{c.rank} "{c.text_overlay || 'text'}"
                   <span style={{ color: '#22c55e', fontSize: 10 }}>⭐{c.ctr_score}</span>
                 </button>
               ))}
