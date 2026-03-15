@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
-    const { concept_id } = body;
+    const { concept_id, char_photos: directCharPhotos, template_ref: directTemplateRef } = body;
     if (!concept_id) return Response.json({ error: 'concept_id is required' }, { status: 400 });
 
     const KIE_API_KEY = Deno.env.get('KIE_API_KEY');
@@ -49,23 +49,31 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Concept has no image_prompt' }, { status: 400 });
     }
 
-    // 2. Parse stored character photos
+    // 2. Character photos — prefer DIRECT pass-through (bypasses DB size limits)
+    //    Fall back to stored char_photos_json if direct not provided
     let charPhotos = [];
-    if (concept.char_photos_json) {
+    if (Array.isArray(directCharPhotos) && directCharPhotos.some(p => p?.b64)) {
+      charPhotos = directCharPhotos.filter(p => p?.b64);
+      console.log('Using DIRECT char photos from frontend:', charPhotos.length);
+    } else if (concept.char_photos_json) {
       try {
-        charPhotos = JSON.parse(concept.char_photos_json);
-        console.log('Loaded', charPhotos.length, 'character photo(s)');
+        const stored = JSON.parse(concept.char_photos_json);
+        charPhotos = stored.filter(p => p?.b64 && !p.truncated);
+        console.log('Using STORED char photos from DB:', charPhotos.length);
       } catch (e) {
         console.warn('Could not parse char_photos_json:', e.message);
       }
     }
 
-    // 2b. Parse stored template reference
+    // 2b. Template reference — prefer DIRECT pass-through
     let templateRef = null;
-    if (concept.template_ref_json) {
+    if (directTemplateRef?.b64) {
+      templateRef = directTemplateRef;
+      console.log('Using DIRECT template ref from frontend:', templateRef.name);
+    } else if (concept.template_ref_json) {
       try {
         templateRef = JSON.parse(concept.template_ref_json);
-        console.log('Loaded template ref:', templateRef.name);
+        console.log('Using STORED template ref from DB:', templateRef.name);
       } catch (e) {
         console.warn('Could not parse template_ref_json:', e.message);
       }
@@ -73,6 +81,8 @@ Deno.serve(async (req) => {
 
     const hasCharPhotos = charPhotos.length > 0;
     const hasTemplateRef = !!templateRef?.b64;
+
+    console.log(`📸 Photos: ${hasCharPhotos ? charPhotos.length + ' available' : 'NONE'} | Template: ${hasTemplateRef ? templateRef.name : 'NONE'}`);
 
     // 3. Build prompt — TWO MODES: template clone vs freeform
     let fullPrompt;
