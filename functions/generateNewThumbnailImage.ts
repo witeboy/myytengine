@@ -252,26 +252,24 @@ The person(s) in the reference photo(s) MUST appear in this image — same face,
     const model = hasTemplateRef ? 'ideogram/character-remix' : 'ideogram/character';
     console.log(`Submitting to ${model}...`);
 
+    // API spec: reference_image_urls supports only 1 image currently
+    // Do NOT send empty image_urls or empty reference_mask_urls — they cause "File type not supported"
     const inputPayload = hasTemplateRef
       ? {
-          // character-remix: template is the base, faces are references
           prompt,
-          image_url: templateUrl,               // BASE — the template to remix
-          reference_image_urls: referenceImageUrls, // FACES — injected into the remix
+          image_url: templateUrl,
+          reference_image_urls: referenceImageUrls.slice(0, 1), // API only supports 1 reference
           rendering_speed: 'BALANCED',
           style: 'REALISTIC',
           expand_prompt: false,
           num_images: '1',
           image_size: 'landscape_16_9',
-          strength: 0.8,                       // 0.75 = strong template adherence, face swap
+          strength: 0.8,
           negative_prompt: 'cartoon, anime, illustration, blurry, low quality, distorted face, wrong person, different person, watermark, logo',
-          image_urls: [],
-          reference_mask_urls: '',
         }
       : {
-          // character: no template, generate from prompt with face reference
           prompt,
-          reference_image_urls: referenceImageUrls,
+          reference_image_urls: referenceImageUrls.slice(0, 1), // API only supports 1 reference
           rendering_speed: 'BALANCED',
           style: 'REALISTIC',
           expand_prompt: false,
