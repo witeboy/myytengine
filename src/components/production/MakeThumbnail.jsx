@@ -338,7 +338,7 @@ export default function MakeThumbnail({ onBack }) {
         conceptsResult = await base44.functions.invoke('newThumbnailConcept', {
           video_title:  title.trim(),
           summary:      summary.trim() || '',
-          char_count:   charCount,
+          char_count:   uploadedChars.length,
           char_photos:  charPhotos,
           ...templateContext,
         });
