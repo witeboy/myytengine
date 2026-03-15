@@ -746,16 +746,72 @@ export default function MakeThumbnail({ onBack }) {
               <OverlayTextCard
                 key={c.id}
                 concept={c}
-                isSelected={selectedConcept?.id === c.id}
-                onSelect={setSelectedConcept}
+                isSelected={!useCustomOverlay && selectedConcept?.id === c.id}
+                onSelect={(concept) => { setSelectedConcept(concept); setUseCustomOverlay(false); }}
               />
             ))}
           </div>
 
-          {/* Generate button — appears when a text is selected */}
-          {selectedConcept && (
+          {/* Custom overlay text input */}
+          <div style={{
+            background: '#0b0b1a', border: useCustomOverlay ? '2px solid #f59e0b' : '2px solid #1f2937',
+            borderRadius: 12, padding: '16px 18px', marginBottom: 20,
+            transition: 'border-color 0.15s',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <Target size={14} color="#f59e0b" />
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#f59e0b' }}>Or Write Your Own Overlay Text</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input
+                value={customOverlay}
+                onChange={e => {
+                  const val = e.target.value.toUpperCase().slice(0, 30);
+                  setCustomOverlay(val);
+                  if (val.trim()) setUseCustomOverlay(true);
+                  else setUseCustomOverlay(false);
+                }}
+                placeholder="e.g. SHE LIED!"
+                maxLength={30}
+                style={{
+                  flex: 1, padding: '11px 14px', background: '#0f172a',
+                  border: '1px solid #374151', borderRadius: 8,
+                  color: '#fff', fontSize: 18, fontWeight: 900,
+                  fontFamily: 'Impact, Arial Black, sans-serif',
+                  letterSpacing: '0.04em', outline: 'none',
+                }}
+              />
+              {customOverlay.trim() && (
+                <button
+                  onClick={() => { setUseCustomOverlay(true); }}
+                  style={{
+                    padding: '11px 16px', borderRadius: 8, border: 'none',
+                    background: useCustomOverlay ? '#f59e0b' : '#1f2937',
+                    color: useCustomOverlay ? '#000' : '#9ca3af',
+                    cursor: 'pointer', fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap',
+                  }}
+                >
+                  {useCustomOverlay ? '✓ Using This' : 'Use This'}
+                </button>
+              )}
+            </div>
+            <div style={{ fontSize: 10, color: '#4b5563', marginTop: 6 }}>
+              MAX 3-4 WORDS · ALL CAPS · {customOverlay.length}/30 characters
+            </div>
+          </div>
+
+          {/* Generate button */}
+          {(selectedConcept || (useCustomOverlay && customOverlay.trim())) && (
             <button
-              onClick={() => handleGenerateImage(selectedConcept)}
+              onClick={() => {
+                if (useCustomOverlay && customOverlay.trim() && selectedConcept) {
+                  // Create a modified concept with custom overlay text
+                  const customConcept = { ...selectedConcept, text_overlay: customOverlay.trim() };
+                  handleGenerateImage(customConcept);
+                } else if (selectedConcept) {
+                  handleGenerateImage(selectedConcept);
+                }
+              }}
               disabled={generating}
               style={{
                 width: '100%', padding: '16px', borderRadius: 12, border: 'none',
@@ -767,7 +823,7 @@ export default function MakeThumbnail({ onBack }) {
             >
               {generating
                 ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Rendering…</>
-                : <><Sparkles size={16} /> Generate Thumbnail: "{selectedConcept.text_overlay}" on "{selectedUserTemplate?.name}"</>
+                : <><Sparkles size={16} /> Generate Thumbnail: "{useCustomOverlay && customOverlay.trim() ? customOverlay.trim() : selectedConcept?.text_overlay}" on "{selectedUserTemplate?.name}"</>
               }
             </button>
           )}
