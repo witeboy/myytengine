@@ -79,7 +79,11 @@ Deno.serve(async (req) => {
     const promptAdditions = [];
 
     if (hasCharPhotos) {
-      promptAdditions.push(`CRITICAL: The people in this image must exactly match the character reference photo(s) provided — same face, skin tone, hair, and recognizable features. Do not substitute different people.`);
+      promptAdditions.push(`CRITICAL — CHARACTER FACE-LOCK:
+The first ${charPhotos.length} reference image(s) show the EXACT people who MUST appear in this thumbnail.
+This is NOT a style reference — these are the ACTUAL humans. Use their REAL face, skin tone, hair color, hair style, facial bone structure, and body type.
+DO NOT generate different people. DO NOT modify their appearance. Copy their face as-is into the scene.
+If the reference shows a dark-skinned woman with braids, the thumbnail MUST show that exact dark-skinned woman with braids — not a different person.`);
     }
     if (hasTemplateRef) {
       promptAdditions.push(`LAYOUT: Recreate the exact spatial composition shown in the template reference image — same character positions, same background zones, same color energy.`);
@@ -87,30 +91,16 @@ Deno.serve(async (req) => {
     // Bake overlay text into the image with full style/position spec
     if (concept.text_overlay) {
       const rawStyle    = concept.text_style || '';
-      const position    = rawStyle.toLowerCase().includes('upper-left')    ? 'upper-left corner, 40px from edges'
-                        : rawStyle.toLowerCase().includes('bottom-center') ? 'bottom-center in a full-width black bar'
-                        : rawStyle.toLowerCase().includes('center')        ? 'center of the clean zone'
-                        : hasTemplateRef ? `exactly as positioned in the "${templateRef?.name}" template reference image`
+      const position    = rawStyle.toLowerCase().includes('upper-left')    ? 'upper-left corner'
+                        : rawStyle.toLowerCase().includes('bottom-center') ? 'bottom-center area'
                         : 'upper-left corner';
-      const fontMatch   = rawStyle.match(/bebas neue|impact|montserrat|roboto|arial/i);
-      const font        = fontMatch ? fontMatch[0] : 'Bebas Neue';
-      const colorMatch  = rawStyle.match(/white|yellow|gold|red|black|orange/i);
-      const color       = colorMatch ? colorMatch[0] : 'white';
-      const templateTextHint = hasTemplateRef
-        ? `Match the EXACT text size, weight, position and style visible in the template reference image.`
-        : '';
 
       promptAdditions.push(`
-TEXT OVERLAY — RENDER THIS TEXT IN THE IMAGE:
-• Text: "${concept.text_overlay.toUpperCase()}"
-• Font: ${font}, ultra-bold, condensed, high x-height
-• Color: ${color} fill + 6px solid black stroke/outline + black drop shadow (4px offset, 60% opacity)
-• Size: Extremely large — each line should be 15-20% of frame height so it reads at 168x94px mobile size
-• Position: ${position}
-• Line breaks: split at natural word breaks, max 2 lines
-• Letter spacing: tight/condensed (-2px)
-• This text is the #1 most important element — it must be sharp, dominant, and instantly readable
-• ${templateTextHint}`);
+TEXT ZONE — DO NOT RENDER ANY TEXT IN THE IMAGE:
+- Leave the ${position} area COMPLETELY CLEAN — no text, no letters, no numbers, no words anywhere in the image.
+- This zone (roughly 30% of the frame) should have a dark, slightly blurred, or gradient background that will make white text readable when composited later.
+- ABSOLUTELY NO text, letters, numbers, words, captions, or writing of ANY kind in the generated image.
+- The image should look like a movie still or photograph — text will be added in post-production.`);
     } else {
       promptAdditions.push(`Leave the ${concept.text_style?.includes('upper-left') ? 'upper-left area' : 'bottom area'} visually clean.`);
     }
@@ -119,16 +109,19 @@ TEXT OVERLAY — RENDER THIS TEXT IN THE IMAGE:
       fullPrompt = `${concept.image_prompt}\n\n${promptAdditions.join('\n')}`;
     }
 
-    // 4. Build image_input — template first (layout reference), then char photos (face reference)
+    // 4. Build image_input — character photos FIRST (highest priority), then template
+    // Kie/Nano Banana weights the first image_input most heavily
     const imageInput = [];
 
+    // Character photos go FIRST — these are the faces we must preserve
+    for (const p of charPhotos.filter(p => p?.b64)) {
+      imageInput.push(`data:${p.mime || 'image/jpeg'};base64,${p.b64}`);
+    }
+
+    // Template layout reference goes after character photos
     if (hasTemplateRef) {
       imageInput.push(`data:${templateRef.mime || 'image/jpeg'};base64,${templateRef.b64}`);
       console.log('Added template reference image to input');
-    }
-
-    for (const p of charPhotos.filter(p => p?.b64)) {
-      imageInput.push(`data:${p.mime || 'image/jpeg'};base64,${p.b64}`);
     }
 
     console.log('image_input count:', imageInput.length, '(template + chars)');
