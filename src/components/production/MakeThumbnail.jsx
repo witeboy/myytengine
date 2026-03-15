@@ -3,7 +3,7 @@ import { base44 } from '@/api/base44Client';
 import {
   ArrowLeft, Upload, X, Sparkles, Loader2, Download,
   RefreshCw, Wand2, Users, Star, ChevronRight, Image as ImageIcon,
-  CheckCircle, AlertCircle, Eye, Zap, Target, Palette
+  CheckCircle, AlertCircle, Eye, Zap, Target, Palette, PenLine
 } from 'lucide-react';
 import ThumbnailTemplatePicker from './ThumbnailTemplatePicker';
 import { buildTemplatePrompt } from './thumbnailTemplates';
