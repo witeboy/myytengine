@@ -120,13 +120,10 @@ Deno.serve(async (req) => {
       'Authorization': `Bearer ${KIE_API_KEY}`,
     };
 
-    const uploadToKie = async (b64, mime, label) => {
-      // Strip any existing data URI prefix to get raw base64
+    const uploadImage = async (b64, mime, label) => {
+      // Strip any data URI prefix to get raw base64
       const rawB64 = b64.includes(',') ? b64.split(',')[1] : b64;
-      
-      // Validate base64 — strip any whitespace/newlines and check it's valid
       const cleanB64 = rawB64.replace(/[\s\r\n]/g, '');
-      console.log(`📤 Uploading ${label}: ${cleanB64.length} chars, mime: ${mime}`);
       
       // Convert base64 to binary bytes
       const binaryString = atob(cleanB64);
@@ -135,78 +132,49 @@ Deno.serve(async (req) => {
         bytes[i] = binaryString.charCodeAt(i);
       }
       
-      // Check if it's actually a PNG (starts with \x89PNG) — if so, use image/png
+      // Detect actual format from magic bytes
       const isPng = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47;
       const actualMime = isPng ? 'image/png' : 'image/jpeg';
       const ext = isPng ? 'png' : 'jpg';
-      
-      // Upload via multipart form data — most reliable method
       const fileName = `${label}_${Date.now()}.${ext}`;
-      const blob = new Blob([bytes], { type: actualMime });
-      const formData = new FormData();
-      formData.append('file', blob, fileName);
       
+      console.log(`📤 Uploading ${label}: ${(bytes.length / 1024).toFixed(0)}KB, detected: ${actualMime}`);
+      
+      // PRIMARY: Use Base44 UploadFile — produces permanent public URLs
+      // that any external API (Ideogram, KIE) can fetch directly
       try {
-        // Try KIE file upload endpoint (multipart)
-        const res = await fetch('https://api.kie.ai/api/v1/files/upload', {
+        const file = new File([bytes], fileName, { type: actualMime });
+        const uploadResult = await base44.integrations.Core.UploadFile({ file });
+        if (uploadResult?.file_url) {
+          console.log(`✅ Uploaded ${label} → ${uploadResult.file_url}`);
+          return uploadResult.file_url;
+        }
+      } catch (e) {
+        console.warn(`⚠️ Base44 upload failed for ${label}: ${e.message}`);
+      }
+      
+      // FALLBACK: KIE base64 upload
+      try {
+        const dataUrl = `data:${actualMime};base64,${cleanB64}`;
+        const res = await fetch('https://kieai.redpandaai.co/api/file-base64-upload', {
           method: 'POST',
-          headers: { 'Authorization': `Bearer ${KIE_API_KEY}` },
-          body: formData,
+          headers: kieHeaders,
+          body: JSON.stringify({ base64Data: dataUrl, uploadPath: 'images/thumbnails', fileName }),
         });
         const text = await res.text();
         let data;
         try { data = JSON.parse(text); } catch (_) {}
-        
-        // Try various response shapes
-        const url = data?.data?.downloadUrl || data?.data?.fileUrl || data?.data?.url || data?.url;
+        const url = data?.data?.downloadUrl || data?.data?.fileUrl || data?.data?.url;
         if (url) {
-          console.log(`✅ Uploaded ${label} → ${url}`);
+          console.log(`✅ Uploaded ${label} (KIE fallback) → ${url}`);
           return url;
         }
-        
-        console.warn(`⚠️ KIE multipart upload returned no URL for ${label}: HTTP ${res.status} — ${text.substring(0, 300)}`);
-        
-        // Fallback: try base64 upload with correct format
-        console.log(`🔄 Trying base64 fallback for ${label}...`);
-        const dataUrl = `data:${actualMime};base64,${cleanB64}`;
-        const fbRes = await fetch('https://kieai.redpandaai.co/api/file-base64-upload', {
-          method: 'POST',
-          headers: kieHeaders,
-          body: JSON.stringify({
-            base64Data: dataUrl,
-            uploadPath: 'images/thumbnails',
-            fileName,
-          }),
-        });
-        const fbText = await fbRes.text();
-        let fbData;
-        try { fbData = JSON.parse(fbText); } catch (_) {}
-        const fbUrl = fbData?.data?.downloadUrl || fbData?.data?.fileUrl || fbData?.data?.url;
-        if (fbUrl) {
-          console.log(`✅ Uploaded ${label} (b64 fallback) → ${fbUrl}`);
-          return fbUrl;
-        }
-        
-        console.warn(`❌ Both upload methods failed for ${label}: ${fbText.substring(0, 200)}`);
-        
-        // Last resort: use Base44 UploadFile integration to get a public URL
-        console.log(`🔄 Trying Base44 UploadFile for ${label}...`);
-        try {
-          const file = new File([bytes], fileName, { type: actualMime });
-          const uploadResult = await base44.integrations.Core.UploadFile({ file });
-          if (uploadResult?.file_url) {
-            console.log(`✅ Uploaded ${label} (Base44) → ${uploadResult.file_url}`);
-            return uploadResult.file_url;
-          }
-        } catch (b44Err) {
-          console.warn(`❌ Base44 upload also failed for ${label}:`, b44Err.message);
-        }
-        
-        return null;
+        console.warn(`❌ KIE fallback also failed for ${label}: ${text.substring(0, 200)}`);
       } catch (e) {
-        console.warn(`❌ Upload error for ${label}: ${e.message}`);
-        return null;
+        console.warn(`❌ KIE fallback error for ${label}: ${e.message}`);
       }
+      
+      return null;
     };
 
     // Upload template → this becomes image_url (the BASE the model remixes FROM)
