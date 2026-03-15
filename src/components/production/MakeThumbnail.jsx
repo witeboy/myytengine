@@ -252,8 +252,7 @@ export default function MakeThumbnail({ onBack }) {
   // Step 0 inputs
   const [title, setTitle]       = useState('');
   const [summary, setSummary]   = useState('');
-  const [charCount, setCharCount] = useState(2);
-  const [chars, setChars]       = useState([null, null, null]);
+  const [chars, setChars]       = useState([null, null]); // start with 2 slots, can grow to 14
   const [selectedUserTemplate, setSelectedUserTemplate] = useState(null);
 
   // Step 1 data
