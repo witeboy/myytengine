@@ -61,13 +61,25 @@ WHAT TO KEEP FROM THE TEMPLATE (Image 1):
 WHAT TO CHANGE:
 - Replace ALL people in the template with the person(s) from the reference photo(s)
 - The expression should match what the template person was doing (shocked face → reference person with shocked face, etc.) but with the reference person's REAL facial features
-${overlayText ? `- Add this text overlay: "${overlayText}" in ${font} font, ultra-bold, ${textColor} color with thick black outline/stroke and drop shadow, positioned at ${textPosition}. Text must be SHARP and READABLE at thumbnail size.` : ''}
+
+═══════════════════════════════════════════════
+TEXT HANDLING — CRITICAL (DO NOT SKIP)
+═══════════════════════════════════════════════
+- REMOVE every single piece of text, title, watermark, channel name, cast name, studio name, logo text, badge text, and any other written words that exist in the template image. The output must have ZERO text from the original template.
+${overlayText ? `- After removing ALL original text, add ONLY this new text: "${overlayText}"
+  • Font: ${font}, ultra-bold, condensed
+  • Color: ${textColor} with thick black outline/stroke (6px+) and strong drop shadow
+  • Size: Match the size of the LARGEST/MAIN title text that was in the original template
+  • Position: Place it in the SAME position where the main title text was in the template
+  • Style: Match the same 3D/gradient/embossed style of the original main title if it had one
+  • This must be the ONLY text in the entire image — nothing else` : '- The output must contain NO text whatsoever — completely clean image with no words'}
 
 OUTPUT REQUIREMENTS:
 - YouTube thumbnail aspect ratio 16:9, 1920×1080
 - Photorealistic quality — must look like a real photograph, not AI-generated
 - Faces must be razor-sharp and high-detail
 - The final image must look like the template but starring the reference person(s)
+- The ONLY text allowed is "${overlayText || 'NONE'}" — remove everything else
 - Professional studio-grade compositing quality`;
 
   } else if (hasTemplate && !hasPhotos) {
