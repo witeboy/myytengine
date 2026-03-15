@@ -2,15 +2,14 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // generateNewThumbnailImage
 //
-// Uses Kie.ai Nano Banana (Gemini 2.5 Flash Image) for image generation
-// Confirmed endpoints from docs:
-//   Submit: POST https://api.kie.ai/api/v1/jobs/createTask
-//           { model: "nano-banana-pro", input: { prompt, image_input: [], aspect_ratio, resolution, output_format } }
-//   Poll:   GET  https://api.kie.ai/api/v1/jobs/recordInfo?taskId=XXX
-//           { data: { state: "success"|"fail"|"queuing"|"generating"|"waiting", resultJson: '{"resultUrls":["..."]}' } }
+// Uses Kie.ai Ideogram/Character for face-accurate image generation
+// FLOW:
+//   1. Upload base64 photos to KIE File Upload API → get public URLs
+//   2. Submit to ideogram/character with reference_image_urls
+//   3. Poll GET /api/v1/jobs/recordInfo?taskId=XXX for result
 //
-// Character photos: passed as base64 image_input array — Nano Banana supports reference images
-// so your REAL people will appear in the generated thumbnail
+// Ideogram/Character preserves the REAL faces from your reference photos
+// unlike Nano Banana which generates illustrated characters
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -34,7 +33,7 @@ Deno.serve(async (req) => {
     const KIE_API_KEY = Deno.env.get('KIE_API_KEY');
     if (!KIE_API_KEY) return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
 
-    console.log('=== generateNewThumbnailImage (Nano Banana) ===');
+    console.log('=== generateNewThumbnailImage (Ideogram Character) ===');
     console.log('concept_id:', concept_id);
 
     // 1. Load concept record
@@ -79,17 +78,8 @@ Deno.serve(async (req) => {
       }
     }
 
-        const hasCharPhotos = charPhotos.length > 0;
+    const hasCharPhotos = charPhotos.length > 0;
     const hasTemplateRef = !!templateRef?.b64;
-
-    // CLEAN IMAGES: KIE API requires raw base64 (no "data:image/..." prefix)
-    const cleanImageInputs = [];
-    if (hasTemplateRef && templateRef.b64) {
-      cleanImageInputs.push(templateRef.b64.split(',').pop());
-    }
-    charPhotos.forEach(p => {
-      if (p.b64) cleanImageInputs.push(p.b64.split(',').pop());
-    });
 
     console.log(`📸 Photos: ${hasCharPhotos ? charPhotos.length + ' available' : 'NONE'} | Template: ${hasTemplateRef ? templateRef.name : 'NONE'}`);
 
@@ -99,8 +89,6 @@ Deno.serve(async (req) => {
 
     if (hasTemplateRef) {
       // ═══ TEMPLATE CLONE MODE ═══
-      // The template image IS the brief. We clone its layout exactly,
-      // just swapping faces and text. The concept.image_prompt is secondary.
       const overlayText = (concept.text_overlay || '').toUpperCase().trim();
       const rawStyle = concept.text_style || '';
       const fontMatch = rawStyle.match(/bebas neue|impact|montserrat|roboto|arial/i);
@@ -144,7 +132,7 @@ The reference template is the MASTER. Your output should be visually indistingui
 QUALITY: Photorealistic, 1920x1080, professional YouTube thumbnail quality. Sharp focus, cinematic lighting, studio production value.`;
 
     } else {
-      // ═══ FREEFORM MODE ═══ (no template — use concept.image_prompt as-is)
+      // ═══ FREEFORM MODE ═══
       const promptAdditions = [];
 
       if (hasCharPhotos) {
@@ -183,104 +171,103 @@ TEXT OVERLAY — RENDER THIS TEXT IN THE IMAGE:
       }
     }
 
-    // 4. Build image_input — template FIRST (layout master), then character faces
-    // Kie treats the first image as the strongest reference
-    const imageInput = [];
-
-    if (hasTemplateRef) {
-      imageInput.push(`data:${templateRef.mime || 'image/jpeg'};base64,${templateRef.b64}`);
-      console.log('Added template reference image FIRST (layout master)');
-    }
-
-    for (const [i, p] of charPhotos.filter(p => p?.b64).entries()) {
-      imageInput.push(`data:${p.mime || 'image/jpeg'};base64,${p.b64}`);
-      console.log(`Added character photo ${i + 1} (face reference)`);
-    }
-
-    console.log('image_input count:', imageInput.length, `(${hasTemplateRef ? '1 template + ' : ''}${charPhotos.length} chars)`);
-
-    // 5. Submit to Kie Nano Banana
+    // ── STEP 4: Upload photos to KIE File Upload API to get public URLs ──
+    // ideogram/character requires reference_image_urls (public URLs, not base64)
+    // KIE File Upload API: POST https://kieai.redpandaai.co/api/file-base64-upload
     const kieHeaders = {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${KIE_API_KEY}`,
     };
 
-    // ── FIXED: correct model slugs and per-model input schemas per KIE docs ──
-    const models = [
-      {
-        name: 'nano-banana-pro',
-        input: {
-          prompt: fullPrompt,
-          image_input: imageInput,
-          aspect_ratio: '16:9',
-          resolution: '1K',
-          output_format: 'png',
-        },
-      },
-      {
-        name: 'nano-banana-2',
-        input: {
-          prompt: fullPrompt,
-          image_input: imageInput,
-          aspect_ratio: '16:9',
-          resolution: '1K',
-          output_format: 'png',
-        },
-      },
-      {
-        name: 'google/nano-banana', // ← requires 'google/' prefix per docs
-        input: {
-          prompt: fullPrompt,
-          image_size: '16:9',       // ← 'image_size' not 'aspect_ratio' for this model
-          output_format: 'png',
-        },
-      },
-    ];
-
-    let taskId = null;
-    let usedModel = null;
-
-    for (const model of models) {
-      console.log('Trying model:', model.name);
-      const res = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
-        method: 'POST',
-        headers: kieHeaders,
-        body: JSON.stringify({
-          model: model.name,
-          input: model.input,
-        }),
-      });
-
-      const text = await res.text();
-      console.log(`  → HTTP ${res.status}: ${text.substring(0, 200)}`);
-
-      let data;
-      try { data = JSON.parse(text); } catch (_) {}
-
-      // Success: task created
-      if (data?.code === 200 && data?.data?.taskId) {
-        taskId = data.data.taskId;
-        usedModel = model.name;
-        console.log(`Task created! taskId: ${taskId} | model: ${usedModel}`);
-        break;
+    const uploadToKie = async (b64, mime, label) => {
+      // KIE accepts full data URL format: data:image/jpeg;base64,....
+      const dataUrl = b64.startsWith('data:') ? b64 : `data:${mime || 'image/jpeg'};base64,${b64}`;
+      try {
+        const res = await fetch('https://kieai.redpandaai.co/api/file-base64-upload', {
+          method: 'POST',
+          headers: kieHeaders,
+          body: JSON.stringify({
+            base64Data: dataUrl,
+            uploadPath: 'images/thumbnails',
+          }),
+        });
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); } catch (_) {}
+        const url = data?.data?.downloadUrl || data?.data?.fileUrl;
+        if (url) {
+          console.log(`Uploaded ${label} → ${url}`);
+          return url;
+        }
+        console.warn(`Upload failed for ${label}: HTTP ${res.status} — ${text.substring(0, 200)}`);
+        return null;
+      } catch (e) {
+        console.warn(`Upload error for ${label}: ${e.message}`);
+        return null;
       }
+    };
 
-      // 404/400 = model not available on this plan, try next
-      if (res.status === 404 || res.status === 400) continue;
+    // Build reference_image_urls — template FIRST (layout master), then character faces
+    const referenceImageUrls = [];
 
-      // Any other error — log and try next
-      console.warn(`  → model ${model.name} failed with status ${res.status}`);
+    if (hasTemplateRef) {
+      const url = await uploadToKie(templateRef.b64, templateRef.mime || 'image/jpeg', 'template_ref');
+      if (url) {
+        referenceImageUrls.push(url);
+        console.log('Added template reference URL (layout master)');
+      }
     }
 
+    for (const [i, p] of charPhotos.filter(p => p?.b64).entries()) {
+      const url = await uploadToKie(p.b64, p.mime || 'image/jpeg', `char_photo_${i + 1}`);
+      if (url) {
+        referenceImageUrls.push(url);
+        console.log(`Added character photo ${i + 1} URL (face reference)`);
+      }
+    }
+
+    console.log('reference_image_urls count:', referenceImageUrls.length);
+
+    // ── STEP 5: Submit to ideogram/character ──
+    // Docs: model="ideogram/character", input.reference_image_urls=[...public urls]
+    // image_size options: square_hd, landscape_16_9, portrait_9_16, etc.
+    console.log('Submitting to ideogram/character...');
+    const createRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
+      method: 'POST',
+      headers: kieHeaders,
+      body: JSON.stringify({
+        model: 'ideogram/character',
+        input: {
+          prompt: fullPrompt,
+          reference_image_urls: referenceImageUrls,
+          rendering_speed: 'BALANCED',
+          style: 'REALISTIC',
+          expand_prompt: false,
+          num_images: '1',
+          image_size: 'landscape_16_9',
+          negative_prompt: 'cartoon, anime, illustration, drawing, painting, 3d render, cgi, fake face, wrong face, different person',
+        },
+      }),
+    });
+
+    const createText = await createRes.text();
+    console.log(`ideogram/character → HTTP ${createRes.status}: ${createText.substring(0, 300)}`);
+
+    let createData;
+    try { createData = JSON.parse(createText); } catch (_) {}
+
+    const taskId = createData?.data?.taskId;
     if (!taskId) {
       return Response.json({
-        error: 'Could not create task on any Nano Banana model. Check KIE_API_KEY has credits and nano-banana access.',
+        error: `ideogram/character task creation failed: ${createText.substring(0, 200)}`,
       }, { status: 500 });
     }
 
+    console.log(`Task created! taskId: ${taskId} | model: ideogram/character`);
+
     // 6. Poll for result
     // GET /api/v1/jobs/recordInfo?taskId=XXX
-    // FIXED states per docs: 'waiting' | 'queuing' | 'generating' | 'success' | 'fail'
+    // states per docs: 'waiting' | 'queuing' | 'generating' | 'success' | 'fail'
     const maxAttempts = 40;
     const pollInterval = 5000;
     let imageUrl = null;
@@ -337,13 +324,13 @@ TEXT OVERLAY — RENDER THIS TEXT IN THE IMAGE:
 
       if (state === 'fail') {
         const msg = pollData?.data?.failMsg || pollData?.data?.error || 'Generation failed';
-        throw new Error(`Nano Banana generation failed: ${msg}`);
+        throw new Error(`ideogram/character generation failed: ${msg}`);
       }
       // waiting / queuing / generating — keep polling
     }
 
     if (!imageUrl) {
-      throw new Error('Timed out waiting for image from Nano Banana. The task may still be processing — try again.');
+      throw new Error('Timed out waiting for image from ideogram/character. The task may still be processing — try again.');
     }
 
     // 7. Save image_url to concept record
@@ -363,7 +350,7 @@ TEXT OVERLAY — RENDER THIS TEXT IN THE IMAGE:
       success: true,
       image_url: imageUrl,
       concept_id,
-      model_used: usedModel,
+      model_used: 'ideogram/character',
     });
 
   } catch (error) {
