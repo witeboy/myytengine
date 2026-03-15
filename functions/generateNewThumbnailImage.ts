@@ -140,17 +140,30 @@ Deno.serve(async (req) => {
       
       console.log(`📤 Uploading ${label}: ${(bytes.length / 1024).toFixed(0)}KB, detected: ${actualMime}`);
       
-      // PRIMARY: Use Base44 UploadFile — produces permanent public URLs
-      // that any external API (Ideogram, KIE) can fetch directly
+      // Use KIE's file-stream-upload (multipart) — produces URLs their own AI models can fetch
+      // This is the official KIE File Upload API endpoint
       try {
-        const file = new File([bytes], fileName, { type: actualMime });
-        const uploadResult = await base44.integrations.Core.UploadFile({ file });
-        if (uploadResult?.file_url) {
-          console.log(`✅ Uploaded ${label} → ${uploadResult.file_url}`);
-          return uploadResult.file_url;
+        const blob = new Blob([bytes], { type: actualMime });
+        const formData = new FormData();
+        formData.append('file', blob, fileName);
+        formData.append('uploadPath', 'thumbnails');
+        
+        const res = await fetch('https://kieai.redpandaai.co/api/file-stream-upload', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${KIE_API_KEY}` },
+          body: formData,
+        });
+        const text = await res.text();
+        let data;
+        try { data = JSON.parse(text); } catch (_) {}
+        const url = data?.data?.fileUrl || data?.data?.downloadUrl || data?.data?.url;
+        if (url) {
+          console.log(`✅ Uploaded ${label} (KIE stream) → ${url}`);
+          return url;
         }
+        console.warn(`⚠️ KIE stream upload response for ${label}: HTTP ${res.status} — ${text.substring(0, 300)}`);
       } catch (e) {
-        console.warn(`⚠️ Base44 upload failed for ${label}: ${e.message}`);
+        console.warn(`⚠️ KIE stream upload error for ${label}: ${e.message}`);
       }
       
       // FALLBACK: KIE base64 upload
@@ -159,19 +172,19 @@ Deno.serve(async (req) => {
         const res = await fetch('https://kieai.redpandaai.co/api/file-base64-upload', {
           method: 'POST',
           headers: kieHeaders,
-          body: JSON.stringify({ base64Data: dataUrl, uploadPath: 'images/thumbnails', fileName }),
+          body: JSON.stringify({ base64Data: dataUrl, uploadPath: 'thumbnails', fileName }),
         });
         const text = await res.text();
         let data;
         try { data = JSON.parse(text); } catch (_) {}
-        const url = data?.data?.downloadUrl || data?.data?.fileUrl || data?.data?.url;
+        const url = data?.data?.fileUrl || data?.data?.downloadUrl || data?.data?.url;
         if (url) {
-          console.log(`✅ Uploaded ${label} (KIE fallback) → ${url}`);
+          console.log(`✅ Uploaded ${label} (KIE b64) → ${url}`);
           return url;
         }
-        console.warn(`❌ KIE fallback also failed for ${label}: ${text.substring(0, 200)}`);
+        console.warn(`❌ KIE b64 also failed for ${label}: ${text.substring(0, 200)}`);
       } catch (e) {
-        console.warn(`❌ KIE fallback error for ${label}: ${e.message}`);
+        console.warn(`❌ KIE b64 error for ${label}: ${e.message}`);
       }
       
       return null;
