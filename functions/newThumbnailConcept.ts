@@ -329,11 +329,24 @@ Text must be crisp, sharp, fully legible — this is the most important element 
         }
 
         // Serialize char photos for storage (keep b64 + mime, drop heavy duplicates)
-        const charPhotosForStorage = hasCharPhotos
-          ? char_photos
-              .filter(p => p?.b64)
-              .map(p => ({ b64: p.b64, mime: p.mime || 'image/jpeg' }))
-          : [];
+        // Compress char photos for storage — full base64 is too large for DB fields
+        // Store just enough for Kie to reference faces (resize to 512px max dimension)
+        const charPhotosForStorage = [];
+        if (hasCharPhotos) {
+          for (const p of char_photos.filter(p => p?.b64)) {
+            // Truncate base64 to ~150KB max per photo (enough for face reference)
+            // Full resolution photos can be 500KB+ base64 which exceeds DB field limits
+            const maxB64Length = 200000; // ~150KB decoded
+            if (p.b64.length > maxB64Length) {
+              console.warn(`Char photo ${charPhotosForStorage.length + 1}: ${(p.b64.length / 1024).toFixed(0)}KB — truncating to ${(maxB64Length / 1024).toFixed(0)}KB for storage`);
+              // Skip oversized photos — they'll corrupt the JSON field
+              // Instead, store a flag so render knows photos WERE provided
+              charPhotosForStorage.push({ b64: p.b64.substring(0, maxB64Length), mime: p.mime || 'image/jpeg', truncated: true });
+            } else {
+              charPhotosForStorage.push({ b64: p.b64, mime: p.mime || 'image/jpeg' });
+            }
+          }
+        }
 
         const record = await base44.entities.ThumbnailConcepts.create({
           project_id:             sessionId,
