@@ -171,9 +171,9 @@ function StepDots({ current, total }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// CONCEPT CARD
+// OVERLAY TEXT CARD — user picks one of 5 AI-generated overlay texts
 // ═══════════════════════════════════════════════════════════════════════
-function ConceptCard({ concept, isSelected, onSelect, onGenerate, generating }) {
+function OverlayTextCard({ concept, isSelected, onSelect }) {
   const ctr = concept.ctr_score || 7;
   const ctrColor = ctr >= 9 ? '#22c55e' : ctr >= 7 ? '#f59e0b' : '#9ca3af';
   const emotionColors = {
@@ -187,98 +187,53 @@ function ConceptCard({ concept, isSelected, onSelect, onGenerate, generating }) 
       onClick={() => onSelect(concept)}
       style={{
         border: isSelected ? '2px solid #7c3aed' : '2px solid #1f2937',
-        borderRadius: 12, background: isSelected ? 'rgba(124,58,237,0.1)' : '#0b0b1a',
+        borderRadius: 12, background: isSelected ? 'rgba(124,58,237,0.15)' : '#0b0b1a',
         cursor: 'pointer', transition: 'border 0.15s, background 0.15s, box-shadow 0.15s',
-        overflow: 'hidden',
+        overflow: 'hidden', padding: '16px 18px',
         boxShadow: isSelected ? '0 0 24px rgba(124,58,237,0.35)' : 'none',
       }}
     >
-      {/* Preview area */}
-      <div style={{
-        aspectRatio: '16/9', background: '#070711', position: 'relative',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-      }}>
-        {concept.image_url ? (
-          <img src={concept.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        ) : (
-          <div style={{ textAlign: 'center', padding: '12px 16px' }}>
-            {concept.text_overlay && (
-              <div style={{
-                fontFamily: 'Impact, Arial Black, sans-serif', fontWeight: 900,
-                fontSize: 22, color: '#fff', letterSpacing: '0.05em',
-                textShadow: '2px 2px 0 #000, 0 0 20px rgba(255,255,255,0.2)',
-                marginBottom: 6, lineHeight: 1.1,
-              }}>
-                {concept.text_overlay}
-              </div>
-            )}
-            <div style={{ fontSize: 10, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              click to select · then generate
-            </div>
-          </div>
-        )}
-        {/* Rank badge */}
-        <div style={{
-          position: 'absolute', top: 8, left: 8, background: 'rgba(0,0,0,0.8)',
-          borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 700, color: '#fff',
-        }}>#{concept.rank || 1}</div>
-        {/* CTR badge */}
-        <div style={{
-          position: 'absolute', top: 8, right: 8, background: ctrColor,
-          borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 700, color: '#fff',
-        }}>⭐ {ctr}/10</div>
-      </div>
-
-      <div style={{ padding: '10px 12px' }}>
-        {/* Emotion tag */}
-        {emotion && (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{
-            display: 'inline-block', fontSize: 10, fontWeight: 800,
-            color: emotionColor, background: `${emotionColor}18`,
-            borderRadius: 4, padding: '2px 7px', marginBottom: 6,
-            textTransform: 'uppercase', letterSpacing: '0.08em',
-          }}>
-            {emotion}
-          </div>
-        )}
-
-        {/* Text overlay — the star of the show */}
-        {concept.text_overlay && (
-          <div style={{
-            fontFamily: 'Impact, Arial Black', fontWeight: 900,
-            fontSize: 20, color: '#fff', letterSpacing: '0.04em',
-            marginBottom: 6, lineHeight: 1.1,
-          }}>
-            {concept.text_overlay}
-          </div>
-        )}
-
-        {/* Why it works */}
-        <div style={{ color: '#6b7280', fontSize: 11, lineHeight: 1.45, marginBottom: 8 }}>
-          {(concept.why_it_stops_scrolling || concept.concept_description || '')
-            .substring(0, 100)}…
+            background: 'rgba(0,0,0,0.8)', borderRadius: 6, padding: '2px 8px',
+            fontSize: 11, fontWeight: 700, color: '#fff',
+          }}>#{concept.rank || 1}</div>
+          {emotion && (
+            <div style={{
+              fontSize: 10, fontWeight: 800, color: emotionColor, background: `${emotionColor}18`,
+              borderRadius: 4, padding: '2px 7px', textTransform: 'uppercase', letterSpacing: '0.08em',
+            }}>{emotion}</div>
+          )}
         </div>
-
-        {/* Generate button — only when selected */}
-        {isSelected && (
-          <button
-            onClick={e => { e.stopPropagation(); onGenerate(concept); }}
-            disabled={generating}
-            style={{
-              width: '100%', marginTop: 8, padding: '10px', borderRadius: 8, border: 'none',
-              background: generating ? '#374151' : 'linear-gradient(135deg, #7c3aed, #db2777)',
-              color: '#fff', cursor: generating ? 'not-allowed' : 'pointer',
-              fontWeight: 700, fontSize: 13,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            }}
-          >
-            {generating
-              ? <><Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> Rendering with Ideogram Character…</>
-              : <><Sparkles size={14} /> Generate This Thumbnail</>
-            }
-          </button>
-        )}
+        <div style={{ background: ctrColor, borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 700, color: '#fff' }}>
+          ⭐ {ctr}/10
+        </div>
       </div>
+
+      {/* The overlay text — star of the show */}
+      {concept.text_overlay && (
+        <div style={{
+          fontFamily: 'Impact, Arial Black', fontWeight: 900,
+          fontSize: 26, color: '#fff', letterSpacing: '0.04em',
+          marginBottom: 10, lineHeight: 1.1, textAlign: 'center',
+          textShadow: '2px 2px 0 #000, 0 0 20px rgba(255,255,255,0.15)',
+          padding: '12px 0',
+        }}>
+          {concept.text_overlay}
+        </div>
+      )}
+
+      {/* Why it works */}
+      <div style={{ color: '#6b7280', fontSize: 11, lineHeight: 1.45 }}>
+        {(concept.why_it_stops_scrolling || concept.concept_description || '').substring(0, 120)}…
+      </div>
+
+      {isSelected && (
+        <div style={{ marginTop: 10, textAlign: 'center', fontSize: 11, fontWeight: 700, color: '#a78bfa' }}>
+          ✓ Selected — this text will be rendered on your thumbnail
+        </div>
+      )}
     </div>
   );
 }
@@ -286,10 +241,10 @@ function ConceptCard({ concept, isSelected, onSelect, onGenerate, generating }) 
 // ═══════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // FLOW:
-//   Step 0 — Title + summary + optional char photos + optional template
-//   Step 1 — Gemini detects mood → engineers 5 high-CTR overlay texts
-//   Step 2 — Ideogram Character renders with real faces
-//   Step 3 — Result: download, re-render, try other concepts
+//   Step 0 — Title + summary + character photos (2-3, required) + template (required)
+//   Step 1 — Gemini engineers 5 high-CTR overlay texts → user picks one
+//   Step 2 — Ideogram character-remix renders: template + photos + selected text
+//   Step 3 — Result: download, re-render, try other texts
 // ═══════════════════════════════════════════════════════════════════════
 export default function MakeThumbnail({ onBack }) {
   const [step, setStep] = useState(0);
@@ -327,9 +282,13 @@ export default function MakeThumbnail({ onBack }) {
     setChars(prev => { const a = [...prev]; a[i] = null; return a; });
   };
 
-  // ── Step 0 → 1: Generate 5 concepts ─────────────────────────────
+  // ── Validation: all required fields ──────────────────────────────
+  const uploadedChars = chars.filter(Boolean);
+  const canSubmit = title.trim() && summary.trim() && uploadedChars.length >= 2 && selectedUserTemplate;
+
+  // ── Step 0 → 1: Generate 5 overlay text concepts ──────────────
   const handleGenerateConcepts = async () => {
-    if (!title.trim()) return;
+    if (!canSubmit) return;
     setLoadingConcepts(true);
     setError(null);
     setConcepts([]);
@@ -418,8 +377,8 @@ export default function MakeThumbnail({ onBack }) {
     setLoadingConcepts(false);
   };
 
-  // ── Step 1 → 2 → 3: Render image ────────────────────────────────
-  const handleGenerateImage = async concept => {
+  // ── Step 1 → 2: User selected an overlay text, now render ──────
+  const handleGenerateImage = async (concept) => {
     if (!concept?.id) return;
     setSelectedConcept(concept);
     setGenerating(true);
@@ -524,8 +483,15 @@ export default function MakeThumbnail({ onBack }) {
 
   const moodProfile = MOODS[detectedMood || detectMood(title, summary)] || MOODS.drama;
 
+  // ── Validation helper for missing fields ───────────────────────
+  const missingFields = [];
+  if (!title.trim()) missingFields.push('Video Title');
+  if (!summary.trim()) missingFields.push('Video Summary');
+  if (uploadedChars.length < 2) missingFields.push(`Character Photos (${uploadedChars.length}/2 minimum)`);
+  if (!selectedUserTemplate) missingFields.push('Reference Template');
+
   // ════════════════════════════════════════════════════════════════
-  // STEP 0 — Setup
+  // STEP 0 — Setup (all fields required)
   // ════════════════════════════════════════════════════════════════
   if (step === 0) return (
     <div style={{ minHeight: '100vh', background: '#070711', color: '#fff' }}>
@@ -544,45 +510,44 @@ export default function MakeThumbnail({ onBack }) {
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{ fontSize: 25, fontWeight: 800, marginBottom: 8 }}>Create a World-Class Thumbnail</div>
           <div style={{ color: '#6b7280', fontSize: 14, lineHeight: 1.6 }}>
-            Gemini detects your mood and engineers 5 high-CTR hooks, then Ideogram Character renders with your real faces
+            Enter your video details, upload 2-3 key photos, pick a template — AI generates 5 overlay texts, then renders a direct replica
           </div>
         </div>
 
         {/* Title */}
         <div style={{ marginBottom: 18 }}>
           <label style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 8 }}>
-            Video Title *
+            Video Title <span style={{ color: '#ef4444' }}>*</span>
           </label>
           <input
             value={title}
             onChange={e => setTitle(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && title.trim() && handleGenerateConcepts()}
             placeholder='e.g. "GRANDMA EXPLODES After Finding Out The Truth!"'
-            style={{ width: '100%', padding: '13px 16px', background: '#0f172a', border: '1px solid #1f2937', borderRadius: 10, color: '#fff', fontSize: 15, outline: 'none', boxSizing: 'border-box' }}
+            style={{ width: '100%', padding: '13px 16px', background: '#0f172a', border: `1px solid ${title.trim() ? '#1f2937' : '#374151'}`, borderRadius: 10, color: '#fff', fontSize: 15, outline: 'none', boxSizing: 'border-box' }}
           />
         </div>
 
         {/* Summary */}
         <div style={{ marginBottom: 22 }}>
           <label style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 8 }}>
-            Video Summary <span style={{ color: '#4b5563', fontWeight: 400, textTransform: 'none' }}>— optional but greatly improves hooks</span>
+            Video Summary <span style={{ color: '#ef4444' }}>*</span>
           </label>
           <textarea
             value={summary}
             onChange={e => setSummary(e.target.value)}
-            placeholder="What's the video about? Gemini uses this to detect the mood and engineer the perfect emotional hook"
+            placeholder="What's the video about? This helps AI engineer the perfect emotional hook for your thumbnail"
             rows={3}
-            style={{ width: '100%', padding: '11px 16px', background: '#0f172a', border: '1px solid #1f2937', borderRadius: 10, color: '#fff', fontSize: 14, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5 }}
+            style={{ width: '100%', padding: '11px 16px', background: '#0f172a', border: `1px solid ${summary.trim() ? '#1f2937' : '#374151'}`, borderRadius: 10, color: '#fff', fontSize: 14, outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'inherit', lineHeight: 1.5 }}
           />
         </div>
 
-        {/* Character count */}
+        {/* Character Photos (required, min 2) */}
         <div style={{ marginBottom: 26 }}>
           <label style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 10 }}>
-            Characters
+            Key Images from Video <span style={{ color: '#ef4444' }}>* (upload 2-3)</span>
           </label>
           <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-            {[1, 2, 3].map(n => (
+            {[2, 3].map(n => (
               <button key={n} onClick={() => handleCharCount(n)} style={{
                 flex: 1, padding: '11px 8px', borderRadius: 10,
                 border: charCount === n ? '2px solid #7c3aed' : '2px solid #1f2937',
@@ -590,52 +555,68 @@ export default function MakeThumbnail({ onBack }) {
                 color: charCount === n ? '#a78bfa' : '#4b5563',
                 cursor: 'pointer', fontWeight: 700, fontSize: 13, transition: 'all 0.15s',
               }}>
-                {n === 1 ? '👤 Solo' : n === 2 ? '👥 Duo' : '👨‍👩‍👦 Trio'}
+                {n === 2 ? '👥 2 Photos' : '👨‍👩‍👦 3 Photos'}
               </button>
             ))}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${charCount}, 1fr)`, gap: 12, maxWidth: charCount === 1 ? 160 : charCount === 2 ? 300 : '100%' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${charCount}, 1fr)`, gap: 12, maxWidth: charCount === 2 ? 300 : '100%' }}>
             {Array.from({ length: charCount }, (_, i) => (
-              <CharSlot key={i} index={i} label={`Character ${i + 1}`} char={chars[i]} onUpload={handleUpload} onRemove={handleRemove} />
+              <CharSlot key={i} index={i} label={`Photo ${i + 1}`} char={chars[i]} onUpload={handleUpload} onRemove={handleRemove} />
             ))}
           </div>
-          <p style={{ color: '#374151', fontSize: 11, marginTop: 8 }}>
-            💡 Upload real photos — Ideogram Character will preserve their exact face in the thumbnail
-          </p>
+          {uploadedChars.length < 2 && (
+            <p style={{ color: '#ef4444', fontSize: 11, marginTop: 8 }}>
+              ⚠️ Upload at least 2 photos — these are the key images AI will use in the thumbnail
+            </p>
+          )}
+          {uploadedChars.length >= 2 && (
+            <p style={{ color: '#22c55e', fontSize: 11, marginTop: 8 }}>
+              ✅ {uploadedChars.length} photo{uploadedChars.length > 1 ? 's' : ''} uploaded — Ideogram will preserve these exact faces
+            </p>
+          )}
         </div>
 
-        {/* Template Picker */}
+        {/* Template Picker (required) */}
         <div style={{ marginBottom: 26 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
             <label style={{ fontSize: 12, fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Choose a Reference Template
+              Choose a Reference Template <span style={{ color: '#ef4444' }}>*</span>
             </label>
-            <span style={{ fontSize: 10, color: '#4b5563', background: '#1f2937', borderRadius: 4, padding: '2px 6px' }}>Optional</span>
           </div>
           <p style={{ color: '#4b5563', fontSize: 12, marginBottom: 14, lineHeight: 1.5 }}>
-            Pick a proven layout — AI recreates it with your characters and title.
+            Pick a proven layout — AI will create a <strong style={{ color: '#a78bfa' }}>direct replica</strong> using your photos and AI-generated overlay text.
           </p>
           <ThumbnailTemplatePicker
             selectedTemplate={selectedUserTemplate}
             onSelect={setSelectedUserTemplate}
-            detectedMood={detectMood(title, summary)}
+            title={title}
+            summary={summary}
           />
         </div>
 
+        {/* Validation summary */}
+        {missingFields.length > 0 && (
+          <div style={{
+            background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+            borderRadius: 10, padding: '10px 14px', marginBottom: 16,
+          }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#f87171', marginBottom: 4 }}>Missing required fields:</div>
+            <div style={{ fontSize: 11, color: '#fca5a5' }}>{missingFields.join(' · ')}</div>
+          </div>
+        )}
+
         <button
           onClick={handleGenerateConcepts}
-          disabled={!title.trim()}
+          disabled={!canSubmit}
           style={{
             width: '100%', padding: '15px', borderRadius: 12, border: 'none',
-            background: title.trim() ? 'linear-gradient(135deg, #7c3aed, #db2777)' : '#1f2937',
-            color: '#fff', cursor: title.trim() ? 'pointer' : 'not-allowed',
+            background: canSubmit ? 'linear-gradient(135deg, #7c3aed, #db2777)' : '#1f2937',
+            color: canSubmit ? '#fff' : '#4b5563', cursor: canSubmit ? 'pointer' : 'not-allowed',
             fontWeight: 700, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           }}
         >
           <Wand2 size={18} />
-          {selectedUserTemplate
-            ? `Recreate "${selectedUserTemplate.name}" with My Content`
-            : 'Generate 5 High-CTR Thumbnail Concepts'}
+          Generate 5 CTR Overlay Texts for "{selectedUserTemplate?.name || '...'}"
         </button>
       </div>
       <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
@@ -712,9 +693,9 @@ export default function MakeThumbnail({ onBack }) {
         </div>
       )}
 
-      {/* Concepts grid */}
+      {/* Overlay text selection grid */}
       {!loadingConcepts && !error && concepts.length > 0 && (
-        <div style={{ maxWidth: 1160, margin: '0 auto', padding: '22px 16px' }}>
+        <div style={{ maxWidth: 800, margin: '0 auto', padding: '22px 16px' }}>
           <StepDots current={1} total={4} />
 
           {/* Mood + metadata banner */}
@@ -726,38 +707,55 @@ export default function MakeThumbnail({ onBack }) {
             }}>
               {detectedMood && (
                 <span style={{ fontSize: 13, fontWeight: 700, color: '#a78bfa' }}>
-                  {MOODS[detectedMood]?.emoji} Mood detected: <span style={{ color: '#fff' }}>{MOODS[detectedMood]?.label || detectedMood}</span>
+                  {MOODS[detectedMood]?.emoji} Mood: <span style={{ color: '#fff' }}>{MOODS[detectedMood]?.label || detectedMood}</span>
                 </span>
               )}
-              {templateMeta?.used_char_photos && (
-                <span style={{ fontSize: 11, color: '#22c55e', background: 'rgba(34,197,94,0.1)', borderRadius: 6, padding: '2px 8px' }}>
-                  ✓ {templateMeta.char_photo_count} face{templateMeta.char_photo_count > 1 ? 's' : ''} locked in
-                </span>
-              )}
-              {templateMeta?.used_user_template && (
-                <span style={{ fontSize: 11, color: '#f59e0b', background: 'rgba(245,158,11,0.1)', borderRadius: 6, padding: '2px 8px' }}>
-                  ✓ Template: {templateMeta.primary_template}
-                </span>
-              )}
+              <span style={{ fontSize: 11, color: '#22c55e', background: 'rgba(34,197,94,0.1)', borderRadius: 6, padding: '2px 8px' }}>
+                ✓ {uploadedChars.length} photo{uploadedChars.length > 1 ? 's' : ''} ready
+              </span>
+              <span style={{ fontSize: 11, color: '#f59e0b', background: 'rgba(245,158,11,0.1)', borderRadius: 6, padding: '2px 8px' }}>
+                ✓ Template: {selectedUserTemplate?.name}
+              </span>
             </div>
           )}
 
-          <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 14 }}>
-            Click a concept to select it, then hit <strong style={{ color: '#fff' }}>Generate This Thumbnail</strong> — Ideogram Character renders with your real faces in ~60s
+          <div style={{ textAlign: 'center', marginBottom: 18 }}>
+            <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 6 }}>Select Your Overlay Text</div>
+            <div style={{ fontSize: 13, color: '#6b7280' }}>
+              Pick one — AI will render <strong style={{ color: '#fff' }}>"{selectedUserTemplate?.name}"</strong> template with your photos and this text
+            </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, marginBottom: 20 }}>
             {concepts.map(c => (
-              <ConceptCard
+              <OverlayTextCard
                 key={c.id}
                 concept={c}
                 isSelected={selectedConcept?.id === c.id}
                 onSelect={setSelectedConcept}
-                onGenerate={handleGenerateImage}
-                generating={generating}
               />
             ))}
           </div>
+
+          {/* Generate button — appears when a text is selected */}
+          {selectedConcept && (
+            <button
+              onClick={() => handleGenerateImage(selectedConcept)}
+              disabled={generating}
+              style={{
+                width: '100%', padding: '16px', borderRadius: 12, border: 'none',
+                background: generating ? '#374151' : 'linear-gradient(135deg, #7c3aed, #db2777)',
+                color: '#fff', cursor: generating ? 'not-allowed' : 'pointer',
+                fontWeight: 700, fontSize: 15,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              }}
+            >
+              {generating
+                ? <><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Rendering…</>
+                : <><Sparkles size={16} /> Generate Thumbnail: "{selectedConcept.text_overlay}" on "{selectedUserTemplate?.name}"</>
+              }
+            </button>
+          )}
         </div>
       )}
 
