@@ -310,50 +310,132 @@ Return JSON:
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-amber-500" />
-                Duplicates Found
+                Duplicate Report
               </DialogTitle>
               <DialogDescription>
-                AI found {duplicates.matches.length} topic{duplicates.matches.length > 1 ? 's' : ''} that already exist. Select which existing duplicates to delete and replace with the new version.
+                Review duplicates below. Auto-removed items are already handled. Flagged items need your decision.
               </DialogDescription>
             </DialogHeader>
-            <ScrollArea className="max-h-[350px] pr-2">
-              <div className="space-y-2 py-2">
-                {duplicates.matches.map((m, i) => (
-                  <div
-                    key={i}
-                    className={`border rounded-lg p-3 transition-colors cursor-pointer ${
-                      selectedDupes.has(i) ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-white'
-                    }`}
-                    onClick={() => toggleDupe(i)}
-                  >
-                    <div className="flex items-start gap-2">
-                      <Checkbox
-                        checked={selectedDupes.has(i)}
-                        onCheckedChange={() => toggleDupe(i)}
-                        className="mt-0.5"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-gray-900">New: "{m.new_title}"</p>
-                        <p className="text-xs text-gray-500 mt-0.5">Existing: "{m.existing_title}"</p>
-                        <p className="text-[10px] text-amber-600 mt-1">{m.reason}</p>
+            <ScrollArea className="max-h-[400px] pr-2">
+              <div className="space-y-3 py-2">
+                {/* Auto-removed: internal verbatim dupes */}
+                {duplicates.autoInternal.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold text-red-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                      <Trash2 className="w-3 h-3" /> Auto-Removed (verbatim duplicates in your list)
+                    </p>
+                    {duplicates.autoInternal.map((m, i) => (
+                      <div key={`ai_${i}`} className="border border-red-200 bg-red-50/50 rounded-lg p-2.5 mb-1.5">
+                        <p className="text-xs text-red-700 line-through">"{m.removed}"</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">Kept: "{m.kept}" — {m.reason}</p>
                       </div>
-                      {selectedDupes.has(i) && <Trash2 className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />}
-                    </div>
+                    ))}
                   </div>
-                ))}
+                )}
+
+                {/* Auto-removed: verbatim matches with existing */}
+                {duplicates.autoExisting.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold text-red-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                      <Trash2 className="w-3 h-3" /> Auto-Removed (verbatim match with existing)
+                    </p>
+                    {duplicates.autoExisting.map((m, i) => (
+                      <div key={`ae_${i}`} className="border border-red-200 bg-red-50/50 rounded-lg p-2.5 mb-1.5">
+                        <p className="text-xs text-red-700">New: "{m.new_title}" <span className="text-[10px]">→ replaces existing</span></p>
+                        <p className="text-[10px] text-gray-500">Existing removed: "{m.existing_title}" — {m.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Flagged: similar to existing — user decides */}
+                {duplicates.flaggedExisting.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" /> Similar to Existing — Your Call
+                    </p>
+                    <p className="text-[10px] text-gray-500 mb-2">Check = delete existing & import new. Uncheck = skip new topic.</p>
+                    {duplicates.flaggedExisting.map((m, i) => {
+                      const key = `existing_${i}`;
+                      return (
+                        <div
+                          key={key}
+                          className={`border rounded-lg p-2.5 mb-1.5 transition-colors cursor-pointer ${
+                            selectedDupes.has(key) ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-white'
+                          }`}
+                          onClick={() => toggleDupe(key)}
+                        >
+                          <div className="flex items-start gap-2">
+                            <Checkbox checked={selectedDupes.has(key)} onCheckedChange={() => toggleDupe(key)} className="mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-gray-900">New: "{m.new_title}"</p>
+                              <p className="text-xs text-gray-500 mt-0.5">Existing: "{m.existing_title}"</p>
+                              <p className="text-[10px] text-amber-600 mt-1">{m.reason}</p>
+                            </div>
+                            {selectedDupes.has(key) && <Trash2 className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Flagged: similar within import list — user decides */}
+                {duplicates.flaggedInternal.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold text-orange-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" /> Similar Within Your List — Your Call
+                    </p>
+                    <p className="text-[10px] text-gray-500 mb-2">Check = remove second topic. Uncheck = keep both.</p>
+                    {duplicates.flaggedInternal.map((m, i) => {
+                      const key = `internal_${i}`;
+                      return (
+                        <div
+                          key={key}
+                          className={`border rounded-lg p-2.5 mb-1.5 transition-colors cursor-pointer ${
+                            selectedDupes.has(key) ? 'border-orange-300 bg-orange-50' : 'border-gray-200 bg-white'
+                          }`}
+                          onClick={() => toggleDupe(key)}
+                        >
+                          <div className="flex items-start gap-2">
+                            <Checkbox checked={selectedDupes.has(key)} onCheckedChange={() => toggleDupe(key)} className="mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-gray-900">A: "{m.title_a}" <span className="text-green-600">(kept)</span></p>
+                              <p className="text-xs text-gray-500 mt-0.5">B: "{m.title_b}" {selectedDupes.has(key) ? <span className="text-red-500">(will remove)</span> : <span className="text-green-500">(keeping both)</span>}</p>
+                              <p className="text-[10px] text-orange-600 mt-1">{m.reason}</p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </ScrollArea>
+
+            {/* Summary */}
             <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 space-y-1">
-              <p><span className="font-semibold text-green-700">{duplicates.unique.length}</span> unique topics will be imported</p>
-              <p><span className="font-semibold text-red-600">{selectedDupes.size}</span> existing duplicates will be deleted & replaced</p>
-              <p><span className="font-semibold text-gray-500">{duplicates.matches.length - selectedDupes.size}</span> new duplicates will be skipped (keeping existing)</p>
+              <p><span className="font-semibold text-green-700">{duplicates.unique.length}</span> unique topics ready to import</p>
+              {duplicates.autoInternal.length > 0 && (
+                <p><span className="font-semibold text-red-600">{duplicates.autoInternal.length}</span> verbatim internal dupes auto-removed</p>
+              )}
+              {duplicates.autoExisting.length > 0 && (
+                <p><span className="font-semibold text-red-600">{duplicates.autoExisting.length}</span> verbatim existing dupes auto-replaced</p>
+              )}
+              {duplicates.flaggedExisting.length > 0 && (
+                <p><span className="font-semibold text-amber-600">
+                  {[...selectedDupes].filter(k => k.startsWith('existing_')).length}/{duplicates.flaggedExisting.length}
+                </span> similar existing topics marked for replacement</p>
+              )}
+              {duplicates.flaggedInternal.length > 0 && (
+                <p><span className="font-semibold text-orange-600">
+                  {[...selectedDupes].filter(k => k.startsWith('internal_')).length}/{duplicates.flaggedInternal.length}
+                </span> similar internal topics marked for removal</p>
+              )}
             </div>
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => { setStep('input'); setDuplicates(null); }}>Back</Button>
-              <Button
-                onClick={handleConfirmReview}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
+              <Button onClick={handleConfirmReview} className="bg-blue-600 hover:bg-blue-700">
                 <Check className="w-4 h-4 mr-1" />
                 Confirm & Import
               </Button>
