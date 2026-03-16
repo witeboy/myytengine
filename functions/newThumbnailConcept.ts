@@ -16,6 +16,8 @@ Deno.serve(async (req) => {
       video_title,
       summary = '',
       char_photos = [],
+      project_id,
+      seo_titles,
       template_id,
       template_name,
       template_psychology,
