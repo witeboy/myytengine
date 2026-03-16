@@ -1570,6 +1570,15 @@ if (nextBatch > 0) {
                   {project.visual_style.replace(/_/g, ' ')}
                 </Badge>
               )}
+              {project?.reference_image_url ? (
+                <Badge className="bg-blue-100 text-blue-800 text-xs" title="Character reference image is locked — all new scenes use this as style anchor">
+                  🔗 Ref Locked
+                </Badge>
+              ) : imageCount > 0 ? (
+                <Badge className="bg-amber-100 text-amber-700 text-xs" title="No character reference — scenes may have inconsistent characters">
+                  ⚠️ No Ref
+                </Badge>
+              ) : null}
               <div className="flex items-center gap-2 text-sm font-medium">
                 <Layers className="w-4 h-4 text-blue-600" /> {scenes.length} scenes
               </div>
