@@ -238,7 +238,9 @@ Return ONLY a valid JSON object. No markdown. No explanation. No backticks.
     const rawDetectedMood = (parsed.detected_mood || 'drama').toLowerCase().replace(/[,|]/g, '|');
     const detectedMood = rawDetectedMood.split('|')[0].trim() || 'drama';
     const concepts = parsed.concepts.slice(0, 5);
-    console.log(`Mood: ${detectedMood} | Concepts: ${concepts.length}`);
+    const extractedObjects = parsed.extracted_objects || [];
+    const thumbnailStrategy = parsed.thumbnail_strategy || 'hero_shot';
+    console.log(`Mood: ${detectedMood} | Strategy: ${thumbnailStrategy} | Objects: ${extractedObjects.join(', ')} | Concepts: ${concepts.length}`);
 
     // ── SAVE CONCEPT RECORDS ─────────────────────────────────────
     const sessionId = project_id || `thumb_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
@@ -285,7 +287,7 @@ Do NOT add any other text.`;
           rank:                   c.rank ?? (i + 1),
           concept_type:           c.emotion_triggered ?? 'shock',
           psychological_trigger:  c.emotion_triggered ?? 'Shock',
-          concept_description:    c.why_this_works ?? '',
+          concept_description:    `${c.why_this_works || ''} | Strategy: ${c.layout_type || thumbnailStrategy} | Objects: ${(c.objects_used || extractedObjects).join(', ')}`,
           visual_metaphor:        detectedMood,
           color_scheme:           c.text_color ?? 'white | black outline',
           text_overlay:           c.text_overlay ?? '',
