@@ -3,15 +3,13 @@ import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Loader2, Upload, FileText } from 'lucide-react';
+import { Loader2, Upload, FileText, Sparkles } from 'lucide-react';
 
 export default function TopicImporter({ open, onOpenChange, channel, onImported }) {
   const [text, setText] = useState('');
-  const [format, setFormat] = useState('short');
   const [importing, setImporting] = useState(false);
-  const [fileRef, setFileRef] = useState(null);
+  const [phase, setPhase] = useState('');
 
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -22,12 +20,10 @@ export default function TopicImporter({ open, onOpenChange, channel, onImported 
   };
 
   const parseTopics = (raw) => {
-    // Split by newlines first, then by commas if single line
     let lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
     if (lines.length === 1 && lines[0].includes(',')) {
       lines = lines[0].split(',').map(l => l.trim()).filter(Boolean);
     }
-    // Remove numbering like "1. " or "1) "
     return lines.map(l => l.replace(/^\d+[\.\)\-]\s*/, '').trim()).filter(l => l.length > 2);
   };
 
@@ -37,11 +33,12 @@ export default function TopicImporter({ open, onOpenChange, channel, onImported 
 
     setImporting(true);
 
-    // Create all topics
+    // Step 1: Create topics without format — AI will assign format during scheduling
+    setPhase('Importing topics...');
     const topicData = titles.map((title, i) => ({
       channel_id: channel.id,
       title,
-      format,
+      format: 'short', // temporary default, AI will reassign
       status: 'queued',
       priority: i,
     }));
@@ -54,12 +51,14 @@ export default function TopicImporter({ open, onOpenChange, channel, onImported 
       total_topics: existing + titles.length,
     });
 
-    // Auto-schedule via backend — wait for it so calendar refreshes with scheduled dates
+    // Step 2: AI classifies & schedules
+    setPhase('AI is analyzing topics and assigning formats...');
     await base44.functions.invoke('parseAndScheduleTopics', {
       channel_id: channel.id,
     }).catch((err) => console.warn('Scheduling error:', err));
 
     setImporting(false);
+    setPhase('');
     setText('');
     onOpenChange(false);
     onImported?.(titles.length);
@@ -74,17 +73,12 @@ export default function TopicImporter({ open, onOpenChange, channel, onImported 
           <DialogTitle>Import Topics — {channel?.name}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
-          <div>
-            <Label>Content Format</Label>
-            <Select value={format} onValueChange={setFormat}>
-              <SelectTrigger className="mt-1">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="short">Short-form (≤{channel?.short_form_word_limit || 200} words)</SelectItem>
-                <SelectItem value="long">Long-form ({channel?.long_form_duration_minutes || 15} min)</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700 flex gap-2">
+            <Sparkles className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium mb-0.5">AI-Powered Format Assignment</p>
+              <p>Just paste all your topics — AI will intelligently assign which should be short-form and which should be long-form to maximize authority, viewership, and audience retention.</p>
+            </div>
           </div>
 
           <div>
@@ -93,18 +87,18 @@ export default function TopicImporter({ open, onOpenChange, channel, onImported 
               <label className="flex items-center gap-2 px-3 py-2 border border-dashed rounded-lg cursor-pointer hover:bg-gray-50 text-sm text-gray-500">
                 <Upload className="w-4 h-4" />
                 Choose file...
-                <input type="file" accept=".csv,.txt,.text" onChange={handleFileUpload} className="hidden" ref={setFileRef} />
+                <input type="file" accept=".csv,.txt,.text" onChange={handleFileUpload} className="hidden" />
               </label>
             </div>
           </div>
 
           <div>
-            <Label>Or paste topics (one per line, or comma-separated)</Label>
+            <Label>Or paste topics (one per line)</Label>
             <Textarea
               value={text}
               onChange={e => setText(e.target.value)}
-              placeholder="How to build wealth in your 20s&#10;The psychology of money&#10;5 investments that made millionaires&#10;..."
-              className="mt-1 min-h-[150px] text-sm"
+              placeholder="How to build wealth in your 20s&#10;The psychology of money&#10;5 investments that made millionaires&#10;Why most people retire broke&#10;Day in the life of a stock trader&#10;..."
+              className="mt-1 min-h-[180px] text-sm"
             />
             {parsedCount > 0 && (
               <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
@@ -112,15 +106,22 @@ export default function TopicImporter({ open, onOpenChange, channel, onImported 
               </p>
             )}
           </div>
+
+          {importing && phase && (
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 flex items-center gap-2 text-xs text-purple-700">
+              <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+              <span>{phase}</span>
+            </div>
+          )}
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={importing}>Cancel</Button>
           <Button
             onClick={handleImport}
             disabled={importing || parsedCount === 0}
             className="bg-blue-600 hover:bg-blue-700"
           >
-            {importing ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
+            {importing ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Sparkles className="w-4 h-4 mr-1" />}
             Import {parsedCount} Topics
           </Button>
         </DialogFooter>
