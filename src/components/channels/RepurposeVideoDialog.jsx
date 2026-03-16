@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
-import { createPageUrl } from '@/utils';
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -73,7 +73,7 @@ export default function RepurposeVideoDialog({ open, onOpenChange, video, channe
         else if (['timeline_editing', 'compiled'].includes(s)) route = `TimelineEditor?project_id=${projects[0].id}`;
         else if (['post_production', 'published'].includes(s)) route = `PostProduction?project_id=${projects[0].id}`;
         onOpenChange(false);
-        navigate(createPageUrl(route));
+        navigate(`/${route}`);
         return;
       }
     }
@@ -116,7 +116,7 @@ export default function RepurposeVideoDialog({ open, onOpenChange, video, channe
     });
 
     onOpenChange(false);
-    navigate(createPageUrl(`StoryTopics?project_id=${project.id}`));
+    navigate(`/StoryTopics?project_id=${project.id}`);
   };
 
   return (
