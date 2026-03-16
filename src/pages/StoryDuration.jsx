@@ -67,7 +67,7 @@ export default function StoryDuration() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate(createPageUrl(`StoryTopics?project_id=${projectId}`))} className="gap-2">
+            <Button variant="outline" onClick={() => navigate(createPageUrl(`StoryTopics?project_id=${projectId}`))} className="gap-2" size="sm">
               <ArrowLeft className="w-4 h-4" /> Topics
             </Button>
             {project && ['outline_ready','hooks_ready','scripting','script_complete','voiceover_ready','scene_breakdown','breakdown_complete','content_generation','scenes_ready'].includes(project.status) ? (
