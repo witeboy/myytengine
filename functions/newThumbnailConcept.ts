@@ -42,6 +42,30 @@ Deno.serve(async (req) => {
     console.log('Has char photos:', hasCharPhotos);
     console.log('Has user template:', hasUserTemplate);
 
+    // ── LOAD SEO TITLES for pairing context ──────────────────────
+    // If SEO titles were already generated, overlay texts should COMPLEMENT them
+    let seoTitleContext = '';
+    try {
+      // Try to find project by checking UploadMetadata — the video_title may match
+      const allMeta = await base44.asServiceRole.entities.UploadMetadata.list('-created_date', 5);
+      const relevantMeta = allMeta.find(m => {
+        const titles = [m.title_primary, m.title_variation_1, m.title_variation_2, m.title_variation_3, m.title_variation_4].filter(Boolean);
+        // Match if any saved title is similar to the current video_title
+        return titles.some(t => t && (video_title.toLowerCase().includes(t.substring(0, 20).toLowerCase()) || t.toLowerCase().includes(video_title.substring(0, 20).toLowerCase())));
+      });
+      if (relevantMeta) {
+        const savedTitles = [relevantMeta.title_primary, relevantMeta.title_variation_1, relevantMeta.title_variation_2, relevantMeta.title_variation_3, relevantMeta.title_variation_4].filter(Boolean);
+        if (savedTitles.length > 0) {
+          seoTitleContext = `\n\nEXISTING SEO TITLES (overlay text must COMPLEMENT these — add visual tension, never repeat their words):
+${savedTitles.map((t, i) => `- Title ${i + 1}: "${t}"`).join('\n')}
+The overlay text + SEO title together should create an irresistible curiosity package.`;
+          console.log(`Found ${savedTitles.length} SEO titles for pairing context`);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not load SEO titles for context:', e.message);
+    }
+
     // ── BUILD GEMINI PROMPT ──────────────────────────────────────
     // We send the title + summary to Gemini and ask for:
     // 1. Detected mood/niche
