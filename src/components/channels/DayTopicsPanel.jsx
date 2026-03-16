@@ -3,13 +3,15 @@ import { base44 } from '@/api/base44Client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Play, Clock, FileText, Zap, CheckCircle2, Loader2 } from 'lucide-react';
+import { Play, Clock, FileText, Zap, CheckCircle2, Loader2, ChevronDown, ChevronUp, Package } from 'lucide-react';
+import { ExpandableAssets } from './TopicAssetsPanel';
 
 export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose, channel, onTopicUpdated }) {
   if (!date) return null;
 
   const [archivedProjects, setArchivedProjects] = useState({});
   const [markingDone, setMarkingDone] = useState(null);
+  const [expandedTopic, setExpandedTopic] = useState(null);
 
   // Check if in_progress topics have archived projects
   useEffect(() => {
@@ -63,78 +65,93 @@ export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose,
     const canStart = topic.status === 'scheduled' || topic.status === 'queued' || (isInProgress && isArchived);
 
     return (
-      <div className={`flex items-center gap-3 p-3 rounded-lg border transition-all group ${
-        isCompleted ? 'border-green-200 bg-green-50/30' : 'border-gray-100 hover:border-blue-200 hover:bg-blue-50/30'
+      <div className={`rounded-lg border transition-all overflow-hidden ${
+        isCompleted ? 'border-green-200 bg-green-50/30' : 'border-gray-100 hover:border-blue-200'
       }`}>
-        <div className="flex-1 min-w-0">
-          <p className={`text-sm font-medium truncate ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
-            {topic.title}
-          </p>
-          {topic.ai_notes && <p className="text-[11px] text-purple-500 truncate mt-0.5">🧠 {topic.ai_notes}</p>}
-          {!topic.ai_notes && topic.notes && <p className="text-[11px] text-gray-400 truncate mt-0.5">{topic.notes}</p>}
-        </div>
-        <Badge className={`text-[10px] flex-shrink-0 ${topic.format === 'short' ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>
-          {topic.format === 'short' ? <Clock className="w-3 h-3 mr-0.5" /> : <FileText className="w-3 h-3 mr-0.5" />}
-          {topic.format === 'short' ? `≤${channel?.short_form_word_limit || 200}w` : `${channel?.long_form_duration_minutes || 15}min`}
-        </Badge>
-        {topic.suggested_post_time && (
-          <Badge className="text-[9px] flex-shrink-0 bg-blue-50 text-blue-600 border border-blue-200">
-            <Clock className="w-2.5 h-2.5 mr-0.5" /> {topic.suggested_post_time}
-          </Badge>
-        )}
-
-        {isCompleted ? (
-          <Badge className="text-[10px] flex-shrink-0 bg-green-100 text-green-700">
-            <CheckCircle2 className="w-3 h-3 mr-0.5" /> Done
-          </Badge>
-        ) : (
-          <Badge className={`text-[10px] flex-shrink-0 ${statusColors[isArchived ? 'scheduled' : topic.status] || statusColors.queued}`}>
-            {isArchived ? 'ready' : topic.status}
-          </Badge>
-        )}
-
-        {/* Action buttons */}
-        {canStart && (
-          <Button
-            size="sm"
-            className="h-7 text-xs bg-blue-600 hover:bg-blue-700 opacity-0 group-hover:opacity-100 transition-opacity"
-            onClick={() => {
-              if (isArchived) {
-                handleRestart(topic);
-              } else {
-                onStartPipeline?.(topic);
-              }
-            }}
-          >
-            <Play className="w-3 h-3 mr-1" /> Start
-          </Button>
-        )}
-
-        {isInProgress && !isArchived && (
-          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs"
-              onClick={() => onStartPipeline?.(topic)}
+        <div className="flex items-center gap-3 p-3 group">
+          {topic.project_id && (
+            <button
+              onClick={() => setExpandedTopic(expandedTopic === topic.id ? null : topic.id)}
+              className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-200 flex-shrink-0"
             >
-              <Zap className="w-3 h-3 mr-1" /> Continue
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs border-green-300 text-green-700 hover:bg-green-50"
-              onClick={() => handleMarkDone(topic)}
-              disabled={markingDone === topic.id}
-            >
-              {markingDone === topic.id ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <><CheckCircle2 className="w-3 h-3 mr-1" /> Done</>
-              )}
-            </Button>
+              {expandedTopic === topic.id ? <ChevronUp className="w-3.5 h-3.5 text-gray-500" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
+            </button>
+          )}
+          {!topic.project_id && <div className="w-6 flex-shrink-0" />}
+          <div className="flex-1 min-w-0">
+            <p className={`text-sm font-medium truncate ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
+              {topic.title}
+            </p>
+            {topic.ai_notes && <p className="text-[11px] text-purple-500 truncate mt-0.5">🧠 {topic.ai_notes}</p>}
+            {!topic.ai_notes && topic.notes && <p className="text-[11px] text-gray-400 truncate mt-0.5">{topic.notes}</p>}
           </div>
-        )}
+          <Badge className={`text-[10px] flex-shrink-0 ${topic.format === 'short' ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>
+            {topic.format === 'short' ? <Clock className="w-3 h-3 mr-0.5" /> : <FileText className="w-3 h-3 mr-0.5" />}
+            {topic.format === 'short' ? `≤${channel?.short_form_word_limit || 200}w` : `${channel?.long_form_duration_minutes || 15}min`}
+          </Badge>
+          {topic.suggested_post_time && (
+            <Badge className="text-[9px] flex-shrink-0 bg-blue-50 text-blue-600 border border-blue-200">
+              <Clock className="w-2.5 h-2.5 mr-0.5" /> {topic.suggested_post_time}
+            </Badge>
+          )}
+
+          {isCompleted ? (
+            <Badge className="text-[10px] flex-shrink-0 bg-green-100 text-green-700">
+              <CheckCircle2 className="w-3 h-3 mr-0.5" /> Done
+            </Badge>
+          ) : (
+            <Badge className={`text-[10px] flex-shrink-0 ${statusColors[isArchived ? 'scheduled' : topic.status] || statusColors.queued}`}>
+              {isArchived ? 'ready' : topic.status}
+            </Badge>
+          )}
+
+          {topic.project_id && (
+            <Package className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" title="Has assets" />
+          )}
+
+          {canStart && (
+            <Button
+              size="sm"
+              className="h-7 text-xs bg-blue-600 hover:bg-blue-700 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={() => {
+                if (isArchived) {
+                  handleRestart(topic);
+                } else {
+                  onStartPipeline?.(topic);
+                }
+              }}
+            >
+              <Play className="w-3 h-3 mr-1" /> Start
+            </Button>
+          )}
+
+          {isInProgress && !isArchived && (
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => onStartPipeline?.(topic)}
+              >
+                <Zap className="w-3 h-3 mr-1" /> Continue
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs border-green-300 text-green-700 hover:bg-green-50"
+                onClick={() => handleMarkDone(topic)}
+                disabled={markingDone === topic.id}
+              >
+                {markingDone === topic.id ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <><CheckCircle2 className="w-3 h-3 mr-1" /> Done</>
+                )}
+              </Button>
+            </div>
+          )}
+        </div>
+        <ExpandableAssets projectId={topic.project_id} topicTitle={topic.title} isOpen={expandedTopic === topic.id} />
       </div>
     );
   };

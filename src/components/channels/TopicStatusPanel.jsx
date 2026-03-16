@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { X, Play, Clock, ArrowRight, FileText } from 'lucide-react';
+import { X, Play, Clock, ArrowRight, FileText, ChevronDown, ChevronUp, Package } from 'lucide-react';
 import { createPageUrl } from '@/utils';
+import { ExpandableAssets } from './TopicAssetsPanel';
 
 const statusColors = {
   queued: 'bg-gray-100 text-gray-600',
@@ -17,6 +18,7 @@ const statusColors = {
 
 export default function TopicStatusPanel({ title, icon: Icon, topics, onClose, onStartPipeline, color }) {
   const navigate = useNavigate();
+  const [expandedTopic, setExpandedTopic] = useState(null);
 
   const handleTopicClick = async (topic) => {
     if (topic.project_id) {
@@ -69,28 +71,44 @@ export default function TopicStatusPanel({ title, icon: Icon, topics, onClose, o
         {topics.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-4">No topics in this category</p>
         ) : (
-          <div className="max-h-72 overflow-y-auto space-y-1.5 pr-1">
+          <div className="max-h-[28rem] overflow-y-auto space-y-1.5 pr-1">
             {topics.map(topic => (
-              <div
-                key={topic.id}
-                onClick={() => handleTopicClick(topic)}
-                className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors group"
-              >
-                <Badge className={`text-[10px] flex-shrink-0 ${topic.format === 'short' ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>
-                  {topic.format === 'short' ? 'S' : 'L'}
-                </Badge>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-800 truncate">{topic.title}</p>
-                  {topic.scheduled_date && (
-                    <p className="text-[11px] text-gray-400 flex items-center gap-1 mt-0.5">
-                      <Clock className="w-3 h-3" /> {topic.scheduled_date}
-                    </p>
+              <div key={topic.id} className="rounded-lg border border-gray-100 overflow-hidden">
+                <div
+                  className="flex items-center gap-3 p-2.5 hover:bg-gray-50 cursor-pointer transition-colors group"
+                >
+                  {topic.project_id && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setExpandedTopic(expandedTopic === topic.id ? null : topic.id); }}
+                      className="w-6 h-6 flex items-center justify-center rounded hover:bg-gray-200 flex-shrink-0"
+                    >
+                      {expandedTopic === topic.id ? <ChevronUp className="w-3.5 h-3.5 text-gray-500" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
+                    </button>
                   )}
+                  {!topic.project_id && <div className="w-6 flex-shrink-0" />}
+                  <Badge className={`text-[10px] flex-shrink-0 ${topic.format === 'short' ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>
+                    {topic.format === 'short' ? 'S' : 'L'}
+                  </Badge>
+                  <div className="flex-1 min-w-0" onClick={() => handleTopicClick(topic)}>
+                    <p className="text-sm text-gray-800 truncate">{topic.title}</p>
+                    {topic.scheduled_date && (
+                      <p className="text-[11px] text-gray-400 flex items-center gap-1 mt-0.5">
+                        <Clock className="w-3 h-3" /> {topic.scheduled_date}
+                      </p>
+                    )}
+                  </div>
+                  <Badge className={`text-[10px] flex-shrink-0 ${statusColors[topic.status] || 'bg-gray-100 text-gray-600'}`}>
+                    {topic.status}
+                  </Badge>
+                  {topic.project_id && (
+                    <Package className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" title="Has assets" />
+                  )}
+                  <ArrowRight
+                    className="w-4 h-4 text-gray-300 group-hover:text-gray-600 transition-colors flex-shrink-0"
+                    onClick={() => handleTopicClick(topic)}
+                  />
                 </div>
-                <Badge className={`text-[10px] flex-shrink-0 ${statusColors[topic.status] || 'bg-gray-100 text-gray-600'}`}>
-                  {topic.status}
-                </Badge>
-                <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-gray-600 transition-colors flex-shrink-0" />
+                <ExpandableAssets projectId={topic.project_id} topicTitle={topic.title} isOpen={expandedTopic === topic.id} />
               </div>
             ))}
           </div>
