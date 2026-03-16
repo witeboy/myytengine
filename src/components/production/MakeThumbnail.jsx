@@ -602,10 +602,64 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
           />
         </div>
 
+        {/* Scene Images from Content Generation — click to add as character photos */}
+        {sceneImages && sceneImages.length > 0 && (
+          <div style={{ marginBottom: 22 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 8 }}>
+              Select from Generated Scenes <span style={{ color: '#6b7280', fontWeight: 400, textTransform: 'none' }}>(click to add)</span>
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
+              {sceneImages.map((scene, i) => {
+                const isAdded = chars.some(c => c?.remoteUrl === scene.image_url);
+                return (
+                  <div
+                    key={scene.id || i}
+                    onClick={() => {
+                      if (isAdded) {
+                        setChars(prev => {
+                          const filtered = prev.filter(c => c?.remoteUrl !== scene.image_url);
+                          while (filtered.length < 2) filtered.push(null);
+                          return filtered;
+                        });
+                      } else if (chars.length < MAX_PHOTOS) {
+                        const newChar = { url: scene.image_url, remoteUrl: scene.image_url, name: `Scene ${scene.scene_number}`, description: '' };
+                        setChars(prev => {
+                          const emptyIdx = prev.findIndex(c => c === null);
+                          if (emptyIdx !== -1) { const a = [...prev]; a[emptyIdx] = newChar; return a; }
+                          return [...prev, newChar];
+                        });
+                      }
+                    }}
+                    style={{
+                      borderRadius: 8, overflow: 'hidden', aspectRatio: '16/9',
+                      border: isAdded ? '2px solid #22c55e' : '2px solid #1f2937',
+                      cursor: 'pointer', position: 'relative', transition: 'border-color 0.15s',
+                      opacity: isAdded ? 1 : 0.7,
+                    }}
+                  >
+                    <img src={scene.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(to top,rgba(0,0,0,0.85),transparent)', padding: '12px 6px 4px', fontSize: 10, color: '#ccc', textAlign: 'center' }}>
+                      Scene {scene.scene_number}
+                    </div>
+                    {isAdded && (
+                      <div style={{ position: 'absolute', top: 4, right: 4, background: '#22c55e', borderRadius: '50%', width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <CheckCircle size={12} color="#fff" />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <p style={{ color: '#6b7280', fontSize: 11, marginTop: 6 }}>
+              {chars.filter(c => c?.remoteUrl).length} scene image{chars.filter(c => c?.remoteUrl).length !== 1 ? 's' : ''} selected · You can also upload additional photos below
+            </p>
+          </div>
+        )}
+
         {/* Character Photos (required, min 2, max 14) */}
         <div style={{ marginBottom: 26 }}>
           <label style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 10 }}>
-            Key Images from Video <span style={{ color: '#ef4444' }}>* (min 2, up to {MAX_PHOTOS})</span>
+            {sceneImages?.length > 0 ? 'Additional Uploads' : 'Key Images from Video'} <span style={{ color: '#ef4444' }}>* (min 2, up to {MAX_PHOTOS})</span>
           </label>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 12 }}>
             {chars.map((char, i) => (
