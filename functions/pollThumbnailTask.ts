@@ -49,16 +49,36 @@ Deno.serve(async (req) => {
       }
       if (!url) url = pollData?.data?.imageUrl || pollData?.data?.image_url || pollData?.data?.url;
 
-      if (url && concept_id) {
+      // Re-upload to Base44 storage for CORS-safe access
+      let persistentUrl = url;
+      if (url) {
+        try {
+          console.log('📦 Re-uploading to Base44 storage...');
+          const imgResp = await fetch(url);
+          if (imgResp.ok) {
+            const imgBlob = await imgResp.blob();
+            const imgFile = new File([imgBlob], `thumbnail_${concept_id || 'poll'}_${Date.now()}.png`, { type: imgBlob.type || 'image/png' });
+            const uploadResult = await base44.integrations.Core.UploadFile({ file: imgFile });
+            if (uploadResult?.file_url) {
+              persistentUrl = uploadResult.file_url;
+              console.log('✅ Re-uploaded:', persistentUrl);
+            }
+          }
+        } catch (e) {
+          console.warn('Re-upload failed (using KIE URL):', e.message);
+        }
+      }
+
+      if (concept_id) {
         try {
           await base44.entities.ThumbnailConcepts.update(concept_id, {
-            image_url: url, status: 'complete', is_selected: true,
+            image_url: persistentUrl, status: 'complete', is_selected: true,
           });
           console.log('✅ Saved to concept');
         } catch (e) { console.warn('Save error:', e.message); }
       }
 
-      return Response.json({ success: true, completed: true, image_url: url });
+      return Response.json({ success: true, completed: true, image_url: persistentUrl });
     }
 
     if (state === 'fail') {
