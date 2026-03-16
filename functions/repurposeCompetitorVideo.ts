@@ -369,18 +369,25 @@ Respond with ONLY valid JSON:
 
     let result;
     try {
-      result = JSON.parse(text);
+      let parsed = JSON.parse(text);
+      // Handle if Gemini returns an array instead of object
+      if (Array.isArray(parsed)) {
+        parsed = parsed[0] || {};
+      }
+      result = parsed;
     } catch (parseErr) {
       // Try to extract JSON from markdown
       const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (jsonMatch) {
-        result = JSON.parse(jsonMatch[1].trim());
+        let parsed = JSON.parse(jsonMatch[1].trim());
+        if (Array.isArray(parsed)) parsed = parsed[0] || {};
+        result = parsed;
       } else {
         console.error('[Repurpose] JSON parse failed:', parseErr.message);
         return Response.json({ error: 'Failed to parse AI response' }, { status: 500 });
       }
     }
-    console.log(`[Repurpose] Parsed result keys: ${Object.keys(result).join(', ')}`);
+    console.log(`[Repurpose] Parsed result keys: ${Object.keys(result).join(', ')}, title: ${(result.title || '').slice(0, 80)}`);
 
     const topicTitle = result.title || `Repurposed: ${video_title}`;
     const fullNotes = [
