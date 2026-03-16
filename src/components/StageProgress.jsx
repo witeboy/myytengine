@@ -1,12 +1,24 @@
 import React from 'react';
-import { BookOpen, Image, Film, Home, Megaphone } from 'lucide-react';
+import { BookOpen, Image, Film, Home, Megaphone, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { base44 } from '@/api/base44Client';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
 
 export default function StageProgress({ currentStage = 1, projectStatus }) {
   const navigate = useNavigate();
   const projectId = new URLSearchParams(window.location.search).get('project_id');
+
+  const { data: project } = useQuery({
+    queryKey: ['project-nav', projectId],
+    queryFn: async () => {
+      const list = await base44.entities.Projects.filter({ id: projectId });
+      return list[0];
+    },
+    enabled: !!projectId,
+    staleTime: 60000,
+  });
 
   const stages = [
     { num: 1, label: 'Story Generation', Icon: BookOpen, page: 'StoryTopics' },
@@ -77,14 +89,25 @@ export default function StageProgress({ currentStage = 1, projectStatus }) {
     <div className="bg-white border-b shadow-sm">
       <div className="max-w-5xl mx-auto px-4 py-3">
         <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate(createPageUrl('Dashboard'))}
-            className="flex-shrink-0"
-          >
-            <Home className="w-5 h-5" />
-          </Button>
+          {project?.channel_id ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate(createPageUrl(`ChannelDetail?channel_id=${project.channel_id}`))}
+              className="flex-shrink-0 gap-1 text-xs"
+            >
+              <ArrowLeft className="w-4 h-4" /> Channel
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate(createPageUrl('Dashboard'))}
+              className="flex-shrink-0"
+            >
+              <Home className="w-5 h-5" />
+            </Button>
+          )}
           <div className="flex items-center gap-2 flex-1">
             {stages.map((stage, idx) => (
               <div key={stage.num} className="contents">
