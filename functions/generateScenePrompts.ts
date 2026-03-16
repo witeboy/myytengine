@@ -126,6 +126,7 @@ function normalizeStyleKey(raw) {
   for (const key of Object.keys(styleMap)) {
     if (normalized.includes(key) || key.includes(normalized)) { console.log(`✅ Fuzzy match: ${key}`); return key; }
   }
+  if (normalized.includes('roblox')) { console.log(`✅ Keyword match: roblox`); return 'roblox'; }
   if (normalized.includes('skeleton')) { console.log(`✅ Keyword match: skeleton_protagonist`); return 'skeleton_protagonist'; }
   console.warn(`❌ No match for "${raw}" → "${normalized}"`);
   return 'cinematic_realistic';
@@ -192,6 +193,10 @@ const styleMap = {
   low_poly_3d_cartoon: {
     positive: "Stylized low-poly 3D cartoon, all geometry from visible flat-shaded polygons and triangular facets. Realistic human proportions with geometric stylization. Angular facial features, expressive eyes, defined eyebrows. Geometric hair, warm peach-tan skin with polygon-edge shading. Clothing with visible folds and flat polygon faces. All environments built from flat-shaded polygons. Vibrant saturated colors, clean polygon edges, no smoothing, matte clay-toy quality, soft ambient occlusion, sharp focused background with all elements in focus, deep depth of field, Pixar expressiveness with geometric stylization",
    negative: "photorealistic, photograph, smooth high-poly, hyperrealistic, film grain, lens flare, bokeh, blurred background, shallow depth of field, out of focus background, anime, cel-shaded, 2D flat, hand-drawn, sketch, watercolor, oil painting, dark horror, neon cyberpunk, abstract, pixel art, voxel art, wireframe, monochrome, desaturated, ray-traced, photogrammetry, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature, funko pop"  },
+  roblox: {
+    positive: "Roblox-style 3D blocky character with cube-shaped head, rectangular torso and limbs, simple 2D cartoon face painted on the cube head (two round dot eyes, small curved mouth), bright flat-shaded matte plastic colors, toy-like R15 avatar proportions, clean geometric edges, no smoothing, Roblox game aesthetic, studio lighting, vibrant saturated colors",
+    negative: "photorealistic, photograph, realistic anatomy, detailed muscles, curved joints, high-poly mesh, smooth skin, realistic face, wrinkles, pores, film grain, bokeh, lens flare, anime, watercolor, oil painting, sketch, dark horror, scary, complex textures, realistic hair strands, chibi, funko pop"
+  },
   skeleton_protagonist: {
    positive: "wide shot showing complete scene, photorealistic detailed environment with sharp focused background, multiple people in frame, cinematic establishing shot composition, golden hour volumetric lighting, HDR cinematic lens, warm amber grading, masterpiece quality",
    negative: "cartoon skeleton, halloween decoration, flat 2D, anime, comic, x-ray medical, horror gore, neon, plastic toy, low quality, blurry, abstract, minimalist, sketch, painting, chibi, dia de los muertos, empty dark eye sockets, bare bones without transparent body, scary horror skeleton, torso only, bust shot, head and shoulders only, cropped at waist, isolated character on blank background, portrait crop, close-up, macro, extreme close-up, chest detail, upper body only, dark background, black background"
@@ -294,6 +299,12 @@ function getStyleSceneBodyRules(styleName) {
 
       objects: "All objects as low-poly geometric forms — boxy cars, yellow disc headlights, chrome bumpers, mailboxes, fire hydrants, street lamps. Every surface shows polygon edges and flat-shaded faces. Matte plastic quality like clay toys.",
       rendering: "Clean polygon edges on all surfaces, flat-shaded with no smoothing (signature faceted look). Soft ambient occlusion, gentle directional shadows, no outlines or cel-shading. Bright gradient sky, geometric cloud clusters. Vibrant saturated colors, warm and inviting."
+    },
+    roblox: {
+      characters: "Roblox-style 3D blocky characters with cube-shaped heads, rectangular torso and rectangular limbs. Simple 2D cartoon faces painted on the cube head: two round dot eyes and a small curved mouth. Bright flat-shaded matte plastic skin colors (yellow, beige, tan, brown). Clothing rendered as 2D texture mapped onto rectangular body parts. R15 avatar proportions: head ~1 unit, torso ~1.3 units, arms ~1.3 units, legs ~1.6 units. NO realistic anatomy, NO curved joints, NO detailed muscles.",
+      environments: "Bright colorful Roblox-style 3D environments with clean geometric shapes, flat-shaded surfaces, vibrant saturated colors. Simplified blocky architecture, smooth plastic-like textures, toy-like world aesthetic. Environments should feel like Roblox game worlds — obby courses, tycoon maps, roleplay towns.",
+      objects: "All objects as simplified geometric 3D shapes — blocky cars, rectangular buildings, cylindrical trees, cube furniture. Flat-shaded matte plastic finish, bright saturated colors, no complex textures or realistic materials.",
+      rendering: "Roblox game engine aesthetic — clean geometric edges, flat shading with no smoothing, bright studio lighting, vibrant saturated colors. No film grain, no bokeh, no lens effects. Think toy-like plastic world with matte finish."
     },
     skeleton_protagonist: {
       characters: "Protagonist in EVERY scene: photorealistic transparent skeleton with clear glass-like body shell, glossy ivory bones visible through translucent torso, big round expressive brown/amber EYEBALLS in skull sockets. MUST be shown according to director's notes — standing, sitting, kneeling, walking, running. Wears context-appropriate clothing. Must be DOING an action (holding objects, gesturing, interacting with people). Other characters are photorealistic normal humans shown alongside or interacting with the skeleton.",
@@ -695,6 +706,8 @@ Deno.serve(async (req) => {
         `3D whiteboard cartoon ${bodyDesc} with bold outlines, ${faceDesc}, flat color fills, normal proportions, warm peach-brown skin`,
      low_poly_3d_cartoon: (bodyDesc, faceDesc) =>
         `low-poly 3D ${bodyDesc} from flat-shaded polygons, ${faceDesc}, angular geometric features, matte clay-toy quality`,
+      roblox: (bodyDesc, faceDesc) =>
+        `Roblox-style 3D blocky ${bodyDesc} with cube head, rectangular torso and limbs, simple 2D cartoon face (two round eyes, curved mouth) painted on the cube head, ${faceDesc}, bright flat-shaded colors, toy-like plastic matte finish, R15 avatar proportions`,
       skeleton_protagonist: (bodyDesc, faceDesc) =>
         `photorealistic transparent skeleton with clear glass-like body shell, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets`
     };
