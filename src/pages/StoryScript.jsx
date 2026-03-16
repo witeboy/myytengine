@@ -78,9 +78,15 @@ export default function StoryScript() {
           }
           await refetchScripts();
 
+          // Step 1: Create batch outlines
           await base44.functions.invoke('initializeScriptBatches', {
             project_id: projectId,
-            selected_hook_id: project.selected_hook_id,
+          });
+          await refetchBatches();
+
+          // Step 2: Generate content for each batch
+          await base44.functions.invoke('generateScriptBatches', {
+            project_id: projectId,
           });
 
           await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
@@ -147,9 +153,15 @@ export default function StoryScript() {
     setRegenerating(false);
 
     try {
+      // Step 1: Re-initialize batch outlines
+      await base44.functions.invoke('initializeScriptBatches', {
+        project_id: projectId,
+      });
+      await refetchBatches();
+
+      // Step 2: Generate content for each batch
       await base44.functions.invoke('generateScriptBatches', {
         project_id: projectId,
-        selected_hook_id: project.selected_hook_id,
       });
       await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
     } catch (err) {
