@@ -8,7 +8,6 @@ import {
   CheckCircle, Loader2, HardDrive
 } from 'lucide-react';
 import { saveExportedVideo } from '@/utils/videoStorage';
-import { saveExportedVideo } from '@/utils/videoStorage';
 
 const PHASE_LABELS = {
   checking: 'Checking browser support...',
