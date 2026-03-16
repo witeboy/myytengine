@@ -58,7 +58,10 @@ BODY (adapt based on what's visible in the reference photo):
     - If FULL BODY is visible: use the person's exact body proportions, build, and frame for the output.
     - If only UPPER BODY/TORSO is visible: match the visible build, shoulder width, arm size, and skin tone. Complete the lower body proportionally — use the template's pose/stance as a guide, but keep proportions consistent with the visible upper body.
     - If only HEAD/SHOULDERS or FACE is visible: match the neck width, shoulder hints, and skin tone. Infer a proportional body type from facial fullness and visible cues. Use the template character's pose, stance, and outfit as the body guide, but adjust proportions to look natural for the reference person's face.
-11. CLOTHING: If the reference photo shows the person's clothing/outfit, use THEIR clothing — not the template character's outfit. Keep the person in whatever they are wearing in the reference photo. If only a face/headshot is visible with no clothing context, then use the template character's outfit as a fallback, but adjusted to fit the reference person's body type naturally.
+11. CLOTHING: Follow this priority order for each character's outfit:
+    a) If the USER PROVIDED a clothing description for this character, use EXACTLY that description (see CHARACTER CLOTHING NOTES below).
+    b) If no description was provided but the reference photo shows clothing, use the clothing visible in the reference photo.
+    c) If no description was provided and only a face/headshot is visible, dress the character in clothing that fits the video's story context and mood.
 12. HANDS & ARMS: If the reference shows hands/arms, match skin tone and proportions. If not visible, generate hands that match the person's skin tone and body build.
 
 WHAT TO KEEP FROM THE TEMPLATE (Image 1):
