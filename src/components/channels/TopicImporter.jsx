@@ -52,41 +52,57 @@ export default function TopicImporter({ open, onOpenChange, channel, onImported 
       return;
     }
 
-    // Use AI to find semantic duplicates
-    setPhase('AI is comparing topics for duplicates...');
+    // Use AI to find duplicates: both within new list AND against existing
+    setPhase('AI is scanning for duplicates...');
     const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `You are a duplicate detector for YouTube video topics.
+      prompt: `You are a strict duplicate detector for YouTube video topics. You must perform TWO checks:
+
+CHECK 1 — DUPLICATES WITHIN THE NEW IMPORT LIST:
+Compare all new topics against each other. 
+- If two new topics are word-for-word identical OR ~80%+ verbatim the same → mark as "auto_remove" (the second/later one gets removed automatically).
+- If two new topics cover the same idea but with different wording (less than 80% verbatim) → mark as "internal_flag" so user can decide.
+
+CHECK 2 — DUPLICATES AGAINST EXISTING CHANNEL TOPICS:
+Compare each remaining new topic against existing topics.
+- If a new topic is word-for-word identical OR ~80%+ verbatim the same as an existing → mark as "auto_remove_existing".
+- If a new topic covers the same idea as an existing but with different wording → mark as "flag_existing" so user can decide.
 
 EXISTING TOPICS in this channel:
-${existingTitles.map((t, i) => `${i + 1}. "${t.title}" (id: ${t.id})`).join('\n')}
+${existingTitles.length > 0 ? existingTitles.map((t, i) => `${i + 1}. "${t.title}" (id: ${t.id})`).join('\n') : '(none)'}
 
-NEW TOPICS being imported:
+NEW TOPICS being imported (in order):
 ${titles.map((t, i) => `${i + 1}. "${t}"`).join('\n')}
 
-For each NEW topic, check if there's an existing topic that covers the SAME subject or is essentially a duplicate/very similar idea. Minor wording differences still count as duplicates. But topics about different aspects of the same broad niche are NOT duplicates.
+IMPORTANT: Topics about different aspects of the same broad niche are NOT duplicates. Only flag truly redundant topics.
 
-Return a JSON object with:
-- "matches": array of objects for each duplicate found: {"new_title": string, "existing_title": string, "existing_id": string, "reason": string}
-- "unique": array of new topic title strings that have NO duplicate in existing topics`,
+Return JSON:
+{
+  "auto_removed_internal": [{"kept": "title kept", "removed": "title auto-removed", "reason": "why"}],
+  "auto_removed_existing": [{"new_title": "...", "existing_title": "...", "existing_id": "...", "reason": "why"}],
+  "flagged_existing": [{"new_title": "...", "existing_title": "...", "existing_id": "...", "reason": "why"}],
+  "flagged_internal": [{"title_a": "...", "title_b": "...", "reason": "why"}],
+  "unique": ["list of new titles that passed all checks and are not auto-removed"]
+}`,
       response_json_schema: {
         type: "object",
         properties: {
-          matches: {
+          auto_removed_internal: {
             type: "array",
-            items: {
-              type: "object",
-              properties: {
-                new_title: { type: "string" },
-                existing_title: { type: "string" },
-                existing_id: { type: "string" },
-                reason: { type: "string" }
-              }
-            }
+            items: { type: "object", properties: { kept: { type: "string" }, removed: { type: "string" }, reason: { type: "string" } } }
           },
-          unique: {
+          auto_removed_existing: {
             type: "array",
-            items: { type: "string" }
-          }
+            items: { type: "object", properties: { new_title: { type: "string" }, existing_title: { type: "string" }, existing_id: { type: "string" }, reason: { type: "string" } } }
+          },
+          flagged_existing: {
+            type: "array",
+            items: { type: "object", properties: { new_title: { type: "string" }, existing_title: { type: "string" }, existing_id: { type: "string" }, reason: { type: "string" } } }
+          },
+          flagged_internal: {
+            type: "array",
+            items: { type: "object", properties: { title_a: { type: "string" }, title_b: { type: "string" }, reason: { type: "string" } } }
+          },
+          unique: { type: "array", items: { type: "string" } }
         }
       }
     });
@@ -94,13 +110,26 @@ Return a JSON object with:
     setImporting(false);
     setPhase('');
 
-    if (result.matches && result.matches.length > 0) {
-      setDuplicates(result);
-      setSelectedDupes(new Set(result.matches.map((_, i) => i))); // select all by default
+    const autoInternal = result.auto_removed_internal || [];
+    const autoExisting = result.auto_removed_existing || [];
+    const flaggedExisting = result.flagged_existing || [];
+    const flaggedInternal = result.flagged_internal || [];
+    const unique = result.unique || [];
+
+    const hasFlags = flaggedExisting.length > 0 || flaggedInternal.length > 0;
+    const hasAutoRemoved = autoInternal.length > 0 || autoExisting.length > 0;
+
+    if (hasFlags || hasAutoRemoved) {
+      setDuplicates({ autoInternal, autoExisting, flaggedExisting, flaggedInternal, unique });
+      // Pre-select all flagged for deletion by default
+      const allFlags = [
+        ...flaggedExisting.map((_, i) => `existing_${i}`),
+        ...flaggedInternal.map((_, i) => `internal_${i}`),
+      ];
+      setSelectedDupes(new Set(allFlags));
       setStep('review');
     } else {
-      // No duplicates — import all
-      await doImport(titles);
+      await doImport(unique.length > 0 ? unique : titles);
     }
   };
 
