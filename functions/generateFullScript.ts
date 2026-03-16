@@ -35,19 +35,36 @@ Deno.serve(async (req) => {
 
     // Merge all batch content and aggressively strip any non-narration content
     let fullScript = batches.map(b => b.content).join("\n\n");
-    // Remove all bracketed tags
+
+    // Remove all bracketed tags [anything in brackets]
     fullScript = fullScript.replace(/\[[^\]]*\]/gi, '');
-    // Remove **VISUAL:** / **AUDIO:** / **MUSIC:** etc. lines
-    fullScript = fullScript.replace(/\*\*(VISUAL|AUDIO|MUSIC|SOUND|SFX|TRANSITION|CUT TO|FADE|NOTE|DIRECTION|CAMERA|IMAGE)[:\s]?\*\*[^\n]*/gi, '');
+
+    // Remove ALL parenthetical directions (B-roll, montage, music, cuts, transitions, visuals, sounds, etc.)
+    fullScript = fullScript.replace(/\([^)]*\)/g, '');
+
+    // Remove **VISUAL:** / **AUDIO:** / **MUSIC:** etc. lines (bold markdown)
+    fullScript = fullScript.replace(/\*\*(VISUAL|AUDIO|MUSIC|SOUND|SFX|TRANSITION|CUT TO|FADE|NOTE|DIRECTION|CAMERA|IMAGE|B-ROLL|MONTAGE|SCENE|SHOT|EFFECT)[:\s]?\*\*[^\n]*/gi, '');
+
     // Remove standalone direction lines without bold markers
-    fullScript = fullScript.replace(/^(VISUAL|AUDIO|MUSIC|SOUND|SFX|TRANSITION|CUT TO|FADE|CAMERA)\s*:.*$/gim, '');
-    // Remove timestamp patterns like (0:00-2:00)
+    fullScript = fullScript.replace(/^(VISUAL|AUDIO|MUSIC|SOUND|SFX|TRANSITION|CUT TO|FADE|CAMERA|B-ROLL|MONTAGE|SCENE|SHOT|EFFECT)\s*:.*$/gim, '');
+
+    // Remove lines that are purely stage directions (start with action words)
+    fullScript = fullScript.replace(/^(Cut to|Fade to|Fade in|Fade out|Dissolve to|Smash cut|Jump cut|Transition to|Pan to|Zoom in|Zoom out|Close[- ]up|Wide shot|Medium shot)\b.*$/gim, '');
+
+    // Remove timestamp patterns like (0:00-2:00) or 0:00 - 2:00
     fullScript = fullScript.replace(/\(?\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\)?/g, '');
-    // Remove "Narrator:", "VO:" labels
+
+    // Remove "Narrator:", "VO:", "Voiceover:" labels
     fullScript = fullScript.replace(/^(Narrator|VO|Voiceover)\s*:\s*/gim, '');
-    // Remove bold markdown headers like **Act 1:** or **Opening:**
+
+    // Remove bold markdown headers like **Act 1:** or **Opening:** or **Phase 3:**
     fullScript = fullScript.replace(/^\*\*[^*]+\*\*:?\s*$/gim, '');
-    // Clean up extra blank lines
+
+    // Remove any remaining markdown bold/italic markers
+    fullScript = fullScript.replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1');
+
+    // Clean up extra spaces and blank lines
+    fullScript = fullScript.replace(/  +/g, ' ');
     fullScript = fullScript.replace(/\n{3,}/g, '\n\n').trim();
 
     // ── DEDUPLICATION: Remove repeated sentences ──
