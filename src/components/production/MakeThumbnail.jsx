@@ -509,6 +509,15 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
 
       if (imageUrl) {
         setGeneratedUrl(imageUrl);
+      } else if (result?.pending && result?.task_id) {
+        // Generation still in progress — poll for result
+        console.log('Generation pending, polling task:', result.task_id);
+        const pollResult = await pollForTaskResult(result.task_id, result.concept_id);
+        if (pollResult?.image_url) {
+          setGeneratedUrl(pollResult.image_url);
+        } else {
+          throw new Error(pollResult?.error || 'Generation timed out. Please try again.');
+        }
       } else if (result?.error) {
         throw new Error(result.error);
       } else {
