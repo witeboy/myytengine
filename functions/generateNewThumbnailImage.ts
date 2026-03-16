@@ -65,6 +65,15 @@ WHAT TO CHANGE:
 - Replace ALL people in the template with the person(s) from the reference photo(s)
 - The expression should match what the template person was doing (shocked face → reference person with shocked face, etc.) but with the reference person's REAL facial features
 
+OBJECT REPLACEMENT (CRITICAL FOR RELEVANCE):
+- If the template contains OBJECTS that are not relevant to this video's story, REPLACE them with story-relevant objects
+- For example: if the template shows a car but our story is about Bitcoin, replace the car with Bitcoin/crypto imagery
+- If the template shows a house but our story is about stocks, replace with stock charts or money imagery
+- Keep the same SIZE, POSITION, and FRAMING of the original object — just swap what the object IS
+- The replacement object must look photorealistic and naturally composited into the scene
+- If the template uses split-screen/before-after layout, maintain that structure but with story-relevant content on each side
+- Study the image_prompt for extracted objects and ensure they appear in the final image
+
 ${(() => {
       const descs = (charDescriptions || []).filter((d, i) => d && d.trim());
       if (descs.length === 0) return '';
@@ -96,10 +105,22 @@ OUTPUT REQUIREMENTS:
 - Professional studio-grade compositing quality`;
 
   } else if (hasTemplate && !hasPhotos) {
-    // Template only — just swap text
+    // Template only — swap text AND replace objects with story-relevant ones
     return `You have been given 1 image — a YouTube thumbnail template.
 
-Recreate this EXACT thumbnail with every element identical: same people, same background, same colors, same lighting, same composition, same decorative elements.
+Recreate this thumbnail with the same overall layout, composition, lighting, and energy.
+
+OBJECT REPLACEMENT (CRITICAL FOR STORY RELEVANCE):
+Study the image_prompt carefully for the story context and extracted objects. Then:
+- IDENTIFY all major objects in the template (products, items, symbols, props)
+- REPLACE these objects with the STORY-RELEVANT objects described in the concept
+- Example: Template has generic product → replace with the specific subject of our video (crypto coin, stock chart, food item, etc.)
+- Keep the same SIZE, POSITION, and FRAMING — just change WHAT the object is
+- If the template uses split-screen or before/after layout, keep that structure but fill each side with story-appropriate imagery
+- People in the template can stay (with appropriate expressions) unless the story requires different characters
+
+STORY CONTEXT FROM IMAGE PROMPT:
+${imagePrompt}
 
 TEXT REPLACEMENT (CRITICAL):
 - REMOVE every single piece of text from the template: all titles, subtitles, channel names, cast names, studio names, watermarks, badges with text, and any other written words. The output must have ZERO original text.
