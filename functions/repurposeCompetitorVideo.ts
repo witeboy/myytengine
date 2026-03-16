@@ -204,18 +204,21 @@ async function getTranscriptInnerTube(videoId) {
     // Fall back to XML
     console.log(`[Transcript T1.5] Trying XML fallback`);
     const captionRes = await fetch(baseUrl);
+    console.log(`[Transcript T1.5] XML status: ${captionRes.status}`);
     const captionXml = await captionRes.text();
+    console.log(`[Transcript T1.5] XML length: ${captionXml.length}, starts with: ${captionXml.slice(0, 100)}`);
     const textParts = [];
     const textRegex = /<text[^>]*>(.*?)<\/text>/gs;
-    let match;
-    while ((match = textRegex.exec(captionXml)) !== null) {
-      const text = match[1]
+    let xmlMatch;
+    while ((xmlMatch = textRegex.exec(captionXml)) !== null) {
+      const t = xmlMatch[1]
         .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
         .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
         .replace(/<[^>]+>/g, '').trim();
-      if (text) textParts.push(text);
+      if (t) textParts.push(t);
     }
     const transcript = textParts.join(' ').replace(/\s+/g, ' ').trim();
+    console.log(`[Transcript T1.5] XML extracted ${transcript.length} chars from ${textParts.length} segments`);
     return transcript.length > 50 ? transcript : null;
   } catch (e) {
     console.log(`[Transcript T1.5] Error: ${e.message}`);
