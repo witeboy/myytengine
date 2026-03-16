@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   Upload, Search, Image, Film, Music, Trash2, Tag, Filter, Loader2,
-  FolderOpen, X, Eye, ArrowLeft, CheckSquare
+  FolderOpen, X, Eye, ArrowLeft, Check
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
