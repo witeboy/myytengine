@@ -194,25 +194,31 @@ export default function useVideoExport() {
     return { supported: true, warning: true, reason: `${quality} H.264 encoding may not be fully supported.`, codec: profiles[0] };
   }, []);
 
+  // Domains known to block CORS — skip the HEAD check and go straight to proxy
+  const CORS_BLOCKED_DOMAINS = ['tempfile.aiquickdraw.com', 'api.kie.ai'];
+
   // Resolve a URL through the proxy if needed, returns a CORS-safe URL
   const resolveUrl = async (url) => {
-    // Try direct fetch first
-    try {
-      const resp = await fetch(url, { method: 'HEAD', mode: 'cors' });
-      if (resp.ok) return url;
-    } catch {}
+    const hostname = new URL(url).hostname;
+    const needsProxy = CORS_BLOCKED_DOMAINS.some(d => hostname.includes(d));
+    // If not a known CORS-blocked domain, try direct
+    if (!needsProxy) {
+      try {
+        const resp = await fetch(url, { method: 'HEAD', mode: 'cors' });
+        if (resp.ok) return url;
+      } catch {}
+    }
     // Use proxy to re-upload to Base44 storage
     try {
       const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url });
       const data = proxyRes.data || proxyRes;
       if (data.success && data.file_url) return data.file_url;
-      // Legacy base64 fallback
       if (data.success && data.data) {
         const bytes = Uint8Array.from(atob(data.data), c => c.charCodeAt(0));
         return URL.createObjectURL(new Blob([bytes], { type: data.content_type || 'application/octet-stream' }));
       }
     } catch (e) { console.warn(`Proxy resolve failed: ${url.substring(0,60)} — ${e.message}`); }
-    return url; // return original as last resort
+    return url;
   };
 
   const loadImage = async (url) => {
