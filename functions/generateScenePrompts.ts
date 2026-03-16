@@ -1511,12 +1511,8 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
                 const fbIdx = fallback.indexOf(fbMatch[0]);
                 const fbBefore = fallback.substring(0, fbIdx);
                 const fbAfter = fallback.substring(fbIdx + fbMatch[0].length);
-                const fbHasVerb = /^\s*(is|was|sits|stands|walks|runs|holds|stares|looks|leans|clutch|sitting|standing|walking|holding)/i.test(fbAfter);
-                if (fbHasVerb) {
-                  fallback = `${fbBefore}${fbMatch[0]}, ${pTiers.moderate},${fbAfter}`;
-                } else {
-                  fallback = `${fbBefore}${pTiers.moderate}${fbAfter}`;
-                }
+                // Always substitute — never appositive
+                fallback = `${fbBefore}${pTiers.moderate}${fbAfter}`;
               }
             }
           }
