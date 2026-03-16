@@ -3,7 +3,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useNavigate, Link } from 'react-router-dom';
-import { Link } from 'react-router-dom';
 import {
   TrendingUp, Clock, CheckCircle2, PlayCircle, FileText,
   ArrowRight, Pause, BarChart3
