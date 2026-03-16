@@ -76,45 +76,54 @@ Deno.serve(async (req) => {
     console.log(`Project: ${durationMinutes} min → ${totalTargetWords} words → ${numBatches} batches`);
     console.log(`Batch targets: ${batchTargets.join(', ')}`);
 
-    // ── STORYTELLING FORMAT STRUCTURE ──
-    const formatStructures = {
-      'Big Lie': {
-        acts: ['The Hook & The Lie', 'Building The Case', 'Cracks In The Story', 'The Truth Revealed', 'The Real Impact'],
-        guidance: 'Start with a bold, widely-believed claim. Build evidence supporting it. Then systematically dismantle it with the shocking truth. End with why this matters.'
-      },
-      'Zero to Hero': {
-        acts: ['The Humble Beginning', 'The Catalyst', 'The Struggle & Growth', 'The Breakthrough', 'The Legacy'],
-        guidance: 'Start with the lowest point or most ordinary beginning. Show what triggered the journey. Detail the struggles and setbacks. Build to the triumph. End with lasting impact.'
-      },
-      'Timeline': {
-        acts: ['The Origins', 'Early Development', 'The Turning Points', 'The Modern Era', 'The Future'],
-        guidance: 'Start at the very beginning with rich historical context. Progress chronologically through key eras. Highlight pivotal moments that changed everything. Connect to the present and future.'
-      },
-      'Mystery': {
-        acts: ['The Puzzle', 'The Clues', 'The Investigation', 'The Revelation', 'The Aftermath'],
-        guidance: 'Open with an unsolved question or mystery. Present clues and red herrings. Build tension through investigation. Deliver a satisfying reveal. Show the consequences.'
-      },
-      'default': {
-        acts: ['The Opening', 'Setting The Stage', 'The Core Story', 'The Climax', 'The Resolution'],
-        guidance: 'Hook the viewer immediately. Provide essential context. Tell the main narrative with rising tension. Hit the emotional peak. Close with lasting impact.'
-      }
+    // ── TVF (TL VIRAL FORMULA) — 8 PHASES ──
+    // These phases are the backbone of every viral script.
+    // The AI will map them across however many batches the duration requires.
+    const TVF_PHASES = [
+      { phase: 'HOOK', purpose: 'Open with a powerful attention trigger — shocking statement, contrarian truth, bold question, dramatic result, or hidden secret. The viewer must immediately think: "I need to hear this." This is the most critical 5-10 seconds.' },
+      { phase: 'RELATABLE SITUATION', purpose: 'Describe a moment the audience recognizes from real life — a mistake, frustration, confusing situation, or hidden problem they did not notice. This creates deep psychological connection and makes viewers feel personally involved.' },
+      { phase: 'TENSION / CURIOSITY GAP', purpose: 'Reveal that something is misunderstood or hidden. Use patterns like "But here is what nobody tells you..." or "Most people think this works… but it actually does the opposite." This is the engine that keeps viewers watching.' },
+      { phase: 'INSIGHT / REFRAME', purpose: 'Introduce the key concept or realization. Explain WHY the problem exists. This is the "aha moment" — the viewer should feel their understanding shift. Make it feel like a revelation, not a lecture.' },
+      { phase: 'PRACTICAL BREAKDOWN', purpose: 'Provide actionable steps, strategies, or lessons. Use step-by-step solutions, simple frameworks, real-world examples, comparisons, or quick demonstrations. Deliver concrete value the viewer can use immediately.' },
+      { phase: 'TRANSFORMATION', purpose: 'Paint the outcome if the viewer applies the idea. Show the change arc: problem → solution → improvement. Make the viewer visualize their life being better. Use before/after contrast.' },
+      { phase: 'POWER CLOSE', purpose: 'Deliver a memorable insight, warning, or perspective shift. This is the line viewers screenshot and share — a mindset change, hidden truth, or big-picture lesson that recontextualizes everything.' },
+      { phase: 'CTA', purpose: 'Encourage the audience to continue engaging — watch another video, subscribe, apply the lesson, comment their experience. Make it feel like a natural extension of the story, not a bolt-on request.' },
+    ];
+
+    // Storytelling format still influences the FLAVOR of each phase
+    const formatFlavors = {
+      'Big Lie':     'Frame the HOOK around a widely-believed lie. The TENSION reveals cracks. The INSIGHT exposes the truth. The TRANSFORMATION shows life after knowing the truth.',
+      'Zero to Hero': 'Frame the HOOK around the lowest point. The RELATABLE SITUATION is the struggle everyone relates to. The INSIGHT is the catalyst moment. The TRANSFORMATION is the triumphant rise.',
+      'Timeline':    'Frame the HOOK around a pivotal historical moment. Progress chronologically through phases. The INSIGHT is the turning point that changed everything. The POWER CLOSE connects past to present.',
+      'Mystery':     'Frame the HOOK as an unsolved puzzle. The TENSION builds through clues and red herrings. The INSIGHT is the revelation. The POWER CLOSE shows the aftermath and consequences.',
+      'default':     'Use the standard TVF flow. Adapt tone to the niche. Focus on maximum curiosity and retention throughout.',
     };
 
-    const format = formatStructures[project.storytelling_format] || formatStructures['default'];
+    const formatFlavor = formatFlavors[project.storytelling_format] || formatFlavors['default'];
 
-    // ── AI-GENERATED DETAILED OUTLINE ──
-    const outlinePrompt = `You are a world-class YouTube documentary scriptwriter. You need to create a DETAILED outline for a ${durationMinutes}-minute documentary.
+    // ── AI-GENERATED TVF OUTLINE ──
+    const phasesText = TVF_PHASES.map((p, i) => `  ${i + 1}. ${p.phase}: ${p.purpose}`).join('\n');
 
-**Topic**: ${topic?.title || project.name}
-**Topic Description**: ${topic?.description || 'No description available'}
-**Niche**: ${project.niche || 'General'}
-**Storytelling Format**: ${project.storytelling_format || 'Documentary'}
-**Format Guidance**: ${format.guidance}
-${selectedHook ? `**Opening Hook**: "${selectedHook.hook_text}"` : ''}
+    const outlinePrompt = `You are an elite viral content strategist and YouTube scriptwriter. You use the TL VIRAL FORMULA (TVF) — a proven 8-phase structure that maximizes curiosity, retention, and shareability.
 
-**Total Target**: ${totalTargetWords} words across ${numBatches} batches
+**THE 8 TVF PHASES** (every script MUST hit all 8 in order):
+${phasesText}
 
-The script will be split into ${numBatches} sequential batches. Each batch will be written separately, so the outline must give each batch enough detail to write ~${WORDS_PER_BATCH} words of rich narration.
+**STORYTELLING FLAVOR**: ${formatFlavor}
+
+**PROJECT**:
+- Topic: ${topic?.title || project.name}
+- Topic Description: ${topic?.description || 'No description available'}
+- Niche: ${project.niche || 'General'}
+- Storytelling Format: ${project.storytelling_format || 'Documentary'}
+- Duration: ${durationMinutes} minutes (~${totalTargetWords} words at 150 wpm)
+${selectedHook ? `- Opening Hook (MUST USE): "${selectedHook.hook_text}"` : ''}
+
+**YOUR TASK**: Map the 8 TVF phases across exactly ${numBatches} batches.
+
+${numBatches <= 3 ? `With ${numBatches} batches, combine multiple phases per batch. Example: Batch 1 = HOOK + RELATABLE SITUATION + TENSION, Batch 2 = INSIGHT + PRACTICAL BREAKDOWN, Batch 3 = TRANSFORMATION + POWER CLOSE + CTA.` : 
+numBatches <= 6 ? `With ${numBatches} batches, spread phases across batches. Some batches may cover 1-2 phases, giving room to go deep on each.` :
+`With ${numBatches} batches, you have room to dedicate full batches to the meatiest phases (PRACTICAL BREAKDOWN, INSIGHT) while combining shorter phases (HOOK+RELATABLE, POWER CLOSE+CTA).`}
 
 Return JSON:
 {
@@ -122,24 +131,27 @@ Return JSON:
     {
       "batch_number": 1,
       "story_segment": "Short segment title (3-5 words)",
+      "tvf_phases": ["HOOK", "RELATABLE SITUATION"],
       "focus_area": "Brief focus description (1 sentence)",
-      "synopsis": "EXTREMELY DETAILED synopsis for this batch. This must be 150-250 words covering: the exact narrative beats to hit, specific facts/events/anecdotes to include, the emotional tone and arc within this segment, key quotes or dialogue moments to weave in, how this segment opens and how it should end to transition to the next. The more detail here, the better the final script will be. Think of this as a mini-brief that a scriptwriter could use to write 1500 words of compelling narration WITHOUT needing any other reference material."
+      "synopsis": "EXTREMELY DETAILED synopsis (150-250 words). Must cover: exact narrative beats, specific facts/events/anecdotes, the emotional triggers to deploy (fear, curiosity, hope, urgency, surprise), how to create curiosity gaps within this batch, the pacing rhythm (when to be punchy vs flowing), specific 'scroll-stopping' moments to include, how this batch opens and how it ends with a cliffhanger or bridge to the next batch. Every sentence in the final script must EARN its place — no filler."
     }
   ]
 }
 
 **RULES:**
 - Generate exactly ${numBatches} batches
-- Batch 1 must open with a powerful hook that grabs attention in the first 10 seconds
-${selectedHook ? `- Batch 1 MUST incorporate this hook: "${selectedHook.hook_text}"` : ''}
-- Each synopsis must be 150-250 words of SPECIFIC detail — not vague descriptions
-- Include specific facts, names, dates, numbers, anecdotes, and emotional beats in each synopsis
-- Each batch should have a clear emotional arc (setup → tension → mini-payoff)
-- The last batch must end with a strong conclusion and call to action
-- Ensure narrative continuity — each batch should flow naturally into the next
-- The overall story should follow the "${project.storytelling_format || 'Documentary'}" format
-- Cover the COMPLETE story — do not leave major aspects unaddressed
-- Distribute the most compelling/dramatic content across batches, don't front-load everything`;
+- ALL 8 TVF phases must be covered across the batches — no phase skipped
+- The tvf_phases array shows which phases each batch covers
+${selectedHook ? `- Batch 1 MUST open with this hook: "${selectedHook.hook_text}"` : '- Batch 1 MUST open with the most powerful attention trigger possible — the viewer decides in 3 seconds'}
+- Each synopsis must be 150-250 words of SPECIFIC, actionable detail
+- Include specific emotional triggers for each batch: which emotions to hit and when
+- Every batch must contain at least ONE curiosity gap (tease what comes next)
+- Pacing mandate: mix punchy 3-7 word sentences with flowing 25-35 word ones
+- The PRACTICAL BREAKDOWN phase must deliver REAL, actionable value — not vague advice
+- The POWER CLOSE must contain a line worth screenshotting — a truth bomb or perspective shift
+- Ensure narrative continuity — each batch ends with a hook pulling into the next
+- The CTA must feel like a natural part of the story, not a bolted-on request
+- No filler, no generic buzzwords, no "in today's video" — every word must earn its place`;
 
     console.log("Generating detailed outline...");
     const outlineResult = await callGemini(outlinePrompt, 0.7);
