@@ -7,6 +7,7 @@ import { Loader2, ImageIcon, Film, Settings2, RefreshCw, Wrench, Check, ChevronD
 import AnimationEditor from './AnimationEditor';
 import SceneSfxEditor from './SceneSfxEditor';
 import PromptEnhancer from './PromptEnhancer';
+import PromptEditor from './PromptEditor';
 
 const statusColors = {
   pending: 'bg-gray-100 text-gray-600',
