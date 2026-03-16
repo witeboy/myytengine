@@ -37,7 +37,7 @@ export default function VideoExporter({
 
   if (!open) return null;
 
-  const totalDuration = scenes.reduce((sum, s) => sum + (s.duration_seconds || 8), 0);
+  const totalDuration = scenes.reduce((sum, s) => sum + (s.duration || s.duration_seconds || 8), 0);
   const totalFrames = Math.ceil(totalDuration * fps);
 
   const handleExport = async (forceExport = false) => {
@@ -53,7 +53,6 @@ export default function VideoExporter({
       }
       if (support.warning) {
         setUnsupported(support.reason);
-        // Don't return — show warning but let user proceed via "Try Anyway" button
         return;
       }
     } else {
@@ -70,6 +69,7 @@ export default function VideoExporter({
     });
 
     if (blob) {
+      const exportFilename = `${projectName || 'video'}-${quality}-export.mp4`;
       const url = URL.createObjectURL(blob);
       setDownloadUrl(url);
       setFileSize((blob.size / (1024 * 1024)).toFixed(1));
@@ -77,7 +77,7 @@ export default function VideoExporter({
       // Auto-download immediately
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${projectName || 'video'}-${quality}-export.mp4`;
+      a.download = exportFilename;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -85,24 +85,10 @@ export default function VideoExporter({
       // Store for ZIP bundling in TopicAssetsPanel (same session)
       window.__exportedVideo = {
         blob,
-        filename: `${projectName || 'video'}-${quality}-export.mp4`,
+        filename: exportFilename,
         size: blob.size,
       };
-
-      // Persist to ProductionSettings so TopicAssetsPanel can include it
-      try {
-        const file = new File([blob], `${projectName || 'video'}-${quality}.mp4`, { type: 'video/mp4' });
-        const uploadRes = await base44.functions.invoke('uploadExportedVideo', {
-          project_id: scenes[0]?.sceneId ? undefined : undefined, // filled below
-        });
-        // Fallback: store blob URL in memory for same-session ZIP download
-        window.__lastExportedVideoBlob = blob;
-        window.__lastExportedVideoName = `${projectName || 'video'}-${quality}-export.mp4`;
-      } catch (e) {
-        console.warn('Could not persist video:', e.message);
-        window.__lastExportedVideoBlob = blob;
-        window.__lastExportedVideoName = `${projectName || 'video'}-${quality}-export.mp4`;
-      }
+      console.log('[Export] Stored video blob:', blob.size, 'bytes');
     }
   };
 
@@ -141,7 +127,6 @@ export default function VideoExporter({
           </Button>
         </CardHeader>
         <CardContent className="space-y-5">
-          {/* Stats */}
           <div className="flex gap-3 text-sm">
             <Badge variant="outline" className="gap-1">
               {orientation === 'portrait' ? <Smartphone className="w-3 h-3" /> : <Monitor className="w-3 h-3" />}
@@ -151,7 +136,6 @@ export default function VideoExporter({
             <Badge variant="outline">{Math.round(totalDuration)}s ({Math.round(totalDuration / 60)} min)</Badge>
           </div>
 
-          {/* Quality selector */}
           {!exporting && !downloadUrl && (
             <>
               <div>
@@ -199,7 +183,6 @@ export default function VideoExporter({
             </>
           )}
 
-          {/* Unsupported warning */}
           {unsupported && !exporting && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 space-y-2">
               <div className="flex items-start gap-2 text-sm text-yellow-800">
@@ -217,7 +200,6 @@ export default function VideoExporter({
             </div>
           )}
 
-          {/* Error */}
           {error && (
             <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-800">
               <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
@@ -225,7 +207,6 @@ export default function VideoExporter({
             </div>
           )}
 
-          {/* Progress */}
           {exporting && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm font-medium">
@@ -240,7 +221,6 @@ export default function VideoExporter({
             </div>
           )}
 
-          {/* Download ready */}
           {downloadUrl && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-green-700 bg-green-50 border border-green-200 rounded-lg p-3">
@@ -262,7 +242,6 @@ export default function VideoExporter({
             </div>
           )}
 
-          {/* Export button */}
           {!exporting && !downloadUrl && (
             <Button
               onClick={handleExport}
