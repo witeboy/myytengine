@@ -48,21 +48,26 @@ Deno.serve(async (req) => {
     // If SEO titles were already generated, overlay texts should COMPLEMENT them
     let seoTitleContext = '';
     try {
-      // Try to find project by checking UploadMetadata — the video_title may match
-      const allMeta = await base44.asServiceRole.entities.UploadMetadata.list('-created_date', 5);
-      const relevantMeta = allMeta.find(m => {
-        const titles = [m.title_primary, m.title_variation_1, m.title_variation_2, m.title_variation_3, m.title_variation_4].filter(Boolean);
-        // Match if any saved title is similar to the current video_title
-        return titles.some(t => t && (video_title.toLowerCase().includes(t.substring(0, 20).toLowerCase()) || t.toLowerCase().includes(video_title.substring(0, 20).toLowerCase())));
-      });
-      if (relevantMeta) {
-        const savedTitles = [relevantMeta.title_primary, relevantMeta.title_variation_1, relevantMeta.title_variation_2, relevantMeta.title_variation_3, relevantMeta.title_variation_4].filter(Boolean);
-        if (savedTitles.length > 0) {
-          seoTitleContext = `\n\nEXISTING SEO TITLES (overlay text must COMPLEMENT these — add visual tension, never repeat their words):
+      let savedTitles = [];
+
+      // Priority 1: Frontend passed selected SEO titles directly
+      if (Array.isArray(seo_titles) && seo_titles.length > 0) {
+        savedTitles = seo_titles.filter(Boolean);
+        console.log(`Using ${savedTitles.length} SEO titles passed from frontend`);
+      }
+      // Priority 2: Look up UploadMetadata by project_id
+      else if (project_id) {
+        const metaList = await base44.asServiceRole.entities.UploadMetadata.filter({ project_id });
+        if (metaList[0]) {
+          savedTitles = [metaList[0].title_primary, metaList[0].title_variation_1, metaList[0].title_variation_2, metaList[0].title_variation_3, metaList[0].title_variation_4].filter(Boolean);
+          console.log(`Found ${savedTitles.length} SEO titles from project metadata`);
+        }
+      }
+
+      if (savedTitles.length > 0) {
+        seoTitleContext = `\n\nEXISTING SEO TITLES (overlay text must COMPLEMENT these — add visual tension, never repeat their words):
 ${savedTitles.map((t, i) => `- Title ${i + 1}: "${t}"`).join('\n')}
 The overlay text + SEO title together should create an irresistible curiosity package.`;
-          console.log(`Found ${savedTitles.length} SEO titles for pairing context`);
-        }
       }
     } catch (e) {
       console.warn('Could not load SEO titles for context:', e.message);
