@@ -227,9 +227,26 @@ export default function PostProduction() {
   setGeneratingSeo(false);
 };
 
+  const [markingDone, setMarkingDone] = useState(false);
+
   const handlePublish = async () => {
-    await base44.entities.Projects.update(projectId, { status: 'published', current_step: 14 });
-    navigate(createPageUrl('Dashboard'));
+    setMarkingDone(true);
+    try {
+      // Mark project as published
+      await base44.entities.Projects.update(projectId, { status: 'published', current_step: 14 });
+
+      // Also mark the channel topic as completed if linked
+      if (project?.channel_topic_id) {
+        try {
+          await base44.entities.ChannelTopics.update(project.channel_topic_id, { status: 'completed' });
+        } catch (_) {}
+      }
+
+      navigate(createPageUrl('Dashboard'));
+    } catch (e) {
+      console.error('Error marking done:', e);
+      setMarkingDone(false);
+    }
   };
 
   const titlesReady = seoTitles && selectedTitles.length > 0;
@@ -252,8 +269,9 @@ export default function PostProduction() {
             <p className="text-gray-600 ml-12">{project?.name} — Thumbnails, SEO titles, descriptions & tags</p>
           </div>
           {metadata && (
-            <Button onClick={handlePublish} className="bg-green-600 hover:bg-green-700 gap-2">
-              <CheckCircle2 className="w-4 h-4" /> Mark as Published
+            <Button onClick={handlePublish} disabled={markingDone} className="bg-green-600 hover:bg-green-700 gap-2">
+              {markingDone ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+              {markingDone ? 'Finishing...' : 'Done — Finalize All Assets'}
             </Button>
           )}
         </div>
