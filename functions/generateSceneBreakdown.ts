@@ -495,7 +495,7 @@ Respond with this JSON:
     "color_arc": "e.g. cool blues → warm amber → vibrant gold",
     "characters": [{
       "name": "Name/archetype",
-      "identity_core": "Casting-sheet: exact age, gender, skin tone shade, face shape, eye color+shape, nose, lips, hair (color/length/style), build+height, 2-3 distinguishing marks. Must be specific enough for 20 artists to draw the SAME person.",
+      "identity_core": "Casting-sheet: exact age, SPECIFIC gender (must be 'male' or 'female' — NEVER 'neutral' or 'any'), skin tone shade, face shape, eye color+shape, nose, lips, hair (color/length/style), build+height, 2-3 distinguishing marks. Must be specific enough for 20 artists to draw the SAME person. If the script doesn't specify gender, pick one and commit to it for consistency.",
       "default_clothing": "Typical outfit (can change per scene)",
       "emotional_arc": "How they change emotionally"
     }]

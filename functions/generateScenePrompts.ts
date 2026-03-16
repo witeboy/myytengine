@@ -163,7 +163,7 @@ const styleMap = {
    negative: "photorealistic, scary, dark, horror, sharp edges, complex, adult themes, violence, anime, sketch, painterly, gritty, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature"
   },
   cinematic_picstory: {
-    positive: "Cinematic 3D animated feature film quality, Pixar and DreamWorks level rendering, dramatic studio lighting with rim lights, rich color grading, detailed textures with subsurface scattering on skin, expressive stylized characters with realistic proportions, depth of field with bokeh, volumetric atmosphere, professional animated feature film composition, emotional cinematography",
+    positive: "Cinematic 3D animated feature film quality, Pixar and DreamWorks level rendering, dramatic studio lighting with rim lights, rich color grading, detailed textures with subsurface scattering on skin, expressive stylized characters with realistic proportions, cinematic depth of field, volumetric atmosphere, professional animated feature film composition, emotional cinematography",
     negative: "flat 2D, sketch, anime linework, rough, low quality, uncanny valley, photorealistic human, cheap 3D, mobile game quality, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature"
   },
   oil_painting: {
@@ -247,9 +247,9 @@ function getStyleSceneBodyRules(styleName) {
       rendering: "CoComelon/Pixar Junior 3D rendering — soft shadows, warm studio lighting, smooth plastic textures."
     },
     cinematic_picstory: {
-      characters: "Pixar/DreamWorks quality 3D characters — expressive stylized faces, realistic proportions, subsurface scattering on skin, detailed clothing.",
+      characters: "Pixar/DreamWorks quality 3D characters — expressive stylized faces, realistic proportions, subsurface scattering on skin, detailed clothing. Body framing defined per-scene by the Body Proportion directive.",
       environments: "Cinematic 3D environments — dramatic studio lighting, rich color grading, volumetric atmosphere, detailed textures.",
-      objects: "High-quality 3D rendered objects with detailed materials, dramatic lighting, depth of field.",
+      objects: "High-quality 3D rendered objects with detailed materials, dramatic lighting, cinematic depth.",
       rendering: "Pixar/DreamWorks animated feature film quality — dramatic lighting, subsurface scattering, cinematic composition."
     },
     oil_painting: {
@@ -568,7 +568,7 @@ Deno.serve(async (req) => {
       // Age keywords
       const agePatterns = /\b(\d{1,2}\s*years?\s*old|\d{1,2}-year-old|in\s+(?:her|his|their)\s+(?:early|mid|late)\s+\d{2}s|young\s+(?:woman|man)|middle[\s-]aged|elderly|teenage)\b/gi;
       // Gender
-      const genderPatterns = /\b(female|male|woman|man|non[\s-]binary)\b/gi;
+      const genderPatterns = /\b(female|male|woman|man)\b/gi;
 
       const bodyTraits = [];
       const ageMatches = rawDesc.match(agePatterns) || [];
@@ -698,6 +698,7 @@ Deno.serve(async (req) => {
       let identityDesc = c.identity_core || c.visual_description || c.description || '';
       const clothing = c.default_clothing || '';
       // Clean junk Gemini sometimes echoes back from our prompt instructions
+      // Clean junk + normalize gender-neutral → concrete gender for image gen
       identityDesc = identityDesc
         .replace(/^Casting[- ]sheet:?\s*/i, '')
         .replace(/^IMMUTABLE[^:]*:\s*/i, '')
@@ -706,6 +707,25 @@ Deno.serve(async (req) => {
         .replace(/\(\s*Beige\s*\d*\s*\)/gi, match => match) // keep but don't duplicate
         .replace(/\bshown full (?:body|figure)\b/gi, '')     // rendering instruction, not identity
         .replace(/\bshown full body in the scene\b/gi, '')
+        // Force a concrete gender — image gen can't render "neutral"
+        .replace(/\bgender[\s:]*neutral\b/gi, 'female')
+        .replace(/\bgender[\s:]*any\b/gi, 'female')
+        .replace(/\bnon[\s-]?binary\b/gi, 'female')
+        // Strip key-value label prefixes the breakdown LLM generates
+        .replace(/\bAge[\s:]+/gi, '')
+        .replace(/\bGender[\s:]+/gi, '')
+        .replace(/\bSkin tone[\s:]*(shade[\s:]*)?/gi, '')
+        .replace(/\bFace shape[\s:]+/gi, '')
+        .replace(/\bEye color\+?shape[\s:]+/gi, '')
+        .replace(/\bNose[\s:]+/gi, '')
+        .replace(/\bLips[\s:]+/gi, '')
+        .replace(/\bHair[\s:]*\([^)]*\)[\s:]+/gi, '')
+        .replace(/\bHair[\s:]+/gi, '')
+        .replace(/\bBuild\+?height[\s:]+/gi, '')
+        .replace(/\bDistinguishing marks[\s:]+/gi, '')
+        .replace(/\bBuild[\s:]+/gi, '')
+        .replace(/,\s*,/g, ',').replace(/^\s*,/, '').replace(/,\s*$/, '')
+        .replace(/\s{2,}/g, ' ')
         .trim();
       if (name && identityDesc) {
         const { body, face } = splitIdentity(identityDesc);
@@ -741,9 +761,13 @@ Deno.serve(async (req) => {
 
         // Derive gender from THIS character's identity (not hardcoded)
         const charIdentity = identityDesc.toLowerCase();
-        const charIsMale = /\b(male|man|boy|he|his|father|husband|grandfather|son|brother)\b/.test(charIdentity);
+        // Determine gender: explicit male wins, explicit female wins, otherwise default to female
+        const hasExplicitMale = /\b(male|man|boy|father|husband|grandfather|son|brother)\b/.test(charIdentity);
+        const hasExplicitFemale = /\b(female|woman|girl|mother|wife|grandmother|daughter|sister|she|her)\b/.test(charIdentity);
+        const charIsMale = hasExplicitMale && !hasExplicitFemale;
         const charGN = charIsMale ? 'man' : 'woman';
         const charGA = charIsMale ? 'male' : 'female';
+        console.log(`   ${name}: gender resolved → ${charGA} (explicitM=${hasExplicitMale}, explicitF=${hasExplicitFemale})`);
 
         function sanitizeGender(desc) {
           return desc
@@ -1223,25 +1247,45 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
 
               const escapedName = c.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-              // Strip any LLM-generated descriptions (parentheticals, inline, "has" clauses, slash-names)
+              // Strip ALL LLM-generated character descriptions to prevent duplication.
+              // We'll inject the correct tier-appropriate identity tag after stripping.
+
+              // Parentheticals: "The Consumer (a 35-year-old woman with...)"
               modifiedPrompt = modifiedPrompt.replace(
                 new RegExp(`\\b${escapedName}\\b\\s*\\([^)]{5,}\\)`, 'gi'), c.name
               );
+              // Inline comma descriptions: "The Consumer, a 35-year-old woman with brown eyes, average build, ..."
               modifiedPrompt = modifiedPrompt.replace(
-                new RegExp(`\\b${escapedName}\\b,\\s*a\\s[^,]{10,}(?:,\\s*[^,]{5,}){0,4},\\s*`, 'gi'), `${c.name}, `
+                new RegExp(`\\b${escapedName}\\b,\\s*(?:a\\s)?\\d{1,2}[^.]*?(?=\\b(?:stands|sits|walks|is|was|holds|stares|looks|leans|clutch|grip|reach|kneel|crouch|watch|gaze|turn|step|press|scroll|tap|carry)\\b)`, 'gi'), `${c.name} `
               );
-              // Strip "Sarah/The Everyperson has light-medium skin..." style duplicate descriptions
+              // Fallback: broader comma-separated inline descriptions
+              modifiedPrompt = modifiedPrompt.replace(
+                new RegExp(`\\b${escapedName}\\b,\\s*a\\s[^,]{10,}(?:,\\s*[^,]{5,}){0,6},\\s*`, 'gi'), `${c.name}, `
+              );
+              // "Name has light-medium skin..." / "Name/Archetype has..."
               modifiedPrompt = modifiedPrompt.replace(
                 new RegExp(`\\b${escapedName}(?:\\/[\\w\\s]+)?\\s+has\\s+[^.]{20,}?\\.`, 'gi'), ''
               );
-              // Strip "Name is a 30-year-old woman with..." if LLM wrote one
+              // "Name is a 30-year-old woman with..."
               modifiedPrompt = modifiedPrompt.replace(
                 new RegExp(`\\b${escapedName}\\s+is\\s+a\\s+\\d{1,2}[^.]{15,}?\\.`, 'gi'), ''
               );
-              // Strip slash-name duplicates: "Sarah/The Everyperson" → just the name
+              // "Name, age 35, female, medium skin tone..." (key-value identity the LLM copies from character block)
+              modifiedPrompt = modifiedPrompt.replace(
+                new RegExp(`\\b${escapedName}\\b,\\s*age\\s+\\d{1,2}[^.]{10,}?\\.`, 'gi'), `${c.name}.`
+              );
+              // Slash-name duplicates: "Sarah/The Everyperson"
               modifiedPrompt = modifiedPrompt.replace(
                 new RegExp(`\\b${escapedName}\\/[\\w\\s]{3,30}\\b`, 'gi'), c.name
               );
+              // Strip remaining SECOND occurrence of the full name (the LLM often writes it twice)
+              let nameCount = 0;
+              modifiedPrompt = modifiedPrompt.replace(
+                new RegExp(`\\b${escapedName}\\b`, 'gi'),
+                (match) => { nameCount++; return nameCount <= 1 ? match : ''; }
+              );
+              // Clean up orphaned punctuation from stripping
+              modifiedPrompt = modifiedPrompt.replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').replace(/\s{2,}/g, ' ');
 
               // Inject the tier-appropriate description WOVEN with the action
               // "The User is sitting" → "The User, a 30-year-old woman with brown eyes, is sitting"
