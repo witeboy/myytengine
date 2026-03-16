@@ -203,7 +203,9 @@ Deno.serve(async (req) => {
       transcript = await getTranscriptAPI(videoId);
       if (transcript) {
         transcriptSource = 'youtube_captions';
-        console.log(`[Repurpose] Transcript from captions: ${transcript.length} chars`);
+        console.log(`[Repurpose] ✅ Transcript from captions: ${transcript.length} chars`);
+      } else {
+        console.log(`[Repurpose] ❌ Tier 1 (Transcript API) returned null`);
       }
 
       // Tier 1.5: InnerTube free captions
@@ -211,7 +213,9 @@ Deno.serve(async (req) => {
         transcript = await getTranscriptInnerTube(videoId);
         if (transcript) {
           transcriptSource = 'youtube_innertube';
-          console.log(`[Repurpose] Transcript from InnerTube: ${transcript.length} chars`);
+          console.log(`[Repurpose] ✅ Transcript from InnerTube: ${transcript.length} chars`);
+        } else {
+          console.log(`[Repurpose] ❌ Tier 1.5 (InnerTube) returned null`);
         }
       }
     }
