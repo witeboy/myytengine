@@ -195,13 +195,15 @@ Write the COMPLETE expanded version (not just the additions).`;
         const toneInstruction = toneGuide[projectTone] || toneGuide.dramatic;
         const audienceInstruction = project.target_audience ? `\n**Target Audience**: ${project.target_audience} — tailor vocabulary, references, and examples to resonate with this specific audience.` : '';
 
-        return `You are writing batch ${batch.batch_number} of ${totalBatches} for a ${durationMinutes}-minute YouTube documentary.
+        return `You are an elite viral content strategist writing batch ${batch.batch_number} of ${totalBatches} for a ${durationMinutes}-minute YouTube video.
 
-**Topic**: ${topic.title}
-**Topic Description**: ${topic.description}
-**Niche**: ${project.niche}
-**Storytelling Format**: ${project.storytelling_format || 'Documentary'}
-**Tone**: ${projectTone} — ${toneInstruction}${audienceInstruction}
+You follow the **TL VIRAL FORMULA (TVF)** — a battle-tested structure that keeps viewers glued from the first second to the last.
+
+**TOPIC**: ${topic.title}
+**TOPIC DESCRIPTION**: ${topic.description}
+**NICHE**: ${project.niche}
+**STORYTELLING FORMAT**: ${project.storytelling_format || 'Documentary'}
+**TONE**: ${projectTone} — ${toneInstruction}${audienceInstruction}
 ${hookInstruction}${continuityInstruction}
 ${nextBatchHint}
 
@@ -228,26 +230,58 @@ ${retryBlock}
 - NO visual descriptions, camera directions, or production notes.
 - PURE narration text only, paragraph by paragraph.
 
-**WRITING QUALITY**:
-- Pacing: 140-150 words per minute, natural speaking rhythm
-- Use vivid, evocative language that paints pictures with words
-- Build emotional arc within this segment: setup → tension → mini-payoff
-- Include specific facts, names, dates, and numbers — not vague generalities
-- Use rhetorical questions, dramatic pauses (short sentences), and callbacks
-- Vary sentence length: mix punchy 5-word sentences with flowing 30-word ones
-- Write for the EAR not the eye — use conversational language, contractions, natural phrasing
-${batch.batch_number === 1 ? '- Open STRONG — the first 2 sentences must hook the viewer immediately' : '- Continue naturally from where the previous batch left off'}
-${batch.batch_number === totalBatches ? '- End with a powerful conclusion and call to action (like, subscribe, comment)' : '- End with a hook or cliffhanger leading into the next segment'}
-- Keep character/subject references consistent throughout
+**══════════════════════════════════════════════════════════**
+**TVF VIRAL WRITING LAWS — FOLLOW EVERY SINGLE ONE**
+**══════════════════════════════════════════════════════════**
+
+**1. PACING IS KING**:
+- Every sentence must EARN its place. If it does not move the story forward, create emotion, or deliver value — DELETE IT.
+- Mix punchy 3-7 word power sentences with flowing 25-35 word narrative ones. Never write 3 long sentences in a row.
+- After every major point, drop a SHORT sentence that hits like a punch: "And nobody saw it coming." / "That changed everything." / "But here is the part nobody talks about."
+- Write for 150 wpm spoken delivery. Think RHYTHM — fast-slow-fast-slow. A rollercoaster, not a highway.
+
+**2. CURIOSITY GAPS — THE RETENTION ENGINE**:
+- Plant a curiosity gap every ~150-200 words. Tease what is coming without revealing it.
+- Patterns: "But what happened next defies logic." / "And this is where the story takes a dark turn." / "There is one detail that changes everything — and we will get to it in a moment."
+- The viewer should ALWAYS have an unanswered question pulling them forward. NEVER resolve everything before planting the next hook.
+
+**3. EMOTIONAL TRIGGERS — MAKE THEM FEEL**:
+- Rotate through: fear, curiosity, hope, urgency, surprise, outrage, empathy.
+- Do NOT stay on one emotion for more than 2 paragraphs — SHIFT. The audience habituates to any single emotion. Keep them off-balance.
+- Use "you" language to make it personal: "You have probably done this without realizing." / "Think about the last time you..."
+- Include at least ONE moment that makes the viewer's stomach drop, laugh, or say "wait, what?"
+
+**4. ZERO FILLER TOLERANCE**:
+- BANNED phrases: "In today's video", "Without further ado", "Before we begin", "As we all know", "It goes without saying", "At the end of the day", "In this day and age".
+- BANNED patterns: throat-clearing openings, summarizing what you are about to say, restating what you just said.
+- Every paragraph must open with a DIFFERENT structure — statement, question, anecdote, statistic, quote, or vivid image. NEVER repeat the same opening pattern twice in a row.
+
+**5. SPECIFICITY OVER GENERALITY**:
+- Use specific facts, names, dates, numbers, and places. "A study from MIT in 2019 found that..." NOT "Studies show that..."
+- Include micro-stories and anecdotes — real moments that the viewer can visualize. Not abstractions.
+- When explaining a concept, use a concrete example within 2 sentences. Never explain for more than 3 sentences without grounding it in reality.
+
+**6. THE SPOKEN WORD TEST**:
+- Read every sentence aloud in your head. If it sounds like a textbook — rewrite it. If it sounds like a friend telling you something mind-blowing — keep it.
+- Use contractions (don't, can't, won't, here's, that's). Write the way people TALK.
+- Use rhetorical questions to create mental engagement: "So what happens when everything you believed turns out to be wrong?"
+
+**7. SEGMENT-SPECIFIC RULES**:
+${batch.batch_number === 1 ? `- You are writing the OPENING. The first 2 sentences must be an absolute scroll-stopper. No warm-up. No context-setting. Drop the viewer into the most compelling moment IMMEDIATELY.
+- Within the first 50 words, the viewer must think: "I NEED to hear this."
+- Use one of these hook types: shocking statement, contrarian truth, relatable scenario, bold question, dramatic result, countdown/urgency, or hidden secret.` : '- Continue naturally from where the previous batch left off. Your first sentence must be the logical NEXT thought — not a recap.'}
+${batch.batch_number === totalBatches ? `- You are writing the FINALE. The last 3 paragraphs must deliver:
+  (a) A POWER CLOSE — a memorable insight, truth bomb, or perspective shift that recontextualizes the entire video. This is the line viewers screenshot.
+  (b) A TRANSFORMATION moment — show the viewer how their understanding has shifted from the beginning to now.
+  (c) A NATURAL CTA — "If this changed how you think about [topic], hit subscribe because next week we are going deeper." Make it feel like a promise, not a plea.` : '- End with a CLIFFHANGER or BRIDGE — tease what comes next without resolving the current thread. The viewer should feel COMPELLED to keep watching.'}
 
 **ANTI-REPETITION**:
 - NEVER repeat a sentence, phrase, or idea that appeared earlier in your own output.
 - NEVER use the same opening structure for consecutive paragraphs.
 - If you catch yourself restating something, DELETE it and write something new.
 - Each paragraph must introduce at least ONE new fact, angle, or narrative development.
-- Vary your paragraph openings: alternate between statements, questions, anecdotes, and descriptions.
 
-**REMEMBER: You MUST write at least ${minimumWords} words. Write deep, rich, detailed narration. Do NOT rush through the synopsis — explore every beat thoroughly.**`;
+**REMEMBER: You MUST write at least ${minimumWords} words. Write deep, rich, punchy, fast-paced narration that keeps viewers GLUED. Every sentence earns its place. Every paragraph moves the story forward. No filler. No fluff. Pure viral energy.**`;
       };
 
       // ── GENERATE WITH RETRY LOGIC ──
