@@ -376,8 +376,56 @@ MANDATORY FRAMING:
 // ══════════════════════════════════════════════════════════════════
 
 
+// ══════════════════════════════════════════════════════════════════
+// SUBJECT-TYPE SANITY CHECK — Prompt Engine Rulebook enforcement
+// Detects non-human subjects and strips leaked human anatomy words
+// ══════════════════════════════════════════════════════════════════
+function subjectTypeSanityCheck(prompt, sceneNumber) {
+  // Detect primary subject from the first ~200 chars (image gen reads left-to-right)
+  const head = prompt.substring(0, 250).toLowerCase();
+  const humanIndicators = /\b(woman|man|person|figure|character|boy|girl|child|worker|doctor|soldier|officer|teacher|scientist|protagonist|narrator|skeleton|individual|people|crowd|group|couple|family|mother|father|husband|wife)\b/;
+  const hasHuman = humanIndicators.test(head);
+
+  if (hasHuman) return prompt; // Humans present — all descriptors allowed
+
+  // Non-human scene: strip any leaked human anatomy
+  const humanOnlyTerms = [
+    /\b(visible\s+)?skin\s+texture(\s+and\s+pores)?\b/gi,
+    /\b(visible\s+)?pores\b/gi,
+    /\bwrinkles?\s*(around\s+(his|her|their)\s+eyes)?\b/gi,
+    /\bfacial\s+expression\b/gi,
+    /\bsubtle\s+facial\s+expression\b/gi,
+    /\bnatural\s+skin\s+texture\b/gi,
+    /\bsoft\s+eye\s+reflections\b/gi,
+    /\bfine\s+wrinkles\b/gi,
+    /\bshows?\s+(?:slight\s+)?wrinkles\b/gi,
+    /\b(his|her|their)\s+(eyes|face|smile|expression|skin|hands|body|hair)\b/gi,
+    /\bconfident\s+smile\b/gi,
+  ];
+
+  let cleaned = prompt;
+  let stripped = false;
+  for (const pattern of humanOnlyTerms) {
+    const before = cleaned;
+    cleaned = cleaned.replace(pattern, '');
+    if (cleaned !== before) stripped = true;
+  }
+
+  if (stripped) {
+    // Clean up orphaned punctuation
+    cleaned = cleaned.replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').replace(/\s{2,}/g, ' ').trim();
+    console.log(`🧹 Scene ${sceneNumber}: SUBJECT SANITY — stripped human anatomy from non-human scene`);
+  }
+
+  return cleaned;
+}
+
 function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, sceneNumber, visualStyle) {
   let enhanced = imagePrompt;
+
+  // ═══ SUBJECT-TYPE SANITY CHECK (Prompt Engine Rulebook) ═══
+  enhanced = subjectTypeSanityCheck(enhanced, sceneNumber);
+
   enhanced = enhanced.replace(/\b\d{3,4}\s*[x×]\s*\d{3,4}\s*(pixels?|px)?\s*\.?\s*/gi, '');
 
 
