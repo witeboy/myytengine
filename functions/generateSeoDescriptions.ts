@@ -164,6 +164,14 @@ RULES:
       long_tail_keywords: d.long_tail_keywords_used || allTags.slice(3, 6),
     }));
 
+    // Save descriptions to metadata
+    await base44.asServiceRole.entities.UploadMetadata.update(meta.id, {
+      description_template: parsed.descriptions[0]?.content || '',
+      description_alt_1: parsed.descriptions[1]?.content || '',
+      description_alt_2: parsed.descriptions[2]?.content || '',
+      descriptions_json: JSON.stringify(formattedDescriptions),
+    });
+
     console.log(`Generated ${formattedDescriptions.length} descriptions`);
 
     return Response.json({
