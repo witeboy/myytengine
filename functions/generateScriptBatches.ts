@@ -31,9 +31,17 @@ async function callGemini(prompt, temperature = 0.85, retries = 2) {
       console.log(`[Gemini] JSON parse failed (attempt ${attempt + 1}): ${parseErr.message}`);
       // Try to fix common issues: escaped chars, markdown wrapping
       try {
-        const cleaned = rawText
-          .replace(/```json\s*/g, '').replace(/```\s*/g, '')
-          .replace(/[\x00-\x1F\x7F]/g, (c) => c === '\n' || c === '\r' || c === '\t' ? c : ' ');
+        let cleaned = rawText
+          .replace(/```json\s*/g, '').replace(/```\s*/g, '');
+        // Escape control chars that break JSON string literals
+        cleaned = cleaned.replace(/[\x00-\x1F\x7F]/g, (c) => {
+          switch (c) {
+            case '\n': return '\\n';
+            case '\r': return '\\r';
+            case '\t': return '\\t';
+            default: return ' ';
+          }
+        });
         return JSON.parse(cleaned);
       } catch (_) {
         if (attempt === retries) throw new Error(`JSON parse failed after ${retries + 1} attempts: ${parseErr.message}`);
