@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
 // ══════════════════════════════════════════════════════════════════
 // SCENE VIDEO POLLER — Checks Grok Imagine video task via Kie API
