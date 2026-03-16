@@ -122,7 +122,7 @@ OUTPUT FORMAT — JSON ONLY
 Return ONLY a valid JSON object. No markdown. No explanation. No backticks.
 
 {
-  "detected_mood": "crime|drama|nollywood|comedy|finance|inspirational|educational",
+  "detected_mood": "ONE of: crime, drama, nollywood, comedy, finance, inspirational, educational",
   "mood_reasoning": "one sentence why",
   "concepts": [
     {
