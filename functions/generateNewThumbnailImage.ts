@@ -75,6 +75,16 @@ WHAT TO CHANGE:
 - Replace ALL people in the template with the person(s) from the reference photo(s)
 - The expression should match what the template person was doing (shocked face → reference person with shocked face, etc.) but with the reference person's REAL facial features
 
+${(() => {
+      const descs = (charDescriptions || []).filter((d, i) => d && d.trim());
+      if (descs.length === 0) return '';
+      let block = `\n═══════════════════════════════════════════════\nCHARACTER CLOTHING NOTES (from user)\n═══════════════════════════════════════════════\n`;
+      charDescriptions.forEach((d, i) => {
+        if (d && d.trim()) block += `- Character ${i + 1} (Image ${hasTemplate ? i + 2 : i + 1}): ${d.trim()}\n`;
+      });
+      block += `Use these descriptions for clothing/outfit. They override what is visible in the reference photo.\n`;
+      return block;
+    })()}
 ═══════════════════════════════════════════════
 TEXT HANDLING — CRITICAL (DO NOT SKIP)
 ═══════════════════════════════════════════════
