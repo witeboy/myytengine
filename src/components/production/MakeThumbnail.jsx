@@ -454,19 +454,8 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
             if (b64) directCharPhotos.push({ b64, mime: 'image/jpeg', description: char.description || '' });
           } catch (_) {}
         } else if (char?.remoteUrl) {
-          // Scene image — fetch and convert to base64
-          try {
-            const resp = await fetch(char.remoteUrl);
-            if (resp.ok) {
-              const blob = await resp.blob();
-              const b64 = await new Promise(resolve => {
-                const r = new FileReader();
-                r.onload = () => resolve(r.result.split(',')[1]);
-                r.readAsDataURL(blob);
-              });
-              if (b64) directCharPhotos.push({ b64, mime: 'image/jpeg', description: char.description || '' });
-            }
-          } catch (_) { console.warn('Failed to fetch scene image:', char.remoteUrl); }
+          // Scene image — pass URL directly to backend (avoids CORS issues)
+          directCharPhotos.push({ url: char.remoteUrl, description: char.description || '' });
         }
       }
 

@@ -290,11 +290,11 @@ Deno.serve(async (req) => {
     catch (e) { return Response.json({ error: `Could not load concept: ${e.message}` }, { status: 404 }); }
     if (!concept?.image_prompt) return Response.json({ error: 'Concept has no image_prompt' }, { status: 400 });
 
-    // 2. Resolve character photos
+    // 2. Resolve character photos (support both b64 and url)
     let charPhotos = [];
-    if (Array.isArray(directCharPhotos) && directCharPhotos.some(p => p?.b64)) {
-      charPhotos = directCharPhotos.filter(p => p?.b64);
-      console.log('Direct char photos:', charPhotos.length);
+    if (Array.isArray(directCharPhotos) && directCharPhotos.some(p => p?.b64 || p?.url)) {
+      charPhotos = directCharPhotos.filter(p => p?.b64 || p?.url);
+      console.log('Direct char photos:', charPhotos.length, '(b64:', charPhotos.filter(p=>p.b64).length, 'url:', charPhotos.filter(p=>p.url).length, ')');
     } else if (concept.char_photos_json) {
       try {
         const stored = JSON.parse(concept.char_photos_json);
