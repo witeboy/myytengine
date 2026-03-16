@@ -323,7 +323,11 @@ export default function ChannelDetail() {
                 ) : (
                   <div className="space-y-1.5">
                     {[...topics].sort((a, b) => (a.scheduled_date || '9999').localeCompare(b.scheduled_date || '9999') || (a.priority || 0) - (b.priority || 0)).map(topic => (
-                      <div key={topic.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-100 hover:bg-gray-50 text-sm">
+                      <div
+                        key={topic.id}
+                        className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-100 hover:bg-gray-50 text-sm cursor-pointer group"
+                        onClick={() => handleStartPipeline(topic)}
+                      >
                         <Badge className={`text-[10px] ${topic.format === 'short' ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>
                           {topic.format === 'short' ? 'S' : 'L'}
                         </Badge>
@@ -342,11 +346,7 @@ export default function ChannelDetail() {
                         }`}>
                           {topic.status}
                         </Badge>
-                        {(topic.status === 'queued' || topic.status === 'scheduled') && (
-                          <Button size="sm" className="h-6 text-[10px] bg-blue-600 hover:bg-blue-700" onClick={() => handleStartPipeline(topic)}>
-                            <Play className="w-3 h-3 mr-0.5" /> Start
-                          </Button>
-                        )}
+                        <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-gray-600 transition-colors flex-shrink-0" />
                       </div>
                     ))}
                   </div>
