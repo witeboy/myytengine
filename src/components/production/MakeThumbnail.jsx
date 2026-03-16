@@ -268,7 +268,7 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
   // Step 0 inputs
   const [title, setTitle]       = useState(initialTitle || '');
   const [summary, setSummary]   = useState(initialSummary || '');
-  const [chars, setChars]       = useState([null, null]); // start with 2 slots, can grow to 14
+  const [chars, setChars]       = useState([null]); // start with 1 slot, can grow to 14
 
   // Sync props when they change (e.g. summary loaded async)
   useEffect(() => { if (initialTitle && !title) setTitle(initialTitle); }, [initialTitle]);
@@ -304,7 +304,7 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
     setChars(prev => {
       const a = [...prev];
       a.splice(i, 1);
-      while (a.length < 2) a.push(null); // keep minimum 2 slots
+      while (a.length < 1) a.push(null); // keep minimum 1 slot
       return a;
     });
   };
@@ -316,7 +316,7 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
 
   // ── Validation: all required fields ──────────────────────────────
   const uploadedChars = chars.filter(Boolean);
-  const canSubmit = title.trim() && summary.trim() && uploadedChars.length >= 2 && selectedUserTemplate;
+  const canSubmit = title.trim() && summary.trim() && uploadedChars.length >= 1 && selectedUserTemplate;
 
   // ── Poll helper for pending KIE tasks ─────────────────────────
   const pollForTaskResult = async (taskId, conceptId) => {
@@ -570,7 +570,7 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
   const missingFields = [];
   if (!title.trim()) missingFields.push('Video Title');
   if (!summary.trim()) missingFields.push('Video Summary');
-  if (uploadedChars.length < 2) missingFields.push(`Character Photos (${uploadedChars.length}/2 minimum)`);
+  if (uploadedChars.length < 1) missingFields.push('At least 1 photo required');
   if (!selectedUserTemplate) missingFields.push('Reference Template');
 
   // ════════════════════════════════════════════════════════════════
@@ -593,7 +593,7 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{ fontSize: 25, fontWeight: 800, marginBottom: 8 }}>Create a World-Class Thumbnail</div>
           <div style={{ color: '#6b7280', fontSize: 14, lineHeight: 1.6 }}>
-            Enter your video details, upload 2–14 key photos, pick a template — AI generates 5 overlay texts, then renders a direct replica
+            Enter your video details, upload 1–14 key photos, pick a template — AI generates 5 overlay texts, then renders a direct replica
           </div>
         </div>
 
@@ -681,7 +681,7 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
         {/* Character Photos (required, min 2, max 14) */}
         <div style={{ marginBottom: 26 }}>
           <label style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 10 }}>
-            {sceneImages?.length > 0 ? 'Additional Uploads' : 'Key Images from Video'} <span style={{ color: '#ef4444' }}>* (min 2, up to {MAX_PHOTOS})</span>
+            {sceneImages?.length > 0 ? 'Additional Uploads' : 'Key Images from Video'} <span style={{ color: '#ef4444' }}>* (min 1, up to {MAX_PHOTOS})</span>
           </label>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 12 }}>
             {chars.map((char, i) => (
@@ -704,12 +704,12 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
               </div>
             )}
           </div>
-          {uploadedChars.length < 2 && (
+          {uploadedChars.length < 1 && (
             <p style={{ color: '#ef4444', fontSize: 11, marginTop: 8 }}>
-              ⚠️ Upload at least 2 photos — these are the key images AI will use in the thumbnail
+              ⚠️ Upload at least 1 photo — the key image AI will use in the thumbnail
             </p>
           )}
-          {uploadedChars.length >= 2 && (
+          {uploadedChars.length >= 1 && (
             <p style={{ color: '#22c55e', fontSize: 11, marginTop: 8 }}>
               ✅ {uploadedChars.length} photo{uploadedChars.length > 1 ? 's' : ''} uploaded — nano-banana-2 will use all {uploadedChars.length} as reference
             </p>
