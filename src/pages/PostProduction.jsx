@@ -437,8 +437,9 @@ export default function PostProduction() {
                   </Button>
                 )}
                 {metadata && (
-                  <Button onClick={handlePublish} className="bg-green-600 hover:bg-green-700 gap-2">
-                    <CheckCircle2 className="w-4 h-4" /> Publish
+                  <Button onClick={handlePublish} disabled={markingDone} className="bg-green-600 hover:bg-green-700 gap-2">
+                    {markingDone ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                    {markingDone ? 'Finishing...' : 'Done — Finalize'}
                   </Button>
                 )}
               </div>
