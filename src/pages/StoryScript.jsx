@@ -78,7 +78,7 @@ export default function StoryScript() {
           }
           await refetchScripts();
 
-          await base44.functions.invoke('generateScriptBatches', {
+          await base44.functions.invoke('initializeScriptBatches', {
             project_id: projectId,
             selected_hook_id: project.selected_hook_id,
           });
