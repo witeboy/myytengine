@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CheckCircle2 } from 'lucide-react';
 
 function getMonthDays(year, month) {
   const firstDay = new Date(year, month, 1).getDay();
@@ -76,6 +76,8 @@ export default function ContentCalendar({ topics, channel, onDateClick }) {
           const dayTopics = topicsByDate[dateStr] || [];
           const shorts = dayTopics.filter(t => t.format === 'short');
           const longs = dayTopics.filter(t => t.format === 'long');
+          const completedCount = dayTopics.filter(t => t.status === 'completed' || t.status === 'published').length;
+          const allDone = hasContent && completedCount === dayTopics.length;
           const isToday = dateStr === todayStr;
           const hasContent = dayTopics.length > 0;
 
@@ -84,19 +86,27 @@ export default function ContentCalendar({ topics, channel, onDateClick }) {
               key={day}
               onClick={() => onDateClick?.(dateStr)}
               className={`min-h-[80px] rounded-lg border p-1.5 text-left transition-all hover:shadow-md hover:border-blue-300 ${
+                allDone ? 'border-green-300 bg-green-50/50' :
                 isToday ? 'border-blue-500 bg-blue-50/50' : hasContent ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50/50'
               }`}
             >
-              <span className={`text-xs font-medium ${isToday ? 'text-blue-600' : 'text-gray-600'}`}>{day}</span>
+              <div className="flex items-center justify-between">
+                <span className={`text-xs font-medium ${isToday ? 'text-blue-600' : 'text-gray-600'}`}>{day}</span>
+                {allDone && <CheckCircle2 className="w-3 h-3 text-green-500" />}
+              </div>
               <div className="mt-1 space-y-0.5">
                 {shorts.length > 0 && (
-                  <Badge className="text-[8px] px-1 py-0 bg-amber-100 text-amber-700 w-full justify-center cursor-pointer hover:bg-amber-200"
+                  <Badge className={`text-[8px] px-1 py-0 w-full justify-center cursor-pointer ${
+                    allDone ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                  }`}
                     onClick={(e) => { e.stopPropagation(); onDateClick?.(dateStr); }}>
                     {shorts.length}S
                   </Badge>
                 )}
                 {longs.length > 0 && (
-                  <Badge className="text-[8px] px-1 py-0 bg-purple-100 text-purple-700 w-full justify-center cursor-pointer hover:bg-purple-200"
+                  <Badge className={`text-[8px] px-1 py-0 w-full justify-center cursor-pointer ${
+                    allDone ? 'bg-green-100 text-green-600' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                  }`}
                     onClick={(e) => { e.stopPropagation(); onDateClick?.(dateStr); }}>
                     {longs.length}L
                   </Badge>
