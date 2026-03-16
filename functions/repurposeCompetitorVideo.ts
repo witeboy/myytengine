@@ -119,6 +119,9 @@ Respond with ONLY valid JSON:
     if (!text) return Response.json({ error: 'AI returned empty response' }, { status: 500 });
 
     const result = JSON.parse(text);
+    
+    // Ensure we have a title
+    const topicTitle = result.title || `Repurposed: ${video_title}`;
 
     // Build the notes combining everything
     const fullNotes = [
@@ -134,7 +137,7 @@ Respond with ONLY valid JSON:
     // Create the ChannelTopic
     const topic = await base44.asServiceRole.entities.ChannelTopics.create({
       channel_id,
-      title: result.title,
+      title: topicTitle,
       format: result.format === 'long' ? 'long' : 'short',
       status: 'queued',
       notes: fullNotes,
