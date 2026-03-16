@@ -102,7 +102,7 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
         {fixing ? (
           <>
             <Loader2 className="w-4 h-4 animate-spin mr-1" />
-            Fixing {fixType === 'characters' ? 'Characters' : fixType === 'cleanup' ? 'Metadata' : fixType === 'quality' ? 'Quality' : 'All'}...
+            Fixing {fixType === 'characters' ? 'Characters' : fixType === 'cleanup' ? 'Metadata' : fixType === 'quality' ? 'Quality' : fixType === 'reference' ? 'Reference' : 'All'}...
           </>
         ) : (
           <>
