@@ -195,6 +195,7 @@ export default function TopicAssetsPanel({ projectId, topicTitle }) {
   };
 
   const slug = sanitize(topicTitle || assets?.project?.name);
+  console.log('[Assets] window.__exportedVideo:', !!window.__exportedVideo, window.__exportedVideo?.blob?.size);
 
   const handleDownloadZip = async (e) => {
     e.stopPropagation();
