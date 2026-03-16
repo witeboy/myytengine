@@ -536,9 +536,7 @@ const handleGenerateSeo = async () => {
     navigate(createPageUrl('Dashboard'));
   };
 
-  const selectedThumb = thumbnails.find(t => t.is_selected);
   const titlesReady = seoTitles && selectedTitles.length > 0;
-  const styleReady = !!selectedNiche || !!referenceStyle;
 
   // ── Render ────────────────────────────────────────────────────────
   return (
@@ -557,7 +555,7 @@ const handleGenerateSeo = async () => {
             </div>
             <p className="text-gray-600 ml-12">{project?.name} — Thumbnails, SEO titles, descriptions & tags</p>
           </div>
-          {selectedThumb && metadata && (
+          {metadata && (
             <Button onClick={handlePublish} className="bg-green-600 hover:bg-green-700 gap-2">
               <CheckCircle2 className="w-4 h-4" /> Mark as Published
             </Button>
@@ -572,9 +570,8 @@ const handleGenerateSeo = async () => {
               {seoTitles && <CheckCircle2 className="w-3.5 h-3.5 text-green-500 ml-1" />}
             </TabsTrigger>
             <TabsTrigger value="thumbnails" className="gap-2">
-              <ImageIcon className="w-4 h-4" />
-              2. Thumbnails
-              {thumbnails.length > 0 && <Badge variant="secondary" className="text-xs ml-1">{thumbnails.length}</Badge>}
+            <ImageIcon className="w-4 h-4" />
+            2. Thumbnails
             </TabsTrigger>
             <TabsTrigger value="descriptions" className="gap-2">
               <FileText className="w-4 h-4" />
@@ -718,7 +715,7 @@ const handleGenerateSeo = async () => {
                     Generate SEO Package
                   </Button>
                 )}
-                {selectedThumb && metadata && (
+                {metadata && (
                   <Button onClick={handlePublish} className="bg-green-600 hover:bg-green-700 gap-2">
                     <CheckCircle2 className="w-4 h-4" /> Publish
                   </Button>
