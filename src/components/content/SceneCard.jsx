@@ -35,7 +35,7 @@ function FixPromptButton({ sceneId, projectId, onFixed }) {
     try {
       const resp = await base44.functions.invoke('fixScenePrompts', {
         project_id: projectId,
-        scene_ids: [sceneId],
+        scene_id: sceneId,
         fix_type: type
       });
       const data = resp.data || resp;
