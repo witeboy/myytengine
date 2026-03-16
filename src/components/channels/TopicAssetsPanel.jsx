@@ -195,7 +195,6 @@ export default function TopicAssetsPanel({ projectId, topicTitle }) {
   };
 
   const slug = sanitize(topicTitle || assets?.project?.name);
-  console.log('[Assets] window.__exportedVideo:', !!window.__exportedVideo, window.__exportedVideo?.blob?.size);
 
   const handleDownloadZip = async (e) => {
     e.stopPropagation();
@@ -277,26 +276,30 @@ export default function TopicAssetsPanel({ projectId, topicTitle }) {
     return <div className="py-3 px-4 text-xs text-gray-400">No project data found</div>;
   }
 
-  const mediaAssets = [];
-  if (assets.voiceoverUrl) mediaAssets.push({ url: assets.voiceoverUrl, label: 'Voiceover', icon: Mic, ext: 'mp3', filename: `${slug}-voiceover.mp3` });
-  if (assets.musicUrl) mediaAssets.push({ url: assets.musicUrl, label: assets.musicTitle || 'Background Music', icon: Music, ext: 'mp3', filename: `${slug}-music.mp3` });
-  if (assets.thumbnailUrl) mediaAssets.push({ url: assets.thumbnailUrl, label: 'Thumbnail', icon: ImageIcon, ext: 'png', filename: `${slug}-thumbnail.png` });
+  // Stable blob URL for exported video — created once, not every render
+  const exportedVideoBlobUrl = React.useMemo(() => {
+    if (window.__exportedVideo?.blob) {
+      return URL.createObjectURL(window.__exportedVideo.blob);
+    }
+    return null;
+  }, [window.__exportedVideo?.blob]);
 
-  const hasExportedVideo = !!window.__exportedVideo?.blob;
-  if (hasExportedVideo) {
-    const vidBlob = window.__exportedVideo.blob;
-    const vidUrl = URL.createObjectURL(vidBlob);
-    const vidSize = (vidBlob.size / (1024 * 1024)).toFixed(1);
-    mediaAssets.unshift({
-      url: vidUrl,
+  const mediaAssets = [];
+
+  if (exportedVideoBlobUrl && window.__exportedVideo?.blob) {
+    const vidSize = (window.__exportedVideo.blob.size / (1024 * 1024)).toFixed(1);
+    mediaAssets.push({
+      url: exportedVideoBlobUrl,
       label: `Exported Video (${vidSize} MB)`,
       icon: Film,
       ext: 'mp4',
       filename: window.__exportedVideo.filename || `${slug}-export.mp4`,
-      _isBlob: true,
-      _blob: vidBlob,
     });
   }
+
+  if (assets.voiceoverUrl) mediaAssets.push({ url: assets.voiceoverUrl, label: 'Voiceover', icon: Mic, ext: 'mp3', filename: `${slug}-voiceover.mp3` });
+  if (assets.musicUrl) mediaAssets.push({ url: assets.musicUrl, label: assets.musicTitle || 'Background Music', icon: Music, ext: 'mp3', filename: `${slug}-music.mp3` });
+  if (assets.thumbnailUrl) mediaAssets.push({ url: assets.thumbnailUrl, label: 'Thumbnail', icon: ImageIcon, ext: 'png', filename: `${slug}-thumbnail.png` });
   const textParts = [];
   if (assets.scriptText) textParts.push('Script');
   if (assets.seoTitles.length) textParts.push('Titles');
@@ -345,6 +348,14 @@ export default function TopicAssetsPanel({ projectId, topicTitle }) {
           </Badge>
         </div>
       </div>
+
+      {/* No video notice */}
+      {!window.__exportedVideo?.blob && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-700">
+          <Film className="w-3.5 h-3.5 flex-shrink-0" />
+          <span>No exported video in this session. Export from Timeline Editor first, then return here.</span>
+        </div>
+      )}
 
       {/* Download All ZIP */}
       <button
