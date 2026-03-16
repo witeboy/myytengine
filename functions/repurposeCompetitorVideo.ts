@@ -181,10 +181,19 @@ Deno.serve(async (req) => {
       // Fetch video metadata (description, tags) for extra context
       try {
         const vidUrl = `https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${YT_API_KEY}`;
+        console.log(`[Repurpose] Fetching video metadata for ${videoId}`);
         const vidRes = await fetch(vidUrl);
         if (vidRes.ok) {
           const vidData = await vidRes.json();
-          videoDescription = vidData.items?.[0]?.snippet?.description || '';
+          const snippet = vidData.items?.[0]?.snippet;
+          videoDescription = snippet?.description || '';
+          console.log(`[Repurpose] Got description: ${videoDescription.length} chars, tags: ${(snippet?.tags || []).length}`);
+          // Also grab tags for context
+          if (snippet?.tags?.length) {
+            videoDescription += '\n\nTags: ' + snippet.tags.slice(0, 20).join(', ');
+          }
+        } else {
+          console.log(`[Repurpose] Video metadata response: ${vidRes.status}`);
         }
       } catch (e) {
         console.log('Description fetch skipped:', e.message);
