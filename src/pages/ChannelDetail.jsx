@@ -86,7 +86,26 @@ export default function ChannelDetail() {
       script_strategy_override: channel.script_strategy || '',
     });
 
-    // Link topic to project
+    // Auto-create a Topics entity from the channel topic and select it
+    const importedTopic = await base44.entities.Topics.create({
+      project_id: project.id,
+      rank: 1,
+      title: topic.title,
+      description: topic.notes || `Imported from channel: ${channel.name}`,
+      viral_score: 8,
+      storytelling_score: 8,
+      emotional_score: 8,
+      is_selected: true,
+    });
+
+    // Mark project as topic_selected so it skips the selection step
+    await base44.entities.Projects.update(project.id, {
+      selected_topic_id: importedTopic.id,
+      status: 'topic_selected',
+      current_step: 1,
+    });
+
+    // Link channel topic to project
     await base44.entities.ChannelTopics.update(topic.id, {
       project_id: project.id,
       status: 'in_progress',
@@ -95,7 +114,7 @@ export default function ChannelDetail() {
     // Refresh topic list so UI reflects the change
     queryClient.invalidateQueries({ queryKey: ['channel-topics', channelId] });
 
-    // Navigate to pipeline
+    // Navigate directly to StoryTopics where the imported topic is shown with edit option
     navigate(createPageUrl(`StoryTopics?project_id=${project.id}`));
   };
 
