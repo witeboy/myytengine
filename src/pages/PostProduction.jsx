@@ -11,7 +11,7 @@ import SeoDescriptionsPanel from '@/components/postprod/SeoDescriptionsPanel';
 import MakeThumbnail from '@/components/production/MakeThumbnail';
 import {
   Loader2, Sparkles, Image as ImageIcon, FileText, CheckCircle2, ArrowLeft,
-  Type, BookOpen, Library, ArrowRight, ClipboardCheck, Zap, Brain, TrendingUp,
+  Type, ArrowRight, ClipboardCheck, Brain, TrendingUp,
   ChevronRight, X
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
