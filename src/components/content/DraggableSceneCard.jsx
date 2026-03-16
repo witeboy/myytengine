@@ -5,7 +5,7 @@ import SceneNotesEditor from './SceneNotesEditor';
 import ActAssigner from './ActAssigner';
 import { GripVertical } from 'lucide-react';
 
-export default function DraggableSceneCard({ scene, index, existingActs, onRegenerateImage, onAnimateScene, onSceneUpdated }) {
+export default function DraggableSceneCard({ scene, index, existingActs, onRegenerateImage, onAnimateScene, onSceneUpdated, orientation }) {
   return (
     <Draggable draggableId={scene.id} index={index}>
       {(provided, snapshot) => (
@@ -23,7 +23,8 @@ export default function DraggableSceneCard({ scene, index, existingActs, onRegen
           </div>
 
           <SceneCard
-            scene={scene}
+  scene={scene}
+  orientation={orientation}
             onRegenerateImage={onRegenerateImage}
             onAnimateScene={onAnimateScene}
             onSceneUpdated={onSceneUpdated}
