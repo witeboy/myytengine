@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Play, Clock, FileText, Zap } from 'lucide-react';
 
-export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose }) {
+export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose, channel }) {
   if (!date) return null;
 
   const shorts = topics.filter(t => t.format === 'short');
@@ -27,7 +27,7 @@ export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose 
       </div>
       <Badge className={`text-[10px] flex-shrink-0 ${topic.format === 'short' ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>
         {topic.format === 'short' ? <Clock className="w-3 h-3 mr-0.5" /> : <FileText className="w-3 h-3 mr-0.5" />}
-        {topic.format === 'short' ? '≤200w' : '15min'}
+        {topic.format === 'short' ? `≤${channel?.short_form_word_limit || 200}w` : `${channel?.long_form_duration_minutes || 15}min`}
       </Badge>
       <Badge className={`text-[10px] flex-shrink-0 ${statusColors[topic.status] || statusColors.queued}`}>
         {topic.status}

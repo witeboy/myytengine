@@ -19,7 +19,7 @@ function formatDate(year, month, day) {
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-export default function ContentCalendar({ topics, channel, onDateClick, onTopicClick }) {
+export default function ContentCalendar({ topics, channel, onDateClick }) {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());

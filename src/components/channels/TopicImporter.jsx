@@ -54,10 +54,10 @@ export default function TopicImporter({ open, onOpenChange, channel, onImported 
       total_topics: existing + titles.length,
     });
 
-    // Auto-schedule via backend
-    base44.functions.invoke('parseAndScheduleTopics', {
+    // Auto-schedule via backend — wait for it so calendar refreshes with scheduled dates
+    await base44.functions.invoke('parseAndScheduleTopics', {
       channel_id: channel.id,
-    }).catch(() => {});
+    }).catch((err) => console.warn('Scheduling error:', err));
 
     setImporting(false);
     setText('');

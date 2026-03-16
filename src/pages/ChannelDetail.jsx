@@ -89,6 +89,9 @@ export default function ChannelDetail() {
       status: 'in_progress',
     });
 
+    // Refresh topic list so UI reflects the change
+    queryClient.invalidateQueries({ queryKey: ['channel-topics', channelId] });
+
     // Navigate to pipeline
     navigate(createPageUrl(`StoryTopics?project_id=${project.id}`));
   };
@@ -218,6 +221,7 @@ export default function ChannelDetail() {
                   <DayTopicsPanel
                     date={selectedDate}
                     topics={selectedTopics}
+                    channel={channel}
                     onStartPipeline={handleStartPipeline}
                     onClose={() => { setSelectedDate(null); setSelectedTopics([]); }}
                   />
