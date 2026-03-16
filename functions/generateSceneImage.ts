@@ -445,11 +445,19 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
     : 'WIDE (native)';
   console.log(`📐 Scene ${sceneNum}: framing → ${framingMode} (${finalPrompt.length} chars)`);
 
+  // ── CHARACTER REFERENCE ANCHORING ──
+  // Scene 1: text-to-image (no reference yet — this becomes the bible)
+  // Scene 2+: image-to-image with Scene 1's image as character reference
+  const referenceUrl = sceneNum > 1 ? (project.reference_image_url || null) : null;
+  if (referenceUrl) {
+    console.log(`🔗 Scene ${sceneNum}: using character reference from Scene 1`);
+  }
+
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      console.log(`🎨 Scene ${sceneNum}: generating (attempt ${attempt + 1}/${MAX_RETRIES}, ${finalPrompt.length} chars)...`);
+      console.log(`🎨 Scene ${sceneNum}: generating (attempt ${attempt + 1}/${MAX_RETRIES}, ${finalPrompt.length} chars, ref=${!!referenceUrl})...`);
 
-      const imageUrl = await generateWithGrokImagine(apiKey, finalPrompt, aspectRatio);
+      const imageUrl = await generateWithGrokImagine(apiKey, finalPrompt, aspectRatio, referenceUrl);
 
       // Validate URL
       if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.startsWith('http')) {
@@ -460,6 +468,20 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
         image_url: imageUrl,
         status: "image_generated"
       });
+
+      // ── SCENE 1 ANCHOR: Save as reference for all subsequent scenes ──
+      if (sceneNum === 1 && !project.reference_image_url) {
+        try {
+          await base44.asServiceRole.entities.Projects.update(project.id, {
+            reference_image_url: imageUrl
+          });
+          // Update the in-memory project so subsequent scenes in this batch can use it
+          project.reference_image_url = imageUrl;
+          console.log(`📌 Scene 1 saved as character reference for all subsequent scenes`);
+        } catch (refErr) {
+          console.warn(`⚠️ Failed to save reference image: ${refErr.message}`);
+        }
+      }
 
       console.log(`✓ Scene ${sceneNum}: image generated (${finalPrompt.length} chars → ${imageUrl.substring(0, 60)}...)`);
 
