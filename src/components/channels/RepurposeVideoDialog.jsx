@@ -127,6 +127,14 @@ export default function RepurposeVideoDialog({ open, onOpenChange, video, channe
                 </div>
               )}
 
+              {/* Competitor video summary */}
+              {result.competitor_summary && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase mb-1">What They Covered</p>
+                  <p className="text-xs text-gray-700 leading-relaxed">{result.competitor_summary}</p>
+                </div>
+              )}
+
               {/* Angles comparison */}
               <div className="grid grid-cols-2 gap-2">
                 {result.original_angle && (
