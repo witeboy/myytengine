@@ -2,6 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
 const GEMINI_KEY = Deno.env.get('GEMINI_API_KEY');
 const YT_API_KEY = Deno.env.get('YOUTUBE_API_KEY');
+// v2: Fixed array response parsing, improved InnerTube extraction, URL unescaping
 
 // ── Extract video ID from URL ────────────────────────────────────
 function extractVideoId(url) {
