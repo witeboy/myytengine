@@ -9,6 +9,7 @@ import {
   Shield, Lightbulb, BarChart3, Video, Trophy, Sparkles
 } from 'lucide-react';
 import CompetitorVideoList from './CompetitorVideoList';
+import RepurposeVideoDialog from './RepurposeVideoDialog';
 
 function formatNum(n) {
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
@@ -29,13 +30,15 @@ const THREAT_COLORS = {
   high: 'bg-red-100 text-red-700',
 };
 
-export default function CompetitorPanel({ channel }) {
+export default function CompetitorPanel({ channel, onTopicsChanged }) {
   const [loading, setLoading] = useState(false);
   const [competitors, setCompetitors] = useState([]);
   const [aiSummary, setAiSummary] = useState(null);
   const [refreshedAt, setRefreshedAt] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [showStrategy, setShowStrategy] = useState(false);
+  const [repurposeVideo, setRepurposeVideo] = useState(null);
+  const [repurposeCompetitor, setRepurposeCompetitor] = useState(null);
 
   // Load cached data from channel.ai_insights
   useEffect(() => {
