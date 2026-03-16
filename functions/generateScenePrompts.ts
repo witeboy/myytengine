@@ -548,7 +548,7 @@ Deno.serve(async (req) => {
           const identity = c.identity_core || c.visual_description || c.description || '';
           const clothing = c.default_clothing || '';
           return `• ${c.name}:\n  IDENTITY (permanent): ${identity}${clothing ? `\n  DEFAULT CLOTHING (can change per scene): ${clothing}` : ''}`;
-        }).join('\n')}\n\n**RULE: You MUST embed the FULL identity description for EVERY character in EVERY image_prompt. The image generator has ZERO memory — each prompt is a fresh start. Name alone means NOTHING to the renderer.**`
+        }).join('\n')}\n\n**RULE: You MUST embed the FULL identity description for EVERY character in EVERY image_prompt. The image generator has ZERO memory — each prompt is a fresh start. Name alone means NOTHING to the renderer.**\n\n**CRITICAL WEAVING RULE: Character features must be WOVEN INTO the action and environment — NEVER listed in isolation.**\nBAD: "A woman with brown hair, oval face, 5ft4, light skin. She stands in a kitchen."\nGOOD: "A brown-haired woman leans against the kitchen counter, her light skin glowing under the warm overhead lamp as she scrolls her phone, coffee steam curling past her oval face."\nEvery physical trait must CONNECT to something in the scene — lighting, objects, movement, emotion. The character exists IN the world, not separate from it.`
       : '';
 
 
