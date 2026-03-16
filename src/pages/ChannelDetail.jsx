@@ -168,16 +168,21 @@ export default function ChannelDetail() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
           {[
-            { label: 'Total Topics', value: topics.length, icon: FileText, color: 'blue' },
-            { label: 'Scheduled', value: scheduledTopics.length, icon: Calendar, color: 'green' },
-            { label: 'In Progress', value: inProgressTopics.length, icon: Zap, color: 'amber' },
-            { label: 'Completed', value: completedTopics.length, icon: Play, color: 'emerald' },
+            { key: 'total', label: 'Total Topics', value: topics.length, icon: FileText, hex: '#3b82f6' },
+            { key: 'scheduled', label: 'Scheduled', value: scheduledTopics.length, icon: Calendar, hex: '#22c55e' },
+            { key: 'in_progress', label: 'In Progress', value: inProgressTopics.length, icon: Zap, hex: '#f59e0b' },
+            { key: 'completed', label: 'Completed', value: completedTopics.length, icon: Play, hex: '#10b981' },
           ].map(stat => (
-            <Card key={stat.label}>
+            <Card
+              key={stat.key}
+              onClick={() => setActiveStatFilter(activeStatFilter === stat.key ? null : stat.key)}
+              className={`cursor-pointer transition-all hover:shadow-md ${activeStatFilter === stat.key ? 'ring-2' : ''}`}
+              style={activeStatFilter === stat.key ? { ringColor: stat.hex, borderColor: stat.hex } : {}}
+            >
               <CardContent className="p-4 flex items-center gap-3">
-                <stat.icon className="w-5 h-5 text-gray-400" />
+                <stat.icon className="w-5 h-5" style={{ color: stat.hex }} />
                 <div>
                   <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
                   <p className="text-[11px] text-gray-500">{stat.label}</p>
@@ -186,6 +191,40 @@ export default function ChannelDetail() {
             </Card>
           ))}
         </div>
+
+        {/* Filtered Topic Panel */}
+        {activeStatFilter && (
+          <div className="mb-6">
+            <TopicStatusPanel
+              title={
+                activeStatFilter === 'total' ? 'All Topics' :
+                activeStatFilter === 'scheduled' ? 'Scheduled Topics' :
+                activeStatFilter === 'in_progress' ? 'In Progress' :
+                'Completed'
+              }
+              icon={
+                activeStatFilter === 'total' ? FileText :
+                activeStatFilter === 'scheduled' ? Calendar :
+                activeStatFilter === 'in_progress' ? Zap :
+                Play
+              }
+              topics={
+                activeStatFilter === 'total' ? topics :
+                activeStatFilter === 'scheduled' ? scheduledTopics :
+                activeStatFilter === 'in_progress' ? inProgressTopics :
+                completedTopics
+              }
+              color={
+                activeStatFilter === 'total' ? '#3b82f6' :
+                activeStatFilter === 'scheduled' ? '#22c55e' :
+                activeStatFilter === 'in_progress' ? '#f59e0b' :
+                '#10b981'
+              }
+              onClose={() => setActiveStatFilter(null)}
+              onStartPipeline={handleStartPipeline}
+            />
+          </div>
+        )}
 
         {/* Niche Strategy Card */}
         {strategy && (
