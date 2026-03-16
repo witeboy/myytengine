@@ -38,12 +38,15 @@ async function getTranscriptAPI(videoId) {
       }
 
       const data = await response.json();
+      console.log(`[Transcript T1] Response data status: ${data.results?.[0]?.status}, has data: ${!!data.results?.[0]?.data}`);
       const rd = data.results?.[0]?.data;
       if (!rd) {
         if (data.results?.[0]?.status === 'processing' && attempt < MAX_RETRIES) {
+          console.log(`[Transcript T1] Still processing, waiting 4s...`);
           await new Promise(r => setTimeout(r, 4000));
           continue;
         }
+        console.log(`[Transcript T1] No data found, full response: ${JSON.stringify(data).slice(0, 500)}`);
         return null;
       }
 
