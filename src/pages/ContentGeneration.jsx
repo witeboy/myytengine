@@ -112,7 +112,7 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
         )}
       </Button>
 
-      {showMenu && !fixing && (
+      {showMenu && !fixing && !showRefPicker && (
         <div className="absolute top-full mt-1 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-64">
           {fixOptions.map(opt => (
             <button
@@ -127,6 +127,53 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
               </div>
             </button>
           ))}
+          {scenesWithImages.length > 0 && (
+            <>
+              <div className="border-t border-gray-100" />
+              <button
+                onClick={() => setShowRefPicker(true)}
+                className="w-full text-left px-4 py-2.5 hover:bg-blue-50 last:rounded-b-lg flex items-start gap-2"
+              >
+                <span className="text-lg">🔗</span>
+                <div>
+                  <p className="text-sm font-medium text-gray-800">Lock Character Reference</p>
+                  <p className="text-xs text-gray-500">
+                    {currentRefUrl ? 'Change reference scene for consistency' : 'Pick a scene as the style anchor'}
+                  </p>
+                </div>
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Reference Image Picker */}
+      {showRefPicker && (
+        <div className="absolute top-full mt-1 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-80 max-h-96 overflow-y-auto">
+          <div className="p-3 border-b border-gray-100 sticky top-0 bg-white z-10">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium text-gray-800">Pick Reference Scene</p>
+              <button onClick={() => { setShowRefPicker(false); setShowMenu(false); }} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
+            </div>
+            <p className="text-[10px] text-gray-500 mt-1">This image will be used as style/character reference for all other scenes via Grok image-to-image</p>
+          </div>
+          <div className="grid grid-cols-3 gap-1.5 p-2">
+            {scenesWithImages.sort((a,b) => a.scene_number - b.scene_number).map(s => (
+              <button
+                key={s.id}
+                onClick={() => handleLockReference(s.id, s.image_url)}
+                className={`relative rounded overflow-hidden border-2 transition-all hover:scale-105 ${
+                  currentRefUrl === s.image_url ? 'border-blue-500 ring-2 ring-blue-200' : 'border-transparent hover:border-blue-300'
+                }`}
+              >
+                <img src={s.image_url} alt={`S${s.scene_number}`} className="w-full aspect-video object-cover" />
+                <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] text-center py-0.5">
+                  S{s.scene_number}
+                  {currentRefUrl === s.image_url && ' ✓'}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -136,6 +183,8 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
         }`}>
           {result.error ? (
             <p>Failed: {result.error}</p>
+          ) : result.reference_locked ? (
+            <p className="font-medium">🔗 Character reference locked!</p>
           ) : (
             <>
               <p className="font-medium">Fixed {result.fixed}/{result.total} scenes</p>
