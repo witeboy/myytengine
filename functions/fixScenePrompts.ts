@@ -150,6 +150,26 @@ function sanitizePrompt(prompt, characterTieredTags, characters, visualStyle, sh
     return '';
   });
 
+  // ═══ 1b. Strip verbatim identity_core dumps that cause floating heads ═══
+  // Pattern: "The 55 year old male with light-medium skin, oval face shape, hazel eyes..."
+  // These appear when the LLM copies the raw character block instead of weaving traits into the scene
+  const beforeIdentityDump = p;
+  p = p.replace(
+    /\b(?:The|A|An)\s+\d{1,2}\s*[-–]?\s*year[\s-]*old\s+(?:male|female|man|woman)\s+with\s+[^.]{30,}?(?=\b(?:is|was|sits|stands|walks|looks|leans|holds|stares|shows|implied|clutch|grip|sitting|standing|walking|holding|staring|leaning)\b)/gi,
+    ''
+  );
+  // Also catch: "a 55-year-old male with light-medium skin... confident smile" (no verb follows, just ends with period)
+  p = p.replace(
+    /\b(?:The|A|An)\s+\d{1,2}\s*[-–]?\s*year[\s-]*old\s+(?:male|female|man|woman)\s+with\s+[^.]{50,300}\./gi,
+    (match) => {
+      // Only strip if it looks like an isolated identity dump (many commas = catalog of traits)
+      const commaCount = (match.match(/,/g) || []).length;
+      if (commaCount >= 4) return '';
+      return match; // Keep if it's a short natural sentence
+    }
+  );
+  if (p !== beforeIdentityDump) fixes.push('stripped_verbatim_identity_dump');
+
   // ═══ 2. Strip orphaned quotes and empty strings from height like 5'10" ═══
   p = p.replace(/['']\s*,\s*['']/g, ',');
   p = p.replace(/,\s*['']+\s*,/g, ',');
