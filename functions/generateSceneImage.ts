@@ -405,6 +405,13 @@ function cleanPromptForGrok(rawPrompt) {
     }
   }
 
+  // Strip "shown full body/figure" rendering instructions — these are NOT visual descriptions
+  // and cause Grok to over-emphasize body framing instead of environment
+  p = p
+    .replace(/\bshown full (?:body|figure)\s*(?:in the scene)?\b/gi, '')
+    .replace(/\bshown full body in the scene\b/gi, '')
+    .replace(/\s{2,}/g, ' ').replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.');
+
   // 8. Smart cap — never cut mid-sentence
   if (p.length > MAX_PROMPT_CHARS) {
     const cutZone = p.substring(MAX_PROMPT_CHARS - 100, MAX_PROMPT_CHARS);
