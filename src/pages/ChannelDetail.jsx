@@ -175,20 +175,20 @@ export default function ChannelDetail() {
             { key: 'in_progress', label: 'In Progress', value: inProgressTopics.length, icon: Zap, hex: '#f59e0b' },
             { key: 'completed', label: 'Completed', value: completedTopics.length, icon: Play, hex: '#10b981' },
           ].map(stat => (
-            <Card
+            <div
               key={stat.key}
               onClick={() => setActiveStatFilter(activeStatFilter === stat.key ? null : stat.key)}
-              className={`cursor-pointer transition-all hover:shadow-md ${activeStatFilter === stat.key ? 'ring-2' : ''}`}
-              style={activeStatFilter === stat.key ? { ringColor: stat.hex, borderColor: stat.hex } : {}}
+              className={`cursor-pointer transition-all hover:shadow-md rounded-xl border bg-card text-card-foreground shadow ${activeStatFilter === stat.key ? 'ring-2 ring-offset-1' : ''}`}
+              style={activeStatFilter === stat.key ? { borderColor: stat.hex, '--tw-ring-color': stat.hex } : {}}
             >
-              <CardContent className="p-4 flex items-center gap-3">
+              <div className="p-4 flex items-center gap-3">
                 <stat.icon className="w-5 h-5" style={{ color: stat.hex }} />
                 <div>
                   <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
                   <p className="text-[11px] text-gray-500">{stat.label}</p>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))}
         </div>
 
