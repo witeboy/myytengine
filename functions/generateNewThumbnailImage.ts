@@ -527,17 +527,39 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── STEP 9: Save ─────────────────────────────────────────────
+    // ── STEP 9: Re-upload to Base44 storage (CORS-safe) ────────
+    let persistentUrl = finalUrl;
+    if (timeLeft() > 8000) {
+      try {
+        console.log('📦 Re-uploading to Base44 storage for CORS-safe access...');
+        const imgResp = await fetch(finalUrl);
+        if (imgResp.ok) {
+          const imgBlob = await imgResp.blob();
+          const imgFile = new File([imgBlob], `thumbnail_${concept_id}_${Date.now()}.png`, { type: imgBlob.type || 'image/png' });
+          const uploadResult = await base44.integrations.Core.UploadFile({ file: imgFile });
+          if (uploadResult?.file_url) {
+            persistentUrl = uploadResult.file_url;
+            console.log('✅ Re-uploaded to Base44:', persistentUrl);
+          }
+        }
+      } catch (e) {
+        console.warn('Re-upload to Base44 failed (non-fatal, using KIE URL):', e.message);
+      }
+    } else {
+      console.log('⏱ Skipping re-upload — not enough time left');
+    }
+
+    // ── STEP 10: Save ─────────────────────────────────────────────
     try {
       await base44.entities.ThumbnailConcepts.update(concept_id, {
-        image_url: finalUrl, status: 'complete', is_selected: true,
+        image_url: persistentUrl, status: 'complete', is_selected: true,
       });
       console.log('✅ Saved');
     } catch (e) { console.warn('Save error:', e.message); }
 
     return Response.json({
       success: true,
-      image_url: finalUrl,
+      image_url: persistentUrl,
       concept_id,
       model_used: model,
       post_processing: { upscaled: finalUrl !== imageUrl, mood_graded: mood, original_url: imageUrl },
