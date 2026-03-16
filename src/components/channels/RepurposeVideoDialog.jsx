@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
+import { useNavigate } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Loader2, CheckCircle2, Zap, ArrowRight, FileText } from 'lucide-react';
+import { Loader2, CheckCircle2, Zap, ArrowRight, FileText, PlayCircle } from 'lucide-react';
 
 export default function RepurposeVideoDialog({ open, onOpenChange, video, channel, onRepurposed }) {
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [startingPipeline, setStartingPipeline] = useState(false);
 
   useEffect(() => {
     if (open && video && !result && !loading) {
@@ -160,10 +164,18 @@ export default function RepurposeVideoDialog({ open, onOpenChange, video, channe
               )}
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-gray-500 bg-blue-50 border border-blue-100 rounded-lg p-2.5">
-              <FileText className="w-4 h-4 text-blue-500 flex-shrink-0" />
-              <span>This topic is now in your queue. Go to <strong>All Topics</strong> or schedule it via the calendar to start production.</span>
-            </div>
+            <Button
+              onClick={handleStartPipeline}
+              disabled={startingPipeline}
+              className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white font-semibold"
+              size="lg"
+            >
+              {startingPipeline ? (
+                <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Starting Pipeline...</>
+              ) : (
+                <><PlayCircle className="w-4 h-4 mr-2" /> Continue to Pipeline</>
+              )}
+            </Button>
           </div>
         )}
       </DialogContent>
