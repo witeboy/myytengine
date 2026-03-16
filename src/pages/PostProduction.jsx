@@ -343,6 +343,8 @@ export default function PostProduction() {
                 initialTitle={selectedTitles.length > 0 ? selectedTitles[0].title : (project?.name || '')}
                 initialSummary={scriptSummary}
                 sceneImages={scenes}
+                projectId={projectId}
+                selectedSeoTitles={selectedTitles}
               />
             </div>
           </TabsContent>
