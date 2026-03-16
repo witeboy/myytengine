@@ -160,6 +160,7 @@ RULES:
       description_template: parsed.descriptions[0]?.content || '',
       description_alt_1: parsed.descriptions[1]?.content || '',
       description_alt_2: parsed.descriptions[2]?.content || '',
+      descriptions_json: JSON.stringify(formattedDescriptions),
     });
 
     // Format for frontend

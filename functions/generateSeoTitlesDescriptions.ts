@@ -218,6 +218,9 @@ CRITICAL RULES:
       seo_strategy: parsed.seo_analysis?.niche_opportunity || '',
     };
 
+    // Also persist the full titles array for rehydration
+    metaData.titles_json = JSON.stringify(titles);
+
     if (existingMeta.length > 0) {
       await base44.asServiceRole.entities.UploadMetadata.update(existingMeta[0].id, metaData);
     } else {
