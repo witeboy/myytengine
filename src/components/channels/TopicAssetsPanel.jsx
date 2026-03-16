@@ -130,9 +130,17 @@ function buildTextDocument(data) {
 }
 
 export default function TopicAssetsPanel({ projectId, topicTitle }) {
-  const [loading, setLoading] = useState(true);
+ const [loading, setLoading] = useState(true);
   const [assets, setAssets] = useState(null);
   const [zipping, setZipping] = useState(false);
+
+  // Must be declared here — before any early returns — to satisfy React hook rules
+  const exportedVideoBlobUrl = React.useMemo(() => {
+    if (window.__exportedVideo?.blob) {
+      return URL.createObjectURL(window.__exportedVideo.blob);
+    }
+    return null;
+  }, []);
 
   useEffect(() => {
     if (!projectId) { setLoading(false); return; }
@@ -277,12 +285,7 @@ export default function TopicAssetsPanel({ projectId, topicTitle }) {
   }
 
   // Stable blob URL for exported video — created once, not every render
-  const exportedVideoBlobUrl = React.useMemo(() => {
-    if (window.__exportedVideo?.blob) {
-      return URL.createObjectURL(window.__exportedVideo.blob);
-    }
-    return null;
-  }, [window.__exportedVideo?.blob]);
+  
 
   const mediaAssets = [];
 
