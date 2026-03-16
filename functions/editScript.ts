@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
 async function safeGeminiCall(prompt, temperature = 0.8) {
   const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
