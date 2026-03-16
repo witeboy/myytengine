@@ -262,13 +262,17 @@ function OverlayTextCard({ concept, isSelected, onSelect }) {
 //   Step 2 — Ideogram character-remix renders: template + photos + selected text
 //   Step 3 — Result: download, re-render, try other texts
 // ═══════════════════════════════════════════════════════════════════════
-export default function MakeThumbnail({ onBack }) {
+export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sceneImages }) {
   const [step, setStep] = useState(0);
 
   // Step 0 inputs
-  const [title, setTitle]       = useState('');
-  const [summary, setSummary]   = useState('');
+  const [title, setTitle]       = useState(initialTitle || '');
+  const [summary, setSummary]   = useState(initialSummary || '');
   const [chars, setChars]       = useState([null, null]); // start with 2 slots, can grow to 14
+
+  // Sync props when they change (e.g. summary loaded async)
+  useEffect(() => { if (initialTitle && !title) setTitle(initialTitle); }, [initialTitle]);
+  useEffect(() => { if (initialSummary && !summary) setSummary(initialSummary); }, [initialSummary]);
   const [selectedUserTemplate, setSelectedUserTemplate] = useState(null);
 
   // Step 1 data
@@ -338,6 +342,9 @@ export default function MakeThumbnail({ onBack }) {
             });
             charPhotos.push({ b64, mime: char.file.type || 'image/jpeg', name: char.name || 'character' });
           } catch (_) {}
+        } else if (char?.remoteUrl) {
+          // Scene image from URL — pass URL directly, backend will handle it
+          charPhotos.push({ url: char.remoteUrl, name: char.name || 'scene' });
         }
       }
 
@@ -444,6 +451,20 @@ export default function MakeThumbnail({ onBack }) {
             const b64 = await resizeToBase64(char.file, 512);
             if (b64) directCharPhotos.push({ b64, mime: 'image/jpeg', description: char.description || '' });
           } catch (_) {}
+        } else if (char?.remoteUrl) {
+          // Scene image — fetch and convert to base64
+          try {
+            const resp = await fetch(char.remoteUrl);
+            if (resp.ok) {
+              const blob = await resp.blob();
+              const b64 = await new Promise(resolve => {
+                const r = new FileReader();
+                r.onload = () => resolve(r.result.split(',')[1]);
+                r.readAsDataURL(blob);
+              });
+              if (b64) directCharPhotos.push({ b64, mime: 'image/jpeg', description: char.description || '' });
+            }
+          } catch (_) { console.warn('Failed to fetch scene image:', char.remoteUrl); }
         }
       }
 
