@@ -96,19 +96,45 @@ The overlay text + SEO title together should create an irresistible curiosity pa
       contentParts.push({ text: `LAYOUT TEMPLATE — study the composition, character positions, background, lighting, and text zones. All image prompts must recreate this layout exactly.` });
     }
 
-    contentParts.push({ text: `You are the world's #1 YouTube thumbnail psychologist and CTR strategist.
+    contentParts.push({ text: `You are the world's #1 YouTube thumbnail psychologist and CTR strategist — combining the visual genius of MrBeast, the clarity of Alex Hormozi, and the emotional manipulation of true crime documentaries.
 
 VIDEO TITLE: "${video_title}"
 ${summary ? `SUMMARY: "${summary}"` : ''}${seoTitleContext}
 
 YOUR JOB:
-Analyse the title and summary. Then generate exactly 5 thumbnail concepts, each with a devastatingly effective overlay text that will trigger millions of clicks.
+1. Extract the KEY OBJECTS and SUBJECTS from the script/title/summary
+2. Determine the best thumbnail STRATEGY (split-screen, before/after, hero shot, etc.)
+3. Generate exactly 5 thumbnail concepts with objects intelligently placed
 
 ════════════════════════════
-STEP 1 — DETECT THE MOOD
+STEP 0 — EXTRACT STORY OBJECTS (CRITICAL)
+════════════════════════════
+Analyze the title and summary to identify the CENTRAL VISUAL OBJECTS that viewers must see to instantly understand the video:
+
+OBJECT EXTRACTION RULES:
+- FINANCE videos (stocks, crypto, money): Extract the specific asset (Bitcoin logo, stock chart, gold bars, dollar bills, specific company logo)
+- CRIME/DRAMA videos: Extract the central person/victim/villain, the weapon/evidence, the location
+- FOOD/LIFESTYLE: Extract the specific food item, product, or transformation result
+- TECH: Extract the specific device, app, or gadget
+- BEFORE/AFTER stories: Extract both the "before" state object and the "after" state object
+- COMPARISON stories: Extract both sides of the comparison
+- TUTORIAL/HOW-TO: Extract the end result or the tool being taught
+
+These objects MUST appear prominently in EVERY image prompt. They are what make the viewer instantly connect the thumbnail to the video.
+
+════════════════════════════
+STEP 1 — DETECT MOOD + CHOOSE STRATEGY
 ════════════════════════════
 From the title/summary, identify the single best niche:
 crime | drama | nollywood | comedy | finance | inspirational | educational
+
+Then choose the BEST thumbnail strategy:
+- SPLIT SCREEN (before/after, then/now, good/bad, rich/poor): Use when there's a contrast or comparison. One side dark/sorrowful, other side bright/successful. Like MrBeast "$1 vs $1,000,000" format.
+- HERO SHOT: Single powerful character with extracted objects around them. Use for story-driven content.
+- REACTION/SHOCK: Character with exaggerated expression + the object that caused the reaction. Use for reveal/discovery content.
+- PROGRESSION: Show transformation from point A to point B with arrow or timeline. Use for journey/growth stories.
+- VERSUS: Two subjects facing each other with VS or lightning bolt between them. Use for competition content.
+- MYSTERY/REVEAL: Partially hidden object with red circle or spotlight. Use for curiosity-gap content.
 
 ════════════════════════════
 STEP 2 — OVERLAY TEXT LAWS (ALL 5 MUST OBEY THESE)
@@ -117,11 +143,9 @@ STEP 2 — OVERLAY TEXT LAWS (ALL 5 MUST OBEY THESE)
 LAW 1 — ZERO OVERLAP (HARD RULE):
 The overlay text MUST NOT repeat any word from the title OR the SEO titles listed above.
 Title words are banned: ${video_title.toLowerCase().replace(/[^a-z0-9\s]/g,'').split(/\s+/).filter(w=>w.length>2).join(', ')}
-Purpose: the text COMPANIONS the title — it adds visual tension, not repetition. Title + thumbnail = a complete curiosity package.
 
 LAW 2 — MAX 3 WORDS, ALL CAPS:
 Thumbnails are seen at 168x94px on mobile. 4+ words = unreadable blur.
-Perfect: 2-3 punchy words. Never a full sentence.
 Font: Impact or Bebas Neue only.
 
 LAW 3 — TRIGGER ONE HIGH-AROUSAL EMOTION:
@@ -136,12 +160,16 @@ LAW 4 — SENTIMENT PIVOT:
 ════════════════════════════
 STEP 3 — IMAGE PROMPT RULES
 ════════════════════════════
-Each concept needs a detailed image_prompt (200+ words) that:
+Each concept needs a detailed image_prompt (300+ words) that:
 - Starts with: "1920x1080 YouTube thumbnail, photorealistic, cinematic DSLR quality"
-- Describes the scene, character emotion/pose, lighting (rim lights, key light)
-- Describes background colors, mood, depth of field
+- MUST include the extracted story objects prominently in the scene
+- For SPLIT SCREEN concepts: describe LEFT side and RIGHT side separately with contrasting mood/lighting
+- For BEFORE/AFTER: left side = dark, desaturated, struggling; right side = bright, saturated, successful
+- For FINANCE: include specific financial symbols (Bitcoin, stock charts going up/down, gold, cash stacks)
+- For CRIME: include evidence, shadows, red accents, police tape, mystery elements
+- Describes character emotion/pose, lighting (rim lights, key light)
 - ${hasCharPhotos ? 'Describes the character(s) from the uploaded photos exactly — same face, skin tone, hair, features. Say "person matching reference photo exactly"' : 'Creates characters that match the video tone'}
-- ${hasUserTemplate ? `Recreates the layout from the uploaded template: "${template_name}" — same composition, positions, zones` : 'Uses a cinematic split or hero layout'}
+- ${hasUserTemplate ? `Recreates the layout from the uploaded template: "${template_name}" — same composition, positions, zones. REPLACE any objects in the template with the story-relevant objects extracted above.` : 'Uses the chosen strategy layout (split-screen, hero, etc.)'}
 - Ends with: "NO text, letters, numbers, or watermarks anywhere in the image"
 
 ════════════════════════════
@@ -152,16 +180,21 @@ Return ONLY a valid JSON object. No markdown. No explanation. No backticks.
 {
   "detected_mood": "ONE of: crime, drama, nollywood, comedy, finance, inspirational, educational",
   "mood_reasoning": "one sentence why",
+  "extracted_objects": ["list", "of", "key", "visual", "objects", "from", "the", "story"],
+  "thumbnail_strategy": "split_screen | hero_shot | reaction | progression | versus | mystery",
+  "strategy_reasoning": "why this strategy works for this content",
   "concepts": [
     {
       "rank": 1,
       "text_overlay": "MAX 3 WORDS ALL CAPS — no title words",
       "emotion_triggered": "FEAR|GREED|SHOCK|CURIOSITY",
       "why_this_works": "one sentence psychological explanation",
+      "objects_used": ["which extracted objects appear in this thumbnail"],
+      "layout_type": "split_screen|hero|reaction|progression|versus|mystery",
       "text_position": "upper-left|bottom-center",
       "text_color": "white|yellow|red",
       "ctr_score": 9,
-      "image_prompt": "1920x1080 YouTube thumbnail, photorealistic... (200+ words, NO text in image)"
+      "image_prompt": "1920x1080 YouTube thumbnail, photorealistic... (300+ words, includes extracted objects, NO text in image)"
     }
   ]
 }` });
