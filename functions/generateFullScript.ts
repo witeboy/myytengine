@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
 // This function MERGES already-generated batch content into a full script.
 // It does NOT call Gemini. No tokens consumed.
@@ -105,13 +105,6 @@ Deno.serve(async (req) => {
       current_step: 4
     });
 
-
-    // Update project
-    await base44.asServiceRole.entities.Projects.update(project_id, {
-      script_id: script.id,
-      status: "script_complete",
-      current_step: 4
-    });
 
     return Response.json({
       success: true,
