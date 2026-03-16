@@ -553,13 +553,23 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
     setStep(3);
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     const url = generatedUrl || selectedConcept?.image_url;
     if (!url) return;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `thumbnail-${title.replace(/\s+/g, '-').toLowerCase()}.png`;
-    a.click();
+    try {
+      const resp = await fetch(url);
+      const blob = await resp.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = `thumbnail-${title.replace(/\s+/g, '-').toLowerCase()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (e) {
+      window.open(url, '_blank');
+    }
   };
 
   // detectedMood from backend can be pipe-separated (e.g. "crime|drama") — take first segment
