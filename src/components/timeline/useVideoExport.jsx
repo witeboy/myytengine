@@ -194,62 +194,63 @@ export default function useVideoExport() {
     return { supported: true, warning: true, reason: `${quality} H.264 encoding may not be fully supported.`, codec: profiles[0] };
   }, []);
 
-  const loadImage = async (url) => {
+  // Resolve a URL through the proxy if needed, returns a CORS-safe URL
+  const resolveUrl = async (url) => {
+    // Try direct fetch first
     try {
-      const resp = await fetch(url, { mode: 'cors' });
-      if (resp.ok) return await createImageBitmap(await resp.blob());
+      const resp = await fetch(url, { method: 'HEAD', mode: 'cors' });
+      if (resp.ok) return url;
     } catch {}
+    // Use proxy to re-upload to Base44 storage
     try {
       const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url });
       const data = proxyRes.data || proxyRes;
+      if (data.success && data.file_url) return data.file_url;
+      // Legacy base64 fallback
       if (data.success && data.data) {
         const bytes = Uint8Array.from(atob(data.data), c => c.charCodeAt(0));
-        return await createImageBitmap(new Blob([bytes], { type: data.content_type || 'image/png' }));
+        return URL.createObjectURL(new Blob([bytes], { type: data.content_type || 'application/octet-stream' }));
       }
-    } catch (e) { console.warn(`Proxy failed: ${url.substring(0,60)} — ${e.message}`); }
+    } catch (e) { console.warn(`Proxy resolve failed: ${url.substring(0,60)} — ${e.message}`); }
+    return url; // return original as last resort
+  };
+
+  const loadImage = async (url) => {
+    const safeUrl = await resolveUrl(url);
+    try {
+      const resp = await fetch(safeUrl, { mode: 'cors' });
+      if (resp.ok) return await createImageBitmap(await resp.blob());
+    } catch {}
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = 'anonymous';
       img.onload  = () => resolve(img);
-      img.onerror = () => reject(new Error('All image load methods failed'));
-      img.src = url;
+      img.onerror = () => reject(new Error('Image load failed: ' + url.substring(0, 60)));
+      img.src = safeUrl;
     });
   };
 
   const loadVideoElement = async (url) => {
+    const safeUrl = await resolveUrl(url);
     let blobUrl = null;
-    // Try direct fetch first
     try {
-      const resp = await fetch(url, { mode: 'cors' });
+      const resp = await fetch(safeUrl, { mode: 'cors' });
       if (resp.ok) blobUrl = URL.createObjectURL(await resp.blob());
     } catch {}
-    // If direct fetch failed, try proxy
     if (!blobUrl) {
-      try {
-        const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url });
-        const data = proxyRes.data || proxyRes;
-        if (data.success && data.data) {
-          const bytes = Uint8Array.from(atob(data.data), c => c.charCodeAt(0));
-          const blob = new Blob([bytes], { type: data.content_type || 'video/mp4' });
-          blobUrl = URL.createObjectURL(blob);
-        }
-      } catch (e) { console.warn(`Video proxy failed: ${url.substring(0,60)} — ${e.message}`); }
-    }
-    if (!blobUrl) {
-      // Last resort: try loading video element directly (may work for some domains)
       return new Promise((resolve, reject) => {
         const v = document.createElement('video');
         v.crossOrigin = 'anonymous'; v.muted = true; v.playsInline = true; v.preload = 'auto';
         const t = setTimeout(() => reject(new Error('timeout')), 30000);
         v.onloadeddata = () => { clearTimeout(t); resolve(v); };
         v.onerror      = () => { clearTimeout(t); reject(new Error('failed')); };
-        v.src = url;
+        v.src = safeUrl;
       });
     }
     return new Promise((resolve, reject) => {
       const v = document.createElement('video');
       v.muted = true; v.playsInline = true; v.preload = 'auto';
-      const t = setTimeout(() => { URL.revokeObjectURL(blobUrl); reject(new Error('timeout')); }, 30000);
+      const t = setTimeout(() => { URL.revokeObjectURL(blobUrl); reject(new Error('timeout')); }, 60000);
       v.onloadeddata = () => { clearTimeout(t); v._blobUrl = blobUrl; resolve(v); };
       v.onerror      = () => { clearTimeout(t); URL.revokeObjectURL(blobUrl); reject(new Error('failed')); };
       v.src = blobUrl;
