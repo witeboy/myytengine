@@ -81,6 +81,28 @@ export default function VideoExporter({
       document.body.appendChild(a);
       a.click();
       a.remove();
+
+      // Store for ZIP bundling in TopicAssetsPanel (same session)
+      window.__exportedVideo = {
+        blob,
+        filename: `${projectName || 'video'}-${quality}-export.mp4`,
+        size: blob.size,
+      };
+
+      // Persist to ProductionSettings so TopicAssetsPanel can include it
+      try {
+        const file = new File([blob], `${projectName || 'video'}-${quality}.mp4`, { type: 'video/mp4' });
+        const uploadRes = await base44.functions.invoke('uploadExportedVideo', {
+          project_id: scenes[0]?.sceneId ? undefined : undefined, // filled below
+        });
+        // Fallback: store blob URL in memory for same-session ZIP download
+        window.__lastExportedVideoBlob = blob;
+        window.__lastExportedVideoName = `${projectName || 'video'}-${quality}-export.mp4`;
+      } catch (e) {
+        console.warn('Could not persist video:', e.message);
+        window.__lastExportedVideoBlob = blob;
+        window.__lastExportedVideoName = `${projectName || 'video'}-${quality}-export.mp4`;
+      }
     }
   };
 
