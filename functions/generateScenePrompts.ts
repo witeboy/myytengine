@@ -591,43 +591,45 @@ Deno.serve(async (req) => {
       };
     }
 
-    // Style transforms — now structured BODY-FIRST
-    // Pattern: "[style] [body build + action framing], [compressed face/hair clause]"
+    // Style transforms — IDENTITY ONLY, no framing/body instructions
+    // Body proportion is controlled by getBodyProportionDirective() per shot type.
+    // These tags describe WHAT the character LOOKS LIKE, not how they're framed.
+    // Pattern: "[style] [body build], [compressed face/hair clause], [style rendering]"
     const styleCharacterRules = {
       cinematic_realistic: (bodyDesc, faceDesc) =>
-        `photorealistic ${bodyDesc} shown full body in the scene, ${faceDesc}, natural skin texture, cinematic lighting`,
+        `photorealistic ${bodyDesc}, ${faceDesc}, natural skin texture, cinematic lighting`,
       photorealistic_4k: (bodyDesc, faceDesc) =>
-        `DSLR-quality photorealistic ${bodyDesc} shown full body, ${faceDesc}, razor-sharp detail, editorial photography`,
+        `DSLR-quality photorealistic ${bodyDesc}, ${faceDesc}, razor-sharp detail, editorial photography`,
       anime: (bodyDesc, faceDesc) =>
-        `anime-style ${bodyDesc} shown full figure, ${faceDesc}, large expressive eyes with highlight reflections, clean linework, cel-shaded`,
+        `anime-style ${bodyDesc}, ${faceDesc}, large expressive eyes with highlight reflections, clean linework, cel-shaded`,
       cinematic_anime: (bodyDesc, faceDesc) =>
-        `cinematic anime ${bodyDesc} shown full body, ${faceDesc}, Makoto Shinkai quality, dramatic volumetric lighting, flowing hair`,
+        `cinematic anime ${bodyDesc}, ${faceDesc}, Makoto Shinkai quality, dramatic volumetric lighting, flowing hair`,
      cartoon_2d: (bodyDesc, faceDesc) =>
-        `2D cartoon ${bodyDesc} shown full body with bold outlines, ${faceDesc}, flat vibrant colors, dynamic pose, normal proportions`,
+        `2D cartoon ${bodyDesc} with bold outlines, ${faceDesc}, flat vibrant colors, dynamic pose, normal proportions`,
      picstory_cocomelon: (bodyDesc, faceDesc) =>
-        `3D rendered ${bodyDesc} shown full body, ${faceDesc}, soft rounded plastic-smooth features, pastel colors, Pixar Junior quality`,
+        `3D rendered ${bodyDesc}, ${faceDesc}, soft rounded plastic-smooth features, pastel colors, Pixar Junior quality`,
       cinematic_picstory: (bodyDesc, faceDesc) =>
-        `Pixar-quality 3D animated ${bodyDesc} shown full body in the scene, ${faceDesc}, subsurface scattering on skin, expressive features, dramatic studio rim lighting`,
+        `Pixar-quality 3D animated ${bodyDesc}, ${faceDesc}, subsurface scattering on skin, expressive features, dramatic studio rim lighting`,
       oil_painting: (bodyDesc, faceDesc) =>
-        `oil-painted ${bodyDesc} shown full figure, ${faceDesc}, visible impasto brushstrokes, Rembrandt chiaroscuro lighting`,
+        `oil-painted ${bodyDesc}, ${faceDesc}, visible impasto brushstrokes, Rembrandt chiaroscuro lighting`,
       watercolor: (bodyDesc, faceDesc) =>
-        `watercolor-rendered ${bodyDesc} shown full figure, ${faceDesc}, soft translucent washes, paper grain showing through`,
+        `watercolor-rendered ${bodyDesc}, ${faceDesc}, soft translucent washes, paper grain showing through`,
       comic_book: (bodyDesc, faceDesc) =>
-        `comic book ${bodyDesc} shown full body in dynamic pose, ${faceDesc}, bold black ink outlines, halftone shading, Marvel/DC quality`,
+        `comic book ${bodyDesc}, ${faceDesc}, bold black ink outlines, halftone shading, Marvel/DC quality`,
       humpty_dumpty: (bodyDesc, faceDesc) =>
-        `storybook ${bodyDesc} shown full figure, ${faceDesc}, rounded friendly shapes, gentle watercolor washes, fairy tale warmth`,
+        `storybook ${bodyDesc}, ${faceDesc}, rounded friendly shapes, gentle watercolor washes, fairy tale warmth`,
       harry_potter: (bodyDesc, faceDesc) =>
-        `fantasy ${bodyDesc} shown full body, ${faceDesc}, warm candlelit tones, magical golden particles, gothic atmosphere`,
+        `fantasy ${bodyDesc}, ${faceDesc}, warm candlelit tones, magical golden particles, gothic atmosphere`,
       "3d_whiteboard_cartoon": (bodyDesc, faceDesc) =>
-        `3D whiteboard cartoon ${bodyDesc} shown full body with bold outlines, ${faceDesc}, flat color fills, normal proportions, warm peach-brown skin`,
+        `3D whiteboard cartoon ${bodyDesc} with bold outlines, ${faceDesc}, flat color fills, normal proportions, warm peach-brown skin`,
      low_poly_3d_cartoon: (bodyDesc, faceDesc) =>
-        `low-poly 3D ${bodyDesc} shown full body from flat-shaded polygons, ${faceDesc}, angular geometric features, matte clay-toy quality`,
+        `low-poly 3D ${bodyDesc} from flat-shaded polygons, ${faceDesc}, angular geometric features, matte clay-toy quality`,
       skeleton_protagonist: (bodyDesc, faceDesc) =>
         `photorealistic transparent skeleton with clear glass-like body shell, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets`
     };
 
 
-    const defaultStyleTransform = (bodyDesc, faceDesc) => `${bodyDesc} shown full body in the scene, ${faceDesc}`;
+    const defaultStyleTransform = (bodyDesc, faceDesc) => `${bodyDesc}, ${faceDesc}`;
 
 
     // ══════════════════════════════════════════════════════════════
