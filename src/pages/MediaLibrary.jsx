@@ -7,8 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
   Upload, Search, Image, Film, Music, Trash2, Tag, Filter, Loader2,
-  FolderOpen, X, Eye
+  FolderOpen, X, Eye, ArrowLeft, CheckSquare
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import MediaPreviewModal from '@/components/media/MediaPreviewModal';
 import MediaUploadZone from '@/components/media/MediaUploadZone';
@@ -34,6 +36,7 @@ const FILE_TYPES = [
 ];
 
 export default function MediaLibrary() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -42,6 +45,8 @@ export default function MediaLibrary() {
   const [showUpload, setShowUpload] = useState(false);
   const [editingTags, setEditingTags] = useState(null);
   const [tagInput, setTagInput] = useState('');
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const { data: assets = [], isLoading } = useQuery({
     queryKey: ['media-assets'],
@@ -86,13 +91,39 @@ export default function MediaLibrary() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Media Library</h1>
-            <p className="text-gray-500 text-sm">{assets.length} assets</p>
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" onClick={() => navigate(createPageUrl('ChannelsHub'))}>
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Media Library</h1>
+              <p className="text-gray-500 text-sm">{assets.length} assets</p>
+            </div>
           </div>
-          <Button onClick={() => setShowUpload(!showUpload)} className="bg-blue-600 hover:bg-blue-700">
-            <Upload className="w-4 h-4 mr-2" /> Upload Media
-          </Button>
+          <div className="flex gap-2">
+            {selectedIds.size > 0 && (
+              <Button
+                variant="destructive"
+                disabled={bulkDeleting}
+                onClick={async () => {
+                  if (!confirm(`Delete ${selectedIds.size} selected asset(s)?`)) return;
+                  setBulkDeleting(true);
+                  for (const id of selectedIds) {
+                    await base44.entities.MediaAssets.delete(id);
+                  }
+                  setSelectedIds(new Set());
+                  setBulkDeleting(false);
+                  queryClient.invalidateQueries({ queryKey: ['media-assets'] });
+                }}
+              >
+                {bulkDeleting ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Trash2 className="w-4 h-4 mr-1" />}
+                Delete {selectedIds.size} Selected
+              </Button>
+            )}
+            <Button onClick={() => setShowUpload(!showUpload)} className="bg-blue-600 hover:bg-blue-700">
+              <Upload className="w-4 h-4 mr-2" /> Upload Media
+            </Button>
+          </div>
         </div>
 
         {showUpload && (
@@ -151,12 +182,29 @@ export default function MediaLibrary() {
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
             {filtered.map(asset => (
-              <Card key={asset.id} className="group overflow-hidden hover:shadow-md transition-shadow">
+              <Card key={asset.id} className={`group overflow-hidden hover:shadow-md transition-shadow ${selectedIds.has(asset.id) ? 'ring-2 ring-blue-500' : ''}`}>
                 {/* Thumbnail */}
                 <div
                   className="aspect-square bg-gray-100 relative cursor-pointer overflow-hidden"
                   onClick={() => setPreviewAsset(asset)}
                 >
+                  {/* Selection checkbox */}
+                  <div
+                    className="absolute top-1.5 right-1.5 z-10"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedIds(prev => {
+                        const next = new Set(prev);
+                        if (next.has(asset.id)) next.delete(asset.id);
+                        else next.add(asset.id);
+                        return next;
+                      });
+                    }}
+                  >
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${selectedIds.has(asset.id) ? 'bg-blue-500 border-blue-500' : 'bg-white/80 border-gray-300 opacity-0 group-hover:opacity-100'}`}>
+                      {selectedIds.has(asset.id) && <Check className="w-3 h-3 text-white" />}
+                    </div>
+                  </div>
                   {asset.file_type === 'image' ? (
                     <img src={asset.file_url} alt={asset.filename} className="w-full h-full object-cover" />
                   ) : asset.file_type === 'video' ? (
