@@ -76,10 +76,10 @@ export default function ContentCalendar({ topics, channel, onDateClick }) {
           const dayTopics = topicsByDate[dateStr] || [];
           const shorts = dayTopics.filter(t => t.format === 'short');
           const longs = dayTopics.filter(t => t.format === 'long');
-          const completedCount = dayTopics.filter(t => t.status === 'completed' || t.status === 'published').length;
-          const allDone = hasContent && completedCount === dayTopics.length;
           const isToday = dateStr === todayStr;
           const hasContent = dayTopics.length > 0;
+          const completedCount = dayTopics.filter(t => t.status === 'completed' || t.status === 'published').length;
+          const allDone = hasContent && completedCount === dayTopics.length;
 
           return (
             <button
