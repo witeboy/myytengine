@@ -139,11 +139,17 @@ export default function TopicAssetsPanel({ projectId, topicTitle }) {
   useEffect(() => {
     if (!projectId) { setLoading(false); return; }
     loadAssets();
+    console.log('[Assets] Loading video for projectId:', projectId);
     loadExportedVideo(projectId).then(data => {
+      console.log('[Assets] IndexedDB result:', data);
       if (data?.blob) {
         setExportedVideo(data);
-        console.log('[Assets] Loaded exported video from IndexedDB:', (data.blob.size / 1048576).toFixed(1), 'MB');
+        console.log('[Assets] Loaded exported video:', (data.blob.size / 1048576).toFixed(1), 'MB');
+      } else {
+        console.warn('[Assets] No video found in IndexedDB for', projectId);
       }
+    }).catch(err => {
+      console.error('[Assets] IndexedDB load error:', err);
     });
   }, [projectId]);
 
