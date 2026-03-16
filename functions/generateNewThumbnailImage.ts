@@ -460,7 +460,7 @@ Deno.serve(async (req) => {
       let enData; try { enData = JSON.parse(enText); } catch (_) {}
       const enTaskId = enData?.data?.taskId;
       if (enTaskId) {
-        const enResult = await pollForResult(enTaskId, KIE_API_KEY, 15, 4000);
+        const enResult = await pollForResult(enTaskId, KIE_API_KEY, 10, 4000);
         if (enResult.success && enResult.url) { finalUrl = enResult.url; console.log('✅ Enhanced'); }
       }
     } catch (e) { console.warn('Enhance error (non-fatal):', e.message); }
