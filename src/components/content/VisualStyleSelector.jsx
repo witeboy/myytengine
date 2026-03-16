@@ -18,6 +18,7 @@ const STYLES = [
   { id: 'harry_potter', label: 'Harry Potter', desc: 'Dark whimsical illustration with teal atmosphere & gothic charm', emoji: '🧙' },
   { id: '3d_whiteboard_cartoon', label: '3D Whiteboard Cartoon', desc: 'Clean cartoon outlines, bright flat colors, isometric depth, explainer style', emoji: '🖊️' },
   { id: 'low_poly_3d_cartoon', label: 'Low-Poly 3D Cartoon', desc: 'Faceted geometric 3D characters, vibrant suburban worlds, Pixar-meets-polygon charm', emoji: '🔷' },
+  { id: 'roblox', label: 'Roblox', desc: 'Blocky cube-head characters with rectangular limbs, simple 2D faces, bright flat colors — R6/R15 avatar style', emoji: '🧱' },
   { id: 'skeleton_protagonist', label: 'Skeleton Protagonist (Viral)', desc: 'Transparent glass skeleton with expressive eyes in photorealistic worlds — Bernard Films style', emoji: '💀' },
 ];
 

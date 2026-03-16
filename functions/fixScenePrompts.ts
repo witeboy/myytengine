@@ -64,6 +64,7 @@ const styleCharacterRules = {
   harry_potter: (b, f) => `fantasy ${b}, ${f}, warm candlelit tones, magical golden particles, gothic atmosphere`,
   "3d_whiteboard_cartoon": (b, f) => `3D whiteboard cartoon ${b} with bold outlines, ${f}, flat color fills, normal proportions, warm peach-brown skin`,
   low_poly_3d_cartoon: (b, f) => `low-poly 3D ${b} from flat-shaded polygons, ${f}, angular geometric features, matte clay-toy quality`,
+  roblox: (b, f) => `Roblox-style 3D blocky ${b} with cube head, rectangular torso and limbs, simple 2D cartoon face (two round eyes, curved mouth) painted on the cube head, ${f}, bright flat-shaded colors, toy-like plastic matte finish, R15 avatar proportions`,
   skeleton_protagonist: () => `photorealistic transparent skeleton with clear glass-like body shell, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets`
 };
 const defaultStyleTransform = (b, f) => `${b}, ${f}`;
@@ -74,6 +75,7 @@ function normalizeStyleKey(raw) {
   const keys = Object.keys(styleCharacterRules);
   if (keys.includes(n)) return n;
   for (const k of keys) { if (n.includes(k) || k.includes(n)) return k; }
+  if (n.includes('roblox')) return 'roblox';
   if (n.includes('skeleton')) return 'skeleton_protagonist';
   return 'cinematic_realistic';
 }
