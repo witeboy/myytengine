@@ -390,9 +390,13 @@ export default function PostProduction() {
     enabled: !!project?.script_id,
   });
 
-  const { data: thumbnails = [], refetch: refetchThumbs } = useQuery({
-    queryKey: ['thumbnails', projectId],
-    queryFn: () => base44.entities.ThumbnailConcepts.filter({ project_id: projectId }),
+  // Scene images from Content Generation
+  const { data: scenes = [] } = useQuery({
+    queryKey: ['scenes-postprod', projectId],
+    queryFn: async () => {
+      const all = await base44.entities.Scenes.filter({ project_id: projectId });
+      return all.filter(s => s.image_url && s.image_url.startsWith('http')).sort((a, b) => a.scene_number - b.scene_number);
+    },
     enabled: !!projectId,
   });
 
@@ -405,72 +409,36 @@ export default function PostProduction() {
   const metadata = metadataList[0] || null;
 
   // ── Handlers ─────────────────────────────────────────────────────
-  const handleTitlesToThumbnails = () => {
+  const handleTitlesToThumbnails = async () => {
     if (selectedTitles.length > 0) {
       navigator.clipboard.writeText(selectedTitles.map(t => t.title).join('\n'));
     }
     setActiveTab('thumbnails');
-  };
-
-  // Core generation function — accepts optional templateIds override
-  const runGeneration = async (templateIds) => {
-    setGeneratingThumbs(true);
-    setThumbError(null);
-
-    try {
-      // Step 1: Generate concepts (LLM only, no images)
-      const res = await base44.functions.invoke('generateThumbnailsFromScript', {
-        project_id: projectId,
-        video_title: selectedTitles.length > 0 ? selectedTitles[0].title : (project?.name || 'Untitled'),
-        reference_style: referenceStyle || undefined,
-        niche_dna: selectedNiche?.synthesized_dna || undefined,
-        niche_name: selectedNiche?.name || undefined,
-        selected_title: selectedTitles.length > 0 ? selectedTitles.map(t => t.title).join(' | ') : undefined,
-        selected_templates: templateIds?.length === 0 ? templateIds : undefined,
-      });
-
-      const data = res.data || res;
-      if (data?.error) {
-        setThumbError(data.error);
-        setGeneratingThumbs(false);
-        return;
-      }
-
-      await refetchThumbs();
-
-      // Step 2: Generate images one at a time (separate calls, no timeout)
-      const concepts = await base44.entities.ThumbnailConcepts.filter({ project_id: projectId });
-      const sorted = concepts.sort((a, b) => (a.rank || 0) - (b.rank || 0));
-
-      for (let i = 0; i < sorted.length; i++) {
-        const concept = sorted[i];
-        if (concept.image_url) continue;
-        try {
-          console.log(`Generating thumbnail image ${i + 1}/${sorted.length}...`);
-          await base44.functions.invoke('generateThumbnailImage', { concept_id: concept.id });
-        } catch (imgErr) {
-          console.warn(`Thumbnail ${concept.rank} image failed:`, imgErr.message);
-        }
-        await refetchThumbs();
-        await new Promise(r => setTimeout(r, 1000));
-      }
-    } catch (err) {
-      setThumbError(err.message || 'Generation failed');
+    // Auto-summarize script when switching to thumbnails tab
+    if (!scriptSummary && script?.full_script) {
+      await summarizeScript(script.full_script);
     }
-
-    await refetchThumbs();
-    setGeneratingThumbs(false);
   };
 
-  // Called by template picker when user confirms 2 templates
-  const handleTemplatesSelected = (templateIds) => {
-    setSelectedTemplateIds(templateIds);
-    runGeneration(templateIds);
-  };
-
-  // Called by "Auto-Generate" skip button — uses whatever templates are selected or none
-  const handleAutoGenerate = () => {
-    runGeneration(selectedTemplateIds.length === 0 ? selectedTemplateIds : undefined);
+  const summarizeScript = async (fullScript) => {
+    if (!fullScript || summarizing) return;
+    setSummarizing(true);
+    try {
+      const result = await base44.integrations.Core.InvokeLLM({
+        prompt: `Summarize the following video script in under 400 words. Focus on: the main story arc, key characters/people involved, emotional beats and turning points, visual themes and settings. This summary will be used to generate a YouTube thumbnail, so emphasize the most visually dramatic and emotionally compelling moments.\n\nSCRIPT:\n${fullScript.substring(0, 12000)}`,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            summary: { type: "string", description: "The script summary under 400 words" }
+          },
+          required: ["summary"]
+        }
+      });
+      if (result?.summary) setScriptSummary(result.summary);
+    } catch (e) {
+      console.error('Script summarization failed:', e);
+    }
+    setSummarizing(false);
   };
 
  // ══════════════════════════════════════════════════════════════════
