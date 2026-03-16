@@ -564,33 +564,54 @@ Deno.serve(async (req) => {
 
 
     // Split identity_core into body traits vs face traits
+    // Produces CLEAN natural-language descriptions, not raw regex extractions.
+    // Body = age + gender + build + height (reads like: "35-year-old male, average build, 5'10")
+    // Face = everything else (skin, face shape, eyes, nose, lips, hair, marks)
     function splitIdentity(rawDesc) {
-      // Body keywords: anything about build, height, body shape, posture
-      const bodyPatterns = /\b(\d+\s*ft\s*\d+|\d+\s*cm|\d+'?\d*"?\s*(?:height|tall)?|tall|short|petite|average build|athletic build|slim build|slender build|heavy build|lean build|lean|stocky|slender|muscular|broad shoulders|narrow shoulders|long neck|long legs|curvy|hourglass|lanky|heavyset|medium build|thin build|stout|wide hips|narrow hips|prominent collarbones|small frame|large frame)\b/gi;
-      // Age keywords
-      const agePatterns = /\b(\d{1,2}\s*years?\s*old|\d{1,2}-year-old|in\s+(?:her|his|their)\s+(?:early|mid|late)\s+\d{2}s|young\s+(?:woman|man)|middle[\s-]aged|elderly|teenage)\b/gi;
+      // ── Extract structured parts ──
+      // Age: bare number at start or "X years old" or "X-year-old"
+      const ageMatch = rawDesc.match(/\b(\d{1,2})\s*[-–]?\s*(?:years?\s*old|year[\s-]old)\b/i)
+        || rawDesc.match(/^(\d{1,2})\s*,/);  // bare "35," at start
+      const age = ageMatch ? ageMatch[1] : null;
+
       // Gender
-      const genderPatterns = /\b(female|male|woman|man)\b/gi;
+      const genderMatch = rawDesc.match(/\b(female|male|woman|man)\b/i);
+      const gender = genderMatch ? genderMatch[1].toLowerCase() : null;
 
-      const bodyTraits = [];
-      const ageMatches = rawDesc.match(agePatterns) || [];
-      const genderMatches = rawDesc.match(genderPatterns) || [];
-      const bodyMatches = rawDesc.match(bodyPatterns) || [];
+      // Build: "average build", "athletic build", "slim", etc — but NOT "short" alone (ambiguous with hair)
+      const buildMatch = rawDesc.match(/\b(average|athletic|slim|slender|heavy|lean|stocky|muscular|medium|thin|stout|petite|lanky|heavyset|curvy|hourglass|broad[\s-]shouldered)\s*(build)?\b/i);
+      const build = buildMatch ? buildMatch[0].trim() : null;
 
-      bodyTraits.push(...ageMatches.slice(0, 1), ...genderMatches.slice(0, 1), ...bodyMatches);
+      // Height: "5'10", "5ft10", "170cm", etc
+      const heightMatch = rawDesc.match(/\b(\d+\s*['′]\s*\d+\s*["″]?|\d+\s*ft\s*\d+|\d+\s*cm)\b/i);
+      const height = heightMatch ? heightMatch[0].trim() : null;
 
-      // Everything else is face/hair (the identifying features)
+      // ── Build body string (natural language) ──
+      const bodyParts = [];
+      if (age) bodyParts.push(`${age}-year-old`);
+      if (gender) bodyParts.push(gender);
+      if (build) bodyParts.push(build);
+      if (height) bodyParts.push(height);
+      const bodyStr = bodyParts.join(', ');
+
+      // ── Build face string (everything NOT in body) ──
       let faceDesc = rawDesc;
-      for (const trait of bodyTraits) {
-        faceDesc = faceDesc.replace(trait, '');
-      }
-      // Clean up leftover commas and spaces
-      faceDesc = faceDesc.replace(/,\s*,/g, ',').replace(/^\s*,\s*/, '').replace(/\s*,\s*$/, '').replace(/\s{2,}/g, ' ').trim();
+      // Remove the parts we extracted (carefully, to avoid removing substrings of other words)
+      if (ageMatch) faceDesc = faceDesc.replace(ageMatch[0], '');
+      if (genderMatch) faceDesc = faceDesc.replace(genderMatch[0], '');
+      if (buildMatch) faceDesc = faceDesc.replace(buildMatch[0], '');
+      if (heightMatch) faceDesc = faceDesc.replace(heightMatch[0], '');
 
-      return {
-        body: bodyTraits.join(', ').trim(),
-        face: faceDesc
-      };
+      // Clean orphaned punctuation, empty quotes, double commas
+      faceDesc = faceDesc
+        .replace(/[""'']+\s*/g, '')          // orphaned quotes from height like 5'10"
+        .replace(/,\s*,/g, ',')              // double commas
+        .replace(/^\s*,\s*/, '')             // leading comma
+        .replace(/\s*,\s*$/, '')             // trailing comma
+        .replace(/\s{2,}/g, ' ')             // double spaces
+        .trim();
+
+      return { body: bodyStr, face: faceDesc };
     }
 
     // Style transforms — IDENTITY ONLY, no framing/body instructions
