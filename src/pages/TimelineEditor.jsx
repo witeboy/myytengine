@@ -1342,6 +1342,7 @@ export default function TimelineEditorV10() {
   const [isApplyingZoom,    setIsApplyingZoom]    = useState(false);
   const [initialized,       setInitialized]       = useState(false);
   const [showExporter,      setShowExporter]      = useState(false);
+  const initializedRef = useRef(false);
 
   // ── Transcription state ─────────────────────────────────────────
   // status: 'idle' | 'transcribing' | 'done' | 'error'
@@ -1479,10 +1480,12 @@ export default function TimelineEditorV10() {
   // mediaType: 'video' if a valid video_url exists, else 'image'.
   // Users can toggle this per-clip in ClipPropertiesPanel.
   useEffect(() => {
-    if (scenes.length === 0 || initialized) return;
+    if (scenes.length === 0 || initializedRef.current) return;
+    initializedRef.current = true;
+    const currentBeats = audioBeatDurations.length === scenes.length ? audioBeatDurations : null;
     let offset = 0;
     const initClips = scenes.map((scene, idx) => {
-      const duration  = audioBeatDurations[idx] || scene.duration_seconds || 5;
+      const duration  = (currentBeats ? currentBeats[idx] : null) || scene.duration_seconds || 5;
       const hasVideo  = scene.video_url &&
                         scene.video_url.startsWith('http') &&
                         !scene.video_url.startsWith('veo_task:') &&
@@ -1491,22 +1494,22 @@ export default function TimelineEditorV10() {
         id: `video-${scene.id}`, sceneId: scene.id, sceneNumber: scene.scene_number,
         type: 'video', startTime: offset, duration,
         label:     `Scene ${scene.scene_number}`,
-        thumbnail: scene.image_url,   // always keep image for timeline thumb
-        imageUrl:  scene.image_url,   // explicit image source
+        thumbnail: scene.image_url,
+        imageUrl:  scene.image_url,
         videoUrl:  hasVideo ? scene.video_url : null,
-        mediaType: hasVideo ? 'video' : 'image', // 'video' | 'image'
+        mediaType: hasVideo ? 'video' : 'image',
         effects: [], audioMuted: false, cinematicMotion: null,
         transition: null, transitionDuration: null, synced: false,
         motionSpeed: 1.0, motionIntensity: 1.0,
-        playbackRate: 1.0,      // will be auto-calculated by AutoSync
-        videoDuration: null,    // measured lazily
+        playbackRate: 1.0,
+        videoDuration: null,
       };
       offset += duration;
       return clip;
     });
     videoHistory.reset(initClips);
     setInitialized(true);
-  }, [scenes.length, initialized, audioBeatDurations]);
+  }, [scenes.length]);
 
   // ── Playback loop ───────────────────────────────────────────────
   useEffect(() => {
