@@ -283,6 +283,9 @@ Deno.serve(async (req) => {
     if (!KIE_API_KEY) return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
 
     console.log('=== generateNewThumbnailImage (nano-banana-2) ===');
+    const startTime = Date.now();
+    const MAX_RUNTIME_MS = 110000; // 110s safety limit
+    const timeLeft = () => MAX_RUNTIME_MS - (Date.now() - startTime);
 
     // 1. Load concept
     let concept;
@@ -460,38 +463,50 @@ Deno.serve(async (req) => {
 
     let finalUrl = imageUrl;
 
-    // 8a. Upscale
-    try {
-      console.log('🔍 Upscaling...');
-      const upRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
-        method: 'POST', headers: kieHeaders,
-        body: JSON.stringify({ model: 'kie-ai/upscaler', input: { image_url: imageUrl, scale: 2 } }),
-      });
-      const upText = await upRes.text();
-      let upData; try { upData = JSON.parse(upText); } catch (_) {}
-      const upTaskId = upData?.data?.taskId;
-      if (upTaskId) {
-        const upResult = await pollForResult(upTaskId, KIE_API_KEY, 8, 4000);
-        if (upResult.success && upResult.url) { finalUrl = upResult.url; console.log('✅ Upscaled'); }
-      }
-    } catch (e) { console.warn('Upscale error (non-fatal):', e.message); }
+    // 8a. Upscale — only if enough time left (need ~35s)
+    if (timeLeft() > 40000) {
+      try {
+        console.log(`🔍 Upscaling... (${Math.round(timeLeft()/1000)}s remaining)`);
+        const upRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
+          method: 'POST', headers: kieHeaders,
+          body: JSON.stringify({ model: 'kie-ai/upscaler', input: { image_url: imageUrl, scale: 2 } }),
+        });
+        const upText = await upRes.text();
+        let upData; try { upData = JSON.parse(upText); } catch (_) {}
+        const upTaskId = upData?.data?.taskId;
+        if (upTaskId) {
+          const maxAttempts = Math.min(8, Math.floor(timeLeft() / 5000));
+          const upResult = await pollForResult(upTaskId, KIE_API_KEY, maxAttempts, 4000);
+          if (upResult.success && upResult.url) { finalUrl = upResult.url; console.log('✅ Upscaled'); }
+          else console.warn('Upscale skipped:', upResult.error);
+        }
+      } catch (e) { console.warn('Upscale error (non-fatal):', e.message); }
+    } else {
+      console.log(`⏱ Skipping upscale — only ${Math.round(timeLeft()/1000)}s left`);
+    }
 
-    // 8b. Color grade
-    try {
-      console.log('🎨 Color grading...');
-      const enhancePrompt = buildEnhancePrompt(mood, grade);
-      const enRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
-        method: 'POST', headers: kieHeaders,
-        body: JSON.stringify({ model: 'kie-ai/image-enhance', input: { image_url: finalUrl, prompt: enhancePrompt, creativity: 0.15 } }),
-      });
-      const enText = await enRes.text();
-      let enData; try { enData = JSON.parse(enText); } catch (_) {}
-      const enTaskId = enData?.data?.taskId;
-      if (enTaskId) {
-        const enResult = await pollForResult(enTaskId, KIE_API_KEY, 6, 4000);
-        if (enResult.success && enResult.url) { finalUrl = enResult.url; console.log('✅ Enhanced'); }
-      }
-    } catch (e) { console.warn('Enhance error (non-fatal):', e.message); }
+    // 8b. Color grade — only if enough time left (need ~30s)
+    if (timeLeft() > 35000) {
+      try {
+        console.log(`🎨 Color grading... (${Math.round(timeLeft()/1000)}s remaining)`);
+        const enhancePrompt = buildEnhancePrompt(mood, grade);
+        const enRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
+          method: 'POST', headers: kieHeaders,
+          body: JSON.stringify({ model: 'kie-ai/image-enhance', input: { image_url: finalUrl, prompt: enhancePrompt, creativity: 0.15 } }),
+        });
+        const enText = await enRes.text();
+        let enData; try { enData = JSON.parse(enText); } catch (_) {}
+        const enTaskId = enData?.data?.taskId;
+        if (enTaskId) {
+          const maxAttempts = Math.min(6, Math.floor(timeLeft() / 5000));
+          const enResult = await pollForResult(enTaskId, KIE_API_KEY, maxAttempts, 4000);
+          if (enResult.success && enResult.url) { finalUrl = enResult.url; console.log('✅ Enhanced'); }
+          else console.warn('Enhance skipped:', enResult.error);
+        }
+      } catch (e) { console.warn('Enhance error (non-fatal):', e.message); }
+    } else {
+      console.log(`⏱ Skipping color grade — only ${Math.round(timeLeft()/1000)}s left`);
+    }
 
     // ── STEP 9: Save ─────────────────────────────────────────────
     try {
