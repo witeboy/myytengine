@@ -318,6 +318,26 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
   const uploadedChars = chars.filter(Boolean);
   const canSubmit = title.trim() && summary.trim() && uploadedChars.length >= 2 && selectedUserTemplate;
 
+  // ── Poll helper for pending KIE tasks ─────────────────────────
+  const pollForTaskResult = async (taskId, conceptId) => {
+    const maxAttempts = 40; // 40 × 5s = 200s max
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise(r => setTimeout(r, 5000));
+      try {
+        const res = await base44.functions.invoke('pollThumbnailTask', { task_id: taskId, concept_id: conceptId });
+        const data = res?.data ?? res;
+        if (data?.completed) {
+          if (data?.image_url) return { image_url: data.image_url };
+          return { error: data?.error || 'Generation failed' };
+        }
+        console.log(`Frontend poll ${i + 1}/${maxAttempts}: ${data?.state || 'waiting'}`);
+      } catch (e) {
+        console.warn('Poll error:', e.message);
+      }
+    }
+    return { error: 'Generation timed out after extended polling.' };
+  };
+
   // ── Step 0 → 1: Generate 5 overlay text concepts ──────────────
   const handleGenerateConcepts = async () => {
     if (!canSubmit) return;
