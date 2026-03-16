@@ -25,7 +25,7 @@ export default function StoryScript() {
     enabled: !!projectId,
   });
 
-  const { data: batches = [], refetch: refetchBatches } = useQuery({
+  const { data: batches = [], isLoading: batchesLoading, refetch: refetchBatches } = useQuery({
     queryKey: ['batches', projectId],
     queryFn: async () => {
       const all = await base44.entities.ScriptBatches.filter({ project_id: projectId });
@@ -61,11 +61,10 @@ export default function StoryScript() {
   useEffect(() => {
     if (autoGenTriggered || generating) return;
     if (!project?.id) return;
+    if (batchesLoading) return; // ← Wait for batches to actually load
     if (project.status === 'script_complete') return;
-    // Only trigger if status indicates we should be scripting but haven't started
     if (!['hooks_ready', 'scripting'].includes(project.status)) return;
-    // Don't trigger if batches already have content
-    if (batches.some(b => b.status === 'completed' && b.content)) return;
+    if (batches.length > 0) return; // ← If batches exist at all, don't regenerate
 
     setAutoGenTriggered(true);
     setGenerating(true);
