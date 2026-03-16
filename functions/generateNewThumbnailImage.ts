@@ -327,8 +327,28 @@ Deno.serve(async (req) => {
     }
 
     for (const [i, p] of charPhotos.entries()) {
-      const url = await uploadToKIE(p.b64, p.mime || 'image/jpeg', `char_${i + 1}`, KIE_API_KEY);
-      if (url) imageUrls.push(url);
+      if (p.b64) {
+        // Base64 photo — upload to KIE
+        const url = await uploadToKIE(p.b64, p.mime || 'image/jpeg', `char_${i + 1}`, KIE_API_KEY);
+        if (url) imageUrls.push(url);
+      } else if (p.url) {
+        // Remote URL photo — fetch server-side, then upload to KIE
+        console.log(`📥 Fetching remote photo ${i + 1}: ${p.url.substring(0, 80)}...`);
+        try {
+          const resp = await fetch(p.url);
+          if (resp.ok) {
+            const arrayBuf = await resp.arrayBuffer();
+            const bytes = new Uint8Array(arrayBuf);
+            const b64 = btoa(String.fromCharCode(...bytes));
+            const url = await uploadToKIE(b64, 'image/jpeg', `char_${i + 1}`, KIE_API_KEY);
+            if (url) imageUrls.push(url);
+          } else {
+            console.warn(`⚠️ Remote fetch failed: HTTP ${resp.status}`);
+          }
+        } catch (e) {
+          console.warn(`⚠️ Remote fetch error for char_${i + 1}: ${e.message}`);
+        }
+      }
     }
 
     console.log(`Uploaded ${imageUrls.length} images to KIE (expected: ${(hasTemplateRef ? 1 : 0) + charPhotos.length})`);
@@ -408,7 +428,7 @@ Deno.serve(async (req) => {
     console.log(`✅ Task: ${taskId}`);
 
     // ── STEP 7: Poll for result ─────────────────────────────────
-    const result = await pollForResult(taskId, KIE_API_KEY, 24, 5000);
+    const result = await pollForResult(taskId, KIE_API_KEY, 18, 5000);
     if (!result.success) throw new Error(result.error);
     let imageUrl = result.url;
     if (!imageUrl) throw new Error('Generation succeeded but no image URL returned');
@@ -443,7 +463,7 @@ Deno.serve(async (req) => {
       let upData; try { upData = JSON.parse(upText); } catch (_) {}
       const upTaskId = upData?.data?.taskId;
       if (upTaskId) {
-        const upResult = await pollForResult(upTaskId, KIE_API_KEY, 12, 4000);
+        const upResult = await pollForResult(upTaskId, KIE_API_KEY, 8, 4000);
         if (upResult.success && upResult.url) { finalUrl = upResult.url; console.log('✅ Upscaled'); }
       }
     } catch (e) { console.warn('Upscale error (non-fatal):', e.message); }
@@ -460,7 +480,7 @@ Deno.serve(async (req) => {
       let enData; try { enData = JSON.parse(enText); } catch (_) {}
       const enTaskId = enData?.data?.taskId;
       if (enTaskId) {
-        const enResult = await pollForResult(enTaskId, KIE_API_KEY, 10, 4000);
+        const enResult = await pollForResult(enTaskId, KIE_API_KEY, 6, 4000);
         if (enResult.success && enResult.url) { finalUrl = enResult.url; console.log('✅ Enhanced'); }
       }
     } catch (e) { console.warn('Enhance error (non-fatal):', e.message); }
