@@ -101,6 +101,13 @@ export default function RepurposeVideoDialog({ open, onOpenChange, video, channe
             </div>
 
             <div className="bg-green-50 border border-green-200 rounded-lg p-4 space-y-3">
+              {/* Transcript source badge */}
+              {result.transcript_source && result.transcript_source !== 'none' && (
+                <Badge variant="outline" className="text-[9px] bg-blue-50 text-blue-600 border-blue-200">
+                  📝 Transcript: {result.transcript_source === 'youtube_captions' ? 'Captions' : result.transcript_source === 'youtube_innertube' ? 'InnerTube' : result.transcript_source} ({Math.round((result.transcript_length || 0) / 1000)}K chars)
+                </Badge>
+              )}
+
               {/* New title */}
               <div>
                 <div className="flex items-center gap-2 mb-1">
