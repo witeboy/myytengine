@@ -273,7 +273,7 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
-    const { concept_id, char_photos: directCharPhotos, template_ref: directTemplateRef, custom_overlay_text } = body;
+    const { concept_id, char_photos: directCharPhotos, template_ref: directTemplateRef, custom_overlay_text, char_descriptions: directCharDescriptions } = body;
     if (!concept_id) return Response.json({ error: 'concept_id is required' }, { status: 400 });
 
     const KIE_API_KEY = Deno.env.get('KIE_API_KEY');

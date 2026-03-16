@@ -442,7 +442,7 @@ export default function MakeThumbnail({ onBack }) {
         if (char?.file) {
           try {
             const b64 = await resizeToBase64(char.file, 512);
-            if (b64) directCharPhotos.push({ b64, mime: 'image/jpeg' });
+            if (b64) directCharPhotos.push({ b64, mime: 'image/jpeg', description: char.description || '' });
           } catch (_) {}
         }
       }
