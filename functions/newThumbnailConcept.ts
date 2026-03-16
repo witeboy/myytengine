@@ -95,7 +95,7 @@ The overlay text + SEO title together should create an irresistible curiosity pa
     contentParts.push({ text: `You are the world's #1 YouTube thumbnail psychologist and CTR strategist.
 
 VIDEO TITLE: "${video_title}"
-${summary ? `SUMMARY: "${summary}"` : ''}
+${summary ? `SUMMARY: "${summary}"` : ''}${seoTitleContext}
 
 YOUR JOB:
 Analyse the title and summary. Then generate exactly 5 thumbnail concepts, each with a devastatingly effective overlay text that will trigger millions of clicks.
