@@ -15,6 +15,7 @@ import { getNicheDefaults } from '@/components/channels/NicheCard';
 import ContentCalendar from '@/components/channels/ContentCalendar';
 import DayTopicsPanel from '@/components/channels/DayTopicsPanel';
 import TopicImporter from '@/components/channels/TopicImporter';
+import NicheInsightsPanel from '@/components/channels/NicheInsightsPanel';
 
 export default function ChannelDetail() {
   const navigate = useNavigate();
@@ -218,6 +219,14 @@ export default function ChannelDetail() {
             </CardContent>
           </Card>
         )}
+
+        {/* AI Insights Panel */}
+        <div className="mb-6">
+          <NicheInsightsPanel
+            channel={channel}
+            onRefreshed={() => queryClient.invalidateQueries({ queryKey: ['channel', channelId] })}
+          />
+        </div>
 
         {/* Tabs */}
         <Tabs defaultValue="calendar">
