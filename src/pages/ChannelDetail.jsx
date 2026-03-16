@@ -46,6 +46,16 @@ export default function ChannelDetail() {
   };
 
   const handleStartPipeline = async (topic) => {
+    // If topic already has a project, navigate to it
+    if (topic.project_id) {
+      const existingProjects = await base44.entities.Projects.filter({ id: topic.project_id });
+      if (existingProjects[0]) {
+        const route = getProjectRoute(existingProjects[0]);
+        navigate(createPageUrl(route));
+        return;
+      }
+    }
+
     // Create a Project from this topic, pre-configured with channel settings
     const project = await base44.entities.Projects.create({
       name: topic.title,
@@ -56,6 +66,9 @@ export default function ChannelDetail() {
       orientation: topic.format === 'short' ? 'portrait' : 'landscape',
       status: 'created',
       current_step: 0,
+      channel_id: channel.id,
+      channel_topic_id: topic.id,
+      script_strategy_override: channel.script_strategy || '',
     });
 
     // Link topic to project
