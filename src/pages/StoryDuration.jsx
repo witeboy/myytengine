@@ -39,18 +39,24 @@ export default function StoryDuration() {
   const numBatches = Math.max(2, Math.round(totalWords / 1500));
 
   const handleGenerate = async () => {
+    const safeDuration = Math.max(1, Math.round(duration));
     setLoading(true);
     await base44.entities.Projects.update(projectId, {
-      video_duration_minutes: duration,
+      video_duration_minutes: safeDuration,
     });
 
-    await base44.functions.invoke('generateOutline', {
+    const res = await base44.functions.invoke('generateOutline', {
       project_id: projectId,
       topic_id: project.selected_topic_id,
       topic_title: topic?.title || project.name,
       niche: project.niche,
-      duration_minutes: duration,
+      duration_minutes: safeDuration,
     });
+
+    if (res.data?.error) {
+      setLoading(false);
+      return;
+    }
 
     navigate(createPageUrl(`StoryHooks?project_id=${projectId}`));
   };
