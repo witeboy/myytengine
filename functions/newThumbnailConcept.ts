@@ -211,7 +211,7 @@ Return ONLY a valid JSON object. No markdown. No explanation. No backticks.
     console.log(`Mood: ${detectedMood} | Concepts: ${concepts.length}`);
 
     // ── SAVE CONCEPT RECORDS ─────────────────────────────────────
-    const sessionId = `thumb_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+    const sessionId = project_id || `thumb_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
     const saved = [];
     const failed = [];
 
