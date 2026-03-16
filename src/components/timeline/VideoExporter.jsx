@@ -7,6 +7,7 @@ import {
   Download, X, Film, Monitor, Smartphone, AlertTriangle,
   CheckCircle, Loader2, HardDrive
 } from 'lucide-react';
+import { saveExportedVideo } from '@/utils/videoStorage';
 
 const PHASE_LABELS = {
   checking: 'Checking browser support...',
@@ -26,6 +27,7 @@ export default function VideoExporter({
   musicUrl,
   musicVolume,
   projectName,
+  projectId,
   exportHook,
 }) {
   const [quality, setQuality] = useState('720p');
@@ -82,12 +84,17 @@ export default function VideoExporter({
       a.click();
       a.remove();
 
-      // Store for ZIP bundling in TopicAssetsPanel (same session)
+      // Store in memory for same-page access
       window.__exportedVideo = {
         blob,
         filename: exportFilename,
         size: blob.size,
       };
+
+      // Persist to IndexedDB — survives page navigation and refresh
+      if (projectId) {
+        saveExportedVideo(projectId, blob, exportFilename);
+      }
       console.log('[Export] Stored video blob:', blob.size, 'bytes');
     }
   };
