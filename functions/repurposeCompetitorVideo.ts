@@ -158,12 +158,12 @@ Respond with ONLY valid JSON:
       success: true,
       topic: {
         id: topic.id,
-        title: result.title,
-        format: result.format,
-        summary: result.summary,
-        strategic_notes: result.strategic_notes,
-        original_angle: result.original_angle,
-        our_angle: result.our_angle,
+        title: topicTitle,
+        format: result.format || 'short',
+        summary: result.summary || '',
+        strategic_notes: result.strategic_notes || '',
+        original_angle: result.original_angle || '',
+        our_angle: result.our_angle || '',
       }
     });
   } catch (error) {
