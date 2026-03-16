@@ -101,7 +101,53 @@ async function kiePollResult(apiKey, taskId) {
   }
 }
 
-async function generateWithGrokImagine(apiKey, prompt, aspectRatio) {
+async function generateWithGrokImagine(apiKey, prompt, aspectRatio, referenceImageUrl = null) {
+  // If we have a reference image (Scene 1's character), use image-to-image for consistency
+  if (referenceImageUrl) {
+    let kieFileUrl = referenceImageUrl;
+
+    // If the reference URL isn't already a KIE file URL, upload it first
+    if (!referenceImageUrl.includes('kieai.redpandaai.co')) {
+      try {
+        console.log(`📤 Uploading reference image to KIE storage...`);
+        const uploadRes = await fetch('https://kieai.redpandaai.co/api/file-url-upload', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            fileUrl: referenceImageUrl,
+            uploadPath: 'character-refs',
+            fileName: `char-ref-${Date.now()}.jpg`
+          })
+        });
+        const uploadData = await uploadRes.json();
+        if (uploadData.success && uploadData.data?.fileUrl) {
+          kieFileUrl = uploadData.data.fileUrl;
+          console.log(`✓ Reference uploaded to KIE: ${kieFileUrl.substring(0, 60)}...`);
+        } else {
+          console.warn(`⚠️ KIE upload failed, falling back to text-to-image`);
+          kieFileUrl = null;
+        }
+      } catch (err) {
+        console.warn(`⚠️ KIE upload error: ${err.message}, falling back to text-to-image`);
+        kieFileUrl = null;
+      }
+    }
+
+    if (kieFileUrl) {
+      console.log(`🔗 Using image-to-image with character reference`);
+      const taskId = await kieCreateTask(apiKey, "grok-imagine/image-to-image", {
+        prompt: prompt,
+        image_urls: [kieFileUrl],
+        aspect_ratio: aspectRatio
+      });
+      return await kiePollResult(apiKey, taskId);
+    }
+  }
+
+  // Default: text-to-image (Scene 1 or no reference available)
   const taskId = await kieCreateTask(apiKey, "grok-imagine/text-to-image", {
     prompt: prompt,
     aspect_ratio: aspectRatio
