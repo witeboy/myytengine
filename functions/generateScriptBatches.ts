@@ -2,28 +2,45 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
 
-async function callGemini(prompt, temperature = 0.85) {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: 16384, responseMimeType: "application/json" }
-      })
+async function callGemini(prompt, temperature = 0.85, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature, maxOutputTokens: 16384, responseMimeType: "application/json" }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(`Gemini error: ${err.error?.message || response.status}`);
     }
-  );
 
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(`Gemini error: ${err.error?.message || response.status}`);
+    const data = await response.json();
+    if (!data.candidates?.length) throw new Error("No candidates from Gemini");
+    const rawText = data.candidates[0].content.parts[0].text;
+
+    try {
+      return JSON.parse(rawText);
+    } catch (parseErr) {
+      console.log(`[Gemini] JSON parse failed (attempt ${attempt + 1}): ${parseErr.message}`);
+      // Try to fix common issues: escaped chars, markdown wrapping
+      try {
+        const cleaned = rawText
+          .replace(/```json\s*/g, '').replace(/```\s*/g, '')
+          .replace(/[\x00-\x1F\x7F]/g, (c) => c === '\n' || c === '\r' || c === '\t' ? c : ' ');
+        return JSON.parse(cleaned);
+      } catch (_) {
+        if (attempt === retries) throw new Error(`JSON parse failed after ${retries + 1} attempts: ${parseErr.message}`);
+        console.log(`[Gemini] Retrying...`);
+      }
+    }
   }
-
-  const data = await response.json();
-  if (!data.candidates?.length) throw new Error("No candidates from Gemini");
-  const rawText = data.candidates[0].content.parts[0].text;
-  return JSON.parse(rawText);
 }
 
 Deno.serve(async (req) => {

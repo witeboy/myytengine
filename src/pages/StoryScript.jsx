@@ -57,49 +57,54 @@ export default function StoryScript() {
     : null;
 
 
-  // Auto-generate: delete old scripts first, then generate batches
+  // Auto-generate: when project is ready but no script content exists yet
   useEffect(() => {
     if (autoGenTriggered || generating) return;
-    if (project?.status === 'script_complete') return;
+    if (!project?.id) return;
+    if (project.status === 'script_complete') return;
+    // Only trigger if status indicates we should be scripting but haven't started
+    if (!['hooks_ready', 'scripting'].includes(project.status)) return;
+    // Don't trigger if batches already have content
+    if (batches.some(b => b.status === 'completed' && b.content)) return;
 
-    const hasPendingBatches = batches.length > 0 && batches.some(b => b.status === 'pending');
-    const hasNoContent = !batches.some(b => b.status === 'completed' && b.content);
+    setAutoGenTriggered(true);
+    setGenerating(true);
 
-    if (hasPendingBatches && hasNoContent && project?.id) {
-      setAutoGenTriggered(true);
-      setGenerating(true);
-
-      const cleanupAndGenerate = async () => {
-        try {
-          // Delete any old stale scripts before generating
-          const oldScripts = await base44.entities.Scripts.filter({ project_id: projectId });
-          for (const s of oldScripts) {
-            await base44.entities.Scripts.delete(s.id);
-          }
-          await refetchScripts();
-
-          // Step 1: Create batch outlines
-          await base44.functions.invoke('initializeScriptBatches', {
-            project_id: projectId,
-          });
-          await refetchBatches();
-
-          // Step 2: Generate content for each batch
-          await base44.functions.invoke('generateScriptBatches', {
-            project_id: projectId,
-          });
-
-          await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
-        } catch (err) {
-          console.error('Script generation error:', err);
-        } finally {
-          setGenerating(false);
+    const runFullGeneration = async () => {
+      try {
+        // Delete any old stale scripts
+        const oldScripts = await base44.entities.Scripts.filter({ project_id: projectId });
+        for (const s of oldScripts) {
+          await base44.entities.Scripts.delete(s.id);
         }
-      };
 
-      cleanupAndGenerate();
-    }
-  }, [project?.id, project?.status, batches, autoGenTriggered, generating]);
+        // Delete any existing batches to start fresh
+        const oldBatches = await base44.entities.ScriptBatches.filter({ project_id: projectId });
+        for (const b of oldBatches) {
+          await base44.entities.ScriptBatches.delete(b.id);
+        }
+
+        // Step 1: Create batch outlines
+        await base44.functions.invoke('initializeScriptBatches', {
+          project_id: projectId,
+        });
+        await refetchBatches();
+
+        // Step 2: Generate content for each batch
+        await base44.functions.invoke('generateScriptBatches', {
+          project_id: projectId,
+        });
+
+        await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
+      } catch (err) {
+        console.error('Script generation error:', err);
+      } finally {
+        setGenerating(false);
+      }
+    };
+
+    runFullGeneration();
+  }, [project?.id, project?.status, autoGenTriggered, generating]);
 
   // ⚡ NEW: Auto-trigger the Merge function when batches hit 100%
   useEffect(() => {
