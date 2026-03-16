@@ -20,52 +20,74 @@ function extractVideoId(url) {
 // ── Transcript Tier 1: YouTube Transcript API ────────────────────
 async function getTranscriptAPI(videoId) {
   const apiKey = Deno.env.get("YOUTUBE_TRANSCRIPT_API_KEY");
-  if (!apiKey) return null;
+  if (!apiKey) {
+    console.log('[Transcript T1] No API key configured');
+    return null;
+  }
 
   const MAX_RETRIES = 3;
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      console.log(`[Transcript T1] Attempt ${attempt} for ${videoId}`);
-      const response = await fetch('https://youtubetranscript.dev/api/v2/batch', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ video_ids: [videoId], lang: 'en', preserve_formatting: false })
-      });
-      console.log(`[Transcript T1] Response status: ${response.status}`);
-      if (!response.ok) {
-        console.log(`[Transcript T1] Response body: ${(await response.text()).slice(0, 500)}`);
-        return null;
-      }
+  
+  // Try both GET and POST endpoints
+  const endpoints = [
+    { url: `https://youtubetranscript.dev/api/v2/transcript?video_id=${videoId}&lang=en`, method: 'GET' },
+    { url: 'https://youtubetranscript.dev/api/v2/batch', method: 'POST', body: JSON.stringify({ video_ids: [videoId], lang: 'en', preserve_formatting: false }) },
+    { url: `https://youtubetranscript.dev/api/transcript?video_id=${videoId}&lang=en`, method: 'GET' },
+  ];
 
-      const data = await response.json();
-      console.log(`[Transcript T1] Response data status: ${data.results?.[0]?.status}, has data: ${!!data.results?.[0]?.data}`);
-      const rd = data.results?.[0]?.data;
-      if (!rd) {
+  for (const ep of endpoints) {
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        console.log(`[Transcript T1] ${ep.method} ${ep.url.split('?')[0]} attempt ${attempt}`);
+        const fetchOpts = {
+          method: ep.method,
+          headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        };
+        if (ep.body) fetchOpts.body = ep.body;
+        
+        const response = await fetch(ep.url, fetchOpts);
+        console.log(`[Transcript T1] Status: ${response.status}`);
+        
+        if (!response.ok) {
+          if (response.status === 405 || response.status === 404) break; // Wrong endpoint, try next
+          if (attempt < MAX_RETRIES) { await new Promise(r => setTimeout(r, 3000)); continue; }
+          break;
+        }
+
+        const data = await response.json();
+        
+        // Handle direct transcript response
+        if (typeof data.transcript === 'string' && data.transcript.length > 50) return data.transcript;
+        if (data.transcript?.text?.length > 50) return data.transcript.text;
+        if (typeof data.text === 'string' && data.text.length > 50) return data.text;
+        if (Array.isArray(data.transcript)) {
+          const joined = data.transcript.map(s => s.text || s.utf8 || '').join(' ').replace(/\s+/g, ' ').trim();
+          if (joined.length > 50) return joined;
+        }
+        
+        // Handle batch response
+        const rd = data.results?.[0]?.data;
+        if (rd) {
+          if (typeof rd.transcript === 'string' && rd.transcript.length > 50) return rd.transcript;
+          if (rd.transcript?.text?.length > 50) return rd.transcript.text;
+          if (Array.isArray(rd.transcript)) {
+            const joined = rd.transcript.map(s => s.text || s.utf8 || '').join(' ').replace(/\s+/g, ' ').trim();
+            if (joined.length > 50) return joined;
+          }
+          if (typeof rd.text === 'string' && rd.text.length > 50) return rd.text;
+        }
+        
         if (data.results?.[0]?.status === 'processing' && attempt < MAX_RETRIES) {
-          console.log(`[Transcript T1] Still processing, waiting 4s...`);
+          console.log(`[Transcript T1] Processing, retrying...`);
           await new Promise(r => setTimeout(r, 4000));
           continue;
         }
-        console.log(`[Transcript T1] No data found, full response: ${JSON.stringify(data).slice(0, 500)}`);
-        return null;
+        
+        console.log(`[Transcript T1] No transcript in response: ${JSON.stringify(data).slice(0, 300)}`);
+        break; // Try next endpoint
+      } catch (e) {
+        console.log(`[Transcript T1] Error: ${e.message}`);
+        if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, 3000));
       }
-
-      // Try multiple paths
-      if (typeof rd.transcript === 'string' && rd.transcript.length > 50) return rd.transcript;
-      if (rd.transcript?.text?.length > 50) return rd.transcript.text;
-      if (Array.isArray(rd.transcript)) {
-        const joined = rd.transcript.map(s => s.text || s.utf8 || '').join(' ').replace(/\s+/g, ' ').trim();
-        if (joined.length > 50) return joined;
-      }
-      if (Array.isArray(rd.transcript?.segments)) {
-        const joined = rd.transcript.segments.map(s => s.text || s.utf8 || '').join(' ').replace(/\s+/g, ' ').trim();
-        if (joined.length > 50) return joined;
-      }
-      if (typeof rd.text === 'string' && rd.text.length > 50) return rd.text;
-      return null;
-    } catch (e) {
-      console.log(`[Transcript T1] Error: ${e.message}`);
-      if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, 3000));
     }
   }
   return null;
