@@ -109,31 +109,53 @@ async function getTranscriptInnerTube(videoId) {
     console.log(`[Transcript T1.5] HTML length: ${html.length}, has captionTracks: ${html.includes('captionTracks')}, has playerResponse: ${html.includes('ytInitialPlayerResponse')}`);
 
     let captionTracks = null;
-    const patterns = [
-      /"captionTracks":\s*(\[.*?\])\s*[,}]/,
-      /captionTracks\\?":\s*(\[.*?\])/,
+    
+    // Strategy 1: Extract ytInitialPlayerResponse (most reliable)
+    const playerPatterns = [
+      /ytInitialPlayerResponse\s*=\s*(\{.+?\});\s*(?:var|let|const|<\/script)/s,
+      /ytInitialPlayerResponse\s*=\s*(\{.+?\});/s,
     ];
-    for (const pattern of patterns) {
-      const match = html.match(pattern);
-      if (match) {
-        try {
-          captionTracks = JSON.parse(match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\'));
-          break;
-        } catch (_) {}
-      }
-    }
-
-    if (!captionTracks?.length) {
-      const playerMatch = html.match(/ytInitialPlayerResponse\s*=\s*({.*?});/s);
+    for (const pattern of playerPatterns) {
+      const playerMatch = html.match(pattern);
       if (playerMatch) {
         try {
           const player = JSON.parse(playerMatch[1]);
           captionTracks = player?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
-        } catch (_) {}
+          if (captionTracks?.length) {
+            console.log(`[Transcript T1.5] Found ${captionTracks.length} caption tracks via playerResponse`);
+            break;
+          }
+        } catch (e) {
+          console.log(`[Transcript T1.5] playerResponse parse failed: ${e.message}`);
+        }
+      }
+    }
+    
+    // Strategy 2: Direct regex for captionTracks
+    if (!captionTracks?.length) {
+      const directPatterns = [
+        /"captionTracks"\s*:\s*(\[[\s\S]*?\])\s*,\s*"/,
+        /captionTracks['"]\s*:\s*(\[[\s\S]*?\])/,
+      ];
+      for (const pattern of directPatterns) {
+        const match = html.match(pattern);
+        if (match) {
+          try {
+            const cleaned = match[1].replace(/\\u0026/g, '&').replace(/\\"/g, '"');
+            captionTracks = JSON.parse(cleaned);
+            if (captionTracks?.length) {
+              console.log(`[Transcript T1.5] Found ${captionTracks.length} caption tracks via regex`);
+              break;
+            }
+          } catch (_) {}
+        }
       }
     }
 
-    if (!captionTracks?.length) return null;
+    if (!captionTracks?.length) {
+      console.log(`[Transcript T1.5] No caption tracks found in page`);
+      return null;
+    }
 
     const enManual = captionTracks.find(t => t.languageCode === 'en' && t.kind !== 'asr');
     const enAuto = captionTracks.find(t => t.languageCode === 'en' && t.kind === 'asr');
