@@ -541,7 +541,7 @@ const handleGenerateSeo = async () => {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold">SEO Video Titles</h2>
-                <p className="text-sm text-gray-500">10 scroll-stopping, algorithm-optimized titles from your script</p>
+                <p className="text-sm text-gray-500">10 AI-powered, clickbait-style titles with keyword optimization & thumbnail pairing</p>
               </div>
               <div className="flex items-center gap-2">
                 <Button
