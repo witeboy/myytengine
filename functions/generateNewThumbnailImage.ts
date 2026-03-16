@@ -339,7 +339,15 @@ Deno.serve(async (req) => {
           if (resp.ok) {
             const arrayBuf = await resp.arrayBuffer();
             const bytes = new Uint8Array(arrayBuf);
-            const b64 = btoa(String.fromCharCode(...bytes));
+            // Convert to base64 in chunks to avoid stack overflow
+            let binaryStr = '';
+            const chunkSize = 8192;
+            for (let j = 0; j < bytes.length; j += chunkSize) {
+              const chunk = bytes.subarray(j, Math.min(j + chunkSize, bytes.length));
+              binaryStr += String.fromCharCode.apply(null, chunk);
+            }
+            const b64 = btoa(binaryStr);
+            console.log(`✅ Fetched & encoded char_${i + 1}: ${(bytes.length / 1024).toFixed(0)}KB`);
             const url = await uploadToKIE(b64, 'image/jpeg', `char_${i + 1}`, KIE_API_KEY);
             if (url) imageUrls.push(url);
           } else {
