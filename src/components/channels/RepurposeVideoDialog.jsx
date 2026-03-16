@@ -51,6 +51,74 @@ export default function RepurposeVideoDialog({ open, onOpenChange, video, channe
     }
   };
 
+  const handleStartPipeline = async () => {
+    if (!result?.id || !channel) return;
+    setStartingPipeline(true);
+
+    // Fetch the ChannelTopic that was created
+    const channelTopics = await base44.entities.ChannelTopics.filter({ id: result.id });
+    const topic = channelTopics[0];
+    if (!topic) { setStartingPipeline(false); return; }
+
+    // If it already has a project, navigate to it
+    if (topic.project_id) {
+      const projects = await base44.entities.Projects.filter({ id: topic.project_id });
+      if (projects[0]) {
+        const s = projects[0].status;
+        let route = `StoryTopics?project_id=${projects[0].id}`;
+        if (s === 'topic_selected') route = `StoryDuration?project_id=${projects[0].id}`;
+        else if (s === 'outline_ready') route = `StoryHooks?project_id=${projects[0].id}`;
+        else if (['hooks_ready', 'scripting', 'script_complete'].includes(s)) route = `StoryScript?project_id=${projects[0].id}`;
+        else if (['voiceover_ready', 'scene_breakdown', 'breakdown_complete', 'content_generation', 'scenes_ready'].includes(s)) route = `ContentGeneration?project_id=${projects[0].id}`;
+        else if (['timeline_editing', 'compiled'].includes(s)) route = `TimelineEditor?project_id=${projects[0].id}`;
+        else if (['post_production', 'published'].includes(s)) route = `PostProduction?project_id=${projects[0].id}`;
+        onOpenChange(false);
+        navigate(createPageUrl(route));
+        return;
+      }
+    }
+
+    // Create new project from topic
+    const project = await base44.entities.Projects.create({
+      name: topic.title,
+      niche: channel.niche,
+      tone: channel.tone || 'dramatic',
+      visual_style: channel.visual_style || 'cinematic_realistic',
+      video_duration_minutes: topic.format === 'short' ? 1 : (channel.long_form_duration_minutes || 15),
+      orientation: topic.format === 'short' ? 'portrait' : 'landscape',
+      status: 'created',
+      current_step: 0,
+      channel_id: channel.id,
+      channel_topic_id: topic.id,
+      script_strategy_override: channel.script_strategy || '',
+    });
+
+    const importedTopic = await base44.entities.Topics.create({
+      project_id: project.id,
+      rank: 1,
+      title: topic.title,
+      description: topic.notes || `Repurposed from competitor content`,
+      viral_score: 8,
+      storytelling_score: 8,
+      emotional_score: 8,
+      is_selected: true,
+    });
+
+    await base44.entities.Projects.update(project.id, {
+      selected_topic_id: importedTopic.id,
+      status: 'topic_selected',
+      current_step: 1,
+    });
+
+    await base44.entities.ChannelTopics.update(topic.id, {
+      project_id: project.id,
+      status: 'in_progress',
+    });
+
+    onOpenChange(false);
+    navigate(createPageUrl(`StoryTopics?project_id=${project.id}`));
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
