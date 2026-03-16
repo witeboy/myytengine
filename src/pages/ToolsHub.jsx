@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { createPageUrl } from '@/utils';
-import { ArrowLeft, Users, RefreshCw, Shield, Film, Image, Search, FolderOpen } from 'lucide-react';
+import { ArrowLeft, Users, RefreshCw, Shield, Film, Image, Search, FolderOpen, Eye } from 'lucide-react';
 
 const tools = [
   { name: 'UGC Creator', desc: 'AI-powered user-generated content pipeline', icon: Users, page: 'UGCPipeline', color: '#8B5CF6' },
@@ -13,6 +13,7 @@ const tools = [
   { name: 'Niche Research', desc: 'Research trending niches and profitability', icon: Search, page: 'ResearchTerminal', color: '#EC4899' },
   { name: 'Media Library', desc: 'Browse and manage all media assets', icon: FolderOpen, page: 'MediaLibrary', color: '#6366F1' },
   { name: 'Make Thumbnail', desc: 'AI thumbnail generation with templates', icon: Image, page: 'PostProduction', color: '#EF4444' },
+  { name: 'Competitor Monitor', desc: 'Track & compare up to 3 competitor channels', icon: Eye, page: 'CompetitorMonitor', color: '#DC2626' },
 ];
 
 export default function ToolsHub() {
