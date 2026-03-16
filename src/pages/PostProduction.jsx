@@ -11,8 +11,7 @@ import SeoDescriptionsPanel from '@/components/postprod/SeoDescriptionsPanel';
 import MakeThumbnail from '@/components/production/MakeThumbnail';
 import {
   Loader2, Sparkles, Image as ImageIcon, FileText, CheckCircle2, ArrowLeft,
-  Type, ArrowRight, ClipboardCheck, Brain, TrendingUp,
-  ChevronRight, X
+  Type, ArrowRight, ClipboardCheck
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -120,14 +119,7 @@ export default function PostProduction() {
     setSummarizing(false);
   };
 
- // ══════════════════════════════════════════════════════════════════
-// handleGenerateSeo Function — For PostProduction.jsx
-// ══════════════════════════════════════════════════════════════════
-// FIND AND REPLACE the existing handleGenerateSeo function in your
-// PostProduction.jsx file with this two-phase version
-// ══════════════════════════════════════════════════════════════════
-
-const handleGenerateSeo = async () => {
+  const handleGenerateSeo = async () => {
   setGeneratingSeo(true);
   setSeoError(null);
   
@@ -179,36 +171,6 @@ const handleGenerateSeo = async () => {
   
   setGeneratingSeo(false);
 };
-
-// ══════════════════════════════════════════════════════════════════
-// OPTIONAL: Loading UI Update
-// ══════════════════════════════════════════════════════════════════
-// Find your existing loading card for SEO generation and update it:
-// 
-// BEFORE:
-// <p className="text-gray-500">Generating SEO metadata...</p>
-//
-// AFTER (shows which phase is running):
-
-/*
-{generatingSeo && (
-  <Card>
-    <CardContent className="py-8 text-center">
-      <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-purple-500" />
-      <p className="text-gray-600 font-medium">
-        {seoTitles?.length > 0 
-          ? 'Phase 2: Generating descriptions...' 
-          : 'Phase 1: Generating titles & tags...'}
-      </p>
-      <p className="text-xs text-gray-400 mt-1">
-        {seoTitles?.length > 0 
-          ? '2 of 2 — Almost done' 
-          : '1 of 2 — Titles, tags, hashtags'}
-      </p>
-    </CardContent>
-  </Card>
-)}
-*/
 
   const handlePublish = async () => {
     await base44.entities.Projects.update(projectId, { status: 'published', current_step: 14 });
