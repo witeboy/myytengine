@@ -25,16 +25,11 @@ export default function RepurposeVideoDialog({ open, onOpenChange, video, channe
     setError(null);
     setResult(null);
 
-    // Extract video URL from the published date or video data
-    let videoUrl = '';
-    if (video.published) {
-      // We have the published field but not URL directly — pass what we have
-    }
-
     const res = await base44.functions.invoke('repurposeCompetitorVideo', {
       channel_id: channel.id,
       video_title: video.title,
-      video_url: videoUrl,
+      video_id: video.video_id || '',
+      video_url: video.video_id ? `https://www.youtube.com/watch?v=${video.video_id}` : '',
       competitor_name: video.channel_name || '',
     });
 
