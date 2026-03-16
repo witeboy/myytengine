@@ -115,39 +115,55 @@ function detectMood(title, summary) {
 // ═══════════════════════════════════════════════════════════════════════
 // CHARACTER UPLOAD SLOT
 // ═══════════════════════════════════════════════════════════════════════
-function CharSlot({ index, label, char, onUpload, onRemove }) {
+function CharSlot({ index, label, char, onUpload, onRemove, onDescriptionChange }) {
   const ref = useRef(null);
   return (
-    <div
-      onClick={() => !char && ref.current?.click()}
-      style={{
-        border: char ? '2px solid #7c3aed' : '2px dashed #374151',
-        borderRadius: 12, overflow: 'hidden', aspectRatio: '3/4',
-        background: char ? '#000' : '#0f172a', cursor: char ? 'default' : 'pointer',
-        position: 'relative', transition: 'border-color 0.2s',
-      }}
-    >
-      <input ref={ref} type="file" accept="image/*" style={{ display: 'none' }}
-        onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(index, f); }} />
-      {char ? (
-        <>
-          <img src={char.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          <button onClick={e => { e.stopPropagation(); onRemove(index); }}
-            style={{ position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%', background: 'rgba(0,0,0,0.75)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <X size={13} />
-          </button>
-          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(to top,rgba(0,0,0,0.9),transparent)', padding: '18px 8px 6px', fontSize: 11, color: '#ccc', textAlign: 'center' }}>
-            {label}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div
+        onClick={() => !char && ref.current?.click()}
+        style={{
+          border: char ? '2px solid #7c3aed' : '2px dashed #374151',
+          borderRadius: 12, overflow: 'hidden', aspectRatio: '3/4',
+          background: char ? '#000' : '#0f172a', cursor: char ? 'default' : 'pointer',
+          position: 'relative', transition: 'border-color 0.2s',
+        }}
+      >
+        <input ref={ref} type="file" accept="image/*" style={{ display: 'none' }}
+          onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(index, f); }} />
+        {char ? (
+          <>
+            <img src={char.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <button onClick={e => { e.stopPropagation(); onRemove(index); }}
+              style={{ position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%', background: 'rgba(0,0,0,0.75)', border: 'none', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <X size={13} />
+            </button>
+            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(to top,rgba(0,0,0,0.9),transparent)', padding: '18px 8px 6px', fontSize: 11, color: '#ccc', textAlign: 'center' }}>
+              {label}
+            </div>
+          </>
+        ) : (
+          <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#4b5563' }}>
+            <Upload size={24} />
+            <div style={{ fontSize: 12, textAlign: 'center', lineHeight: 1.4 }}>
+              <div style={{ color: '#6b7280', fontWeight: 600 }}>{label}</div>
+              <div style={{ color: '#374151', fontSize: 10 }}>Click to upload</div>
+            </div>
           </div>
-        </>
-      ) : (
-        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: '#4b5563' }}>
-          <Upload size={24} />
-          <div style={{ fontSize: 12, textAlign: 'center', lineHeight: 1.4 }}>
-            <div style={{ color: '#6b7280', fontWeight: 600 }}>{label}</div>
-            <div style={{ color: '#374151', fontSize: 10 }}>Click to upload</div>
-          </div>
-        </div>
+        )}
+      </div>
+      {char && (
+        <input
+          value={char.description || ''}
+          onChange={e => onDescriptionChange(index, e.target.value)}
+          placeholder="Outfit/look (optional)"
+          onClick={e => e.stopPropagation()}
+          style={{
+            width: '100%', padding: '6px 8px', background: '#0f172a',
+            border: '1px solid #1f2937', borderRadius: 6, color: '#d1d5db',
+            fontSize: 10, outline: 'none', boxSizing: 'border-box',
+            fontFamily: 'inherit',
+          }}
+        />
       )}
     </div>
   );
@@ -274,7 +290,10 @@ export default function MakeThumbnail({ onBack }) {
   const MAX_PHOTOS = 14; // nano-banana-2 supports up to 14 image inputs
   const handleUpload = (i, file) => {
     const url = URL.createObjectURL(file);
-    setChars(prev => { const a = [...prev]; a[i] = { file, url, name: file.name }; return a; });
+    setChars(prev => { const a = [...prev]; a[i] = { file, url, name: file.name, description: '' }; return a; });
+  };
+  const handleDescriptionChange = (i, desc) => {
+    setChars(prev => { const a = [...prev]; if (a[i]) a[i] = { ...a[i], description: desc }; return a; });
   };
   const handleRemove = i => {
     // Remove the slot entirely (unless it would go below 2 slots)
@@ -565,7 +584,7 @@ export default function MakeThumbnail({ onBack }) {
           </label>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 12 }}>
             {chars.map((char, i) => (
-              <CharSlot key={i} index={i} label={`Photo ${i + 1}`} char={char} onUpload={handleUpload} onRemove={handleRemove} />
+              <CharSlot key={i} index={i} label={`Photo ${i + 1}`} char={char} onUpload={handleUpload} onRemove={handleRemove} onDescriptionChange={handleDescriptionChange} />
             ))}
             {/* Add more button */}
             {chars.length < MAX_PHOTOS && (
