@@ -7,6 +7,7 @@ import {
   Download, Loader2, Music, Mic, Image as ImageIcon,
   FileText, Type, Package, FolderArchive, Film
 } from 'lucide-react';
+import { loadExportedVideo } from '@/utils/videoStorage';
 
 function sanitize(name) {
   return (name || 'untitled').replace(/[^a-zA-Z0-9\s_-]/g, '').replace(/\s+/g, '-').toLowerCase().substring(0, 80);
@@ -130,21 +131,20 @@ function buildTextDocument(data) {
 }
 
 export default function TopicAssetsPanel({ projectId, topicTitle }) {
- const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [assets, setAssets] = useState(null);
   const [zipping, setZipping] = useState(false);
-
-  // Must be declared here — before any early returns — to satisfy React hook rules
-  const exportedVideoBlobUrl = React.useMemo(() => {
-    if (window.__exportedVideo?.blob) {
-      return URL.createObjectURL(window.__exportedVideo.blob);
-    }
-    return null;
-  }, []);
+  const [exportedVideo, setExportedVideo] = useState(null);
 
   useEffect(() => {
     if (!projectId) { setLoading(false); return; }
     loadAssets();
+    loadExportedVideo(projectId).then(data => {
+      if (data?.blob) {
+        setExportedVideo(data);
+        console.log('[Assets] Loaded exported video from IndexedDB:', (data.blob.size / 1048576).toFixed(1), 'MB');
+      }
+    });
   }, [projectId]);
 
   const loadAssets = async () => {
@@ -202,75 +202,6 @@ export default function TopicAssetsPanel({ projectId, topicTitle }) {
     setLoading(false);
   };
 
-  const slug = sanitize(topicTitle || assets?.project?.name);
-
-  const handleDownloadZip = async (e) => {
-    e.stopPropagation();
-    if (!assets) return;
-    setZipping(true);
-    try {
-      const zip = new JSZip();
-
-      // Fetch media files in parallel
-      const fetches = [];
-
-      // Add exported video directly from memory (no fetch needed)
-      if (window.__exportedVideo?.blob) {
-        zip.file(window.__exportedVideo.filename || `${slug}-export.mp4`, window.__exportedVideo.blob);
-      }
-
-      if (assets.voiceoverUrl) {
-        fetches.push(
-          fetch(assets.voiceoverUrl).then(r => r.blob()).then(b => zip.file(`${slug}-voiceover.mp3`, b)).catch(() => {})
-        );
-      }
-      if (assets.musicUrl) {
-        fetches.push(
-          fetch(assets.musicUrl).then(r => r.blob()).then(b => zip.file(`${slug}-music.mp3`, b)).catch(() => {})
-        );
-      }
-      if (assets.thumbnailUrl) {
-        fetches.push(
-          fetch(assets.thumbnailUrl).then(r => r.blob()).then(b => zip.file(`${slug}-thumbnail.png`, b)).catch(() => {})
-        );
-      }
-
-      await Promise.all(fetches);
-
-      // Add text files
-      const fullTextDoc = buildTextDocument({
-        projectName: topicTitle || assets.project?.name || 'Project',
-        seoTitles: assets.seoTitles,
-        descriptions: assets.descriptions,
-        tags: assets.tags,
-        hashtags: assets.hashtags,
-        pinnedComment: assets.pinnedComment,
-        script: assets.scriptText,
-      });
-
-      if (fullTextDoc.length > 50) {
-        zip.file(`${slug}-seo-package.txt`, fullTextDoc);
-      }
-
-      if (assets.scriptText) {
-        zip.file(`${slug}-script.txt`, assets.scriptText);
-      }
-
-      const blob = await zip.generateAsync({ type: 'blob' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${slug}-assets.zip`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error('Zip error:', e);
-    }
-    setZipping(false);
-  };
-
   if (loading) {
     return (
       <div className="flex items-center gap-2 py-3 px-4">
@@ -284,25 +215,28 @@ export default function TopicAssetsPanel({ projectId, topicTitle }) {
     return <div className="py-3 px-4 text-xs text-gray-400">No project data found</div>;
   }
 
-  // Stable blob URL for exported video — created once, not every render
-  
+  const slug = sanitize(topicTitle || assets?.project?.name);
+
+  // Use IndexedDB video (survives refresh) or fallback to window global (same session)
+  const videoData = exportedVideo || (window.__exportedVideo?.blob ? window.__exportedVideo : null);
 
   const mediaAssets = [];
 
-  if (exportedVideoBlobUrl && window.__exportedVideo?.blob) {
-    const vidSize = (window.__exportedVideo.blob.size / (1024 * 1024)).toFixed(1);
+  if (videoData?.blob) {
+    const vidSize = (videoData.blob.size / (1024 * 1024)).toFixed(1);
     mediaAssets.push({
-      url: exportedVideoBlobUrl,
+      url: URL.createObjectURL(videoData.blob),
       label: `Exported Video (${vidSize} MB)`,
       icon: Film,
       ext: 'mp4',
-      filename: window.__exportedVideo.filename || `${slug}-export.mp4`,
+      filename: videoData.filename || `${slug}-export.mp4`,
     });
   }
 
   if (assets.voiceoverUrl) mediaAssets.push({ url: assets.voiceoverUrl, label: 'Voiceover', icon: Mic, ext: 'mp3', filename: `${slug}-voiceover.mp3` });
   if (assets.musicUrl) mediaAssets.push({ url: assets.musicUrl, label: assets.musicTitle || 'Background Music', icon: Music, ext: 'mp3', filename: `${slug}-music.mp3` });
   if (assets.thumbnailUrl) mediaAssets.push({ url: assets.thumbnailUrl, label: 'Thumbnail', icon: ImageIcon, ext: 'png', filename: `${slug}-thumbnail.png` });
+
   const textParts = [];
   if (assets.scriptText) textParts.push('Script');
   if (assets.seoTitles.length) textParts.push('Titles');
@@ -331,6 +265,59 @@ export default function TopicAssetsPanel({ projectId, topicTitle }) {
     script: assets.scriptText,
   });
 
+  const handleDownloadZip = async (e) => {
+    e.stopPropagation();
+    if (!assets) return;
+    setZipping(true);
+    try {
+      const zip = new JSZip();
+      const fetches = [];
+
+      if (videoData?.blob) {
+        zip.file(videoData.filename || `${slug}-export.mp4`, videoData.blob);
+      }
+
+      if (assets.voiceoverUrl) {
+        fetches.push(
+          fetch(assets.voiceoverUrl).then(r => r.blob()).then(b => zip.file(`${slug}-voiceover.mp3`, b)).catch(() => {})
+        );
+      }
+      if (assets.musicUrl) {
+        fetches.push(
+          fetch(assets.musicUrl).then(r => r.blob()).then(b => zip.file(`${slug}-music.mp3`, b)).catch(() => {})
+        );
+      }
+      if (assets.thumbnailUrl) {
+        fetches.push(
+          fetch(assets.thumbnailUrl).then(r => r.blob()).then(b => zip.file(`${slug}-thumbnail.png`, b)).catch(() => {})
+        );
+      }
+
+      await Promise.all(fetches);
+
+      if (fullTextDoc.length > 50) {
+        zip.file(`${slug}-seo-package.txt`, fullTextDoc);
+      }
+
+      if (assets.scriptText) {
+        zip.file(`${slug}-script.txt`, assets.scriptText);
+      }
+
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${slug}-assets.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Zip error:', e);
+    }
+    setZipping(false);
+  };
+
   return (
     <div className="py-3 px-4 space-y-3 bg-gray-50/80 rounded-b-lg border-t border-gray-100" onClick={e => e.stopPropagation()}>
       <div className="flex items-center justify-between">
@@ -352,15 +339,13 @@ export default function TopicAssetsPanel({ projectId, topicTitle }) {
         </div>
       </div>
 
-      {/* No video notice */}
-      {!window.__exportedVideo?.blob && (
+      {!videoData?.blob && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-700">
           <Film className="w-3.5 h-3.5 flex-shrink-0" />
-          <span>No exported video in this session. Export from Timeline Editor first, then return here.</span>
+          <span>No exported video found. Export from Timeline Editor first, then return here.</span>
         </div>
       )}
 
-      {/* Download All ZIP */}
       <button
         onClick={handleDownloadZip}
         disabled={zipping}
@@ -373,7 +358,6 @@ export default function TopicAssetsPanel({ projectId, topicTitle }) {
         )}
       </button>
 
-      {/* Media downloads */}
       {mediaAssets.length > 0 && (
         <div>
           <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Media</p>
@@ -385,7 +369,6 @@ export default function TopicAssetsPanel({ projectId, topicTitle }) {
         </div>
       )}
 
-      {/* Text document download */}
       {textParts.length > 0 && (
         <div>
           <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Documents</p>
