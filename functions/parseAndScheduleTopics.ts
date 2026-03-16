@@ -25,38 +25,103 @@ Deno.serve(async (req) => {
     const shortsPerDay = channel.shorts_per_day || 5;
     const longformPerWeek = channel.longform_per_week || 3;
     const niche = channel.niche_label || channel.niche || 'general';
+    const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+    const youtubeApiKey = Deno.env.get("YOUTUBE_API_KEY");
 
     // ══════════════════════════════════════════════════════════════
-    // STEP 1: AI classifies topics into short vs long format
+    // STEP 1: Gather YouTube trend context
+    // ══════════════════════════════════════════════════════════════
+    let trendContext = '';
+    if (youtubeApiKey) {
+      try {
+        const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${encodeURIComponent(niche)}&type=video&order=viewCount&maxResults=10&publishedAfter=${getDateWeeksAgo(2)}&key=${youtubeApiKey}`;
+        const res = await fetch(searchUrl);
+        if (res.ok) {
+          const data = await res.json();
+          const titles = (data.items || []).map(v => v.snippet.title).filter(Boolean);
+          if (titles.length > 0) {
+            trendContext = `\n\nCURRENTLY TRENDING ON YOUTUBE IN THIS NICHE (last 2 weeks):\n${titles.map((t, i) => `${i + 1}. ${t}`).join('\n')}`;
+          }
+        }
+      } catch (err) {
+        console.warn('YouTube trend fetch failed:', err.message);
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // STEP 2: AI classifies, orders, and assigns posting times
     // ══════════════════════════════════════════════════════════════
     const topicTitles = unscheduled.map(t => t.title);
-    const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
-
-    let formatAssignments = {};
+    let aiPlan = null;
 
     if (geminiApiKey && topicTitles.length > 0) {
-      const prompt = `You are an expert YouTube content strategist for a "${niche}" channel.
+      const existingScheduled = allTopics
+        .filter(t => t.scheduled_date && t.status !== 'queued')
+        .map(t => `${t.title} (${t.format}, ${t.scheduled_date})`)
+        .slice(-20);
 
-Given these ${topicTitles.length} video topics, classify each as either "short" (YouTube Shorts, under 60 seconds) or "long" (full-length video, ${channel.long_form_duration_minutes || 15}+ minutes).
+      const prompt = `You are an elite YouTube content strategist for a "${niche}" channel.
+You must plan a content calendar that MAXIMIZES: authority building, viewer retention, cult following, discoverability, and revenue.
 
-STRATEGY RULES:
-- Long-form videos should be deep-dive, educational, authority-building topics that establish expertise
-- Long-form should be topics that generate high watch time, drive subscriptions, and create loyal viewers
-- Short-form should be quick hooks, surprising facts, trending angles, reaction-worthy moments, or teaser content
-- Short-form drives discovery and new viewers; long-form drives retention and cult following
-- Mix ratio target: roughly ${shortsPerDay * 7} shorts per week and ${longformPerWeek} long-form per week
-- Topics that invite discussion, controversy, or deep analysis → long-form
-- Topics that are listicles, quick tips, single facts, or trending → short-form
-- Evergreen educational content → long-form
-- Viral/attention-grabbing hooks → short-form
+CHANNEL CONFIG:
+- ${shortsPerDay} shorts/day, ${longformPerWeek} long-form/week
+- Short-form: YouTube Shorts (under 60 seconds, ≤${channel.short_form_word_limit || 200} words)
+- Long-form: Full videos (${channel.long_form_duration_minutes || 15}+ minutes)
+${trendContext}
 
-TOPICS:
+ALREADY SCHEDULED (for context):
+${existingScheduled.length > 0 ? existingScheduled.join('\n') : 'None yet — this is a fresh start.'}
+
+NEW TOPICS TO SCHEDULE (${topicTitles.length} topics):
 ${topicTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}
 
-Respond with ONLY valid JSON:
-{"assignments": [{"index": 0, "format": "short"}, {"index": 1, "format": "long"}, ...]}
+YOUR TASKS:
 
-Every topic must be assigned. Use 0-based index matching the topic list above.`;
+1. CLASSIFY each topic as "short" or "long":
+   - Long-form: deep-dives, tutorials, storytelling, authority-building, evergreen education, controversial takes that need explanation
+   - Short-form: hooks, quick facts, trending reactions, listicle fragments, teaser clips, viral-potential moments
+   - Consider: long-form builds subscriber loyalty; short-form drives discovery
+
+2. ORDER topics strategically:
+   - Use THEMATIC CLUSTERS: group related topics so viewers binge
+   - Place SHORT teasers BEFORE related long-form content to build anticipation
+   - Alternate between educational and entertaining to prevent fatigue
+   - Front-load high-trend-score topics for momentum
+   - End each week with a strong long-form to drive weekend watch time
+
+3. ASSIGN posting times for each topic:
+   - Shorts: best times are typically morning (8-9 AM), lunch (12-1 PM), evening (6-7 PM) — stagger across the day
+   - Long-form: afternoon (2-4 PM) on weekdays, morning (10 AM) on weekends — when people have time to watch
+   - Adjust for "${niche}" audience behavior patterns
+
+4. ADD strategic notes explaining WHY each topic is placed where it is.
+
+5. GROUP topics into theme clusters (e.g., "wealth mindset", "investment basics", "success stories").
+
+Respond with ONLY valid JSON:
+{
+  "plan": [
+    {
+      "index": 0,
+      "format": "short",
+      "suggested_post_time": "9:00 AM",
+      "ai_notes": "Quick hook to introduce the wealth series — posts early for morning commuters",
+      "theme_cluster": "wealth mindset",
+      "trend_score": 85,
+      "day_order": 1
+    }
+  ],
+  "posting_strategy": {
+    "short_times": ["8:00 AM", "12:30 PM", "6:00 PM", "8:30 PM"],
+    "long_times": ["2:00 PM", "4:00 PM"],
+    "long_days": ["Tuesday", "Thursday", "Saturday"],
+    "reasoning": "..."
+  },
+  "weekly_narrative": "Brief description of how the week's content tells a cohesive story"
+}
+
+"day_order" is the STRATEGIC order (1 = schedule first, 2 = second, etc.). Topics with lower day_order get scheduled on earlier dates.
+Every topic (0-indexed) must appear exactly once in the plan.`;
 
       try {
         const response = await fetch(
@@ -66,7 +131,7 @@ Every topic must be assigned. Use 0-based index matching the topic list above.`;
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: { temperature: 0.3, maxOutputTokens: 4096, responseMimeType: "application/json" }
+              generationConfig: { temperature: 0.4, maxOutputTokens: 16384, responseMimeType: "application/json" }
             })
           }
         );
@@ -75,40 +140,59 @@ Every topic must be assigned. Use 0-based index matching the topic list above.`;
           const data = await response.json();
           const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
           if (text) {
-            const parsed = JSON.parse(text);
-            if (parsed.assignments && Array.isArray(parsed.assignments)) {
-              for (const a of parsed.assignments) {
-                if (typeof a.index === 'number' && (a.format === 'short' || a.format === 'long')) {
-                  formatAssignments[a.index] = a.format;
-                }
-              }
-              console.log(`✓ AI classified ${Object.keys(formatAssignments).length}/${topicTitles.length} topics`);
-            }
+            aiPlan = JSON.parse(text);
+            console.log(`✓ AI strategic plan received for ${aiPlan.plan?.length || 0} topics`);
           }
         }
       } catch (err) {
-        console.warn('AI classification failed, using fallback:', err.message);
-      }
-    }
-
-    // Apply AI format assignments to topics
-    for (let i = 0; i < unscheduled.length; i++) {
-      const assignedFormat = formatAssignments[i];
-      if (assignedFormat && assignedFormat !== unscheduled[i].format) {
-        await base44.asServiceRole.entities.ChannelTopics.update(unscheduled[i].id, { format: assignedFormat });
-        unscheduled[i].format = assignedFormat;
+        console.warn('AI strategic planning failed, using basic scheduling:', err.message);
       }
     }
 
     // ══════════════════════════════════════════════════════════════
-    // STEP 2: Schedule topics on the calendar
+    // STEP 3: Apply AI plan or fallback to basic scheduling
     // ══════════════════════════════════════════════════════════════
-    const shorts = unscheduled.filter(t => t.format === 'short');
-    const longs = unscheduled.filter(t => t.format === 'long');
+    
+    // Apply AI classifications
+    if (aiPlan?.plan) {
+      for (const item of aiPlan.plan) {
+        if (typeof item.index === 'number' && item.index < unscheduled.length) {
+          const topic = unscheduled[item.index];
+          const updateData = {};
+          if (item.format === 'short' || item.format === 'long') {
+            updateData.format = item.format;
+            topic.format = item.format;
+          }
+          if (item.suggested_post_time) updateData.suggested_post_time = item.suggested_post_time;
+          if (item.ai_notes) updateData.ai_notes = item.ai_notes;
+          if (item.theme_cluster) updateData.theme_cluster = item.theme_cluster;
+          if (typeof item.trend_score === 'number') updateData.trend_score = item.trend_score;
+          if (typeof item.day_order === 'number') topic._dayOrder = item.day_order;
 
+          if (Object.keys(updateData).length > 0) {
+            await base44.asServiceRole.entities.ChannelTopics.update(topic.id, updateData);
+          }
+        }
+      }
+    }
+
+    // Sort by AI-assigned day_order if available
+    const sortedTopics = [...unscheduled].sort((a, b) => {
+      const aOrder = a._dayOrder ?? 999;
+      const bOrder = b._dayOrder ?? 999;
+      return aOrder - bOrder;
+    });
+
+    const shorts = sortedTopics.filter(t => t.format === 'short');
+    const longs = sortedTopics.filter(t => t.format === 'long');
     console.log(`Format split: ${shorts.length} shorts, ${longs.length} long-form`);
 
-    // Find the latest scheduled date, or start from tomorrow
+    // Determine preferred long-form days from AI or defaults
+    const longDayNames = aiPlan?.posting_strategy?.long_days || ['Tuesday', 'Thursday', 'Saturday'];
+    const dayNameToNum = { Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4, Friday: 5, Saturday: 6 };
+    const longDayNums = longDayNames.map(d => dayNameToNum[d]).filter(n => n !== undefined);
+
+    // Find start date
     const scheduledDates = allTopics
       .filter(t => t.scheduled_date)
       .map(t => t.scheduled_date)
@@ -131,22 +215,11 @@ Every topic must be assigned. Use 0-based index matching the topic list above.`;
     let longformThisWeek = 0;
     let weekStart = getWeekStart(currentDate);
 
-    function getWeekStart(date) {
-      const d = new Date(date);
-      const day = d.getDay();
-      d.setDate(d.getDate() - day);
-      return d.toISOString().split('T')[0];
-    }
-
-    function formatDate(d) {
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    }
-
     const maxDays = 365;
     let dayCount = 0;
 
     while ((shortIdx < shorts.length || longIdx < longs.length) && dayCount < maxDays) {
-      const dateStr = formatDate(currentDate);
+      const dateStr = formatDateStr(currentDate);
       const ws = getWeekStart(currentDate);
       
       if (ws !== weekStart) {
@@ -167,12 +240,10 @@ Every topic must be assigned. Use 0-based index matching the topic list above.`;
         shortsToday++;
       }
 
-      // Schedule longform (spread across Mon/Wed/Fri)
+      // Schedule longform on AI-preferred days
       if (longformThisWeek < longformPerWeek && longIdx < longs.length) {
         const dayOfWeek = currentDate.getDay();
-        const longformDays = longformPerWeek <= 3 ? [1, 3, 5] : [0, 1, 2, 3, 4, 5, 6];
-        
-        if (longformDays.includes(dayOfWeek) || longformPerWeek > 3) {
+        if (longDayNums.includes(dayOfWeek) || longformPerWeek > 3) {
           updates.push({
             id: longs[longIdx].id,
             scheduled_date: dateStr,
@@ -188,7 +259,7 @@ Every topic must be assigned. Use 0-based index matching the topic list above.`;
       dayCount++;
     }
 
-    // Apply updates
+    // Apply schedule updates
     for (const update of updates) {
       const { id, ...data } = update;
       await base44.asServiceRole.entities.ChannelTopics.update(id, data);
@@ -201,7 +272,7 @@ Every topic must be assigned. Use 0-based index matching the topic list above.`;
       total_topics: allTopics.length,
     });
 
-    console.log(`✓ Scheduled ${updates.length} topics (${shortIdx} shorts + ${longIdx} long-form) across ${dayCount} days for "${channel.name}"`);
+    console.log(`✓ Scheduled ${updates.length} topics (${shortIdx}S + ${longIdx}L) across ${dayCount} days for "${channel.name}"`);
 
     return Response.json({
       success: true,
@@ -209,10 +280,29 @@ Every topic must be assigned. Use 0-based index matching the topic list above.`;
       days_covered: dayCount,
       shorts_scheduled: shortIdx,
       longform_scheduled: longIdx,
-      ai_classified: Object.keys(formatAssignments).length,
+      ai_classified: aiPlan?.plan?.length || 0,
+      posting_strategy: aiPlan?.posting_strategy || null,
+      weekly_narrative: aiPlan?.weekly_narrative || null,
     });
   } catch (error) {
     console.error("parseAndScheduleTopics error:", error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
+
+function getWeekStart(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  d.setDate(d.getDate() - day);
+  return d.toISOString().split('T')[0];
+}
+
+function formatDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function getDateWeeksAgo(weeks) {
+  const d = new Date();
+  d.setDate(d.getDate() - (weeks * 7));
+  return d.toISOString();
+}
