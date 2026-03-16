@@ -8,6 +8,7 @@ import {
   CheckCircle, Loader2, HardDrive
 } from 'lucide-react';
 import { saveExportedVideo } from '@/utils/videoStorage';
+import { saveExportedVideo } from '@/utils/videoStorage';
 
 const PHASE_LABELS = {
   checking: 'Checking browser support...',
@@ -26,7 +27,7 @@ export default function VideoExporter({
   voiceoverUrl,
   musicUrl,
   musicVolume,
-  projectName,
+ projectName,
   projectId,
   exportHook,
 }) {
@@ -90,8 +91,6 @@ export default function VideoExporter({
         filename: exportFilename,
         size: blob.size,
       };
-
-      // Persist to IndexedDB — survives page navigation and refresh
       if (projectId) {
         saveExportedVideo(projectId, blob, exportFilename);
       }
