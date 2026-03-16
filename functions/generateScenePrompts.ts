@@ -396,6 +396,8 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
     enhanced = enhanced.replace(/\b(Kodak|Vision3|film grain texture|chromatic aberration)\b/gi, '');
     enhanced = enhanced.replace(/\bf\/\d+\.?\d*\b/g, '');
     enhanced = enhanced.replace(/\b(bokeh|lens flare)\b/gi, '');
+    // Clean up "depth of field with ," left after bokeh removal
+    enhanced = enhanced.replace(/\bdepth of field with\s*,/gi, 'cinematic depth of field,');
     enhanced = enhanced// Strip rendering instructions that leaked into prompt
             .replace(/\bshown full (?:body|figure)\s*(?:in the scene)?\b/gi, '')
             .replace(/\bshown full body in the scene\b/gi, '')
