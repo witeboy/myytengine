@@ -3,7 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Loader2, Upload, FileText, Sparkles } from 'lucide-react';
 
 export default function TopicImporter({ open, onOpenChange, channel, onImported }) {
@@ -71,6 +71,7 @@ export default function TopicImporter({ open, onOpenChange, channel, onImported 
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Import Topics — {channel?.name}</DialogTitle>
+          <DialogDescription>Paste or upload topics. AI will assign formats and schedule them.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700 flex gap-2">

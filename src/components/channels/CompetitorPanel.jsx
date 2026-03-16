@@ -55,9 +55,9 @@ export default function CompetitorPanel({ channel }) {
     setLoading(true);
     const res = await base44.functions.invoke('discoverCompetitors', { channel_id: channel.id });
     setLoading(false);
-    if (res.data?.competitors) {
+    if (res.data?.success && res.data.competitors) {
       setCompetitors(res.data.competitors);
-      setAiSummary(res.data.ai_summary);
+      setAiSummary(res.data.ai_summary || null);
       setRefreshedAt(new Date().toISOString());
     }
   };
