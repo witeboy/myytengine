@@ -167,7 +167,7 @@ Preserve ALL faces, text, layout exactly. Only adjust color, sharpness, contrast
 }
 
 // ── Poll helper ─────────────────────────────────────────────────────────
-async function pollForResult(taskId, apiKey, maxAttempts = 40, interval = 5000) {
+async function pollForResult(taskId, apiKey, maxAttempts = 24, interval = 5000) {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     await new Promise(r => setTimeout(r, interval));
     let pollData;
