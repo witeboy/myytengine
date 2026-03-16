@@ -686,135 +686,22 @@ const handleGenerateSeo = async () => {
 
           {/* ═══════════════ THUMBNAILS TAB ═══════════════ */}
           <TabsContent value="thumbnails" className="space-y-5">
-
-            {/* Pipeline status */}
-            <PipelineStatus
-              selectedTitles={selectedTitles}
-              selectedNiche={selectedNiche}
-              referenceStyle={referenceStyle}
-              selectedTemplateIds={selectedTemplateIds}
-              onGoToTitles={() => setActiveTab('titles')}
-            />
-
-            {/* Step A: Style source */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <NicheManager onSelectNiche={setSelectedNiche} selectedNicheId={selectedNiche?.id} />
-              <YouTubeThumbnailImporter
-                projectId={projectId}
-                onConceptCreated={() => refetchThumbs()}
-                onStyleExtracted={(style) => setReferenceStyle(style)}
+            {summarizing && (
+              <Card>
+                <CardContent className="py-8 text-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-purple-500 mx-auto mb-2" />
+                  <p className="text-sm text-gray-500">Summarizing your script for thumbnail AI...</p>
+                </CardContent>
+              </Card>
+            )}
+            <div className="rounded-xl overflow-hidden border border-gray-200 bg-white">
+              <MakeThumbnail
+                onBack={() => setActiveTab('titles')}
+                initialTitle={selectedTitles.length > 0 ? selectedTitles[0].title : (project?.name || '')}
+                initialSummary={scriptSummary}
+                sceneImages={scenes}
               />
             </div>
-
-            {/* Step B: Template Intelligence Picker */}
-            <ThumbnailTemplatePicker
-              projectId={projectId}
-              onTemplatesSelected={handleTemplatesSelected}
-              onSkip={handleAutoGenerate}
-            />
-
-            {/* Already selected templates strip — shown after selection */}
-            {selectedTemplateIds.length === 0 && !generatingThumbs && (
-              <Card className="border-green-200 bg-green-50">
-                <CardContent className="py-3 px-4 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-600" />
-                    <span className="text-sm text-green-800 font-medium">Templates locked:</span>
-                    {selectedTemplateIds.map((id, i) => (
-                      <Badge key={id} className="bg-green-100 text-green-700 text-xs">{i+1}. {id.replace(/_/g,' ')}</Badge>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs text-gray-400 h-7"
-                      onClick={() => setSelectedTemplateIds([])}
-                    >
-                      Change templates
-                    </Button>
-                    <Button
-                      onClick={handleAutoGenerate}
-                      disabled={generatingThumbs}
-                      size="sm"
-                      className="gap-2 bg-purple-600 hover:bg-purple-700"
-                    >
-                      {generatingThumbs ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                      Regenerate
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Error state */}
-            {thumbError && (
-              <Card className="border-red-200 bg-red-50">
-                <CardContent className="py-4 text-center">
-                  <p className="text-red-600 font-medium text-sm">{thumbError}</p>
-                  <p className="text-xs text-red-400 mt-1">Make sure you have a selected topic and a final script.</p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Loading state */}
-            {generatingThumbs && (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-purple-600 mx-auto mb-3" />
-                  <p className="text-gray-500 font-medium">Creating 3 scroll-stopping thumbnail designs...</p>
-                  {selectedTemplateIds.length === 0 && (
-                    <div className="flex justify-center gap-2 mt-3 flex-wrap">
-                      {selectedTemplateIds.map((id, i) => (
-                        <Badge key={id} className="bg-purple-100 text-purple-700 text-xs">
-                          Concept {i+1}: {id.replace(/_/g,' ')}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                  <div className="mt-4 max-w-md mx-auto space-y-2 text-left">
-                    <div className="flex items-center gap-2 text-xs text-purple-700 bg-purple-50 rounded px-3 py-1.5">
-                      <Sparkles className="w-3 h-3 animate-pulse" /> Phase 0: Extracting script essence & emotional hooks
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 rounded px-3 py-1.5">
-                      <Type className="w-3 h-3" /> Phase 1: Generating high-CTR overlay text (max 5 words, power words)
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-amber-700 bg-amber-50 rounded px-3 py-1.5">
-                      <ImageIcon className="w-3 h-3" /> Phase 2: Composing visuals with template DNA
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 rounded px-3 py-1.5">
-                      <Sparkles className="w-3 h-3" /> Phase 3: Engineering image prompts & generating 1 images
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-400 mt-4">This takes 1–2 minutes</p>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Thumbnail Grid */}
-            {thumbnails.length > 0 && !generatingThumbs && (
-              <>
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">Generated Concepts</h3>
-                  {selectedThumb && (
-                    <Button onClick={() => setActiveTab('descriptions')} className="gap-2">
-                      Next: Description & Tags <ArrowRight className="w-4 h-4" />
-                    </Button>
-                  )}
-                </div>
-                <ThumbnailGrid thumbnails={thumbnails} projectId={projectId} onRefetch={refetchThumbs} />
-              </>
-            )}
-
-            {thumbnails.length === 0 && !generatingThumbs && (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <ImageIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                  <p className="text-gray-500 mb-1">No thumbnail concepts yet</p>
-                  <p className="text-xs text-gray-400">Select titles, pick a style, choose templates above, then generate</p>
-                </CardContent>
-              </Card>
-            )}
           </TabsContent>
 
           {/* ═══════════════ DESCRIPTIONS TAB ═══════════════ */}
