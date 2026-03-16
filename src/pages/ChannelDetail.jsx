@@ -248,6 +248,7 @@ export default function ChannelDetail() {
                     channel={channel}
                     onStartPipeline={handleStartPipeline}
                     onClose={() => setSelectedDate(null)}
+                    onTopicUpdated={() => refetchTopics()}
                   />
                 ) : (
                   <Card>
