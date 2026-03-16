@@ -269,6 +269,9 @@ function sanitizePrompt(prompt, characterTieredTags, characters, visualStyle, sh
       p = p.replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').replace(/\s{2,}/g, ' ');
 
       // Inject clean identity at first name occurrence
+      // CRITICAL: Always SUBSTITUTE the name with the identity description.
+      // Never use appositive pattern ("Name, HUGE BLOB, verb") — it causes
+      // image gen to render a portrait/floating head instead of a scene.
       const firstOcc = p.match(new RegExp(`\\b${escapedName}\\b`, 'i'));
       if (firstOcc) {
         const idx = p.indexOf(firstOcc[0]);
@@ -276,12 +279,10 @@ function sanitizePrompt(prompt, characterTieredTags, characters, visualStyle, sh
         const after = p.substring(idx + firstOcc[0].length);
         const afterTrimmed = after.trimStart();
         const isPossessive = /^'s\b/.test(afterTrimmed);
-        const hasVerb = /^(is|was|sits|stands|walks|runs|holds|stares|looks|leans|clutch|grip|reach|kneel|crouch|watch|gaze|turn|step|press|scroll|tap|delet|swip)/i.test(afterTrimmed);
         if (isPossessive) {
-          p = `${before}${firstOcc[0]}, ${desc}, whose${after.substring(2)}`;
-        } else if (hasVerb) {
-          p = `${before}${firstOcc[0]}, ${desc},${after}`;
+          p = `${before}${desc}, whose${after.substring(after.indexOf("'s") + 2)}`;
         } else {
+          // Always substitute — the desc is a natural noun phrase that reads as a subject
           p = `${before}${desc}${after}`;
         }
         fixes.push(`injected_${tier}_identity_${charName}`);
