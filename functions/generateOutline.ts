@@ -13,7 +13,7 @@ function repairJSON(str) {
   // Strategy: walk through and fix quotes between key-value pairs
   s = s.replace(/"([^"]*?)"\s*:\s*"([\s\S]*?)"\s*([,}\]])/g, (match, key, val, end) => {
     // Escape any unescaped quotes inside the value
-    const fixedVal = val.replace(/(?<!\\)"/g, '\\"');
+    const fixedVal = val.replace(/([^\\])"/g, '$1\\"').replace(/^"/g, '\\"');
     return `"${key}": "${fixedVal}"${end}`;
   });
   return s;
