@@ -36,7 +36,11 @@ export default function RepurposeVideoDialog({ open, onOpenChange, video, channe
     setLoading(false);
 
     if (res.data?.success) {
-      setResult(res.data.topic);
+      setResult({
+        ...res.data.topic,
+        transcript_source: res.data.transcript_source,
+        transcript_length: res.data.transcript_length,
+      });
       onRepurposed?.();
     } else {
       setError(res.data?.error || 'Failed to repurpose');
