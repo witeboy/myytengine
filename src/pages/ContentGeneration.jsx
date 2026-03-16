@@ -1599,7 +1599,9 @@ if (nextBatch > 0) {
               <FixPromptsButton
                 projectId={projectId}
                 sceneCount={scenes.filter(s => s.status === 'prompts_ready' || s.status === 'image_generated').length}
-                onComplete={async () => { await refetchScenes(); }}
+                scenes={scenes}
+                project={project}
+                onComplete={async () => { await refetchScenes(); await refetchProject(); }}
               />
 
 <DedupButton
