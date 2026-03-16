@@ -245,18 +245,11 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
       <CardContent className="pt-3 space-y-3">
         <p className="text-sm text-gray-700 line-clamp-3">{scene.narration_text}</p>
 
-        {/* Prompts collapsible */}
+        {/* Prompts — editable */}
         <details className="text-xs">
-          <summary className="cursor-pointer text-blue-600 font-medium">View Prompts</summary>
+          <summary className="cursor-pointer text-blue-600 font-medium">Edit Prompts</summary>
           <div className="mt-2 space-y-2">
-            <div>
-              <p className="font-medium text-gray-500">Image Prompt:</p>
-              <p className="text-gray-600">{scene.image_prompt}</p>
-            </div>
-            <div>
-              <p className="font-medium text-gray-500">Animation Prompt:</p>
-              <p className="text-gray-600">{scene.animation_prompt}</p>
-            </div>
+            <PromptEditor scene={scene} onSaved={onSceneUpdated} onRegenerateImage={handleImage} />
             <div className="pt-2 border-t border-dashed">
               <PromptEnhancer scene={scene} onEnhanced={onSceneUpdated} />
             </div>
