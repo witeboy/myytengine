@@ -266,7 +266,8 @@ export default function useVideoExport() {
   });
 
   const decodeAudio = async (url) => {
-    const resp = await fetch(url);
+    const safeUrl = await resolveUrl(url);
+    const resp = await fetch(safeUrl, { mode: 'cors' });
     const buf  = await resp.arrayBuffer();
     const actx = new AudioContext({ sampleRate: 48000 });
     const dec  = await actx.decodeAudioData(buf);
