@@ -1030,9 +1030,10 @@ ${sceneDirections}
 
 1. **image_prompt** — Production-ready AI image generation prompt. The image generator renders whatever it reads FIRST as the dominant element. STRUCTURE MATTERS:
 
-   **STEP A — SHOT FRAMING (first sentence, most important):**
-   Start EVERY prompt with the shot type and composition: "Full body wide shot showing..." or "Medium shot from waist up showing..." or "Low angle shot looking up at..."
+   **STEP A — SHOT FRAMING + BODY PROPORTION (first sentence, most important):**
+   Start EVERY prompt with the shot type AND how much of the character's body is visible: "Full body wide shot showing a woman walking head to feet through..." or "Medium shot from waist up showing hands gripping..." or "Low angle looking up at a figure towering against..."
    This MUST be the very first thing in the prompt. The image generator commits to this framing before reading anything else.
+   USE THE "Body Proportion" FIELD from the scene notes — it tells you EXACTLY how much body to show and how the character relates to objects in the frame.
 
    **STEP B — ENVIRONMENT (next 1-2 sentences):**
    Describe the COMPLETE environment: location, architecture, weather, time of day, foreground props, background depth.
