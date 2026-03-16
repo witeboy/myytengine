@@ -450,6 +450,7 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
 
   // For non-photorealistic styles, strip any photorealistic camera language that may have leaked in
   const isPhotoStyle = ['cinematic_realistic', 'photorealistic_4k', 'skeleton_protagonist'].includes(visualStyle);
+  // Roblox is NOT a photo style — camera language will be stripped
   if (!isPhotoStyle) {
     enhanced = enhanced.replace(/\b(shot on|ARRI|Alexa|Canon|Sony|Nikon|Panavision|anamorphic|DSLR|RAW)\b/gi, '');
     enhanced = enhanced.replace(/\b(Kodak|Vision3|film grain texture|chromatic aberration)\b/gi, '');
