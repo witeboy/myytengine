@@ -1301,6 +1301,13 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
               modifiedPrompt = modifiedPrompt.replace(
                 new RegExp(`\\b${escapedName}\\/[\\w\\s]{3,30}\\b`, 'gi'), c.name
               );
+              // Strip raw identity_core dumps the LLM copies verbatim from the character block
+              // e.g. "The 55 year old male with light-medium skin, oval face shape, hazel eyes (almond-shaped)..."
+              // These isolated descriptions cause image gen to render a portrait/floating head
+              modifiedPrompt = modifiedPrompt.replace(
+                /\b(?:The|A|An)\s+\d{1,2}\s*[-–]?\s*year[\s-]*old\s+(?:male|female|man|woman)\s+with\s+[^.]{30,}?(?=\b(?:is|was|sits|stands|walks|looks|leans|holds|stares|shows|implied|clutch|grip)\b)/gi,
+                ''
+              );
               // Strip remaining SECOND occurrence of the full name (the LLM often writes it twice)
               let nameCount = 0;
               modifiedPrompt = modifiedPrompt.replace(
