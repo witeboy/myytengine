@@ -1,6 +1,6 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
-import { ArrowUpRight, Eye, ThumbsUp, MessageSquare } from 'lucide-react';
+import { ArrowUpRight, Eye, ThumbsUp, MessageSquare, Zap } from 'lucide-react';
 
 function formatNum(n) {
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
@@ -8,7 +8,7 @@ function formatNum(n) {
   return String(n);
 }
 
-export default function CompetitorVideoList({ videos, title, emptyText }) {
+export default function CompetitorVideoList({ videos, title, emptyText, onRepurpose }) {
   if (!videos?.length) {
     return <p className="text-[11px] text-gray-400 italic">{emptyText || 'No videos'}</p>;
   }
@@ -18,7 +18,7 @@ export default function CompetitorVideoList({ videos, title, emptyText }) {
       {title && <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">{title}</p>}
       <div className="space-y-1">
         {videos.map((v, i) => (
-          <div key={i} className="flex items-start gap-2 p-1.5 rounded bg-gray-50 hover:bg-gray-100 transition-colors">
+          <div key={i} className="flex items-start gap-2 p-1.5 rounded bg-gray-50 hover:bg-gray-100 transition-colors group">
             {v.thumbnail && (
               <img src={v.thumbnail} alt="" className="w-16 h-9 rounded object-cover flex-shrink-0" />
             )}
@@ -37,6 +37,15 @@ export default function CompetitorVideoList({ videos, title, emptyText }) {
                 )}
               </div>
             </div>
+            {onRepurpose && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onRepurpose(v); }}
+                className="flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-md bg-orange-100 text-orange-700 hover:bg-orange-200 text-[9px] font-semibold opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Repurpose this video into your pipeline"
+              >
+                <Zap className="w-2.5 h-2.5" /> Repurpose
+              </button>
+            )}
           </div>
         ))}
       </div>
