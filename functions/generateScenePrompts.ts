@@ -1003,22 +1003,31 @@ ${sceneDirections}
    Describe the COMPLETE environment: location, architecture, weather, time of day, foreground props, background depth.
    Example: "...a rain-slicked Tokyo street at dusk, neon signs reflecting in puddles between parked cars, steam rising from a ramen cart in the foreground, office towers vanishing into low clouds behind."
 
-   **STEP C — CHARACTER (depth depends on shot type):**
+   **STEP C — CHARACTER IN CONTEXT (depth depends on shot type):**
    The amount of character detail must match the shot framing. Over-describing a character in a wide shot causes the image generator to zoom into their face.
 
+   **CRITICAL — WEAVE, DON'T ISOLATE:**
+   Character descriptions must be WOVEN INTO THE ACTION AND ENVIRONMENT — never as a separate catalog of features.
+   The character exists IN the world, interacting with objects, affected by lighting, touching surfaces.
+   
+   BAD (isolated): "A woman with brown hair, oval face, light skin, brown eyes, 5ft4, wearing a blue jacket. She is in a kitchen."
+   GOOD (woven): "A brown-haired woman in a rumpled blue jacket leans against the kitchen counter, her light skin catching the warm glow of the overhead lamp as she scrolls through her phone, coffee steam curling past her face."
+   
+   The GOOD version weaves identity (brown hair, light skin, blue jacket) INTO the action (leaning, scrolling) and environment (kitchen counter, lamp glow, coffee steam). Every character trait connects to something in the scene.
+
    **WIDE/ENVIRONMENTAL shots (WS, EWS, MWS, HIGH ANGLE, OVERHEAD, ESTABLISHING):**
-   Character is SMALL in frame. Use MINIMAL description — just silhouette identifiers:
+   Character is SMALL in frame. Use MINIMAL description — just silhouette identifiers woven into movement:
    "A woman with a dark-brown bob in a lavender jacket walks through the crosswalk, phone in hand."
    NO face details, NO eye color, NO skin texture. The character is a figure in a landscape.
 
    **MEDIUM/ACTION shots (MS, LOW ANGLE, OTS, TRACKING, DUTCH):**
-   Character is visible but environment shares the frame. Use MODERATE description — body, hair, skin tone, action:
+   Character is visible but environment shares the frame. Use MODERATE description — body, hair, skin tone WOVEN INTO action:
    "A 5ft4 woman with dark-brown hair strides through the crowd, light-beige skin catching the neon glow, clutching her phone mid-step."
    Brief identifying features WOVEN INTO ACTION — not a feature catalog.
 
    **CLOSE-UP shots (CU, MCU, ECU, POV, INSERT):**
-   Character's face IS the subject. Use FULL description for consistency:
-   "Extreme close-up of a woman's face — light-beige skin with warm undertones, wide-set light-brown eyes glistening with unshed tears, her dark-brown hair falling across her forehead."
+   Character's face IS the subject. Use FULL description for consistency, WOVEN with emotion:
+   "Extreme close-up — a woman's light-beige face with warm undertones crumples as wide-set light-brown eyes glisten with unshed tears, dark-brown hair falling across her forehead as she bites her lower lip."
 
    **PROP FIDELITY:**
    When the narration mentions a specific device or object (iPhone, MacBook, Tesla, Starbucks cup), use that EXACT name in the prompt — NOT a generic replacement. But the prop is part of the scene, never the subject. The character and environment dominate; the prop is in their hand or nearby.
