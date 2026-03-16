@@ -1,10 +1,8 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
-// ══════════════════════════════════════════════════════════════════
 // generateSeoTitlesDescriptions — PHASE 1 (AI-Powered Title Generator)
 // Uses Gemini for high-CTR clickbait-style titles with keyword optimization
 // Pairs with thumbnail concepts for maximum scroll-stopping power
-// ══════════════════════════════════════════════════════════════════
 
 async function callGemini(apiKey, prompt, maxTokens = 4096) {
   const res = await fetch(
