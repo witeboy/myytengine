@@ -17,19 +17,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 
-function FitBar_UNUSED({ score }) {
-  return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className="h-full bg-gradient-to-r from-purple-400 to-purple-600 rounded-full transition-all duration-700"
-          style={{ width: `${score || 0}%` }}
-        />
-      </div>
-      <span className="text-xs text-gray-500 font-medium w-8">{score}%</span>
-    </div>
-  );
-}
+
 
 function PowerDots({ power }) {
   return (
