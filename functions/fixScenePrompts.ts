@@ -130,6 +130,39 @@ function cleanIdentityDesc(raw) {
     .trim();
 }
 
+// ── Subject-type sanity check (Prompt Engine Rulebook) ──
+function subjectTypeSanityCheck(prompt) {
+  const head = prompt.substring(0, 250).toLowerCase();
+  const humanIndicators = /\b(woman|man|person|figure|character|boy|girl|child|worker|doctor|soldier|officer|teacher|scientist|protagonist|narrator|skeleton|individual|people|crowd|group|couple|family|mother|father|husband|wife)\b/;
+  if (humanIndicators.test(head)) return { prompt, stripped: false };
+
+  const humanOnlyTerms = [
+    /\b(visible\s+)?skin\s+texture(\s+and\s+pores)?\b/gi,
+    /\b(visible\s+)?pores\b/gi,
+    /\bwrinkles?\s*(around\s+(his|her|their)\s+eyes)?\b/gi,
+    /\bfacial\s+expression\b/gi,
+    /\bsubtle\s+facial\s+expression\b/gi,
+    /\bnatural\s+skin\s+texture\b/gi,
+    /\bsoft\s+eye\s+reflections\b/gi,
+    /\bfine\s+wrinkles\b/gi,
+    /\bshows?\s+(?:slight\s+)?wrinkles\b/gi,
+    /\b(his|her|their)\s+(eyes|face|smile|expression|skin|hands|body|hair)\b/gi,
+    /\bconfident\s+smile\b/gi,
+  ];
+
+  let cleaned = prompt;
+  let stripped = false;
+  for (const pattern of humanOnlyTerms) {
+    const before = cleaned;
+    cleaned = cleaned.replace(pattern, '');
+    if (cleaned !== before) stripped = true;
+  }
+  if (stripped) {
+    cleaned = cleaned.replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').replace(/\s{2,}/g, ' ').trim();
+  }
+  return { prompt: cleaned, stripped };
+}
+
 // ── Sanitize a single prompt (the core fix) ──
 function sanitizePrompt(prompt, characterTieredTags, characters, visualStyle, shotTypeHint) {
   let p = prompt;
@@ -137,6 +170,13 @@ function sanitizePrompt(prompt, characterTieredTags, characters, visualStyle, sh
 
   const fixes = [];
   const original = p;
+
+  // ═══ 0. Subject-type sanity check (Prompt Engine Rulebook) ═══
+  const sanity = subjectTypeSanityCheck(p);
+  if (sanity.stripped) {
+    p = sanity.prompt;
+    fixes.push('subject_type_sanity_strip');
+  }
 
   // Determine shot type from director notes hint or prompt content
   const shotType = shotTypeHint || detectShotType(p);
