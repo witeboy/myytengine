@@ -111,9 +111,9 @@ STEP 2 — OVERLAY TEXT LAWS (ALL 5 MUST OBEY THESE)
 ════════════════════════════
 
 LAW 1 — ZERO OVERLAP (HARD RULE):
-The overlay text MUST NOT repeat any word from the title.
+The overlay text MUST NOT repeat any word from the title OR the SEO titles listed above.
 Title words are banned: ${video_title.toLowerCase().replace(/[^a-z0-9\s]/g,'').split(/\s+/).filter(w=>w.length>2).join(', ')}
-Purpose: the text COMPANION the title — it adds tension, not repetition.
+Purpose: the text COMPANIONS the title — it adds visual tension, not repetition. Title + thumbnail = a complete curiosity package.
 
 LAW 2 — MAX 3 WORDS, ALL CAPS:
 Thumbnails are seen at 168x94px on mobile. 4+ words = unreadable blur.
