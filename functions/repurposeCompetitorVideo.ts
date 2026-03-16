@@ -122,9 +122,6 @@ Respond with ONLY valid JSON:
     
     // Ensure we have a title
     const topicTitle = result.title || `Repurposed: ${video_title}`;
-    console.log('AI result keys:', Object.keys(result));
-    console.log('Topic title:', topicTitle);
-
     // Build the notes combining everything
     const fullNotes = [
       `🔄 REPURPOSED from: "${video_title}" by ${competitor_name || 'competitor'}`,
