@@ -113,13 +113,14 @@ export default function SceneGrid({ scenes, onRefetch }) {
                 className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
               >
                 {scenes.map((scene, index) => (
-                  <DraggableSceneCard
-                    key={scene.id}
-                    scene={scene}
-                    index={index}
-                    existingActs={existingActs}
-                    {...sceneCallbacks(scene)}
-                  />
+                 <DraggableSceneCard
+  key={scene.id}
+  scene={scene}
+  index={index}
+  existingActs={existingActs}
+  orientation={scene.orientation}
+  {...sceneCallbacks(scene)}
+/>
                 ))}
                 {provided.placeholder}
               </div>
