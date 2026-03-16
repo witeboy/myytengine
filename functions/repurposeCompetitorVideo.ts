@@ -170,12 +170,21 @@ async function getTranscriptInnerTube(videoId) {
     const enManual = captionTracks.find(t => t.languageCode === 'en' && t.kind !== 'asr');
     const enAuto = captionTracks.find(t => t.languageCode === 'en' && t.kind === 'asr');
     const track = enManual || enAuto || captionTracks[0];
-    if (!track?.baseUrl) return null;
+    console.log(`[Transcript T1.5] Selected track: lang=${track?.languageCode}, kind=${track?.kind}, hasBaseUrl=${!!track?.baseUrl}`);
+    if (!track?.baseUrl) {
+      console.log(`[Transcript T1.5] No baseUrl on track`);
+      return null;
+    }
+
+    // Fix escaped URLs
+    const baseUrl = track.baseUrl.replace(/\\u0026/g, '&').replace(/&amp;/g, '&');
+    console.log(`[Transcript T1.5] Caption URL: ${baseUrl.slice(0, 200)}`);
 
     // Try JSON3 format first
     try {
-      const json3Url = track.baseUrl + (track.baseUrl.includes('?') ? '&' : '?') + 'fmt=json3';
+      const json3Url = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'fmt=json3';
       const json3Res = await fetch(json3Url);
+      console.log(`[Transcript T1.5] JSON3 status: ${json3Res.status}`);
       if (json3Res.ok) {
         const json3 = await json3Res.json();
         if (json3.events) {
@@ -183,13 +192,17 @@ async function getTranscriptInnerTube(videoId) {
             .filter(e => e.segs)
             .flatMap(e => e.segs.map(s => s.utf8?.trim()).filter(Boolean))
             .join(' ').replace(/\s+/g, ' ').trim();
+          console.log(`[Transcript T1.5] JSON3 extracted ${text.length} chars`);
           if (text.length > 50) return text;
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      console.log(`[Transcript T1.5] JSON3 error: ${e.message}`);
+    }
 
     // Fall back to XML
-    const captionRes = await fetch(track.baseUrl);
+    console.log(`[Transcript T1.5] Trying XML fallback`);
+    const captionRes = await fetch(baseUrl);
     const captionXml = await captionRes.text();
     const textParts = [];
     const textRegex = /<text[^>]*>(.*?)<\/text>/gs;
