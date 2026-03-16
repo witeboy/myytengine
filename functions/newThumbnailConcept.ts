@@ -1,9 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
-// newThumbnailConcept — Lean & intelligent
-// Takes: video_title + summary + char_photos
-// Does:  Detects mood → generates 5 high-CTR overlay texts via Gemini
-// Returns: 5 concept records ready for image generation
+// newThumbnailConcept — Lean & intelligent thumbnail concept generator
 
 Deno.serve(async (req) => {
   try {
