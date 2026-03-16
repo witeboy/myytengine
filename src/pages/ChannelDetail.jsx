@@ -17,6 +17,7 @@ import DayTopicsPanel from '@/components/channels/DayTopicsPanel';
 import TopicImporter from '@/components/channels/TopicImporter';
 import NicheInsightsPanel from '@/components/channels/NicheInsightsPanel';
 import CompetitorPanel from '@/components/channels/CompetitorPanel';
+import TopicStatusPanel from '@/components/channels/TopicStatusPanel';
 
 export default function ChannelDetail() {
   const navigate = useNavigate();
@@ -25,6 +26,7 @@ export default function ChannelDetail() {
 
   const [showImporter, setShowImporter] = useState(false);
   const [selectedDate, setSelectedDate] = useState(null);
+  const [activeStatFilter, setActiveStatFilter] = useState(null);
 
   const getProjectRoute = (project) => {
     const s = project.status;
