@@ -15,13 +15,7 @@ export default function StoryDuration() {
   const [duration, setDuration] = useState(8);
 const [loading, setLoading] = useState(false);
 
-React.useEffect(() => {
-  if (project?.video_duration_minutes) {
-    setDuration(project.video_duration_minutes);
-  }
-}, [project?.video_duration_minutes]);
-
-  const { data: project } = useQuery({
+const { data: project } = useQuery({
     queryKey: ['project', projectId],
     queryFn: async () => {
       const list = await base44.entities.Projects.filter({ id: projectId });
@@ -30,7 +24,13 @@ React.useEffect(() => {
     enabled: !!projectId,
   });
 
-  // No auto-skip — users can always come back to change duration
+  React.useEffect(() => {
+    if (project?.video_duration_minutes) {
+      setDuration(project.video_duration_minutes);
+    }
+  }, [project?.video_duration_minutes]);
+
+  // No auto-skip
 
   const { data: topic } = useQuery({
     queryKey: ['topic', project?.selected_topic_id],
