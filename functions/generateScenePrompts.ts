@@ -1420,13 +1420,9 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
                 const ghIdx = rawPrompt.indexOf(ghMatch[0]);
                 const ghBefore = rawPrompt.substring(0, ghIdx);
                 const ghAfter = rawPrompt.substring(ghIdx + ghMatch[0].length);
-                const ghHasVerb = /^\s*(is|was|sits|stands|walks|runs|holds|stares|looks|leans|clutch|grip|reach|kneel|crouch|watch|gaze|turn|step|press|scroll|tap|delet|swip|carry|push|pull|seat|sitting|standing|walking|holding|staring|leaning)/i.test(ghAfter);
-                if (ghHasVerb) {
-                  rawPrompt = `${ghBefore}${ghMatch[0]}, ${desc},${ghAfter}`;
-                } else {
-                  rawPrompt = `${ghBefore}${desc}${ghAfter}`;
-                }
-                console.log(`👤 Scene ${s.scene_number}: injected primary char via generic ref (${tier}, ${desc.length}ch, woven=${ghHasVerb})`);
+                // Always substitute — never appositive ("a woman, DESC, is sitting")
+                rawPrompt = `${ghBefore}${desc}${ghAfter}`;
+                console.log(`👤 Scene ${s.scene_number}: injected primary char via generic ref (${tier}, ${desc.length}ch)`);
               }
             }
           }
