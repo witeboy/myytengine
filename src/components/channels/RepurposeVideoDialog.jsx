@@ -73,8 +73,8 @@ export default function RepurposeVideoDialog({ open, onOpenChange, video, channe
         {loading && (
           <div className="text-center py-8">
             <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-orange-500" />
-            <p className="text-sm font-medium text-gray-700">AI is analyzing & repurposing...</p>
-            <p className="text-xs text-gray-400 mt-1">Generating unique angle, content brief & strategy</p>
+            <p className="text-sm font-medium text-gray-700">AI is fetching transcript & analyzing...</p>
+            <p className="text-xs text-gray-400 mt-1">Extracting video content, then generating unique angle & strategy</p>
           </div>
         )}
 
