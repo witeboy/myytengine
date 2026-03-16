@@ -322,8 +322,7 @@ export default function PostProduction() {
 
   const [activeTab, setActiveTab] = useState('titles');
 
-  // Scene images for thumbnail maker
-  const [sceneImages, setSceneImages] = useState([]);
+
 
   // ── Queries ──────────────────────────────────────────────────────
   const { data: project } = useQuery({
