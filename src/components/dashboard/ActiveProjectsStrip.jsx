@@ -1,10 +1,8 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { createPageUrl } from '@/utils';
-import { ArrowRight, BookOpen, Image, Film, Archive } from 'lucide-react';
+import { Archive } from 'lucide-react';
 
 const STAGES = [
   { label: 'Story', barClass: 'bg-blue-500', badgeClass: 'bg-blue-100 text-blue-800' },
@@ -42,7 +40,6 @@ function getRoute(project) {
 }
 
 export default function ActiveProjectsStrip({ projects, onArchive }) {
-  const navigate = useNavigate();
   const active = projects.filter(p => !p.archived).slice(0, 8);
 
   if (active.length === 0) return null;
@@ -58,32 +55,30 @@ export default function ActiveProjectsStrip({ projects, onArchive }) {
           const stage = getStage(p.status);
           const info = STAGES[stage - 1];
           return (
-            <Card
-              key={p.id}
-              className="hover:shadow-md transition-all cursor-pointer group border-gray-100"
-              onClick={() => navigate(createPageUrl(getRoute(p)))}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between mb-2">
-                  <h4 className="text-sm font-semibold text-gray-800 group-hover:text-blue-600 transition-colors truncate flex-1">{p.name}</h4>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onArchive(p.id); }}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity ml-2"
-                  >
-                    <Archive className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />
-                  </button>
-                </div>
-                <div className="flex gap-0.5 mb-2">
-                  {STAGES.map((s, i) => (
-                    <div key={i} className={`flex-1 h-1.5 rounded-full ${stage > i ? s.barClass : 'bg-gray-200'}`} />
-                  ))}
-                </div>
-                <div className="flex items-center justify-between">
-                  <Badge className={`text-[9px] ${info.badgeClass}`}>{info.label}</Badge>
-                  <span className="text-[10px] text-gray-400">{p.status?.replace(/_/g, ' ')}</span>
-                </div>
-              </CardContent>
-            </Card>
+            <Link key={p.id} to={`/${getRoute(p)}`} className="block">
+              <Card className="hover:shadow-md transition-all cursor-pointer group border-gray-100">
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <h4 className="text-sm font-semibold text-gray-800 group-hover:text-blue-600 transition-colors truncate flex-1">{p.name}</h4>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); onArchive(p.id); }}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity ml-2"
+                    >
+                      <Archive className="w-3.5 h-3.5 text-gray-400 hover:text-red-500" />
+                    </button>
+                  </div>
+                  <div className="flex gap-0.5 mb-2">
+                    {STAGES.map((s, i) => (
+                      <div key={i} className={`flex-1 h-1.5 rounded-full ${stage > i ? s.barClass : 'bg-gray-200'}`} />
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Badge className={`text-[9px] ${info.badgeClass}`}>{info.label}</Badge>
+                    <span className="text-[10px] text-gray-400">{p.status?.replace(/_/g, ' ')}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
           );
         })}
       </div>
