@@ -241,7 +241,7 @@ function getStyleSceneBodyRules(styleName) {
       rendering: "Cartoon Network / Disney Channel quality. Bold outlines, flat colors, no photorealistic terms."
     },
     picstory_cocomelon: {
-     characters: "Soft rounded 3D characters with plastic-smooth skin, pastel clothing, cheerful expressions. Character proportions defined per-character inline.",
+     characters: "Soft rounded 3D characters with plastic-smooth skin, pastel clothing, cheerful expressions. Body framing defined per-scene by the Body Proportion directive.",
       environments: "Bright pastel 3D environments — soft rounded architecture, gentle lighting, toy-like world, child-safe wholesome settings.",
       objects: "Smooth plastic-textured 3D objects, rounded edges, bright pastel colors, toy-like quality.",
       rendering: "CoComelon/Pixar Junior 3D rendering — soft shadows, warm studio lighting, smooth plastic textures."
