@@ -1126,15 +1126,57 @@ ${sceneDirections}
    **THE GOLDEN RULE:** If the image generator only renders the first 200 characters of your prompt, would it produce a SCENE or a PORTRAIT? It MUST produce a scene. That means FRAMING + ENVIRONMENT must come first, ALWAYS.
 
    Additional rules:
-     • Character description depth MUST match shot type — wide shots get minimal, medium gets moderate, close-ups get full. NEVER dump a full casting-sheet description into a wide shot.
-     • If the narration mentions a specific prop (iPhone, MacBook, Tesla, etc.), use that exact name — but keep it as a prop in the character's hand or environment, NOT the visual subject.
-     • ${orientationConfig.composition}
-   - FORBIDDEN: text, words, letters, numbers, charts, graphs, signs in the image
-   - FORBIDDEN: Describing what's ON a screen, phone, laptop, book, receipt, bill, letter, contract, or any document. The image generator WILL try to render it as garbled text. Instead, show the character's emotional reaction to the object from a wider angle. Example: "crumpled bill clutched in trembling hands, face pale under harsh light" NOT "medical bill showing $45,000 in charges"
-   - FORBIDDEN: Dollar amounts ($X), percentages, dates, names, or any specific text that would appear on a prop. These render as random garbled characters.
-   - When a character holds or uses an object (phone, document, tool, weapon, cup), describe it from a MEDIUM or WIDER shot. Close-ups of hand-object interaction produce broken physics (fingers clipping through objects, impossible grips). Let the object be PART of the scene, not the SUBJECT of it.
-   - Abstract concepts → PHYSICAL METAPHORS
-   - End with: "ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image"
+      • Character description depth MUST match shot type — wide shots get minimal, medium gets moderate, close-ups get full. NEVER dump a full casting-sheet description into a wide shot.
+      • If the narration mentions a specific prop (iPhone, MacBook, Tesla, etc.), use that exact name — but keep it as a prop in the character's hand or environment, NOT the visual subject.
+      • ${orientationConfig.composition}
+    - FORBIDDEN: text, words, letters, numbers, charts, graphs, signs in the image
+    - FORBIDDEN: Describing what's ON a screen, phone, laptop, book, receipt, bill, letter, contract, or any document. The image generator WILL try to render it as garbled text. Instead, show the character's emotional reaction to the object from a wider angle. Example: "crumpled bill clutched in trembling hands, face pale under harsh light" NOT "medical bill showing $45,000 in charges"
+    - FORBIDDEN: Dollar amounts ($X), percentages, dates, names, or any specific text that would appear on a prop. These render as random garbled characters.
+    - When a character holds or uses an object (phone, document, tool, weapon, cup), describe it from a MEDIUM or WIDER shot. Close-ups of hand-object interaction produce broken physics (fingers clipping through objects, impossible grips). Let the object be PART of the scene, not the SUBJECT of it.
+    - Abstract concepts → PHYSICAL METAPHORS
+    - End with: "ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image"
+
+   **═══════════════════════════════════════════════════════════════**
+   **🚨 PROMPT ENGINE RULEBOOK — MANDATORY COMPLIANCE 🚨**
+   **═══════════════════════════════════════════════════════════════**
+
+   **SUBJECT TYPE IDENTIFICATION (MOST IMPORTANT RULE):**
+   Before writing each prompt, identify the PRIMARY SUBJECT TYPE of the scene:
+   - human, object, animal, food, landscape, architecture, vehicle, abstract
+   The prompt must ONLY include descriptors compatible with that subject type.
+
+   **FORBIDDEN MIXING RULE:**
+   Human anatomy descriptors (skin, pores, wrinkles, eyes, face, expression, smile, body, hands, hair) must NEVER appear in a prompt unless a HUMAN subject exists in the scene.
+   If subject = object → NO skin, pores, wrinkles, eyes, face, expression, smile, body, hands, hair
+   If subject = landscape → NO skin, pores, wrinkles, eyes, face, expression
+   If subject = vehicle → NO skin, pores, wrinkles, eyes, face
+   For non-human subjects, use: surface texture, material details, subtle imperfections, natural wear, reflections, creases
+
+   **PROMPT BLOCK ORDER (never change this order):**
+   1. SUBJECT — clearly defined in one sentence
+   2. ENVIRONMENT — surroundings without symbolism or metaphors
+   3. MOOD — ONE emotional tone only (melancholic, peaceful, tense, nostalgic, lonely, etc). NEVER stack multiple emotions.
+   4. COLOR PALETTE — 3-5 color descriptors maximum
+   5. LIGHTING — physically realistic (soft natural window light, dim ambient lighting, warm sunset lighting). NEVER "sad lighting" or "emotional lighting"
+   6. CAMERA — real photography language (medium shot, shallow depth of field, Canon EOS R5)
+   7. QUALITY — one concise quality phrase, never stack 20 buzzwords
+
+   **WORD LIMIT:** 60-120 words per prompt. Long prompts confuse image models.
+
+   **SYMBOLISM PREVENTION:** NEVER use: representing, symbolizing, embodying, illustrating, metaphor. Models render literal scenes.
+
+   **SCENE CONSISTENCY:** All elements must logically coexist. No balloon + ocean waves + mountain sunset.
+
+   **SANITY CHECK before outputting each prompt — REJECT if it contains:**
+   - balloon + wrinkles/skin/pores
+   - car + skin/facial expression
+   - landscape + facial expression/pores
+   - Any non-human subject + human anatomy descriptors
+
+   **STYLE LOCK:** One visual style only per prompt, never mix photography + painting + anime.
+
+   **TOKEN CLEANUP:** Remove repeated quality words. One quality phrase is enough.
+   **═══════════════════════════════════════════════════════════════**
 
 
 2. **animation_prompt** — RICH, CINEMATIC motion direction for the EXACT duration of each scene (see Duration field per scene):
