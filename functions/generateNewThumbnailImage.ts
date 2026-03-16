@@ -443,7 +443,7 @@ Deno.serve(async (req) => {
       let upData; try { upData = JSON.parse(upText); } catch (_) {}
       const upTaskId = upData?.data?.taskId;
       if (upTaskId) {
-        const upResult = await pollForResult(upTaskId, KIE_API_KEY, 20, 4000);
+        const upResult = await pollForResult(upTaskId, KIE_API_KEY, 12, 4000);
         if (upResult.success && upResult.url) { finalUrl = upResult.url; console.log('✅ Upscaled'); }
       }
     } catch (e) { console.warn('Upscale error (non-fatal):', e.message); }
