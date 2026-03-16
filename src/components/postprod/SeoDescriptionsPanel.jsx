@@ -63,14 +63,19 @@ export default function SeoDescriptionsPanel({ descriptions, tagsBreakdown, hash
               {/* Keywords */}
               <div className="flex flex-wrap gap-1.5">
                 {(descriptions[activeDesc].primary_keywords || []).map((k, i) => (
-                  <Badge key={i} className="bg-blue-100 text-blue-800 text-[10px]">
+                  <Badge key={`p-${i}`} className="bg-blue-100 text-blue-800 text-[10px]">
                     <Search className="w-2.5 h-2.5 mr-0.5" />{k}
                   </Badge>
                 ))}
                 {(descriptions[activeDesc].long_tail_keywords || []).map((k, i) => (
-                  <Badge key={i} className="bg-green-100 text-green-800 text-[10px]">{k}</Badge>
+                  <Badge key={`l-${i}`} className="bg-green-100 text-green-800 text-[10px]">{k}</Badge>
                 ))}
               </div>
+
+              {/* Word count */}
+              {descriptions[activeDesc].word_count > 0 && (
+                <span className="text-[10px] text-gray-400">~{descriptions[activeDesc].word_count} words</span>
+              )}
 
               {/* Description content */}
               <div className="border rounded-lg p-3 bg-gray-50">
@@ -115,7 +120,7 @@ export default function SeoDescriptionsPanel({ descriptions, tagsBreakdown, hash
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
-              <p className="text-xs font-medium text-gray-500 mb-1.5">Short Keywords</p>
+              <p className="text-xs font-medium text-gray-500 mb-1.5">Short Keywords ({(tagsBreakdown.short || []).length})</p>
               <div className="flex flex-wrap gap-1">
                 {(tagsBreakdown.short || []).map((t, i) => (
                   <Badge key={i} variant="secondary" className="text-xs">{t}</Badge>
@@ -123,7 +128,7 @@ export default function SeoDescriptionsPanel({ descriptions, tagsBreakdown, hash
               </div>
             </div>
             <div>
-              <p className="text-xs font-medium text-gray-500 mb-1.5">Medium Keywords</p>
+              <p className="text-xs font-medium text-gray-500 mb-1.5">Medium Keywords ({(tagsBreakdown.medium || []).length})</p>
               <div className="flex flex-wrap gap-1">
                 {(tagsBreakdown.medium || []).map((t, i) => (
                   <Badge key={i} className="bg-blue-50 text-blue-700 text-xs">{t}</Badge>
@@ -131,7 +136,7 @@ export default function SeoDescriptionsPanel({ descriptions, tagsBreakdown, hash
               </div>
             </div>
             <div>
-              <p className="text-xs font-medium text-gray-500 mb-1.5">Long-tail Keywords</p>
+              <p className="text-xs font-medium text-gray-500 mb-1.5">Long-tail Keywords ({(tagsBreakdown.long || []).length})</p>
               <div className="flex flex-wrap gap-1">
                 {(tagsBreakdown.long || []).map((t, i) => (
                   <Badge key={i} className="bg-green-50 text-green-700 text-xs">{t}</Badge>
@@ -144,7 +149,7 @@ export default function SeoDescriptionsPanel({ descriptions, tagsBreakdown, hash
 
       {/* Hashtags + Pinned Comment */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {hashtags && (
+        {hashtags && hashtags.length > 0 && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
