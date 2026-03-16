@@ -27,11 +27,12 @@ import {
 // ═══════════════════════════════════════════════════════════════════
 // Fix Prompts Button — Module-level component
 // ═══════════════════════════════════════════════════════════════════
-function FixPromptsButton({ projectId, sceneCount, onComplete }) {
+function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }) {
   const [fixing, setFixing] = useState(false);
   const [fixType, setFixType] = useState(null);
   const [result, setResult] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
+  const [showRefPicker, setShowRefPicker] = useState(false);
 
   const handleFix = async (type) => {
     setShowMenu(false);
@@ -57,7 +58,31 @@ function FixPromptsButton({ projectId, sceneCount, onComplete }) {
     setTimeout(() => setResult(null), 5000);
   };
 
+  const handleLockReference = async (sceneId, imageUrl) => {
+    setShowRefPicker(false);
+    setShowMenu(false);
+    setFixing(true);
+    setFixType('reference');
+    setResult(null);
+
+    try {
+      await base44.entities.Projects.update(projectId, { reference_image_url: imageUrl });
+      setResult({ fixed: 1, total: 1, reference_locked: true });
+      await onComplete();
+    } catch (err) {
+      console.error('Lock reference failed:', err);
+      setResult({ error: err.message });
+    }
+
+    setFixing(false);
+    setFixType(null);
+    setTimeout(() => setResult(null), 5000);
+  };
+
   if (sceneCount === 0) return null;
+
+  const scenesWithImages = (scenes || []).filter(s => s.image_url && s.image_url.startsWith('http'));
+  const currentRefUrl = project?.reference_image_url;
 
   const fixOptions = [
     { type: 'all', label: 'Fix Everything', desc: 'Characters + Cleanup + Quality', icon: '🔧' },
