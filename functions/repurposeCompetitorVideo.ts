@@ -31,7 +31,11 @@ async function getTranscriptAPI(videoId) {
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ video_ids: [videoId], lang: 'en', preserve_formatting: false })
       });
-      if (!response.ok) return null;
+      console.log(`[Transcript T1] Response status: ${response.status}`);
+      if (!response.ok) {
+        console.log(`[Transcript T1] Response body: ${(await response.text()).slice(0, 500)}`);
+        return null;
+      }
 
       const data = await response.json();
       const rd = data.results?.[0]?.data;
