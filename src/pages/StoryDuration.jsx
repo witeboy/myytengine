@@ -13,7 +13,13 @@ export default function StoryDuration() {
   const navigate = useNavigate();
   const projectId = new URLSearchParams(window.location.search).get('project_id');
   const [duration, setDuration] = useState(8);
-  const [loading, setLoading] = useState(false);
+const [loading, setLoading] = useState(false);
+
+React.useEffect(() => {
+  if (project?.video_duration_minutes) {
+    setDuration(project.video_duration_minutes);
+  }
+}, [project?.video_duration_minutes]);
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -77,9 +83,25 @@ export default function StoryDuration() {
               <ArrowLeft className="w-4 h-4" /> Topics
             </Button>
             {project && ['outline_ready','hooks_ready','scripting','script_complete','voiceover_ready','scene_breakdown','breakdown_complete','content_generation','scenes_ready'].includes(project.status) ? (
-              <Button onClick={() => navigate(createPageUrl(`StoryHooks?project_id=${projectId}`))} className="bg-blue-600 hover:bg-blue-700 gap-2" size="lg">
-                Continue <ArrowRight className="w-4 h-4" />
-              </Button>
+              <Button onClick={async () => {
+  const safeDuration = Math.max(1, Math.round(duration));
+  if (safeDuration !== project.video_duration_minutes) {
+    setLoading(true);
+    await base44.entities.Projects.update(projectId, { video_duration_minutes: safeDuration });
+    await base44.functions.invoke('generateOutline', {
+      project_id: projectId,
+      topic_id: project.selected_topic_id,
+      topic_title: topic?.title || project.name,
+      niche: project.niche,
+      duration_minutes: safeDuration,
+    });
+    setLoading(false);
+  }
+  navigate(createPageUrl(`StoryHooks?project_id=${projectId}`));
+}} className="bg-blue-600 hover:bg-blue-700 gap-2" size="lg" disabled={loading}>
+  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+  {loading ? 'Regenerating...' : 'Continue'}
+</Button>
             ) : (
               <Button onClick={handleGenerate} disabled={loading} className="bg-blue-600 hover:bg-blue-700 gap-2" size="lg">
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
