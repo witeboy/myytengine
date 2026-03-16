@@ -654,6 +654,38 @@ Deno.serve(async (req) => {
       return 'moderate';
     }
 
+    // ══════════════════════════════════════════════════════════════
+    // BODY PROPORTION DIRECTIVE — shot type → explicit body framing
+    // ══════════════════════════════════════════════════════════════
+    // This tells the image generator EXACTLY how much of the body to show
+    // based on the director's shot type. Prevents full-body dumps in CU
+    // and head-only portraits in wide shots.
+    // ══════════════════════════════════════════════════════════════
+
+    function getBodyProportionDirective(shotType) {
+      if (!shotType) return 'shown from waist up, interacting with nearby objects';
+      const st = shotType.toLowerCase();
+      if (/\b(ews|extreme\s*wide|establishing|aerial|drone|bird.?s?\s*eye)\b/.test(st))
+        return 'visible as a small full-body figure within the vast environment, body language readable from distance, surrounded by architecture and landscape';
+      if (/\b(ws\b|wide\s*shot|mws|medium\s*wide)\b/.test(st))
+        return 'shown full body head to feet within the environment, body proportions natural against surrounding objects and architecture, actively moving through the space';
+      if (/\b(high\s*angle|overhead|god.?s?\s*eye)\b/.test(st))
+        return 'seen from above, full body visible against the ground plane, body creating a shape within the environment geometry';
+      if (/\b(low\s*angle)\b/.test(st))
+        return 'seen from below looking up, showing full body from feet upward, figure towering against sky or ceiling, environment visible behind and around';
+      if (/\b(ots|over[\s-]*the[\s-]*shoulder)\b/.test(st))
+        return 'shown from behind another person\'s shoulder, upper body and hands visible, actively engaged with something in front of them';
+      if (/\b(ms\b|medium\s*shot|tracking|dutch)\b/.test(st))
+        return 'framed from waist up, hands and arms visible and actively doing something — holding, gesturing, reaching, gripping — torso and posture conveying emotion';
+      if (/\b(mcu|medium\s*close)\b/.test(st))
+        return 'framed from chest up, shoulders and upper arms visible, hands partially in frame if gesturing, facial expression prominent but body posture still readable';
+      if (/\b(cu\b|close[\s-]*up)\b/.test(st))
+        return 'framed from shoulders up, face dominant but neck and shoulder tension visible, environment still present as soft context behind';
+      if (/\b(ecu|extreme\s*close|insert|detail)\b/.test(st))
+        return 'extreme close-up filling the frame — face details, skin texture, and micro-expressions dominant, but eyes reflecting the environment';
+      return 'shown from waist up, interacting with nearby objects';
+    }
+
     const characterTieredTags = {};  // name → { minimal, moderate, full }
     const characterReferencePrompts = {};
     const styleTransform = styleCharacterRules[visualStyle] || defaultStyleTransform;
