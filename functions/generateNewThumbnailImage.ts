@@ -438,12 +438,17 @@ Deno.serve(async (req) => {
     }
     console.log(`✅ Task: ${taskId}`);
 
-    // ── STEP 7: Poll for result ─────────────────────────────────
-    const result = await pollForResult(taskId, KIE_API_KEY, 18, 5000);
+    // ── STEP 7: Poll for result (time-aware) ────────────────────
+    // Use remaining time budget for polling. Leave 15s buffer for post-processing + save.
+    const pollBudgetMs = Math.max(30000, timeLeft() - 15000);
+    const pollInterval = 5000;
+    const maxPollAttempts = Math.min(20, Math.floor(pollBudgetMs / pollInterval));
+    console.log(`Polling: up to ${maxPollAttempts} attempts, ${Math.round(pollBudgetMs/1000)}s budget`);
+    const result = await pollForResult(taskId, KIE_API_KEY, maxPollAttempts, pollInterval);
     if (!result.success) throw new Error(result.error);
     let imageUrl = result.url;
     if (!imageUrl) throw new Error('Generation succeeded but no image URL returned');
-    console.log('✅ Generated:', imageUrl);
+    console.log(`✅ Generated: ${imageUrl} (${Math.round((Date.now()-startTime)/1000)}s elapsed)`);
 
     // ── STEP 8: Post-processing — Upscale ───────────────────────
     // Mood can be pipe-separated (e.g. "crime|drama") — take the first segment
