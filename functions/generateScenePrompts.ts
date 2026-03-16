@@ -211,7 +211,7 @@ const UNIVERSAL_NEGATIVE_SUFFIX = ", torso only, bust shot, cropped at waist, is
 function getStyleSceneBodyRules(styleName) {
   const rules = {
     cinematic_realistic: {
-      characters: "Describe characters with photorealistic detail — skin texture, real clothing fabrics, natural hair, realistic body proportions.",
+      characters: "Describe characters with photorealistic detail — skin texture, real clothing fabrics, natural hair, realistic body proportions. Character proportions defined per-scene by the Body Proportion directive.",
       environments: "Real-world locations with architectural accuracy, natural materials (wood, stone, glass), weather and atmospheric effects.",
       objects: "Props with realistic material properties — metal reflections, fabric weave, glass transparency, leather grain.",
       rendering: "Use cinematic camera language freely — ARRI, anamorphic, bokeh, f-stops, film grain, color LUT."
