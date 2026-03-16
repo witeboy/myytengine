@@ -16,6 +16,7 @@ import ContentCalendar from '@/components/channels/ContentCalendar';
 import DayTopicsPanel from '@/components/channels/DayTopicsPanel';
 import TopicImporter from '@/components/channels/TopicImporter';
 import NicheInsightsPanel from '@/components/channels/NicheInsightsPanel';
+import CompetitorPanel from '@/components/channels/CompetitorPanel';
 
 export default function ChannelDetail() {
   const navigate = useNavigate();
@@ -52,7 +53,6 @@ export default function ChannelDetail() {
     enabled: !!channelId,
   });
 
-  // Derive selected topics from the live topics array so they stay fresh after mutations
   const selectedTopicsLive = selectedDate
     ? topics.filter(t => t.scheduled_date === selectedDate)
     : [];
@@ -62,7 +62,6 @@ export default function ChannelDetail() {
   };
 
   const handleStartPipeline = async (topic) => {
-    // If topic already has a project, navigate to it
     if (topic.project_id) {
       const existingProjects = await base44.entities.Projects.filter({ id: topic.project_id });
       if (existingProjects[0]) {
@@ -72,7 +71,6 @@ export default function ChannelDetail() {
       }
     }
 
-    // Create a Project from this topic, pre-configured with channel settings
     const project = await base44.entities.Projects.create({
       name: topic.title,
       niche: channel.niche,
@@ -87,7 +85,6 @@ export default function ChannelDetail() {
       script_strategy_override: channel.script_strategy || '',
     });
 
-    // Auto-create a Topics entity from the channel topic and select it
     const importedTopic = await base44.entities.Topics.create({
       project_id: project.id,
       rank: 1,
@@ -99,23 +96,18 @@ export default function ChannelDetail() {
       is_selected: true,
     });
 
-    // Mark project as topic_selected so it skips the selection step
     await base44.entities.Projects.update(project.id, {
       selected_topic_id: importedTopic.id,
       status: 'topic_selected',
       current_step: 1,
     });
 
-    // Link channel topic to project
     await base44.entities.ChannelTopics.update(topic.id, {
       project_id: project.id,
       status: 'in_progress',
     });
 
-    // Refresh topic list so UI reflects the change
     queryClient.invalidateQueries({ queryKey: ['channel-topics', channelId] });
-
-    // Navigate directly to StoryTopics where the imported topic is shown with edit option
     navigate(createPageUrl(`StoryTopics?project_id=${project.id}`));
   };
 
@@ -219,6 +211,11 @@ export default function ChannelDetail() {
             </CardContent>
           </Card>
         )}
+
+        {/* Competitor Monitor - inline for this channel */}
+        <div className="mb-6">
+          <CompetitorPanel channel={channel} />
+        </div>
 
         {/* AI Insights Panel */}
         <div className="mb-6">
