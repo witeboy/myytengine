@@ -296,9 +296,27 @@ Respond with ONLY valid JSON:
 
     const gemData = await gemRes.json();
     const text = gemData.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) return Response.json({ error: 'AI returned empty response' }, { status: 500 });
+    console.log(`[Repurpose] Gemini raw response length: ${text?.length || 0}`);
+    console.log(`[Repurpose] Gemini raw (first 500): ${(text || '').slice(0, 500)}`);
+    if (!text) {
+      console.log(`[Repurpose] Gemini full response:`, JSON.stringify(gemData).slice(0, 1000));
+      return Response.json({ error: 'AI returned empty response' }, { status: 500 });
+    }
 
-    const result = JSON.parse(text);
+    let result;
+    try {
+      result = JSON.parse(text);
+    } catch (parseErr) {
+      // Try to extract JSON from markdown
+      const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (jsonMatch) {
+        result = JSON.parse(jsonMatch[1].trim());
+      } else {
+        console.error('[Repurpose] JSON parse failed:', parseErr.message);
+        return Response.json({ error: 'Failed to parse AI response' }, { status: 500 });
+      }
+    }
+    console.log(`[Repurpose] Parsed result keys: ${Object.keys(result).join(', ')}`);
 
     const topicTitle = result.title || `Repurposed: ${video_title}`;
     const fullNotes = [
