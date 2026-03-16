@@ -195,7 +195,7 @@ export default function useVideoExport() {
   }, []);
 
   // Domains known to block CORS — skip the HEAD check and go straight to proxy
-  const CORS_BLOCKED_DOMAINS = ['tempfile.aiquickdraw.com', 'api.kie.ai'];
+  const CORS_BLOCKED_DOMAINS = ['tempfile.aiquickdraw.com', 'api.kie.ai', 'ideogram.ai', 'storage.googleapis.com'];
 
   // Resolve a URL through the proxy if needed, returns a CORS-safe URL
   const resolveUrl = async (url) => {
@@ -373,11 +373,16 @@ export default function useVideoExport() {
             measuredVideoDur = (media.duration && isFinite(media.duration)) ? media.duration : (clip.videoDuration ?? 6);
           } catch(e) {
             console.warn(`Clip ${i} video failed, using image:`, e.message);
-            if (hasImg) try { media = await loadImage(clip.imageUrl); } catch {}
+            if (hasImg) try { media = await loadImage(clip.imageUrl); } catch (imgErr) {
+              console.error(`❌ Clip ${i} image fallback also failed:`, imgErr.message);
+            }
           }
         } else if (hasImg) {
-          try { media = await loadImage(clip.imageUrl); } catch {}
+          try { media = await loadImage(clip.imageUrl); } catch (e) {
+            console.error(`❌ Clip ${i} image load FAILED:`, clip.imageUrl?.substring(0, 80), e.message);
+          }
         }
+        if (!media) console.warn(`⚠️ Clip ${i} has NO media — will render black. imageUrl: ${clip.imageUrl?.substring(0, 80)}, videoUrl: ${clip.videoUrl?.substring(0, 80)}`);
         clipMedia.push({ media, mediaType, measuredVideoDur });
       }
 
