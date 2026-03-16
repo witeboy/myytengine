@@ -632,6 +632,7 @@ Deno.serve(async (req) => {
     console.log(`🎨 IMAGE GENERATION — ${scenesToProcess.length} scenes`);
     console.log(`📐 Aspect ratio: ${aspectRatio} | ⚡ Concurrency: ${MAX_CONCURRENT}`);
     console.log(`🔄 Retries: ${MAX_RETRIES} | ⏱️ Poll timeout: ${POLL_TIMEOUT_MS / 1000}s`);
+    console.log(`🔗 Character reference: ${project.reference_image_url ? 'YES (Scene 2+ will use image-to-image)' : 'NONE (Scene 1 will establish reference)'}`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     // ── Process with concurrency pool ─────────────────────────
