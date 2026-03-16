@@ -136,7 +136,7 @@ function FixPromptButton({ sceneId, projectId, onFixed }) {
 // ═══════════════════════════════════════════════════════════════════
 // MAIN COMPONENT — Scene Card
 // ═══════════════════════════════════════════════════════════════════
-export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, onSceneUpdated }) {
+export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, onSceneUpdated, orientation }) {
   const [loadingImage, setLoadingImage] = useState(false);
   const [loadingVideo, setLoadingVideo] = useState(false);
   const [polling, setPolling] = useState(false);
@@ -221,7 +221,7 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
   return (
     <Card className="overflow-hidden">
       {/* Preview */}
-      <div className="aspect-video bg-gray-100 relative">
+      <div className={`${orientation === 'portrait' || scene.orientation === 'portrait' ? 'aspect-[9/16]' : 'aspect-video'} bg-gray-100 relative`}>
         {scene.video_url && scene.video_url.startsWith('http') ? (
           <video src={scene.video_url} controls className="w-full h-full object-cover" />
         ) : scene.image_url ? (
