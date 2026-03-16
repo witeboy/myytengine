@@ -173,7 +173,9 @@ Return ONLY a valid JSON object. No markdown. No explanation. No backticks.
       throw new Error('Gemini did not return valid concepts JSON');
     }
 
-    const detectedMood = parsed.detected_mood || 'drama';
+    // Normalize mood — Gemini sometimes returns pipe-separated or comma-separated values
+    const rawDetectedMood = (parsed.detected_mood || 'drama').toLowerCase().replace(/[,|]/g, '|');
+    const detectedMood = rawDetectedMood.split('|')[0].trim() || 'drama';
     const concepts = parsed.concepts.slice(0, 5);
     console.log(`Mood: ${detectedMood} | Concepts: ${concepts.length}`);
 
