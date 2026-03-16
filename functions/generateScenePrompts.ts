@@ -1310,29 +1310,27 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
               // Clean up orphaned punctuation from stripping
               modifiedPrompt = modifiedPrompt.replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').replace(/\s{2,}/g, ' ');
 
-              // Inject the tier-appropriate description WOVEN with the action
-              // "The User is sitting" → "The User, a 30-year-old woman with brown eyes, is sitting"
+              // ═══ CONTEXTUAL CHARACTER INJECTION ═══
+              // Replace the name with the tier-appropriate identity description.
+              // CRITICAL: Always REPLACE the name, never create "Name, HUGE BLOB, verb" patterns.
+              // The old appositive pattern ("Name, desc, is sitting") caused image gen to
+              // read the identity blob as a portrait subject, producing floating heads.
+              // Instead, we substitute: "Name walks" → "[identity desc] walks"
               const firstOcc = modifiedPrompt.match(new RegExp(`\\b${escapedName}\\b`, 'i'));
               if (firstOcc) {
                 const idx = modifiedPrompt.indexOf(firstOcc[0]);
                 const before = modifiedPrompt.substring(0, idx);
                 const after = modifiedPrompt.substring(idx + firstOcc[0].length);
-                // Check if the next word is a verb/action — if so, weave as appositive
                 const afterTrimmed = after.trimStart();
-                // Check for possessive ('s) or verb after the name
                 const isPossessive = /^'s\b/.test(afterTrimmed);
-                const startsWithVerb = /^(is|was|sits|stands|walks|runs|holds|stares|looks|leans|clutch|grip|reach|kneel|crouch|watch|gaze|turn|step|press|scroll|tap|delet|swip)/i.test(afterTrimmed);
                 if (isPossessive) {
-                  // "Sarah's hands" → "Sarah, a 30-year-old woman, whose hands"
-                  modifiedPrompt = `${before}${firstOcc[0]}, ${desc}, whose${after.substring(2)}`;
-                } else if (startsWithVerb) {
-                  // "The User is sitting" → "The User, a 30-year-old woman, is sitting"
-                  modifiedPrompt = `${before}${firstOcc[0]}, ${desc},${after}`;
+                  modifiedPrompt = `${before}${desc}, whose${after.substring(after.indexOf("'s") + 2)}`;
                 } else {
-                  // No verb follows — just replace name with description
+                  // Always substitute — the desc reads as a natural noun phrase
+                  // "The Consumer walks" → "a 55-year-old man with graying hair walks"
                   modifiedPrompt = `${before}${desc}${after}`;
                 }
-                console.log(`👤 Scene ${s.scene_number}: ${identityTier.toUpperCase()} identity for "${c.name}" (${desc.length} chars, woven=${startsWithVerb})`);
+                console.log(`👤 Scene ${s.scene_number}: ${identityTier.toUpperCase()} identity for "${c.name}" (${desc.length} chars)`);
               }
             }
 
