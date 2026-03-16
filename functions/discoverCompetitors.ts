@@ -170,6 +170,7 @@ Deno.serve(async (req) => {
         if (/https?:\/\/(?!youtu|twitter|instagram|tiktok|facebook)/.test(desc)) monSignals.add('external_site');
 
         recentVideos.push({
+          video_id: v.id,
           title: v.snippet.title?.slice(0, 100),
           views, likes, comments,
           vpd: Math.round(vpd),
