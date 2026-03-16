@@ -110,23 +110,33 @@ async function getTranscriptInnerTube(videoId) {
 
     let captionTracks = null;
     
-    // Strategy 1: Extract ytInitialPlayerResponse (most reliable)
-    const playerPatterns = [
-      /ytInitialPlayerResponse\s*=\s*(\{.+?\});\s*(?:var|let|const|<\/script)/s,
-      /ytInitialPlayerResponse\s*=\s*(\{.+?\});/s,
-    ];
-    for (const pattern of playerPatterns) {
-      const playerMatch = html.match(pattern);
-      if (playerMatch) {
-        try {
-          const player = JSON.parse(playerMatch[1]);
-          captionTracks = player?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
-          if (captionTracks?.length) {
-            console.log(`[Transcript T1.5] Found ${captionTracks.length} caption tracks via playerResponse`);
-            break;
+    // Strategy 1: Extract ytInitialPlayerResponse using balanced brace matching
+    const playerStart = html.indexOf('ytInitialPlayerResponse');
+    if (playerStart !== -1) {
+      const eqIdx = html.indexOf('=', playerStart);
+      if (eqIdx !== -1) {
+        const jsonStart = html.indexOf('{', eqIdx);
+        if (jsonStart !== -1) {
+          // Find matching closing brace
+          let depth = 0, i = jsonStart;
+          for (; i < html.length && i < jsonStart + 500000; i++) {
+            if (html[i] === '{') depth++;
+            else if (html[i] === '}') { depth--; if (depth === 0) break; }
           }
-        } catch (e) {
-          console.log(`[Transcript T1.5] playerResponse parse failed: ${e.message}`);
+          if (depth === 0) {
+            const jsonStr = html.substring(jsonStart, i + 1);
+            try {
+              const player = JSON.parse(jsonStr);
+              captionTracks = player?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+              if (captionTracks?.length) {
+                console.log(`[Transcript T1.5] Found ${captionTracks.length} caption tracks via playerResponse`);
+              } else {
+                console.log(`[Transcript T1.5] playerResponse parsed OK but no captionTracks (video may not have captions)`);
+              }
+            } catch (e) {
+              console.log(`[Transcript T1.5] playerResponse JSON parse failed: ${e.message.slice(0, 100)}`);
+            }
+          }
         }
       }
     }
