@@ -155,14 +155,6 @@ RULES:
       return Response.json({ error: 'Failed to parse descriptions', raw: responseText.substring(0, 300) }, { status: 500 });
     }
 
-    // Save descriptions to metadata
-    await base44.asServiceRole.entities.UploadMetadata.update(meta.id, {
-      description_template: parsed.descriptions[0]?.content || '',
-      description_alt_1: parsed.descriptions[1]?.content || '',
-      description_alt_2: parsed.descriptions[2]?.content || '',
-      descriptions_json: JSON.stringify(formattedDescriptions),
-    });
-
     // Format for frontend
     const formattedDescriptions = parsed.descriptions.map((d, i) => ({
       label: d.label || ['Hook-Heavy', 'SEO-Optimized', 'Storytelling'][i] || `Version ${i + 1}`,
