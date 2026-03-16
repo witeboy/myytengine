@@ -597,7 +597,7 @@ function TextPropertiesPanel({ caption, onUpdate, onDelete, onDuplicate }) {
   );
 }
 
-function ClipPropertiesPanel({ clip, audioBeatDuration, onUpdate }) {
+function ClipPropertiesPanel({ clip, audioBeatDuration, onUpdate, onApplyToAll }) {
   if (!clip) return <div className="h-full flex items-center justify-center text-xs text-gray-500">Select a clip</div>;
   const u = (k, v) => onUpdate({ ...clip, [k]: v });
   const isSynced  = Math.abs(clip.duration - audioBeatDuration) < 0.1;
@@ -608,8 +608,17 @@ function ClipPropertiesPanel({ clip, audioBeatDuration, onUpdate }) {
   return (
     <div className="h-full flex flex-col bg-[#12121f] p-3 space-y-4 overflow-y-auto">
 
-      {/* Scene header */}
-      <div className="text-sm font-medium text-white">Scene {clip.sceneNumber}</div>
+      {/* Scene header + Apply to All */}
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-white">Scene {clip.sceneNumber}</span>
+        <Button
+          size="sm"
+          onClick={onApplyToAll}
+          className="text-[10px] bg-cyan-600 hover:bg-cyan-700 px-2 py-1 h-auto gap-1"
+        >
+          <Copy size={10} /> Apply to All
+        </Button>
+      </div>
 
       {/* ── Media Type Toggle ──────────────────────────────────── */}
       <div className="p-3 bg-gray-800/60 rounded border border-gray-700 space-y-2">
@@ -1787,6 +1796,21 @@ export default function TimelineEditorV10() {
     setIsApplyingZoom(false);
   };
   const handleRemoveCinematicZoom = () => setVideoClips(videoClips.map(c => ({ ...c, cinematicMotion: null })));
+
+  const handleApplyToAll = () => {
+    if (!selectedVideo) return;
+    setVideoClips(videoClips.map(c => ({
+      ...c,
+      cinematicMotion:    selectedVideo.cinematicMotion,
+      motionSpeed:        selectedVideo.motionSpeed ?? 1.0,
+      motionIntensity:    selectedVideo.motionIntensity ?? 1.0,
+      transition:         selectedVideo.transition,
+      transitionDuration: selectedVideo.transitionDuration,
+      mediaType:          c.videoUrl && selectedVideo.mediaType === 'video' ? 'video' : c.mediaType,
+      playbackRate:       selectedVideo.mediaType === 'video' ? (selectedVideo.playbackRate ?? 1.0) : (c.playbackRate ?? 1.0),
+      effects:            selectedVideo.effects?.length > 0 ? [...selectedVideo.effects] : c.effects,
+    })));
+  };
   const motionCount     = videoClips.filter(c => c.cinematicMotion).length;
   const transitionCount = videoClips.filter(c => c.transition).length;
 
@@ -2081,7 +2105,7 @@ export default function TimelineEditorV10() {
           {selectedCaption ? (
             <TextPropertiesPanel caption={selectedCaption} onUpdate={c => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))} onDelete={handleDeleteCaption} onDuplicate={handleDuplicateCaption} />
           ) : selectedVideo ? (
-            <ClipPropertiesPanel clip={selectedVideo} audioBeatDuration={audioBeatDurations[selectedVideoIdx]} onUpdate={c => setVideoClips(videoClips.map(x => x.id === c.id ? c : x))} />
+            <ClipPropertiesPanel clip={selectedVideo} audioBeatDuration={audioBeatDurations[selectedVideoIdx]} onUpdate={c => setVideoClips(videoClips.map(x => x.id === c.id ? c : x))} onApplyToAll={handleApplyToAll} />
           ) : (
             <div className="h-full flex items-center justify-center text-xs text-gray-500">Select a clip or caption</div>
           )}
