@@ -262,7 +262,7 @@ function OverlayTextCard({ concept, isSelected, onSelect }) {
 //   Step 2 — Ideogram character-remix renders: template + photos + selected text
 //   Step 3 — Result: download, re-render, try other texts
 // ═══════════════════════════════════════════════════════════════════════
-export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sceneImages }) {
+export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sceneImages, projectId, selectedSeoTitles = [] }) {
   const [step, setStep] = useState(0);
 
   // Step 0 inputs
@@ -370,6 +370,8 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
           summary:      summary.trim() || '',
           char_count:   uploadedChars.length,
           char_photos:  charPhotos,
+          project_id:   projectId || undefined,
+          seo_titles:   selectedSeoTitles.length > 0 ? selectedSeoTitles.map(t => t.title) : undefined,
           ...templateContext,
         });
       } catch (e) {
