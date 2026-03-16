@@ -256,19 +256,28 @@ export default function CompetitorPanel({ channel, onTopicsChanged }) {
 
                         {/* Top Performing Videos */}
                         {c.top_performing?.length > 0 && (
-                          <CompetitorVideoList videos={c.top_performing} title="🏆 Top Performing Videos" />
+                          <CompetitorVideoList
+                            videos={c.top_performing.map(v => ({ ...v, channel_name: c.name }))}
+                            title="🏆 Top Performing Videos"
+                            onRepurpose={(v) => { setRepurposeVideo(v); setRepurposeCompetitor(c.name); }}
+                          />
                         )}
 
                         {/* Viral / Overperforming */}
                         {c.viral_videos?.length > 0 && (
-                          <CompetitorVideoList videos={c.viral_videos} title="🔥 Viral / Overperforming" />
+                          <CompetitorVideoList
+                            videos={c.viral_videos.map(v => ({ ...v, channel_name: c.name }))}
+                            title="🔥 Viral / Overperforming"
+                            onRepurpose={(v) => { setRepurposeVideo(v); setRepurposeCompetitor(c.name); }}
+                          />
                         )}
 
                         {/* Recent Videos */}
                         <CompetitorVideoList
-                          videos={c.recent_videos?.slice(0, 5)}
+                          videos={c.recent_videos?.slice(0, 5).map(v => ({ ...v, channel_name: c.name }))}
                           title="📅 Most Recent"
                           emptyText="No recent videos"
+                          onRepurpose={(v) => { setRepurposeVideo(v); setRepurposeCompetitor(c.name); }}
                         />
                       </div>
                     )}
@@ -279,6 +288,14 @@ export default function CompetitorPanel({ channel, onTopicsChanged }) {
           </>
         )}
       </CardContent>
+
+      <RepurposeVideoDialog
+        open={!!repurposeVideo}
+        onOpenChange={(open) => { if (!open) setRepurposeVideo(null); }}
+        video={repurposeVideo ? { ...repurposeVideo, channel_name: repurposeCompetitor } : null}
+        channel={channel}
+        onRepurposed={() => onTopicsChanged?.()}
+      />
     </Card>
   );
 }
