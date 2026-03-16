@@ -2,8 +2,8 @@ import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useNavigate } from 'react-router-dom';
-import { createPageUrl } from '@/utils';
+import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import {
   TrendingUp, Clock, CheckCircle2, PlayCircle, FileText,
   ArrowRight, Pause, BarChart3
@@ -30,8 +30,6 @@ function getColors(niche) {
 }
 
 export default function NicheStatsGrid({ channels, topics, projects }) {
-  const navigate = useNavigate();
-
   const channelStats = channels.map(ch => {
     const chTopics = topics.filter(t => t.channel_id === ch.id);
     const chProjects = projects.filter(p => p.channel_id === ch.id && !p.archived);
@@ -57,10 +55,9 @@ export default function NicheStatsGrid({ channels, topics, projects }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
       {channelStats.map(ch => (
+        <Link to={`/ChannelDetail?id=${ch.id}`} key={ch.id} className="block">
         <Card
-          key={ch.id}
           className={`overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer group border ${ch.colors.border}`}
-          onClick={() => navigate(createPageUrl(`ChannelDetail?id=${ch.id}`))}
         >
           {/* Color header bar */}
           <div className={`h-2 bg-gradient-to-r ${ch.colors.bg}`} />
@@ -130,6 +127,7 @@ export default function NicheStatsGrid({ channels, topics, projects }) {
             </div>
           </CardContent>
         </Card>
+        </Link>
       ))}
     </div>
   );
