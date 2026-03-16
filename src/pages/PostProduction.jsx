@@ -513,7 +513,12 @@ const handleGenerateSeo = async () => {
           )}
         </div>
 
-        <Tabs defaultValue="titles" value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <Tabs defaultValue="titles" value={activeTab} onValueChange={(tab) => {
+          setActiveTab(tab);
+          if (tab === 'thumbnails' && !scriptSummary && !summarizing && script?.full_script) {
+            summarizeScript(script.full_script);
+          }
+        }} className="space-y-6">
           <TabsList className="grid w-full max-w-2xl grid-cols-3">
             <TabsTrigger value="titles" className="gap-2">
               <Type className="w-4 h-4" />
