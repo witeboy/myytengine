@@ -218,11 +218,25 @@ export default function useVideoExport() {
 
   const loadVideoElement = async (url) => {
     let blobUrl = null;
+    // Try direct fetch first
     try {
       const resp = await fetch(url, { mode: 'cors' });
       if (resp.ok) blobUrl = URL.createObjectURL(await resp.blob());
     } catch {}
+    // If direct fetch failed, try proxy
     if (!blobUrl) {
+      try {
+        const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url });
+        const data = proxyRes.data || proxyRes;
+        if (data.success && data.data) {
+          const bytes = Uint8Array.from(atob(data.data), c => c.charCodeAt(0));
+          const blob = new Blob([bytes], { type: data.content_type || 'video/mp4' });
+          blobUrl = URL.createObjectURL(blob);
+        }
+      } catch (e) { console.warn(`Video proxy failed: ${url.substring(0,60)} — ${e.message}`); }
+    }
+    if (!blobUrl) {
+      // Last resort: try loading video element directly (may work for some domains)
       return new Promise((resolve, reject) => {
         const v = document.createElement('video');
         v.crossOrigin = 'anonymous'; v.muted = true; v.playsInline = true; v.preload = 'auto';
