@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { createPageUrl } from '@/utils';
 import { Plus, Wrench, FolderOpen, Search, Tv } from 'lucide-react';
 import NicheCard from '@/components/channels/NicheCard';
 import CreateChannelDialog from '@/components/channels/CreateChannelDialog';
@@ -36,13 +35,13 @@ export default function ChannelsHub() {
             </div>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" onClick={() => navigate(createPageUrl('ToolsHub'))} className="text-xs">
+            <Button variant="outline" onClick={() => navigate('/ToolsHub')} className="text-xs">
               <Wrench className="w-4 h-4 mr-1" /> Tools
             </Button>
-            <Button variant="outline" onClick={() => navigate(createPageUrl('MediaLibrary'))} className="text-xs">
+            <Button variant="outline" onClick={() => navigate('/MediaLibrary')} className="text-xs">
               <FolderOpen className="w-4 h-4 mr-1" /> Media
             </Button>
-            <Button variant="outline" onClick={() => navigate(createPageUrl('ResearchTerminal'))} className="text-xs">
+            <Button variant="outline" onClick={() => navigate('/ResearchTerminal')} className="text-xs">
               <Search className="w-4 h-4 mr-1" /> Research
             </Button>
             <Button onClick={() => setShowCreate(true)} className="bg-blue-600 hover:bg-blue-700">
@@ -90,7 +89,7 @@ export default function ChannelsHub() {
               <NicheCard
                 key={channel.id}
                 channel={channel}
-                onClick={() => navigate(createPageUrl(`ChannelDetail?channel_id=${channel.id}`))}
+                onClick={() => navigate(`/ChannelDetail?channel_id=${channel.id}`)}
               />
             ))}
             {/* Add channel card */}

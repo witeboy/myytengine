@@ -54,7 +54,7 @@ export default function NicheStatsGrid({ channels, topics, projects }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
       {channelStats.map(ch => (
-        <Link to={`/ChannelDetail?id=${ch.id}`} key={ch.id} className="block">
+        <Link to={`/ChannelDetail?channel_id=${ch.id}`} key={ch.id} className="block">
         <Card
           className={`overflow-hidden hover:shadow-xl transition-all duration-300 cursor-pointer group border ${ch.colors.border}`}
         >
