@@ -6,11 +6,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import StageProgress from '@/components/StageProgress';
-import ThumbnailGrid from '@/components/postprod/ThumbnailGrid';
-import YouTubeThumbnailImporter from '@/components/postprod/YouTubeThumbnailImporter';
-import NicheManager from '@/components/postprod/NicheManager';
 import SeoTitlesPanel from '@/components/postprod/SeoTitlesPanel';
 import SeoDescriptionsPanel from '@/components/postprod/SeoDescriptionsPanel';
+import MakeThumbnail from '@/components/production/MakeThumbnail';
 import {
   Loader2, Sparkles, Image as ImageIcon, FileText, CheckCircle2, ArrowLeft,
   Type, BookOpen, Library, ArrowRight, ClipboardCheck, Zap, Brain, TrendingUp,
@@ -354,10 +352,12 @@ export default function PostProduction() {
   const navigate = useNavigate();
   const projectId = new URLSearchParams(window.location.search).get('project_id');
 
-  const [generatingThumbs, setGeneratingThumbs] = useState(false);
   const [generatingSeo, setGeneratingSeo] = useState(false);
-  const [thumbError, setThumbError] = useState(null);
   const [seoError, setSeoError] = useState(null);
+
+  // Script summary for thumbnail maker
+  const [scriptSummary, setScriptSummary] = useState('');
+  const [summarizing, setSummarizing] = useState(false);
 
   // SEO state
   const [seoTitles, setSeoTitles] = useState(null);
@@ -370,12 +370,8 @@ export default function PostProduction() {
 
   const [activeTab, setActiveTab] = useState('titles');
 
-  // Style state
-  const [referenceStyle, setReferenceStyle] = useState('');
-  const [selectedNiche, setSelectedNiche] = useState(null);
-
-  // Template selection state
-  const [selectedTemplateIds, setSelectedTemplateIds] = useState([]); // ['shock_face', 'income_reveal', 'breaking_news']
+  // Scene images for thumbnail maker
+  const [sceneImages, setSceneImages] = useState([]);
 
   // ── Queries ──────────────────────────────────────────────────────
   const { data: project } = useQuery({
