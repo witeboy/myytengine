@@ -331,7 +331,22 @@ Deno.serve(async (req) => {
       if (url) imageUrls.push(url);
     }
 
-    console.log(`Uploaded ${imageUrls.length} images to KIE`);
+    console.log(`Uploaded ${imageUrls.length} images to KIE (expected: ${(hasTemplateRef ? 1 : 0) + charPhotos.length})`);
+
+    // Log which images succeeded
+    if (hasTemplateRef && imageUrls.length === 0) {
+      console.warn('⚠️ Template upload FAILED — falling back to prompt-only generation');
+    }
+    if (hasCharPhotos && imageUrls.length <= (hasTemplateRef ? 1 : 0)) {
+      console.warn('⚠️ Character photo uploads FAILED — faces will not be preserved');
+    }
+
+    // Determine effective state based on what actually uploaded
+    const templateUploaded = hasTemplateRef && imageUrls.length > 0;
+    const photosUploaded = imageUrls.length > (templateUploaded ? 1 : 0);
+    const effectivePhotoCount = templateUploaded ? imageUrls.length - 1 : imageUrls.length;
+
+    console.log(`Effective state: template=${templateUploaded}, photos=${photosUploaded} (${effectivePhotoCount} uploaded)`);
 
     // ── STEP 5: Build the face-preservation prompt ──────────────
     const overlayText = (custom_overlay_text || concept.text_overlay || '').toUpperCase().trim();
@@ -350,9 +365,9 @@ Deno.serve(async (req) => {
       font,
       textColor,
       textPosition,
-      hasTemplate: hasTemplateRef && imageUrls.length > 0,
-      hasPhotos: hasCharPhotos,
-      photoCount: charPhotos.length,
+      hasTemplate: templateUploaded,
+      hasPhotos: photosUploaded,
+      photoCount: effectivePhotoCount,
       concept,
       charDescriptions,
     });
