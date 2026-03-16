@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -85,6 +85,61 @@ export default function PostProduction() {
   });
 
   const metadata = metadataList[0] || null;
+
+  // ── Hydrate SEO state from saved metadata on load ────────────────
+  useEffect(() => {
+    if (!metadata) return;
+    // Only hydrate if state is empty (not currently generating)
+    if (seoTitles || generatingSeo) return;
+
+    // Hydrate titles
+    if (metadata.titles_json) {
+      try {
+        const titles = JSON.parse(metadata.titles_json);
+        if (titles?.length) setSeoTitles(titles);
+      } catch (_) {}
+    }
+
+    // Hydrate SEO analysis
+    if (metadata.seo_analysis) {
+      try { setSeoAnalysis(JSON.parse(metadata.seo_analysis)); } catch (_) {}
+    }
+
+    // Hydrate tags breakdown
+    if (metadata.tags_short || metadata.tags_medium || metadata.tags_long) {
+      try {
+        setTagsBreakdown({
+          short: JSON.parse(metadata.tags_short || '[]'),
+          medium: JSON.parse(metadata.tags_medium || '[]'),
+          long: JSON.parse(metadata.tags_long || '[]'),
+        });
+      } catch (_) {}
+    }
+
+    // Hydrate hashtags
+    if (metadata.hashtags) {
+      const h = metadata.hashtags.trim().split(/\s+/).filter(Boolean);
+      if (h.length) setHashtags(h);
+    }
+
+    // Hydrate pinned comment
+    if (metadata.pinned_comment) setPinnedComment(metadata.pinned_comment);
+
+    // Hydrate descriptions
+    if (metadata.descriptions_json) {
+      try {
+        const descs = JSON.parse(metadata.descriptions_json);
+        if (descs?.length) setSeoDescriptions(descs);
+      } catch (_) {}
+    } else if (metadata.description_template) {
+      // Fallback: reconstruct from individual fields
+      const descs = [];
+      if (metadata.description_template) descs.push({ label: 'Hook-Heavy', content: metadata.description_template, word_count: 0, primary_keywords: [], long_tail_keywords: [] });
+      if (metadata.description_alt_1) descs.push({ label: 'SEO-Optimized', content: metadata.description_alt_1, word_count: 0, primary_keywords: [], long_tail_keywords: [] });
+      if (metadata.description_alt_2) descs.push({ label: 'Storytelling', content: metadata.description_alt_2, word_count: 0, primary_keywords: [], long_tail_keywords: [] });
+      if (descs.length) setSeoDescriptions(descs);
+    }
+  }, [metadata]);
 
   // ── Handlers ─────────────────────────────────────────────────────
   const handleTitlesToThumbnails = async () => {
