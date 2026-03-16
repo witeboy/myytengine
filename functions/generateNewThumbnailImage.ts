@@ -1,16 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
-// generateNewThumbnailImage — Nano Banana 2 Edition
-//
-// Uses nano-banana-2 (Google) via KIE API
-// Accepts up to 14 images, 4K output, 20K char prompts
-//
-// FLOW:
-//   1. Load concept record (has image_prompt, text_overlay, mood, etc.)
-//   2. Upload template + character photos to KIE → get public URLs
-//   3. Pass ALL images via image_input[] with a surgical face-preservation prompt
-//   4. Poll for result
-//   5. Upscale + save
+// generateNewThumbnailImage — Nano Banana 2 via KIE API
 
 // ── Build the face-preservation prompt ──────────────────────────────────
 // This is the core innovation: Nano Banana has no dedicated "face swap" field,
