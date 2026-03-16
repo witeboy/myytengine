@@ -410,7 +410,10 @@ Deno.serve(async (req) => {
     console.log('✅ Generated:', imageUrl);
 
     // ── STEP 8: Post-processing — Upscale ───────────────────────
-    const mood = (concept.mood || concept.visual_metaphor || 'drama').toLowerCase();
+    // Mood can be pipe-separated (e.g. "crime|drama") — take the first segment
+    const rawMood = (concept.mood || concept.visual_metaphor || 'drama').toLowerCase();
+    const mood = rawMood.split('|')[0].trim() || 'drama';
+    console.log(`🎨 Mood resolved: "${rawMood}" → "${mood}"`);
     const MOOD_GRADES = {
       crime:        { saturation: 0.7,  contrast: 1.35, brightness: 0.75, vignetteStrength: 0.92 },
       drama:        { saturation: 1.4,  contrast: 1.2,  brightness: 0.95, vignetteStrength: 0.75 },
