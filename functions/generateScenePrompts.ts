@@ -953,8 +953,10 @@ animation_prompt: "${(s.animation_prompt || '').substring(0, 200)}"
         const shotType = s.director?.shot_type || 'MS — Medium Shot';
         const identityTier = getIdentityTier(shotType);
 
+        const bodyDirective = getBodyProportionDirective(s.director?.shot_type || 'MS — Medium Shot');
+
         if (!s.director) {
-          return `Scene ${s.scene_number}: (No director notes — generate from narration)\n  Narration: "${s.narration_text}"\n  Duration: ${sceneDuration}s\n  Character Detail Level: ${identityTier.toUpperCase()} (match description depth to this)\n  Arc Phase: ${arcPosition}\n  Arc Animation: ${arcAnim}${propsLine}`;
+          return `Scene ${s.scene_number}: (No director notes — generate from narration)\n  Narration: "${s.narration_text}"\n  Duration: ${sceneDuration}s\n  Character Detail Level: ${identityTier.toUpperCase()} (match description depth to this)\n  Body Proportion: ${bodyDirective}\n  Arc Phase: ${arcPosition}\n  Arc Animation: ${arcAnim}${propsLine}`;
         }
         return `Scene ${s.scene_number}:
   Narration: "${s.narration_text}"
@@ -962,6 +964,7 @@ animation_prompt: "${(s.animation_prompt || '').substring(0, 200)}"
   Visual Concept: ${s.director.visual_concept}
   Shot Type: ${s.director.shot_type}
   Character Detail Level: ${identityTier.toUpperCase()} (${identityTier === 'minimal' ? 'wide shot — silhouette only, NO face details' : identityTier === 'moderate' ? 'medium shot — body + hair + skin, brief features' : 'close-up — full identity for face consistency'})
+  Body Proportion: ${bodyDirective}
   Camera Angle: ${s.director.camera_angle}
   Camera Movement: ${s.director.camera_movement}
   Lighting: ${s.director.lighting}
