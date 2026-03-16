@@ -137,32 +137,50 @@ Return JSON:
     setStep('importing');
     setImporting(true);
 
-    // Delete selected duplicates from existing topics
-    if (selectedDupes.size > 0) {
-      setPhase('Removing duplicate existing topics...');
-      for (const idx of selectedDupes) {
-        const match = duplicates.matches[idx];
-        if (match?.existing_id) {
-          await base44.entities.ChannelTopics.delete(match.existing_id);
-        }
+    const d = duplicates;
+
+    // 1. Delete selected existing-topic duplicates (flagged ones user confirmed)
+    const existingIdsToDelete = [];
+    d.flaggedExisting.forEach((m, i) => {
+      if (selectedDupes.has(`existing_${i}`) && m.existing_id) {
+        existingIdsToDelete.push(m.existing_id);
+      }
+    });
+    // Also delete auto-removed existing matches
+    d.autoExisting.forEach(m => {
+      if (m.existing_id) existingIdsToDelete.push(m.existing_id);
+    });
+
+    if (existingIdsToDelete.length > 0) {
+      setPhase(`Removing ${existingIdsToDelete.length} duplicate existing topics...`);
+      for (const id of existingIdsToDelete) {
+        await base44.entities.ChannelTopics.delete(id);
       }
     }
 
-    // Build final list: unique topics + all new topics (including the ones whose old dupes we deleted)
-    const titlesToImport = [
-      ...duplicates.unique,
-      ...duplicates.matches.map(m => m.new_title),
-    ];
+    // 2. Build final import list
+    // Start with unique titles
+    const finalTitles = [...d.unique];
 
-    // Remove new topics that the user chose to KEEP the existing version of (unselected dupes)
-    const skippedNewTitles = new Set();
-    duplicates.matches.forEach((m, i) => {
-      if (!selectedDupes.has(i)) {
-        skippedNewTitles.add(m.new_title);
+    // Add flagged-existing new titles where user chose to delete existing (replace)
+    d.flaggedExisting.forEach((m, i) => {
+      if (selectedDupes.has(`existing_${i}`)) {
+        finalTitles.push(m.new_title);
       }
+      // If not selected, skip the new title (keep existing)
     });
 
-    const finalTitles = titlesToImport.filter(t => !skippedNewTitles.has(t));
+    // Add auto-removed-existing new titles (old was auto-deleted, import new)
+    d.autoExisting.forEach(m => finalTitles.push(m.new_title));
+
+    // For internal flags: keep title_a, only add title_b if user selected to keep both
+    d.flaggedInternal.forEach((m, i) => {
+      if (!selectedDupes.has(`internal_${i}`)) {
+        // User wants to keep both — add title_b if not already in list
+        if (!finalTitles.includes(m.title_b)) finalTitles.push(m.title_b);
+      }
+      // If selected = remove title_b (it's already not in the list)
+    });
 
     await doImport(finalTitles);
   };
@@ -211,11 +229,11 @@ Return JSON:
     setStep('input');
   };
 
-  const toggleDupe = (idx) => {
+  const toggleDupe = (key) => {
     setSelectedDupes(prev => {
       const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
