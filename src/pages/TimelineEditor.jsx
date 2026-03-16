@@ -2253,7 +2253,7 @@ export default function TimelineEditorV10() {
             open={showExporter} onClose={() => setShowExporter(false)}
             scenes={exportScenes} orientation={orientation}
             voiceoverUrl={voiceoverUrl} musicUrl={musicUrl} musicVolume={musicVol}
-            projectName={project?.name || 'Untitled'} exportHook={exportHook}
+            projectName={project?.name || 'Untitled'} projectId={projectId} exportHook={exportHook}
           />
         );
       })()}
