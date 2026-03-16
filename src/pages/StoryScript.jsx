@@ -61,33 +61,37 @@ export default function StoryScript() {
   useEffect(() => {
     if (autoGenTriggered || generating) return;
     if (!project?.id) return;
-    if (batchesLoading) return; // ← Wait for batches to actually load
+    if (batchesLoading) return;
     if (project.status === 'script_complete') return;
     if (!['hooks_ready', 'scripting'].includes(project.status)) return;
-    if (batches.length > 0) return; // ← If batches exist at all, don't regenerate
+    // If any batch already has content, don't restart
+    if (batches.some(b => b.status === 'completed' && b.content)) return;
 
     setAutoGenTriggered(true);
     setGenerating(true);
 
     const runFullGeneration = async () => {
       try {
-        // Delete any old stale scripts
-        const oldScripts = await base44.entities.Scripts.filter({ project_id: projectId });
-        for (const s of oldScripts) {
-          await base44.entities.Scripts.delete(s.id);
-        }
+        const hasPendingBatches = batches.length > 0 && batches.every(b => b.status === 'pending' || b.status === 'generating');
 
-        // Delete any existing batches to start fresh
-        const oldBatches = await base44.entities.ScriptBatches.filter({ project_id: projectId });
-        for (const b of oldBatches) {
-          await base44.entities.ScriptBatches.delete(b.id);
-        }
+        if (!hasPendingBatches) {
+          // No usable batches — start fresh
+          const oldScripts = await base44.entities.Scripts.filter({ project_id: projectId });
+          for (const s of oldScripts) {
+            await base44.entities.Scripts.delete(s.id);
+          }
 
-        // Step 1: Create batch outlines
-        await base44.functions.invoke('initializeScriptBatches', {
-          project_id: projectId,
-        });
-        await refetchBatches();
+          const oldBatches = await base44.entities.ScriptBatches.filter({ project_id: projectId });
+          for (const b of oldBatches) {
+            await base44.entities.ScriptBatches.delete(b.id);
+          }
+
+          // Step 1: Create batch outlines
+          await base44.functions.invoke('initializeScriptBatches', {
+            project_id: projectId,
+          });
+          await refetchBatches();
+        }
 
         // Step 2: Generate content for each batch
         await base44.functions.invoke('generateScriptBatches', {
