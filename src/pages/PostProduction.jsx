@@ -17,11 +17,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 
-// ══════════════════════════════════════════════════════════════════
-// TEMPLATE PICKER — inline (no separate file needed)
-// ══════════════════════════════════════════════════════════════════
-
-function FitBar({ score }) {
+function FitBar_UNUSED({ score }) {
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
