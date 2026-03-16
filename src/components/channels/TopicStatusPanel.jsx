@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { X, Play, Clock, ArrowRight, FileText, ChevronDown, ChevronUp, Package } from 'lucide-react';
-import { createPageUrl } from '@/utils';
+
 import { ExpandableAssets } from './TopicAssetsPanel';
 
 const statusColors = {
@@ -26,7 +26,7 @@ export default function TopicStatusPanel({ title, icon: Icon, topics, onClose, o
       const projects = await (await import('@/api/base44Client')).base44.entities.Projects.filter({ id: topic.project_id });
       if (projects[0]) {
         const route = getProjectRoute(projects[0]);
-        navigate(createPageUrl(route));
+        navigate(`/${route}`);
         return;
       }
     }
