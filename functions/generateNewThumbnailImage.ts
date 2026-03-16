@@ -445,6 +445,20 @@ Deno.serve(async (req) => {
     const maxPollAttempts = Math.min(20, Math.floor(pollBudgetMs / pollInterval));
     console.log(`Polling: up to ${maxPollAttempts} attempts, ${Math.round(pollBudgetMs/1000)}s budget`);
     const result = await pollForResult(taskId, KIE_API_KEY, maxPollAttempts, pollInterval);
+    
+    // If still waiting, return task_id so frontend can continue polling
+    if (!result.success && result.error === 'Timed out waiting for result') {
+      console.log('⏱ Generation still in progress — returning task_id for frontend polling');
+      return Response.json({
+        success: false,
+        pending: true,
+        task_id: taskId,
+        concept_id,
+        model_used: model,
+        message: 'Generation in progress. Poll with task_id.',
+      });
+    }
+    
     if (!result.success) throw new Error(result.error);
     let imageUrl = result.url;
     if (!imageUrl) throw new Error('Generation succeeded but no image URL returned');
@@ -455,62 +469,62 @@ Deno.serve(async (req) => {
     const rawMood = (concept.mood || concept.visual_metaphor || 'drama').toLowerCase();
     const mood = rawMood.split('|')[0].trim() || 'drama';
     console.log(`🎨 Mood resolved: "${rawMood}" → "${mood}"`);
-    const MOOD_GRADES = {
-      crime:        { saturation: 0.7,  contrast: 1.35, brightness: 0.75, vignetteStrength: 0.92 },
-      drama:        { saturation: 1.4,  contrast: 1.2,  brightness: 0.95, vignetteStrength: 0.75 },
-      nollywood:    { saturation: 1.6,  contrast: 1.2,  brightness: 1.0,  vignetteStrength: 0.6  },
-      comedy:       { saturation: 2.0,  contrast: 1.1,  brightness: 1.1,  vignetteStrength: 0.2  },
-      finance:      { saturation: 1.15, contrast: 1.15, brightness: 0.9,  vignetteStrength: 0.65 },
-      inspirational:{ saturation: 1.3,  contrast: 1.05, brightness: 1.05, vignetteStrength: 0.3  },
-      educational:  { saturation: 1.15, contrast: 1.15, brightness: 0.95, vignetteStrength: 0.55 },
-    };
-    const grade = MOOD_GRADES[mood] || MOOD_GRADES.drama;
 
     let finalUrl = imageUrl;
 
-    // 8a. Upscale — only if enough time left (need ~35s)
-    if (timeLeft() > 40000) {
-      try {
-        console.log(`🔍 Upscaling... (${Math.round(timeLeft()/1000)}s remaining)`);
-        const upRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
-          method: 'POST', headers: kieHeaders,
-          body: JSON.stringify({ model: 'kie-ai/upscaler', input: { image_url: imageUrl, scale: 2 } }),
-        });
-        const upText = await upRes.text();
-        let upData; try { upData = JSON.parse(upText); } catch (_) {}
-        const upTaskId = upData?.data?.taskId;
-        if (upTaskId) {
-          const maxAttempts = Math.min(8, Math.floor(timeLeft() / 5000));
-          const upResult = await pollForResult(upTaskId, KIE_API_KEY, maxAttempts, 4000);
-          if (upResult.success && upResult.url) { finalUrl = upResult.url; console.log('✅ Upscaled'); }
-          else console.warn('Upscale skipped:', upResult.error);
-        }
-      } catch (e) { console.warn('Upscale error (non-fatal):', e.message); }
+    // Skip post-processing if time is tight — return the raw image
+    if (timeLeft() < 20000) {
+      console.log(`⏱ Skipping post-processing — only ${Math.round(timeLeft()/1000)}s left`);
     } else {
-      console.log(`⏱ Skipping upscale — only ${Math.round(timeLeft()/1000)}s left`);
-    }
+      const MOOD_GRADES = {
+        crime:        { saturation: 0.7,  contrast: 1.35, brightness: 0.75, vignetteStrength: 0.92 },
+        drama:        { saturation: 1.4,  contrast: 1.2,  brightness: 0.95, vignetteStrength: 0.75 },
+        nollywood:    { saturation: 1.6,  contrast: 1.2,  brightness: 1.0,  vignetteStrength: 0.6  },
+        comedy:       { saturation: 2.0,  contrast: 1.1,  brightness: 1.1,  vignetteStrength: 0.2  },
+        finance:      { saturation: 1.15, contrast: 1.15, brightness: 0.9,  vignetteStrength: 0.65 },
+        inspirational:{ saturation: 1.3,  contrast: 1.05, brightness: 1.05, vignetteStrength: 0.3  },
+        educational:  { saturation: 1.15, contrast: 1.15, brightness: 0.95, vignetteStrength: 0.55 },
+      };
+      const grade = MOOD_GRADES[mood] || MOOD_GRADES.drama;
 
-    // 8b. Color grade — only if enough time left (need ~30s)
-    if (timeLeft() > 35000) {
-      try {
-        console.log(`🎨 Color grading... (${Math.round(timeLeft()/1000)}s remaining)`);
-        const enhancePrompt = buildEnhancePrompt(mood, grade);
-        const enRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
-          method: 'POST', headers: kieHeaders,
-          body: JSON.stringify({ model: 'kie-ai/image-enhance', input: { image_url: finalUrl, prompt: enhancePrompt, creativity: 0.15 } }),
-        });
-        const enText = await enRes.text();
-        let enData; try { enData = JSON.parse(enText); } catch (_) {}
-        const enTaskId = enData?.data?.taskId;
-        if (enTaskId) {
-          const maxAttempts = Math.min(6, Math.floor(timeLeft() / 5000));
-          const enResult = await pollForResult(enTaskId, KIE_API_KEY, maxAttempts, 4000);
-          if (enResult.success && enResult.url) { finalUrl = enResult.url; console.log('✅ Enhanced'); }
-          else console.warn('Enhance skipped:', enResult.error);
-        }
-      } catch (e) { console.warn('Enhance error (non-fatal):', e.message); }
-    } else {
-      console.log(`⏱ Skipping color grade — only ${Math.round(timeLeft()/1000)}s left`);
+      // 8a. Upscale
+      if (timeLeft() > 40000) {
+        try {
+          console.log(`🔍 Upscaling... (${Math.round(timeLeft()/1000)}s remaining)`);
+          const upRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
+            method: 'POST', headers: kieHeaders,
+            body: JSON.stringify({ model: 'kie-ai/upscaler', input: { image_url: imageUrl, scale: 2 } }),
+          });
+          const upText = await upRes.text();
+          let upData; try { upData = JSON.parse(upText); } catch (_) {}
+          const upTaskId = upData?.data?.taskId;
+          if (upTaskId) {
+            const maxUp = Math.min(8, Math.floor(timeLeft() / 5000));
+            const upResult = await pollForResult(upTaskId, KIE_API_KEY, maxUp, 4000);
+            if (upResult.success && upResult.url) { finalUrl = upResult.url; console.log('✅ Upscaled'); }
+          }
+        } catch (e) { console.warn('Upscale error (non-fatal):', e.message); }
+      }
+
+      // 8b. Color grade
+      if (timeLeft() > 35000) {
+        try {
+          console.log(`🎨 Color grading... (${Math.round(timeLeft()/1000)}s remaining)`);
+          const enhancePrompt = buildEnhancePrompt(mood, grade);
+          const enRes = await fetch('https://api.kie.ai/api/v1/jobs/createTask', {
+            method: 'POST', headers: kieHeaders,
+            body: JSON.stringify({ model: 'kie-ai/image-enhance', input: { image_url: finalUrl, prompt: enhancePrompt, creativity: 0.15 } }),
+          });
+          const enText = await enRes.text();
+          let enData; try { enData = JSON.parse(enText); } catch (_) {}
+          const enTaskId = enData?.data?.taskId;
+          if (enTaskId) {
+            const maxEn = Math.min(6, Math.floor(timeLeft() / 5000));
+            const enResult = await pollForResult(enTaskId, KIE_API_KEY, maxEn, 4000);
+            if (enResult.success && enResult.url) { finalUrl = enResult.url; console.log('✅ Enhanced'); }
+          }
+        } catch (e) { console.warn('Enhance error (non-fatal):', e.message); }
+      }
     }
 
     // ── STEP 9: Save ─────────────────────────────────────────────
