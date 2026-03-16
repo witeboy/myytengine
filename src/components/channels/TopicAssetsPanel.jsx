@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import JSZip from 'jszip';
 import {
   Download, Loader2, Music, Mic, Image as ImageIcon,
-  FileText, Type, Package, FolderArchive
+  FileText, Type, Package, FolderArchive, Film
 } from 'lucide-react';
 
 function sanitize(name) {
@@ -206,6 +206,11 @@ export default function TopicAssetsPanel({ projectId, topicTitle }) {
       // Fetch media files in parallel
       const fetches = [];
 
+      // Add exported video directly from memory (no fetch needed)
+      if (window.__exportedVideo?.blob) {
+        zip.file(window.__exportedVideo.filename || `${slug}-export.mp4`, window.__exportedVideo.blob);
+      }
+
       if (assets.voiceoverUrl) {
         fetches.push(
           fetch(assets.voiceoverUrl).then(r => r.blob()).then(b => zip.file(`${slug}-voiceover.mp3`, b)).catch(() => {})
@@ -276,6 +281,21 @@ export default function TopicAssetsPanel({ projectId, topicTitle }) {
   if (assets.musicUrl) mediaAssets.push({ url: assets.musicUrl, label: assets.musicTitle || 'Background Music', icon: Music, ext: 'mp3', filename: `${slug}-music.mp3` });
   if (assets.thumbnailUrl) mediaAssets.push({ url: assets.thumbnailUrl, label: 'Thumbnail', icon: ImageIcon, ext: 'png', filename: `${slug}-thumbnail.png` });
 
+  const hasExportedVideo = !!window.__exportedVideo?.blob;
+  if (hasExportedVideo) {
+    const vidBlob = window.__exportedVideo.blob;
+    const vidUrl = URL.createObjectURL(vidBlob);
+    const vidSize = (vidBlob.size / (1024 * 1024)).toFixed(1);
+    mediaAssets.unshift({
+      url: vidUrl,
+      label: `Exported Video (${vidSize} MB)`,
+      icon: Film,
+      ext: 'mp4',
+      filename: window.__exportedVideo.filename || `${slug}-export.mp4`,
+      _isBlob: true,
+      _blob: vidBlob,
+    });
+  }
   const textParts = [];
   if (assets.scriptText) textParts.push('Script');
   if (assets.seoTitles.length) textParts.push('Titles');
