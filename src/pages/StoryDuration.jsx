@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -12,10 +12,11 @@ import { Loader2, Clock, FileText, Layers, ArrowRight, ArrowLeft } from 'lucide-
 export default function StoryDuration() {
   const navigate = useNavigate();
   const projectId = new URLSearchParams(window.location.search).get('project_id');
-  const [duration, setDuration] = useState(8);
-const [loading, setLoading] = useState(false);
+  const [duration, setDuration] = useState(null);
+  const [hasInitialized, setHasInitialized] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-const { data: project } = useQuery({
+  const { data: project } = useQuery({
     queryKey: ['project', projectId],
     queryFn: async () => {
       const list = await base44.entities.Projects.filter({ id: projectId });
@@ -24,13 +25,14 @@ const { data: project } = useQuery({
     enabled: !!projectId,
   });
 
-  React.useEffect(() => {
-    if (project?.video_duration_minutes) {
-      setDuration(project.video_duration_minutes);
+  useEffect(() => {
+    if (project && !hasInitialized) {
+      const saved = project.video_duration_minutes;
+      console.log('[StoryDuration] Initializing duration from project:', saved, typeof saved);
+      setDuration(saved && saved > 0 ? saved : 8);
+      setHasInitialized(true);
     }
-  }, [project?.video_duration_minutes]);
-
-  // No auto-skip
+  }, [project, hasInitialized]);
 
   const { data: topic } = useQuery({
     queryKey: ['topic', project?.selected_topic_id],
@@ -41,14 +43,15 @@ const { data: project } = useQuery({
     enabled: !!project?.selected_topic_id,
   });
 
-  const totalWords = duration * 150;
+  const safeDuration = duration || 8;
+  const totalWords = safeDuration * 150;
   const numBatches = Math.max(2, Math.round(totalWords / 1500));
 
   const handleGenerate = async () => {
-    const safeDuration = Math.max(1, Math.round(duration));
+    const finalDuration = Math.max(1, Math.round(safeDuration));
     setLoading(true);
     await base44.entities.Projects.update(projectId, {
-      video_duration_minutes: safeDuration,
+      video_duration_minutes: finalDuration,
     });
 
     const res = await base44.functions.invoke('generateOutline', {
@@ -56,7 +59,7 @@ const { data: project } = useQuery({
       topic_id: project.selected_topic_id,
       topic_title: topic?.title || project.name,
       niche: project.niche,
-      duration_minutes: safeDuration,
+      duration_minutes: finalDuration,
     });
 
     if (res.data?.error) {
@@ -64,6 +67,23 @@ const { data: project } = useQuery({
       return;
     }
 
+    navigate(createPageUrl(`StoryHooks?project_id=${projectId}`));
+  };
+
+  const handleContinue = async () => {
+    const finalDuration = Math.max(1, Math.round(safeDuration));
+    if (finalDuration !== project.video_duration_minutes) {
+      setLoading(true);
+      await base44.entities.Projects.update(projectId, { video_duration_minutes: finalDuration });
+      await base44.functions.invoke('generateOutline', {
+        project_id: projectId,
+        topic_id: project.selected_topic_id,
+        topic_title: topic?.title || project.name,
+        niche: project.niche,
+        duration_minutes: finalDuration,
+      });
+      setLoading(false);
+    }
     navigate(createPageUrl(`StoryHooks?project_id=${projectId}`));
   };
 
@@ -83,27 +103,12 @@ const { data: project } = useQuery({
               <ArrowLeft className="w-4 h-4" /> Topics
             </Button>
             {project && ['outline_ready','hooks_ready','scripting','script_complete','voiceover_ready','scene_breakdown','breakdown_complete','content_generation','scenes_ready'].includes(project.status) ? (
-              <Button onClick={async () => {
-  const safeDuration = Math.max(1, Math.round(duration));
-  if (safeDuration !== project.video_duration_minutes) {
-    setLoading(true);
-    await base44.entities.Projects.update(projectId, { video_duration_minutes: safeDuration });
-    await base44.functions.invoke('generateOutline', {
-      project_id: projectId,
-      topic_id: project.selected_topic_id,
-      topic_title: topic?.title || project.name,
-      niche: project.niche,
-      duration_minutes: safeDuration,
-    });
-    setLoading(false);
-  }
-  navigate(createPageUrl(`StoryHooks?project_id=${projectId}`));
-}} className="bg-blue-600 hover:bg-blue-700 gap-2" size="lg" disabled={loading}>
-  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
-  {loading ? 'Regenerating...' : 'Continue'}
-</Button>
+              <Button onClick={handleContinue} className="bg-blue-600 hover:bg-blue-700 gap-2" size="lg" disabled={loading}>
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
+                {loading ? 'Regenerating...' : 'Continue'}
+              </Button>
             ) : (
-              <Button onClick={handleGenerate} disabled={loading} className="bg-blue-600 hover:bg-blue-700 gap-2" size="lg">
+              <Button onClick={handleGenerate} disabled={loading || duration === null} className="bg-blue-600 hover:bg-blue-700 gap-2" size="lg">
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
                 {loading ? 'Generating...' : 'Generate & Continue'}
               </Button>
@@ -122,7 +127,7 @@ const { data: project } = useQuery({
                 type="number"
                 min={2}
                 max={120}
-                value={duration}
+                value={safeDuration}
                 onChange={e => setDuration(Number(e.target.value))}
                 className="text-lg"
               />
@@ -131,7 +136,7 @@ const { data: project } = useQuery({
             <div className="grid grid-cols-3 gap-4">
               <div className="bg-blue-50 rounded-lg p-4 text-center">
                 <Clock className="w-5 h-5 text-blue-600 mx-auto mb-1" />
-                <p className="text-2xl font-bold text-blue-700">{duration}</p>
+                <p className="text-2xl font-bold text-blue-700">{safeDuration}</p>
                 <p className="text-xs text-blue-600">minutes</p>
               </div>
               <div className="bg-purple-50 rounded-lg p-4 text-center">
@@ -145,8 +150,6 @@ const { data: project } = useQuery({
                 <p className="text-xs text-green-600">batches</p>
               </div>
             </div>
-
-{/* Button moved to header */}
           </CardContent>
         </Card>
       </div>
