@@ -15,7 +15,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 // ── Build the face-preservation prompt ──────────────────────────────────
 // This is the core innovation: Nano Banana has no dedicated "face swap" field,
 // so we engineer the prompt to achieve the same result.
-function buildFaceSwapPrompt({ overlayText, font, textColor, textPosition, hasTemplate, hasPhotos, photoCount, concept }) {
+function buildFaceSwapPrompt({ overlayText, font, textColor, textPosition, hasTemplate, hasPhotos, photoCount, concept, charDescriptions }) {
   const imagePrompt = concept.image_prompt || '';
 
   if (hasTemplate && hasPhotos) {
@@ -339,6 +339,9 @@ Deno.serve(async (req) => {
     const textColor = colorMatch ? colorMatch[0] : 'white';
     const textPosition = rawStyle.toLowerCase().includes('bottom') ? 'bottom-center' : 'upper-left';
 
+    // Resolve character descriptions
+    const charDescriptions = Array.isArray(directCharDescriptions) ? directCharDescriptions : [];
+
     const prompt = buildFaceSwapPrompt({
       overlayText,
       font,
@@ -348,6 +351,7 @@ Deno.serve(async (req) => {
       hasPhotos: hasCharPhotos,
       photoCount: charPhotos.length,
       concept,
+      charDescriptions,
     });
 
     console.log(`Prompt length: ${prompt.length} chars`);
