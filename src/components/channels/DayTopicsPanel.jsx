@@ -70,12 +70,18 @@ export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose,
           <p className={`text-sm font-medium truncate ${isCompleted ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
             {topic.title}
           </p>
-          {topic.notes && <p className="text-[11px] text-gray-400 truncate mt-0.5">{topic.notes}</p>}
+          {topic.ai_notes && <p className="text-[11px] text-purple-500 truncate mt-0.5">🧠 {topic.ai_notes}</p>}
+          {!topic.ai_notes && topic.notes && <p className="text-[11px] text-gray-400 truncate mt-0.5">{topic.notes}</p>}
         </div>
         <Badge className={`text-[10px] flex-shrink-0 ${topic.format === 'short' ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>
           {topic.format === 'short' ? <Clock className="w-3 h-3 mr-0.5" /> : <FileText className="w-3 h-3 mr-0.5" />}
           {topic.format === 'short' ? `≤${channel?.short_form_word_limit || 200}w` : `${channel?.long_form_duration_minutes || 15}min`}
         </Badge>
+        {topic.suggested_post_time && (
+          <Badge className="text-[9px] flex-shrink-0 bg-blue-50 text-blue-600 border border-blue-200">
+            <Clock className="w-2.5 h-2.5 mr-0.5" /> {topic.suggested_post_time}
+          </Badge>
+        )}
 
         {isCompleted ? (
           <Badge className="text-[10px] flex-shrink-0 bg-green-100 text-green-700">
