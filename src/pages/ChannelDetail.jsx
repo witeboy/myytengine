@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { createPageUrl } from '@/utils';
 import {
   ArrowLeft, Upload, Calendar, List, Settings, Loader2, Play,
-  FileText, Clock, Zap
+  FileText, Clock, Zap, ArrowRight
 } from 'lucide-react';
 import { getNicheDefaults } from '@/components/channels/NicheCard';
 import ContentCalendar from '@/components/channels/ContentCalendar';
