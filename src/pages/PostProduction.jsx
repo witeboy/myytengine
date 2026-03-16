@@ -299,51 +299,7 @@ function ThumbnailTemplatePicker({ projectId, onTemplatesSelected, onSkip }) {
   );
 }
 
-// ══════════════════════════════════════════════════════════════════
-// PIPELINE STATUS BAR
-// ══════════════════════════════════════════════════════════════════
-function PipelineStatus({ selectedTitles, selectedNiche, referenceStyle, selectedTemplateIds, onGoToTitles }) {
-  const hasTitles = selectedTitles.length > 0;
-  const hasStyle = !!selectedNiche || !!referenceStyle;
-  const hasTemplates = selectedTemplateIds.length === 0;
 
-  return (
-    <Card className="bg-gradient-to-r from-slate-50 to-slate-100 border-slate-200">
-      <CardContent className="py-3 px-4">
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Pipeline</span>
-
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${hasTitles ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
-            {hasTitles ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Type className="w-3.5 h-3.5" />}
-            {hasTitles ? `${selectedTitles.length} title${selectedTitles.length > 1 ? 's' : ''} locked` : 'No titles selected'}
-            {!hasTitles && <button className="underline ml-1" onClick={onGoToTitles}>Select →</button>}
-          </div>
-
-          <ArrowRight className="w-3 h-3 text-gray-300" />
-
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${hasStyle ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-500'}`}>
-            {hasStyle ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Library className="w-3.5 h-3.5" />}
-            {selectedNiche ? `${selectedNiche.icon} ${selectedNiche.name}` : referenceStyle ? '🎨 YouTube style' : 'Choose style below'}
-          </div>
-
-          <ArrowRight className="w-3 h-3 text-gray-300" />
-
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${hasTemplates ? 'bg-green-100 text-green-800' : 'bg-amber-50 text-amber-700'}`}>
-            {hasTemplates ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Zap className="w-3.5 h-3.5" />}
-            {hasTemplates ? '2 templates selected' : 'Pick 2 templates below'}
-          </div>
-
-          <ArrowRight className="w-3 h-3 text-gray-300" />
-
-          <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${(hasTitles && hasStyle && hasTemplates) ? 'bg-purple-100 text-purple-800' : 'bg-gray-100 text-gray-400'}`}>
-            <Sparkles className="w-3.5 h-3.5" />
-            Generate
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 // ══════════════════════════════════════════════════════════════════
 // MAIN PAGE
