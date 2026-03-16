@@ -481,11 +481,15 @@ export default function MakeThumbnail({ onBack }) {
         directTemplate = { b64: tplB64, mime: tpl.mime || 'image/jpeg', name: selectedUserTemplate.name };
       }
 
+      // Collect character descriptions
+      const charDescs = chars.filter(Boolean).map(c => c.description || '');
+
       const raw = await base44.functions.invoke('generateNewThumbnailImage', {
         concept_id:   effectiveConcept.id,
         char_photos:  directCharPhotos.length > 0 ? directCharPhotos : undefined,
         template_ref: directTemplate || undefined,
         custom_overlay_text: (useCustomOverlay && customOverlay.trim()) ? customOverlay.trim() : undefined,
+        char_descriptions: charDescs,
       });
 
       const result = raw?.data ?? raw;
