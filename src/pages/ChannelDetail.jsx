@@ -214,7 +214,7 @@ export default function ChannelDetail() {
 
         {/* Competitor Monitor - inline for this channel */}
         <div className="mb-6">
-          <CompetitorPanel channel={channel} />
+          <CompetitorPanel channel={channel} onTopicsChanged={() => refetchTopics()} />
         </div>
 
         {/* AI Insights Panel */}
