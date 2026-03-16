@@ -82,7 +82,7 @@ export default function ContentCalendar({ topics, channel, onDateClick }) {
           return (
             <button
               key={day}
-              onClick={() => onDateClick?.(dateStr, dayTopics)}
+              onClick={() => onDateClick?.(dateStr)}
               className={`min-h-[80px] rounded-lg border p-1.5 text-left transition-all hover:shadow-md hover:border-blue-300 ${
                 isToday ? 'border-blue-500 bg-blue-50/50' : hasContent ? 'border-gray-200 bg-white' : 'border-gray-100 bg-gray-50/50'
               }`}
@@ -91,13 +91,13 @@ export default function ContentCalendar({ topics, channel, onDateClick }) {
               <div className="mt-1 space-y-0.5">
                 {shorts.length > 0 && (
                   <Badge className="text-[8px] px-1 py-0 bg-amber-100 text-amber-700 w-full justify-center cursor-pointer hover:bg-amber-200"
-                    onClick={(e) => { e.stopPropagation(); onDateClick?.(dateStr, dayTopics); }}>
+                    onClick={(e) => { e.stopPropagation(); onDateClick?.(dateStr); }}>
                     {shorts.length}S
                   </Badge>
                 )}
                 {longs.length > 0 && (
                   <Badge className="text-[8px] px-1 py-0 bg-purple-100 text-purple-700 w-full justify-center cursor-pointer hover:bg-purple-200"
-                    onClick={(e) => { e.stopPropagation(); onDateClick?.(dateStr, dayTopics); }}>
+                    onClick={(e) => { e.stopPropagation(); onDateClick?.(dateStr); }}>
                     {longs.length}L
                   </Badge>
                 )}
