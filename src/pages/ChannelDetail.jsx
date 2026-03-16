@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { createPageUrl } from '@/utils';
 import {
   ArrowLeft, Upload, Calendar, List, Settings, Loader2, Play,
-  FileText, Clock, Zap, Trash2
+  FileText, Clock, Zap
 } from 'lucide-react';
 import { getNicheDefaults } from '@/components/channels/NicheCard';
 import ContentCalendar from '@/components/channels/ContentCalendar';
@@ -23,7 +23,6 @@ export default function ChannelDetail() {
 
   const [showImporter, setShowImporter] = useState(false);
   const [selectedDate, setSelectedDate] = useState(null);
-  const [selectedTopics, setSelectedTopics] = useState([]);
 
   const getProjectRoute = (project) => {
     const s = project.status;
@@ -52,9 +51,13 @@ export default function ChannelDetail() {
     enabled: !!channelId,
   });
 
-  const handleDateClick = (date, dayTopics) => {
+  // Derive selected topics from the live topics array so they stay fresh after mutations
+  const selectedTopicsLive = selectedDate
+    ? topics.filter(t => t.scheduled_date === selectedDate)
+    : [];
+
+  const handleDateClick = (date) => {
     setSelectedDate(date);
-    setSelectedTopics(dayTopics);
   };
 
   const handleStartPipeline = async (topic) => {
@@ -121,7 +124,9 @@ export default function ChannelDetail() {
   const completedTopics = topics.filter(t => t.status === 'completed' || t.status === 'published');
 
   let strategy = null;
-  try { strategy = JSON.parse(channel.script_strategy || ''); } catch (_) {}
+  if (channel.script_strategy) {
+    try { strategy = JSON.parse(channel.script_strategy); } catch (_) {}
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -220,10 +225,10 @@ export default function ChannelDetail() {
                 {selectedDate ? (
                   <DayTopicsPanel
                     date={selectedDate}
-                    topics={selectedTopics}
+                    topics={selectedTopicsLive}
                     channel={channel}
                     onStartPipeline={handleStartPipeline}
-                    onClose={() => { setSelectedDate(null); setSelectedTopics([]); }}
+                    onClose={() => setSelectedDate(null)}
                   />
                 ) : (
                   <Card>
@@ -250,7 +255,7 @@ export default function ChannelDetail() {
                   </div>
                 ) : (
                   <div className="space-y-1.5">
-                    {topics.sort((a, b) => (a.scheduled_date || '9999').localeCompare(b.scheduled_date || '9999') || (a.priority || 0) - (b.priority || 0)).map(topic => (
+                    {[...topics].sort((a, b) => (a.scheduled_date || '9999').localeCompare(b.scheduled_date || '9999') || (a.priority || 0) - (b.priority || 0)).map(topic => (
                       <div key={topic.id} className="flex items-center gap-3 p-2.5 rounded-lg border border-gray-100 hover:bg-gray-50 text-sm">
                         <Badge className={`text-[10px] ${topic.format === 'short' ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>
                           {topic.format === 'short' ? 'S' : 'L'}
