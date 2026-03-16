@@ -155,6 +155,15 @@ Generate 5 hooks ranked by viral potential. Keep all string values clean with no
 
     let qualityWarnings = 0;
 
+    const validHookTypes = ['curiosity_gap', 'power_word', 'pattern_break'];
+    const mapHookType = (type) => {
+      if (validHookTypes.includes(type)) return type;
+      // Map AI-generated types to valid enum values
+      if (['specificity_bomb', 'stakes_escalation'].includes(type)) return 'power_word';
+      if (['emotional_contrast', 'pattern_interrupt'].includes(type)) return 'pattern_break';
+      return 'curiosity_gap';
+    };
+
     const savePromises = result.data.hooks.map(async (hook, i) => {
       const validation = validateHook(hook);
       if (!validation.valid) {
@@ -168,17 +177,10 @@ Generate 5 hooks ranked by viral potential. Keep all string values clean with no
           topic_id: topic_id,
           rank: hook.rank || i + 1,
           hook_text: hook.hook_text || '',
-          hook_type: hook.hook_type || 'curiosity_gap',
-          primary_emotion: hook.primary_emotion || 'curiosity',
+          hook_type: mapHookType(hook.hook_type),
           intensity_score: hook.intensity_score || 7,
-          character_count: hook.hook_text?.length || 0,
           use_as_thumbnail: hook.use_as_thumbnail ?? true,
           use_as_voiceover: hook.use_as_voiceover ?? true,
-          thumbnail_power: hook.thumbnail_power || '',
-          voiceover_power: hook.voiceover_power || '',
-          unanswered_question: hook.unanswered_question || '',
-          quality_valid: validation.valid,
-          quality_issues: validation.issues.join('; '),
           is_selected: false
         });
         return { success: true, record };
