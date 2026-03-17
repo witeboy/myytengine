@@ -140,7 +140,8 @@ export default function TopicAssetsPanel({ projectId, topicTitle }) {
     if (!projectId) { setLoading(false); return; }
     loadAssets();
     console.log('[Assets] Loading video for projectId:', projectId);
-    loadExportedVideo(projectId).then(data => {
+    console.log('[Assets] Looking for video with projectId:', projectId, 'type:', typeof projectId);
+    loadExportedVideo(String(projectId)).then(data => {
       console.log('[Assets] IndexedDB result:', data);
       if (data?.blob) {
         setExportedVideo(data);
