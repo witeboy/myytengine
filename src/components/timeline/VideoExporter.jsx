@@ -90,7 +90,12 @@ export default function VideoExporter({
         filename: exportFilename,
         size: blob.size,
       };
-      console.log('[Export] projectId:', projectId, 'blob size:', blob.size);
+      console.log('[Export] Saving with projectId:', projectId, 'type:', typeof projectId);
+      if (projectId) {
+        saveExportedVideo(String(projectId), blob, exportFilename);
+      } else {
+        console.warn('[Export] NO projectId!');
+      }
       if (projectId) {
         saveExportedVideo(projectId, blob, exportFilename).then(ok => {
           console.log('[Export] IndexedDB save result:', ok);
