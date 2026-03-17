@@ -439,7 +439,7 @@ function TransitionsPanel({ selectedClip, onApplyTransition, onRemoveTransition,
 // CAPTIONS PANEL — now with audio transcription
 // ═══════════════════════════════════════════════════════════════════
 
-function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, transcriptionState }) {
+function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, transcriptionState, onOffsetCaptions, captionOffset }) {
   const [del, setDel] = useState(true);
   const { status, wordCount, error } = transcriptionState;
 
@@ -498,6 +498,23 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, t
           <input type="checkbox" id="del" checked={del} onChange={e => setDel(e.target.checked)} className="rounded border-gray-600" />
           <label htmlFor="del" className="text-[10px] text-gray-400">Replace existing captions</label>
         </div>
+        {captionCount > 0 && (
+          <div className="space-y-1">
+            <div className="flex justify-between text-[10px]">
+              <span className="text-gray-400">Timing Offset</span>
+              <span className="text-white font-mono">{(captionOffset || 0) >= 0 ? '+' : ''}{(captionOffset || 0).toFixed(2)}s</span>
+            </div>
+            <input
+              type="range" min={-2.0} max={2.0} step={0.05}
+              value={captionOffset || 0}
+              onChange={e => onOffsetCaptions(parseFloat(e.target.value))}
+              className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
+            />
+            <div className="flex justify-between text-[9px] text-gray-600">
+              <span>-2s earlier</span><span>0</span><span>+2s later</span>
+            </div>
+          </div>
+        )}
         <Button
           onClick={() => onGenerate(del)}
           disabled={isGenerating || status === 'transcribing'}
@@ -519,7 +536,7 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, t
 // RIGHT PANELS
 // ═══════════════════════════════════════════════════════════════════
 
-function TextPropertiesPanel({ caption, onUpdate, onDelete, onDuplicate }) {
+function TextPropertiesPanel({ caption, onUpdate, onDelete, onDuplicate, onApplyStyleToAll }) {
   if (!caption) return <div className="h-full flex items-center justify-center text-xs text-gray-500">Select a caption</div>;
   const u = (k, v) => onUpdate({ ...caption, [k]: v });
 
@@ -528,6 +545,7 @@ function TextPropertiesPanel({ caption, onUpdate, onDelete, onDuplicate }) {
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium text-white">Caption</span>
         <div className="flex gap-1">
+          <button onClick={onApplyStyleToAll} className="p-1.5 text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 rounded" title="Apply style to all captions"><Wand2 size={14} /></button>
           <button onClick={onDuplicate} className="p-1.5 text-gray-400 hover:text-white hover:bg-white/10 rounded" title="Duplicate"><Copy size={14} /></button>
           <button onClick={onDelete}    className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded"    title="Delete"><Trash2 size={14} /></button>
         </div>
@@ -1350,6 +1368,7 @@ export default function TimelineEditorV10() {
   const [isSyncing,         setIsSyncing]         = useState(false);
   const [syncStatus,        setSyncStatus]        = useState(null);
   const [isGenCaptions,     setIsGenCaptions]     = useState(false);
+  const [captionOffset,     setCaptionOffset]     = useState(0);
   const [isApplyingZoom,    setIsApplyingZoom]    = useState(false);
   const [initialized,       setInitialized]       = useState(false);
   const [showExporter,      setShowExporter]      = useState(false);
@@ -1955,10 +1974,14 @@ export default function TimelineEditorV10() {
       const weights = tokens.map(t => wordWeight(t) + pauseAfter(t));
       const rawSum  = weights.reduce((s, w) => s + w, 0);
 
-      // ── 2. Scale to fit within the usable beat window ─────────
-      // Scale to (beatDur - margin) so last word always ends before the cut
+      // ── 2. Scale to natural speech pace ───────────────────────
+      // Use natural speech timing if it fits within the beat.
+      // Only compress if natural pace exceeds the beat.
+      // Never stretch beyond natural pace — captions follow speech, not beats.
       const usableDur = beatDur - SCENE_END_MARGIN;
-      const scale     = usableDur / rawSum;
+      const scale = rawSum > usableDur
+        ? usableDur / rawSum
+        : 1.0;
 
       // ── 3. Build word timeline ────────────────────────────────
       let cursor = beatStart;
@@ -2095,6 +2118,29 @@ export default function TimelineEditorV10() {
     setSelectedCaptionId(dup.id);
   };
 
+  const handleApplyStyleToAllCaptions = () => {
+    const cap = captionClips.find(c => c.id === selectedCaptionId);
+    if (!cap) return;
+    setCaptionClips(captionClips.map(c => ({
+      ...c,
+      fontSize: cap.fontSize,
+      color: cap.color,
+      bgColor: cap.bgColor,
+      x: cap.x,
+      y: cap.y,
+    })));
+  };
+
+  const handleOffsetCaptions = (newOffset) => {
+    const delta = newOffset - captionOffset;
+    if (Math.abs(delta) < 0.001) return;
+    setCaptionClips(captionClips.map(c => ({
+      ...c,
+      startTime: Math.max(0, c.startTime + delta),
+    })));
+    setCaptionOffset(newOffset);
+  };
+
   const selectedVideo    = videoClips.find(c => c.id === selectedVideoId);
   const selectedCaption  = captionClips.find(c => c.id === selectedCaptionId);
   const selectedVideoIdx = videoClips.findIndex(c => c.id === selectedVideoId);
@@ -2138,6 +2184,8 @@ export default function TimelineEditorV10() {
               captionCount={captionClips.length}
               voiceoverUrl={voiceoverUrl}
               transcriptionState={transcription}
+              onOffsetCaptions={handleOffsetCaptions}
+              captionOffset={captionOffset}
             />
           )}
           {!['media','effects','transitions','captions'].includes(activePanel) && <div className="flex items-center justify-center h-full text-xs text-gray-500">Coming soon</div>}
@@ -2167,7 +2215,7 @@ export default function TimelineEditorV10() {
         {/* Right panel */}
         <div className="w-64 flex-shrink-0 bg-[#12121f]">
           {selectedCaption ? (
-            <TextPropertiesPanel caption={selectedCaption} onUpdate={c => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))} onDelete={handleDeleteCaption} onDuplicate={handleDuplicateCaption} />
+            <TextPropertiesPanel caption={selectedCaption} onUpdate={c => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))} onDelete={handleDeleteCaption} onDuplicate={handleDuplicateCaption} onApplyStyleToAll={handleApplyStyleToAllCaptions} />
           ) : selectedVideo ? (
             <ClipPropertiesPanel clip={selectedVideo} audioBeatDuration={audioBeatDurations[selectedVideoIdx]} onUpdate={c => setVideoClips(videoClips.map(x => x.id === c.id ? c : x))} onApplyToAll={handleApplyToAll} />
           ) : (
