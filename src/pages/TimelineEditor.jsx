@@ -193,7 +193,7 @@ Format: [{"word":"hello","start":0.00,"end":0.35},{"word":"world","start":0.38,"
 // TOP TOOLBAR
 // ═══════════════════════════════════════════════════════════════════
 
-function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport, onDownloadAssets, onShowExporter, onNext }) {
+function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport, onDownloadAssets, onShowExporter, onNext, onSave, isSaving, saveStatus }) {
   const panels = [
     { id: 'media',       label: 'Media',       icon: Film     },
     { id: 'audio',       label: 'Audio',       icon: Music    },
@@ -226,6 +226,17 @@ function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport,
       </div>
 
       <div className="flex items-center gap-2">
+        <Button onClick={onSave} disabled={isSaving} size="sm"
+          className={`gap-1.5 text-xs ${
+            saveStatus === 'saved' ? 'bg-green-600 hover:bg-green-700' :
+            saveStatus === 'error' ? 'bg-red-600 hover:bg-red-700' :
+            'bg-blue-600 hover:bg-blue-700'
+          }`}>
+          {isSaving ? <><Loader2 size={14} className="animate-spin" /> Saving...</> :
+           saveStatus === 'saved' ? <><CheckCircle size={14} /> Saved!</> :
+           saveStatus === 'error' ? <><AlertCircle size={14} /> Failed</> :
+           <><Package size={14} /> Save</>}
+        </Button>
         <Button onClick={onDownloadAssets} variant="outline" size="sm" className="gap-1.5 text-xs border-gray-700 text-gray-300">
           <Package size={14} /> Assets
         </Button>
@@ -1482,6 +1493,27 @@ export default function TimelineEditorV10() {
   useEffect(() => {
     if (scenes.length === 0 || initializedRef.current) return;
     initializedRef.current = true;
+
+    // Try to restore saved timeline state from DB
+    if (prodSettings?.timeline_video_clips) {
+      try {
+        const savedVideo = JSON.parse(prodSettings.timeline_video_clips);
+        const savedCaptions = prodSettings.timeline_caption_clips
+          ? JSON.parse(prodSettings.timeline_caption_clips)
+          : [];
+        if (Array.isArray(savedVideo) && savedVideo.length > 0) {
+          videoHistory.reset(savedVideo);
+          if (savedCaptions.length > 0) captionHistory.reset(savedCaptions);
+          setInitialized(true);
+          console.log('[Timeline] Restored', savedVideo.length, 'clips +', savedCaptions.length, 'captions from DB');
+          return;
+        }
+      } catch (e) {
+        console.warn('[Timeline] Could not restore saved state:', e.message);
+      }
+    }
+
+    // Fresh init from scenes
     const currentBeats = audioBeatDurations.length === scenes.length ? audioBeatDurations : null;
     let offset = 0;
     const initClips = scenes.map((scene, idx) => {
@@ -1509,7 +1541,7 @@ export default function TimelineEditorV10() {
     });
     videoHistory.reset(initClips);
     setInitialized(true);
-  }, [scenes.length]);
+  }, [scenes.length, prodSettings]);
 
   // ── Playback loop ───────────────────────────────────────────────
   useEffect(() => {
@@ -2021,6 +2053,34 @@ export default function TimelineEditorV10() {
   const handleDownloadAssets   = () => alert('Download Assets coming soon!');
   const handleSeek             = t  => { const ct = Math.max(0, Math.min(totalDuration, t)); setCurrentTime(ct); if (audioRef.current) audioRef.current.currentTime = ct; };
   const handleNext             = () => navigate(createPageUrl('PostProduction') + `?project_id=${projectId}`);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(null); // 'saved' | 'error'
+
+  const handleSaveTimeline = async () => {
+    setIsSaving(true);
+    setSaveStatus(null);
+    try {
+      const payload = {
+        timeline_video_clips: JSON.stringify(videoClips),
+        timeline_caption_clips: JSON.stringify(captionClips),
+      };
+      if (overrideBeatDurations) {
+        payload.beat_durations = JSON.stringify(overrideBeatDurations);
+      }
+      if (prodSettings?.id) {
+        await base44.entities.ProductionSettings.update(prodSettings.id, payload);
+      } else {
+        await base44.entities.ProductionSettings.create({ project_id: projectId, ...payload });
+      }
+      setSaveStatus('saved');
+      console.log('[Timeline] Saved', videoClips.length, 'clips +', captionClips.length, 'captions');
+    } catch (e) {
+      console.error('[Timeline] Save failed:', e);
+      setSaveStatus('error');
+    }
+    setIsSaving(false);
+    setTimeout(() => setSaveStatus(null), 3000);
+  };
   const handleApplyEffect      = e  => { if (!selectedVideoId) return; setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, effects: [...(c.effects || []), e.id] } : c)); };
   const handleApplyTransition      = t  => { if (!selectedVideoId) return; setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transition: t.name } : c)); };
   const handleRemoveTransition     = ()  => { if (!selectedVideoId) return; setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transition: null } : c)); };
@@ -2050,6 +2110,7 @@ export default function TimelineEditorV10() {
         projectName={project?.name} onBack={handleBack}
         onExport={handleExport} onDownloadAssets={handleDownloadAssets}
         onShowExporter={() => setShowExporter(true)} onNext={handleNext}
+        onSave={handleSaveTimeline} isSaving={isSaving} saveStatus={saveStatus}
       />
 
       <div className="flex-1 flex min-h-0">
