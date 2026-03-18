@@ -124,48 +124,41 @@ export default function StoryScript() {
     runFullGeneration();
   }, [project?.id, project?.status, autoGenTriggered, generating]);
 
-  // Retry-resilient batch generation — calls backend one batch at a time
+  // Retry-resilient batch generation — calls backend once per batch with retry
   const generateBatchesWithRetry = async () => {
     const MAX_RETRIES = 3;
-    let keepGoing = true;
+    let allDone = false;
 
-    while (keepGoing) {
-      const freshBatches = await base44.entities.ScriptBatches.filter({ project_id: projectId });
-      const pending = freshBatches
-        .filter(b => b.status === 'pending' || b.status === 'generating')
-        .sort((a, b) => a.batch_number - b.batch_number);
-
-      if (pending.length === 0) {
-        keepGoing = false;
-        break;
-      }
-
+    while (!allDone) {
       let retries = 0;
       let success = false;
 
       while (retries < MAX_RETRIES && !success) {
         try {
-          await base44.functions.invoke('generateScriptBatches', { project_id: projectId });
+          const resp = await base44.functions.invoke('generateScriptBatches', { project_id: projectId });
+          const data = resp.data || resp;
           success = true;
+          allDone = data.done === true;
         } catch (err) {
           retries++;
           const status = err?.response?.status || err?.status;
           console.warn(`Batch generation attempt ${retries} failed (${status}):`, err.message);
 
-          if (retries < MAX_RETRIES) {
-            // Reset any stuck 'generating' batches before retry
-            const stuckNow = await base44.entities.ScriptBatches.filter({ project_id: projectId });
-            for (const b of stuckNow.filter(b => b.status === 'generating')) {
-              await base44.entities.ScriptBatches.update(b.id, { status: 'pending' });
-            }
+          if (status === 504 || status === 500 || status === 502) {
+            // Timeout/server error — the batch may have actually completed
+            // Check by refetching and seeing if progress was made
             await new Promise(r => setTimeout(r, 5000));
-          } else {
-            console.error('Max retries reached for batch generation');
-            // Reset stuck batches so user can retry manually
-            const stuckFinal = await base44.entities.ScriptBatches.filter({ project_id: projectId });
-            for (const b of stuckFinal.filter(b => b.status === 'generating')) {
-              await base44.entities.ScriptBatches.update(b.id, { status: 'pending' });
+            const freshBatches = await base44.entities.ScriptBatches.filter({ project_id: projectId });
+            const stillPending = freshBatches.filter(b => b.status === 'pending' || b.status === 'generating');
+            if (stillPending.length === 0) {
+              success = true;
+              allDone = true;
+              break;
             }
+          }
+
+          if (retries < MAX_RETRIES) {
+            await new Promise(r => setTimeout(r, 3000));
           }
         }
       }
@@ -173,7 +166,8 @@ export default function StoryScript() {
       await refetchBatches();
 
       if (!success) {
-        keepGoing = false;
+        console.error('Max retries reached — user can click Resume to continue');
+        break;
       }
     }
   };
