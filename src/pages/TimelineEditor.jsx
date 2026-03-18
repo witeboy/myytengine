@@ -201,37 +201,25 @@ function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport,
 }
 
 function MediaPanel({ scenes, audioBeatDurations, videoClips, onSelectScene, onSetAllMediaType }) {
-  const videoSceneCount = scenes.filter(s =>
-    s.video_url && s.video_url.startsWith('http') &&
-    !s.video_url.startsWith('veo_task:') && !s.video_url.startsWith('grok_vid_task:')
-  ).length;
+  const videoSceneCount = scenes.filter(s => s.video_url && s.video_url.startsWith('http') && !s.video_url.startsWith('veo_task:') && !s.video_url.startsWith('grok_vid_task:')).length;
+  const brollSceneCount = scenes.filter(s => s.broll_url && s.broll_url.startsWith('http')).length;
 
   return (
     <div className="h-full flex flex-col">
       <div className="px-3 py-2 border-b border-gray-800 space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-xs text-gray-400">{scenes.length} scenes</span>
-          {videoSceneCount > 0 && (
-            <span className="text-[9px] text-purple-400">{videoSceneCount} with video</span>
-          )}
+          {videoSceneCount > 0 && <span className="text-[9px] text-purple-400">{videoSceneCount} video</span>}
+          {brollSceneCount > 0 && <span className="text-[9px] text-teal-400">{brollSceneCount} B-roll</span>}
         </div>
         {/* Bulk media type controls */}
-        {videoSceneCount > 0 && (
+        {(videoSceneCount > 0 || brollSceneCount > 0) && (
           <div className="space-y-1">
             <p className="text-[9px] text-gray-500">Set all clips to:</p>
-            <div className="flex gap-1.5">
-              <button
-                onClick={() => onSetAllMediaType('image')}
-                className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[10px] bg-cyan-900/40 text-cyan-300 hover:bg-cyan-800/60 border border-cyan-800/50"
-              >
-                <Image size={10} /> All Image
-              </button>
-              <button
-                onClick={() => onSetAllMediaType('video')}
-                className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[10px] bg-purple-900/40 text-purple-300 hover:bg-purple-800/60 border border-purple-800/50"
-              >
-                <Film size={10} /> All Video
-              </button>
+            <div className="flex gap-1">
+              <button onClick={() => onSetAllMediaType('image')} className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[10px] bg-cyan-900/40 text-cyan-300 hover:bg-cyan-800/60 border border-cyan-800/50"><Image size={10} /> Image</button>
+              {videoSceneCount > 0 && <button onClick={() => onSetAllMediaType('video')} className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[10px] bg-purple-900/40 text-purple-300 hover:bg-purple-800/60 border border-purple-800/50"><Film size={10} /> Video</button>}
+              {brollSceneCount > 0 && <button onClick={() => onSetAllMediaType('broll')} className="flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[10px] bg-teal-900/40 text-teal-300 hover:bg-teal-800/60 border border-teal-800/50"><Clapperboard size={10} /> B-Roll</button>}
             </div>
           </div>
         )}
