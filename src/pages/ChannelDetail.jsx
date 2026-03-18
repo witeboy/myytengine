@@ -19,6 +19,7 @@ import NicheInsightsPanel from '@/components/channels/NicheInsightsPanel';
 import CompetitorPanel from '@/components/channels/CompetitorPanel';
 import TopicStatusPanel from '@/components/channels/TopicStatusPanel';
 import { ExpandableAssets } from '@/components/channels/TopicAssetsPanel';
+import ScriptModeSelector from '@/components/channels/ScriptModeSelector';
 
 export default function ChannelDetail() {
   const navigate = useNavigate();
@@ -371,7 +372,18 @@ export default function ChannelDetail() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="settings" className="mt-4">
+          <TabsContent value="settings" className="mt-4 space-y-4">
+            <Card>
+              <CardContent className="p-6">
+                <ScriptModeSelector
+                  value={channel.script_mode || 'standard'}
+                  onChange={async (mode) => {
+                    await base44.entities.Channels.update(channel.id, { script_mode: mode });
+                    queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
+                  }}
+                />
+              </CardContent>
+            </Card>
             <Card>
               <CardContent className="p-6 space-y-4">
                 <h3 className="font-bold text-gray-900">Channel Configuration</h3>
