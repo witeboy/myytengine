@@ -25,9 +25,9 @@ export default function StoryHooks() {
     enabled: !!projectId,
   });
 
-  // Sleep projects skip hooks entirely — redirect to script
+  // Hooks step removed — redirect all projects to script
   useEffect(() => {
-    if (project && (project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story')) {
+    if (project) {
       navigate(createPageUrl(`StoryScript?project_id=${projectId}`), { replace: true });
     }
   }, [project]);

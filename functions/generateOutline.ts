@@ -184,14 +184,13 @@ Respond with ONLY valid JSON:
       });
     }
 
-    // Sleep projects skip the hooks step entirely
-    const nextStatus = isSleep ? "hooks_ready" : "outline_ready";
+    // Skip hooks step — hook is embedded in script generation
     await base44.asServiceRole.entities.Projects.update(project_id, {
       video_duration_minutes: duration_minutes,
       storytelling_format: outline.storytelling_format,
       outline: JSON.stringify(outline.batches),
-      status: nextStatus,
-      current_step: isSleep ? 4 : 3
+      status: "hooks_ready",
+      current_step: 4
     });
 
     return Response.json({

@@ -27,13 +27,11 @@ export default function StageProgress({ currentStage = 1, projectStatus }) {
     { num: 4, label: 'Post Production', Icon: Megaphone, page: 'PostProduction' },
   ];
 
-  // Stage 1 sub-steps for navigation — sleep projects skip hooks
-  const isSleepProject = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
+  // Stage 1 sub-steps for navigation — hooks removed, embedded in script generation
   const storySubSteps = [
     { label: 'Topics', page: 'StoryTopics', statuses: ['created', 'topics_ready'] },
     { label: 'Duration', page: 'StoryDuration', statuses: ['topic_selected'] },
-    ...(!isSleepProject ? [{ label: 'Hooks', page: 'StoryHooks', statuses: ['outline_ready'] }] : []),
-    { label: 'Script', page: 'StoryScript', statuses: ['hooks_ready', 'scripting', 'script_complete', 'voiceover_ready'] },
+    { label: 'Script', page: 'StoryScript', statuses: ['outline_ready', 'hooks_ready', 'scripting', 'script_complete', 'voiceover_ready'] },
   ];
 
   // All statuses in pipeline order — used to determine reachability
