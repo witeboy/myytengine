@@ -27,16 +27,19 @@ const RETRY_BASE_MS = 3000;      // Base delay for exponential backoff
 async function kieCreateTask(apiKey, model, input, retries = MAX_RETRIES) {
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
+      const payload = { model, input };
+      console.log(`📡 Kie createTask: model=${model}, prompt=${(input.prompt || '').substring(0, 80)}...`);
       const res = await fetch(`${KIE_BASE}/createTask`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ model, input })
+        body: JSON.stringify(payload)
       });
 
       const result = await res.json();
+      console.log(`📡 Kie createTask response: code=${result.code}, msg=${result.msg}, taskId=${result.data?.taskId}`);
 
       // Rate limited — back off and retry
       if (res.status === 429) {
@@ -531,26 +534,12 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
       .replace(/\bblanket\b/gi, 'cloth')
       .replace(/\bsleeping\b/gi, 'resting')
       .replace(/\bnight\s*stand\b/gi, 'side table')
-      .replace(/\bnight\s*gown\b/gi, 'robe')
-      // Strip negative constraints — safety filters interpret "no people" as circumvention
-      .replace(/,?\s*no people[^.]*/gi, '')
-      .replace(/,?\s*no human figures?[^.]*/gi, '')
-      .replace(/,?\s*no silhouettes?[^.]*/gi, '')
-      .replace(/,?\s*no persons?[^.]*/gi, '');
-
-    // Prefix with explicit generation command — Grok needs "Create" to treat it as a generation instruction
-    if (!/^(create|generate|paint|draw|render|imagine|make)\b/i.test(finalPrompt)) {
-      finalPrompt = `Create an image of: ${finalPrompt}`;
-    }
+      .replace(/\bnight\s*gown\b/gi, 'robe');
 
     // Log the cleaned prompt for debugging
     console.log(`🌙 Scene ${sceneNum}: sleep prompt (${finalPrompt.length}ch): ${finalPrompt.substring(0, 200)}`);
   } else {
     finalPrompt = cleanPromptForGrok(finalPrompt);
-    // Prefix with explicit generation command for all styles
-    if (!/^(create|generate|paint|draw|render|imagine|make)\b/i.test(finalPrompt)) {
-      finalPrompt = `Create an image of: ${finalPrompt}`;
-    }
   }
 
   // SLEEP: Skip the framing anchor that cleanPromptForGrok adds — it mentions "character" and "body"
@@ -581,10 +570,26 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      console.log(`🎨 Scene ${sceneNum}: generating (attempt ${attempt + 1}/${MAX_RETRIES}, ${finalPrompt.length} chars, ref=${!!referenceUrl})...`);
-      console.log(`📝 FINAL PROMPT SENT TO GROK: "${finalPrompt}"`);
+      // For sleep: if we keep getting content safety blocks, try progressively simpler prompts
+      let promptToSend = finalPrompt;
+      if (isSleepProject && attempt > 0) {
+        // Attempt 2+: use ultra-simple fallback prompt
+        const dirMatch = scene.image_prompt?.match(/DIRECTOR_NOTES:(.+)/);
+        let fallbackDesc = 'peaceful landscape at dusk with warm golden light';
+        if (dirMatch) {
+          try {
+            const notes = JSON.parse(dirMatch[1]);
+            fallbackDesc = (notes.image_prompt_core || '').split(',')[0] || fallbackDesc;
+          } catch (_) {}
+        }
+        promptToSend = `Oil painting of ${fallbackDesc}, warm colors, painterly brushstrokes`;
+        console.log(`🔄 Scene ${sceneNum}: using simplified fallback prompt (attempt ${attempt + 1})`);
+      }
 
-      const imageUrl = await generateWithGrokImagine(apiKey, finalPrompt, aspectRatio, referenceUrl);
+      console.log(`🎨 Scene ${sceneNum}: generating (attempt ${attempt + 1}/${MAX_RETRIES}, ${promptToSend.length} chars, ref=${!!referenceUrl})...`);
+      console.log(`📝 FINAL PROMPT: "${promptToSend.substring(0, 200)}"`);
+
+      const imageUrl = await generateWithGrokImagine(apiKey, promptToSend, aspectRatio, referenceUrl);
 
       // Validate URL
       if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.startsWith('http')) {
