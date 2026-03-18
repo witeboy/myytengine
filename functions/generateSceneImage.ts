@@ -87,7 +87,13 @@ async function kiePollResult(apiKey, taskId) {
       }
 
       if (poll.data?.state === "fail") {
-        throw new Error(poll.data?.failMsg || `Kie task ${taskId} failed`);
+        const failMsg = poll.data?.failMsg || `Kie task ${taskId} failed`;
+        throw new Error(failMsg);
+      }
+
+      // Content safety restriction — this IS a failure, not a transient error
+      if (poll.data?.state === "success" && !JSON.parse(poll.data.resultJson || "{}").resultUrls?.[0]) {
+        throw new Error(`Kie task ${taskId} returned no image URL`);
       }
 
       // Still processing — continue polling
