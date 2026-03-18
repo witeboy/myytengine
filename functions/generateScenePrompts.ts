@@ -506,6 +506,7 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
 
   // Ensure style quality suffix is present — APPEND at END, never prepend
   // The first 200 chars of the prompt must be FRAMING + ENVIRONMENT, not style language
+  // For sleep: check for "dark moody oil painting" since that's the canonical sleep suffix
   const styleCheck = styleConfig.positive.substring(0, 30).toLowerCase();
   if (!enhanced.toLowerCase().includes(styleCheck.substring(0, 20))) {
     enhanced = `${enhanced}. ${styleConfig.positive}`;
