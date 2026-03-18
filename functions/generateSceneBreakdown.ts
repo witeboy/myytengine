@@ -461,11 +461,19 @@ Deno.serve(async (req) => {
     const visualStyle = normalizeStyleKey(rawStyle);
     const styleDirective = getStyleCharacterDirective(visualStyle);
 
+    // Detect if this is a sleep project
+    const isSleep = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
+
     // ═══ DURATION-AWARE SCENE DENSITY ═══
-    const densityAnchors = [
-      {m:1,d:4.2},{m:3,d:5.0},{m:5,d:5.5},{m:8,d:6.0},
-      {m:10,d:6.2},{m:15,d:7.0},{m:30,d:8.0},{m:60,d:9.0}
-    ];
+    const densityAnchors = isSleep
+      ? [
+          // Sleep: much fewer scenes, longer holds (15-35s avg per scene)
+          {m:5,d:15},{m:10,d:20},{m:15,d:22},{m:20,d:25},{m:30,d:28},{m:60,d:32}
+        ]
+      : [
+          {m:1,d:4.2},{m:3,d:5.0},{m:5,d:5.5},{m:8,d:6.0},
+          {m:10,d:6.2},{m:15,d:7.0},{m:30,d:8.0},{m:60,d:9.0}
+        ];
     function getAvgSceneDuration(mins) {
       if (mins <= densityAnchors[0].m) return densityAnchors[0].d;
       if (mins >= densityAnchors[densityAnchors.length-1].m) return densityAnchors[densityAnchors.length-1].d;
@@ -476,10 +484,10 @@ Deno.serve(async (req) => {
           return lo.d + t * (hi.d - lo.d);
         }
       }
-      return 5.5;
+      return isSleep ? 22 : 5.5;
     }
     const avgSceneDuration = getAvgSceneDuration(durationMinutes);
-    const totalTargetScenes = Math.max(8, Math.round((durationMinutes * 60) / avgSceneDuration));
+    const totalTargetScenes = Math.max(isSleep ? 4 : 8, Math.round((durationMinutes * 60) / avgSceneDuration));
 
     const phases = calculatePhaseAllocation(totalTargetScenes);
     const scriptChunks = splitScriptByPhase(finalScript, phases);
@@ -547,7 +555,7 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
       storyAnalysis = analysis.story_analysis || analysis;
 
       // ── Beat durations ──
-      beatDurations = calculateBeatDurations(phases, durationMinutes);
+      beatDurations = calculateBeatDurations(phases, durationMinutes, isSleep);
       beatStartTimes = calculateStartTimes(beatDurations);
 
       console.log(`📊 Beats: ${beatDurations.length} scenes | Range: ${Math.min(...beatDurations).toFixed(1)}s – ${Math.max(...beatDurations).toFixed(1)}s | Total: ${beatDurations.reduce((a,b)=>a+b,0).toFixed(1)}s`);
