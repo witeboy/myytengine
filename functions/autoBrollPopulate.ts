@@ -237,22 +237,14 @@ Return JSON:
           continue;
         }
 
-        // Store B-roll data as JSON in the scene's notes field and
-        // save the B-roll URL + source info
-        const brollData = {
-          broll_url: best.downloadUrl,
-          broll_source: best.source,
-          broll_id: best.id,
-          broll_thumbnail: best.thumbnail,
-          broll_author: best.author,
-          broll_duration: best.duration,
-          broll_query: query?.primary,
-          broll_candidates: videos.length,
-        };
-
+        // Store B-roll data in dedicated scene fields
         try {
           await base44.asServiceRole.entities.Scenes.update(scene.id, {
-            notes: JSON.stringify(brollData),
+            broll_url: best.downloadUrl,
+            broll_source: best.source,
+            broll_id: best.id,
+            broll_thumbnail: best.thumbnail || '',
+            broll_query: query?.primary || '',
           });
           totalPopulated++;
           results.push({
