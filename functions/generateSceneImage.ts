@@ -539,13 +539,25 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
     finalPrompt = cleanPromptForGrok(finalPrompt);
   }
 
-  // SLEEP: Skip the framing anchor that cleanPromptForGrok adds — it mentions "character" and "body"
+  // SLEEP: Strip framing anchors and any leaked cinematic/photorealistic language
   if (isSleepProject) {
     finalPrompt = finalPrompt
       .replace(/^Full scene wide shot showing the character's complete body[^.]*\.\s*/i, '')
+      .replace(/^Full body wide shot[^.]*\.\s*/i, '')
+      .replace(/^Wide ambient shot of[^.]*\.\s*/i, '')
       .replace(/\bthe character's\b/gi, '')
       .replace(/\bcomplete body head to feet\b/gi, '')
       .replace(/\bcharacter\b/gi, '')
+      // Strip any ARRI/cinematic language that leaked through
+      .replace(/Cinematic film still[^.]*\./gi, '')
+      .replace(/\bARRI\s+Alexa[^,.]*/gi, '')
+      .replace(/\banamorphic\s+Panavision[^,.]*/gi, '')
+      .replace(/\bbeautiful lens flare[^,.]*/gi, '')
+      .replace(/\bshallow depth of field f\/[^,.]*/gi, '')
+      .replace(/\bdramatic three-point lighting[^,.]*/gi, '')
+      .replace(/\bcolor graded with professional[^,.]*/gi, '')
+      .replace(/\bHollywood blockbuster[^,.]*/gi, '')
+      .replace(/\bphotorealistic rendering[^,.]*/gi, '')
       .replace(/\s{2,}/g, ' ')
       .trim();
   }
