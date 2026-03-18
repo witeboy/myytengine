@@ -674,54 +674,75 @@ export default function ContentGeneration() {
     try {
       // ── Phase 1: Scene Breakdown ────────────────────────────────
       setImportPhase('breakdown');
-      setImportProgress('Analyzing script & breaking down into cinematic scenes...');
 
-      let breakdownDone = false;
-      let nextBatch = 0;
+      const isSleepProject = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
 
-      while (!breakdownDone) {
+      if (isSleepProject) {
+        // Sleep projects use the lightweight ambient breakdown (6-12 images)
+        setImportProgress('Designing ambient sleep visuals...');
         try {
-          // Longer delay after batch 0 (analysis) to let DB propagate blueprint
-if (nextBatch > 0) {
-  const delay = nextBatch === 1 ? 8000 : 3000;
-  await new Promise(r => setTimeout(r, delay));
-}
-
-          const bdResult = await base44.functions.invoke('generateSceneBreakdown', {
-            project_id: projectId,
-            batch_index: nextBatch
-          });
-          const bdData = bdResult.data || bdResult;
-          breakdownDone = bdData.done === true;
-          nextBatch = bdData.next_batch ?? (nextBatch + 1);
-
-          const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
-          queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
-
-          const target = bdData.total_target || freshScenes.length;
-          setTotalExpectedScenes(target);
-          setImportProgress(`Breaking down script... ${freshScenes.length}/${target} scenes created`);
+          await base44.functions.invoke('sleepSceneBreakdown', { project_id: projectId });
         } catch (err) {
-          const status = err?.response?.status || err?.status;
-          const errMsg = err?.response?.data?.error || '';
-          if (status === 400 && errMsg.includes('blueprint')) {
-            console.log(`Blueprint not ready yet, retrying batch ${nextBatch} in 5s...`);
-            await new Promise(r => setTimeout(r, 5000));
-            continue;
-          }
-          if (status === 500 || status === 502) {
-            console.log(`Server error on batch ${nextBatch}, retrying in 8s...`);
+          if (err?.response?.status === 504) {
             await new Promise(r => setTimeout(r, 8000));
-            continue;
+          } else {
+            throw err;
           }
-          if (status === 504) {
-            await new Promise(r => setTimeout(r, 8000));
+        }
+        const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+        queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+        setTotalExpectedScenes(freshScenes.length);
+        setImportProgress(`Created ${freshScenes.length} ambient image definitions`);
+      } else {
+        // Standard projects use the full cinematic breakdown
+        setImportProgress('Analyzing script & breaking down into cinematic scenes...');
+
+        let breakdownDone = false;
+        let nextBatch = 0;
+
+        while (!breakdownDone) {
+          try {
+            if (nextBatch > 0) {
+              const delay = nextBatch === 1 ? 8000 : 3000;
+              await new Promise(r => setTimeout(r, delay));
+            }
+
+            const bdResult = await base44.functions.invoke('generateSceneBreakdown', {
+              project_id: projectId,
+              batch_index: nextBatch
+            });
+            const bdData = bdResult.data || bdResult;
+            breakdownDone = bdData.done === true;
+            nextBatch = bdData.next_batch ?? (nextBatch + 1);
+
             const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
             queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
-            setImportProgress(`Recovering from timeout... ${freshScenes.length} scenes so far`);
-            continue;
+
+            const target = bdData.total_target || freshScenes.length;
+            setTotalExpectedScenes(target);
+            setImportProgress(`Breaking down script... ${freshScenes.length}/${target} scenes created`);
+          } catch (err) {
+            const status = err?.response?.status || err?.status;
+            const errMsg = err?.response?.data?.error || '';
+            if (status === 400 && errMsg.includes('blueprint')) {
+              console.log(`Blueprint not ready yet, retrying batch ${nextBatch} in 5s...`);
+              await new Promise(r => setTimeout(r, 5000));
+              continue;
+            }
+            if (status === 500 || status === 502) {
+              console.log(`Server error on batch ${nextBatch}, retrying in 8s...`);
+              await new Promise(r => setTimeout(r, 8000));
+              continue;
+            }
+            if (status === 504) {
+              await new Promise(r => setTimeout(r, 8000));
+              const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+              queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+              setImportProgress(`Recovering from timeout... ${freshScenes.length} scenes so far`);
+              continue;
+            }
+            throw err;
           }
-          throw err;
         }
       }
 
