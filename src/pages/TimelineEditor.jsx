@@ -908,7 +908,8 @@ function TimelineTrack({ type, clips, pps, totalDuration, currentTime, selectedI
           const hasMotion     = type === 'video' && clip.cinematicMotion;
           const hasTransition = type === 'video' && clip.transition;
           const isVideoClip   = type === 'video' && clip.mediaType === 'video' && clip.videoUrl;
-          let bgColor = isVideoClip ? '#7c3aed' : color; // purple for video clips
+          const isBrollClip   = type === 'video' && clip.mediaType === 'broll' && clip.brollUrl;
+          let bgColor = isBrollClip ? '#0d9488' : isVideoClip ? '#7c3aed' : color;
           if (hasMotion)                  bgColor = '#b45309';
           if (hasTransition && !hasMotion) bgColor = '#6d28d9';
           if (hasMotion && hasTransition) bgColor = '#be185d';
@@ -929,6 +930,7 @@ function TimelineTrack({ type, clips, pps, totalDuration, currentTime, selectedI
                 <div className="flex-1 min-w-0">
                   <p className="text-[9px] text-white font-medium truncate drop-shadow flex items-center gap-1">
                     {clip.label}
+                    {isBrollClip   && <Clapperboard size={8} className="text-teal-200" />}
                     {isVideoClip   && <Film   size={8} className="text-purple-200" />}
                     {hasMotion     && <Camera size={8} className="text-amber-200" />}
                     {hasTransition && <Blend  size={8} className="text-purple-200" />}
