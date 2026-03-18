@@ -48,6 +48,9 @@
  * The mainPage value must match a key in the PAGES object exactly.
  */
 import ChannelAuditor from './pages/ChannelAuditor';
+import ChannelDetail from './pages/ChannelDetail';
+import ChannelsHub from './pages/ChannelsHub';
+import CompetitorMonitor from './pages/CompetitorMonitor';
 import ContentGeneration from './pages/ContentGeneration';
 import ContentRepurpose from './pages/ContentRepurpose';
 import Dashboard from './pages/Dashboard';
@@ -58,11 +61,13 @@ import NewProject from './pages/NewProject';
 import PostProduction from './pages/PostProduction';
 import ResearchTerminal from './pages/ResearchTerminal';
 import ResultsGrid from './pages/ResultsGrid';
+import SleepPipeline from './pages/SleepPipeline';
 import StoryDuration from './pages/StoryDuration';
 import StoryHooks from './pages/StoryHooks';
 import StoryScript from './pages/StoryScript';
 import StoryTopics from './pages/StoryTopics';
 import TimelineEditor from './pages/TimelineEditor';
+import ToolsHub from './pages/ToolsHub';
 import UGCPipeline from './pages/UGCPipeline';
 import VersionHistory from './pages/VersionHistory';
 import __Layout from './Layout.jsx';
@@ -70,6 +75,9 @@ import __Layout from './Layout.jsx';
 
 export const PAGES = {
     "ChannelAuditor": ChannelAuditor,
+    "ChannelDetail": ChannelDetail,
+    "ChannelsHub": ChannelsHub,
+    "CompetitorMonitor": CompetitorMonitor,
     "ContentGeneration": ContentGeneration,
     "ContentRepurpose": ContentRepurpose,
     "Dashboard": Dashboard,
@@ -80,11 +88,13 @@ export const PAGES = {
     "PostProduction": PostProduction,
     "ResearchTerminal": ResearchTerminal,
     "ResultsGrid": ResultsGrid,
+    "SleepPipeline": SleepPipeline,
     "StoryDuration": StoryDuration,
     "StoryHooks": StoryHooks,
     "StoryScript": StoryScript,
     "StoryTopics": StoryTopics,
     "TimelineEditor": TimelineEditor,
+    "ToolsHub": ToolsHub,
     "UGCPipeline": UGCPipeline,
     "VersionHistory": VersionHistory,
 }
