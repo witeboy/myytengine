@@ -78,7 +78,11 @@ export default function StoryScript() {
     if (!project?.id) return;
     if (batchesLoading) return;
     if (project.status === 'script_complete') return;
-    if (!['hooks_ready', 'scripting'].includes(project.status)) return;
+    const isSleep = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
+    const validStatuses = isSleep
+      ? ['topic_selected', 'outline_ready', 'hooks_ready', 'scripting']
+      : ['hooks_ready', 'scripting'];
+    if (!validStatuses.includes(project.status)) return;
     // If any batch already has content, don't restart
     if (batches.some(b => b.status === 'completed' && b.content)) return;
     // Don't start if we just reset stuck batches — wait for refetch
@@ -214,8 +218,9 @@ export default function StoryScript() {
       await base44.entities.Scripts.delete(s.id);
     }
 
+    const isSleepProject = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
     await base44.entities.Projects.update(projectId, {
-      status: 'hooks_ready',
+      status: isSleepProject ? 'outline_ready' : 'hooks_ready',
       script_id: '',
     });
 
@@ -262,8 +267,11 @@ export default function StoryScript() {
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => navigate(createPageUrl(`StoryHooks?project_id=${projectId}`))} className="gap-2" size="sm">
-              <ArrowLeft className="w-4 h-4" /> Hooks
+            <Button variant="outline" onClick={() => {
+              const isSleep = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
+              navigate(createPageUrl(isSleep ? `StoryDuration?project_id=${projectId}` : `StoryHooks?project_id=${projectId}`));
+            }} className="gap-2" size="sm">
+              <ArrowLeft className="w-4 h-4" /> {project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story' ? 'Duration' : 'Hooks'}
             </Button>
             <h1 className="text-3xl font-bold">Script Generation</h1>
           </div>
