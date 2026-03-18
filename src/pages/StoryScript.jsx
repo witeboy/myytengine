@@ -236,10 +236,8 @@ export default function StoryScript() {
       });
       await refetchBatches();
 
-      // Step 2: Generate content for each batch
-      await base44.functions.invoke('generateScriptBatches', {
-        project_id: projectId,
-      });
+      // Step 2: Generate batches with retry logic
+      await generateBatchesWithRetry();
       await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
     } catch (err) {
       console.error('Regeneration error:', err);
