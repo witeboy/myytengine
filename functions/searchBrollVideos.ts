@@ -2,66 +2,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
 // ══════════════════════════════════════════════════════════════════
 // MULTI-SOURCE B-ROLL VIDEO SEARCH
-// Searches Freepik, Pexels, and Pixabay in parallel
+// Searches Pexels and Pixabay in parallel
 // ══════════════════════════════════════════════════════════════════
-
-async function searchFreepik(searchTerms, duration, quality) {
-  const apiKey = Deno.env.get('FREEPIK_API_KEY');
-  if (!apiKey) return { videos: [], source: 'freepik', error: 'No API key' };
-
-  const filters = {
-    resolution: { '1080': true },
-    category: 'footage',
-    orientation: ['horizontal']
-  };
-  if (quality === '4k') filters.resolution['4k'] = true;
-  if (quality === '720p') filters.resolution['720'] = true;
-  if (duration) {
-    filters.duration = { from: Math.max(1, duration - 5), to: duration + 5 };
-  }
-
-  const filterParams = new URLSearchParams();
-  Object.entries(filters).forEach(([key, value]) => {
-    if (typeof value === 'object' && !Array.isArray(value)) {
-      Object.entries(value).forEach(([k, v]) => {
-        if (v) filterParams.append(`filters[${key}][${k}]`, v);
-      });
-    } else if (Array.isArray(value)) {
-      value.forEach(v => filterParams.append(`filters[${key}][]`, v));
-    }
-  });
-
-  const url = `https://api.freepik.com/v1/videos?term=${encodeURIComponent(searchTerms)}&order=relevance&page=1&${filterParams.toString()}`;
-
-  try {
-    const response = await fetch(url, {
-      headers: { 'x-freepik-api-key': apiKey, 'Accept-Language': 'en-US' }
-    });
-    if (!response.ok) {
-      console.error('Freepik API error:', response.status);
-      return { videos: [], source: 'freepik', error: `HTTP ${response.status}` };
-    }
-    const data = await response.json();
-    const videos = (data.data || []).map(video => ({
-      id: `freepik-${video.id}`,
-      source: 'freepik',
-      name: video.name || 'Freepik Video',
-      url: video.url,
-      duration: video.duration,
-      quality: video.quality,
-      thumbnail: video.thumbnails?.[0]?.url,
-      preview: video.previews?.[0]?.url,
-      downloadUrl: video.previews?.[0]?.url || video.url,
-      author: video.author?.name,
-      premium: video.premium === 1,
-      aspectRatio: video.aspect_ratio
-    }));
-    return { videos, source: 'freepik' };
-  } catch (err) {
-    console.error('Freepik search error:', err.message);
-    return { videos: [], source: 'freepik', error: err.message };
-  }
-}
 
 async function searchPexels(searchTerms, duration, quality, orientation) {
   const apiKey = Deno.env.get('PEXELS_API_KEY');
@@ -72,9 +14,7 @@ async function searchPexels(searchTerms, duration, quality, orientation) {
     per_page: '15',
     page: '1',
   });
-  if (orientation) params.set('orientation', orientation); // landscape, portrait
-
-  // Pexels has min_width/min_height/min_duration/max_duration
+  if (orientation) params.set('orientation', orientation);
   if (quality === '4k') params.set('size', 'large');
   if (duration) {
     params.set('min_duration', String(Math.max(1, duration - 5)));
@@ -93,7 +33,6 @@ async function searchPexels(searchTerms, duration, quality, orientation) {
     }
     const data = await response.json();
     const videos = (data.videos || []).map(video => {
-      // Pick best video file: prefer HD, then SD
       const files = video.video_files || [];
       const hd = files.find(f => f.quality === 'hd' && f.width >= 1280);
       const sd = files.find(f => f.quality === 'sd');
@@ -137,7 +76,6 @@ async function searchPixabay(searchTerms, duration, quality) {
     safesearch: 'true',
     order: 'popular',
   });
-  // Pixabay has min_width/min_height
   if (quality === '4k') params.set('min_width', '3840');
   else if (quality === '1080p') params.set('min_width', '1920');
 
@@ -151,7 +89,6 @@ async function searchPixabay(searchTerms, duration, quality) {
     }
     const data = await response.json();
     const videos = (data.hits || []).map(video => {
-      // Pick best quality: large > medium > small > tiny
       const vids = video.videos || {};
       const best = vids.large || vids.medium || vids.small || vids.tiny || {};
 
@@ -193,22 +130,17 @@ Deno.serve(async (req) => {
 
     if (!prompt) return Response.json({ error: 'Missing prompt' }, { status: 400 });
 
-    // Extract key search terms (first 8 words)
     const searchTerms = prompt.split(' ').slice(0, 8).join(' ');
-
-    // Determine which sources to search (default: all available)
-    const enabledSources = sources || ['freepik', 'pexels', 'pixabay'];
+    const enabledSources = sources || ['pexels', 'pixabay'];
     const pexelsOrientation = orientation === 'portrait' ? 'portrait' : 'landscape';
 
-    // Search all sources in parallel
     const searchPromises = [];
-    if (enabledSources.includes('freepik'))  searchPromises.push(searchFreepik(searchTerms, duration, quality));
-    if (enabledSources.includes('pexels'))   searchPromises.push(searchPexels(searchTerms, duration, quality, pexelsOrientation));
-    if (enabledSources.includes('pixabay'))  searchPromises.push(searchPixabay(searchTerms, duration, quality));
+    if (enabledSources.includes('pexels'))  searchPromises.push(searchPexels(searchTerms, duration, quality, pexelsOrientation));
+    if (enabledSources.includes('pixabay')) searchPromises.push(searchPixabay(searchTerms, duration, quality));
 
     const results = await Promise.all(searchPromises);
 
-    // Merge results, interleaving sources for variety
+    // Interleave results from sources
     const allVideos = [];
     const maxLen = Math.max(...results.map(r => r.videos.length));
     for (let i = 0; i < maxLen; i++) {
@@ -219,7 +151,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Build source summary
     const sourceSummary = {};
     for (const result of results) {
       sourceSummary[result.source] = {

@@ -14,7 +14,6 @@ import {
 } from '@/components/ui/select';
 
 const SOURCE_COLORS = {
-  freepik: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Freepik' },
   pexels:  { bg: 'bg-green-100', text: 'text-green-700', label: 'Pexels' },
   pixabay: { bg: 'bg-purple-100', text: 'text-purple-700', label: 'Pixabay' },
 };
@@ -85,7 +84,7 @@ export default function BrollSelector({
           Find B-Roll Videos
         </CardTitle>
         <p className="text-xs text-gray-500">
-          Searches Freepik, Pexels &amp; Pixabay simultaneously
+          Searches Pexels &amp; Pixabay simultaneously
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -123,7 +122,7 @@ export default function BrollSelector({
               className="flex-1 bg-blue-600 hover:bg-blue-700"
             >
               {isSearching ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Searching 3 sources...</>
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Searching 2 sources...</>
               ) : (
                 <><Search className="w-4 h-4 mr-2" /> Search B-Roll</>
               )}
@@ -236,7 +235,7 @@ export default function BrollSelector({
             <p className="text-sm text-gray-500">
               {videos.length > 0 
                 ? 'No results for this filter. Try "All" sources.' 
-                : 'Click search to find B-roll from Freepik, Pexels & Pixabay.'}
+                : 'Click search to find B-roll from Pexels & Pixabay.'}
             </p>
           </div>
         )}
