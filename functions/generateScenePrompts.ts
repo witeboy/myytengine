@@ -618,8 +618,17 @@ Deno.serve(async (req) => {
 
     const rawStyle = project.visual_style || 'cinematic_realistic';
     const visualStyle = normalizeStyleKey(rawStyle);
-    const styleConfig = styleMap[visualStyle];
-    console.log(`🎨 Style: raw="${rawStyle}" → resolved="${visualStyle}"`);
+    const isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
+    let styleConfig = { ...styleMap[visualStyle] };
+
+    // ═══ SLEEP MODE OVERRIDE — enforce dark, dim, painterly aesthetic ═══
+    if (isSleepProject) {
+      const sleepSuffix = ', dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow covering 70 percent of frame, warm amber rim light only, burnt sienna and dark chocolate color palette, low-key candlelit atmosphere, no bright colors, no harsh lighting, no daylight, masterpiece quality';
+      styleConfig.positive = (styleConfig.positive || '') + sleepSuffix;
+      styleConfig.negative = (styleConfig.negative || '') + ', bright daylight, harsh lighting, vivid saturated colors, neon, high key, overexposed, bright blue, bright green, vivid purple, white background, studio lighting, flash photography';
+      console.log(`🌙 Sleep mode: injected dark/dim aesthetic overrides`);
+    }
+    console.log(`🎨 Style: raw="${rawStyle}" → resolved="${visualStyle}"${isSleepProject ? ' [SLEEP DARK MODE]' : ''}`);
 
 
     // ═══ UNIVERSAL: Append anti-crop negatives to ALL styles ═══
