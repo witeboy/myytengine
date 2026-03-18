@@ -639,8 +639,38 @@ Deno.serve(async (req) => {
 
 
     // ── Style-specific LLM reinforcement (e.g. skeleton protagonist) ──
-    const styleReinforcement = getStyleReinforcementInstruction(visualStyle);
-    if (styleReinforcement) {
+    let styleReinforcement = getStyleReinforcementInstruction(visualStyle);
+
+    // ═══ SLEEP MODE — override LLM reinforcement with dark aesthetic rules ═══
+    if (isSleepProject) {
+      styleReinforcement = `
+**🌙 SLEEP CONTENT — MANDATORY DARK AESTHETIC RULES (HIGHEST PRIORITY):**
+
+This is a SLEEP video. Every image must be DARK, DIM, and WARM — safe for sleeping viewers.
+
+**LIGHTING RULES:**
+- 70-80% of every image MUST be shadow/darkness
+- Only light sources allowed: candlelight, moonlight, distant horizon glow, oil lamps, campfire embers, faint bioluminescence
+- Light is ALWAYS warm (amber, gold, sienna) and DIM — never bright, never harsh
+- Think Rembrandt/Caravaggio chiaroscuro — figures emerging from deep shadow with warm rim light
+
+**COLOR RULES (STRICT):**
+- ALLOWED: deep amber (#8B5E3C), burnt sienna (#6B3A2A), dark chocolate (#2C1810), midnight navy (#0A1628), warm gold (#D4A574), muted forest (#1A2F1A)
+- FORBIDDEN: bright blue, vivid green, saturated purple, neon anything, pure white, bright yellow, electric colors
+- Overall palette should feel like a dimly lit oil painting in a museum at night
+
+**STYLE RULES:**
+- Style: Dark moody oil painting / digital painting. Painterly brushwork feel. NOT photorealistic.
+- Texture: Visible brushstroke quality, impasto highlights, soft blended shadows
+- Composition: Simple, uncluttered, lots of dark negative space
+- People are allowed — silhouetted or dimly lit with warm rim lighting. Faces softly lit, never harshly exposed.
+
+**EVERY image_prompt MUST end with:** "dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow, warm amber rim light, burnt sienna and dark chocolate palette, low-key lighting, candlelit atmosphere, masterpiece quality"
+
+**EVERY image_prompt MUST NOT contain:** bright daylight, harsh lighting, vivid colors, neon, overexposed, studio lighting, white background
+` + styleReinforcement;
+      console.log(`🌙 Sleep dark aesthetic reinforcement active`);
+    } else if (styleReinforcement) {
       console.log(`🦴 Style reinforcement active: ${visualStyle}`);
     }
 
