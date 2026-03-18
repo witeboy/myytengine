@@ -21,33 +21,11 @@ import {
   Monitor, Smartphone, Radio
 } from 'lucide-react';
 
-// ══════════════════════════════════════════════════════════════════
-// TIMELINE EDITOR V10
-// FIX 1: Captions generated from AUDIO TRANSCRIPTION (word timestamps)
-//         not from imported script text — handles edited voiceovers.
-// FIX 2: Portrait 9:16 preview fixed — removed broken width:auto logic,
-//         now uses a proper fixed-ratio container that scales correctly.
-// ══════════════════════════════════════════════════════════════════
-
 const TRACK_HEIGHT = 56;
 const LABEL_WIDTH = 40;
 const MAX_HISTORY = 50;
 const DEFAULT_TRANSITION_DURATION = 0.6;
 
-// ═══════════════════════════════════════════════════════════════════
-// CINEMATIC ZOOM MOTION TYPES
-// ═══════════════════════════════════════════════════════════════════
-
-// ── Cinematic Motion System ─────────────────────────────────────────
-// Each motion is a ONE-WAY continuous drift: the clip enters at
-// startScale/startX/startY and glides to endScale/endX/endY,
-// then HOLDS there until the next cut. No snap-back.
-//
-// Motions are paired in families so consecutive clips feel linked:
-//   pair[0] ends pushed in  → pair[1] starts from that pushed state
-//   pair[1] ends pulled out → pair[2] picks up from there, etc.
-// This creates the seamless "documentary zoom" flow the user wants.
-// ─────────────────────────────────────────────────────────────────────
 const CINEMATIC_MOTIONS = [
   // ── Zoom family ──────────────────────────────────────────────────
   { id: 'zoom_in_center',  name: 'Push In',          description: 'Slowly drifts closer — holds at end',  startScale: 1.0,  endScale: 1.10, startX: 0,    startY: 0,    endX: 0,    endY: 0    },
@@ -62,10 +40,6 @@ const CINEMATIC_MOTIONS = [
   { id: 'diagonal_tl_br',  name: 'Diagonal ↘',        description: 'Drifts top-left to bottom-right',      startScale: 1.0,  endScale: 1.08, startX: 1.5,  startY: 1.0,  endX: -1.5, endY: -1.0 },
   { id: 'diagonal_tr_bl',  name: 'Diagonal ↙',        description: 'Drifts top-right to bottom-left',      startScale: 1.0,  endScale: 1.08, startX: -1.5, startY: 1.0,  endX: 1.5,  endY: -1.0 },
 ];
-
-// ═══════════════════════════════════════════════════════════════════
-// EASING FUNCTIONS
-// ═══════════════════════════════════════════════════════════════════
 
 const easingFunctions = {
   easeInOutQuad:  (t) => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
@@ -92,10 +66,6 @@ const TRANSITIONS = [
   { id: 'overlap_fade', name: 'Overlap Fade' },
 ];
 
-// ═══════════════════════════════════════════════════════════════════
-// UTILITIES
-// ═══════════════════════════════════════════════════════════════════
-
 function formatTime(seconds) {
   if (!seconds || isNaN(seconds)) return '00:00';
   const m = Math.floor(seconds / 60);
@@ -111,10 +81,6 @@ function formatTimecode(seconds) {
   const f = Math.floor((seconds % 1) * 30);
   return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}:${f.toString().padStart(2, '0')}`;
 }
-
-// ═══════════════════════════════════════════════════════════════════
-// HISTORY HOOK
-// ═══════════════════════════════════════════════════════════════════
 
 function useHistory(initialState) {
   const [history, setHistory] = useState([initialState]);
@@ -135,20 +101,6 @@ function useHistory(initialState) {
 
   return { state, setState, undo, redo, reset, canUndo: index > 0, canRedo: index < history.length - 1 };
 }
-
-// ═══════════════════════════════════════════════════════════════════
-// SMART CAPTION TIMING via Claude API
-//
-// No mic, no transcription service needed. We already have the exact
-// script text in scene.narration_text. We send each scene's text +
-// its exact audio beat duration to Claude and ask it to produce
-// realistic word-level timestamps accounting for:
-//   - natural speech rhythm (stressed syllables take longer)
-//   - punctuation pauses (comma ~0.15s, period ~0.35s)
-//   - sentence-initial words spoken slightly slower
-//   - short function words (the, a, is) spoken faster
-// Returns [{word, start, end}] with times relative to scene start.
-// ═══════════════════════════════════════════════════════════════════
 
 async function getSmartWordTimings(sceneText, beatDuration, sceneNumber) {
   try {
@@ -188,10 +140,6 @@ Format: [{"word":"hello","start":0.00,"end":0.35},{"word":"world","start":0.38,"
     return { success: false, words: [] };
   }
 }
-
-// ═══════════════════════════════════════════════════════════════════
-// TOP TOOLBAR
-// ═══════════════════════════════════════════════════════════════════
 
 function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport, onDownloadAssets, onShowExporter, onNext, onSave, isSaving, saveStatus }) {
   const panels = [
@@ -250,10 +198,6 @@ function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport,
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════════════════
-// LEFT PANELS
-// ═══════════════════════════════════════════════════════════════════
 
 function MediaPanel({ scenes, audioBeatDurations, videoClips, onSelectScene, onSetAllMediaType }) {
   const videoSceneCount = scenes.filter(s =>
@@ -435,10 +379,6 @@ function TransitionsPanel({ selectedClip, onApplyTransition, onRemoveTransition,
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// CAPTIONS PANEL — now with audio transcription
-// ═══════════════════════════════════════════════════════════════════
-
 function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, transcriptionState, onOffsetCaptions, captionOffset }) {
   const [del, setDel] = useState(true);
   const { status, wordCount, error } = transcriptionState;
@@ -531,10 +471,6 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, t
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════════════════
-// RIGHT PANELS
-// ═══════════════════════════════════════════════════════════════════
 
 function TextPropertiesPanel({ caption, onUpdate, onDelete, onDuplicate, onApplyStyleToAll }) {
   if (!caption) return <div className="h-full flex items-center justify-center text-xs text-gray-500">Select a caption</div>;
@@ -900,10 +836,6 @@ function VideoPreview({
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// TRANSPORT & TIMELINE
-// ═══════════════════════════════════════════════════════════════════
-
 function TransportControls({ isPlaying, onPlayPause, currentTime, totalDuration, onSeek }) {
   return (
     <div className="flex items-center justify-center gap-4 py-3 bg-[#12121f] border-t border-gray-800">
@@ -1023,10 +955,6 @@ function TimelineTrack({ type, clips, pps, totalDuration, currentTime, selectedI
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════════════════
-// MAIN COMPONENT
-// ═══════════════════════════════════════════════════════════════════
 
 export default function TimelineEditorV10() {
   const navigate       = useNavigate();
