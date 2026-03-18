@@ -617,16 +617,19 @@ Deno.serve(async (req) => {
 
 
     const rawStyle = project.visual_style || 'cinematic_realistic';
-    const visualStyle = normalizeStyleKey(rawStyle);
     const isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
-    let styleConfig = { ...styleMap[visualStyle] };
+    const visualStyle = isSleepProject ? 'oil_painting' : normalizeStyleKey(rawStyle);
+    let styleConfig;
 
-    // ═══ SLEEP MODE OVERRIDE — enforce dark, dim, painterly aesthetic ═══
+    // ═══ SLEEP MODE — REPLACE style entirely with dark oil painting ═══
     if (isSleepProject) {
-      const sleepSuffix = ', dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow covering 70 percent of frame, warm amber rim light only, burnt sienna and dark chocolate color palette, low-key candlelit atmosphere, no bright colors, no harsh lighting, no daylight, masterpiece quality';
-      styleConfig.positive = (styleConfig.positive || '') + sleepSuffix;
-      styleConfig.negative = (styleConfig.negative || '') + ', bright daylight, harsh lighting, vivid saturated colors, neon, high key, overexposed, bright blue, bright green, vivid purple, white background, studio lighting, flash photography';
-      console.log(`🌙 Sleep mode: injected dark/dim aesthetic overrides`);
+      styleConfig = {
+        positive: "dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow, warm amber rim light, burnt sienna and dark chocolate palette, low-key lighting, candlelit atmosphere, masterpiece quality",
+        negative: "photorealistic, ARRI, anamorphic, Panavision, lens flare, bokeh, film grain, bright daylight, harsh lighting, vivid saturated colors, neon, high key, overexposed, studio lighting, flash photography, 8K resolution, Hollywood"
+      };
+      console.log(`🌙 Sleep mode: using PURE dark oil painting style (replaced "${rawStyle}")`);
+    } else {
+      styleConfig = { ...styleMap[normalizeStyleKey(rawStyle)] };
     }
     console.log(`🎨 Style: raw="${rawStyle}" → resolved="${visualStyle}"${isSleepProject ? ' [SLEEP DARK MODE]' : ''}`);
 
