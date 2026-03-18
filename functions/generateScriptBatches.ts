@@ -110,10 +110,11 @@ Deno.serve(async (req) => {
     // Get all batches for this project
     const allBatches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
     const sortedBatches = allBatches.sort((a, b) => a.batch_number - b.batch_number);
-    const pendingBatches = sortedBatches.filter(b => b.status === 'pending');
+    // Also pick up stuck 'generating' batches (timed out from a previous call)
+    const pendingBatches = sortedBatches.filter(b => b.status === 'pending' || b.status === 'generating');
 
     if (pendingBatches.length === 0) {
-      return Response.json({ success: true, message: 'No pending batches to generate', completed: 0 });
+      return Response.json({ success: true, message: 'No pending batches to generate', completed: 0, done: true });
     }
 
     console.log(`[generateScriptBatches] ${pendingBatches.length} pending batches for project ${project_id}`);
@@ -123,8 +124,9 @@ Deno.serve(async (req) => {
 
     let completedCount = 0;
 
-    // Generate content for each pending batch sequentially
-    for (const batch of pendingBatches) {
+    // Process only ONE batch per call to avoid platform timeout
+    const batch = pendingBatches[0];
+    {
       // Mark as generating
       await base44.asServiceRole.entities.ScriptBatches.update(batch.id, { status: 'generating' });
 
@@ -198,10 +200,7 @@ Return JSON:
         status: 'completed'
       });
 
-      // Add to completed context for next iteration
-      completedBatches.push({ ...batch, content, word_count: wordCount });
       completedCount++;
-
       console.log(`[Batch ${batch.batch_number}] ✅ ${wordCount} words written`);
     }
 
@@ -211,12 +210,20 @@ Return JSON:
       current_step: 3
     });
 
-    console.log(`[generateScriptBatches] Completed ${completedCount} batches`);
+    // Check if all batches are now completed
+    const remainingPending = sortedBatches.filter(b =>
+      b.id !== batch.id && (b.status === 'pending' || b.status === 'generating')
+    ).length;
+    const allDone = remainingPending === 0;
+
+    console.log(`[generateScriptBatches] Completed batch ${batch.batch_number}. ${remainingPending} remaining.`);
 
     return Response.json({
       success: true,
       completed: completedCount,
-      total_batches: sortedBatches.length
+      total_batches: sortedBatches.length,
+      remaining: remainingPending,
+      done: allDone
     });
   } catch (error) {
     console.error('generateScriptBatches error:', error.message);
