@@ -164,7 +164,14 @@ export default function ChannelDetail() {
             {channel.icon_emoji || defaults.emoji}
           </div>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-gray-900">{channel.name}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-gray-900">{channel.name}</h1>
+              {channel.script_mode && channel.script_mode !== 'standard' && (
+                <Badge className="text-[10px] bg-indigo-100 text-indigo-700">
+                  {channel.script_mode === 'sleep_meditation' ? '🧘 Sleep Meditation' : '🌙 Sleep Story'}
+                </Badge>
+              )}
+            </div>
             <p className="text-sm text-gray-500">{channel.niche_label || defaults.label}</p>
           </div>
           <div className="flex gap-2">
