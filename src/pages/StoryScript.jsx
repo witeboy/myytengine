@@ -332,7 +332,34 @@ export default function StoryScript() {
                   <FileText className="w-4 h-4 text-blue-600" />
                   {completedCount}/{batches.length} batches
                 </span>
-                {generating && <Loader2 className="w-4 h-4 animate-spin text-blue-600" />}
+                <div className="flex items-center gap-2">
+                  {generating && <Loader2 className="w-4 h-4 animate-spin text-blue-600" />}
+                  {!generating && !allCompleted && batches.length > 0 && (
+                    <Button
+                      size="sm"
+                      onClick={async () => {
+                        setGenerating(true);
+                        try {
+                          // Reset any stuck batches first
+                          const current = await base44.entities.ScriptBatches.filter({ project_id: projectId });
+                          for (const b of current.filter(b => b.status === 'generating')) {
+                            await base44.entities.ScriptBatches.update(b.id, { status: 'pending' });
+                          }
+                          await refetchBatches();
+                          await generateBatchesWithRetry();
+                          await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
+                        } catch (err) {
+                          console.error('Resume error:', err);
+                        } finally {
+                          setGenerating(false);
+                        }
+                      }}
+                      className="bg-amber-600 hover:bg-amber-700 text-white gap-1"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Resume Generation
+                    </Button>
+                  )}
+                </div>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
