@@ -666,9 +666,15 @@ This is a SLEEP video. Every image must be DARK, DIM, and WARM — safe for slee
 - NO PEOPLE. These are pure ambient environment/landscape scenes. No human figures, silhouettes, hands, or body parts.
 - If the director notes mention a figure, replace with an environmental element (empty chair, lone candle, still water).
 
-**EVERY image_prompt MUST end with:** "dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow, warm amber rim light, burnt sienna and dark chocolate palette, low-key lighting, candlelit atmosphere, masterpiece quality"
+**EVERY image_prompt MUST end with:** "dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow, warm amber rim light, burnt sienna and dark chocolate palette, low-key lighting, candlelit atmosphere, masterpiece quality, no people, no human figures"
 
-**EVERY image_prompt MUST NOT contain:** bright daylight, harsh lighting, vivid colors, neon, overexposed, studio lighting, white background
+**EVERY image_prompt MUST NOT contain:** bright daylight, harsh lighting, vivid colors, neon, overexposed, studio lighting, white background, people, human figures, woman, man, hands, body, person, silhouette, figure
+
+**ABSOLUTELY NO PEOPLE — THIS IS THE #1 RULE:**
+- These are PURE ENVIRONMENT/LANDSCAPE scenes. No humans of any kind.
+- If the narration mentions "your body" or "your arms" — these are auditory cues, NOT visual subjects.
+- Replace any human reference with an ENVIRONMENTAL element: empty chair, lone candle, still water, a path, floating feather, resting stone
+- NEVER show hands, feet, silhouettes, or any human body part
 ` + styleReinforcement;
       console.log(`🌙 Sleep dark aesthetic reinforcement active`);
     } else if (styleReinforcement) {
