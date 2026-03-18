@@ -689,14 +689,14 @@ These are ambient environment/landscape scenes — painterly, atmospheric, calmi
     }
 
 
-    const framingPrefix = isSleepProject
+    const framingPrefix = useSleepStyle
       ? "Wide ambient shot of a dark atmospheric environment"
       : "Full body wide shot showing complete scene with detailed sharp environment, visible architecture and props, character shown head to feet mid-action in a populated world";
     const promptPrefix = `${framingPrefix}. `;
 
 
     let characters = [];
-    if (!isSleepProject && project.character_descriptions) {
+    if (!useSleepStyle && project.character_descriptions) {
       try { characters = JSON.parse(project.character_descriptions); } catch (_) {}
     }
 
