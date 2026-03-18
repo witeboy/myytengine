@@ -484,9 +484,7 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
       // Clean artifacts
       .replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').replace(/\s{2,}/g, ' ').trim();
 
-    // For sleep: strip ALL the heavyweight style suffixes that generateScenePrompts appends
-    // Grok only needs a clean visual description + minimal style cue
-    // The long "Cinematic film still shot on ARRI Alexa 65..." blocks trigger safety filters
+    // For sleep: strip heavyweight style suffixes that may trigger safety filters
     finalPrompt = finalPrompt
       .replace(/Cinematic film still shot on ARRI[^.]*\./gi, '')
       .replace(/shot on ARRI[^.]*\./gi, '')
@@ -496,7 +494,6 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
       .replace(/color graded with professional[^,.]*/gi, '')
       .replace(/Kodak Vision3[^,.]*/gi, '')
       .replace(/volumetric god rays[^,.]*/gi, '')
-      // Strip duplicate "dark moody oil painting" blocks (keep only one)
       .replace(/(dark moody oil painting[^.]*\.)\s*(dark moody oil painting)/gi, '$1');
 
     // Now apply standard cleaning
