@@ -4,18 +4,22 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Film, CheckCircle2, XCircle } from 'lucide-react';
 
-export default function AutoBrollButton({ projectId, sceneCount, onComplete }) {
+export default function AutoBrollButton({ projectId, sceneCount, onComplete, projectMode }) {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState(null);
 
   if (sceneCount === 0) return null;
+
+  const isSleep = projectMode === 'sleep_meditation' || projectMode === 'sleep_story';
 
   const handleRun = async () => {
     setRunning(true);
     setResult(null);
 
     try {
-      const res = await base44.functions.invoke('autoBrollPopulate', {
+      // Use sleep-specific b-roll function for sleep projects
+      const fnName = isSleep ? 'sleepBrollPopulate' : 'autoBrollPopulate';
+      const res = await base44.functions.invoke(fnName, {
         project_id: projectId,
       });
       const data = res.data || res;
@@ -41,12 +45,12 @@ export default function AutoBrollButton({ projectId, sceneCount, onComplete }) {
         {running ? (
           <>
             <Loader2 className="w-4 h-4 animate-spin mr-1" />
-            Finding B-Roll...
+            {isSleep ? 'Finding Sleep B-Roll...' : 'Finding B-Roll...'}
           </>
         ) : (
           <>
             <Film className="w-4 h-4 mr-1" />
-            Auto B-Roll
+            {isSleep ? '🌙 Sleep B-Roll' : 'Auto B-Roll'}
           </>
         )}
       </Button>
