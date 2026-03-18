@@ -124,6 +124,60 @@ export default function StoryScript() {
     runFullGeneration();
   }, [project?.id, project?.status, autoGenTriggered, generating]);
 
+  // Retry-resilient batch generation — calls backend one batch at a time
+  const generateBatchesWithRetry = async () => {
+    const MAX_RETRIES = 3;
+    let keepGoing = true;
+
+    while (keepGoing) {
+      const freshBatches = await base44.entities.ScriptBatches.filter({ project_id: projectId });
+      const pending = freshBatches
+        .filter(b => b.status === 'pending' || b.status === 'generating')
+        .sort((a, b) => a.batch_number - b.batch_number);
+
+      if (pending.length === 0) {
+        keepGoing = false;
+        break;
+      }
+
+      let retries = 0;
+      let success = false;
+
+      while (retries < MAX_RETRIES && !success) {
+        try {
+          await base44.functions.invoke('generateScriptBatches', { project_id: projectId });
+          success = true;
+        } catch (err) {
+          retries++;
+          const status = err?.response?.status || err?.status;
+          console.warn(`Batch generation attempt ${retries} failed (${status}):`, err.message);
+
+          if (retries < MAX_RETRIES) {
+            // Reset any stuck 'generating' batches before retry
+            const stuckNow = await base44.entities.ScriptBatches.filter({ project_id: projectId });
+            for (const b of stuckNow.filter(b => b.status === 'generating')) {
+              await base44.entities.ScriptBatches.update(b.id, { status: 'pending' });
+            }
+            await new Promise(r => setTimeout(r, 5000));
+          } else {
+            console.error('Max retries reached for batch generation');
+            // Reset stuck batches so user can retry manually
+            const stuckFinal = await base44.entities.ScriptBatches.filter({ project_id: projectId });
+            for (const b of stuckFinal.filter(b => b.status === 'generating')) {
+              await base44.entities.ScriptBatches.update(b.id, { status: 'pending' });
+            }
+          }
+        }
+      }
+
+      await refetchBatches();
+
+      if (!success) {
+        keepGoing = false;
+      }
+    }
+  };
+
   // ⚡ NEW: Auto-trigger the Merge function when batches hit 100%
   useEffect(() => {
     // Only trigger if all batches are done AND we don't have the final script yet
