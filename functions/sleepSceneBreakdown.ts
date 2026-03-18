@@ -100,7 +100,8 @@ Deno.serve(async (req) => {
     const wordCount = finalScript.split(/\s+/).filter(w => w.length > 0).length;
     const durationMinutes = project.video_duration_minutes || Math.ceil(wordCount / 150);
 
-    const imageCount = Math.min(12, Math.max(6, Math.round(durationMinutes / 5) + 3));
+    // ~1 image per 1.5 minutes, min 8, max 30
+    const imageCount = Math.min(30, Math.max(8, Math.round(durationMinutes / 1.5)));
 
     console.log(`🌙 Sleep ambient breakdown: ${durationMinutes}min → ${imageCount} images | mode: ${project.project_mode}`);
 
