@@ -288,10 +288,11 @@ Deno.serve(async (req) => {
     // ── CALCULATE BATCH COUNT ──
     const durationMinutes = project.video_duration_minutes || 10;
     // Sleep content uses 150 wpm (deliberately slow speaking pace)
-    const wordsPerMinute = isSleepMode ? 150 : 150;
+    const wordsPerMinute = 150;
     const totalTargetWords = Math.round(durationMinutes * wordsPerMinute);
-    // Sleep scripts use ~2250 words per 15-min section; standard uses 1500
-    const WORDS_PER_BATCH = isSleepMode ? 2250 : 1500;
+    // Sleep scripts: ~1100 words per batch (~7 min each) for more granular sections
+    // Standard: ~1500 words per batch
+    const WORDS_PER_BATCH = isSleepMode ? 1100 : 1500;
     const numBatches = Math.max(2, Math.ceil(totalTargetWords / WORDS_PER_BATCH));
 
     const batchTargets = [];
