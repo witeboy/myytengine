@@ -606,29 +606,30 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
     console.log(`🔗 Scene ${sceneNum}: using character reference from Scene 1`);
   }
 
+  // Map aspect_ratio to Nano Banana image_size format
+  const nanoBananaSize = aspectRatio; // Both use "16:9" / "9:16" format
+
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
-      // For sleep: if we keep getting content safety blocks, try progressively simpler prompts
       let promptToSend = finalPrompt;
+      let useNanoBanana = false;
+
+      // Sleep projects: attempt 1 = Grok, attempt 2+ = Nano Banana (no content safety filter)
+      // Non-sleep: all attempts use Grok with exponential backoff
       if (isSleepProject && attempt > 0) {
-        // Attempt 2+: use ultra-simple nature-only fallback prompts
-        // These are generic safe landscapes that never trigger content safety
-        const safeFallbacks = [
-          'Beautiful oil painting of a misty mountain valley at twilight, amber tones, dark shadows, impressionist style',
-          'Oil painting of an ancient forest path covered in autumn leaves, golden hour, warm earth tones, classical style',
-          'Dark oil painting of a calm lake reflecting starlight, surrounded by pine trees, deep blue and amber palette',
-          'Impressionist oil painting of rolling hills under a crescent moon, muted earth tones, peaceful countryside',
-          'Classical oil painting of a stone bridge over a quiet stream, surrounded by willow trees, warm golden tones',
-          'Oil painting of a snowy mountain peak under northern lights, deep blue sky, soft green aurora glow',
-        ];
-        promptToSend = safeFallbacks[(sceneNum - 1 + attempt) % safeFallbacks.length];
-        console.log(`🔄 Scene ${sceneNum}: using safe fallback prompt (attempt ${attempt + 1})`);
+        useNanoBanana = true;
+        console.log(`🍌 Scene ${sceneNum}: switching to Nano Banana fallback (attempt ${attempt + 1})`);
       }
 
-      console.log(`🎨 Scene ${sceneNum}: generating (attempt ${attempt + 1}/${MAX_RETRIES}, ${promptToSend.length} chars, ref=${!!referenceUrl})...`);
+      console.log(`🎨 Scene ${sceneNum}: generating via ${useNanoBanana ? 'Nano Banana' : 'Grok'} (attempt ${attempt + 1}/${MAX_RETRIES}, ${promptToSend.length} chars)...`);
       console.log(`📝 FINAL PROMPT: "${promptToSend.substring(0, 200)}"`);
 
-      const imageUrl = await generateWithGrokImagine(apiKey, promptToSend, aspectRatio, referenceUrl);
+      let imageUrl;
+      if (useNanoBanana) {
+        imageUrl = await generateWithNanoBanana(apiKey, promptToSend, nanoBananaSize);
+      } else {
+        imageUrl = await generateWithGrokImagine(apiKey, promptToSend, aspectRatio, referenceUrl);
+      }
 
       // Validate URL
       if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.startsWith('http')) {
@@ -646,7 +647,6 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
           await base44.asServiceRole.entities.Projects.update(project.id, {
             reference_image_url: imageUrl
           });
-          // Update the in-memory project so subsequent scenes in this batch can use it
           project.reference_image_url = imageUrl;
           console.log(`📌 Scene 1 saved as character reference for all subsequent scenes`);
         } catch (refErr) {
@@ -654,22 +654,22 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
         }
       }
 
-      console.log(`✓ Scene ${sceneNum}: image generated (${finalPrompt.length} chars → ${imageUrl.substring(0, 60)}...)`);
+      console.log(`✓ Scene ${sceneNum}: image generated via ${useNanoBanana ? 'Nano Banana 🍌' : 'Grok'} (${promptToSend.length} chars → ${imageUrl.substring(0, 60)}...)`);
 
       return {
         scene_id: scene.id,
         scene_number: sceneNum,
         status: 'success',
         image_url: imageUrl,
-        prompt_length: finalPrompt.length,
-        attempts: attempt + 1
+        prompt_length: promptToSend.length,
+        attempts: attempt + 1,
+        model: useNanoBanana ? 'nano_banana' : 'grok'
       };
 
     } catch (error) {
       console.warn(`⚠️ Scene ${sceneNum} attempt ${attempt + 1} failed: ${error.message}`);
 
       if (attempt === MAX_RETRIES - 1) {
-        // Final attempt failed — mark scene so it can be retried later
         try {
           await base44.asServiceRole.entities.Scenes.update(scene.id, {
             status: "image_failed"
@@ -687,8 +687,8 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
         };
       }
 
-      // Exponential backoff before retry
-      const waitMs = RETRY_BASE_MS * Math.pow(2, attempt);
+      // Short backoff before switching to fallback model
+      const waitMs = isSleepProject ? 2000 : RETRY_BASE_MS * Math.pow(2, attempt);
       console.log(`⏳ Scene ${sceneNum}: retrying in ${waitMs / 1000}s...`);
       await new Promise(r => setTimeout(r, waitMs));
     }
