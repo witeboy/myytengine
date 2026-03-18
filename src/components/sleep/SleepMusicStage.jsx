@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ export default function SleepMusicStage({ projectId, project, onRefetch }) {
   const [loaded, setLoaded] = useState(false);
 
   // Load existing music tracks
-  React.useEffect(() => {
+  useEffect(() => {
     if (!projectId || loaded) return;
     (async () => {
       try {
