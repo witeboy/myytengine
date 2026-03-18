@@ -698,7 +698,11 @@ This is a SLEEP video. Every image must be DARK, DIM, and WARM — safe for slee
 
 
     let characters = [];
-    if (project.character_descriptions) {
+    // Sleep projects: NO characters — all scenes are pure ambient environments
+    if (isSleepProject) {
+      characters = [];
+      console.log(`🌙 Sleep mode: character injection DISABLED — pure environment scenes`);
+    } else if (project.character_descriptions) {
       try { characters = JSON.parse(project.character_descriptions); } catch (_) {}
     }
 
