@@ -118,7 +118,11 @@ RULES: Show FULL BODY in most scenes. Environment FIRST, then character. Charact
 // DURATION-AWARE BEAT CALCULATOR
 // ══════════════════════════════════════════════════════════════════
 
-function calculateBeatDurations(phases, durationMinutes) {
+function calculateBeatDurations(phases, durationMinutes, isSleep = false) {
+  if (isSleep) {
+    return calculateSleepBeatDurations(phases, durationMinutes);
+  }
+
   const anchors = [
     {m:1,s:0.70},{m:3,s:0.85},{m:5,s:1.00},{m:10,s:1.20},
     {m:15,s:1.40},{m:30,s:1.70},{m:60,s:2.00}
@@ -157,6 +161,40 @@ function calculateBeatDurations(phases, durationMinutes) {
     }
   }
   return durations;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// SLEEP-SPECIFIC BEAT CALCULATOR — slow, gentle, progressively longer
+// ══════════════════════════════════════════════════════════════════
+
+function calculateSleepBeatDurations(phases, durationMinutes) {
+  // Sleep scenes are much longer — viewers should see slow, calming visuals
+  // Each scene: 15-40 seconds, getting progressively longer toward the end
+  const sleepPacing = {
+    cold_open: { base: 15, variance: 3 },       // Opening: 12-18s per scene
+    rising_tension: { base: 20, variance: 5 },   // Body settling: 15-25s
+    emotional_core: { base: 25, variance: 8 },   // Deep relaxation: 17-33s
+    resolution: { base: 35, variance: 10 }       // Near-sleep: 25-45s (longest holds)
+  };
+
+  const durations = [];
+
+  for (const phase of phases) {
+    const p = sleepPacing[phase.name] || { base: 22, variance: 5 };
+    for (let i = 0; i < phase.scenes; i++) {
+      // Progressive deepening within each phase too
+      const ratio = phase.scenes > 1 ? i / (phase.scenes - 1) : 0.5;
+      const d = Math.round((p.base + (ratio - 0.3) * p.variance) * 10) / 10;
+      durations.push(Math.max(12, d));
+    }
+  }
+
+  // Scale to match target duration
+  const totalCurrent = durations.reduce((a, b) => a + b, 0);
+  const totalTarget = durationMinutes * 60;
+  const scaleFactor = totalTarget / totalCurrent;
+
+  return durations.map(d => Math.round(d * scaleFactor * 10) / 10);
 }
 
 function calculateStartTimes(durations) {

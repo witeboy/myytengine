@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Palette, Check } from 'lucide-react';
 
 const STYLES = [
+  { id: 'broll_only', label: 'B-Roll Only', desc: 'Skip AI images — use stock B-roll footage for all scenes', emoji: '🎥' },
   { id: 'cinematic_realistic', label: 'Cinematic Realistic', desc: 'Hollywood-grade cinematic look with dramatic lighting', emoji: '🎬' },
   { id: 'photorealistic_4k', label: 'Photorealistic 4K', desc: 'Ultra-realistic photography, sharp detail', emoji: '📸' },
   { id: 'cinematic_anime', label: 'Cinematic Anime', desc: 'Anime style with cinematic composition and lighting', emoji: '⚔️' },
