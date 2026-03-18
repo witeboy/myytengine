@@ -45,7 +45,56 @@ Deno.serve(async (req) => {
     const numBatches = Math.max(2, Math.ceil(totalWords / wordsPerBatchTarget));
     const wordsPerBatch = Math.floor(totalWords / numBatches);
 
-    const prompt = `You are a YouTube documentary expert. Create a detailed outline for a ${duration_minutes}-minute video about "${topic_title}" in the ${niche} niche.
+    let prompt;
+
+    if (isSleep) {
+      const isMeditation = project.project_mode === 'sleep_meditation';
+      const contentType = isMeditation ? 'motivational meditation' : 'sleep story';
+
+      prompt = `You are an expert sleep audio script planner. You plan ${contentType} scripts that ARE the soothing content — not scripts that talk ABOUT meditation or sleep.
+
+**CRITICAL RULE**: Every section synopsis must describe WHAT THE NARRATOR WILL SAY — the actual soothing words, affirmations, imagery, and guided relaxation. Synopses must NEVER include:
+❌ Explaining what ASMR is or how it works
+❌ Discussing neuroscience, dopamine, oxytocin, or "studies"
+❌ Giving practical sleep tips or advice
+❌ Educational content about meditation or relaxation techniques
+❌ Referencing YouTube, channels, videos, or content creation
+❌ Any meta-commentary ("in this section we will...")
+
+**CONTENT TYPE**: ${isMeditation ? 'Motivational Meditation — the narrator speaks directly to the listener with gentle affirmations, nature imagery, and soothing repetition.' : 'Sleep Story — the narrator tells a peaceful story with rich sensory details, calm settings, and gentle activities.'}
+
+**PROJECT**:
+- Topic: ${topic_title}
+- Niche: ${niche}
+- Duration: ${duration_minutes} minutes (~${totalWords} words at 150 wpm)
+
+**SLEEP CONTENT PRINCIPLES**:
+- Extremely gentle and soothing tone throughout
+- Deliberately monotonous (boring is GOOD for sleep)
+- Strategic repetition — each key concept repeated 4-6 times in different words
+- NO excitement, urgency, drama, tension, or surprises
+- Include [PAUSE X SEC] markers in synopses
+- Simple vocabulary, short sentences (8-18 words ideal)
+- Progressive deepening: physical relaxation → mental calm → emotional peace → deep rest
+- Nature metaphors: ocean, mountain, tree, river, moon, stars, forest
+- Sensory grounding: touch, sound, sight, smell references
+
+Create exactly ${numBatches} sections for this ${duration_minutes}-minute ${contentType}.
+
+Rules:
+- First section MUST be Opening & Welcome (physical settling, breathing, body awareness)
+- Last section should be the gentlest, most minimal — mostly pauses and silence
+- Progressive deepening: each section calmer and slower than the last
+- Synopses must describe the ACTUAL words and imagery, not explain concepts
+- Include specific affirmation phrases IN QUOTES in synopses
+- Include [PAUSE X SEC] markers in synopses
+- Every synopsis: 200-300 words of SPECIFIC soothing content detail
+- NO educational content, NO science, NO advice, NO meta-commentary
+
+Return JSON:
+{"storytelling_format": "${contentType}", "batches": [{"batch_number": 1, "story_segment": "Short title (3-5 words)", "focus_area": "Brief focus (1 sentence)", "target_words": ${wordsPerBatch}, "synopsis": "EXTREMELY DETAILED synopsis (200-300 words) describing the ACTUAL soothing content."}]}`;
+    } else {
+      prompt = `You are a YouTube documentary expert. Create a detailed outline for a ${duration_minutes}-minute video about "${topic_title}" in the ${niche} niche.
 
 Pick the BEST storytelling format from: Big Lie, Untold Truth, Domino, Reveal, Zero to Hero, Turning Point, Timeline, Origin Story.
 
@@ -55,6 +104,7 @@ For each batch write a DETAILED synopsis (5-8 sentences, 150-200 words, no newli
 
 Respond with ONLY valid JSON:
 {"storytelling_format": "Format Name", "batches": [{"batch_number": 1, "story_segment": "Segment Title", "focus_area": "Focus description", "target_words": ${wordsPerBatch}, "synopsis": "Detailed synopsis here."}]}`;
+    }
 
     const outline = await callOpenAI(prompt, 0.7);
 
