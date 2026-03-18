@@ -67,7 +67,8 @@ export default function StoryDuration() {
       return;
     }
 
-    navigate(createPageUrl(`StoryHooks?project_id=${projectId}`));
+    const isSleep = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
+    navigate(createPageUrl(isSleep ? `StoryScript?project_id=${projectId}` : `StoryHooks?project_id=${projectId}`));
   };
 
   const handleContinue = async () => {
@@ -84,7 +85,8 @@ export default function StoryDuration() {
       });
       setLoading(false);
     }
-    navigate(createPageUrl(`StoryHooks?project_id=${projectId}`));
+    const isSleep = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
+    navigate(createPageUrl(isSleep ? `StoryScript?project_id=${projectId}` : `StoryHooks?project_id=${projectId}`));
   };
 
   return (

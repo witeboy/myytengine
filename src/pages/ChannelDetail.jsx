@@ -33,9 +33,10 @@ export default function ChannelDetail() {
 
   const getProjectRoute = (project) => {
     const s = project.status;
+    const isSleep = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
     if (s === 'created' || s === 'topics_ready') return `StoryTopics?project_id=${project.id}`;
     if (s === 'topic_selected') return `StoryDuration?project_id=${project.id}`;
-    if (s === 'outline_ready') return `StoryHooks?project_id=${project.id}`;
+    if (s === 'outline_ready') return isSleep ? `StoryScript?project_id=${project.id}` : `StoryHooks?project_id=${project.id}`;
     if (['hooks_ready', 'scripting', 'script_complete'].includes(s)) return `StoryScript?project_id=${project.id}`;
     if (['voiceover_ready', 'scene_breakdown', 'breakdown_complete', 'content_generation', 'scenes_ready'].includes(s)) return `ContentGeneration?project_id=${project.id}`;
     if (['timeline_editing', 'compiled'].includes(s)) return `TimelineEditor?project_id=${project.id}`;
