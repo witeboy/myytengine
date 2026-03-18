@@ -441,7 +441,7 @@ function cleanPromptForGrok(rawPrompt) {
 
 async function processScene(base44, scene, project, apiKey, aspectRatio) {
   const sceneNum = scene.scene_number;
-  const isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
+  const isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story' || project.visual_style === 'sleep_ambient';
 
   // For sleep: log the raw prompt before any cleaning so we can debug safety issues
   if (isSleepProject) {
