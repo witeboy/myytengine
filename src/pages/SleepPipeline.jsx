@@ -1,23 +1,23 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React from 'react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { createPageUrl } from '@/utils';
 import SleepScriptStage from '@/components/sleep/SleepScriptStage';
-import SleepScenesStage from '@/components/sleep/SleepScenesStage';
-import SleepBrollStage from '@/components/sleep/SleepBrollStage';
+import SleepVisualsStage from '@/components/sleep/SleepVisualsStage';
+import SleepMusicStage from '@/components/sleep/SleepMusicStage';
 import {
-  ArrowLeft, Moon, Sparkles, Layers, ImageIcon, Film,
-  Clapperboard, ArrowRight, CheckCircle2, Circle, Loader2
+  ArrowLeft, Moon, Sparkles, ImageIcon, Music,
+  Film, ArrowRight, CheckCircle2, Circle, Loader2
 } from 'lucide-react';
 
 const STAGES = [
   { key: 'script', label: 'Script', icon: Sparkles },
-  { key: 'scenes', label: 'Scene Breakdown', icon: Layers },
-  { key: 'broll', label: 'B-Roll', icon: Clapperboard },
+  { key: 'visuals', label: 'Ambient Visuals', icon: ImageIcon },
+  { key: 'music', label: '432Hz Music', icon: Music },
   { key: 'handoff', label: 'Timeline', icon: Film },
 ];
 
@@ -38,7 +38,6 @@ function StagePill({ stage, isActive, isComplete }) {
 
 export default function SleepPipeline() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const projectId = new URLSearchParams(window.location.search).get('project_id');
 
   const { data: project, refetch: refetchProject } = useQuery({
@@ -78,28 +77,24 @@ export default function SleepPipeline() {
   const hasFinalScript = scripts.some(s => s.version === 'final_aggregated');
   const scriptReady = allBatchesDone && hasFinalScript;
 
-  const scenesDone = scenes.length > 0 && scenes.every(s => s.status !== 'pending');
-  const breakdownDone = scenes.length > 0 && scenes.filter(s => s.status === 'breakdown_ready' || s.status === 'prompts_ready').length === scenes.length;
-
-  const brollCount = scenes.filter(s => s.broll_url && s.broll_url.startsWith('http')).length;
-  const brollDone = scenes.length > 0 && brollCount >= scenes.length * 0.7; // 70% threshold
+  const allImagesReady = scenes.length > 0 && scenes.every(s => s.image_url && s.image_url.startsWith('http'));
 
   // Determine active stage
   let activeStage = 'script';
-  if (scriptReady && !breakdownDone) activeStage = 'scenes';
-  else if (scriptReady && breakdownDone && !brollDone) activeStage = 'broll';
-  else if (scriptReady && breakdownDone && brollDone) activeStage = 'handoff';
+  if (scriptReady && !allImagesReady) activeStage = 'visuals';
+  else if (scriptReady && allImagesReady) activeStage = 'music';
+
+  // Check if music exists
+  const { data: musicTracks = [] } = useQuery({
+    queryKey: ['sleep-music', projectId],
+    queryFn: () => base44.entities.MusicTracks.filter({ project_id: projectId }),
+    enabled: !!projectId,
+  });
+  const hasMusicReady = musicTracks.some(t => t.is_selected && t.audio_url);
+  if (scriptReady && allImagesReady && hasMusicReady) activeStage = 'handoff';
 
   const isMeditation = project?.project_mode === 'sleep_meditation';
   const modeLabel = isMeditation ? '🧘 Sleep Meditation' : '🌙 Sleep Story';
-
-  const handleGoToTimeline = () => {
-    navigate(createPageUrl(`TimelineEditor?project_id=${projectId}`));
-  };
-
-  const handleGoToContentGen = () => {
-    navigate(createPageUrl(`ContentGeneration?project_id=${projectId}`));
-  };
 
   if (!project) {
     return (
@@ -123,17 +118,15 @@ export default function SleepPipeline() {
               <h1 className="text-2xl font-bold">{project.name}</h1>
               <Badge className="bg-indigo-500/20 text-indigo-300 border-indigo-500/30 text-[10px]">{modeLabel}</Badge>
             </div>
-            <p className="text-sm text-white/50">{project.video_duration_minutes || 15} min · Sleep Pipeline</p>
+            <p className="text-sm text-white/50">{project.video_duration_minutes || 15} min · Ambient Sleep Pipeline</p>
           </div>
           {activeStage === 'handoff' && (
-            <div className="flex gap-2">
-              <Button onClick={handleGoToContentGen} variant="outline" className="border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10">
-                <ImageIcon className="w-4 h-4 mr-1" /> Content Gen
-              </Button>
-              <Button onClick={handleGoToTimeline} className="bg-indigo-600 hover:bg-indigo-700 gap-2">
-                Timeline <ArrowRight className="w-4 h-4" />
-              </Button>
-            </div>
+            <Button
+              onClick={() => navigate(createPageUrl(`TimelineEditor?project_id=${projectId}`))}
+              className="bg-indigo-600 hover:bg-indigo-700 gap-2"
+            >
+              Timeline <ArrowRight className="w-4 h-4" />
+            </Button>
           )}
         </div>
 
@@ -141,16 +134,29 @@ export default function SleepPipeline() {
         <div className="flex flex-wrap gap-2 mb-8">
           {STAGES.map((stage, i) => {
             const stageIdx = STAGES.findIndex(s => s.key === activeStage);
-            const thisIdx = i;
             return (
               <StagePill
                 key={stage.key}
                 stage={stage}
                 isActive={stage.key === activeStage}
-                isComplete={thisIdx < stageIdx || (activeStage === 'handoff' && thisIdx <= stageIdx)}
+                isComplete={i < stageIdx || (activeStage === 'handoff' && i <= stageIdx)}
               />
             );
           })}
+        </div>
+
+        {/* Info Banner */}
+        <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-lg p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <Moon className="w-5 h-5 text-indigo-400 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="text-sm text-indigo-200 font-medium">Ambient Sleep Format</p>
+              <p className="text-xs text-white/40 mt-1">
+                {scenes.length > 0 ? `${scenes.length} gorgeous ambient images` : '8-12 gorgeous ambient images'}, each holding for several minutes with ultra-slow Ken Burns motion.
+                Voice + 432Hz music do the real work — visuals are warm ambient wallpaper.
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Stage Content */}
@@ -167,25 +173,22 @@ export default function SleepPipeline() {
             />
           )}
 
-          {scriptReady && (activeStage === 'scenes' || activeStage === 'broll' || activeStage === 'handoff') && (
-            <SleepScenesStage
+          {scriptReady && (
+            <SleepVisualsStage
               projectId={projectId}
               project={project}
               scenes={scenes}
-              breakdownDone={breakdownDone}
               onRefetch={async () => {
                 await Promise.all([refetchScenes(), refetchProject()]);
               }}
             />
           )}
 
-          {scriptReady && breakdownDone && (activeStage === 'broll' || activeStage === 'handoff') && (
-            <SleepBrollStage
+          {scriptReady && allImagesReady && (
+            <SleepMusicStage
               projectId={projectId}
-              scenes={scenes}
-              brollCount={brollCount}
-              brollDone={brollDone}
-              onRefetch={refetchScenes}
+              project={project}
+              onRefetch={refetchProject}
             />
           )}
 
@@ -195,14 +198,21 @@ export default function SleepPipeline() {
                 <CheckCircle2 className="w-10 h-10 text-green-400 mx-auto mb-3" />
                 <h3 className="text-lg font-bold text-white mb-1">Sleep Pipeline Complete</h3>
                 <p className="text-white/50 text-sm mb-4">
-                  {scenes.length} scenes with {brollCount} B-roll clips ready.
-                  Continue to Content Generation for image/video creation, or go directly to Timeline.
+                  {scenes.length} ambient images + 432Hz music ready.
+                  Each image will hold for several minutes with ultra-slow Ken Burns motion.
                 </p>
                 <div className="flex gap-3 justify-center">
-                  <Button onClick={handleGoToContentGen} variant="outline" className="border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10">
-                    <ImageIcon className="w-4 h-4 mr-1" /> Generate Images & Videos
+                  <Button
+                    onClick={() => navigate(createPageUrl(`ContentGeneration?project_id=${projectId}`))}
+                    variant="outline"
+                    className="border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/10"
+                  >
+                    <ImageIcon className="w-4 h-4 mr-1" /> Edit in Content Gen
                   </Button>
-                  <Button onClick={handleGoToTimeline} className="bg-indigo-600 hover:bg-indigo-700 gap-2">
+                  <Button
+                    onClick={() => navigate(createPageUrl(`TimelineEditor?project_id=${projectId}`))}
+                    className="bg-indigo-600 hover:bg-indigo-700 gap-2"
+                  >
                     Go to Timeline <ArrowRight className="w-4 h-4" />
                   </Button>
                 </div>
