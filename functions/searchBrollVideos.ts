@@ -1,98 +1,241 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
-Deno.serve(async (req) => {
+// ══════════════════════════════════════════════════════════════════
+// MULTI-SOURCE B-ROLL VIDEO SEARCH
+// Searches Freepik, Pexels, and Pixabay in parallel
+// ══════════════════════════════════════════════════════════════════
+
+async function searchFreepik(searchTerms, duration, quality) {
+  const apiKey = Deno.env.get('FREEPIK_API_KEY');
+  if (!apiKey) return { videos: [], source: 'freepik', error: 'No API key' };
+
+  const filters = {
+    resolution: { '1080': true },
+    category: 'footage',
+    orientation: ['horizontal']
+  };
+  if (quality === '4k') filters.resolution['4k'] = true;
+  if (quality === '720p') filters.resolution['720'] = true;
+  if (duration) {
+    filters.duration = { from: Math.max(1, duration - 5), to: duration + 5 };
+  }
+
+  const filterParams = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (typeof value === 'object' && !Array.isArray(value)) {
+      Object.entries(value).forEach(([k, v]) => {
+        if (v) filterParams.append(`filters[${key}][${k}]`, v);
+      });
+    } else if (Array.isArray(value)) {
+      value.forEach(v => filterParams.append(`filters[${key}][]`, v));
+    }
+  });
+
+  const url = `https://api.freepik.com/v1/videos?term=${encodeURIComponent(searchTerms)}&order=relevance&page=1&${filterParams.toString()}`;
+
   try {
-    const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-
-    if (!user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const body = await req.json();
-    const { prompt, duration, quality = '1080p' } = body;
-
-    if (!prompt) {
-      return Response.json({ error: 'Missing prompt' }, { status: 400 });
-    }
-
-    const apiKey = Deno.env.get('FREEPIK_API_KEY');
-    if (!apiKey) {
-      return Response.json({ error: 'Freepik API key not configured' }, { status: 500 });
-    }
-
-    // Extract key search terms from prompt (first 5 words or main concepts)
-    const searchTerms = prompt.split(' ').slice(0, 5).join(' ');
-
-    // Build Freepik API query
-    const filters = {
-      resolution: { '1080': true },
-      category: 'footage',
-      orientation: ['horizontal']
-    };
-
-    // Add quality filter
-    if (quality === '4k') {
-      filters.resolution['4k'] = true;
-    } else if (quality === '720p') {
-      filters.resolution['720'] = true;
-    }
-
-    // Add duration filter if specified
-    if (duration) {
-      filters.duration = {
-        from: Math.max(1, duration - 5),
-        to: duration + 5
-      };
-    }
-
-    // Build query string with filters
-    const filterParams = new URLSearchParams();
-    Object.entries(filters).forEach(([key, value]) => {
-      if (typeof value === 'object' && !Array.isArray(value)) {
-        Object.entries(value).forEach(([k, v]) => {
-          if (v) filterParams.append(`filters[${key}][${k}]`, v);
-        });
-      } else if (Array.isArray(value)) {
-        value.forEach(v => filterParams.append(`filters[${key}][]`, v));
-      }
-    });
-
-    const url = `https://api.freepik.com/v1/videos?term=${encodeURIComponent(searchTerms)}&order=relevance&page=1&${filterParams.toString()}`;
-
     const response = await fetch(url, {
-      headers: {
-        'x-freepik-api-key': apiKey,
-        'Accept-Language': 'en-US'
-      }
+      headers: { 'x-freepik-api-key': apiKey, 'Accept-Language': 'en-US' }
     });
-
     if (!response.ok) {
       console.error('Freepik API error:', response.status);
-      return Response.json({ error: 'Failed to search Freepik' }, { status: 500 });
+      return { videos: [], source: 'freepik', error: `HTTP ${response.status}` };
     }
-
     const data = await response.json();
-
-    // Transform Freepik response to our format
     const videos = (data.data || []).map(video => ({
-      id: video.id,
-      name: video.name,
+      id: `freepik-${video.id}`,
+      source: 'freepik',
+      name: video.name || 'Freepik Video',
       url: video.url,
       duration: video.duration,
       quality: video.quality,
       thumbnail: video.thumbnails?.[0]?.url,
       preview: video.previews?.[0]?.url,
+      downloadUrl: video.previews?.[0]?.url || video.url,
       author: video.author?.name,
       premium: video.premium === 1,
       aspectRatio: video.aspect_ratio
     }));
+    return { videos, source: 'freepik' };
+  } catch (err) {
+    console.error('Freepik search error:', err.message);
+    return { videos: [], source: 'freepik', error: err.message };
+  }
+}
+
+async function searchPexels(searchTerms, duration, quality, orientation) {
+  const apiKey = Deno.env.get('PEXELS_API_KEY');
+  if (!apiKey) return { videos: [], source: 'pexels', error: 'No API key' };
+
+  const params = new URLSearchParams({
+    query: searchTerms,
+    per_page: '15',
+    page: '1',
+  });
+  if (orientation) params.set('orientation', orientation); // landscape, portrait
+
+  // Pexels has min_width/min_height/min_duration/max_duration
+  if (quality === '4k') params.set('size', 'large');
+  if (duration) {
+    params.set('min_duration', String(Math.max(1, duration - 5)));
+    params.set('max_duration', String(duration + 10));
+  }
+
+  const url = `https://api.pexels.com/videos/search?${params.toString()}`;
+
+  try {
+    const response = await fetch(url, {
+      headers: { 'Authorization': apiKey }
+    });
+    if (!response.ok) {
+      console.error('Pexels API error:', response.status);
+      return { videos: [], source: 'pexels', error: `HTTP ${response.status}` };
+    }
+    const data = await response.json();
+    const videos = (data.videos || []).map(video => {
+      // Pick best video file: prefer HD, then SD
+      const files = video.video_files || [];
+      const hd = files.find(f => f.quality === 'hd' && f.width >= 1280);
+      const sd = files.find(f => f.quality === 'sd');
+      const best = hd || sd || files[0];
+
+      return {
+        id: `pexels-${video.id}`,
+        source: 'pexels',
+        name: video.url?.split('/').pop()?.replace(/-/g, ' ')?.replace(/\/$/, '') || 'Pexels Video',
+        url: video.url,
+        duration: video.duration,
+        quality: best?.quality || 'hd',
+        width: best?.width,
+        height: best?.height,
+        thumbnail: video.image,
+        preview: video.video_files?.find(f => f.quality === 'sd')?.link || best?.link,
+        downloadUrl: best?.link,
+        author: video.user?.name,
+        authorUrl: video.user?.url,
+        premium: false,
+        aspectRatio: best ? `${best.width}:${best.height}` : null
+      };
+    });
+    return { videos, source: 'pexels' };
+  } catch (err) {
+    console.error('Pexels search error:', err.message);
+    return { videos: [], source: 'pexels', error: err.message };
+  }
+}
+
+async function searchPixabay(searchTerms, duration, quality) {
+  const apiKey = Deno.env.get('PIXABAY_API_KEY');
+  if (!apiKey) return { videos: [], source: 'pixabay', error: 'No API key' };
+
+  const params = new URLSearchParams({
+    key: apiKey,
+    q: searchTerms,
+    video_type: 'film',
+    per_page: '15',
+    page: '1',
+    safesearch: 'true',
+    order: 'popular',
+  });
+  // Pixabay has min_width/min_height
+  if (quality === '4k') params.set('min_width', '3840');
+  else if (quality === '1080p') params.set('min_width', '1920');
+
+  const url = `https://pixabay.com/api/videos/?${params.toString()}`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error('Pixabay API error:', response.status);
+      return { videos: [], source: 'pixabay', error: `HTTP ${response.status}` };
+    }
+    const data = await response.json();
+    const videos = (data.hits || []).map(video => {
+      // Pick best quality: large > medium > small > tiny
+      const vids = video.videos || {};
+      const best = vids.large || vids.medium || vids.small || vids.tiny || {};
+
+      return {
+        id: `pixabay-${video.id}`,
+        source: 'pixabay',
+        name: video.tags || 'Pixabay Video',
+        url: video.pageURL,
+        duration: video.duration,
+        quality: best === vids.large ? '1080p+' : best === vids.medium ? '720p' : 'SD',
+        width: best.width,
+        height: best.height,
+        thumbnail: `https://i.vimeocdn.com/video/${video.picture_id}_295x166.jpg`,
+        preview: (vids.small || vids.tiny || {}).url,
+        downloadUrl: best.url,
+        author: video.user,
+        authorUrl: `https://pixabay.com/users/${video.user}-${video.user_id}/`,
+        premium: false,
+        views: video.views,
+        downloads: video.downloads,
+        likes: video.likes,
+      };
+    });
+    return { videos, source: 'pixabay' };
+  } catch (err) {
+    console.error('Pixabay search error:', err.message);
+    return { videos: [], source: 'pixabay', error: err.message };
+  }
+}
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const body = await req.json();
+    const { prompt, duration, quality = '1080p', sources, orientation } = body;
+
+    if (!prompt) return Response.json({ error: 'Missing prompt' }, { status: 400 });
+
+    // Extract key search terms (first 8 words)
+    const searchTerms = prompt.split(' ').slice(0, 8).join(' ');
+
+    // Determine which sources to search (default: all available)
+    const enabledSources = sources || ['freepik', 'pexels', 'pixabay'];
+    const pexelsOrientation = orientation === 'portrait' ? 'portrait' : 'landscape';
+
+    // Search all sources in parallel
+    const searchPromises = [];
+    if (enabledSources.includes('freepik'))  searchPromises.push(searchFreepik(searchTerms, duration, quality));
+    if (enabledSources.includes('pexels'))   searchPromises.push(searchPexels(searchTerms, duration, quality, pexelsOrientation));
+    if (enabledSources.includes('pixabay'))  searchPromises.push(searchPixabay(searchTerms, duration, quality));
+
+    const results = await Promise.all(searchPromises);
+
+    // Merge results, interleaving sources for variety
+    const allVideos = [];
+    const maxLen = Math.max(...results.map(r => r.videos.length));
+    for (let i = 0; i < maxLen; i++) {
+      for (const result of results) {
+        if (i < result.videos.length) {
+          allVideos.push(result.videos[i]);
+        }
+      }
+    }
+
+    // Build source summary
+    const sourceSummary = {};
+    for (const result of results) {
+      sourceSummary[result.source] = {
+        count: result.videos.length,
+        error: result.error || null,
+      };
+    }
+
+    console.log(`B-Roll search "${searchTerms}": ${allVideos.length} total (${results.map(r => `${r.source}:${r.videos.length}`).join(', ')})`);
 
     return Response.json({
       success: true,
-      videos,
-      total: data.meta?.pagination?.total || 0,
-      prompt: searchTerms
+      videos: allVideos,
+      total: allVideos.length,
+      prompt: searchTerms,
+      sources: sourceSummary,
     });
   } catch (error) {
     console.error('Error searching B-roll videos:', error);
