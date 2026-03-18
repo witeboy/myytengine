@@ -558,6 +558,7 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       console.log(`🎨 Scene ${sceneNum}: generating (attempt ${attempt + 1}/${MAX_RETRIES}, ${finalPrompt.length} chars, ref=${!!referenceUrl})...`);
+      console.log(`📝 FINAL PROMPT SENT TO GROK: "${finalPrompt}"`);
 
       const imageUrl = await generateWithGrokImagine(apiKey, finalPrompt, aspectRatio, referenceUrl);
 
