@@ -460,27 +460,28 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
 
   let finalPrompt = scene.image_prompt;
 
-  // ═══ SLEEP MODE — pure environment, no people, dark aesthetic ═══
+  // ═══ SLEEP MODE — ambient environments, dark aesthetic ═══
   if (isSleepProject) {
-    // Sleep scenes are ambient environments — strip ALL person/character descriptions
-    // to avoid content safety filters and keep the focus on atmosphere
     finalPrompt = finalPrompt
-      // Strip full character identity blocks (name + description chains)
+      // Strip ALL photorealistic/cinematic language that doesn't belong in sleep oil paintings
+      .replace(/\b(photorealistic|DSLR|Canon|Sony|Nikon)\b[^.]{0,60}/gi, '')
+      .replace(/\bnatural skin texture[^,.]*/gi, '')
+      .replace(/\beditorial photography[^,.]*/gi, '')
+      .replace(/\brazor[\s-]sharp detail[^,.]*/gi, '')
+      // Strip full character identity blocks
       .replace(/\b(a\s+)?(photorealistic\s+)?(female|male|woman|man|person|figure|girl|boy|lady|gentleman),?\s+[A-Z][a-z]+,?\s+(with\s+)?[^.]{20,300}(pajamas|clothing|dressed|wearing|shirt|pants|outfit|build|slender|muscular)[^.]*\.\s*/gi, '')
-      // Strip "Sarah" or any named character references
       .replace(/\b[A-Z][a-z]{2,15}\s*(→|is|sits?|stands?|lies?|rests?|gazes?|walks?|holds?|closes?|faces?)\s+/gi, '')
       .replace(/\b(Sarah|The Listener|the listener|the figure|the character|the protagonist)\b/gi, '')
-      // Strip character appearance descriptors
       .replace(/\b(light\s+ivory\s+skin|oval\s+face|hazel\s+eyes?|almond[- ]shaped|chestnut[- ]brown\s+hair|wavy\s+hair|upturned\s+nose|full\s+lips|slender\s+build)\b[^,.]{0,60}[.,]\s*/gi, '')
-      // Strip clothing references
       .replace(/\b(wearing|dressed\s+in|clothed\s+in)\s+[^.]{5,80}(pajamas|cotton|silk|comfortable)[^.]*\.\s*/gi, '')
       .replace(/\bcomfortable\s+(cotton\s+)?pajamas?\b/gi, '')
-      // Strip "the main subject" / "primary subject" for people
       .replace(/\b(is\s+)?(the\s+)?(main|primary)\s+subject\b/gi, '')
-      // Strip human body part close-ups
       .replace(/\b(her|his)\s+(hands?|face|eyes?|arms?|legs?|chest|shoulders?|skin|lips?|hair)\b/gi, 'the scene')
-      // Strip "from the waist up" / "head to feet" etc
       .replace(/\b(from\s+the\s+waist\s+up|head\s+to\s+feet|complete\s+body|full\s+body)\b/gi, '')
+      // Strip the full-body framing anchor
+      .replace(/^Full (body |scene )?wide shot showing[^.]*\.\s*/i, '')
+      .replace(/\bcharacter shown head to feet[^.]*\.\s*/gi, '')
+      .replace(/\bmid-action in a populated world[^.]*\.\s*/gi, '')
       // Clean artifacts
       .replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').replace(/\s{2,}/g, ' ').trim();
 
