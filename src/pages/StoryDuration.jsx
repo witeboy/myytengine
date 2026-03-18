@@ -7,12 +7,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { createPageUrl } from '@/utils';
 import StageProgress from '@/components/StageProgress';
+import ScriptModeSelector from '@/components/script/ScriptModeSelector';
 import { Loader2, Clock, FileText, Layers, ArrowRight, ArrowLeft } from 'lucide-react';
 
 export default function StoryDuration() {
   const navigate = useNavigate();
   const projectId = new URLSearchParams(window.location.search).get('project_id');
   const [duration, setDuration] = useState(null);
+  const [scriptMode, setScriptMode] = useState('');
   const [hasInitialized, setHasInitialized] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -28,8 +30,8 @@ export default function StoryDuration() {
   useEffect(() => {
     if (project && !hasInitialized) {
       const saved = project.video_duration_minutes;
-      console.log('[StoryDuration] Initializing duration from project:', saved, typeof saved);
       setDuration(saved && saved > 0 ? saved : 8);
+      setScriptMode(project.project_mode || '');
       setHasInitialized(true);
     }
   }, [project, hasInitialized]);
@@ -45,7 +47,7 @@ export default function StoryDuration() {
 
   const safeDuration = duration || 8;
   const totalWords = safeDuration * 150;
-  const isSleepProject = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
+  const isSleepProject = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
   const numBatches = Math.max(2, Math.ceil(totalWords / (isSleepProject ? 1100 : 800)));
 
   const handleGenerate = async () => {
@@ -53,6 +55,7 @@ export default function StoryDuration() {
     setLoading(true);
     await base44.entities.Projects.update(projectId, {
       video_duration_minutes: finalDuration,
+      project_mode: scriptMode || '',
     });
 
     const res = await base44.functions.invoke('generateOutline', {
@@ -73,9 +76,10 @@ export default function StoryDuration() {
 
   const handleContinue = async () => {
     const finalDuration = Math.max(1, Math.round(safeDuration));
-    if (finalDuration !== project.video_duration_minutes) {
+    const modeChanged = (scriptMode || '') !== (project.project_mode || '');
+    if (finalDuration !== project.video_duration_minutes || modeChanged) {
       setLoading(true);
-      await base44.entities.Projects.update(projectId, { video_duration_minutes: finalDuration });
+      await base44.entities.Projects.update(projectId, { video_duration_minutes: finalDuration, project_mode: scriptMode || '' });
       await base44.functions.invoke('generateOutline', {
         project_id: projectId,
         topic_id: project.selected_topic_id,
@@ -122,6 +126,8 @@ export default function StoryDuration() {
             <CardTitle>Duration & Batches</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            <ScriptModeSelector value={scriptMode} onChange={setScriptMode} />
+
             <div>
               <label className="text-sm font-medium mb-2 block">Video Duration (minutes)</label>
               <Input
