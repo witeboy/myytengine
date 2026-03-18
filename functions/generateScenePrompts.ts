@@ -1255,12 +1255,9 @@ ${sceneDirections}
       • Character description depth MUST match shot type — wide shots get minimal, medium gets moderate, close-ups get full. NEVER dump a full casting-sheet description into a wide shot.
       • If the narration mentions a specific prop (iPhone, MacBook, Tesla, etc.), use that exact name — but keep it as a prop in the character's hand or environment, NOT the visual subject.
       • ${orientationConfig.composition}
-    - FORBIDDEN: text, words, letters, numbers, charts, graphs, signs in the image
-    - FORBIDDEN: Describing what's ON a screen, phone, laptop, book, receipt, bill, letter, contract, or any document. The image generator WILL try to render it as garbled text. Instead, show the character's emotional reaction to the object from a wider angle. Example: "crumpled bill clutched in trembling hands, face pale under harsh light" NOT "medical bill showing $45,000 in charges"
-    - FORBIDDEN: Dollar amounts ($X), percentages, dates, names, or any specific text that would appear on a prop. These render as random garbled characters.
-    - When a character holds or uses an object (phone, document, tool, weapon, cup), describe it from a MEDIUM or WIDER shot. Close-ups of hand-object interaction produce broken physics (fingers clipping through objects, impossible grips). Let the object be PART of the scene, not the SUBJECT of it.
+    - When text, UI, or screen content appears in a scene, describe it as a clean digital overlay INSIDE a defined container (phone screen, monitor, sign). Keep text minimal, short, and specify exact position. Include: "all text must be perfectly spelled, sharp, readable, high contrast, no garbled text, no distorted letters"
+    - When a character holds or uses an object (phone, document, tool, weapon, cup), describe it from a MEDIUM or WIDER shot. Let the object be PART of the scene, not the SUBJECT of it.
     - Abstract concepts → PHYSICAL METAPHORS
-    - End with: "ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image"
 
    **═══════════════════════════════════════════════════════════════**
    **🚨 PROMPT ENGINE RULEBOOK — MANDATORY COMPLIANCE 🚨**
