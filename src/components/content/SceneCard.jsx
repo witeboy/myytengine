@@ -34,14 +34,36 @@ function FixPromptButton({ sceneId, projectId, onFixed }) {
     setResult(null);
 
     try {
-      const resp = await base44.functions.invoke('fixScenePrompts', {
-        project_id: projectId,
-        scene_id: sceneId,
-        fix_type: type
-      });
-      const data = resp.data || resp;
-      setResult(data);
-      onFixed?.();
+      if (type === 'ai_clean') {
+        // Fetch the current scene prompt, clean it via OpenAI, and save
+        const sceneList = await base44.entities.Scenes.filter({ id: sceneId });
+        const scene = sceneList[0];
+        if (scene?.image_prompt) {
+          const projectList = await base44.entities.Projects.filter({ id: projectId });
+          const visualStyle = projectList[0]?.visual_style || '';
+          const resp = await base44.functions.invoke('cleanScenePrompt', {
+            prompt: scene.image_prompt,
+            visual_style: visualStyle
+          });
+          const data = resp.data || resp;
+          if (data.cleaned_prompt && data.cleaned_prompt !== scene.image_prompt) {
+            await base44.entities.Scenes.update(sceneId, { image_prompt: data.cleaned_prompt });
+            setResult({ fixed: 1, total: 1 });
+          } else {
+            setResult({ fixed: 0, total: 1 });
+          }
+        }
+        onFixed?.();
+      } else {
+        const resp = await base44.functions.invoke('fixScenePrompts', {
+          project_id: projectId,
+          scene_id: sceneId,
+          fix_type: type
+        });
+        const data = resp.data || resp;
+        setResult(data);
+        onFixed?.();
+      }
     } catch (err) {
       console.error('Fix prompt failed:', err);
       setResult({ error: err.message });
@@ -98,6 +120,7 @@ function FixPromptButton({ sceneId, projectId, onFixed }) {
             { type: 'characters', label: 'Fix Characters', icon: '👤' },
             { type: 'cleanup', label: 'Clean Metadata', icon: '🧹' },
             { type: 'quality', label: 'Check Quality', icon: '⚠️' },
+            { type: 'ai_clean', label: 'AI Clean (OpenAI)', icon: '✨' },
           ].map(opt => (
             <button
               key={opt.type}
