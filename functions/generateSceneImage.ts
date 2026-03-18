@@ -470,14 +470,24 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
       // Clean artifacts
       .replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').replace(/\s{2,}/g, ' ').trim();
 
+    // For sleep: strip ALL the heavyweight style suffixes that generateScenePrompts appends
+    // Grok only needs a clean visual description + minimal style cue
+    // The long "Cinematic film still shot on ARRI Alexa 65..." blocks trigger safety filters
+    finalPrompt = finalPrompt
+      .replace(/Cinematic film still shot on ARRI[^.]*\./gi, '')
+      .replace(/shot on ARRI[^.]*\./gi, '')
+      .replace(/Hollywood blockbuster[^.]*\./gi, '')
+      .replace(/photorealistic rendering[^,.]*/gi, '')
+      .replace(/8K resolution[^,.]*/gi, '')
+      .replace(/color graded with professional[^,.]*/gi, '')
+      .replace(/Kodak Vision3[^,.]*/gi, '')
+      .replace(/volumetric god rays[^,.]*/gi, '')
+      // Strip duplicate "dark moody oil painting" blocks (keep only one)
+      .replace(/(dark moody oil painting[^.]*\.)\s*(dark moody oil painting)/gi, '$1');
+
     // Now apply standard cleaning
     finalPrompt = cleanPromptForGrok(finalPrompt);
 
-    // Ensure the dark aesthetic keywords are present
-    const sleepStyleSuffix = '. Dark moody oil painting style, Rembrandt chiaroscuro, deep shadow covering most of the frame, warm amber and burnt sienna palette, low-key candlelit atmosphere, no bright colors, dim and sleep-safe, no people, no human figures';
-    if (!/dark\s*moody\s*oil/i.test(finalPrompt) && !/chiaroscuro/i.test(finalPrompt)) {
-      finalPrompt = finalPrompt + sleepStyleSuffix;
-    }
     // Strip any bright/daylight language
     finalPrompt = finalPrompt
       .replace(/\bbright\s+(daylight|sunlight|sunshine|light|white|blue)\b/gi, 'dim warm glow')
@@ -485,7 +495,24 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
       .replace(/\boverexposed\b/gi, 'underexposed')
       .replace(/\bvibrant\s+(saturated\s+)?colors?\b/gi, 'muted dark tones')
       .replace(/\bneon\b/gi, 'candlelight');
-    console.log(`🌙 Scene ${sceneNum}: sleep dark mode — environment only, no people`);
+
+    // Keep prompt SHORT for sleep — under 500 chars to avoid safety filter triggers
+    // Extract the core visual description (first 1-2 sentences before style suffixes)
+    if (finalPrompt.length > 500) {
+      // Find the first style/technical block and cut there
+      const cutPatterns = [/\.\s*(Cinematic|dark moody|Deep shadow|Rembrandt|ARRI|shallow depth|dramatic three)/i];
+      for (const pattern of cutPatterns) {
+        const match = finalPrompt.match(pattern);
+        if (match && match.index > 80) {
+          finalPrompt = finalPrompt.substring(0, match.index + 1).trim();
+          break;
+        }
+      }
+      // Append a SHORT style cue
+      finalPrompt += ' Dark moody oil painting, deep shadows, warm amber candlelight, no people.';
+    }
+
+    console.log(`🌙 Scene ${sceneNum}: sleep dark mode — ${finalPrompt.length} chars`);
   } else {
     finalPrompt = cleanPromptForGrok(finalPrompt);
   }
