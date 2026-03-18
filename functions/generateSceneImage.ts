@@ -444,23 +444,50 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
     return { scene_id: scene.id, scene_number: sceneNum, status: 'skipped', reason: 'already_generated' };
   }
 
-  let finalPrompt = cleanPromptForGrok(scene.image_prompt);
+  let finalPrompt = scene.image_prompt;
 
-  // ═══ SLEEP MODE — inject dark, dim, painterly aesthetic ═══
+  // ═══ SLEEP MODE — pure environment, no people, dark aesthetic ═══
   if (isSleepProject) {
-    // Ensure the dark aesthetic keywords are present even after prompt cleaning
-    const sleepStyleSuffix = '. Dark moody oil painting style, Rembrandt chiaroscuro, deep shadow covering most of the frame, warm amber and burnt sienna palette, low-key candlelit atmosphere, no bright colors, dim and sleep-safe';
+    // Sleep scenes are ambient environments — strip ALL person/character descriptions
+    // to avoid content safety filters and keep the focus on atmosphere
+    finalPrompt = finalPrompt
+      // Strip full character identity blocks (name + description chains)
+      .replace(/\b(a\s+)?(photorealistic\s+)?(female|male|woman|man|person|figure|girl|boy|lady|gentleman),?\s+[A-Z][a-z]+,?\s+(with\s+)?[^.]{20,300}(pajamas|clothing|dressed|wearing|shirt|pants|outfit|build|slender|muscular)[^.]*\.\s*/gi, '')
+      // Strip "Sarah" or any named character references
+      .replace(/\b[A-Z][a-z]{2,15}\s*(→|is|sits?|stands?|lies?|rests?|gazes?|walks?|holds?|closes?|faces?)\s+/gi, '')
+      .replace(/\b(Sarah|The Listener|the listener|the figure|the character|the protagonist)\b/gi, '')
+      // Strip character appearance descriptors
+      .replace(/\b(light\s+ivory\s+skin|oval\s+face|hazel\s+eyes?|almond[- ]shaped|chestnut[- ]brown\s+hair|wavy\s+hair|upturned\s+nose|full\s+lips|slender\s+build)\b[^,.]{0,60}[.,]\s*/gi, '')
+      // Strip clothing references
+      .replace(/\b(wearing|dressed\s+in|clothed\s+in)\s+[^.]{5,80}(pajamas|cotton|silk|comfortable)[^.]*\.\s*/gi, '')
+      .replace(/\bcomfortable\s+(cotton\s+)?pajamas?\b/gi, '')
+      // Strip "the main subject" / "primary subject" for people
+      .replace(/\b(is\s+)?(the\s+)?(main|primary)\s+subject\b/gi, '')
+      // Strip human body part close-ups
+      .replace(/\b(her|his)\s+(hands?|face|eyes?|arms?|legs?|chest|shoulders?|skin|lips?|hair)\b/gi, 'the scene')
+      // Strip "from the waist up" / "head to feet" etc
+      .replace(/\b(from\s+the\s+waist\s+up|head\s+to\s+feet|complete\s+body|full\s+body)\b/gi, '')
+      // Clean artifacts
+      .replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').replace(/\s{2,}/g, ' ').trim();
+
+    // Now apply standard cleaning
+    finalPrompt = cleanPromptForGrok(finalPrompt);
+
+    // Ensure the dark aesthetic keywords are present
+    const sleepStyleSuffix = '. Dark moody oil painting style, Rembrandt chiaroscuro, deep shadow covering most of the frame, warm amber and burnt sienna palette, low-key candlelit atmosphere, no bright colors, dim and sleep-safe, no people, no human figures';
     if (!/dark\s*moody\s*oil/i.test(finalPrompt) && !/chiaroscuro/i.test(finalPrompt)) {
       finalPrompt = finalPrompt + sleepStyleSuffix;
     }
-    // Strip any bright/daylight language that may have leaked through
+    // Strip any bright/daylight language
     finalPrompt = finalPrompt
       .replace(/\bbright\s+(daylight|sunlight|sunshine|light|white|blue)\b/gi, 'dim warm glow')
       .replace(/\bhigh[- ]key\s+lighting\b/gi, 'low-key lighting')
       .replace(/\boverexposed\b/gi, 'underexposed')
       .replace(/\bvibrant\s+(saturated\s+)?colors?\b/gi, 'muted dark tones')
       .replace(/\bneon\b/gi, 'candlelight');
-    console.log(`🌙 Scene ${sceneNum}: sleep dark mode applied`);
+    console.log(`🌙 Scene ${sceneNum}: sleep dark mode — environment only, no people`);
+  } else {
+    finalPrompt = cleanPromptForGrok(finalPrompt);
   }
 
   // Log which framing mode was applied
