@@ -627,8 +627,8 @@ Deno.serve(async (req) => {
     // ═══ SLEEP MODE or SLEEP_AMBIENT style — REPLACE style entirely with dark oil painting ═══
     if (useSleepStyle) {
       styleConfig = {
-        positive: "dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow, warm amber rim light, burnt sienna and dark chocolate palette, low-key lighting, candlelit atmosphere, masterpiece quality",
-        negative: "photorealistic, ARRI, anamorphic, Panavision, lens flare, bokeh, film grain, bright daylight, harsh lighting, vivid saturated colors, neon, high key, overexposed, studio lighting, flash photography, 8K resolution, Hollywood"
+        positive: "dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow, very dim warm amber rim light, burnt sienna and dark chocolate palette, ultra low-key lighting, very dim candlelit atmosphere, masterpiece quality",
+        negative: "photorealistic, ARRI, anamorphic, Panavision, lens flare, bokeh, film grain, bright daylight, harsh lighting, vivid saturated colors, neon, high key, overexposed, studio lighting, flash photography, 8K resolution, Hollywood, bright light, strong light, well-lit"
       };
       console.log(`🌙 Sleep/ambient mode: using PURE dark oil painting style (replaced "${rawStyle}")`);
     } else {
@@ -665,13 +665,13 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
 - If the narration mentions a person, represent it through SYMBOLIC environments (empty paths, distant lights, weathered doors) — NEVER through human forms
 - IGNORE all universal rules about "characters", "body language", "identity tiers", "character injection" — they do NOT apply to sleep content
 
-**LIGHTING:** 70-80% shadow/darkness. Only candlelight, moonlight, distant glow, oil lamps, campfire embers. Always warm (amber, gold, sienna) and DIM.
+**LIGHTING:** 80-90% shadow/darkness. Only VERY DIM candlelight, VERY DIM moonlight, faint distant glow, dying embers. Always warm (amber, gold, sienna) and VERY DIM — barely visible. NEVER use "candlelight" or "moonlight" alone — ALWAYS prefix with "very dim" or "faint".
 
 **COLOR PALETTE:** deep amber, burnt sienna, dark chocolate, midnight navy, warm gold, muted forest. NO bright blue, vivid green, neon, pure white, electric colors.
 
 **STYLE:** Dark moody oil painting. Visible brushstroke quality, impasto highlights, soft blended shadows. Simple compositions with lots of dark negative space.
 
-**EVERY image_prompt MUST end with:** "dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow, warm amber rim light, burnt sienna and dark chocolate palette, low-key lighting, candlelit atmosphere, masterpiece quality"
+**EVERY image_prompt MUST end with:** "dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow, very dim warm amber rim light, burnt sienna and dark chocolate palette, ultra low-key lighting, very dim candlelit atmosphere, masterpiece quality"
 
 **FORBIDDEN in prompts:** bright daylight, harsh lighting, vivid colors, neon, overexposed, studio lighting, white background, ARRI, Panavision, anamorphic, lens flare, bokeh, film grain, 8K, Hollywood, photorealistic, woman, man, person, figure, hands, face, body, skin, eyes, hair
 `;

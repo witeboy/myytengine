@@ -132,9 +132,10 @@ Deno.serve(async (req) => {
 RULES:
 - Dark moody oil painting style, Rembrandt chiaroscuro, 70%+ shadow
 - Colors: deep amber, burnt sienna, dark chocolate, midnight navy, warm gold highlights only
-- Light sources: candlelight, moonlight, distant glow, campfire embers — always warm and dim
+- Light sources: very dim candlelight, very dim moonlight, faint distant glow, dying campfire embers — always warm and VERY DIM, barely visible
 - Topic-matched to "${project.name}" — every image relates to the topic
-- Progressive darkening: image 1 is warmest/brightest, final images are nearly black
+- Progressive darkening: image 1 has very dim warm glow, final images are nearly black
+- ALL light must be described as "very dim" or "faint" — never just "candlelight" or "moonlight" alone
 - Simple compositions with lots of dark negative space
 
 ABSOLUTE PROHIBITION — ZERO TOLERANCE:

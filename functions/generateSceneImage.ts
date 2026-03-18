@@ -500,13 +500,26 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
     // Now apply standard cleaning
     finalPrompt = cleanPromptForGrok(finalPrompt);
 
-    // Strip any bright/daylight language
+    // Strip any bright/daylight language and enforce very dim lighting
     finalPrompt = finalPrompt
-      .replace(/\bbright\s+(daylight|sunlight|sunshine|light|white|blue)\b/gi, 'dim warm glow')
-      .replace(/\bhigh[- ]key\s+lighting\b/gi, 'low-key lighting')
+      .replace(/\bbright\s+(daylight|sunlight|sunshine|light|white|blue)\b/gi, 'very dim warm glow')
+      .replace(/\bhigh[- ]key\s+lighting\b/gi, 'ultra low-key lighting')
       .replace(/\boverexposed\b/gi, 'underexposed')
       .replace(/\bvibrant\s+(saturated\s+)?colors?\b/gi, 'muted dark tones')
-      .replace(/\bneon\b/gi, 'candlelight');
+      .replace(/\bneon\b/gi, 'very dim candlelight')
+      .replace(/\bsoft glow\b/gi, 'very faint glow')
+      .replace(/\bwarm glow\b/gi, 'very dim warm glow')
+      .replace(/\bgentle glow\b/gi, 'very faint glow')
+      .replace(/\bsoft light\b/gi, 'very dim light')
+      .replace(/\bwarm light\b/gi, 'very dim warm light')
+      .replace(/\bgentle light\b/gi, 'very dim light')
+      .replace(/\bsoft moonlight\b/gi, 'very dim moonlight')
+      .replace(/\bsoft candlelight\b/gi, 'very dim candlelight')
+      .replace(/\bsoft amber\b/gi, 'very dim amber')
+      .replace(/(?<!(very |faint |dim ))\b(candlelight)\b(?!\s+atmosphere)/gi, 'very dim candlelight')
+      .replace(/(?<!(very |faint |dim ))\b(moonlight)\b(?!\s+atmosphere)/gi, 'very dim moonlight')
+      .replace(/(?<!(very |faint |dim ))\b(firelight)\b/gi, 'very faint firelight')
+      .replace(/(?<!(very |faint |dim ))\b(lantern\s*light)\b/gi, 'very dim lantern light');
 
     // Keep prompt SHORT for sleep — under 500 chars to avoid safety filter triggers
     if (finalPrompt.length > 500) {
@@ -518,7 +531,7 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
           break;
         }
       }
-      finalPrompt += ' Dark moody oil painting, deep shadows, warm amber candlelight.';
+      finalPrompt += ' Dark moody oil painting, deep shadows, very dim warm amber candlelight, ultra low-key lighting.';
     }
 
     // Strip words that Grok's content safety filter flags in dark/night contexts
@@ -591,7 +604,7 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
             fallbackDesc = (notes.image_prompt_core || '').split(',')[0] || fallbackDesc;
           } catch (_) {}
         }
-        promptToSend = `Oil painting of ${fallbackDesc}, warm colors, painterly brushstrokes`;
+        promptToSend = `Oil painting of ${fallbackDesc}, very dim warm colors, painterly brushstrokes, ultra low-key lighting`;
         console.log(`🔄 Scene ${sceneNum}: using simplified fallback prompt (attempt ${attempt + 1})`);
       }
 
