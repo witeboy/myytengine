@@ -1375,12 +1375,14 @@ export default function TimelineEditorV10() {
                               !scene.video_url.startsWith('grok_vid_task:')
                                 ? 'video' : 'image'
                             ),
+          brollUrl:         existing?.brollUrl   || (scene.broll_url?.startsWith('http') ? scene.broll_url : null),
+          brollSource:      existing?.brollSource || scene.broll_source || null,
+          brollQuery:       existing?.brollQuery  || scene.broll_query  || null,
           cinematicMotion:  existing?.cinematicMotion  || null,
           transition:       existing?.transition       || null,
           transitionDuration: existing?.transitionDuration ?? null,
           motionSpeed:      existing?.motionSpeed      ?? 1.0,
           motionIntensity:  existing?.motionIntensity  ?? 1.0,
-          // playbackRate is recalculated in Step 5b — preserve manual override flag
           playbackRate:     existing?.playbackRate     ?? 1.0,
           videoDuration:    existing?.videoDuration    ?? null,
           manualSpeed:      existing?.manualSpeed      ?? false,
