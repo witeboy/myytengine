@@ -93,17 +93,18 @@ export default function StoryScript() {
 
     const runFullGeneration = async () => {
       try {
-        const hasPendingBatches = batches.length > 0 && batches.every(b => b.status === 'pending');
+        // Always fetch fresh from DB — React state may be stale on page load
+        const freshBatches = await base44.entities.ScriptBatches.filter({ project_id: projectId });
+        const hasPendingBatches = freshBatches.length > 0 && freshBatches.some(b => b.status === 'pending');
 
         if (!hasPendingBatches) {
-          // No usable batches — start fresh
+          // No usable pending batches — start fresh
           const oldScripts = await base44.entities.Scripts.filter({ project_id: projectId });
           for (const s of oldScripts) {
             await base44.entities.Scripts.delete(s.id);
           }
 
-          const oldBatches = await base44.entities.ScriptBatches.filter({ project_id: projectId });
-          for (const b of oldBatches) {
+          for (const b of freshBatches) {
             await base44.entities.ScriptBatches.delete(b.id);
           }
 
@@ -111,6 +112,9 @@ export default function StoryScript() {
           await base44.functions.invoke('initializeScriptBatches', {
             project_id: projectId,
           });
+          await refetchBatches();
+        } else {
+          // Batches exist — just make sure React Query is in sync
           await refetchBatches();
         }
 
