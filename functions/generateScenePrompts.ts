@@ -648,7 +648,7 @@ Deno.serve(async (req) => {
     let styleReinforcement = getStyleReinforcementInstruction(visualStyle);
 
     // ═══ SLEEP MODE — override LLM reinforcement with dark aesthetic rules ═══
-    if (isSleepProject) {
+    if (useSleepStyle) {
       styleReinforcement = `
 **🌙 SLEEP CONTENT — MANDATORY DARK AESTHETIC RULES (HIGHEST PRIORITY):**
 
