@@ -1,12 +1,13 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
-// SLEEP SCENE BREAKDOWN ENGINE
-// Purpose-built for sleep meditations & sleep stories.
-// - Longer scenes that progressively grow (variable pacing)
-// - Gentle, atmospheric visual concepts
-// - No tension, no drama, no conflict in visual direction
-// - Moody/dark nature + abstract ambient visuals
+// SLEEP VISUAL BREAKDOWN ENGINE (v2)
+// ══════════════════════════════════════════════════════════════════
+// Instead of many short cinematic scenes, generates 8-12 gorgeous
+// "ambient image" definitions with 5-15 minute holds each.
+// Each image is topic-matched (forests for forests, planets for
+// terraforming, etc.) with dreamy, painterly aesthetics.
+// Ultra-slow Ken Burns (zoom/pan) on static AI images.
 // ══════════════════════════════════════════════════════════════════
 
 async function callGemini(prompt, temperature = 0.5) {
@@ -34,7 +35,6 @@ async function callGemini(prompt, temperature = 0.5) {
 
   try { return JSON.parse(rawText); } catch (_) {}
 
-  // Recovery
   const lastBrace = rawText.lastIndexOf('}');
   if (lastBrace === -1) throw new Error("Cannot recover JSON from Gemini response");
   const trimmed = rawText.substring(0, lastBrace + 1);
@@ -42,7 +42,6 @@ async function callGemini(prompt, temperature = 0.5) {
     try {
       const parsed = JSON.parse(trimmed + suffix);
       if (parsed.scenes && Array.isArray(parsed.scenes)) return parsed;
-      if (parsed.story_analysis) return parsed;
     } catch (_) {}
   }
   throw new Error("Failed to parse Gemini JSON after recovery");
@@ -51,7 +50,6 @@ async function callGemini(prompt, temperature = 0.5) {
 function cleanNarrationText(text) {
   if (!text) return text;
   let cleaned = text;
-  // Keep [PAUSE X SEC] and [BREATHE] markers for sleep content — they're part of the narration
   cleaned = cleaned.replace(/\[[^\]]*\]/gi, (match) => {
     if (/PAUSE|BREATHE/i.test(match)) return match;
     return '';
@@ -66,104 +64,77 @@ function cleanNarrationText(text) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// SLEEP-SPECIFIC PROGRESSIVE BEAT CALCULATOR
-// Start medium (~8s), gradually extend to 15-25s+ as content deepens
+// AMBIENT IMAGE PROMPT BUILDER
 // ══════════════════════════════════════════════════════════════════
 
-function calculateSleepBeatDurations(totalScenes, durationMinutes) {
-  const totalSeconds = durationMinutes * 60;
-  const durations = [];
+function buildAmbientImagePrompt({ scriptText, imageCount, topicTitle, isMeditation, durationMinutes }) {
+  return `You are a visual art director for premium sleep content on YouTube. Your job is to design ${imageCount} GORGEOUS ambient images for a ${durationMinutes}-minute ${isMeditation ? 'guided meditation' : 'sleep story'}.
 
-  for (let i = 0; i < totalScenes; i++) {
-    const progress = i / (totalScenes - 1 || 1); // 0 → 1
-    // Start at ~8s, ramp to ~20s by the end
-    const baseDuration = 8 + progress * 14;
-    // Add slight variance
-    const variance = (Math.sin(i * 1.7) * 0.1 + 1) * baseDuration;
-    durations.push(Math.round(Math.max(6, Math.min(30, variance)) * 10) / 10);
-  }
-
-  // Scale to fit total duration
-  const sumRaw = durations.reduce((a, b) => a + b, 0);
-  const scale = totalSeconds / sumRaw;
-  return durations.map(d => Math.round(d * scale * 10) / 10);
-}
-
-function calculateStartTimes(durations) {
-  const starts = [];
-  let offset = 0;
-  for (const d of durations) {
-    starts.push(offset);
-    offset += d;
-  }
-  return starts;
-}
-
-// ══════════════════════════════════════════════════════════════════
-// SLEEP SCENE BREAKDOWN PROMPT
-// ══════════════════════════════════════════════════════════════════
-
-function buildSleepBreakdownPrompt({ scriptText, sceneCount, sceneStart, beatDurations, isMeditation, topicTitle }) {
-  return `You are a visual director for sleep and relaxation content. Your job is to break a narration script into gentle visual scenes for a ${isMeditation ? 'guided meditation' : 'bedtime story'} video.
+**CRITICAL CONTEXT**: These images will each be shown for 5-15 MINUTES with an ultra-slow Ken Burns effect (barely perceptible zoom/pan). Viewers glance at them before closing their eyes. The images are AMBIENT WALLPAPER, not storytelling — they set a mood.
 
 **TOPIC**: "${topicTitle}"
 
-**VISUAL DIRECTION FOR SLEEP CONTENT:**
-- Every scene must be CALMING, DARK, and ATMOSPHERIC
-- Color palette: deep blues, midnight purples, dark teals, warm amber accents, moonlight silver, soft gold
-- Lighting: always low and gentle — moonlight, candlelight, firelight, starlight, dawn glow, bioluminescence
-- NO bright daylight, NO harsh lighting, NO high contrast
-- Environments: dark forests, moonlit oceans, starlit meadows, cozy cabins at night, misty mountains at dusk, rain-soaked gardens, aurora skies, underwater coral, firelit caves
-- Camera movements: extremely slow — glacial pans, imperceptible zoom-outs, drifting dolly
-- NO sudden movements, NO dramatic angles, NO tension-building shots
-- Each scene should feel like it could be a still painting that barely breathes
-- Progressive deepening: scenes get SLOWER, DARKER, and MORE ABSTRACT as the video progresses
+**YOUR TASK**: Design ${imageCount} breathtaking images that are TOPIC-MATCHED to "${topicTitle}".
 
-**PACING RULE — VARIABLE PROGRESSIVE:**
-- Early scenes (first 20%): ~${beatDurations[0]?.toFixed(1) || '8'}s — establishing, still relatively active visuals
-- Middle scenes (20-60%): gradually longer — nature contemplation, ambient movement
-- Late scenes (60-100%): longest — near-static, abstract, hypnotic, barely moving
+**VISUAL STYLE RULES**:
+- Style: Dreamlike, painterly, warm. Think oil painting meets digital art. NOT photorealistic.
+- Colors: Rich, warm, saturated but dark — deep blues, warm ambers, soft golds, midnight purples, emerald greens
+- Lighting: Always gentle — golden hour, moonlight, candlelight, bioluminescence, aurora, starlight
+- Composition: Simple, uncluttered, vast. Leave lots of breathing room. No busy details.
+- Mood: Serene, peaceful, wonder-inducing, cozy
+- NO text, NO people (unless very distant/silhouetted), NO faces, NO animals in focus
+- NO bright daylight, NO harsh contrast, NO drama or tension
+- Each image should work as a standalone piece of ambient art
+- Progressive deepening: images get DARKER and MORE ABSTRACT toward the end
 
-**SCRIPT TO BREAK DOWN:**
-${scriptText}
+**TOPIC MATCHING** (this is CRITICAL):
+- If the topic is about forests → forest scenes (moonlit groves, misty canopies, ancient trees)
+- If about space/planets → cosmic scenes (nebulae, planet surfaces, star fields, auroras)
+- If about oceans → ocean scenes (deep underwater, moonlit waves, coral reefs at night)
+- If about history → atmospheric period settings (ancient libraries, castle corridors, candlelit chambers)
+- If about science → abstract science visuals (molecular structures as art, crystalline formations, light phenomena)
+- If about nature → nature scenes matching the specific topic (mountains, rivers, deserts at dusk)
+- If about motivation/self → symbolic nature metaphors (paths through forests, mountains at dawn, calm rivers)
+- ALWAYS tie visuals to the ACTUAL TOPIC while keeping the dreamy sleep aesthetic
 
-**YOUR TASK**: Create exactly ${sceneCount} scenes starting from scene number ${sceneStart}.
+**PROGRESSION ARC** (${imageCount} images):
+1. First image: Most "awake" — still topic-relevant but warmly lit, inviting
+2. Middle images: Gradually darker, more atmospheric, deeper into the visual world
+3. Final 2-3 images: Near-abstract, very dark, hypnotic — barely-there details in darkness
 
-**RESPONSE FORMAT:**
+**SCRIPT CONTEXT** (for topic understanding, NOT for scene-matching):
+${scriptText.substring(0, 3000)}
+
+**DURATION ALLOCATION**: Total ${durationMinutes} minutes. Distribute time across ${imageCount} images.
+- Earlier images: slightly shorter (they're seen while listener is still awake)
+- Later images: longer holds (listener is drifting off, doesn't need visual change)
+- Suggested durations should sum to ${durationMinutes} minutes
+
+Return JSON:
 {
   "scenes": [
     {
-      "scene_number": ${sceneStart},
-      "narration_text": "EXACT words from the script (include [PAUSE X SEC] and [BREATHE] markers)",
-      "visual_concept": "2-3 sentences describing a DARK, ATMOSPHERIC scene. Environment first, then any gentle movement.",
-      "shot_type": "e.g. EWS — Extreme Wide Shot, WS — Wide Shot, MS — Medium Shot",
-      "camera_movement": "e.g. imperceptible slow zoom out over 15 seconds",
-      "lighting": "e.g. soft moonlight from upper left, faint bioluminescent glow",
-      "color_palette": "e.g. deep midnight blue #0a1628, soft amber #d4a574, silver moonlight #c0c8d4",
-      "mood": "2-3 words — e.g. serene stillness, deep peace, gentle wonder",
-      "emotional_intensity": 0.2,
-      "duration_seconds": ${beatDurations[0]?.toFixed(1) || '10'},
-      "sleep_visual_type": "nature_dark|nature_twilight|abstract_ambient|water|sky|fire_warmth|mist_fog|cozy_interior"
+      "scene_number": 1,
+      "narration_text": "First ~${Math.floor(scriptText.split(/\\s+/).length / imageCount)} words of script here...",
+      "visual_concept": "3-4 sentences describing a GORGEOUS, DREAMLIKE scene. Rich detail but simple composition. This is a painting prompt.",
+      "image_prompt_core": "A single-paragraph AI image generation prompt. Painterly, dreamlike, rich colors. Include style keywords: 'digital painting, dreamy atmosphere, warm lighting, ambient, 4K, masterpiece quality'. Be very specific about colors, lighting direction, and composition.",
+      "camera_movement": "ultra_slow_zoom_in|ultra_slow_zoom_out|ultra_slow_pan_left|ultra_slow_pan_right|imperceptible_drift",
+      "color_palette": "e.g. midnight blue #0a1628, warm gold #d4a574, soft amber #c8956a",
+      "mood": "2-3 words",
+      "duration_minutes": 5,
+      "topic_match": "Brief note on how this image connects to the topic"
     }
   ]
 }
 
-**RULES:**
-1. Generate EXACTLY ${sceneCount} scenes
-2. Narration text must use EXACT words from the script — distribute evenly
-3. Visual concepts must be DARK and ATMOSPHERIC — no bright scenes
-4. Camera movement must be EXTREMELY SLOW — viewers should barely notice
-5. Emotional intensity should stay between 0.1 and 0.3 (never higher)
-6. Each scene must tag its sleep_visual_type for B-roll matching
-7. Progressive deepening: scenes get calmer, darker, more abstract toward the end
-8. Duration per scene: [${beatDurations.map(d => d.toFixed(1)).join(', ')}] seconds
-9. NO conflict, tension, surprise, or excitement in visual concepts
-10. Include nature and abstract elements: rain, stars, ocean, candles, fog, aurora, fireflies`;
+RULES:
+1. Generate EXACTLY ${imageCount} images
+2. Every image MUST relate to "${topicTitle}" — no generic images
+3. image_prompt_core must be a COMPLETE, STANDALONE image generation prompt (not dependent on other images)
+4. Distribute the full script text evenly across narration_text fields — use ALL the script words
+5. Durations must sum to approximately ${durationMinutes} minutes
+6. Style: painterly, dreamlike, NOT photorealistic. Include "digital painting, dreamlike" in every prompt.`;
 }
-
-// ══════════════════════════════════════════════════════════════════
-// MAIN HANDLER
-// ══════════════════════════════════════════════════════════════════
 
 Deno.serve(async (req) => {
   const callStart = Date.now();
@@ -172,8 +143,7 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, batch_index } = await req.json();
-    const startBatch = batch_index || 0;
+    const { project_id } = await req.json();
 
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
     const project = projects[0];
@@ -190,114 +160,99 @@ Deno.serve(async (req) => {
     const wordCount = finalScript.split(/\s+/).filter(w => w.length > 0).length;
     const durationMinutes = project.video_duration_minutes || Math.ceil(wordCount / 150);
 
-    // Sleep content: fewer scenes, longer durations
-    // ~1 scene per 15-20 seconds for sleep (vs ~5-7s for standard)
-    const avgSceneDuration = 12 + (durationMinutes / 10); // 12s base, scales up
-    const totalTargetScenes = Math.max(6, Math.round((durationMinutes * 60) / avgSceneDuration));
+    // Sleep content: 8-12 ambient images for the entire video
+    // Short videos (10-15 min): 6-8 images
+    // Medium videos (20-30 min): 8-10 images
+    // Long videos (60+ min): 10-12 images
+    const imageCount = Math.min(12, Math.max(6, Math.round(durationMinutes / 5) + 3));
 
-    const beatDurations = calculateSleepBeatDurations(totalTargetScenes, durationMinutes);
-    const beatStartTimes = calculateStartTimes(beatDurations);
+    console.log(`🌙 Sleep ambient breakdown: ${durationMinutes}min → ${imageCount} ambient images | mode: ${project.project_mode}`);
 
-    console.log(`🌙 Sleep breakdown: ${durationMinutes}min → ${totalTargetScenes} scenes (avg ${avgSceneDuration.toFixed(1)}s) | mode: ${project.project_mode}`);
-    console.log(`📊 Beat range: ${Math.min(...beatDurations).toFixed(1)}s – ${Math.max(...beatDurations).toFixed(1)}s`);
-
-    if (startBatch === 0) {
-      // Delete old scenes
-      const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-      if (oldScenes.length > 0) {
-        for (let i = 0; i < oldScenes.length; i += 10) {
-          await Promise.all(oldScenes.slice(i, i + 10).map(s =>
-            base44.asServiceRole.entities.Scenes.delete(s.id).catch(_ => {})
-          ));
-        }
-        console.log(`🗑️ Deleted ${oldScenes.length} old scenes`);
+    // Delete old scenes
+    const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
+    if (oldScenes.length > 0) {
+      for (let i = 0; i < oldScenes.length; i += 10) {
+        await Promise.all(oldScenes.slice(i, i + 10).map(s =>
+          base44.asServiceRole.entities.Scenes.delete(s.id).catch(_ => {})
+        ));
       }
-
-      // Save beat data to ProductionSettings
-      const psPayload = {
-        beat_durations: JSON.stringify(beatDurations),
-        beat_start_times: JSON.stringify(beatStartTimes),
-        story_analysis: JSON.stringify({
-          central_theme: `${isMeditation ? 'Guided meditation' : 'Sleep story'}: ${project.name}`,
-          narrative_arc_summary: 'Progressive relaxation from gentle awareness to deep rest',
-          emotional_trajectory: ['calm', 'settling', 'peaceful', 'deep_rest'],
-          visual_world: 'Dark atmospheric environments — moonlit nature, candlelit interiors, starlit skies',
-          recurring_visual_motifs: ['moonlight', 'water', 'stars', 'gentle flame', 'mist'],
-          color_arc: 'deep midnight blue → warm amber → soft silver → darkness'
-        })
-      };
-      const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
-      if (psList[0]) {
-        await base44.asServiceRole.entities.ProductionSettings.update(psList[0].id, psPayload);
-      } else {
-        await base44.asServiceRole.entities.ProductionSettings.create({ project_id, ...psPayload });
-      }
-
-      await base44.asServiceRole.entities.Projects.update(project_id, {
-        status: 'scene_breakdown',
-        current_step: 5
-      });
+      console.log(`🗑️ Deleted ${oldScenes.length} old scenes`);
     }
 
-    // Split script into chunks for batched processing
-    const sentences = finalScript.match(/[^.!?]+[.!?]+[\s]*/g) || [finalScript];
-    const MAX_SCENES_PER_CALL = 15;
-    const MAX_WALL_MS = 55000;
-
-    let scenesCreated = 0;
-    let sceneOffset = startBatch > 0
-      ? (await base44.asServiceRole.entities.Scenes.filter({ project_id })).length
-      : 0;
-
-    const scenesPerBatch = Math.min(MAX_SCENES_PER_CALL, totalTargetScenes - sceneOffset);
-    if (scenesPerBatch <= 0) {
-      return Response.json({ success: true, done: true, scenes_created: sceneOffset, total_target: totalTargetScenes });
-    }
-
-    // Distribute sentences to this batch
-    const sentencesPerScene = Math.max(1, Math.floor(sentences.length / totalTargetScenes));
-    const batchSentenceStart = sceneOffset * sentencesPerScene;
-    const batchSentenceEnd = Math.min(sentences.length, batchSentenceStart + scenesPerBatch * sentencesPerScene);
-    const batchText = sentences.slice(batchSentenceStart, batchSentenceEnd).join('').trim();
-    const batchBeats = beatDurations.slice(sceneOffset, sceneOffset + scenesPerBatch);
-
-    if (!batchText) {
-      return Response.json({ success: true, done: true, scenes_created: sceneOffset, total_target: totalTargetScenes });
-    }
-
-    const prompt = buildSleepBreakdownPrompt({
-      scriptText: batchText,
-      sceneCount: scenesPerBatch,
-      sceneStart: sceneOffset + 1,
-      beatDurations: batchBeats,
+    // Generate ambient image definitions
+    const prompt = buildAmbientImagePrompt({
+      scriptText: finalScript,
+      imageCount,
+      topicTitle: project.name,
       isMeditation,
-      topicTitle: project.name
+      durationMinutes
     });
 
-    console.log(`🌙 Generating scenes ${sceneOffset + 1}-${sceneOffset + scenesPerBatch}...`);
-    const result = await callGemini(prompt, 0.5);
+    console.log(`🎨 Generating ${imageCount} ambient image definitions...`);
+    const result = await callGemini(prompt, 0.6);
 
     let scenesArr = result?.scenes;
     if (!scenesArr || !Array.isArray(scenesArr)) {
       console.error(`No scenes array in response. Keys: ${Object.keys(result || {}).join(',')}`);
-      return Response.json({ error: 'AI failed to generate scenes' }, { status: 500 });
+      return Response.json({ error: 'AI failed to generate ambient images' }, { status: 500 });
     }
 
+    // Calculate beat durations and start times
+    const beatDurations = [];
+    const beatStartTimes = [];
+    let timeOffset = 0;
+
     for (const scene of scenesArr) {
-      const sceneNum = sceneOffset + scenesCreated + 1;
-      const cleanedNarration = cleanNarrationText(scene.narration_text);
-      const targetDuration = beatDurations[sceneNum - 1] || scene.duration_seconds || 12;
+      const durationSec = (scene.duration_minutes || (durationMinutes / imageCount)) * 60;
+      beatDurations.push(durationSec);
+      beatStartTimes.push(timeOffset);
+      timeOffset += durationSec;
+    }
+
+    // Save beats to ProductionSettings
+    const psPayload = {
+      beat_durations: JSON.stringify(beatDurations),
+      beat_start_times: JSON.stringify(beatStartTimes),
+      story_analysis: JSON.stringify({
+        central_theme: `${isMeditation ? 'Guided meditation' : 'Sleep story'}: ${project.name}`,
+        narrative_arc_summary: 'Progressive relaxation with topic-matched ambient visuals',
+        emotional_trajectory: ['wonder', 'calm', 'settling', 'deep_rest'],
+        visual_world: `Dreamlike ambient scenes inspired by ${project.name}`,
+        recurring_visual_motifs: ['warm light', 'gentle darkness', 'nature', 'atmosphere'],
+        color_arc: 'warm amber → deep blue → midnight → near-darkness',
+        visual_format: 'ambient_images_with_ken_burns'
+      })
+    };
+    const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
+    if (psList[0]) {
+      await base44.asServiceRole.entities.ProductionSettings.update(psList[0].id, psPayload);
+    } else {
+      await base44.asServiceRole.entities.ProductionSettings.create({ project_id, ...psPayload });
+    }
+
+    // Create scene records
+    let scenesCreated = 0;
+    for (let i = 0; i < scenesArr.length; i++) {
+      const scene = scenesArr[i];
+      const sceneNum = i + 1;
+      const durationSec = beatDurations[i] || (durationMinutes / imageCount) * 60;
+
+      const cleanedNarration = cleanNarrationText(scene.narration_text || '');
+
+      // Store the image prompt directly (not director notes) since these ARE the prompts
+      const imagePrompt = scene.image_prompt_core || scene.visual_concept || '';
 
       const directorNotes = {
         visual_concept: scene.visual_concept,
-        shot_type: scene.shot_type,
-        camera_movement: scene.camera_movement,
-        lighting: scene.lighting,
+        image_prompt_core: scene.image_prompt_core,
+        camera_movement: scene.camera_movement || 'ultra_slow_zoom_out',
         color_palette: scene.color_palette,
         mood: scene.mood,
-        emotional_intensity: scene.emotional_intensity || 0.15,
-        sleep_visual_type: scene.sleep_visual_type || 'nature_dark',
-        phase: 'sleep_deepening'
+        duration_minutes: scene.duration_minutes || (durationMinutes / imageCount),
+        topic_match: scene.topic_match,
+        emotional_intensity: 0.15,
+        sleep_visual_type: 'ambient_image',
+        phase: 'sleep_ambient'
       };
 
       await base44.asServiceRole.entities.Scenes.create({
@@ -305,35 +260,33 @@ Deno.serve(async (req) => {
         scene_number: sceneNum,
         narration_text: cleanedNarration,
         image_prompt: `DIRECTOR_NOTES:${JSON.stringify(directorNotes)}`,
-        animation_prompt: '',
-        duration_seconds: targetDuration,
+        animation_prompt: scene.camera_movement || 'ultra_slow_zoom_out',
+        duration_seconds: durationSec,
+        camera_movement: 'slow_zoom_out',
+        animation_speed: 'very_slow',
         status: 'breakdown_ready'
       });
 
       scenesCreated++;
     }
 
-    const totalCreated = sceneOffset + scenesCreated;
-    const allDone = totalCreated >= totalTargetScenes;
-
-    if (allDone) {
-      await base44.asServiceRole.entities.Projects.update(project_id, {
-        status: 'breakdown_complete',
-        current_step: 5
-      });
-    }
+    await base44.asServiceRole.entities.Projects.update(project_id, {
+      status: 'breakdown_complete',
+      current_step: 5
+    });
 
     const elapsed = ((Date.now() - callStart) / 1000).toFixed(1);
-    console.log(`🌙 Created ${scenesCreated} scenes (total: ${totalCreated}/${totalTargetScenes}) in ${elapsed}s`);
+    console.log(`🌙 Created ${scenesCreated} ambient image definitions in ${elapsed}s`);
+    console.log(`📊 Durations: ${beatDurations.map(d => (d/60).toFixed(1) + 'min').join(', ')}`);
 
     return Response.json({
       success: true,
-      done: allDone,
-      next_batch: allDone ? null : (startBatch || 0) + 1,
-      scenes_created: totalCreated,
-      total_target: totalTargetScenes,
+      done: true,
+      scenes_created: scenesCreated,
+      total_target: imageCount,
       beat_durations: beatDurations,
-      beat_start_times: beatStartTimes
+      beat_start_times: beatStartTimes,
+      visual_format: 'ambient_images_with_ken_burns'
     });
 
   } catch (error) {
