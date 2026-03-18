@@ -8,6 +8,7 @@ import AnimationEditor from './AnimationEditor';
 import SceneSfxEditor from './SceneSfxEditor';
 import PromptEnhancer from './PromptEnhancer';
 import PromptEditor from './PromptEditor';
+import BrollPreview from './BrollPreview';
 
 const statusColors = {
   pending: 'bg-gray-100 text-gray-600',
@@ -324,6 +325,23 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
           <div className="border-t pt-3">
             <AnimationEditor scene={scene} onSave={() => { setShowAnimEditor(false); onSceneUpdated?.(); }} />
           </div>
+        )}
+
+        {/* B-Roll Preview */}
+        {scene.broll_url && (
+          <BrollPreview
+            scene={scene}
+            onRemove={async () => {
+              await base44.entities.Scenes.update(scene.id, {
+                broll_url: '',
+                broll_source: '',
+                broll_id: '',
+                broll_thumbnail: '',
+                broll_query: '',
+              });
+              onSceneUpdated?.();
+            }}
+          />
         )}
 
         {/* Sound Effect Editor */}
