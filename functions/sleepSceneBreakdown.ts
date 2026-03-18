@@ -84,7 +84,7 @@ function buildAmbientImagePrompt({ scriptText, imageCount, topicTitle, isMeditat
 - Composition: Simple, uncluttered, vast. Leave lots of breathing room. Dark negative space is your friend.
 - Mood: Serene, ancient, intimate, mysterious — like a Rembrandt painting viewed by candlelight
 - NO text, NO bright daylight, NO harsh contrast, NO neon, NO vivid saturated colors
-- People ARE allowed (silhouetted, dimly lit, painterly) — they add story warmth. But faces should be softly lit, never harshly exposed.
+- NO PEOPLE, NO HUMAN FIGURES, NO SILHOUETTES. These are pure ambient environment/landscape scenes. Replace any human presence with environmental elements (empty chair, lone candle, still water, a path leading into darkness).
 - Each image should work as ambient art that won't wake someone up if their screen stays on
 - Progressive deepening: images get DARKER toward the end — final images should be nearly black with barely-visible warm shapes
 
