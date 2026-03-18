@@ -1155,6 +1155,7 @@ export default function TimelineEditorV10() {
                         scene.video_url.startsWith('http') &&
                         !scene.video_url.startsWith('veo_task:') &&
                         !scene.video_url.startsWith('grok_vid_task:');
+      const hasBroll = scene.broll_url && scene.broll_url.startsWith('http');
       const clip = {
         id: `video-${scene.id}`, sceneId: scene.id, sceneNumber: scene.scene_number,
         type: 'video', startTime: offset, duration,
@@ -1162,12 +1163,14 @@ export default function TimelineEditorV10() {
         thumbnail: scene.image_url,
         imageUrl:  scene.image_url,
         videoUrl:  hasVideo ? scene.video_url : null,
+        brollUrl:  hasBroll ? scene.broll_url : null,
+        brollSource: scene.broll_source || null,
+        brollQuery: scene.broll_query || null,
         mediaType: hasVideo ? 'video' : 'image',
         effects: [], audioMuted: false, cinematicMotion: null,
         transition: null, transitionDuration: null, synced: false,
         motionSpeed: 1.0, motionIntensity: 1.0,
-        playbackRate: 1.0,
-        videoDuration: null,
+        playbackRate: 1.0, videoDuration: null,
       };
       offset += duration;
       return clip;
