@@ -9,47 +9,45 @@ import { ExpandableAssets } from './TopicAssetsPanel';
 export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose, channel, onTopicUpdated }) {
   if (!date) return null;
 
-  const [archivedProjects, setArchivedProjects] = useState({});
-  const [markingDone, setMarkingDone] = useState(null);
+  const [projectData, setProjectData] = useState({});
+  const [actionLoading, setActionLoading] = useState(null);
   const [expandedTopic, setExpandedTopic] = useState(null);
 
-  // Check if in_progress topics have archived projects
+  // Fetch project data for topics that have projects
   useEffect(() => {
-    const checkArchived = async () => {
-      const inProgressWithProject = topics.filter(t => t.status === 'in_progress' && t.project_id);
-      if (inProgressWithProject.length === 0) return;
+    const fetchProjects = async () => {
+      const withProject = topics.filter(t => t.project_id);
+      if (withProject.length === 0) return;
 
       const results = {};
-      for (const t of inProgressWithProject) {
+      for (const t of withProject) {
         const projects = await base44.entities.Projects.filter({ id: t.project_id });
-        const proj = projects[0];
-        results[t.id] = !proj || proj.archived === true;
+        results[t.id] = projects[0] || null;
       }
-      setArchivedProjects(results);
+      setProjectData(results);
     };
-    checkArchived();
+    fetchProjects();
   }, [topics]);
 
-  const handleMarkDone = async (topic) => {
-    setMarkingDone(topic.id);
-    await base44.entities.ChannelTopics.update(topic.id, { status: 'completed' });
-    setMarkingDone(null);
-    onTopicUpdated?.();
-  };
-
   const handleRestart = async (topic) => {
-    // Reset topic so it can be started fresh
+    setActionLoading(topic.id);
+    // Archive the old project if it exists
+    if (topic.project_id) {
+      await base44.entities.Projects.update(topic.project_id, { archived: true });
+    }
+    // Reset topic to scheduled so it starts from scratch
     await base44.entities.ChannelTopics.update(topic.id, { 
       status: 'scheduled', 
       project_id: '' 
     });
+    setActionLoading(null);
     onTopicUpdated?.();
   };
 
   const handleMarkPublished = async (topic) => {
-    setMarkingDone(topic.id);
+    setActionLoading(topic.id);
     await base44.entities.ChannelTopics.update(topic.id, { status: 'published' });
-    setMarkingDone(null);
+    setActionLoading(null);
     onTopicUpdated?.();
   };
 
@@ -66,11 +64,14 @@ export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose,
   };
 
   const TopicRow = ({ topic }) => {
-    const isArchived = archivedProjects[topic.id] === true;
+    const proj = projectData[topic.id];
+    const isArchived = proj ? proj.archived === true : false;
     const isInProgress = topic.status === 'in_progress';
     const isCompleted = topic.status === 'completed';
     const isPublished = topic.status === 'published';
     const canStart = topic.status === 'scheduled' || topic.status === 'queued' || (isInProgress && isArchived);
+    // Project has reached post_production or published — can mark topic as done/published
+    const projectIsDone = proj && ['post_production', 'published'].includes(proj.status);
 
     return (
       <div className={`rounded-lg border transition-all overflow-hidden ${
@@ -152,22 +153,21 @@ export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose,
                 variant="outline"
                 className="h-7 text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
                 onClick={() => handleRestart(topic)}
+                disabled={actionLoading === topic.id}
               >
-                <RotateCcw className="w-3 h-3 mr-1" /> Restart
+                {actionLoading === topic.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><RotateCcw className="w-3 h-3 mr-1" /> Restart</>}
               </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 text-xs border-green-300 text-green-700 hover:bg-green-50"
-                onClick={() => handleMarkDone(topic)}
-                disabled={markingDone === topic.id}
-              >
-                {markingDone === topic.id ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <><CheckCircle2 className="w-3 h-3 mr-1" /> Done</>
-                )}
-              </Button>
+              {projectIsDone && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                  onClick={() => handleMarkPublished(topic)}
+                  disabled={actionLoading === topic.id}
+                >
+                  {actionLoading === topic.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Globe className="w-3 h-3 mr-1" /> Published</>}
+                </Button>
+              )}
             </div>
           )}
 
@@ -186,21 +186,18 @@ export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose,
                 variant="outline"
                 className="h-7 text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
                 onClick={() => handleRestart(topic)}
+                disabled={actionLoading === topic.id}
               >
-                <RotateCcw className="w-3 h-3 mr-1" /> Restart
+                {actionLoading === topic.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><RotateCcw className="w-3 h-3 mr-1" /> Restart</>}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
                 onClick={() => handleMarkPublished(topic)}
-                disabled={markingDone === topic.id}
+                disabled={actionLoading === topic.id}
               >
-                {markingDone === topic.id ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : (
-                  <><Globe className="w-3 h-3 mr-1" /> Published</>
-                )}
+                {actionLoading === topic.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Globe className="w-3 h-3 mr-1" /> Published</>}
               </Button>
             </div>
           )}
@@ -212,8 +209,9 @@ export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose,
                 variant="outline"
                 className="h-7 text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
                 onClick={() => handleRestart(topic)}
+                disabled={actionLoading === topic.id}
               >
-                <RotateCcw className="w-3 h-3 mr-1" /> Restart
+                {actionLoading === topic.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><RotateCcw className="w-3 h-3 mr-1" /> Restart</>}
               </Button>
             </div>
           )}
