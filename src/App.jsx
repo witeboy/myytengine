@@ -11,6 +11,7 @@ import ChannelsHub from '@/pages/ChannelsHub';
 import ChannelDetail from '@/pages/ChannelDetail';
 import ToolsHub from '@/pages/ToolsHub';
 import CompetitorMonitor from '@/pages/CompetitorMonitor';
+import SleepPipeline from '@/pages/SleepPipeline';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -66,6 +67,7 @@ const AuthenticatedApp = () => {
       <Route path="/ChannelDetail" element={<ChannelDetail />} />
       <Route path="/ToolsHub" element={<ToolsHub />} />
       <Route path="/CompetitorMonitor" element={<CompetitorMonitor />} />
+      <Route path="/SleepPipeline" element={<SleepPipeline />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
