@@ -440,6 +440,11 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
   const sceneNum = scene.scene_number;
   const isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
 
+  // For sleep: log the raw prompt before any cleaning so we can debug safety issues
+  if (isSleepProject) {
+    console.log(`🔍 Scene ${sceneNum} RAW prompt (first 300): ${(scene.image_prompt || '').substring(0, 300)}`);
+  }
+
   if (!scene.image_prompt) {
     return { scene_id: scene.id, scene_number: sceneNum, status: 'skipped', reason: 'no_prompt' };
   }
