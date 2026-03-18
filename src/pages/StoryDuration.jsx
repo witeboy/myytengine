@@ -46,7 +46,7 @@ export default function StoryDuration() {
   const safeDuration = duration || 8;
   const totalWords = safeDuration * 150;
   const isSleepProject = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
-  const numBatches = Math.max(2, Math.ceil(totalWords / (isSleepProject ? 1100 : 1500)));
+  const numBatches = Math.max(2, Math.ceil(totalWords / (isSleepProject ? 1100 : 800)));
 
   const handleGenerate = async () => {
     const finalDuration = Math.max(1, Math.round(safeDuration));
