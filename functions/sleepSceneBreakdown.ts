@@ -106,7 +106,7 @@ function buildAmbientImagePrompt({ scriptText, imageCount, topicTitle, isMeditat
 3. Final 2-3 images: Near-abstract, very dark, hypnotic — barely-there details in darkness
 
 **SCRIPT CONTEXT** (for topic understanding, NOT for scene-matching):
-${scriptText.substring(0, 3000)}
+${scriptText.substring(0, 1500)}
 
 **DURATION ALLOCATION**: Total ${durationMinutes} minutes. Distribute time across ${imageCount} images.
 - Earlier images: slightly shorter (they're seen while listener is still awake)
