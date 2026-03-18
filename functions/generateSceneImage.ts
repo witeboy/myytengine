@@ -542,6 +542,10 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
     console.log(`🌙 Scene ${sceneNum}: sleep prompt (${finalPrompt.length}ch): ${finalPrompt.substring(0, 200)}`);
   } else {
     finalPrompt = cleanPromptForGrok(finalPrompt);
+    // Prefix with explicit generation command for all styles
+    if (!/^(create|generate|paint|draw|render|imagine|make)\b/i.test(finalPrompt)) {
+      finalPrompt = `Create an image of: ${finalPrompt}`;
+    }
   }
 
   // SLEEP: Skip the framing anchor that cleanPromptForGrok adds — it mentions "character" and "body"
