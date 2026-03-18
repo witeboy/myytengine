@@ -1880,7 +1880,7 @@ export default function TimelineEditorV10() {
         </div>
 
         <div className="flex items-center gap-3 text-xs text-gray-500">
-          <span>{videoClips.filter(c => c.mediaType === 'video' && c.videoUrl).length}🎬 video / {videoClips.filter(c => c.mediaType !== 'video').length}🖼 image</span>
+          <span>{videoClips.filter(c => c.mediaType === 'video').length}🎬 {videoClips.filter(c => c.mediaType === 'broll').length}📎 {videoClips.filter(c => c.mediaType === 'image' || (!c.mediaType)).length}🖼</span>
           <span>{audioClips.length} audio</span>
           <span>{captionClips.length} captions</span>
           {motionCount     > 0 && <span className="text-amber-400">{motionCount} zooms</span>}
