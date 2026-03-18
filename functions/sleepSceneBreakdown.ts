@@ -171,15 +171,25 @@ Deno.serve(async (req) => {
 
     console.log(`🌙 Sleep ambient breakdown: ${durationMinutes}min → ${imageCount} ambient images | mode: ${project.project_mode}`);
 
-    // Delete old scenes
+    // Delete old scenes — sequential with rate limit protection
     const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
     if (oldScenes.length > 0) {
-      for (let i = 0; i < oldScenes.length; i += 10) {
-        await Promise.all(oldScenes.slice(i, i + 10).map(s =>
-          base44.asServiceRole.entities.Scenes.delete(s.id).catch(_ => {})
-        ));
+      let deleted = 0;
+      for (const s of oldScenes) {
+        try {
+          await base44.asServiceRole.entities.Scenes.delete(s.id);
+          deleted++;
+        } catch (e) {
+          if (e.message?.includes('Rate limit')) {
+            await new Promise(r => setTimeout(r, 2000));
+            try {
+              await base44.asServiceRole.entities.Scenes.delete(s.id);
+              deleted++;
+            } catch (_) {}
+          }
+        }
       }
-      console.log(`🗑️ Deleted ${oldScenes.length} old scenes`);
+      console.log(`🗑️ Deleted ${deleted}/${oldScenes.length} old scenes`);
     }
 
     // Generate ambient image definitions
