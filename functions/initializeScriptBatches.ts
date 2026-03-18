@@ -1,28 +1,30 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import OpenAI from 'npm:openai@4.58.1';
 
-async function callGemini(prompt, temperature = 0.7) {
-  const apiKey = Deno.env.get("GEMINI_API_KEY");
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: 8192, responseMimeType: "application/json" }
-      })
+const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
+
+async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        temperature,
+        max_tokens: 16384,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: 'You are a YouTube content strategist. Always respond with valid JSON.' },
+          { role: 'user', content: prompt },
+        ],
+      });
+
+      const rawText = response.choices[0].message.content;
+      return JSON.parse(rawText);
+    } catch (error) {
+      if (attempt === retries - 1) throw error;
+      console.warn(`⚠️ OpenAI attempt ${attempt + 1} failed: ${error.message}, retrying...`);
+      await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
     }
-  );
-
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(`Gemini error: ${err.error?.message || response.status}`);
   }
-
-  const data = await response.json();
-  if (!data.candidates?.length) throw new Error("No candidates from Gemini");
-  const rawText = data.candidates[0].content.parts[0].text;
-  return JSON.parse(rawText);
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -329,7 +331,7 @@ Deno.serve(async (req) => {
       : buildStandardOutlinePrompt(promptArgs);
 
     console.log("Generating detailed outline...");
-    const outlineResult = await callGemini(outlinePrompt, isSleepMode ? 0.6 : 0.7);
+    const outlineResult = await callOpenAI(outlinePrompt, isSleepMode ? 0.6 : 0.7);
 
     if (!outlineResult.batches || outlineResult.batches.length === 0) {
       throw new Error("AI failed to generate outline batches");
