@@ -93,7 +93,7 @@ function FixPromptButton({ sceneId, projectId, onFixed }) {
             <Wrench className="w-3 h-3 mr-1" />
           )}
           {fixing
-            ? `Fixing ${fixType === 'characters' ? 'chars' : fixType === 'cleanup' ? 'meta' : 'all'}...`
+            ? `Fixing ${fixType === 'characters' ? 'chars' : fixType === 'cleanup' ? 'meta' : fixType === 'ai_clean' ? 'AI clean' : 'all'}...`
             : result?.fixed > 0
               ? 'Fixed!'
               : 'Fix Prompt'
@@ -146,7 +146,7 @@ function FixPromptButton({ sceneId, projectId, onFixed }) {
           {result.error
             ? `Error: ${result.error.substring(0, 40)}`
             : result.fixed > 0
-              ? `✓ ${result.character_fixes || 0} chars · ${result.cleanup_fixes || 0} cleanup${result.quality_resets > 0 ? ` · ${result.quality_resets} flagged` : ''}`
+              ? (result.character_fixes != null ? `✓ ${result.character_fixes || 0} chars · ${result.cleanup_fixes || 0} cleanup${result.quality_resets > 0 ? ` · ${result.quality_resets} flagged` : ''}` : '✓ Prompt cleaned')
               : 'No changes needed'
           }
         </div>
