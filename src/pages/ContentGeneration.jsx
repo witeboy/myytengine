@@ -1366,6 +1366,8 @@ if (nextBatch > 0) {
   const promptsReadyCount = scenes.filter(s => s.status === 'prompts_ready').length;
   const directorNotesCount = scenes.filter(s => s.image_prompt?.startsWith('DIRECTOR_NOTES:')).length;
 
+  const brollCount = scenes.filter(s => s.broll_url && s.broll_url.startsWith('http')).length;
+
   const videoStatusCounts = videoProgress.sceneStatuses
     ? {
         queued: Object.values(videoProgress.sceneStatuses).filter(s => s === 'queued').length,
@@ -1641,6 +1643,11 @@ if (nextBatch > 0) {
                   <span className="text-xs text-amber-600 font-medium">({animatingCount} rendering)</span>
                 )}
               </div>
+              {brollCount > 0 && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Clapperboard className="w-4 h-4 text-cyan-600" /> {brollCount}/{scenes.length} B-roll
+                </div>
+              )}
               <div className="flex-1" />
 
               {breakdownReadyCount > 0 && (
