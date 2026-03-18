@@ -137,6 +137,15 @@ RULES:
 - Progressive darkening: image 1 is warmest/brightest, final images are nearly black
 - Simple compositions with lots of dark negative space
 
+ABSOLUTE PROHIBITION — ZERO TOLERANCE:
+- NEVER include ANY human figures, people, persons, characters, silhouettes, or shadows of people
+- NEVER include ANY body parts: hands, fingers, feet, legs, arms, face, eyes, skin, torso, shoulders, hair, lips, head
+- NEVER include human-occupied furniture: beds, chairs, sofas, desks with items on them
+- NEVER include clothing, shoes, accessories, or any object implying human presence
+- NEVER use words like: person, figure, someone, viewer, listener, character, protagonist, woman, man, child
+- Every scene must be a PURE ENVIRONMENT or LANDSCAPE — nature, architecture, still life, abstract atmosphere
+- If the topic involves people, represent it through SYMBOLIC environments (empty paths, distant lights, weathered doors) — NEVER through human forms
+
 Return JSON with EXACTLY ${imageCount} scenes:
 {
   "scenes": [
