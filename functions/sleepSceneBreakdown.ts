@@ -1,25 +1,24 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
-// SLEEP VISUAL BREAKDOWN ENGINE (v2)
+// SLEEP VISUAL BREAKDOWN ENGINE (v3)
 // ══════════════════════════════════════════════════════════════════
-// Instead of many short cinematic scenes, generates 8-12 gorgeous
-// "ambient image" definitions with 5-15 minute holds each.
-// Each image is topic-matched (forests for forests, planets for
-// terraforming, etc.) with dreamy, painterly aesthetics.
-// Ultra-slow Ken Burns (zoom/pan) on static AI images.
+// Generates 6-12 ambient environment image definitions.
+// Narration is split in code (not by AI) to avoid timeout.
+// AI only generates visual concepts + image prompts.
+// NO PEOPLE — pure environment/landscape scenes.
 // ══════════════════════════════════════════════════════════════════
 
 async function callGemini(prompt, temperature = 0.5) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: 8192, responseMimeType: "application/json" }
+        generationConfig: { temperature, maxOutputTokens: 4096, responseMimeType: "application/json" }
       })
     }
   );
@@ -63,80 +62,18 @@ function cleanNarrationText(text) {
   return cleaned;
 }
 
-// ══════════════════════════════════════════════════════════════════
-// AMBIENT IMAGE PROMPT BUILDER
-// ══════════════════════════════════════════════════════════════════
-
-function buildAmbientImagePrompt({ scriptText, imageCount, topicTitle, isMeditation, durationMinutes }) {
-  return `You are a visual art director for premium sleep content on YouTube. Your job is to design ${imageCount} GORGEOUS ambient images for a ${durationMinutes}-minute ${isMeditation ? 'guided meditation' : 'sleep story'}.
-
-**CRITICAL CONTEXT**: These images will each be shown for 5-15 MINUTES with an ultra-slow Ken Burns effect (barely perceptible zoom/pan). Viewers glance at them before closing their eyes. The images are AMBIENT WALLPAPER, not storytelling — they set a mood.
-
-**TOPIC**: "${topicTitle}"
-
-**YOUR TASK**: Design ${imageCount} breathtaking images that are TOPIC-MATCHED to "${topicTitle}".
-
-**VISUAL STYLE RULES (CRITICAL — study the reference aesthetic)**:
-- Style: Dark, moody oil painting / digital painting hybrid. Rich impasto texture feel. NOT photorealistic, NOT bright.
-- Colors: EXTREMELY LIMITED warm palette — deep amber (#8B5E3C), burnt sienna (#6B3A2A), dark chocolate (#2C1810), midnight navy (#0A1628), warm gold highlights ONLY as rim light or distant glow (#D4A574). NO bright colors. NO saturated greens, blues, or purples.
-- Lighting: ALWAYS low-key. 70-80% of every image should be SHADOW/DARKNESS. Light sources: candlelight, distant horizon glow, moonlight through clouds, campfire embers, oil lamp, faint bioluminescence. Light is WARM and DIM, never bright or harsh.
-- Brightness: DARK. Think of a dimly lit room at night. The viewer should be able to sleep with this on screen — zero eye strain, zero glare. Overall exposure should feel like ISO 800 at f/2.8 in a candlelit room.
-- Composition: Simple, uncluttered, vast. Leave lots of breathing room. Dark negative space is your friend.
-- Mood: Serene, ancient, intimate, mysterious — like a Rembrandt painting viewed by candlelight
-- NO text, NO bright daylight, NO harsh contrast, NO neon, NO vivid saturated colors
-- NO PEOPLE, NO HUMAN FIGURES, NO SILHOUETTES. These are pure ambient environment/landscape scenes. Replace any human presence with environmental elements (empty chair, lone candle, still water, a path leading into darkness).
-- Each image should work as ambient art that won't wake someone up if their screen stays on
-- Progressive deepening: images get DARKER toward the end — final images should be nearly black with barely-visible warm shapes
-
-**REFERENCE AESTHETIC**: Classical oil painting meets dark fantasy concept art. Think Rembrandt's "Night Watch" darkness level, Caravaggio's chiaroscuro, dark fantasy book covers. Warm amber/sienna rim lighting on figures emerging from deep shadow. Ancient, timeless, painterly.
-
-**TOPIC MATCHING** (this is CRITICAL):
-- If the topic is about forests → forest scenes (moonlit groves, misty canopies, ancient trees)
-- If about space/planets → cosmic scenes (nebulae, planet surfaces, star fields, auroras)
-- If about oceans → ocean scenes (deep underwater, moonlit waves, coral reefs at night)
-- If about history → atmospheric period settings (ancient libraries, castle corridors, candlelit chambers)
-- If about science → abstract science visuals (molecular structures as art, crystalline formations, light phenomena)
-- If about nature → nature scenes matching the specific topic (mountains, rivers, deserts at dusk)
-- If about motivation/self → symbolic nature metaphors (paths through forests, mountains at dawn, calm rivers)
-- ALWAYS tie visuals to the ACTUAL TOPIC while keeping the dreamy sleep aesthetic
-
-**PROGRESSION ARC** (${imageCount} images):
-1. First image: Most "awake" — still topic-relevant but warmly lit, inviting
-2. Middle images: Gradually darker, more atmospheric, deeper into the visual world
-3. Final 2-3 images: Near-abstract, very dark, hypnotic — barely-there details in darkness
-
-**SCRIPT CONTEXT** (for topic understanding, NOT for scene-matching):
-${scriptText.substring(0, 1500)}
-
-**DURATION ALLOCATION**: Total ${durationMinutes} minutes. Distribute time across ${imageCount} images.
-- Earlier images: slightly shorter (they're seen while listener is still awake)
-- Later images: longer holds (listener is drifting off, doesn't need visual change)
-- Suggested durations should sum to ${durationMinutes} minutes
-
-Return JSON:
-{
-  "scenes": [
-    {
-      "scene_number": 1,
-      "narration_text": "First ~${Math.floor(scriptText.split(/\\s+/).length / imageCount)} words of script here...",
-      "visual_concept": "3-4 sentences describing a GORGEOUS, DREAMLIKE scene. Rich detail but simple composition. This is a painting prompt.",
-      "image_prompt_core": "A single-paragraph AI image generation prompt. MUST include these mandatory style keywords at the end: 'dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow, warm amber rim light, burnt sienna and dark chocolate palette, low-key lighting, candlelit atmosphere, masterpiece quality, 70 percent shadow'. Be very specific about the warm dim light sources and deep darkness surrounding them.",
-      "camera_movement": "ultra_slow_zoom_in|ultra_slow_zoom_out|ultra_slow_pan_left|ultra_slow_pan_right|imperceptible_drift",
-      "color_palette": "e.g. midnight blue #0a1628, warm gold #d4a574, soft amber #c8956a",
-      "mood": "2-3 words",
-      "duration_minutes": 5,
-      "topic_match": "Brief note on how this image connects to the topic"
-    }
-  ]
-}
-
-RULES:
-1. Generate EXACTLY ${imageCount} images
-2. Every image MUST relate to "${topicTitle}" — no generic images
-3. image_prompt_core must be a COMPLETE, STANDALONE image generation prompt (not dependent on other images)
-4. Distribute the full script text evenly across narration_text fields — use ALL the script words
-5. Durations must sum to approximately ${durationMinutes} minutes
-6. Style: painterly, dreamlike, NOT photorealistic. Include "digital painting, dreamlike" in every prompt.`;
+// Split script into N roughly-equal chunks, breaking at sentence boundaries
+function splitScriptIntoChunks(scriptText, chunkCount) {
+  const sentences = scriptText.split(/(?<=[.!?…])\s+/).filter(s => s.trim().length > 0);
+  const totalSentences = sentences.length;
+  const perChunk = Math.ceil(totalSentences / chunkCount);
+  const chunks = [];
+  for (let i = 0; i < chunkCount; i++) {
+    const start = i * perChunk;
+    const end = Math.min(start + perChunk, totalSentences);
+    chunks.push(sentences.slice(start, end).join(' '));
+  }
+  return chunks;
 }
 
 Deno.serve(async (req) => {
@@ -163,15 +100,11 @@ Deno.serve(async (req) => {
     const wordCount = finalScript.split(/\s+/).filter(w => w.length > 0).length;
     const durationMinutes = project.video_duration_minutes || Math.ceil(wordCount / 150);
 
-    // Sleep content: 8-12 ambient images for the entire video
-    // Short videos (10-15 min): 6-8 images
-    // Medium videos (20-30 min): 8-10 images
-    // Long videos (60+ min): 10-12 images
     const imageCount = Math.min(12, Math.max(6, Math.round(durationMinutes / 5) + 3));
 
-    console.log(`🌙 Sleep ambient breakdown: ${durationMinutes}min → ${imageCount} ambient images | mode: ${project.project_mode}`);
+    console.log(`🌙 Sleep ambient breakdown: ${durationMinutes}min → ${imageCount} images | mode: ${project.project_mode}`);
 
-    // Delete old scenes — sequential with rate limit protection
+    // Delete old scenes
     const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
     if (oldScenes.length > 0) {
       let deleted = 0;
@@ -182,41 +115,58 @@ Deno.serve(async (req) => {
         } catch (e) {
           if (e.message?.includes('Rate limit')) {
             await new Promise(r => setTimeout(r, 2000));
-            try {
-              await base44.asServiceRole.entities.Scenes.delete(s.id);
-              deleted++;
-            } catch (_) {}
+            try { await base44.asServiceRole.entities.Scenes.delete(s.id); deleted++; } catch (_) {}
           }
         }
       }
       console.log(`🗑️ Deleted ${deleted}/${oldScenes.length} old scenes`);
     }
 
-    // Generate ambient image definitions
-    const prompt = buildAmbientImagePrompt({
-      scriptText: finalScript,
-      imageCount,
-      topicTitle: project.name,
-      isMeditation,
-      durationMinutes
-    });
+    // Split narration in code — don't ask AI to do it
+    const narrationChunks = splitScriptIntoChunks(finalScript, imageCount);
+
+    // Ask Gemini ONLY for visual concepts (small output)
+    const prompt = `You are a visual art director for premium sleep content. Design ${imageCount} ambient environment images for a ${durationMinutes}-minute ${isMeditation ? 'guided meditation' : 'sleep story'} about "${project.name}".
+
+RULES:
+- NO PEOPLE, NO HUMAN FIGURES, NO SILHOUETTES — pure environment/landscape only
+- Dark moody oil painting style, Rembrandt chiaroscuro, 70%+ shadow
+- Colors: deep amber, burnt sienna, dark chocolate, midnight navy, warm gold highlights only
+- Light sources: candlelight, moonlight, distant glow, campfire embers — always warm and dim
+- Topic-matched to "${project.name}" — every image relates to the topic
+- Progressive darkening: image 1 is warmest/brightest, final images are nearly black
+- Simple compositions with lots of dark negative space
+
+Return JSON with EXACTLY ${imageCount} scenes:
+{
+  "scenes": [
+    {
+      "scene_number": 1,
+      "image_prompt_core": "Complete standalone image generation prompt ending with: dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow, warm amber rim light, burnt sienna and dark chocolate palette, low-key lighting, masterpiece quality, 70 percent shadow, no people, no human figures",
+      "camera_movement": "ultra_slow_zoom_in|ultra_slow_zoom_out|ultra_slow_pan_left|ultra_slow_pan_right",
+      "mood": "2-3 words",
+      "duration_minutes": ${(durationMinutes / imageCount).toFixed(1)}
+    }
+  ]
+}`;
 
     console.log(`🎨 Generating ${imageCount} ambient image definitions...`);
     const result = await callGemini(prompt, 0.6);
 
     let scenesArr = result?.scenes;
     if (!scenesArr || !Array.isArray(scenesArr)) {
-      console.error(`No scenes array in response. Keys: ${Object.keys(result || {}).join(',')}`);
+      console.error(`No scenes array. Keys: ${Object.keys(result || {}).join(',')}`);
       return Response.json({ error: 'AI failed to generate ambient images' }, { status: 500 });
     }
 
-    // Calculate beat durations and start times
+    // Calculate beat durations
     const beatDurations = [];
     const beatStartTimes = [];
     let timeOffset = 0;
 
-    for (const scene of scenesArr) {
-      const durationSec = (scene.duration_minutes || (durationMinutes / imageCount)) * 60;
+    for (let i = 0; i < imageCount; i++) {
+      const scene = scenesArr[i];
+      const durationSec = scene ? (scene.duration_minutes || (durationMinutes / imageCount)) * 60 : (durationMinutes / imageCount) * 60;
       beatDurations.push(durationSec);
       beatStartTimes.push(timeOffset);
       timeOffset += durationSec;
@@ -243,26 +193,19 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.ProductionSettings.create({ project_id, ...psPayload });
     }
 
-    // Create scene records
+    // Create scene records — narration from code, visuals from AI
     let scenesCreated = 0;
-    for (let i = 0; i < scenesArr.length; i++) {
-      const scene = scenesArr[i];
+    for (let i = 0; i < imageCount; i++) {
+      const aiScene = scenesArr[i] || {};
       const sceneNum = i + 1;
-      const durationSec = beatDurations[i] || (durationMinutes / imageCount) * 60;
-
-      const cleanedNarration = cleanNarrationText(scene.narration_text || '');
-
-      // Store the image prompt directly (not director notes) since these ARE the prompts
-      const imagePrompt = scene.image_prompt_core || scene.visual_concept || '';
+      const durationSec = beatDurations[i];
+      const cleanedNarration = cleanNarrationText(narrationChunks[i] || '');
 
       const directorNotes = {
-        visual_concept: scene.visual_concept,
-        image_prompt_core: scene.image_prompt_core,
-        camera_movement: scene.camera_movement || 'ultra_slow_zoom_out',
-        color_palette: scene.color_palette,
-        mood: scene.mood,
-        duration_minutes: scene.duration_minutes || (durationMinutes / imageCount),
-        topic_match: scene.topic_match,
+        image_prompt_core: aiScene.image_prompt_core || '',
+        camera_movement: aiScene.camera_movement || 'ultra_slow_zoom_out',
+        mood: aiScene.mood || 'serene',
+        duration_minutes: aiScene.duration_minutes || (durationMinutes / imageCount),
         emotional_intensity: 0.15,
         sleep_visual_type: 'ambient_image',
         phase: 'sleep_ambient'
@@ -273,7 +216,7 @@ Deno.serve(async (req) => {
         scene_number: sceneNum,
         narration_text: cleanedNarration,
         image_prompt: `DIRECTOR_NOTES:${JSON.stringify(directorNotes)}`,
-        animation_prompt: scene.camera_movement || 'ultra_slow_zoom_out',
+        animation_prompt: aiScene.camera_movement || 'ultra_slow_zoom_out',
         duration_seconds: durationSec,
         camera_movement: 'slow_zoom_out',
         animation_speed: 'very_slow',
