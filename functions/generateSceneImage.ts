@@ -98,9 +98,9 @@ async function kiePollResult(apiKey, taskId) {
 
       // Still processing — continue polling
     } catch (error) {
-      // Network error during poll — don't crash, just retry the poll
-      if (error.message.includes('timed out') || error.message.includes('failed')) {
-        throw error; // Re-throw actual failures
+      // Content safety or actual failure — re-throw immediately
+      if (error.message.includes('timed out') || error.message.includes('failed') || error.message.includes('content safety') || error.message.includes('no image URL')) {
+        throw error;
       }
       console.warn(`⚠️ Poll network error for task ${taskId}: ${error.message}, retrying...`);
     }
