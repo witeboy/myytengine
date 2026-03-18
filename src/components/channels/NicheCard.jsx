@@ -23,6 +23,8 @@ const NICHE_DEFAULTS = {
   news: { emoji: '📰', color: '#64748B', label: 'News & Current Affairs' },
   horror: { emoji: '👻', color: '#1F2937', label: 'Horror' },
   lifestyle: { emoji: '🌿', color: '#84CC16', label: 'Lifestyle' },
+  meditation: { emoji: '🧘', color: '#7C3AED', label: 'Meditation & Study' },
+  sleep: { emoji: '🌙', color: '#4F46E5', label: 'Sleep & Tranquility' },
 };
 
 export function getNicheDefaults(niche) {
