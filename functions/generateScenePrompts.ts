@@ -1604,24 +1604,9 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
             console.log(`🎬 Scene ${s.scene_number}: injected action "${action}" (no verb detected)`);
           }
 
-          // ═══ STRIP FORBIDDEN CONTENT — screen/UI/text that image gen renders as garbled text ═══
+          // Text/UI content is now allowed and handled by OpenAI cleaner (structured legibility)
+          // Clean up basic formatting only
           rawPrompt = rawPrompt
-            // Screen content: "Storage Almost Full notification", "showing settings menu"
-            .replace(/\b(?:the\s+)?['"]?storage\s+(?:almost\s+)?full['"]?\s*(?:notification|warning|alert|message|popup|banner)?/gi, 'a notification on')
-            .replace(/\bdisplaying\s+a\s+(?:warning\s+)?notification\s+on\b/gi, 'glowing with a notification')
-            .replace(/\bnotification\s+(?:flashes|appears|shows|displays|reads|says)[^.]*\./gi, 'notification glows on the screen.')
-            .replace(/\bscreen\s+(?:showing|displaying|reading|that reads|with)[^.]*\./gi, 'screen glowing in the dark.')
-            .replace(/\bsettings?\s+(?:menu|app|page|screen)\b[^.]*\./gi, 'phone screen.')
-            // Specific app/UI names
-            .replace(/\b(?:Battery|Privacy|General|Wi-Fi|Bluetooth|iCloud|Photos|Camera|Safari|Chrome|Gmail|Instagram|TikTok|YouTube|Settings)\s*(?:app|menu|option|setting|page)?\b/gi, '')
-            // Dollar amounts and percentages
-            .replace(/\$[\d,.]+/g, 'a significant amount')
-            .replace(/\d+(?:\.\d+)?%/g, 'a large percentage')
-            // UI elements
-            .replace(/\b(?:the\s+)?['"]?OK['"]?\s*button\b/gi, 'the screen')
-            .replace(/\b(?:tap|press|click|hover)\w*\s+(?:on\s+)?(?:the\s+)?['"]?(?:OK|Cancel|Delete|Accept|Confirm|Submit|Close|Back|Next|Done|Settings|Allow|Deny)['"]?\s*(?:button|option|link)?\b/gi, 'interacting with the phone')
-            .replace(/\bher\s+thumb\s+hovering\s+over\b[^,.]*/gi, 'her fingers gripping the phone tightly')
-            // Cleanup double spaces and orphaned punctuation
             .replace(/\s{2,}/g, ' ')
             .replace(/,\s*,/g, ',')
             .replace(/\.\s*\./g, '.');
