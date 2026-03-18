@@ -137,8 +137,14 @@ Deno.serve(async (req) => {
 
     const { project_id, topic_id, topic_title, niche, duration_minutes } = await req.json();
 
+    // Check if this is a sleep project to use smaller batch sizes
+    const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
+    const project = projects[0];
+    const isSleep = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
+
     const totalWords = duration_minutes * 150;
-    const numBatches = Math.max(2, Math.round(totalWords / 1500));
+    const wordsPerBatchTarget = isSleep ? 1100 : 1500;
+    const numBatches = Math.max(2, Math.ceil(totalWords / wordsPerBatchTarget));
     const wordsPerBatch = Math.floor(totalWords / numBatches);
 
     const prompt = `You are a YouTube documentary expert. Create a detailed outline for a ${duration_minutes}-minute video about "${topic_title}" in the ${niche} niche.
