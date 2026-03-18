@@ -27,11 +27,12 @@ export default function StageProgress({ currentStage = 1, projectStatus }) {
     { num: 4, label: 'Post Production', Icon: Megaphone, page: 'PostProduction' },
   ];
 
-  // Stage 1 sub-steps for navigation
+  // Stage 1 sub-steps for navigation — sleep projects skip hooks
+  const isSleepProject = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
   const storySubSteps = [
     { label: 'Topics', page: 'StoryTopics', statuses: ['created', 'topics_ready'] },
     { label: 'Duration', page: 'StoryDuration', statuses: ['topic_selected'] },
-    { label: 'Hooks', page: 'StoryHooks', statuses: ['outline_ready'] },
+    ...(!isSleepProject ? [{ label: 'Hooks', page: 'StoryHooks', statuses: ['outline_ready'] }] : []),
     { label: 'Script', page: 'StoryScript', statuses: ['hooks_ready', 'scripting', 'script_complete', 'voiceover_ready'] },
   ];
 

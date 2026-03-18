@@ -184,12 +184,14 @@ Respond with ONLY valid JSON:
       });
     }
 
+    // Sleep projects skip the hooks step entirely
+    const nextStatus = isSleep ? "hooks_ready" : "outline_ready";
     await base44.asServiceRole.entities.Projects.update(project_id, {
       video_duration_minutes: duration_minutes,
       storytelling_format: outline.storytelling_format,
       outline: JSON.stringify(outline.batches),
-      status: "outline_ready",
-      current_step: 3
+      status: nextStatus,
+      current_step: isSleep ? 4 : 3
     });
 
     return Response.json({
