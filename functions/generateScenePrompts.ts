@@ -619,20 +619,22 @@ Deno.serve(async (req) => {
 
     const rawStyle = project.visual_style || 'cinematic_realistic';
     const isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
-    const visualStyle = isSleepProject ? 'oil_painting' : normalizeStyleKey(rawStyle);
+    const isSleepAmbient = rawStyle === 'sleep_ambient';
+    const useSleepStyle = isSleepProject || isSleepAmbient;
+    const visualStyle = useSleepStyle ? 'oil_painting' : normalizeStyleKey(rawStyle);
     let styleConfig;
 
-    // ═══ SLEEP MODE — REPLACE style entirely with dark oil painting ═══
-    if (isSleepProject) {
+    // ═══ SLEEP MODE or SLEEP_AMBIENT style — REPLACE style entirely with dark oil painting ═══
+    if (useSleepStyle) {
       styleConfig = {
         positive: "dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow, warm amber rim light, burnt sienna and dark chocolate palette, low-key lighting, candlelit atmosphere, masterpiece quality",
         negative: "photorealistic, ARRI, anamorphic, Panavision, lens flare, bokeh, film grain, bright daylight, harsh lighting, vivid saturated colors, neon, high key, overexposed, studio lighting, flash photography, 8K resolution, Hollywood"
       };
-      console.log(`🌙 Sleep mode: using PURE dark oil painting style (replaced "${rawStyle}")`);
+      console.log(`🌙 Sleep/ambient mode: using PURE dark oil painting style (replaced "${rawStyle}")`);
     } else {
       styleConfig = { ...styleMap[normalizeStyleKey(rawStyle)] };
     }
-    console.log(`🎨 Style: raw="${rawStyle}" → resolved="${visualStyle}"${isSleepProject ? ' [SLEEP DARK MODE]' : ''}`);
+    console.log(`🎨 Style: raw="${rawStyle}" → resolved="${visualStyle}"${useSleepStyle ? ' [SLEEP DARK MODE]' : ''}`);
 
 
     // ═══ UNIVERSAL: Append anti-crop negatives to ALL styles ═══
