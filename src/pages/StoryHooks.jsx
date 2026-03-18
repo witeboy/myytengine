@@ -25,7 +25,12 @@ export default function StoryHooks() {
     enabled: !!projectId,
   });
 
-  // No auto-skip — users can always come back to change hooks
+  // Sleep projects skip hooks entirely — redirect to script
+  useEffect(() => {
+    if (project && (project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story')) {
+      navigate(createPageUrl(`StoryScript?project_id=${projectId}`), { replace: true });
+    }
+  }, [project]);
 
   const { data: topic } = useQuery({
     queryKey: ['topic', project?.selected_topic_id],
