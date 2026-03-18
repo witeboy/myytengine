@@ -626,19 +626,8 @@ function TextPropertiesPanel({ caption, onUpdate, onDelete, onDuplicate, onApply
   );
 }
 
-// ClipPropertiesPanel extracted to components/timeline/ClipPropertiesPanel.jsx
-
 // ═══════════════════════════════════════════════════════════════════
 // VIDEO PREVIEW
-// FIX 2: Portrait layout completely rewritten.
-//   Old approach: `width: auto; maxHeight: calc(100% - 40px)`
-//   Problem: In a flex column the container has no intrinsic width when
-//   width is auto, so aspect-ratio collapses to 0×0.
-//
-//   New approach: a wrapper div fills all available space; inside it we
-//   use a JS-calculated size so the 9:16 rectangle is always the largest
-//   one that fits, centred in the available space. We read the wrapper
-//   dimensions via ResizeObserver and compute width/height in JS.
 // ═══════════════════════════════════════════════════════════════════
 
 function VideoPreview({
