@@ -322,10 +322,25 @@ Deno.serve(async (req) => {
       console.log(`[Batch ${batch.batch_number}] Generating ~${batch.target_words} words (${scriptMode})...`);
 
       // Sleep scripts use lower temperature for more consistent, soothing output
-      const result = await callGemini(prompt, isSleepMode ? 0.65 : 0.85);
+      const baseTemp = isSleepMode ? 0.65 : 0.85;
+      const minWords = Math.round(batch.target_words * 0.85);
+      let content = '';
+      let wordCount = 0;
+      const MAX_ATTEMPTS = 3;
 
-      const content = result.content || '';
-      const wordCount = content.split(/\s+/).filter(w => w.length > 0).length;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        const result = await callGemini(prompt, baseTemp);
+        content = result.content || '';
+        wordCount = content.split(/\s+/).filter(w => w.length > 0).length;
+
+        if (wordCount >= minWords || attempt === MAX_ATTEMPTS) {
+          if (wordCount < minWords) {
+            console.warn(`[Batch ${batch.batch_number}] ⚠️ Only ${wordCount}/${batch.target_words} words after ${MAX_ATTEMPTS} attempts — accepting`);
+          }
+          break;
+        }
+        console.log(`[Batch ${batch.batch_number}] ⚠️ Only ${wordCount}/${batch.target_words} words (attempt ${attempt}/${MAX_ATTEMPTS}) — retrying...`);
+      }
 
       await base44.asServiceRole.entities.ScriptBatches.update(batch.id, {
         content: content,
