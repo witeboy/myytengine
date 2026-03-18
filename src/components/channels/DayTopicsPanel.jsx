@@ -3,7 +3,7 @@ import { base44 } from '@/api/base44Client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Play, Clock, FileText, Zap, CheckCircle2, Loader2, ChevronDown, ChevronUp, Package } from 'lucide-react';
+import { Play, Clock, FileText, Zap, CheckCircle2, Loader2, ChevronDown, ChevronUp, Package, RotateCcw, Globe } from 'lucide-react';
 import { ExpandableAssets } from './TopicAssetsPanel';
 
 export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose, channel, onTopicUpdated }) {
@@ -46,6 +46,13 @@ export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose,
     onTopicUpdated?.();
   };
 
+  const handleMarkPublished = async (topic) => {
+    setMarkingDone(topic.id);
+    await base44.entities.ChannelTopics.update(topic.id, { status: 'published' });
+    setMarkingDone(null);
+    onTopicUpdated?.();
+  };
+
   const shorts = topics.filter(t => t.format === 'short');
   const longs = topics.filter(t => t.format === 'long');
 
@@ -61,12 +68,13 @@ export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose,
   const TopicRow = ({ topic }) => {
     const isArchived = archivedProjects[topic.id] === true;
     const isInProgress = topic.status === 'in_progress';
-    const isCompleted = topic.status === 'completed' || topic.status === 'published';
+    const isCompleted = topic.status === 'completed';
+    const isPublished = topic.status === 'published';
     const canStart = topic.status === 'scheduled' || topic.status === 'queued' || (isInProgress && isArchived);
 
     return (
       <div className={`rounded-lg border transition-all overflow-hidden ${
-        isCompleted ? 'border-green-200 bg-green-50/30' : 'border-gray-100 hover:border-blue-200'
+      isPublished ? 'border-emerald-200 bg-emerald-50/30' : isCompleted ? 'border-green-200 bg-green-50/30' : 'border-gray-100 hover:border-blue-200'
       }`}>
         <div className="flex items-center gap-3 p-3 group">
           {topic.project_id && (
@@ -95,7 +103,11 @@ export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose,
             </Badge>
           )}
 
-          {isCompleted ? (
+          {isPublished ? (
+            <Badge className="text-[10px] flex-shrink-0 bg-emerald-100 text-emerald-800">
+              <Globe className="w-3 h-3 mr-0.5" /> Published
+            </Badge>
+          ) : isCompleted ? (
             <Badge className="text-[10px] flex-shrink-0 bg-green-100 text-green-700">
               <CheckCircle2 className="w-3 h-3 mr-0.5" /> Done
             </Badge>
@@ -138,6 +150,14 @@ export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose,
               <Button
                 size="sm"
                 variant="outline"
+                className="h-7 text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
+                onClick={() => handleRestart(topic)}
+              >
+                <RotateCcw className="w-3 h-3 mr-1" /> Restart
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
                 className="h-7 text-xs border-green-300 text-green-700 hover:bg-green-50"
                 onClick={() => handleMarkDone(topic)}
                 disabled={markingDone === topic.id}
@@ -147,6 +167,53 @@ export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose,
                 ) : (
                   <><CheckCircle2 className="w-3 h-3 mr-1" /> Done</>
                 )}
+              </Button>
+            </div>
+          )}
+
+          {isCompleted && (
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => onStartPipeline?.(topic)}
+              >
+                <Zap className="w-3 h-3 mr-1" /> Continue
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
+                onClick={() => handleRestart(topic)}
+              >
+                <RotateCcw className="w-3 h-3 mr-1" /> Restart
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                onClick={() => handleMarkPublished(topic)}
+                disabled={markingDone === topic.id}
+              >
+                {markingDone === topic.id ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <><Globe className="w-3 h-3 mr-1" /> Published</>
+                )}
+              </Button>
+            </div>
+          )}
+
+          {isPublished && (
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs border-orange-300 text-orange-700 hover:bg-orange-50"
+                onClick={() => handleRestart(topic)}
+              >
+                <RotateCcw className="w-3 h-3 mr-1" /> Restart
               </Button>
             </div>
           )}
