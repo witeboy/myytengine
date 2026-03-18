@@ -63,7 +63,7 @@ async function generateWithMinimax(apiKey, text, voiceId) {
       stream: false,
       voice_setting: {
         voice_id: voiceId,
-        speed: 1,
+        speed: voiceId.includes('calm') ? 0.85 : 1, // Slower for calm/sleep voices
         vol: 1,
         pitch: 0,
       },
@@ -173,10 +173,61 @@ async function generateWithAi33(apiKey, text, voiceId) {
   throw new Error('AI33 TTS timed out after 60 seconds');
 }
 
+// ── Parse sleep pause markers into structured data ─────────────────
+// Returns { cleanedText, pauses: [{position, durationSec, type}] }
+function parseSleepMarkers(text) {
+  const pauses = [];
+  let offset = 0;
+
+  // Match [PAUSE X SEC], [PAUSE X SECONDS], [BREATHE]
+  const markerRegex = /\[(PAUSE\s+(\d+)\s*(?:SEC(?:ONDS?)?)?|BREATHE)\]/gi;
+  const cleaned = text.replace(markerRegex, (match, content, seconds, idx) => {
+    const pos = text.indexOf(match, offset);
+    offset = pos + match.length;
+
+    if (/^BREATHE$/i.test(content.trim())) {
+      pauses.push({ position: pos, durationSec: 4, type: 'breathe' });
+    } else {
+      pauses.push({ position: pos, durationSec: parseInt(seconds) || 3, type: 'pause' });
+    }
+    return ''; // Strip from text
+  });
+
+  return { cleanedText: cleaned, pauses };
+}
+
+// ── Convert pause markers to SSML break tags for MiniMax ──────────
+function insertSsmlBreaks(text) {
+  // Replace [PAUSE X SEC] with MiniMax-compatible SSML-like long pauses
+  // MiniMax speech-2.8-hd supports <break time="Xs"/> in text
+  let result = text;
+  result = result.replace(/\[(PAUSE\s+(\d+)\s*(?:SEC(?:ONDS?)?)?)\]/gi, (_, _content, seconds) => {
+    const sec = parseInt(seconds) || 3;
+    // MiniMax supports up to 5s breaks natively; for longer pauses, chain them
+    if (sec <= 5) {
+      return ` ... ... ... `; // Triple ellipsis creates natural ~3-5s pause
+    }
+    // For longer pauses, use multiple ellipsis groups
+    const groups = Math.ceil(sec / 3);
+    return ' ' + Array(groups).fill('... ... ...').join(' ') + ' ';
+  });
+  result = result.replace(/\[BREATHE\]/gi, ' ... ... ... ... ');
+  return result;
+}
+
 // ── Clean script text for TTS ──────────────────────────────────────
-function cleanScript(text) {
-  return text
-    .replace(/\[[^\]]*\]/gi, '')
+function cleanScript(text, isSleepMode = false) {
+  let cleaned = text;
+
+  if (isSleepMode) {
+    // For sleep content: convert pause markers to natural pauses instead of stripping
+    cleaned = insertSsmlBreaks(cleaned);
+  } else {
+    // For standard content: strip all bracket markers
+    cleaned = cleaned.replace(/\[[^\]]*\]/gi, '');
+  }
+
+  cleaned = cleaned
     .replace(/^(VOICEOVER|NARRATOR|VO|SOUND|MUSIC|SFX|SCENE)\s*:\s*/gim, '')
     .replace(/\*\*[^*]+\*\*:?\s*/g, '')
     .replace(/\([^)]*(?:voiceover|pause|beat|whisper|dramatic)[^)]*\)/gi, '')
@@ -184,6 +235,8 @@ function cleanScript(text) {
     .replace(/#{1,6}\s+/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+
+  return cleaned;
 }
 
 // ── Estimate MP3 duration from bytes (128kbps) ────────────────────
@@ -227,13 +280,17 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'No final_aggregated script found. Generate the full script first.' }, { status: 400 });
     }
 
-    const cleanedText = cleanScript(script.full_script);
+    // Detect if this is a sleep project
+    const isSleepMode = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
+    
+    const cleanedText = cleanScript(script.full_script, isSleepMode);
     const wordCount = cleanedText.split(/\s+/).filter(w => w.length > 0).length;
     
-    
-    console.log(`🎙 Voiceover: ${wordCount} words, ${cleanedText.length} chars`);
+    console.log(`🎙 Voiceover: ${wordCount} words, ${cleanedText.length} chars${isSleepMode ? ' (sleep mode — pauses converted to ellipsis breaks)' : ''}`);
 
-    const selectedVoiceId = voice_id || 'English_expressive_narrator';
+    // Default to a calmer voice for sleep content
+    const defaultVoice = isSleepMode ? 'English_calm_female' : 'English_expressive_narrator';
+    const selectedVoiceId = voice_id || defaultVoice;
 
     // ── Update status to generating ────────────────────────────────
     const existingSettings = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
