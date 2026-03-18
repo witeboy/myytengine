@@ -55,7 +55,25 @@ async function callGemini(prompt, temperature = 0.85, retries = 2) {
 function buildSleepWritingPrompt({ scriptMode, batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock }) {
   const isMeditation = scriptMode === 'sleep_meditation';
 
-  return `You are an expert sleep script writer specializing in ${isMeditation ? 'bedtime motivational meditations' : 'bedtime sleep stories'} designed to help listeners fall asleep. You create professional-grade scripts following proven formats from successful sleep channels.
+  return `You are an expert sleep audio script writer. You create professional-grade ${isMeditation ? 'bedtime motivational meditations' : 'bedtime sleep stories'} following the proven format of top sleep channels (Jason Stephenson, Michael Sealey, The Honest Guys).
+
+**CRITICAL RULE — READ THIS FIRST**:
+You are writing the ACTUAL meditation/story script — the words the narrator speaks. You are NOT writing ABOUT meditation. You are NOT explaining what ASMR is. You are NOT giving sleep tips or advice. You ARE the soothing voice guiding someone to sleep. Every single word must serve that purpose.
+
+**ABSOLUTELY FORBIDDEN CONTENT** (including these will ruin the script):
+❌ Explaining what ASMR is, how it works, or its benefits
+❌ Mentioning dopamine, oxytocin, neuroscience, or "studies show"
+❌ Giving practical sleep tips (caffeine, screen time, sleep schedule)
+❌ Referencing "this video", "this channel", or YouTube
+❌ First-person anecdotes ("I remember when I...")
+❌ Educational content of any kind — no teaching, no explaining
+❌ Defining meditation, affirmations, or relaxation techniques
+❌ Suggesting the listener try other videos or content
+❌ Any meta-commentary about what the script is doing
+❌ Conflict, tension, danger, stress, urgency, surprises
+❌ Questions requiring active thinking or answers
+❌ Energizing words: "exciting", "alert", "energy", "suddenly"
+❌ Unresolved storylines or cliffhangers
 
 **PROJECT CONTEXT**:
 - Topic: ${topic?.title || project.name}
@@ -77,79 +95,64 @@ ${batch.synopsis}
 
 ${previousContent ? `**PREVIOUSLY WRITTEN** (maintain continuity, do NOT repeat):\n${previousContent.slice(-4000)}\n` : ''}
 
-**═══ SLEEP SCRIPT WRITING RULES ═══**
+**═══ WRITING STYLE RULES ═══**
 
 **TONE & DELIVERY**:
-1. Extremely gentle and soothing — deliberately monotonous (boring is GOOD)
-2. Consistent rhythm throughout — NO excitement, urgency, drama, or emotional peaks
-3. NO surprises, plot twists, or tension — hypnotic, trance-inducing quality
-4. Slow and deliberate pacing — strategic repetition is ESSENTIAL
-5. Each key concept repeated 4-6 times in different phrasings
+- Extremely gentle, warm, and soothing — deliberately slow and monotonous
+- Hypnotic, trance-inducing rhythm — repetition is your primary tool
+- Each key concept stated, then restated 3-5 times in different words
+- Progressive deepening: each paragraph calmer and slower than the last
 
 **LANGUAGE**:
-6. Simple, accessible vocabulary — short to medium sentences (12-20 words ideal)
-7. Comforting, warm language — ${isMeditation ? 'second-person "you"' : 'third-person narrative, present tense'}
-8. AVOID: complex words, long winding sentences, harsh consonant sounds, alerting words (suddenly, shocking, alarm, urgent), medical jargon, anything requiring active problem-solving
+- Simple vocabulary — short sentences (8-18 words)
+- ${isMeditation ? 'Second-person "you" — speak directly to the listener as their gentle guide' : 'Third-person narrative, present tense — immerse the listener in a character\'s peaceful world'}
+- Soft consonants preferred — avoid harsh sounds (k, t, hard g)
 
-**PAUSE MARKERS** (ESSENTIAL — include these throughout):
-- [PAUSE 3 SEC] — short contemplative pause (use after key phrases)
-- [PAUSE 5 SEC] — medium integration pause (use between thoughts)
-- [PAUSE 10 SEC] — deep integration pause (use between major sections)
-- [BREATHE] — breathing cue marker
-- Insert pauses generously — at least every 2-3 sentences
+**PAUSE MARKERS** (ESSENTIAL — include generously):
+- [PAUSE 3 SEC] — after key phrases
+- [PAUSE 5 SEC] — between thoughts
+- [PAUSE 10 SEC] — between major sections
+- [BREATHE] — breathing cue
+- Use pauses every 2-3 sentences minimum
 
 **SENSORY GROUNDING** (weave throughout):
 - Touch: weight of blankets, softness, warmth, gentle pressure
-- Sound: rain, ocean waves, rustling leaves, soft breathing, distant sounds
-- Sight: darkness, soft light, stars, candlelight, gentle colors
-- Smell: fresh bread, rain, flowers, wood smoke (subtle)
+- Sound: rain, ocean waves, rustling leaves, distant gentle sounds
+- Sight: soft darkness, starlight, candlelight, gentle colors
+- Smell: rain, flowers, wood smoke, fresh air (subtle mentions)
 
-**NATURE METAPHORS** (use repeatedly):
-- Ocean: deep, vast, constant, waves of breath
+**NATURE METAPHORS** (core imagery):
+- Ocean: vast, constant, waves matching breath
 - Mountain: stable, grounded, enduring
-- Tree: rooted, growing, patient, seasonal cycles
-- River: flowing, letting go, natural path
-- Moon: perfect in every phase, gentle light
-- Stars: always present, constant light in darkness
-
-**PSYCHOLOGICAL TECHNIQUES**:
-- Progressive relaxation: physical → mental → emotional settling
-- Cognitive defusion: "thoughts are like clouds passing", "let it drift away"
-- Positive suggestion: "you are safe", "rest comes naturally"
-- Temporal distortion: "time passes... though it's hard to say how much..."
-- Anchoring phrases every 5-10 minutes: "let it go... just for now...", "safe... held... at peace...", "rest now..."
+- Tree: rooted, growing, patient
+- River: flowing, releasing, natural path
+- Moon & Stars: gentle light, constant presence
 
 ${isMeditation ? `**MEDITATION SECTION STRUCTURE**:
-- Start: Introduce sub-theme gently
-- Core: State main affirmation clearly, repeat 2-3 ways
-- Elaborate: Nature imagery, sensory details, peaceful mental pictures
-- Repeat: Same core message in new phrasing, "You are..." statements
-- Ground: Return to body awareness, breath, weight, warmth
-- Breathe: Guided breath cycle with [BREATHE] markers
-- Transition: Gentle bridge, deepen relaxation` :
+1. Gently introduce the theme through imagery (NOT by naming or defining it)
+2. State the core affirmation: "You are enough... you are enough..."
+3. Elaborate with nature scenes and sensory details
+4. Restate the affirmation in new words: "You are whole... complete... just as you are..."
+5. Ground in body awareness: breath, weight, warmth
+6. [BREATHE] cycle
+7. Gentle bridge deeper into relaxation
+
+AFFIRMATION FORMAT: State simply → pause → restate → pause → elaborate with imagery → pause → restate again. Do NOT explain WHY the affirmation matters. Just say it, softly, repeatedly.` :
 
 `**STORY SCENE STRUCTURE**:
-- Setting: Rich sensory environment, NO action yet, just atmosphere
-- Activity: Character does something peaceful (making tea, walking, reading) — describe in LOVING detail, focus on process not outcome
-- Reflection: Character's peaceful thoughts, observations, contentment — NO problems to solve
-- Transition: Natural movement to next setting, seamless flow`}
-
-**WHAT TO NEVER INCLUDE**:
-❌ Conflict, tension, danger, or stress
-❌ Sudden sounds or events, surprises
-❌ Complex problem-solving, puzzles, decisions
-❌ Unresolved storylines or cliffhangers
-❌ Energizing language ("exciting", "alert", "wake up", "energy")
-❌ Time pressure, deadlines, rushing
-❌ Negative emotions dwelt upon
-❌ Questions requiring answers or active thinking
-❌ Sudden tone changes
+1. Set the atmosphere: rich sensory details, no action yet
+2. Peaceful activity: character does something calming (making tea, walking a path, watching rain) — describe every small detail lovingly
+3. Reflection: character's quiet contentment, simple observations
+4. Seamless transition to the next scene`}
 
 **PERMISSION & RELEASE PHRASES** (use liberally):
 "You don't have to...", "There's no need to...", "It's okay to...", "Let yourself...", "Allow...", "Release...", "Let go of..."
 
-**${isFirstBatch ? 'OPENING: Start with gentle welcome, physical settling cues, breathing exercise (3 slow breaths), then ease into content' : 'Continue seamlessly — maintain the deepening relaxation arc'}**
-**${isLastBatch ? 'ENDING: This is the final section — content should be the gentlest, most sleep-inducing. End with: "Rest now... peaceful dreams... [PAUSE 10 SEC]" then fade to silence' : 'End this section by gently deepening relaxation, bridging naturally to the next theme'}**
+**ANCHORING PHRASES** (repeat every few minutes):
+"Safe... held... at peace...", "Let it go... just for now...", "Rest now...", "You are safe here..."
+
+**${isFirstBatch ? 'OPENING: Start with a gentle welcome. Settle the listener physically (body sinking, pillows, warmth). Guide 3 slow breaths with [BREATHE] markers. Then ease into the first theme through imagery — NOT by explaining what you\'re about to do.' : 'Continue seamlessly from where the previous section ended — maintain the deepening relaxation arc.'}**
+**${isLastBatch ? 'ENDING: This is the final section — the gentlest, most minimal content. Fewer words, more pauses. End with: "Rest now... peaceful dreams... [PAUSE 10 SEC]" then fade to near-silence with one final "You are safe... you are loved... [PAUSE 10 SEC]"' : 'End by gently deepening relaxation, bridging naturally to the next theme.'}**
 
 Return JSON:
 {
