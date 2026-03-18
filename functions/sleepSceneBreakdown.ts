@@ -151,7 +151,7 @@ Return JSON with EXACTLY ${imageCount} scenes:
   "scenes": [
     {
       "scene_number": 1,
-      "image_prompt_core": "Complete standalone image generation prompt ending with: dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow, warm amber rim light, burnt sienna and dark chocolate palette, low-key lighting, masterpiece quality, 70 percent shadow",
+      "image_prompt_core": "Pure environment/landscape prompt with NO people or body parts. Example: 'A misty forest path at twilight, ancient oak trees with gnarled roots, golden fireflies drifting through heavy fog, dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow, warm amber rim light, burnt sienna and dark chocolate palette, low-key lighting, masterpiece quality, 70 percent shadow'",
       "camera_movement": "ultra_slow_zoom_in|ultra_slow_zoom_out|ultra_slow_pan_left|ultra_slow_pan_right",
       "mood": "2-3 words",
       "duration_minutes": ${(durationMinutes / imageCount).toFixed(1)}
