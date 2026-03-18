@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft, Upload, Calendar, List, Settings, Loader2, Play,
-  FileText, Clock, Zap, ArrowRight, ChevronDown, ChevronUp, Package
+  FileText, Clock, Zap, ArrowRight, ChevronDown, ChevronUp, Package, Sparkles
 } from 'lucide-react';
 import { getNicheDefaults } from '@/components/channels/NicheCard';
 import ContentCalendar from '@/components/channels/ContentCalendar';
@@ -21,6 +21,7 @@ import TopicStatusPanel from '@/components/channels/TopicStatusPanel';
 import { ExpandableAssets } from '@/components/channels/TopicAssetsPanel';
 import ScriptModeSelector from '@/components/channels/ScriptModeSelector';
 import EditableTopicTitle from '@/components/channels/EditableTopicTitle';
+import AITitleGenerator from '@/components/channels/AITitleGenerator';
 
 export default function ChannelDetail() {
   const navigate = useNavigate();
@@ -31,6 +32,7 @@ export default function ChannelDetail() {
   const [selectedDate, setSelectedDate] = useState(null);
   const [activeStatFilter, setActiveStatFilter] = useState(null);
   const [expandedTopicAll, setExpandedTopicAll] = useState(null);
+  const [showAIGenerator, setShowAIGenerator] = useState(false);
 
   const getProjectRoute = (project) => {
     const s = project.status;
@@ -188,6 +190,9 @@ export default function ChannelDetail() {
             <p className="text-sm text-gray-500">{channel.niche_label || defaults.label}</p>
           </div>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowAIGenerator(true)} className="border-purple-200 text-purple-700 hover:bg-purple-50">
+              <Sparkles className="w-4 h-4 mr-1" /> AI Generate 100 Titles
+            </Button>
             <Button variant="outline" onClick={() => setShowImporter(true)}>
               <Upload className="w-4 h-4 mr-1" /> Import Topics
             </Button>
@@ -451,6 +456,14 @@ export default function ChannelDetail() {
         onOpenChange={setShowImporter}
         channel={channel}
         onImported={() => refetchTopics()}
+      />
+
+      <AITitleGenerator
+        open={showAIGenerator}
+        onOpenChange={setShowAIGenerator}
+        channel={channel}
+        existingTopics={topics}
+        onComplete={() => refetchTopics()}
       />
     </div>
   );
