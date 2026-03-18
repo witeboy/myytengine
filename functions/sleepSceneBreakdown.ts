@@ -76,16 +76,19 @@ function buildAmbientImagePrompt({ scriptText, imageCount, topicTitle, isMeditat
 
 **YOUR TASK**: Design ${imageCount} breathtaking images that are TOPIC-MATCHED to "${topicTitle}".
 
-**VISUAL STYLE RULES**:
-- Style: Dreamlike, painterly, warm. Think oil painting meets digital art. NOT photorealistic.
-- Colors: Rich, warm, saturated but dark — deep blues, warm ambers, soft golds, midnight purples, emerald greens
-- Lighting: Always gentle — golden hour, moonlight, candlelight, bioluminescence, aurora, starlight
-- Composition: Simple, uncluttered, vast. Leave lots of breathing room. No busy details.
-- Mood: Serene, peaceful, wonder-inducing, cozy
-- NO text, NO people (unless very distant/silhouetted), NO faces, NO animals in focus
-- NO bright daylight, NO harsh contrast, NO drama or tension
-- Each image should work as a standalone piece of ambient art
-- Progressive deepening: images get DARKER and MORE ABSTRACT toward the end
+**VISUAL STYLE RULES (CRITICAL — study the reference aesthetic)**:
+- Style: Dark, moody oil painting / digital painting hybrid. Rich impasto texture feel. NOT photorealistic, NOT bright.
+- Colors: EXTREMELY LIMITED warm palette — deep amber (#8B5E3C), burnt sienna (#6B3A2A), dark chocolate (#2C1810), midnight navy (#0A1628), warm gold highlights ONLY as rim light or distant glow (#D4A574). NO bright colors. NO saturated greens, blues, or purples.
+- Lighting: ALWAYS low-key. 70-80% of every image should be SHADOW/DARKNESS. Light sources: candlelight, distant horizon glow, moonlight through clouds, campfire embers, oil lamp, faint bioluminescence. Light is WARM and DIM, never bright or harsh.
+- Brightness: DARK. Think of a dimly lit room at night. The viewer should be able to sleep with this on screen — zero eye strain, zero glare. Overall exposure should feel like ISO 800 at f/2.8 in a candlelit room.
+- Composition: Simple, uncluttered, vast. Leave lots of breathing room. Dark negative space is your friend.
+- Mood: Serene, ancient, intimate, mysterious — like a Rembrandt painting viewed by candlelight
+- NO text, NO bright daylight, NO harsh contrast, NO neon, NO vivid saturated colors
+- People ARE allowed (silhouetted, dimly lit, painterly) — they add story warmth. But faces should be softly lit, never harshly exposed.
+- Each image should work as ambient art that won't wake someone up if their screen stays on
+- Progressive deepening: images get DARKER toward the end — final images should be nearly black with barely-visible warm shapes
+
+**REFERENCE AESTHETIC**: Classical oil painting meets dark fantasy concept art. Think Rembrandt's "Night Watch" darkness level, Caravaggio's chiaroscuro, dark fantasy book covers. Warm amber/sienna rim lighting on figures emerging from deep shadow. Ancient, timeless, painterly.
 
 **TOPIC MATCHING** (this is CRITICAL):
 - If the topic is about forests → forest scenes (moonlit groves, misty canopies, ancient trees)
@@ -117,7 +120,7 @@ Return JSON:
       "scene_number": 1,
       "narration_text": "First ~${Math.floor(scriptText.split(/\\s+/).length / imageCount)} words of script here...",
       "visual_concept": "3-4 sentences describing a GORGEOUS, DREAMLIKE scene. Rich detail but simple composition. This is a painting prompt.",
-      "image_prompt_core": "A single-paragraph AI image generation prompt. Painterly, dreamlike, rich colors. Include style keywords: 'digital painting, dreamy atmosphere, warm lighting, ambient, 4K, masterpiece quality'. Be very specific about colors, lighting direction, and composition.",
+      "image_prompt_core": "A single-paragraph AI image generation prompt. MUST include these mandatory style keywords at the end: 'dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow, warm amber rim light, burnt sienna and dark chocolate palette, low-key lighting, candlelit atmosphere, masterpiece quality, 70 percent shadow'. Be very specific about the warm dim light sources and deep darkness surrounding them.",
       "camera_movement": "ultra_slow_zoom_in|ultra_slow_zoom_out|ultra_slow_pan_left|ultra_slow_pan_right|imperceptible_drift",
       "color_palette": "e.g. midnight blue #0a1628, warm gold #d4a574, soft amber #c8956a",
       "mood": "2-3 words",
