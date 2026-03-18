@@ -1720,11 +1720,16 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
 
 
         // ═══ OPENAI PROMPT CLEANER — final structuring pass ═══
-        // Sends the assembled prompt through OpenAI to resolve ambiguity,
-        // enforce visual hierarchy, structure text/UI elements, and lock style.
-        const cleanedImagePrompt = await cleanPromptWithOpenAI(imagePrompt, visualStyle);
-        if (cleanedImagePrompt !== imagePrompt) {
-          console.log(`🧹 Scene ${s.scene_number}: OpenAI cleaned (${imagePrompt.length}→${cleanedImagePrompt.length}ch)`);
+        // Skip for sleep projects — their prompts are already well-structured
+        // and the OpenAI cleaner adds ~5s per scene causing timeouts
+        let cleanedImagePrompt = imagePrompt;
+        if (!isSleepProject) {
+          cleanedImagePrompt = await cleanPromptWithOpenAI(imagePrompt, visualStyle);
+          if (cleanedImagePrompt !== imagePrompt) {
+            console.log(`🧹 Scene ${s.scene_number}: OpenAI cleaned (${imagePrompt.length}→${cleanedImagePrompt.length}ch)`);
+          }
+        } else {
+          console.log(`🌙 Scene ${s.scene_number}: skipping OpenAI cleaner (sleep mode)`);
         }
 
         try {
