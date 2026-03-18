@@ -1,51 +1,59 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
-const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
+const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
-async function callGemini(prompt, temperature = 0.85, retries = 2) {
+async function callClaude(prompt, temperature = 0.85, retries = 2) {
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature, maxOutputTokens: 16384, responseMimeType: "application/json" }
-        })
-      }
-    );
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 16384,
+        temperature,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (response.status === 429) {
+      const waitMs = Math.pow(2, attempt + 1) * 3000;
+      console.warn(`⏳ Claude rate limited, waiting ${waitMs / 1000}s (attempt ${attempt + 1})`);
+      await new Promise(r => setTimeout(r, waitMs));
+      continue;
+    }
 
     if (!response.ok) {
       const err = await response.json();
-      throw new Error(`Gemini error: ${err.error?.message || response.status}`);
+      throw new Error(`Claude error ${response.status}: ${err.error?.message || JSON.stringify(err)}`);
     }
 
     const data = await response.json();
-    if (!data.candidates?.length) throw new Error("No candidates from Gemini");
-    const rawText = data.candidates[0].content.parts[0].text;
+    const rawText = data.content?.[0]?.text || '';
 
-    try {
-      return JSON.parse(rawText);
-    } catch (parseErr) {
-      console.log(`[Gemini] JSON parse failed (attempt ${attempt + 1}): ${parseErr.message}`);
-      try {
-        let cleaned = rawText
-          .replace(/```json\s*/g, '').replace(/```\s*/g, '');
-        cleaned = cleaned.replace(/[\x00-\x1F\x7F]/g, (c) => {
-          switch (c) {
-            case '\n': return '\\n';
-            case '\r': return '\\r';
-            case '\t': return '\\t';
-            default: return ' ';
-          }
-        });
-        return JSON.parse(cleaned);
-      } catch (_) {
-        if (attempt === retries) throw new Error(`JSON parse failed after ${retries + 1} attempts: ${parseErr.message}`);
-        console.log(`[Gemini] Retrying...`);
-      }
+    // Extract JSON from response
+    try { return JSON.parse(rawText); } catch (_) {}
+
+    // Try extracting from markdown code blocks
+    let jsonStr = rawText;
+    if (rawText.includes('```json')) {
+      jsonStr = rawText.split('```json')[1].split('```')[0].trim();
+    } else if (rawText.includes('```')) {
+      jsonStr = rawText.split('```')[1].split('```')[0].trim();
     }
+    try { return JSON.parse(jsonStr); } catch (_) {}
+
+    // Try extracting just the JSON object
+    const objMatch = rawText.match(/\{[\s\S]*\}/);
+    if (objMatch) {
+      try { return JSON.parse(objMatch[0]); } catch (_) {}
+    }
+
+    if (attempt === retries) throw new Error('Failed to parse Claude JSON after all attempts');
+    console.log(`[Claude] JSON parse failed (attempt ${attempt + 1}), retrying...`);
   }
 }
 
@@ -329,7 +337,7 @@ Deno.serve(async (req) => {
       const MAX_ATTEMPTS = 3;
 
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-        const result = await callGemini(prompt, baseTemp);
+        const result = await callClaude(prompt, baseTemp);
         content = result.content || '';
         wordCount = content.split(/\s+/).filter(w => w.length > 0).length;
 
