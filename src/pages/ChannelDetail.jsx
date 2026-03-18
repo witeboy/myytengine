@@ -249,6 +249,7 @@ export default function ChannelDetail() {
               }
               onClose={() => setActiveStatFilter(null)}
               onStartPipeline={handleStartPipeline}
+              onTopicUpdated={() => refetchTopics()}
             />
           </div>
         )}
