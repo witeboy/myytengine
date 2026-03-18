@@ -70,7 +70,13 @@ export default function ChannelDetail() {
     if (topic.project_id) {
       const existingProjects = await base44.entities.Projects.filter({ id: topic.project_id });
       if (existingProjects[0]) {
-        const route = getProjectRoute(existingProjects[0]);
+        const ep = existingProjects[0];
+        // Route sleep projects to their own pipeline
+        if (ep.project_mode === 'sleep_meditation' || ep.project_mode === 'sleep_story') {
+          navigate(`/SleepPipeline?project_id=${ep.id}`);
+          return;
+        }
+        const route = getProjectRoute(ep);
         navigate(`/${route}`);
         return;
       }
