@@ -331,14 +331,40 @@ Deno.serve(async (req) => {
 
       // Sleep scripts use lower temperature for more consistent, soothing output
       const baseTemp = isSleepMode ? 0.65 : 0.85;
-      const minWords = Math.round(batch.target_words * 0.85);
+      const minWords = Math.round(batch.target_words * 0.92);
       let content = '';
       let wordCount = 0;
       const MAX_ATTEMPTS = 3;
 
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-        const result = await callClaude(prompt, baseTemp);
-        content = result.content || '';
+        let currentPrompt;
+        if (attempt === 1 || !content) {
+          currentPrompt = prompt;
+        } else {
+          // Continuation prompt — ask Claude to extend the existing content
+          const wordsNeeded = batch.target_words - wordCount;
+          currentPrompt = `You previously wrote the following script section but it was too short (${wordCount} words, need ${batch.target_words}).
+
+EXISTING CONTENT (DO NOT REPEAT — continue SEAMLESSLY from the last line):
+---
+${content.slice(-3000)}
+---
+
+Write EXACTLY ${wordsNeeded} MORE words continuing this section. Maintain the same tone, style, and pacing. ${isSleepMode ? 'Add more repetition, more imagery, more [PAUSE] markers, more sensory grounding.' : 'Add more detail, more anecdotes, more specific examples, more emotional beats.'}
+
+Return JSON:
+{"content": "The additional continuation text only...", "word_count": ${wordsNeeded}}`;
+        }
+
+        const result = await callClaude(currentPrompt, baseTemp);
+        const newContent = result.content || '';
+
+        if (attempt > 1 && content) {
+          // Append continuation to existing content
+          content = content.trim() + '\n\n' + newContent.trim();
+        } else {
+          content = newContent;
+        }
         wordCount = content.split(/\s+/).filter(w => w.length > 0).length;
 
         if (wordCount >= minWords || attempt === MAX_ATTEMPTS) {
@@ -347,7 +373,7 @@ Deno.serve(async (req) => {
           }
           break;
         }
-        console.log(`[Batch ${batch.batch_number}] ⚠️ Only ${wordCount}/${batch.target_words} words (attempt ${attempt}/${MAX_ATTEMPTS}) — retrying...`);
+        console.log(`[Batch ${batch.batch_number}] ⚠️ Only ${wordCount}/${batch.target_words} words (attempt ${attempt}/${MAX_ATTEMPTS}) — extending...`);
       }
 
       await base44.asServiceRole.entities.ScriptBatches.update(batch.id, {
