@@ -49,6 +49,7 @@ export default function StoryScript() {
 
 
   const completedCount = batches.filter(b => b.status === 'completed').length;
+  const stuckCount = batches.filter(b => b.status === 'generating').length;
   const allCompleted = batches.length > 0 && completedCount === batches.length;
 
     // 🎯 Strictly look for the version created by your 'generateFullScript' function
@@ -56,6 +57,20 @@ export default function StoryScript() {
     ? scripts.find(s => s.version === 'final_aggregated')
     : null;
 
+
+  // Reset stuck 'generating' batches back to 'pending' on page load
+  const [stuckReset, setStuckReset] = useState(false);
+  useEffect(() => {
+    if (stuckReset || generating || batchesLoading) return;
+    const stuck = batches.filter(b => b.status === 'generating');
+    if (stuck.length > 0) {
+      setStuckReset(true);
+      console.log(`Resetting ${stuck.length} stuck 'generating' batches back to 'pending'`);
+      Promise.all(
+        stuck.map(b => base44.entities.ScriptBatches.update(b.id, { status: 'pending' }))
+      ).then(() => refetchBatches());
+    }
+  }, [batches, batchesLoading, generating, stuckReset]);
 
   // Auto-generate: when project is ready but no script content exists yet
   useEffect(() => {
@@ -66,13 +81,15 @@ export default function StoryScript() {
     if (!['hooks_ready', 'scripting'].includes(project.status)) return;
     // If any batch already has content, don't restart
     if (batches.some(b => b.status === 'completed' && b.content)) return;
+    // Don't start if we just reset stuck batches — wait for refetch
+    if (batches.some(b => b.status === 'generating')) return;
 
     setAutoGenTriggered(true);
     setGenerating(true);
 
     const runFullGeneration = async () => {
       try {
-        const hasPendingBatches = batches.length > 0 && batches.every(b => b.status === 'pending' || b.status === 'generating');
+        const hasPendingBatches = batches.length > 0 && batches.every(b => b.status === 'pending');
 
         if (!hasPendingBatches) {
           // No usable batches — start fresh
@@ -93,10 +110,8 @@ export default function StoryScript() {
           await refetchBatches();
         }
 
-        // Step 2: Generate content for each batch
-        await base44.functions.invoke('generateScriptBatches', {
-          project_id: projectId,
-        });
+        // Step 2: Generate batches one at a time with retry
+        await generateBatchesWithRetry();
 
         await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
       } catch (err) {
