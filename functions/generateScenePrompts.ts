@@ -1675,9 +1675,17 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
           animationPrompt = `${movement} over ${sceneDuration} seconds. ${getArcAnimationGuidance(arcPosition)} Camera reveals the scene through parallax — foreground elements drift at different speed than background, creating cinematic depth. Subject exhibits natural micro-motion: breathing rhythm visible in chest and shoulders, weight shifts, small involuntary gestures. Environmental physics respond to the world: ${vc.includes('rain') ? 'water streaks surfaces, reflections ripple in puddles, droplets catch light' : vc.includes('wind') ? 'fabric ripples, hair lifts and settles, loose objects shift' : vc.includes('crowd') ? 'background figures move at varied speeds, creating depth layers' : 'ambient textures evolve — light creeps across surfaces, shadows rotate, particles drift through beams'}. Light is alive — ${mood.includes('tense') || mood.includes('anxiety') ? 'flickering, unstable, casting nervous shadows' : mood.includes('warm') || mood.includes('hope') ? 'gradually warming, golden rays expanding across frame' : 'shifting slowly, painting the scene with evolving tones'}. Shallow DOF breathes between planes, drawing focus where emotion lives.`;        }
 
 
+        // ═══ OPENAI PROMPT CLEANER — final structuring pass ═══
+        // Sends the assembled prompt through OpenAI to resolve ambiguity,
+        // enforce visual hierarchy, structure text/UI elements, and lock style.
+        const cleanedImagePrompt = await cleanPromptWithOpenAI(imagePrompt, visualStyle);
+        if (cleanedImagePrompt !== imagePrompt) {
+          console.log(`🧹 Scene ${s.scene_number}: OpenAI cleaned (${imagePrompt.length}→${cleanedImagePrompt.length}ch)`);
+        }
+
         try {
           await base44.asServiceRole.entities.Scenes.update(s.scene_id, {
-            image_prompt: imagePrompt,
+            image_prompt: cleanedImagePrompt,
             animation_prompt: animationPrompt,
             status: "prompts_ready"
           });
