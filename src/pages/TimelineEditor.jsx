@@ -10,12 +10,13 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import VideoExporter from '@/components/timeline/VideoExporter';
 import useVideoExport from '@/components/timeline/useVideoExport';
+import ClipPropertiesPanel from '@/components/timeline/ClipPropertiesPanel';
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Volume1,
   ZoomIn, ZoomOut, Undo2, Redo2, Scissors, Trash2, Copy,
   Image, Music, Type, Wand2, Film, Mic, Settings,
   Loader2, CheckCircle, Sparkles, Star, Move, ArrowLeft, ArrowRight, FileVideo,
-  LayoutGrid, FolderOpen, X, Package, Camera, AlertCircle,
+  LayoutGrid, FolderOpen, X, Package, Camera, AlertCircle, Clapperboard,
   Bold, Italic, Underline, Palette,
   Minimize2, Focus, Blend, ArrowUpRight, ArrowDownLeft,
   Monitor, Smartphone, Radio
