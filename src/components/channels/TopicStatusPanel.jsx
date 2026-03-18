@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { X, Play, Clock, ArrowRight, FileText, ChevronDown, ChevronUp, Package, RotateCcw, Globe, Zap, CheckCircle2, Loader2 } from 'lucide-react';
+import { X, Play, Clock, FileText, ChevronDown, ChevronUp, Package, RotateCcw, Globe, Zap, CheckCircle2, Loader2 } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
 
 import { ExpandableAssets } from './TopicAssetsPanel';
