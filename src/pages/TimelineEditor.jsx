@@ -768,22 +768,13 @@ function VideoPreview({
             style={{ width: canvasW, height: canvasH }}
             onClick={() => onSelectCaption(null)}
           >
-            {/* ── Incoming scene — video or image ──────────────────── */}
+            {/* ── Incoming scene — video, broll, or image ──────────── */}
             <div className="absolute inset-0 overflow-hidden" style={isTransitioning ? getTransitionStyle(false) : {}}>
-              {currentClip?.mediaType === 'video' && currentClip?.videoUrl ? (
-                // Video clip: muted (voiceover is separate), playbackRate set to fill beat without looping
-                <video
-                  key={`${currentClip.videoUrl}-${currentClip.playbackRate ?? 1}`}
-                  ref={videoRef}
-                  src={currentClip.videoUrl}
-                  className="w-full h-full object-cover"
-                  style={motionStyle}
-                  muted
-                  playsInline
-                  autoPlay
-                />
+              {currentClip?.mediaType === 'broll' && currentClip?.brollUrl ? (
+                <video key={`broll-${currentClip.brollUrl}`} ref={videoRef} src={currentClip.brollUrl} className="w-full h-full object-cover" style={motionStyle} muted playsInline autoPlay />
+              ) : currentClip?.mediaType === 'video' && currentClip?.videoUrl ? (
+                <video key={`${currentClip.videoUrl}-${currentClip.playbackRate ?? 1}`} ref={videoRef} src={currentClip.videoUrl} className="w-full h-full object-cover" style={motionStyle} muted playsInline autoPlay />
               ) : currentScene?.image_url ? (
-                // Image clip (default)
                 <img src={currentScene.image_url} className="w-full h-full object-cover" style={motionStyle} alt="" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center"><Film className="w-12 h-12 text-gray-700" /></div>
