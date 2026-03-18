@@ -85,6 +85,44 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
   const scenesWithImages = (scenes || []).filter(s => s.image_url && s.image_url.startsWith('http'));
   const currentRefUrl = project?.reference_image_url;
 
+  const handleAIClean = async () => {
+    setShowMenu(false);
+    setFixing(true);
+    setFixType('ai_clean');
+    setResult(null);
+
+    try {
+      const toClean = (scenes || []).filter(s =>
+        s.image_prompt && !s.image_prompt.startsWith('DIRECTOR_NOTES:') &&
+        (s.status === 'prompts_ready' || s.status === 'image_generated')
+      );
+      const batchPayload = toClean.map(s => ({ scene_number: s.scene_number, image_prompt: s.image_prompt }));
+      const resp = await base44.functions.invoke('cleanScenePrompt', {
+        prompts: batchPayload,
+        visual_style: project?.visual_style || ''
+      });
+      const data = resp.data || resp;
+      const cleaned = data.cleaned_prompts || [];
+      let updated = 0;
+      for (const item of cleaned) {
+        const scene = toClean.find(s => s.scene_number === item.scene_number);
+        if (scene && item.cleaned_prompt && item.cleaned_prompt !== scene.image_prompt) {
+          await base44.entities.Scenes.update(scene.id, { image_prompt: item.cleaned_prompt });
+          updated++;
+        }
+      }
+      setResult({ fixed: updated, total: toClean.length });
+      await onComplete();
+    } catch (err) {
+      console.error('AI Clean failed:', err);
+      setResult({ error: err.message });
+    }
+
+    setFixing(false);
+    setFixType(null);
+    setTimeout(() => setResult(null), 5000);
+  };
+
   const fixOptions = [
     { type: 'all', label: 'Fix Everything', desc: 'Characters + Cleanup + Quality', icon: '🔧' },
     { type: 'characters', label: 'Fix Characters', desc: 'Inject identity descriptions', icon: '👤' },
@@ -128,6 +166,17 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
               </div>
             </button>
           ))}
+          <div className="border-t border-gray-100" />
+          <button
+            onClick={handleAIClean}
+            className="w-full text-left px-4 py-2.5 hover:bg-cyan-50 flex items-start gap-2"
+          >
+            <span className="text-lg">✨</span>
+            <div>
+              <p className="text-sm font-medium text-gray-800">AI Clean (OpenAI)</p>
+              <p className="text-xs text-gray-500">Structure prompts for better rendering</p>
+            </div>
+          </button>
           {scenesWithImages.length > 0 && (
             <>
               <div className="border-t border-gray-100" />
