@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,17 +21,29 @@ export default function TopicStatusPanel({ title, icon: Icon, topics, onClose, o
   const navigate = useNavigate();
   const [expandedTopic, setExpandedTopic] = useState(null);
   const [actionLoading, setActionLoading] = useState(null);
+  const [projectData, setProjectData] = useState({});
+
+  // Fetch project data for topics that have projects
+  useEffect(() => {
+    const fetchProjects = async () => {
+      const withProject = topics.filter(t => t.project_id);
+      if (withProject.length === 0) return;
+      const results = {};
+      for (const t of withProject) {
+        const projects = await base44.entities.Projects.filter({ id: t.project_id });
+        results[t.id] = projects[0] || null;
+      }
+      setProjectData(results);
+    };
+    fetchProjects();
+  }, [topics]);
 
   const handleRestart = async (topic) => {
     setActionLoading(topic.id);
+    if (topic.project_id) {
+      await base44.entities.Projects.update(topic.project_id, { archived: true });
+    }
     await base44.entities.ChannelTopics.update(topic.id, { status: 'scheduled', project_id: '' });
-    setActionLoading(null);
-    onTopicUpdated?.();
-  };
-
-  const handleMarkDone = async (topic) => {
-    setActionLoading(topic.id);
-    await base44.entities.ChannelTopics.update(topic.id, { status: 'completed' });
     setActionLoading(null);
     onTopicUpdated?.();
   };
@@ -123,44 +135,52 @@ export default function TopicStatusPanel({ title, icon: Icon, topics, onClose, o
                   )}
 
                   {/* Action buttons */}
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                    {topic.status === 'in_progress' && (
-                      <>
-                        <button onClick={(e) => { e.stopPropagation(); handleTopicClick(topic); }} className="h-6 px-2 text-[10px] font-medium rounded border border-blue-200 text-blue-700 hover:bg-blue-50 flex items-center gap-0.5">
-                          <Zap className="w-3 h-3" /> Continue
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); handleRestart(topic); }} className="h-6 px-2 text-[10px] font-medium rounded border border-orange-200 text-orange-700 hover:bg-orange-50 flex items-center gap-0.5">
-                          <RotateCcw className="w-3 h-3" /> Restart
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); handleMarkDone(topic); }} disabled={actionLoading === topic.id} className="h-6 px-2 text-[10px] font-medium rounded border border-green-200 text-green-700 hover:bg-green-50 flex items-center gap-0.5">
-                          {actionLoading === topic.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><CheckCircle2 className="w-3 h-3" /> Done</>}
-                        </button>
-                      </>
-                    )}
-                    {topic.status === 'completed' && (
-                      <>
-                        <button onClick={(e) => { e.stopPropagation(); handleTopicClick(topic); }} className="h-6 px-2 text-[10px] font-medium rounded border border-blue-200 text-blue-700 hover:bg-blue-50 flex items-center gap-0.5">
-                          <Zap className="w-3 h-3" /> Continue
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); handleRestart(topic); }} className="h-6 px-2 text-[10px] font-medium rounded border border-orange-200 text-orange-700 hover:bg-orange-50 flex items-center gap-0.5">
-                          <RotateCcw className="w-3 h-3" /> Restart
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); handleMarkPublished(topic); }} disabled={actionLoading === topic.id} className="h-6 px-2 text-[10px] font-medium rounded border border-emerald-200 text-emerald-700 hover:bg-emerald-50 flex items-center gap-0.5">
-                          {actionLoading === topic.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Globe className="w-3 h-3" /> Published</>}
-                        </button>
-                      </>
-                    )}
-                    {topic.status === 'published' && (
-                      <button onClick={(e) => { e.stopPropagation(); handleRestart(topic); }} className="h-6 px-2 text-[10px] font-medium rounded border border-orange-200 text-orange-700 hover:bg-orange-50 flex items-center gap-0.5">
-                        <RotateCcw className="w-3 h-3" /> Restart
-                      </button>
-                    )}
-                    {(topic.status === 'scheduled' || topic.status === 'queued') && (
-                      <button onClick={(e) => { e.stopPropagation(); onStartPipeline(topic); }} className="h-6 px-2 text-[10px] font-medium rounded border border-blue-200 text-blue-700 hover:bg-blue-50 flex items-center gap-0.5">
-                        <Play className="w-3 h-3" /> Start
-                      </button>
-                    )}
-                  </div>
+                  {(() => {
+                    const proj = projectData[topic.id];
+                    const projectIsDone = proj && ['post_production', 'published'].includes(proj.status);
+                    return (
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                        {topic.status === 'in_progress' && (
+                          <>
+                            <button onClick={(e) => { e.stopPropagation(); handleTopicClick(topic); }} className="h-6 px-2 text-[10px] font-medium rounded border border-blue-200 text-blue-700 hover:bg-blue-50 flex items-center gap-0.5">
+                              <Zap className="w-3 h-3" /> Continue
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); handleRestart(topic); }} disabled={actionLoading === topic.id} className="h-6 px-2 text-[10px] font-medium rounded border border-orange-200 text-orange-700 hover:bg-orange-50 flex items-center gap-0.5">
+                              {actionLoading === topic.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><RotateCcw className="w-3 h-3" /> Restart</>}
+                            </button>
+                            {projectIsDone && (
+                              <button onClick={(e) => { e.stopPropagation(); handleMarkPublished(topic); }} disabled={actionLoading === topic.id} className="h-6 px-2 text-[10px] font-medium rounded border border-emerald-200 text-emerald-700 hover:bg-emerald-50 flex items-center gap-0.5">
+                                {actionLoading === topic.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Globe className="w-3 h-3" /> Published</>}
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {topic.status === 'completed' && (
+                          <>
+                            <button onClick={(e) => { e.stopPropagation(); handleTopicClick(topic); }} className="h-6 px-2 text-[10px] font-medium rounded border border-blue-200 text-blue-700 hover:bg-blue-50 flex items-center gap-0.5">
+                              <Zap className="w-3 h-3" /> Continue
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); handleRestart(topic); }} disabled={actionLoading === topic.id} className="h-6 px-2 text-[10px] font-medium rounded border border-orange-200 text-orange-700 hover:bg-orange-50 flex items-center gap-0.5">
+                              {actionLoading === topic.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><RotateCcw className="w-3 h-3" /> Restart</>}
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); handleMarkPublished(topic); }} disabled={actionLoading === topic.id} className="h-6 px-2 text-[10px] font-medium rounded border border-emerald-200 text-emerald-700 hover:bg-emerald-50 flex items-center gap-0.5">
+                              {actionLoading === topic.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><Globe className="w-3 h-3" /> Published</>}
+                            </button>
+                          </>
+                        )}
+                        {topic.status === 'published' && (
+                          <button onClick={(e) => { e.stopPropagation(); handleRestart(topic); }} disabled={actionLoading === topic.id} className="h-6 px-2 text-[10px] font-medium rounded border border-orange-200 text-orange-700 hover:bg-orange-50 flex items-center gap-0.5">
+                            {actionLoading === topic.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <><RotateCcw className="w-3 h-3" /> Restart</>}
+                          </button>
+                        )}
+                        {(topic.status === 'scheduled' || topic.status === 'queued') && (
+                          <button onClick={(e) => { e.stopPropagation(); onStartPipeline(topic); }} className="h-6 px-2 text-[10px] font-medium rounded border border-blue-200 text-blue-700 hover:bg-blue-50 flex items-center gap-0.5">
+                            <Play className="w-3 h-3" /> Start
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <ExpandableAssets projectId={topic.project_id} topicTitle={topic.title} isOpen={expandedTopic === topic.id} />
               </div>
