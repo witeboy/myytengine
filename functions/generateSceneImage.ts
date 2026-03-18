@@ -533,6 +533,11 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
       .replace(/\bnight\s*stand\b/gi, 'side table')
       .replace(/\bnight\s*gown\b/gi, 'robe');
 
+    // Prefix with explicit generation command — Grok needs "Create" to treat it as a generation instruction
+    if (!/^(create|generate|paint|draw|render|imagine|make)\b/i.test(finalPrompt)) {
+      finalPrompt = `Create an image of: ${finalPrompt}`;
+    }
+
     // Log the cleaned prompt for debugging
     console.log(`🌙 Scene ${sceneNum}: sleep prompt (${finalPrompt.length}ch): ${finalPrompt.substring(0, 200)}`);
   } else {
