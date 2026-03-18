@@ -534,7 +534,9 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
       .replace(/\bblanket\b/gi, 'cloth')
       .replace(/\bsleeping\b/gi, 'resting')
       .replace(/\bnight\s*stand\b/gi, 'side table')
-      .replace(/\bnight\s*gown\b/gi, 'robe');
+      .replace(/\bnight\s*gown\b/gi, 'robe')
+      .replace(/,?\s*no people\b[^.]*/gi, '')
+      .replace(/,?\s*no human figures\b[^.]*/gi, '');
 
     // Log the cleaned prompt for debugging
     console.log(`🌙 Scene ${sceneNum}: sleep prompt (${finalPrompt.length}ch): ${finalPrompt.substring(0, 200)}`);
