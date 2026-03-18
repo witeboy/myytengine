@@ -76,10 +76,13 @@ export default function ChannelDetail() {
       }
     }
 
+    const scriptMode = channel.script_mode || 'standard';
+    const isSleep = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
+
     const project = await base44.entities.Projects.create({
       name: topic.title,
       niche: channel.niche,
-      tone: channel.tone || 'dramatic',
+      tone: isSleep ? 'soothing' : (channel.tone || 'dramatic'),
       visual_style: channel.visual_style || 'cinematic_realistic',
       video_duration_minutes: topic.format === 'short' ? 1 : (channel.long_form_duration_minutes || 15),
       orientation: topic.format === 'short' ? 'portrait' : 'landscape',
@@ -88,6 +91,7 @@ export default function ChannelDetail() {
       channel_id: channel.id,
       channel_topic_id: topic.id,
       script_strategy_override: channel.script_strategy || '',
+      project_mode: isSleep ? scriptMode : '',
     });
 
     const importedTopic = await base44.entities.Topics.create({
