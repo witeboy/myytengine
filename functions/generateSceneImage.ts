@@ -169,7 +169,7 @@ async function generateWithGrokImagine(apiKey, prompt, aspectRatio, referenceIma
 // PROMPT CLEANING — strip metadata Grok renders as visible text
 // ─────────────────────────────────────────────
 
-function cleanPromptForGrok(rawPrompt) {
+function cleanPromptForGrok(rawPrompt, isSleep = false) {
   let p = rawPrompt;
 
   // 1. Strip orientation/format directives (handled by aspect_ratio param)
@@ -385,10 +385,11 @@ function cleanPromptForGrok(rawPrompt) {
   // framing language, we skip. Otherwise we prepend it.
   // ══════════════════════════════════════════════════════════════
 
-  const alreadyFramed = /^(full\s+(body|scene)|wide\s+shot|medium\s+(wide\s+)?shot|low\s+angle|high\s+angle|overhead|establishing|tracking|dutch\s+angle|pov\s+shot)/i.test(p);
+  const alreadyFramed = /^(full\s+(body|scene)|wide\s+shot|medium\s+(wide\s+)?shot|low\s+angle|high\s+angle|overhead|establishing|tracking|dutch\s+angle|pov\s+shot|landscape)/i.test(p);
 
-  if (alreadyFramed) {
-    // Prompt generator already structured correctly — no prepend needed
+  if (alreadyFramed || isSleep) {
+    // Sleep projects: NEVER add character framing anchors — pure environments
+    // Already framed prompts: no prepend needed
   } else {
     // Detect if this is INTENTIONALLY a close-up (from director breakdown shot_type)
     const isIntentionalCloseUp = /\b(ecu|extreme\s*close[\s-]*up|ecu\s*—|macro\s*shot)\b/i.test(p);
@@ -497,8 +498,8 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
       .replace(/volumetric god rays[^,.]*/gi, '')
       .replace(/(dark moody oil painting[^.]*\.)\s*(dark moody oil painting)/gi, '$1');
 
-    // Now apply standard cleaning
-    finalPrompt = cleanPromptForGrok(finalPrompt);
+    // Now apply standard cleaning — pass isSleep=true to skip character framing anchor
+    finalPrompt = cleanPromptForGrok(finalPrompt, true);
 
     // Strip any bright/daylight language and enforce very dim lighting
     finalPrompt = finalPrompt
@@ -595,17 +596,18 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
       // For sleep: if we keep getting content safety blocks, try progressively simpler prompts
       let promptToSend = finalPrompt;
       if (isSleepProject && attempt > 0) {
-        // Attempt 2+: use ultra-simple fallback prompt
-        const dirMatch = scene.image_prompt?.match(/DIRECTOR_NOTES:(.+)/);
-        let fallbackDesc = 'peaceful landscape at dusk with warm golden light';
-        if (dirMatch) {
-          try {
-            const notes = JSON.parse(dirMatch[1]);
-            fallbackDesc = (notes.image_prompt_core || '').split(',')[0] || fallbackDesc;
-          } catch (_) {}
-        }
-        promptToSend = `Oil painting of ${fallbackDesc}, very dim warm colors, painterly brushstrokes, ultra low-key lighting`;
-        console.log(`🔄 Scene ${sceneNum}: using simplified fallback prompt (attempt ${attempt + 1})`);
+        // Attempt 2+: use ultra-simple nature-only fallback prompts
+        // These are generic safe landscapes that never trigger content safety
+        const safeFallbacks = [
+          'Beautiful oil painting of a misty mountain valley at twilight, amber tones, dark shadows, impressionist style',
+          'Oil painting of an ancient forest path covered in autumn leaves, golden hour, warm earth tones, classical style',
+          'Dark oil painting of a calm lake reflecting starlight, surrounded by pine trees, deep blue and amber palette',
+          'Impressionist oil painting of rolling hills under a crescent moon, muted earth tones, peaceful countryside',
+          'Classical oil painting of a stone bridge over a quiet stream, surrounded by willow trees, warm golden tones',
+          'Oil painting of a snowy mountain peak under northern lights, deep blue sky, soft green aurora glow',
+        ];
+        promptToSend = safeFallbacks[(sceneNum - 1 + attempt) % safeFallbacks.length];
+        console.log(`🔄 Scene ${sceneNum}: using safe fallback prompt (attempt ${attempt + 1})`);
       }
 
       console.log(`🎨 Scene ${sceneNum}: generating (attempt ${attempt + 1}/${MAX_RETRIES}, ${promptToSend.length} chars, ref=${!!referenceUrl})...`);
