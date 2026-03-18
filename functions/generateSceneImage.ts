@@ -508,9 +508,7 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
       .replace(/\bneon\b/gi, 'candlelight');
 
     // Keep prompt SHORT for sleep — under 500 chars to avoid safety filter triggers
-    // Extract the core visual description (first 1-2 sentences before style suffixes)
     if (finalPrompt.length > 500) {
-      // Find the first style/technical block and cut there
       const cutPatterns = [/\.\s*(Cinematic|dark moody|Deep shadow|Rembrandt|ARRI|shallow depth|dramatic three)/i];
       for (const pattern of cutPatterns) {
         const match = finalPrompt.match(pattern);
@@ -519,8 +517,7 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
           break;
         }
       }
-      // Append a SHORT style cue
-      finalPrompt += ' Dark moody oil painting, deep shadows, warm amber candlelight, no people.';
+      finalPrompt += ' Dark moody oil painting, deep shadows, warm amber candlelight.';
     }
 
     // Strip words that Grok's content safety filter flags in dark/night contexts
