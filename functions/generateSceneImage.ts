@@ -432,6 +432,7 @@ function cleanPromptForGrok(rawPrompt) {
 
 async function processScene(base44, scene, project, apiKey, aspectRatio) {
   const sceneNum = scene.scene_number;
+  const isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
 
   if (!scene.image_prompt) {
     return { scene_id: scene.id, scene_number: sceneNum, status: 'skipped', reason: 'no_prompt' };
@@ -443,7 +444,24 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
     return { scene_id: scene.id, scene_number: sceneNum, status: 'skipped', reason: 'already_generated' };
   }
 
-  const finalPrompt = cleanPromptForGrok(scene.image_prompt);
+  let finalPrompt = cleanPromptForGrok(scene.image_prompt);
+
+  // ═══ SLEEP MODE — inject dark, dim, painterly aesthetic ═══
+  if (isSleepProject) {
+    // Ensure the dark aesthetic keywords are present even after prompt cleaning
+    const sleepStyleSuffix = '. Dark moody oil painting style, Rembrandt chiaroscuro, deep shadow covering most of the frame, warm amber and burnt sienna palette, low-key candlelit atmosphere, no bright colors, dim and sleep-safe';
+    if (!/dark\s*moody\s*oil/i.test(finalPrompt) && !/chiaroscuro/i.test(finalPrompt)) {
+      finalPrompt = finalPrompt + sleepStyleSuffix;
+    }
+    // Strip any bright/daylight language that may have leaked through
+    finalPrompt = finalPrompt
+      .replace(/\bbright\s+(daylight|sunlight|sunshine|light|white|blue)\b/gi, 'dim warm glow')
+      .replace(/\bhigh[- ]key\s+lighting\b/gi, 'low-key lighting')
+      .replace(/\boverexposed\b/gi, 'underexposed')
+      .replace(/\bvibrant\s+(saturated\s+)?colors?\b/gi, 'muted dark tones')
+      .replace(/\bneon\b/gi, 'candlelight');
+    console.log(`🌙 Scene ${sceneNum}: sleep dark mode applied`);
+  }
 
   // Log which framing mode was applied
   const framingMode = /^Extreme close-up/i.test(finalPrompt) ? 'ECU'
