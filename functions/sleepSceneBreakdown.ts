@@ -129,7 +129,6 @@ Deno.serve(async (req) => {
     const prompt = `You are a visual art director for premium sleep content. Design ${imageCount} ambient environment images for a ${durationMinutes}-minute ${isMeditation ? 'guided meditation' : 'sleep story'} about "${project.name}".
 
 RULES:
-- NO PEOPLE, NO HUMAN FIGURES, NO SILHOUETTES — pure environment/landscape only
 - Dark moody oil painting style, Rembrandt chiaroscuro, 70%+ shadow
 - Colors: deep amber, burnt sienna, dark chocolate, midnight navy, warm gold highlights only
 - Light sources: candlelight, moonlight, distant glow, campfire embers — always warm and dim
