@@ -697,7 +697,9 @@ This is a SLEEP video. Every image must be DARK, DIM, and WARM — safe for slee
     }
 
 
-    const framingPrefix = "Full body wide shot showing complete scene with detailed sharp environment, visible architecture and props, character shown head to feet mid-action in a populated world";
+    const framingPrefix = isSleepProject
+      ? "Wide ambient shot of a dark atmospheric environment"
+      : "Full body wide shot showing complete scene with detailed sharp environment, visible architecture and props, character shown head to feet mid-action in a populated world";
     const promptPrefix = `${framingPrefix}. `;
 
 
