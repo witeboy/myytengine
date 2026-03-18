@@ -1770,8 +1770,7 @@ export default function TimelineEditorV10() {
             onSetAllMediaType={(type) => {
               setVideoClips(videoClips.map(clip => ({
                 ...clip,
-                // Only switch to 'video' if this clip actually has a video URL
-                mediaType: type === 'video' && clip.videoUrl ? 'video' : 'image',
+                mediaType: type === 'video' && clip.videoUrl ? 'video' : type === 'broll' && clip.brollUrl ? 'broll' : 'image',
               })));
             }}
           />}
