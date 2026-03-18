@@ -498,9 +498,9 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
   console.log(`📐 Scene ${sceneNum}: framing → ${framingMode} (${finalPrompt.length} chars)`);
 
   // ── CHARACTER REFERENCE ANCHORING ──
-  // Scene 1: text-to-image (no reference yet — this becomes the bible)
-  // Scene 2+: image-to-image with Scene 1's image as character reference
-  const referenceUrl = sceneNum > 1 ? (project.reference_image_url || null) : null;
+  // Sleep projects: no character reference (pure environments)
+  // Standard: Scene 1 text-to-image, Scene 2+ image-to-image with reference
+  const referenceUrl = isSleepProject ? null : (sceneNum > 1 ? (project.reference_image_url || null) : null);
   if (referenceUrl) {
     console.log(`🔗 Scene ${sceneNum}: using character reference from Scene 1`);
   }
