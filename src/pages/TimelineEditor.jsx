@@ -228,25 +228,23 @@ function MediaPanel({ scenes, audioBeatDurations, videoClips, onSelectScene, onS
         <div className="grid grid-cols-2 gap-2">
           {scenes.map((scene, idx) => {
             const clip = videoClips.find(c => c.sceneId === scene.id);
+            const isBroll = clip?.mediaType === 'broll' && clip?.brollUrl;
             const isVideo = clip?.mediaType === 'video' && clip?.videoUrl;
-            const hasVideo = !!(scene.video_url && scene.video_url.startsWith('http') &&
-              !scene.video_url.startsWith('veo_task:') && !scene.video_url.startsWith('grok_vid_task:'));
+            const hasBroll = !!(scene.broll_url && scene.broll_url.startsWith('http'));
+            const hasVideo = !!(scene.video_url && scene.video_url.startsWith('http') && !scene.video_url.startsWith('veo_task:') && !scene.video_url.startsWith('grok_vid_task:'));
             return (
               <div key={scene.id}
-                className={`group relative aspect-video bg-gray-800 rounded overflow-hidden cursor-pointer hover:ring-2 hover:ring-cyan-500 ${isVideo ? 'ring-1 ring-purple-500/50' : ''}`}
+                className={`group relative aspect-video bg-gray-800 rounded overflow-hidden cursor-pointer hover:ring-2 hover:ring-cyan-500 ${isBroll ? 'ring-1 ring-teal-500/50' : isVideo ? 'ring-1 ring-purple-500/50' : ''}`}
                 onClick={() => onSelectScene(idx)}>
-                {scene.image_url
-                  ? <img src={scene.image_url} className="w-full h-full object-cover" alt="" />
-                  : <div className="w-full h-full flex items-center justify-center"><Image className="w-5 h-5 text-gray-600" /></div>}
+                {scene.image_url ? <img src={scene.image_url} className="w-full h-full object-cover" alt="" /> : <div className="w-full h-full flex items-center justify-center"><Image className="w-5 h-5 text-gray-600" /></div>}
                 <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 p-1">
                   <p className="text-[9px] text-white">Scene {scene.scene_number}</p>
                   <p className="text-[8px] text-cyan-300">🎵 {audioBeatDurations[idx]?.toFixed(1)}s</p>
                 </div>
-                {/* Badge: video or image */}
                 <div className={`absolute top-1 right-1 px-1 py-0.5 rounded text-[8px] font-bold ${
-                  isVideo ? 'bg-purple-600 text-white' : hasVideo ? 'bg-gray-700/80 text-gray-300' : 'bg-gray-800/80 text-gray-500'
+                  isBroll ? 'bg-teal-600 text-white' : isVideo ? 'bg-purple-600 text-white' : hasBroll ? 'bg-teal-800/80 text-teal-300' : hasVideo ? 'bg-gray-700/80 text-gray-300' : 'bg-gray-800/80 text-gray-500'
                 }`}>
-                  {isVideo ? '🎬' : hasVideo ? '🖼' : '📷'}
+                  {isBroll ? '📎' : isVideo ? '🎬' : hasBroll ? '📎' : hasVideo ? '🖼' : '📷'}
                 </div>
               </div>
             );
