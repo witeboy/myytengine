@@ -110,6 +110,21 @@ async function kiePollResult(apiKey, taskId) {
   }
 }
 
+// ─────────────────────────────────────────────
+// NANO BANANA — fallback image generator (no content safety filter)
+// Uses same KIE API, different model: google/nano-banana
+// ─────────────────────────────────────────────
+
+async function generateWithNanoBanana(apiKey, prompt, imageSize) {
+  console.log(`🍌 Nano Banana: generating (${prompt.length} chars, size=${imageSize})...`);
+  const taskId = await kieCreateTask(apiKey, "google/nano-banana", {
+    prompt: prompt,
+    output_format: "png",
+    image_size: imageSize
+  });
+  return await kiePollResult(apiKey, taskId);
+}
+
 async function generateWithGrokImagine(apiKey, prompt, aspectRatio, referenceImageUrl = null) {
   // If we have a reference image (Scene 1's character), use image-to-image for consistency
   if (referenceImageUrl) {
