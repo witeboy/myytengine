@@ -653,7 +653,17 @@ Deno.serve(async (req) => {
 **🌙 SLEEP CONTENT — MANDATORY DARK AESTHETIC RULES (HIGHEST PRIORITY):**
 
 This is a SLEEP video. Every image must be DARK, DIM, and WARM — safe for sleeping viewers.
-These are ambient environment/landscape scenes — painterly, atmospheric, calming.
+These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, calming.
+
+**⛔ ABSOLUTE PROHIBITION — ZERO TOLERANCE:**
+- NEVER include ANY human figures, people, persons, characters, silhouettes, or shadows of people
+- NEVER include ANY body parts: hands, fingers, feet, legs, arms, face, eyes, skin, torso, shoulders, hair, lips, head
+- NEVER include human-occupied furniture shown in use: beds with someone in them, occupied chairs
+- NEVER include clothing, shoes, accessories, or any object implying human presence
+- NEVER use words like: person, figure, someone, viewer, listener, character, protagonist, woman, man, child, her, his, she, he
+- Every scene must be a PURE ENVIRONMENT — nature, architecture, still life, abstract atmosphere
+- If the narration mentions a person, represent it through SYMBOLIC environments (empty paths, distant lights, weathered doors) — NEVER through human forms
+- IGNORE all universal rules about "characters", "body language", "identity tiers", "character injection" — they do NOT apply to sleep content
 
 **LIGHTING:** 70-80% shadow/darkness. Only candlelight, moonlight, distant glow, oil lamps, campfire embers. Always warm (amber, gold, sienna) and DIM.
 
@@ -663,7 +673,7 @@ These are ambient environment/landscape scenes — painterly, atmospheric, calmi
 
 **EVERY image_prompt MUST end with:** "dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow, warm amber rim light, burnt sienna and dark chocolate palette, low-key lighting, candlelit atmosphere, masterpiece quality"
 
-**FORBIDDEN in prompts:** bright daylight, harsh lighting, vivid colors, neon, overexposed, studio lighting, white background, ARRI, Panavision, anamorphic, lens flare, bokeh, film grain, 8K, Hollywood, photorealistic
+**FORBIDDEN in prompts:** bright daylight, harsh lighting, vivid colors, neon, overexposed, studio lighting, white background, ARRI, Panavision, anamorphic, lens flare, bokeh, film grain, 8K, Hollywood, photorealistic, woman, man, person, figure, hands, face, body, skin, eyes, hair
 `;
       console.log(`🌙 Sleep dark aesthetic reinforcement active`);
     } else if (styleReinforcement) {
