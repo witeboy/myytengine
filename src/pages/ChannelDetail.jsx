@@ -117,7 +117,13 @@ export default function ChannelDetail() {
     });
 
     queryClient.invalidateQueries({ queryKey: ['channel-topics', channelId] });
-    navigate(`/StoryTopics?project_id=${project.id}`);
+
+    // Route sleep projects to the dedicated Sleep Pipeline
+    if (isSleep) {
+      navigate(`/SleepPipeline?project_id=${project.id}`);
+    } else {
+      navigate(`/StoryTopics?project_id=${project.id}`);
+    }
   };
 
   if (loadingChannel) {
