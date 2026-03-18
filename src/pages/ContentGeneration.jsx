@@ -17,6 +17,7 @@ import MusicPanel from '@/components/content/MusicPanel';
 import AudioMixerPanel from '@/components/content/AudioMixerPanel';
 import ProcessingNotifier from '@/components/content/ProcessingNotifier';
 import DedupButton from '@/components/content/DedupButton';
+import AutoBrollButton from '@/components/content/AutoBrollButton';
 import {
   Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film,
   Palette, Sparkles, Monitor, Clapperboard, Wand2, CheckCircle2,
@@ -1618,6 +1619,12 @@ if (nextBatch > 0) {
   sceneCount={scenes.length}
   onComplete={() => refetchScenes()}
 />
+
+              <AutoBrollButton
+                projectId={projectId}
+                sceneCount={scenes.filter(s => s.narration_text?.trim()).length}
+                onComplete={() => refetchScenes()}
+              />
 
               <Button onClick={handleGenerateImages} disabled={generatingImages} variant="outline">
                 {generatingImages ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <ImageIcon className="w-4 h-4 mr-1" />}
