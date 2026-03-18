@@ -55,17 +55,17 @@ function buildSleepOutlinePrompt({ scriptMode, topic, project, channel, selected
 
   const sectionTemplates = isMeditation
     ? [
-        'Opening & Welcome (settle, breathe, topic intro)',
-        'You Are Enough (self-worth affirmations)',
-        'You Deserve Rest (permission to stop, release productivity guilt)',
-        'Let Go of Today (release worries, tomorrow takes care of itself)',
-        'You Are Safe Here (safety, warmth, protection)',
-        'Your Journey Matters (progress, self-compassion)',
-        'You Belong (acceptance, connection)',
-        'Tomorrow Holds Promise (gentle hope)',
-        'Your Body Knows (trust body wisdom, release control)',
+        'Opening & Welcome (settle, breathe, body awareness)',
+        'You Are Enough (self-worth affirmations with ocean imagery)',
+        'You Deserve Rest (permission to stop, release guilt, mountain metaphors)',
+        'Let Go of Today (release worries, river carrying them away)',
+        'You Are Safe Here (safety, warmth, protection, starlight imagery)',
+        'Your Journey Matters (progress, self-compassion, tree growth metaphor)',
+        'You Belong (acceptance, connection, forest community)',
+        'Tomorrow Holds Promise (gentle hope, sunrise imagery)',
+        'Your Body Knows (trust body wisdom, release control, breathing focus)',
         'Deep Rest (minimal words, long pauses, pure relaxation)',
-        'Closing & Fade (brief gentle goodbye)',
+        'Closing & Fade (brief gentle goodbye, silence)',
       ]
     : [
         'Opening & Welcome (settle, breathe, story world intro)',
@@ -80,9 +80,18 @@ function buildSleepOutlinePrompt({ scriptMode, topic, project, channel, selected
         'Closing & Fade (character settles, gentle goodbye)',
       ];
 
-  return `You are an expert sleep script planner specializing in ${contentType} content designed to help listeners fall asleep.
+  return `You are an expert sleep audio script planner. You plan ${contentType} scripts that ARE the soothing content — not scripts that talk ABOUT meditation or sleep.
 
-**CONTENT TYPE**: ${isMeditation ? 'Motivational Meditation — gentle affirmations, self-improvement themes, soothing repetition' : 'Sleep Story — narrative content with rich sensory details, peaceful settings, gentle activities'}
+**CRITICAL RULE**: Every section synopsis must describe WHAT THE NARRATOR WILL SAY — the actual soothing words, affirmations, imagery, and guided relaxation. Synopses must NEVER include:
+❌ Explaining what ASMR is or how it works
+❌ Discussing neuroscience, dopamine, oxytocin, or "studies"
+❌ Giving practical sleep tips or advice
+❌ Educational content about meditation or relaxation techniques
+❌ Referencing YouTube, channels, videos, or content creation
+❌ Personal anecdotes or first-person stories about discovering meditation
+❌ Any meta-commentary ("in this section we will...")
+
+**CONTENT TYPE**: ${isMeditation ? 'Motivational Meditation — the narrator speaks directly to the listener with gentle affirmations, nature imagery, and soothing repetition. Think Jason Stephenson, Michael Sealey.' : 'Sleep Story — the narrator tells a peaceful story with rich sensory details, calm settings, and gentle activities. Think Calm app, Headspace sleepcasts.'}
 
 **PROJECT**:
 - Topic: ${topic?.title || project.name}
@@ -95,12 +104,12 @@ ${strategyBlock}
 **SLEEP CONTENT PRINCIPLES**:
 - Extremely gentle and soothing tone throughout
 - Deliberately monotonous (boring is GOOD for sleep)
-- Strategic repetition — each key concept repeated 4-6 times
+- Strategic repetition — each key concept repeated 4-6 times in different words
 - NO excitement, urgency, drama, tension, or surprises
 - Include [PAUSE X SEC] markers in synopses
-- Simple vocabulary, short sentences (12-20 words ideal)
+- Simple vocabulary, short sentences (8-18 words ideal)
 - Progressive deepening: physical relaxation → mental calm → emotional peace → deep rest
-- Use nature metaphors: ocean, mountain, tree, river, moon, stars, forest
+- Nature metaphors throughout: ocean, mountain, tree, river, moon, stars, forest
 - Sensory grounding: touch, sound, sight, smell references
 
 **SECTION TEMPLATE IDEAS** (adapt to fit ${numBatches} batches):
@@ -108,18 +117,22 @@ ${sectionTemplates.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}
 
 **YOUR TASK**: Plan exactly ${numBatches} batches for a ${durationMinutes}-minute ${contentType}.
 
-${isMeditation ? `Each 15-minute section should follow:
-- Minutes 1-2: Introduce sub-theme (~300 words)
-- Minutes 3-4: Core affirmation stated clearly, repeated 2-3 ways (~300 words)
-- Minutes 5-8: Elaborate with nature imagery and sensory details (~600 words)
-- Minutes 9-11: Repeat affirmation in new phrasing (~450 words)
-- Minutes 12-13: Sensory grounding, body awareness (~300 words)
-- Minutes 14-15: Breathing reminder + transition to next theme (~300 words)` :
-`Each scene section should follow:
-- Scene Opening (2-3 min): Set immediate environment, rich sensory details, no action yet
-- Gentle Activity (5-8 min): Character does something peaceful, described in loving detail
-- Reflection (2-3 min): Character's peaceful thoughts, observations, contentment
-- Scene Transition (1-2 min): Natural movement to next setting, seamless flow`}
+${isMeditation ? `Each section should contain ONLY:
+- Gentle theme introduction through imagery (NOT by defining or explaining the concept)
+- Core affirmation stated simply, then repeated 3-5 times in different phrasings
+- Nature imagery and sensory details that reinforce the affirmation
+- Body awareness cues (breath, weight, warmth)
+- [BREATHE] and [PAUSE] markers
+- Gentle bridge to next theme
+
+Example good synopsis: "The narrator gently speaks: 'You are enough... just as you are... you are enough.' [PAUSE 5 SEC] Then weaves ocean imagery — waves rolling in, each one whispering 'enough.' The listener's breath matches the tide. [BREATHE] 'With every breath... you sink deeper into knowing... you have always been enough.' Repeat the affirmation with mountain imagery — solid, unmovable, complete. [PAUSE 3 SEC] Return to body: weight of blankets, warmth, safety."
+
+Example BAD synopsis: "This section explains the science behind self-worth affirmations and discusses how ASMR triggers help the brain release dopamine. The narrator shares a personal story about discovering meditation."` :
+`Each scene section should contain ONLY:
+- Rich sensory atmosphere (what the character sees, hears, smells, feels)
+- A peaceful activity described in loving, slow detail
+- The character's quiet contentment and simple observations
+- Seamless transition to the next scene`}
 
 Return JSON:
 {
@@ -129,20 +142,21 @@ Return JSON:
       "story_segment": "Short segment title (3-5 words)",
       "section_type": "${isMeditation ? 'opening|affirmation|grounding|deepening|closing' : 'opening|scene|deepening|closing'}",
       "focus_area": "Brief focus (1 sentence)",
-      "synopsis": "EXTREMELY DETAILED synopsis (200-300 words). Include: exact imagery, sensory details, affirmation phrases, [PAUSE] placement, breathing cues, nature metaphors to use, emotional arc within section, how it deepens relaxation progressively."
+      "synopsis": "EXTREMELY DETAILED synopsis (200-300 words) describing the ACTUAL soothing content the narrator will speak. Include: specific affirmation phrases in quotes, nature imagery to use, sensory details, [PAUSE] and [BREATHE] placement, how the section deepens relaxation."
     }
   ]
 }
 
 **RULES:**
 - Generate exactly ${numBatches} batches
-- First batch MUST be the Opening & Welcome section
-- Last batch should be the gentlest, most sleep-inducing content
-- Progressive deepening: each batch should be calmer and slower than the last
+- First batch MUST be Opening & Welcome (physical settling, breathing, ease into theme)
+- Last batch should be the gentlest, most minimal content — mostly pauses and silence
+- Progressive deepening: each batch calmer and slower than the last
+- Synopses must describe the ACTUAL words and imagery, not explain concepts
+- Include specific affirmation phrases IN QUOTES in synopses
 - Include specific [PAUSE X SEC] markers in synopses
-- Include specific affirmation phrases and nature metaphors in synopses
-- Every synopsis: 200-300 words of SPECIFIC detail
-- NO conflict, tension, excitement, urgency, or surprises anywhere
+- Every synopsis: 200-300 words of SPECIFIC soothing content detail
+- NO educational content, NO science, NO advice, NO meta-commentary
 - Content gets progressively more repetitive and slower as it goes`;
 }
 
