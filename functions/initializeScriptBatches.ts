@@ -234,9 +234,10 @@ Deno.serve(async (req) => {
     const topics = await base44.asServiceRole.entities.Topics.filter({ id: project.selected_topic_id });
     const topic = topics[0];
 
-    // Get selected hook if any
+    // Get selected hook if any (skip for sleep projects — they don't use hooks)
     let selectedHook = null;
-    if (project.selected_hook_id) {
+    const isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
+    if (!isSleepProject && project.selected_hook_id) {
       const hooks = await base44.asServiceRole.entities.Hooks.filter({ id: project.selected_hook_id });
       selectedHook = hooks[0];
     }
