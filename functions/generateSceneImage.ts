@@ -614,11 +614,12 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
       let promptToSend = finalPrompt;
       let useNanoBanana = false;
 
-      // Sleep projects: attempt 1 = Grok, attempt 2+ = Nano Banana (no content safety filter)
+      // Sleep projects: attempt 1 = Nano Banana (cheap, no content safety), attempt 2+ = Grok fallback
       // Non-sleep: all attempts use Grok with exponential backoff
-      if (isSleepProject && attempt > 0) {
+      if (isSleepProject && attempt === 0) {
         useNanoBanana = true;
-        console.log(`🍌 Scene ${sceneNum}: switching to Nano Banana fallback (attempt ${attempt + 1})`);
+      } else if (isSleepProject && attempt > 0) {
+        console.log(`🔄 Scene ${sceneNum}: falling back to Grok (attempt ${attempt + 1})`);
       }
 
       console.log(`🎨 Scene ${sceneNum}: generating via ${useNanoBanana ? 'Nano Banana' : 'Grok'} (attempt ${attempt + 1}/${MAX_RETRIES}, ${promptToSend.length} chars)...`);
