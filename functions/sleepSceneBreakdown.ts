@@ -13,13 +13,13 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 async function callGemini(prompt, temperature = 0.5) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: 16384, responseMimeType: "application/json" }
+        generationConfig: { temperature, maxOutputTokens: 8192, responseMimeType: "application/json" }
       })
     }
   );
