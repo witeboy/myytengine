@@ -1716,7 +1716,7 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
         // Skip for sleep projects — their prompts are already well-structured
         // and the OpenAI cleaner adds ~5s per scene causing timeouts
         let cleanedImagePrompt = imagePrompt;
-        if (!isSleepProject) {
+        if (!useSleepStyle) {
           cleanedImagePrompt = await cleanPromptWithOpenAI(imagePrompt, visualStyle);
           if (cleanedImagePrompt !== imagePrompt) {
             console.log(`🧹 Scene ${s.scene_number}: OpenAI cleaned (${imagePrompt.length}→${cleanedImagePrompt.length}ch)`);
