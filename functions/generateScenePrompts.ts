@@ -650,29 +650,18 @@ Deno.serve(async (req) => {
 **🌙 SLEEP CONTENT — MANDATORY DARK AESTHETIC RULES (HIGHEST PRIORITY):**
 
 This is a SLEEP video. Every image must be DARK, DIM, and WARM — safe for sleeping viewers.
+These are ambient environment/landscape scenes — painterly, atmospheric, calming.
 
-**LIGHTING RULES:**
-- 70-80% of every image MUST be shadow/darkness
-- Only light sources allowed: candlelight, moonlight, distant horizon glow, oil lamps, campfire embers, faint bioluminescence
-- Light is ALWAYS warm (amber, gold, sienna) and DIM — never bright, never harsh
-- Think Rembrandt/Caravaggio chiaroscuro — figures emerging from deep shadow with warm rim light
+**LIGHTING:** 70-80% shadow/darkness. Only candlelight, moonlight, distant glow, oil lamps, campfire embers. Always warm (amber, gold, sienna) and DIM.
 
-**COLOR RULES (STRICT):**
-- ALLOWED: deep amber (#8B5E3C), burnt sienna (#6B3A2A), dark chocolate (#2C1810), midnight navy (#0A1628), warm gold (#D4A574), muted forest (#1A2F1A)
-- FORBIDDEN: bright blue, vivid green, saturated purple, neon anything, pure white, bright yellow, electric colors
-- Overall palette should feel like a dimly lit oil painting in a museum at night
+**COLOR PALETTE:** deep amber, burnt sienna, dark chocolate, midnight navy, warm gold, muted forest. NO bright blue, vivid green, neon, pure white, electric colors.
 
-**STYLE RULES:**
-- Style: Dark moody oil painting / digital painting. Painterly brushwork feel. NOT photorealistic.
-- Texture: Visible brushstroke quality, impasto highlights, soft blended shadows
-- Composition: Simple, uncluttered, lots of dark negative space
-- NO PEOPLE. These are pure ambient environment/landscape scenes. No human figures, silhouettes, hands, or body parts.
-- If the director notes mention a figure, replace with an environmental element (empty chair, lone candle, still water).
+**STYLE:** Dark moody oil painting. Visible brushstroke quality, impasto highlights, soft blended shadows. Simple compositions with lots of dark negative space.
 
 **EVERY image_prompt MUST end with:** "dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow, warm amber rim light, burnt sienna and dark chocolate palette, low-key lighting, candlelit atmosphere, masterpiece quality"
 
-**EVERY image_prompt MUST NOT contain:** bright daylight, harsh lighting, vivid colors, neon, overexposed, studio lighting, white background
-` + styleReinforcement;
+**FORBIDDEN in prompts:** bright daylight, harsh lighting, vivid colors, neon, overexposed, studio lighting, white background, ARRI, Panavision, anamorphic, lens flare, bokeh, film grain, 8K, Hollywood, photorealistic
+`;
       console.log(`🌙 Sleep dark aesthetic reinforcement active`);
     } else if (styleReinforcement) {
       console.log(`🦴 Style reinforcement active: ${visualStyle}`);
