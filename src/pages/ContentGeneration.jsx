@@ -1680,6 +1680,7 @@ if (nextBatch > 0) {
                 projectId={projectId}
                 sceneCount={scenes.filter(s => s.narration_text?.trim()).length}
                 onComplete={() => refetchScenes()}
+                projectMode={project?.project_mode}
               />
 
               <Button onClick={handleGenerateImages} disabled={generatingImages} variant="outline">
