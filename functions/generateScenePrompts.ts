@@ -663,7 +663,8 @@ This is a SLEEP video. Every image must be DARK, DIM, and WARM — safe for slee
 - Style: Dark moody oil painting / digital painting. Painterly brushwork feel. NOT photorealistic.
 - Texture: Visible brushstroke quality, impasto highlights, soft blended shadows
 - Composition: Simple, uncluttered, lots of dark negative space
-- People are allowed — silhouetted or dimly lit with warm rim lighting. Faces softly lit, never harshly exposed.
+- NO PEOPLE. These are pure ambient environment/landscape scenes. No human figures, silhouettes, hands, or body parts.
+- If the director notes mention a figure, replace with an environmental element (empty chair, lone candle, still water).
 
 **EVERY image_prompt MUST end with:** "dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow, warm amber rim light, burnt sienna and dark chocolate palette, low-key lighting, candlelit atmosphere, masterpiece quality"
 
