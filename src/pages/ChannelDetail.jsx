@@ -20,6 +20,7 @@ import CompetitorPanel from '@/components/channels/CompetitorPanel';
 import TopicStatusPanel from '@/components/channels/TopicStatusPanel';
 import { ExpandableAssets } from '@/components/channels/TopicAssetsPanel';
 import ScriptModeSelector from '@/components/channels/ScriptModeSelector';
+import EditableTopicTitle from '@/components/channels/EditableTopicTitle';
 
 export default function ChannelDetail() {
   const navigate = useNavigate();
@@ -364,7 +365,9 @@ export default function ChannelDetail() {
                           <Badge className={`text-[10px] ${topic.format === 'short' ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>
                             {topic.format === 'short' ? 'S' : 'L'}
                           </Badge>
-                          <span className="flex-1 text-gray-800 truncate" onClick={() => handleStartPipeline(topic)}>{topic.title}</span>
+                          <div className="flex-1 min-w-0" onClick={() => handleStartPipeline(topic)}>
+                            <EditableTopicTitle topic={topic} onUpdated={() => refetchTopics()} />
+                          </div>
                           {topic.scheduled_date && (
                             <span className="text-[11px] text-gray-400 flex-shrink-0 flex items-center gap-1">
                               <Clock className="w-3 h-3" />

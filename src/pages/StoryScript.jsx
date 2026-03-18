@@ -32,7 +32,7 @@ export default function StoryScript() {
       return all.sort((a, b) => a.batch_number - b.batch_number);
     },
     enabled: !!projectId,
-    refetchInterval: generating ? 3000 : false,
+    refetchInterval: generating ? 8000 : false,
   });
 
       const { data: scripts = [], refetch: refetchScripts } = useQuery({
@@ -42,7 +42,7 @@ export default function StoryScript() {
     // 🛡️ Added Array.isArray check to prevent the TypeError
     refetchInterval: (data) => {
       const hasFinal = Array.isArray(data) && data.some(s => s.version === 'final_aggregated');
-      return hasFinal ? false : 2000;
+      return hasFinal ? false : 10000;
     }
   });
 

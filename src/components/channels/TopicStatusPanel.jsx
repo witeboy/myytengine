@@ -7,6 +7,7 @@ import { X, Play, Clock, FileText, ChevronDown, ChevronUp, Package, RotateCcw, G
 import { base44 } from '@/api/base44Client';
 
 import { ExpandableAssets } from './TopicAssetsPanel';
+import EditableTopicTitle from './EditableTopicTitle';
 
 const statusColors = {
   queued: 'bg-gray-100 text-gray-600',
@@ -120,7 +121,7 @@ export default function TopicStatusPanel({ title, icon: Icon, topics, onClose, o
                     {topic.format === 'short' ? 'S' : 'L'}
                   </Badge>
                   <div className="flex-1 min-w-0" onClick={() => handleTopicClick(topic)}>
-                    <p className="text-sm text-gray-800 truncate">{topic.title}</p>
+                    <EditableTopicTitle topic={topic} onUpdated={() => onTopicUpdated?.()} />
                     {topic.scheduled_date && (
                       <p className="text-[11px] text-gray-400 flex items-center gap-1 mt-0.5">
                         <Clock className="w-3 h-3" /> {topic.scheduled_date}
