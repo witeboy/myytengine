@@ -523,9 +523,21 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
       finalPrompt += ' Dark moody oil painting, deep shadows, warm amber candlelight, no people.';
     }
 
-    console.log(`🌙 Scene ${sceneNum}: sleep dark mode — ${finalPrompt.length} chars`);
+    // Log the cleaned prompt for debugging
+    console.log(`🌙 Scene ${sceneNum}: sleep prompt (${finalPrompt.length}ch): ${finalPrompt.substring(0, 200)}`);
   } else {
     finalPrompt = cleanPromptForGrok(finalPrompt);
+  }
+
+  // SLEEP: Skip the framing anchor that cleanPromptForGrok adds — it mentions "character" and "body"
+  if (isSleepProject) {
+    finalPrompt = finalPrompt
+      .replace(/^Full scene wide shot showing the character's complete body[^.]*\.\s*/i, '')
+      .replace(/\bthe character's\b/gi, '')
+      .replace(/\bcomplete body head to feet\b/gi, '')
+      .replace(/\bcharacter\b/gi, '')
+      .replace(/\s{2,}/g, ' ')
+      .trim();
   }
 
   // Log which framing mode was applied
