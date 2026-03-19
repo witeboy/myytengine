@@ -213,8 +213,9 @@ export default function StoryScript() {
     }
   };
 
-  // ⚡ NEW: Auto-trigger the Merge function when batches hit 100%
+  // ⚡ Auto-trigger the Merge function when batches hit 100% (standard mode only)
   useEffect(() => {
+    if (isShorts) return; // Shorts scripts are already final_aggregated
     // Only trigger if all batches are done AND we don't have the final script yet
     if (allCompleted && !latestScript && !generating && project?.status !== 'script_complete') {
       
