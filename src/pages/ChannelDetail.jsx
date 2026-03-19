@@ -423,8 +423,11 @@ export default function ChannelDetail() {
                   <div className="mt-4 pt-4 border-t">
                     <p className="text-sm font-medium text-gray-800 mb-2">Shorts Niche</p>
                     <p className="text-xs text-gray-500 mb-3">Determines the script structure, hook style, and visual spec for your Shorts</p>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {[
+                        { id: 'crime_story', label: '🔪 Crime Story', desc: 'Cold Open → Setup → Escalation → Twist → CTA' },
+                        { id: 'tech_explainer', label: '⚡ Tech Explainer', desc: 'WTF Hook → Context → 3 Steps → So What → CTA' },
+                        { id: 'side_hustle', label: '💸 Side Hustle', desc: 'Proof Hook → Myth Kill → 3 Steps → Proof → CTA' },
                         { id: 'finance', label: '💰 Finance / Wealth', desc: 'Hook → Tension → Pivot → 3 Rules → CTA' },
                         { id: 'book', label: '📚 Book Summaries', desc: 'Hook → Context → 3 Lessons → Transformation → CTA' },
                       ].map(n => (
