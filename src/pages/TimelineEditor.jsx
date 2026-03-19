@@ -1512,12 +1512,16 @@ export default function TimelineEditorV10() {
               prevClip={prevClip}
               captions={captionClips}
               selectedCaption={selectedCaption}
-              onSelectCaption={c => { setSelectedCaptionId(c?.id || null); setSelectedVideoId(null); }}
+              onSelectCaption={c => { setSelectedCaptionId(c?.id || null); setSelectedVideoId(null); setSelectedOverlayId(null); }}
               onUpdateCaption={c => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))}
               orientation={orientation}
               onOrientationChange={setPreviewOrientation}
               videoClips={videoClips}
               scenes={scenes}
+              overlayClips={overlayClips}
+              selectedOverlayId={selectedOverlayId}
+              onSelectOverlay={ov => { setSelectedOverlayId(ov?.id || null); setSelectedVideoId(null); setSelectedCaptionId(null); }}
+              onUpdateOverlay={c => setOverlayClips(overlayClips.map(x => x.id === c.id ? c : x))}
             />
           </div>
           <TransportControls isPlaying={isPlaying} onPlayPause={() => setIsPlaying(!isPlaying)} currentTime={currentTime} totalDuration={totalDuration} onSeek={handleSeek} />
