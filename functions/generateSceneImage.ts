@@ -369,6 +369,11 @@ function cleanPromptForGrok(rawPrompt, isSleep = false) {
     .replace(/\*/g, '')
     .replace(/#{1,3}\s*/g, '');
 
+  // 5.1 Strip style name prefixes the LLM writes as labels (e.g. "Skeleton protagonist → ...")
+  p = p
+    .replace(/^Skeleton\s+protagonist\s*→\s*/i, '')
+    .replace(/\bSkeleton\s+protagonist\s*→\s*/gi, '');
+
   // 6. Clean up artifacts from all prior stripping/replacement
   p = p
     .replace(/\.['''""][\s]*/g, '. ')   // "softly.' The" → "softly. The"
