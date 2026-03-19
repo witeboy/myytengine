@@ -123,6 +123,15 @@ Deno.serve(async (req) => {
       title = (prompt || 'Background Track').substring(0, 80);
     }
 
+    // Append 432Hz tuning for sleep projects
+    if (isSleepProject) {
+      musicPrompt += '. Tuned to 432Hz frequency for deep relaxation and sleep optimization, warm healing tones';
+      if (!style.toLowerCase().includes('ambient')) {
+        style = 'Ambient ' + style;
+      }
+      console.log(`🌙 Sleep mode: 432Hz tuning appended to music prompt`);
+    }
+
     // Enforce prompt length limit
     if (musicPrompt.length > 400) musicPrompt = musicPrompt.substring(0, 397) + '...';
     if (title.length > 80) title = title.substring(0, 80);
