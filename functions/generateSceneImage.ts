@@ -752,29 +752,29 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
       };
 
     } catch (error) {
-      console.warn(`⚠️ Scene ${sceneNum} attempt ${attempt + 1} failed: ${error.message}`);
+      console.warn(`⚠️ Scene ${sceneNum} ${providers[attempt]} failed: ${error.message}`);
 
-      if (attempt === MAX_RETRIES - 1) {
+      if (attempt === providers.length - 1) {
         try {
           await base44.asServiceRole.entities.Scenes.update(scene.id, {
             status: "image_failed"
           });
         } catch (_) {}
 
-        console.error(`❌ Scene ${sceneNum}: all ${MAX_RETRIES} attempts failed — marked as image_failed`);
+        console.error(`❌ Scene ${sceneNum}: all providers failed (${providers.join(' → ')}) — marked as image_failed`);
 
         return {
           scene_id: scene.id,
           scene_number: sceneNum,
           status: 'failed',
           error: error.message,
-          attempts: MAX_RETRIES
+          attempts: providers.length
         };
       }
 
-      // Short backoff before switching to fallback model
-      const waitMs = isSleepProject ? 2000 : RETRY_BASE_MS * Math.pow(2, attempt);
-      console.log(`⏳ Scene ${sceneNum}: retrying in ${waitMs / 1000}s...`);
+      // Short backoff before switching to fallback provider
+      const waitMs = 2000;
+      console.log(`⏳ Scene ${sceneNum}: falling back to ${providers[attempt + 1]} in ${waitMs / 1000}s...`);
       await new Promise(r => setTimeout(r, waitMs));
     }
   }
