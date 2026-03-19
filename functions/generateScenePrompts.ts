@@ -1438,7 +1438,7 @@ ${s.director ? `Visual Concept: ${s.director.visual_concept}\nShot: ${s.director
 1. FIRST sentence: Shot framing — "Full body wide shot showing..." or "Medium shot of..."
 2. NEXT 1-2 sentences: Environment — location, architecture, weather, props, atmosphere
 3. NEXT 1-2 sentences: Character BODY-FIRST (build, height, posture, action), then face features as compact clause
-4. FINAL sentence: Mood, lighting, then style quality: "${styleConfig.positive.substring(0, 100)}"
+4. FINAL sentence: Mood, lighting, then style quality: ${styleConfig.positive.substring(0, 100)}
 
 **FORBIDDEN:** text/words/numbers on any surface, screen content descriptions, dollar amounts, close-ups of hands holding objects.
 If the scene mentions a phone/document/receipt, describe the CHARACTER'S REACTION to it, not the content on it.
