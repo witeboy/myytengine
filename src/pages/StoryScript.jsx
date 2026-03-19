@@ -76,8 +76,37 @@ export default function StoryScript() {
     }
   }, [batches, batchesLoading, generating, stuckReset]);
 
-  // Auto-generate: when project is ready but no script content exists yet
+  // ═══ SHORTS AUTO-GENERATION ═══
   useEffect(() => {
+    if (!isShorts || autoGenTriggered || generating) return;
+    if (!project?.id) return;
+    if (project.status === 'script_complete') return;
+    if (scripts.some(s => s.version === 'final_aggregated')) return;
+
+    setAutoGenTriggered(true);
+    setGenerating(true);
+
+    const runShortsGeneration = async () => {
+      try {
+        // Step 1: Generate the shorts script
+        const resp = await base44.functions.invoke('shortsGenerateScript', { project_id: projectId });
+        const data = resp.data || resp;
+        console.log('Shorts script generated:', data);
+
+        await Promise.all([refetchProject(), refetchScripts()]);
+      } catch (err) {
+        console.error('Shorts script generation error:', err);
+      } finally {
+        setGenerating(false);
+      }
+    };
+
+    runShortsGeneration();
+  }, [isShorts, project?.id, project?.status, autoGenTriggered, generating]);
+
+  // ═══ STANDARD AUTO-GENERATION ═══
+  useEffect(() => {
+    if (isShorts) return;
     if (autoGenTriggered || generating) return;
     if (!project?.id) return;
     if (batchesLoading) return;
