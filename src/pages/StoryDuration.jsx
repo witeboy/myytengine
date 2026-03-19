@@ -144,17 +144,27 @@ export default function StoryDuration() {
           <CardContent className="space-y-6">
             <ScriptModeSelector value={scriptMode} onChange={setScriptMode} />
 
-            <div>
-              <label className="text-sm font-medium mb-2 block">Video Duration (minutes)</label>
-              <Input
-                type="number"
-                min={2}
-                max={480}
-                value={safeDuration}
-                onChange={e => setDuration(Number(e.target.value))}
-                className="text-lg"
-              />
-            </div>
+            {isShorts ? (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">📱</span>
+                  <span className="text-sm font-semibold text-green-800">YouTube Shorts Mode</span>
+                </div>
+                <p className="text-xs text-green-700">Duration is fixed at ~90 seconds. Script will be 200–240 words with visual changes every 2–3 seconds. Portrait 9:16 format.</p>
+              </div>
+            ) : (
+              <div>
+                <label className="text-sm font-medium mb-2 block">Video Duration (minutes)</label>
+                <Input
+                  type="number"
+                  min={2}
+                  max={480}
+                  value={safeDuration}
+                  onChange={e => setDuration(Number(e.target.value))}
+                  className="text-lg"
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-3 gap-4">
               <div className="bg-blue-50 rounded-lg p-4 text-center">
