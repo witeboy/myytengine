@@ -112,6 +112,80 @@ async function kiePollResult(apiKey, taskId) {
 }
 
 // ─────────────────────────────────────────────
+// AI33 SEEDREAM — PRIMARY image generator
+// Uses AI33 API with bytedance-seedream-4.5
+// ─────────────────────────────────────────────
+
+async function generateWithAI33Seedream(apiKey, prompt, aspectRatio) {
+  // Map our aspect ratios to AI33 format
+  const ai33Aspect = aspectRatio === "9:16" ? "9:16" : "16:9";
+  
+  console.log(`🌱 AI33 Seedream: generating (${prompt.length} chars, ratio=${ai33Aspect})...`);
+
+  // Create FormData for multipart request
+  const formData = new FormData();
+  formData.append('prompt', prompt.substring(0, AI33_MAX_PROMPT_CHARS));
+  formData.append('model_id', 'bytedance-seedream-4.5');
+  formData.append('generations_count', '1');
+  formData.append('model_parameters', JSON.stringify({
+    aspect_ratio: ai33Aspect,
+    resolution: "2K"
+  }));
+
+  const submitRes = await fetch(`${AI33_BASE}/v1i/task/generate-image`, {
+    method: 'POST',
+    headers: { 'xi-api-key': apiKey },
+    body: formData
+  });
+
+  const submitData = await submitRes.json();
+  
+  if (!submitData.success || !submitData.task_id) {
+    throw new Error(`AI33 Seedream submit failed: ${submitData.message || JSON.stringify(submitData)}`);
+  }
+
+  const taskId = submitData.task_id;
+  console.log(`📡 AI33 Seedream task: ${taskId} (est. credits: ${submitData.estimated_credits})`);
+
+  // Poll for completion
+  const startTime = Date.now();
+  while (true) {
+    if (Date.now() - startTime > POLL_TIMEOUT_MS) {
+      throw new Error(`AI33 Seedream timed out after ${POLL_TIMEOUT_MS / 1000}s for task ${taskId}`);
+    }
+
+    await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+
+    const pollRes = await fetch(`${AI33_BASE}/v1/task/${taskId}`, {
+      headers: { 'Content-Type': 'application/json', 'xi-api-key': apiKey }
+    });
+
+    if (!pollRes.ok) continue;
+    const pollData = await pollRes.json();
+
+    if (pollData.status === 'done') {
+      const images = pollData.metadata?.result_images;
+      if (!images || images.length === 0) {
+        throw new Error(`AI33 Seedream task ${taskId} done but no images returned`);
+      }
+      const imageUrl = images[0].imageUrl;
+      if (!imageUrl) throw new Error(`AI33 Seedream task ${taskId} done but imageUrl is empty`);
+      console.log(`✓ AI33 Seedream: ${images[0].width}x${images[0].height} image ready`);
+      return imageUrl;
+    }
+
+    if (pollData.status === 'error' || pollData.status === 'failed') {
+      throw new Error(`AI33 Seedream failed: ${pollData.error_message || 'Unknown error'}`);
+    }
+
+    // Still processing
+    if (pollData.progress) {
+      console.log(`⏳ AI33 Seedream: ${pollData.progress}% complete...`);
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
 // NANO BANANA — fallback image generator (no content safety filter)
 // Uses same KIE API, different model: google/nano-banana
 // ─────────────────────────────────────────────
