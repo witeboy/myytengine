@@ -87,18 +87,25 @@ export default function StoryScript() {
     setGenerating(true);
 
     const runShortsGeneration = async () => {
-      try {
-        // Step 1: Generate the shorts script
-        const resp = await base44.functions.invoke('shortsGenerateScript', { project_id: projectId });
-        const data = resp.data || resp;
-        console.log('Shorts script generated:', data);
-
-        await Promise.all([refetchProject(), refetchScripts()]);
-      } catch (err) {
-        console.error('Shorts script generation error:', err);
-      } finally {
-        setGenerating(false);
+      const MAX_RETRIES = 3;
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const resp = await base44.functions.invoke('shortsGenerateScript', { project_id: projectId });
+          const data = resp.data || resp;
+          console.log('Shorts script generated:', data);
+          await Promise.all([refetchProject(), refetchScripts()]);
+          break;
+        } catch (err) {
+          const status = err?.response?.status || err?.status;
+          console.warn(`Shorts script attempt ${attempt} failed (${status}):`, err.message);
+          if (attempt < MAX_RETRIES && (status === 502 || status === 504 || status === 500)) {
+            await new Promise(r => setTimeout(r, 3000));
+            continue;
+          }
+          console.error('Shorts script generation failed after retries');
+        }
       }
+      setGenerating(false);
     };
 
     runShortsGeneration();
