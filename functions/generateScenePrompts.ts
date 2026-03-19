@@ -1349,8 +1349,21 @@ ${sceneDirections}
    **═══════════════════════════════════════════════════════════════**
 
 
-2. **animation_prompt** — RICH, CINEMATIC motion direction for the EXACT duration of each scene (see Duration field per scene):
-   - NOT a simple camera instruction — a FULL MOTION POEM describing everything that moves over the scene's duration.
+2. **animation_prompt** — RICH motion direction for the EXACT duration of each scene (see Duration field per scene):
+${useSleepStyle ? `   **🌙 SLEEP MODE ANIMATION — STRICT RULES:**
+   This is sleep content. The animation must be CALM, MINIMAL, and HYPNOTIC — designed to lull viewers to sleep.
+   - **ONLY ALLOWED MOTION:**
+     a) **CAMERA**: Ultra-slow pan left/right, ultra-slow zoom in/out, gentle drift. ONE direction per scene, no cuts.
+     b) **NATURE/ENVIRONMENT**: Subtle wind rustling leaves/grass, gentle water ripple, slow fog/mist drift, falling snow, drifting clouds. Only if contextually appropriate to the scene.
+     c) **DEPTH**: Very slow, gentle focus breathing between foreground and background.
+   - **⛔ ABSOLUTELY FORBIDDEN in sleep animation prompts:**
+     - ANY light animation: no light rays, no light shifts, no light creeping, no light evolving, no god rays, no flickering, no glowing, no shining, no illumination changes, no candlelight dancing, no firelight animation, no light pools, no rim light movement
+     - ANY sudden movement, fast motion, or dramatic changes
+     - ANY subject/character motion (no breathing, no body movement — these are PURE environments)
+     - ANY rack focus snaps, DOF shifts, or focus pulls
+     - ANY emotional intensity language ("urgent", "dramatic", "peak", "assertive")
+   - Keep it to 1-2 calm sentences. Example: "Ultra-slow pan right across the misty forest, gentle breeze rustling distant leaves, soft fog drifting between trees."
+   - The animation should feel like a screensaver — peaceful, unchanging, meditative.` : `   - NOT a simple camera instruction — a FULL MOTION POEM describing everything that moves over the scene's duration.
    - **IMPORTANT: Each scene has its own duration.** A 3.5s scene needs TIGHT, PUNCHY motion. A 7s scene can BREATHE. Match the motion density to the seconds available.
    - **Include ALL layers:**
      a) **CAMERA MOTION**: Specific movement with speed, direction, framing change
@@ -1363,7 +1376,7 @@ ${sceneDirections}
      • COLD_OPEN / SETUP: Sharp, immediate. Camera grabs attention — quick cuts, assertive angles.
      • RISING_TENSION / RISING: Building momentum. Camera grows bolder. Push-ins, tracking.
      • EMOTIONAL_CORE / CLIMAX: Peak intensity but DELIBERATE. Camera lingers. Meaningful holds. Let moments breathe.
-     • RESOLUTION: Exhale. Camera pulls back gently. Peace settles.
+     • RESOLUTION: Exhale. Camera pulls back gently. Peace settles.`}
    - **MINIMUM 3-4 rich sentences** — NEVER generic "slow pan right"
 
 
