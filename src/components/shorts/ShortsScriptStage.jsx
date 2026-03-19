@@ -56,7 +56,7 @@ export default function ShortsScriptStage({ projectId, project, scripts, onRefet
         </div>
 
         <p className="text-xs text-white/40 mb-4">
-          AI generates a 200–240 word script following the 90-second Shorts structure: Hook → Tension → Pivot → Value (3 points) → CTA → Loop
+          AI generates a 200–240 word script using a niche-specific storytelling structure (Crime, Tech, Side Hustle, Finance, or Book)
         </p>
 
         {generating && !hasFinalScript && (
