@@ -474,13 +474,15 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, t
         <Button
           onClick={() => onGenerate(del)}
           disabled={isGenerating || status === 'transcribing'}
-          className="w-full bg-orange-600 hover:bg-orange-700"
+          className={`w-full ${voiceoverUrl ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-orange-600 hover:bg-orange-700'}`}
         >
           {isGenerating
-            ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Generating…</>
+            ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> {voiceoverUrl ? 'Transcribing Audio…' : 'Generating…'}</>
             : status === 'transcribing'
-            ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Analyzing timing…</>
-            : <><Radio size={14} className="mr-2" /> Generate Captions</>
+            ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Analyzing…</>
+            : voiceoverUrl
+            ? <><Mic size={14} className="mr-2" /> Generate from Audio (ASR)</>
+            : <><Radio size={14} className="mr-2" /> Generate from Script</>
           }
         </Button>
       </div>
