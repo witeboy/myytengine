@@ -554,22 +554,9 @@ function TextPropertiesPanel({ caption, onUpdate, onDelete, onDuplicate, onApply
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// VIDEO PREVIEW
-// ═══════════════════════════════════════════════════════════════════
-
-function VideoPreview({
-  currentScene, currentTime, currentClip, prevClip,
-  captions, selectedCaption, onSelectCaption, onUpdateCaption,
-  orientation, onOrientationChange,
-  videoClips, scenes
-}) {
-  const canvasRef    = useRef(null);
-  const wrapperRef   = useRef(null);
-  const videoRef     = useRef(null);   // ref for the active video element
-  const prevVideoRef = useRef(null);   // ref for the outgoing video (transition)
-  const [drag, setDrag]         = useState(null);
-  const [wrapperSize, setWrapperSize] = useState({ w: 0, h: 0 });
+// VideoPreview moved → components/timeline/CanvasPreview.jsx
+// TimelineTrack moved → components/timeline/SnapTimeline.jsx
+const __REMOVED_PREVIEW = true; /*
 
   // ── FIX 2: Measure wrapper via ResizeObserver ────────────────────
   useEffect(() => {
