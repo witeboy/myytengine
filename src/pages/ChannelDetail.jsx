@@ -81,6 +81,11 @@ export default function ChannelDetail() {
           navigate(`/SleepPipeline?project_id=${ep.id}`);
           return;
         }
+        // Route shorts projects to their own pipeline
+        if (ep.project_mode === 'youtube_shorts') {
+          navigate(`/ShortsPipeline?project_id=${ep.id}`);
+          return;
+        }
         const route = getProjectRoute(ep);
         navigate(`/${route}`);
         return;
@@ -89,20 +94,21 @@ export default function ChannelDetail() {
 
     const scriptMode = channel.script_mode || 'standard';
     const isSleep = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
+    const isShorts = scriptMode === 'youtube_shorts';
 
     const project = await base44.entities.Projects.create({
       name: topic.title,
       niche: channel.niche,
       tone: isSleep ? 'soothing' : (channel.tone || 'dramatic'),
       visual_style: channel.visual_style || 'cinematic_realistic',
-      video_duration_minutes: topic.format === 'short' ? 1 : (channel.long_form_duration_minutes || 15),
-      orientation: topic.format === 'short' ? 'portrait' : 'landscape',
+      video_duration_minutes: isShorts ? 1.5 : (topic.format === 'short' ? 1 : (channel.long_form_duration_minutes || 15)),
+      orientation: isShorts ? 'portrait' : (topic.format === 'short' ? 'portrait' : 'landscape'),
       status: 'created',
       current_step: 0,
       channel_id: channel.id,
       channel_topic_id: topic.id,
       script_strategy_override: channel.script_strategy || '',
-      project_mode: isSleep ? scriptMode : '',
+      project_mode: isSleep ? scriptMode : (isShorts ? 'youtube_shorts' : ''),
     });
 
     const importedTopic = await base44.entities.Topics.create({
@@ -129,9 +135,11 @@ export default function ChannelDetail() {
 
     queryClient.invalidateQueries({ queryKey: ['channel-topics', channelId] });
 
-    // Route sleep projects to the dedicated Sleep Pipeline
+    // Route to dedicated pipelines
     if (isSleep) {
       navigate(`/SleepPipeline?project_id=${project.id}`);
+    } else if (isShorts) {
+      navigate(`/ShortsPipeline?project_id=${project.id}`);
     } else {
       navigate(`/StoryTopics?project_id=${project.id}`);
     }
@@ -184,8 +192,8 @@ export default function ChannelDetail() {
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold text-gray-900">{channel.name}</h1>
               {channel.script_mode && channel.script_mode !== 'standard' && (
-                <Badge className="text-[10px] bg-indigo-100 text-indigo-700">
-                  {channel.script_mode === 'sleep_meditation' ? '🧘 Sleep Meditation' : '🌙 Sleep Story'}
+                <Badge className={`text-[10px] ${channel.script_mode === 'youtube_shorts' ? 'bg-green-100 text-green-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                  {channel.script_mode === 'youtube_shorts' ? '📱 YouTube Shorts' : channel.script_mode === 'sleep_meditation' ? '🧘 Sleep Meditation' : '🌙 Sleep Story'}
                 </Badge>
               )}
             </div>

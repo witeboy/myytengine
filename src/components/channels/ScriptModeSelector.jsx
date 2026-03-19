@@ -1,26 +1,33 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Moon, Sparkles, Zap } from 'lucide-react';
+import { Moon, Sparkles, Zap, Film } from 'lucide-react';
 
 const MODES = [
   {
     id: 'standard',
     label: 'Standard (Viral)',
-    description: 'TVF 8-phase viral formula — hooks, tension, transformation, CTA',
+    description: 'Documentary / storytelling with TVF retention formula',
     icon: Zap,
     color: '#3b82f6',
   },
   {
+    id: 'youtube_shorts',
+    label: 'YouTube Shorts',
+    description: '90s shorts — Hook → Tension → 3 Rules → CTA. Visual every 2-3s. 9:16 portrait.',
+    icon: Film,
+    color: '#22c55e',
+  },
+  {
     id: 'sleep_meditation',
     label: 'Sleep Meditation',
-    description: 'Soothing affirmations, progressive relaxation, repetitive comfort — 90min to 8hrs',
+    description: 'Soothing affirmations, breathing cues, nature imagery',
     icon: Sparkles,
     color: '#8b5cf6',
   },
   {
     id: 'sleep_story',
     label: 'Sleep Story',
-    description: 'Narrative bedtime stories — gentle activities, rich sensory details, no tension',
+    description: 'Peaceful narrative bedtime story with rich sensory detail',
     icon: Moon,
     color: '#6366f1',
   },
@@ -33,7 +40,7 @@ export default function ScriptModeSelector({ value, onChange }) {
     <div>
       <p className="text-sm font-medium text-gray-800 mb-2">Script Generation Mode</p>
       <p className="text-xs text-gray-500 mb-3">Controls how scripts are structured and written for this channel</p>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {MODES.map(mode => {
           const selected = current === mode.id;
           return (
