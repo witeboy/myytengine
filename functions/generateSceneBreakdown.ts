@@ -95,7 +95,8 @@ function normalizeStyleKey(raw) {
     'cinematic_realistic', 'photorealistic_4k', 'anime', 'cinematic_anime',
     'cartoon_2d', 'picstory_cocomelon', 'cinematic_picstory', 'oil_painting',
     'watercolor', 'comic_book', 'humpty_dumpty', 'harry_potter',
-    '3d_whiteboard_cartoon', 'low_poly_3d_cartoon', 'skeleton_protagonist'
+    '3d_whiteboard_cartoon', 'low_poly_3d_cartoon', 'skeleton_protagonist',
+    'afro_nolly_global'
   ];
   if (knownStyles.includes(normalized)) return normalized;
   for (const key of knownStyles) {
@@ -109,7 +110,19 @@ function getStyleCharacterDirective(visualStyle) {
     skeleton_protagonist: `
 **🦴 MANDATORY — SKELETON PROTAGONIST STYLE:**
 CHARACTER: Photorealistic transparent glass-like humanoid body shell with glossy ivory skeleton visible inside (ribcage, spine, pelvis, all bones). Big round expressive brown/amber EYEBALLS in skull sockets (NOT empty dark sockets). Adult male proportions, context-appropriate clothing per scene. NOT scary — relatable HERO.
-RULES: Show FULL BODY in most scenes. Environment FIRST, then character. Character must be DOING something. Include other photorealistic humans in most scenes. Every scene has a CONTINUITY ELEMENT bridging to the next. Use varied camera angles. Blurred backgrounds BANNED.`
+RULES: Show FULL BODY in most scenes. Environment FIRST, then character. Character must be DOING something. Include other photorealistic humans in most scenes. Every scene has a CONTINUITY ELEMENT bridging to the next. Use varied camera angles. Blurred backgrounds BANNED.`,
+    afro_nolly_global: `
+**🌍 MANDATORY — AFRO-NOLLY-GLOBAL STYLE:**
+This is a 3D Pixar/Illumination-quality CGI style set in African environments — Nollywood drama meets Disney animation.
+TWO SUB-MODES (pick based on story context):
+- MODERN URBAN: Colorful West African compound courtyards with mustard/terracotta/blue/green buildings, red laterite dirt ground, corrugated roofs, hand-painted signs with proverbs, hanging laundry, louvered windows. Saturated punchy colors. Bright high-key lighting.
+- TRADITIONAL VILLAGE: Thatched-roof huts, central village clearing, large shade trees, campfires, cooking pots, wooden stools. Golden hour cinematic grading. Warm earth tones.
+CHARACTER ARCHETYPES: Use recurring cast system — heavyset authority woman (gold lace, ankara wrapper, headwrap, gold earrings, wooden stick), beautiful tall slim young woman (modern fusion clothing, long flowing hair, defiant stance), large police officer (light blue uniform, cap, baton), community crowd (6-15 mixed-age bystanders with shocked/amused expressions), village elder (white beard, agbada, walking stick, kufi cap), child protagonist (large Disney eyes, cornrow braids, traditional cloth, beaded jewelry).
+SKIN TONES: Always warm undertone. Range: #4A2E1A dark to #A07850 warm brown. NEVER grey, NEVER ashy.
+COMPOSITION: 3-layer depth staging (foreground characters, mid-ground action, background crowd). Below-eye-level camera for dramatic feel. Slight wide-angle distortion.
+SIGNS: Include hand-painted signs on buildings that foreshadow the story's moral (proverbs, rules, location names). Black text on white/cream, all caps, slightly uneven hand-lettered look.
+RENDERING: Subsurface scattering on skin, soft ambient occlusion, individually rendered hair strands (braids, afros, headwraps show fiber detail), realistic cloth folds and weight.
+RULES: Always 3D Pixar-quality CGI. Faces ALWAYS well-lit and readable. Include community bystanders in most scenes. Use dramatic confrontational staging. Show FULL BODY characters in environment.`
   };
   return directives[visualStyle] || '';
 }
