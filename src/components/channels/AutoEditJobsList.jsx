@@ -1,15 +1,17 @@
-import React from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import {
-  Loader2, CheckCircle2, XCircle, Eye, Film,
+  Loader2, CheckCircle2, XCircle, Eye,
   Clock, AlertCircle, Wand2
 } from 'lucide-react';
+
+const ACTIVE_STATUSES = ['pending', 'searching_media', 'assembling_timeline', 'applying_effects', 'exporting'];
 
 const STATUS_CONFIG = {
   pending:            { color: 'bg-gray-100 text-gray-600', icon: Clock, label: 'Pending' },
@@ -25,13 +27,28 @@ const STATUS_CONFIG = {
 
 export default function AutoEditJobsList({ channelId }) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const { data: jobs = [] } = useQuery({
     queryKey: ['auto-edit-jobs', channelId],
     queryFn: () => base44.entities.AutoEditJobs.filter({ channel_id: channelId }),
     enabled: !!channelId,
-    refetchInterval: 5000, // Poll every 5s for live updates
+    refetchInterval: (query) => {
+      // Poll aggressively (2s) when there are active jobs, otherwise 15s
+      const data = query.state.data || [];
+      const hasActive = data.some(j => ACTIVE_STATUSES.includes(j.status));
+      return hasActive ? 2000 : 15000;
+    },
   });
+
+  // Real-time subscription for instant updates
+  useEffect(() => {
+    if (!channelId) return;
+    const unsubscribe = base44.entities.AutoEditJobs.subscribe((event) => {
+      queryClient.invalidateQueries({ queryKey: ['auto-edit-jobs', channelId] });
+    });
+    return unsubscribe;
+  }, [channelId, queryClient]);
 
   if (jobs.length === 0) return null;
 

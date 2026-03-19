@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { Loader2, Film, Wand2 } from 'lucide-react';
+import { Loader2, Wand2 } from 'lucide-react';
 
 export default function AutoEditButton({ topic, channel, onJobCreated }) {
   const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
 
   const handleAutoEdit = async (e) => {
     e.stopPropagation();
@@ -21,6 +23,9 @@ export default function AutoEditButton({ topic, channel, onJobCreated }) {
         orientation: topic.format === 'short' ? 'portrait' : 'landscape',
         format: (topic.format || 'short').toLowerCase(),
       });
+
+      // Immediately refresh the jobs list so the user sees the new job
+      queryClient.invalidateQueries({ queryKey: ['auto-edit-jobs', channel.id] });
 
       // Fire the pipeline (don't await — it runs in background)
       base44.functions.invoke('autoEditPipeline', { job_id: job.id }).catch(err => {
