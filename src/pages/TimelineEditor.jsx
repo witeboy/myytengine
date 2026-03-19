@@ -1819,7 +1819,7 @@ export default function TimelineEditorV10() {
         {/* Center */}
         <div className="flex-1 min-w-0 flex flex-col border-r border-gray-800">
           <div className="flex-1 min-h-0">
-            <VideoPreview
+            <CanvasPreview
               currentScene={currentScene}
               currentTime={currentTime}
               currentClip={currentClip}
