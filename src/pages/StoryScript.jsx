@@ -48,9 +48,13 @@ export default function StoryScript() {
 
 
 
+  const isShorts = project?.project_mode === 'youtube_shorts';
+
   const completedCount = batches.filter(b => b.status === 'completed').length;
   const stuckCount = batches.filter(b => b.status === 'generating').length;
-  const allCompleted = batches.length > 0 && completedCount === batches.length;
+  const allCompleted = isShorts
+    ? scripts.some(s => s.version === 'final_aggregated')
+    : (batches.length > 0 && completedCount === batches.length);
 
     // 🎯 Strictly look for the version created by your 'generateFullScript' function
   const latestScript = allCompleted
