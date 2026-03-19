@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
-import { Loader2, Music, Play, Pause, Check, RefreshCw, Volume2, Wand2 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Loader2, Music, Play, Pause, Check, RefreshCw, Volume2, Wand2, Pencil, Save, X } from 'lucide-react';
 
 export default function MusicPanel({ project }) {
   const [generating, setGenerating] = useState(false);
@@ -14,6 +15,8 @@ export default function MusicPanel({ project }) {
   const [customPrompt, setCustomPrompt] = useState('');
   const [playingId, setPlayingId] = useState(null);
   const [audioEl, setAudioEl] = useState(null);
+  const [editingPromptId, setEditingPromptId] = useState(null);
+  const [editedPrompt, setEditedPrompt] = useState('');
   const pollRef = useRef(null);
 
   const { data: tracks = [], refetch } = useQuery({
@@ -22,13 +25,11 @@ export default function MusicPanel({ project }) {
     enabled: !!project?.id,
   });
 
-  // Poll for generating tracks
   useEffect(() => {
     const genTrack = tracks.find(t => t.status === 'generating');
     if (genTrack && !pollRef.current) {
       setGeneratingTrackId(genTrack.id);
       pollRef.current = setInterval(async () => {
-        // We need the task_id — store it in prompt temporarily or check all
         await refetch();
       }, 5000);
     }
@@ -40,7 +41,6 @@ export default function MusicPanel({ project }) {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [tracks]);
 
-  // Step 1: Generate music concepts via LLM
   const handleGenerateConcepts = async () => {
     setGenerating(true);
     const prompt = customPrompt ||
@@ -90,7 +90,6 @@ Return JSON:
     setGenerating(false);
   };
 
-  // Step 2: Generate actual audio for a track via KIE Suno API
   const handleGenerateAudio = async (track) => {
     setGeneratingTrackId(track.id);
     const res = await base44.functions.invoke('generateMusic', {
@@ -110,7 +109,6 @@ Return JSON:
 
     if (taskId) {
       let failCount = 0;
-      // Suno generation takes longer — poll every 15s
       const poll = setInterval(async () => {
         try {
           const statusRes = await base44.functions.invoke('checkMusicStatus', {
@@ -150,6 +148,12 @@ Return JSON:
 
   const handleVolumeChange = async (trackId, vol) => {
     await base44.entities.MusicTracks.update(trackId, { volume: vol });
+    refetch();
+  };
+
+  const handleSavePrompt = async (trackId) => {
+    await base44.entities.MusicTracks.update(trackId, { prompt: editedPrompt });
+    setEditingPromptId(null);
     refetch();
   };
 
@@ -257,8 +261,36 @@ Return JSON:
                 )}
               </div>
 
-              {track.prompt && (
-                <p className="text-[10px] text-gray-400 mt-1 line-clamp-1">{track.prompt}</p>
+              {/* Editable Prompt Section */}
+              {editingPromptId === track.id ? (
+                <div className="mt-2 space-y-1.5">
+                  <Textarea
+                    value={editedPrompt}
+                    onChange={(e) => setEditedPrompt(e.target.value)}
+                    className="text-xs bg-gray-50 border-gray-200 min-h-[60px]"
+                    placeholder="Describe the music style, tempo, instruments, mood..."
+                  />
+                  <div className="flex gap-1 justify-end">
+                    <Button size="sm" variant="ghost" className="h-6 text-[10px] px-2"
+                      onClick={() => setEditingPromptId(null)}>
+                      <X className="w-3 h-3 mr-0.5" /> Cancel
+                    </Button>
+                    <Button size="sm" className="h-6 text-[10px] px-2 bg-blue-600 hover:bg-blue-700 gap-1"
+                      onClick={() => handleSavePrompt(track.id)}>
+                      <Save className="w-3 h-3" /> Save Prompt
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setEditingPromptId(track.id); setEditedPrompt(track.prompt || ''); }}
+                  className="text-[10px] text-gray-400 mt-1.5 text-left w-full flex items-start gap-1 group hover:text-gray-600 transition-colors"
+                >
+                  <Pencil className="w-2.5 h-2.5 mt-0.5 opacity-0 group-hover:opacity-100 flex-shrink-0 transition-opacity" />
+                  <span className={track.prompt ? 'line-clamp-2' : 'italic text-gray-300'}>
+                    {track.prompt || '+ Add prompt description'}
+                  </span>
+                </button>
               )}
 
               {track.is_selected && track.audio_url && (
