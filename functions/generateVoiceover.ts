@@ -1,5 +1,4 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-import { S3Client, PutObjectCommand } from 'npm:@aws-sdk/client-s3@3.782.0';
 
 // ══════════════════════════════════════════════════════════════════
 // VOICEOVER GENERATOR — All TTS via AI33 proxy
