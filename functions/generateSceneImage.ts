@@ -684,24 +684,33 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
   // Map aspect_ratio to Nano Banana image_size format
   const nanoBananaSize = aspectRatio; // Both use "16:9" / "9:16" format
 
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+  // Provider order: AI33 Seedream → Grok Imagine → Nano Banana
+  // Sleep:          AI33 Seedream → Nano Banana → Grok Imagine
+  const AI33_KEY = Deno.env.get("AI33_API_KEY");
+  const providers = isSleepProject
+    ? [
+        AI33_KEY ? 'ai33_seedream' : null,
+        'nano_banana',
+        'grok'
+      ].filter(Boolean)
+    : [
+        AI33_KEY ? 'ai33_seedream' : null,
+        'grok',
+        'nano_banana'
+      ].filter(Boolean);
+
+  for (let attempt = 0; attempt < providers.length; attempt++) {
     try {
       let promptToSend = finalPrompt;
-      let useNanoBanana = false;
+      const provider = providers[attempt];
 
-      // Sleep projects: attempt 1 = Nano Banana (cheap, no content safety), attempt 2+ = Grok fallback
-      // Non-sleep: all attempts use Grok with exponential backoff
-      if (isSleepProject && attempt === 0) {
-        useNanoBanana = true;
-      } else if (isSleepProject && attempt > 0) {
-        console.log(`🔄 Scene ${sceneNum}: falling back to Grok (attempt ${attempt + 1})`);
-      }
-
-      console.log(`🎨 Scene ${sceneNum}: generating via ${useNanoBanana ? 'Nano Banana' : 'Grok'} (attempt ${attempt + 1}/${MAX_RETRIES}, ${promptToSend.length} chars)...`);
+      console.log(`🎨 Scene ${sceneNum}: generating via ${provider} (attempt ${attempt + 1}/${providers.length}, ${promptToSend.length} chars)...`);
       console.log(`📝 FINAL PROMPT: "${promptToSend.substring(0, 200)}"`);
 
       let imageUrl;
-      if (useNanoBanana) {
+      if (provider === 'ai33_seedream') {
+        imageUrl = await generateWithAI33Seedream(AI33_KEY, promptToSend, aspectRatio);
+      } else if (provider === 'nano_banana') {
         imageUrl = await generateWithNanoBanana(apiKey, promptToSend, nanoBananaSize);
       } else {
         imageUrl = await generateWithGrokImagine(apiKey, promptToSend, aspectRatio, referenceUrl);
