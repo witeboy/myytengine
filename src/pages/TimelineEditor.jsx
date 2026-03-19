@@ -630,7 +630,6 @@ export default function TimelineEditorV10() {
   const [overrideBeatDurations, setOverrideBeatDurations] = useState(null);
 
   const exportHook = useVideoExport();
-  const playRef    = useRef(null);
   const audioRef   = useRef(null);
 
   // ── Data queries ────────────────────────────────────────────────
