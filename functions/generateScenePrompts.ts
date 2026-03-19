@@ -427,7 +427,7 @@ CONTINUITY: Each scene must contain a visual element that connects to the next s
   const instructions = {
     skeleton_protagonist: universalReinforcement + `
 **🦴 SKELETON PROTAGONIST STYLE — ADDITIONAL RULES:**
-The protagonist in EVERY image prompt must be described as: "a photorealistic transparent skeleton with a clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through the translucent torso, big round expressive brown amber eyeballs in the skull sockets"
+The protagonist in EVERY image prompt must be described as: a photorealistic transparent skeleton with a clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through the translucent torso, big round expressive brown amber eyeballs in the skull sockets
 
 
 MANDATORY FRAMING:
