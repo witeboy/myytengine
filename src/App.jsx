@@ -12,6 +12,7 @@ import ChannelDetail from '@/pages/ChannelDetail';
 import ToolsHub from '@/pages/ToolsHub';
 import CompetitorMonitor from '@/pages/CompetitorMonitor';
 import SleepPipeline from '@/pages/SleepPipeline';
+import AutoEditReview from '@/pages/AutoEditReview';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -68,6 +69,7 @@ const AuthenticatedApp = () => {
       <Route path="/ToolsHub" element={<ToolsHub />} />
       <Route path="/CompetitorMonitor" element={<CompetitorMonitor />} />
       <Route path="/SleepPipeline" element={<SleepPipeline />} />
+      <Route path="/AutoEditReview" element={<AutoEditReview />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );

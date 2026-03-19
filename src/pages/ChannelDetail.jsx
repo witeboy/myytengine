@@ -22,6 +22,8 @@ import { ExpandableAssets } from '@/components/channels/TopicAssetsPanel';
 import ScriptModeSelector from '@/components/channels/ScriptModeSelector';
 import EditableTopicTitle from '@/components/channels/EditableTopicTitle';
 import AITitleGenerator from '@/components/channels/AITitleGenerator';
+import AutoEditButton from '@/components/channels/AutoEditButton';
+import AutoEditJobsList from '@/components/channels/AutoEditJobsList';
 
 export default function ChannelDetail() {
   const navigate = useNavigate();
@@ -259,6 +261,11 @@ export default function ChannelDetail() {
           </div>
         )}
 
+        {/* Auto-Edit Pipeline Jobs */}
+        <div className="mb-4">
+          <AutoEditJobsList channelId={channelId} />
+        </div>
+
         {/* Niche Strategy Card */}
         {strategy && (
           <Card className="mb-6 border-l-4" style={{ borderLeftColor: color }}>
@@ -390,6 +397,11 @@ export default function ChannelDetail() {
                           {topic.project_id && (
                             <Package className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" title="Has assets" />
                           )}
+                          <AutoEditButton
+                            topic={topic}
+                            channel={channel}
+                            onJobCreated={() => queryClient.invalidateQueries({ queryKey: ['auto-edit-jobs', channelId] })}
+                          />
                           <ArrowRight
                             className="w-4 h-4 text-gray-300 group-hover:text-gray-600 transition-colors flex-shrink-0"
                             onClick={() => handleStartPipeline(topic)}
