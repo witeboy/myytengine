@@ -10,13 +10,15 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 // ══════════════════════════════════════════════════════════════════
 
 const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
+const AI33_BASE = "https://api.ai33.pro";
 
 // ── Tuning knobs ──────────────────────────────────────────────
-const MAX_CONCURRENT = 3;        // Parallel Kie image jobs
-const MAX_RETRIES = 3;           // Retries per scene on failure
+const MAX_CONCURRENT = 3;        // Parallel image jobs
+const MAX_RETRIES = 3;           // Retries per scene (one per provider)
 const POLL_INTERVAL_MS = 4000;   // Time between poll checks
 const POLL_TIMEOUT_MS = 300000;  // 5 min max wait per image
 const MAX_PROMPT_CHARS = 1200;   // Grok's sweet spot ceiling
+const AI33_MAX_PROMPT_CHARS = 4000; // Seedream supports longer prompts
 const RETRY_BASE_MS = 3000;      // Base delay for exponential backoff
 
 // ─────────────────────────────────────────────
