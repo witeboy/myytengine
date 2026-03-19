@@ -383,8 +383,17 @@ export default function StoryScript() {
 
 
         <div className="space-y-6">
-          {/* Progress bar while generating */}
-          {batches.length > 0 && !allCompleted && (
+          {/* Shorts generating indicator */}
+          {isShorts && generating && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
+              <Loader2 className="w-8 h-8 animate-spin text-green-600 mx-auto mb-3" />
+              <p className="text-sm font-medium text-green-800">Generating YouTube Shorts script...</p>
+              <p className="text-xs text-green-600 mt-1">~90 seconds • 200–240 words • Hook → Tension → Value → CTA</p>
+            </div>
+          )}
+
+          {/* Progress bar while generating (standard/sleep only) */}
+          {!isShorts && batches.length > 0 && !allCompleted && (
             <div className="bg-white p-4 rounded-lg shadow-sm border">
               <div className="flex items-center justify-between mb-2">
                 <span className="font-medium text-sm flex items-center gap-2">
