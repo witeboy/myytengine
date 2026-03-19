@@ -15,6 +15,7 @@ export default function StoryDuration() {
   const projectId = new URLSearchParams(window.location.search).get('project_id');
   const [duration, setDuration] = useState(null);
   const [scriptMode, setScriptMode] = useState('');
+  const [shortsNiche, setShortsNiche] = useState('finance');
   const [hasInitialized, setHasInitialized] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -142,7 +143,12 @@ export default function StoryDuration() {
             <CardTitle>Duration & Batches</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <ScriptModeSelector value={scriptMode} onChange={setScriptMode} />
+            <ScriptModeSelector
+              value={scriptMode}
+              onChange={setScriptMode}
+              shortsNiche={shortsNiche}
+              onShortsNicheChange={setShortsNiche}
+            />
 
             {isShorts ? (
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
