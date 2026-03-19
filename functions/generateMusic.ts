@@ -82,10 +82,16 @@ Deno.serve(async (req) => {
     let musicPrompt, style, title;
     let analysisUsed = false;
 
+    let isSleepProject = false;
+
     if (project_id) {
       try {
         const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
         const project = projects[0];
+
+        if (project) {
+          isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
+        }
 
         if (project?.script) {
           console.log(`🎵 Analyzing script for intelligent music selection...`);
