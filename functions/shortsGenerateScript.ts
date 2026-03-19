@@ -86,7 +86,12 @@ Return JSON: {"title":"string under 60 chars","script":"full formatted script","
     console.log(`📱 Calling Gemini for "${topicTitle}" (${shortsNiche})...`);
     const result = await callGemini(prompt, 0.75);
 
-    const fullScript = result.script || '';
+    const rawScript = result.script || '';
+    // Strip section headers like [HOOK - 5s], [TENSION - 15s], [VALUE - 45s], etc.
+    const fullScript = rawScript
+      .replace(/\[.*?\]/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
     const wordCount = fullScript.split(/\s+/).filter(w => w.length > 0).length;
     const title = result.title || topicTitle;
 
