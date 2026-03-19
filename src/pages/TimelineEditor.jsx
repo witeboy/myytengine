@@ -554,13 +554,8 @@ function TextPropertiesPanel({ caption, onUpdate, onDelete, onDuplicate, onApply
   );
 }
 
-// VideoPreview moved → components/timeline/CanvasPreview.jsx
-// TimelineTrack moved → components/timeline/SnapTimeline.jsx
-const __REMOVED_PREVIEW = true; /*
-
-  // ── FIX 2: Measure wrapper via ResizeObserver ────────────────────
-  useEffect(() => {
-    if (!wrapperRef.current) return;
+// VideoPreview → CanvasPreview.jsx | TimelineTrack → SnapTimeline.jsx
+/* REMOVED — old inline components replaced by imports above
     const ro = new ResizeObserver(entries => {
       for (const entry of entries) {
         setWrapperSize({ w: entry.contentRect.width, h: entry.contentRect.height });
