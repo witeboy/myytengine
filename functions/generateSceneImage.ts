@@ -1,13 +1,12 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
 // ══════════════════════════════════════════════════════════════════
-// IMAGE GENERATION — Grok Imagine via Kie API
+// IMAGE GENERATION — AI33 Seedream primary, Grok + Nano Banana fallback
 // Pipeline: Script → Breakdown → Prompts → [THIS] → Animation
 // ══════════════════════════════════════════════════════════════════
+// Priority: AI33 Seedream 4.5 → Grok Imagine → Nano Banana
+// Sleep:    AI33 Seedream 4.5 → Nano Banana → Grok Imagine
 // Accepts: single scene_id OR array of scene_ids for batch mode
-// Processes scenes concurrently with configurable parallelism
-// Retries failed generations with exponential backoff
-// Polls with timeout to avoid infinite hangs
 // ══════════════════════════════════════════════════════════════════
 
 const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
