@@ -174,24 +174,46 @@ Return EXACTLY 50 titles.`;
         }
       };
 
-      // Try with internet context first (gemini), fall back to non-search model on JSON parse failure
       let batchResult = null;
       try {
         batchResult = await base44.integrations.Core.InvokeLLM({
           prompt: batchPrompt,
           response_json_schema: schema,
+          model: 'gemini_3_flash',
           add_context_from_internet: true,
         });
-      } catch (e) {
-        console.warn('Search model JSON failed, retrying with standard model:', e.message);
-        batchResult = await base44.integrations.Core.InvokeLLM({
-          prompt: batchPrompt,
-          response_json_schema: schema,
-          model: 'gemini_3_flash',
-        });
+      } catch (e1) {
+        console.warn('Gemini flash failed, retrying without internet:', e1.message);
+        try {
+          batchResult = await base44.integrations.Core.InvokeLLM({
+            prompt: batchPrompt,
+            response_json_schema: schema,
+            model: 'gemini_3_flash',
+          });
+        } catch (e2) {
+          console.warn('Gemini flash retry also failed:', e2.message);
+          batchResult = await base44.integrations.Core.InvokeLLM({
+            prompt: batchPrompt,
+            response_json_schema: schema,
+          });
+        }
       }
 
-      allTitles.push(...(batchResult?.titles || []));
+      const batchTitles = batchResult?.titles || [];
+      allTitles.push(...batchTitles);
+
+      // If we got very few titles, try one more补充 batch
+      if (batchTitles.length < 30 && batch === 1) {
+        setPhase(`Generating additional titles...`);
+        try {
+          const extra = await base44.integrations.Core.InvokeLLM({
+            prompt: batchPrompt + `\n\nYou MUST return at least ${50 - batchTitles.length} titles. The previous attempt only returned ${batchTitles.length}.`,
+            response_json_schema: schema,
+            model: 'gemini_3_flash',
+          });
+          allTitles.push(...(extra?.titles || []));
+        } catch (_) {}
+      }
     }
 
     // Sort by CTR score descending
