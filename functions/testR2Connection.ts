@@ -2,59 +2,49 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 import { S3Client, PutObjectCommand } from 'npm:@aws-sdk/client-s3@3.600.0';
 
 Deno.serve(async (req) => {
+  const base44 = createClientFromRequest(req);
+  const user = await base44.auth.me();
+  if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const accountId = Deno.env.get('CLOUDFLARE_ACCOUNT_ID') || '';
+  const accessKeyId = Deno.env.get('CLOUDFLARE_R2_ACCESS_KEY_ID') || '';
+  const secretAccessKey = Deno.env.get('CLOUDFLARE_R2_SECRET_ACCESS_KEY') || '';
+  const bucketName = Deno.env.get('CLOUDFLARE_R2_BUCKET_NAME') || '';
+  const publicUrl = Deno.env.get('CLOUDFLARE_R2_PUBLIC_URL') || '';
+
+  const diagnostics = {
+    accountId_length: accountId.length,
+    accountId_first8: accountId.substring(0, 8),
+    bucketName_raw: bucketName,
+    bucketName_length: bucketName.length,
+    bucketName_trimmed: bucketName.trim(),
+    bucketName_charCodes: Array.from(bucketName).map(c => c.charCodeAt(0)),
+    publicUrl,
+    accessKeyId_length: accessKeyId.length,
+    secretKey_length: secretAccessKey.length,
+    endpoint: `https://${accountId.trim()}.r2.cloudflarestorage.com`,
+  };
+
   try {
-    const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
-    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const accountId = Deno.env.get('CLOUDFLARE_ACCOUNT_ID');
-    const accessKeyId = Deno.env.get('CLOUDFLARE_R2_ACCESS_KEY_ID');
-    const secretAccessKey = Deno.env.get('CLOUDFLARE_R2_SECRET_ACCESS_KEY');
-    const bucketName = Deno.env.get('CLOUDFLARE_R2_BUCKET_NAME');
-    const publicUrl = Deno.env.get('CLOUDFLARE_R2_PUBLIC_URL');
-
-    console.log('Account ID:', accountId);
-    console.log('Bucket Name:', JSON.stringify(bucketName));
-    console.log('Public URL:', publicUrl);
-    console.log('Access Key ID starts with:', accessKeyId?.substring(0, 6));
-    console.log('Secret Access Key length:', secretAccessKey?.length);
-
-    const endpoint = `https://${accountId}.r2.cloudflarestorage.com`;
-    console.log('Constructed endpoint:', endpoint);
-
     const r2Client = new S3Client({
       region: 'auto',
-      endpoint,
+      endpoint: `https://${accountId.trim()}.r2.cloudflarestorage.com`,
       credentials: {
-        accessKeyId,
-        secretAccessKey,
+        accessKeyId: accessKeyId.trim(),
+        secretAccessKey: secretAccessKey.trim(),
       },
     });
 
-    // Try uploading a tiny test file
-    const testContent = new TextEncoder().encode('test file ' + Date.now());
-    const testKey = `test/connection-test-${Date.now()}.txt`;
-
+    const testKey = `test/ping-${Date.now()}.txt`;
     await r2Client.send(new PutObjectCommand({
-      Bucket: bucketName,
+      Bucket: bucketName.trim(),
       Key: testKey,
-      Body: testContent,
+      Body: new TextEncoder().encode('hello r2'),
       ContentType: 'text/plain',
     }));
 
-    const fileUrl = `${publicUrl.replace(/\/$/, '')}/${testKey}`;
-    console.log('Upload successful! File URL:', fileUrl);
-
-    return Response.json({
-      success: true,
-      message: 'R2 connection works!',
-      file_url: fileUrl,
-      bucket: bucketName,
-      endpoint,
-    });
-
+    return Response.json({ success: true, diagnostics, file_url: `${publicUrl.replace(/\/$/, '')}/${testKey}` });
   } catch (error) {
-    console.error('R2 test error:', error.message);
-    return Response.json({ error: error.message }, { status: 500 });
+    return Response.json({ success: false, error: error.message, diagnostics }, { status: 500 });
   }
 });
