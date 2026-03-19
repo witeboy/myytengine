@@ -325,9 +325,10 @@ export default function StoryScript() {
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={() => {
               const isSleep = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
-              navigate(createPageUrl(isSleep ? `StoryDuration?project_id=${projectId}` : `StoryHooks?project_id=${projectId}`));
+              const isYTShorts = project?.project_mode === 'youtube_shorts';
+              navigate(createPageUrl((isSleep || isYTShorts) ? `StoryDuration?project_id=${projectId}` : `StoryHooks?project_id=${projectId}`));
             }} className="gap-2" size="sm">
-              <ArrowLeft className="w-4 h-4" /> {project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story' ? 'Duration' : 'Hooks'}
+              <ArrowLeft className="w-4 h-4" /> {(project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story' || project?.project_mode === 'youtube_shorts') ? 'Duration' : 'Hooks'}
             </Button>
             <h1 className="text-3xl font-bold">Script Generation</h1>
           </div>
