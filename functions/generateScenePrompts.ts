@@ -194,6 +194,7 @@ function normalizeStyleKey(raw) {
   }
   if (normalized.includes('roblox')) { console.log(`✅ Keyword match: roblox`); return 'roblox'; }
   if (normalized.includes('skeleton')) { console.log(`✅ Keyword match: skeleton_protagonist`); return 'skeleton_protagonist'; }
+  if (normalized.includes('afro') || normalized.includes('nolly')) { console.log(`✅ Keyword match: afro_nolly_global`); return 'afro_nolly_global'; }
   console.warn(`❌ No match for "${raw}" → "${normalized}"`);
   return 'cinematic_realistic';
 }
@@ -266,6 +267,10 @@ const styleMap = {
   skeleton_protagonist: {
    positive: "cinematic establishing shot composition, golden hour volumetric lighting, HDR cinematic lens, warm amber grading, photorealistic detailed environment with sharp focused background, masterpiece quality",
    negative: "real human skin, real human face, realistic flesh, normal human appearance, human skin visible through skeleton, dual character overlay, skeleton overlaid on human, x-ray medical scan, cartoon skeleton, halloween decoration, flat 2D, anime, comic, horror gore, neon, plastic toy, low quality, blurry, abstract, minimalist, sketch, painting, chibi, dia de los muertos, empty dark eye sockets, bare bones without transparent body, scary horror skeleton, torso only, bust shot, head and shoulders only, cropped at waist, isolated character on blank background, portrait crop, dark background, black background, text, words, letters, numbers, UI elements, screen content, garbled text"
+  },
+  afro_nolly_global: {
+    positive: "3D Pixar-Illumination quality CGI animation, African setting, subsurface scattering on dark skin, soft ambient occlusion, individually strand-rendered hair showing fiber detail in braids afros and headwraps, realistic cloth folds and weight on ankara and traditional garments, warm natural lighting, vibrant saturated colors, cinematic composition with 3-layer depth staging, dramatic expressions, detailed African clothing textures, community of onlookers with expressive reactions, 16:9 cinematic aspect ratio, high-quality 3D rendering, Nollywood drama meets Disney Pixar aesthetic",
+    negative: "photorealistic, live action, photograph, anime, manga, watercolor, sketch, flat 2D, dark gloomy, cartoon outline style, cel-shaded, low quality, blurry, grey ashy skin tones, western European features, pale skin, blonde hair, empty backgrounds, isolated portraits, minimalist, abstract, horror, scary, chibi, bobblehead, oversized head, text garbled, distorted letters"
   }
 };
 
@@ -377,6 +382,12 @@ function getStyleSceneBodyRules(styleName) {
       environments: "Photorealistic DETAILED real-world environments in SHARP FOCUS — visible architecture, landscape features, props, furniture, tools, weather effects. The skeleton exists INSIDE this world. Include foreground elements for depth. NEVER blurred bokeh backgrounds.",
       objects: "Photorealistic props the skeleton is actively interacting with — tools in hand, objects being held, furniture being used. Props tell the story. NEVER show readable text, numbers, or screen content on any object — describe the CHARACTER'S REACTION to information, not the information itself.",
       rendering: "Cinematic wide-to-medium framing. HDR cinematic lens, warm amber grading, dramatic volumetric golden hour lighting, strong rim light on bone edges. Sharp detailed backgrounds."
+    },
+    afro_nolly_global: {
+      characters: "3D Pixar/Illumination quality CGI African characters with subsurface scattering on dark skin (warm undertones, NEVER grey/ashy), individually strand-rendered hair (braids with beads, afros, headwraps with fiber detail). Character archetypes: MAMA/AUTHORITY — heavyset, imposing, round face, gold hoop earrings, headwrap or dyed short hair, ankara wrapper + lace blouse, barefoot, often wielding wooden stick; YOUNG WOMAN — tall slim model proportions, long flowing black hair, modern African fusion (dashiki crop top + jeans, pink sneakers), defiant composed expression; POLICE — large overweight, light blue uniform, cap with badge, baton; VILLAGE ELDER — thin weathered dignified, white beard, agbada/dashiki, colorful kufi cap, carved walking stick; CHILD — 8-12 years old, HUGE Disney-style expressive eyes (30%+ of face), cornrow braids with beads, traditional wrapped cloth, barefoot. ALL characters have DRAMATIC EXAGGERATED expressions — screaming, shocked, crying, defiant — never neutral.",
+      environments: "MODERN COMPOUND: Colorful buildings (mustard #D4943A, terracotta #C67B5C, dusty blue #8FA3C4, sage green #7CAA6E, salmon pink #D1847A), dark terracotta roofs #A0442E, red-orange laterite dirt ground #B85C3A, dark wood doors #5C3A20, louvered windows, hanging laundry between buildings, potted flowers at doorsteps, scattered rocks, hand-painted signs with proverbs on buildings (black text on cream/white wood, all caps, hand-lettered). TRADITIONAL VILLAGE: Thatched-roof round huts (warm mud brown #A08060), brown earth ground #6A5030, large shade trees, central campfire with smoke, cooking pots and baskets, wooden stools, lush green vegetation #2A5A20 at edges. Night: central campfire as primary light, HUGE stylized full moon, deep blue-black sky #0A1530, silhouettes of huts.",
+      objects: "Hand-painted wooden signs with proverbs that foreshadow the moral (e.g. 'PRIDE COMES BEFORE THE FALL', 'COMPOUND RULES: LANDLADY IS ALWAYS RIGHT'), wooden sticks/canes (mama's signature prop), gold jewelry (earrings, bangles, necklaces), ankara/kente cloth patterns, cooking pots, woven baskets, carved wooden stools, corrugated iron roofing, potted plants.",
+      rendering: "3D Pixar-Illumination quality CGI. Subsurface scattering on skin. Soft ambient occlusion in shadows. Slight depth-of-field blur on background characters. Hair individually strand-rendered. Cloth shows realistic folds, wrinkles, and weight. Camera slightly below eye level (heroic/dramatic). Slight wide-angle lens distortion making foreground characters larger. 3-layer depth: foreground characters, mid-ground action, background crowd (6-15 shocked/amused onlookers). Faces ALWAYS well-lit and readable even in dark scenes. Warm bounce light from orange/red dirt ground. Saturated punchy vibrant colors."
     }
   };
 
@@ -427,6 +438,41 @@ CONTINUITY: Each scene must contain a visual element that connects to the next s
 
 
   const instructions = {
+    afro_nolly_global: universalReinforcement + `
+**🌍 AFRO-NOLLY-GLOBAL STYLE — CRITICAL RULES:**
+
+This is a 3D Pixar/Illumination quality CGI style depicting African stories — Nollywood drama meets Disney animation.
+
+**MANDATORY VISUAL RULES:**
+- EVERY scene must be rendered as high-quality 3D CGI that mimics Pixar/Illumination quality — NOT actual 3D renders, NOT photorealistic, NOT flat cartoon
+- Skin has subsurface scattering (realistic light transmission), visible pores at close-up but smoothed at mid-range. Warm undertone ALWAYS — NEVER grey, NEVER ashy
+- Hair is individually strand-rendered — braids, afros, headwraps ALL show fiber detail
+- Cloth shows realistic folds, wrinkles, and weight (wrapper sag, blouse crease, ankara patterns)
+- Camera positioned slightly below eye level for heroic/dramatic feel
+- Slight wide-angle lens distortion making foreground characters larger/more imposing
+- 3-layer depth staging: foreground characters → mid-ground action → background crowd of 6-15 onlookers
+- Background crowd ALWAYS has dramatic expressions: SHOCKED (mouths open, hands on face), AMUSED (laughing, pointing), SCARED (pulling children close)
+
+**ENVIRONMENTAL WORLD-BUILDING:**
+- MODERN SCENES: Colorful compound buildings around central courtyard, red laterite dirt ground, wooden doors with metal handles, louvered windows, corrugated iron roofing. INCLUDE hand-painted SIGNS on buildings with proverbs/rules that foreshadow the story's moral (e.g. "PRIDE COMES BEFORE THE FALL", "TIME WAITS FOR NO ONE"). Signs: black text on white/cream wood, all caps, slightly uneven hand-lettered look.
+- TRADITIONAL SCENES: Thatched-roof round/rectangular huts, central village clearing, large shade trees, campfire with smoke, cooking pots, baskets, wooden stools, lush green vegetation at edges.
+- Night village: central campfire as primary light, HUGE stylized full moon, warm fire glow on near faces, cool blue moonlight on shoulders/back.
+
+**CHARACTER ARCHETYPES (use these recurring templates):**
+- MAMA/LANDLADY: Heavyset, physically imposing, gold lace blouse + patterned ankara wrapper, headwrap or dyed short curly hair, gold hoop earrings + bangles, often wielding wooden stick, SCREAMING angry expression (70% of scenes) or crying/pleading (20%) or smug (10%)
+- YOUNG WOMAN: Tall slim, long flowing black hair (wind-blown), modern African fusion clothing (dashiki crop top + jeans, pink sneakers), defiant unbothered expression, arms crossed
+- POLICE: Large overweight, light blue uniform + dark navy pants, police cap with badge, baton, stern expression
+- ELDER: Thin weathered dignified, white beard, brown agbada/dashiki, colorful striped kufi cap, carved walking stick, kind wise eyes
+- CHILD: 8-12 years old, HUGE Disney-style eyes (30%+ of face), cornrow braids with beads, traditional wrapped cloth, barefoot
+
+**COLOR PALETTE:**
+- Modern: building walls mustard/terracotta/blue/green/pink, red-orange dirt, saturated punchy clothing
+- Traditional: warm mud browns, golden straw, deep forest green, golden hour amber or deep night blue
+- Skin tones: #4A2E1A dark to #A07850 warm brown, ALL with warm undertone
+- Clothing: gold, emerald green lace, purple, blue, orange dashiki, patterned ankara
+
+**FORBIDDEN:** photorealistic, live action, dark/gloomy, anime, watercolor, sketch, grey/ashy skin, western features, empty backgrounds`,
+
     skeleton_protagonist: universalReinforcement + `
 **🦴 SKELETON PROTAGONIST STYLE — CRITICAL RULES:**
 
@@ -823,7 +869,9 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
       roblox: (bodyDesc, faceDesc) =>
         `Roblox-style 3D blocky ${bodyDesc} with cube head, rectangular torso and limbs, simple 2D cartoon face (two round eyes, curved mouth) painted on the cube head, ${faceDesc}, bright flat-shaded colors, toy-like plastic matte finish, R15 avatar proportions`,
       skeleton_protagonist: (bodyDesc, faceDesc) =>
-        `a photorealistic transparent skeleton with clear glass-like body shell, glossy ivory bones visible through the translucent torso, big round expressive brown amber eyeballs in skull sockets, wearing context-appropriate clothing, NO real human skin or flesh visible`
+        `a photorealistic transparent skeleton with clear glass-like body shell, glossy ivory bones visible through the translucent torso, big round expressive brown amber eyeballs in skull sockets, wearing context-appropriate clothing, NO real human skin or flesh visible`,
+      afro_nolly_global: (bodyDesc, faceDesc) =>
+        `3D Pixar-quality animated ${bodyDesc}, ${faceDesc}, warm brown skin with subsurface scattering, expressive dramatic features, detailed African hairstyle with individually rendered strands, vibrant traditional clothing with realistic fabric weight and folds, gold jewelry accents`
     };
 
 
