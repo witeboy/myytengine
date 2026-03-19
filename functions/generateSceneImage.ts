@@ -832,6 +832,32 @@ Deno.serve(async (req) => {
       return Response.json({ error: "No image API keys configured (AI33_API_KEY or KIE_API_KEY)" }, { status: 500 });
     }
 
+    // ── Quick health check: test AI33 key validity ──
+    if (AI33_API_KEY) {
+      try {
+        const healthRes = await fetch(`${AI33_BASE}/v1/user/credits`, {
+          headers: { 'Content-Type': 'application/json', 'xi-api-key': AI33_API_KEY }
+        });
+        const healthData = await healthRes.json();
+        console.log(`🔑 AI33 key status: HTTP ${healthRes.status}, credits: ${JSON.stringify(healthData)}`);
+      } catch (e) {
+        console.warn(`🔑 AI33 key check failed: ${e.message}`);
+      }
+    }
+
+    if (KIE_API_KEY) {
+      try {
+        const kieHealth = await fetch(`${KIE_BASE}/createTask`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${KIE_API_KEY}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: 'test', input: {} })
+        });
+        console.log(`🔑 KIE key status: HTTP ${kieHealth.status}`);
+      } catch (e) {
+        console.warn(`🔑 KIE key check failed: ${e.message}`);
+      }
+    }
+
     // ── Resolve which scenes to process ──────────────────────
 
     let scenesToProcess = [];
