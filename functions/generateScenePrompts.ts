@@ -954,9 +954,20 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
         .replace(/\bshown full (?:body|figure)\b/gi, '')     // rendering instruction, not identity
         .replace(/\bshown full body in the scene\b/gi, '')
         // Force a concrete gender — image gen can't render "neutral"
-        .replace(/\bgender[\s:]*neutral\b/gi, 'female')
-        .replace(/\bgender[\s:]*any\b/gi, 'female')
-        .replace(/\bnon[\s-]?binary\b/gi, 'female')
+        // Detect best gender from surrounding identity context instead of defaulting female
+        .replace(/\bgender[\s:]*neutral\b/gi, (match) => {
+          // Check if surrounding text gives clues
+          const ctx = identityDesc.toLowerCase();
+          if (/\b(father|husband|king|prince|brother|uncle|nephew|grandson|sir|mr|beard|mustache)\b/.test(ctx)) return 'male';
+          if (/\b(mother|wife|queen|princess|sister|aunt|niece|granddaughter|ms|mrs|miss|pregnant|headwrap|braids)\b/.test(ctx)) return 'female';
+          return 'male'; // truly ambiguous — pick based on visual contrast
+        })
+        .replace(/\bgender[\s:]*any\b/gi, (match) => {
+          const ctx = identityDesc.toLowerCase();
+          if (/\b(mother|wife|queen|princess|sister|aunt|niece|ms|mrs|miss)\b/.test(ctx)) return 'female';
+          return 'male';
+        })
+        .replace(/\bnon[\s-]?binary\b/gi, 'male')
         // Strip key-value label prefixes the breakdown LLM generates
         .replace(/\bAge[\s:]+/gi, '')
         .replace(/\bGender[\s:]+/gi, '')
@@ -1007,10 +1018,14 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
 
         // Derive gender from THIS character's identity (not hardcoded)
         const charIdentity = identityDesc.toLowerCase();
-        // Determine gender: explicit male wins, explicit female wins, otherwise default to female
-        const hasExplicitMale = /\b(male|man|boy|father|husband|grandfather|son|brother)\b/.test(charIdentity);
-        const hasExplicitFemale = /\b(female|woman|girl|mother|wife|grandmother|daughter|sister|she|her)\b/.test(charIdentity);
-        const charIsMale = hasExplicitMale && !hasExplicitFemale;
+        // Determine gender: detect from identity, no automatic female default
+        const hasExplicitMale = /\b(male|man|boy|father|husband|grandfather|son|brother|he\b|his\b|king|prince|uncle|nephew|sir|mr\b|beard|mustache)\b/.test(charIdentity);
+        const hasExplicitFemale = /\b(female|woman|girl|mother|wife|grandmother|daughter|sister|she\b|her\b|queen|princess|aunt|niece|ms\b|mrs|miss|headwrap|braids)\b/.test(charIdentity);
+        // If both or neither are found, use the script/niche context to decide
+        const charIsMale = hasExplicitMale && !hasExplicitFemale ? true
+          : hasExplicitFemale && !hasExplicitMale ? false
+          : hasExplicitMale && hasExplicitFemale ? true // conflicting signals, male wins
+          : true; // truly ambiguous — default male for visual contrast (was female before)
         const charGN = charIsMale ? 'man' : 'woman';
         const charGA = charIsMale ? 'male' : 'female';
         console.log(`   ${name}: gender resolved → ${charGA} (explicitM=${hasExplicitMale}, explicitF=${hasExplicitFemale})`);
@@ -1288,9 +1303,15 @@ ${styleBodyBlock}
 - Characters must be DOING something — holding, reaching, walking, gesturing, interacting — NOT standing static facing camera
 - Backgrounds must be SHARP and DETAILED with visible props and architecture, not blurred to nothing
 - Include foreground elements for depth and scene richness (objects on tables, plants, tools, fences, etc.)
-- Each scene must contain a visual CONTINUITY element connecting to adjacent scenes (shared prop, color shift, gesture echo, location transform)
+- **SCENE FLOW (CRITICAL):** Each scene must VISUALLY FLOW into the next. Use these specific techniques:
+  • SHARED COLOR THREAD: Adjacent scenes share a dominant color or color temperature
+  • MATCHING GEOMETRY: Composition lines (horizons, diagonals) align across scene transitions
+  • MOTION CONTINUITY: If scene ends with rightward movement, next starts with continued rightward energy
+  • LIGHT CONTINUITY: Adjacent scenes share similar lighting warmth and direction — never jump from golden sunset to harsh noon
+  • ENVIRONMENTAL BRIDGE: Share a recognizable element (same building seen from afar then close, same weather, same foreground object)
 - NEVER generate an isolated character portrait against a blank or blurred background — always place them IN a detailed world
-- Include other people in scenes where the story calls for it — the character lives in a populated world
+- **POPULATED WORLD:** Include MULTIPLE other people in most scenes — crowds, passersby, coworkers, family, neighbors, onlookers. Wide shots should show 5-15+ people. The world feels ALIVE and BUSY, not empty.
+- **CHARACTER PRESENCE:** Only include human characters when the narration calls for them. If the narration describes a concept, landscape, object, building, or abstract idea — render a PURE ENVIRONMENT or OBJECT scene. Do NOT force a character into every scene.
 
 
 **DIRECTOR'S SCENE NOTES:**
@@ -1681,24 +1702,34 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
             .replace(/\bperson of any gender\b/gi, genderNoun)
             .replace(/\bgender[- ]neutral\b/gi, genderAdj);
 
-          // If NO character was injected (sceneCast was empty), weave primary character at first human reference
+          // If NO character was injected (sceneCast was empty), check if scene actually needs a character
+          // Don't force characters into environment/concept/landscape scenes
           if (sceneCast.length === 0 && characters.length > 0) {
-            const pName = (characters[0].name || '').toLowerCase().trim();
-            const pTiers = characterTieredTags[pName];
-            if (pTiers) {
-              const shotType = s.director?.shot_type || 'MS — Medium Shot';
-              const tier = getIdentityTier(shotType);
-              const desc = pTiers[tier] || pTiers.moderate;
-              const genericHuman = /\b(a\s+(?:woman|man|person|figure|character|user|narrator))\b/i;
-              const ghMatch = rawPrompt.match(genericHuman);
-              if (ghMatch) {
-                const ghIdx = rawPrompt.indexOf(ghMatch[0]);
-                const ghBefore = rawPrompt.substring(0, ghIdx);
-                const ghAfter = rawPrompt.substring(ghIdx + ghMatch[0].length);
-                // Always substitute — never appositive ("a woman, DESC, is sitting")
-                rawPrompt = `${ghBefore}${desc}${ghAfter}`;
-                console.log(`👤 Scene ${s.scene_number}: injected primary char via generic ref (${tier}, ${desc.length}ch)`);
+            const narr = (s.narration_text || '').toLowerCase();
+            const prompt_lower = rawPrompt.toLowerCase();
+            // Detect if this is a pure environment/concept scene where no human is needed
+            const isEnvironmentScene = !(/\b(he|she|him|her|they|them|person|people|man|woman|boy|girl|child|worker|officer|doctor|teacher|walked|ran|sat|stood|held|grabbed|said|spoke|cried|laughed|smiled|screamed|looked|stared|watched|waved|pointed|shouted)\b/.test(narr));
+            const hasHumanInPrompt = /\b(woman|man|person|figure|character|boy|girl|child|worker|people|crowd)\b/i.test(prompt_lower);
+            
+            if (hasHumanInPrompt && !isEnvironmentScene) {
+              const pName = (characters[0].name || '').toLowerCase().trim();
+              const pTiers = characterTieredTags[pName];
+              if (pTiers) {
+                const shotType = s.director?.shot_type || 'MS — Medium Shot';
+                const tier = getIdentityTier(shotType);
+                const desc = pTiers[tier] || pTiers.moderate;
+                const genericHuman = /\b(a\s+(?:woman|man|person|figure|character|user|narrator))\b/i;
+                const ghMatch = rawPrompt.match(genericHuman);
+                if (ghMatch) {
+                  const ghIdx = rawPrompt.indexOf(ghMatch[0]);
+                  const ghBefore = rawPrompt.substring(0, ghIdx);
+                  const ghAfter = rawPrompt.substring(ghIdx + ghMatch[0].length);
+                  rawPrompt = `${ghBefore}${desc}${ghAfter}`;
+                  console.log(`👤 Scene ${s.scene_number}: injected primary char via generic ref (${tier}, ${desc.length}ch)`);
+                }
               }
+            } else if (isEnvironmentScene) {
+              console.log(`🏞️ Scene ${s.scene_number}: environment/concept scene — no character forced`);
             }
           }
 

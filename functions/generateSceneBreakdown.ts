@@ -405,13 +405,20 @@ ${scriptText}
 **RULES:**
 1. Scenes are VISUAL BEATS, not sentences. Change scene when the visual changes.
 2. visual_concept: 2-4 sentences. Environment FIRST, then character ACTION, then atmosphere.
-3. Shot variety: NEVER same shot type consecutively. Cycle WS/EWS/MWS/MS/LOW/HIGH/OTS/MCU/CU/POV/DUTCH.
+3. **CINEMATIC SHOT DISTRIBUTION (MANDATORY):** At least 50% of scenes must use WIDE or WIDER framing (WS, EWS, MWS, HIGH ANGLE, ESTABLISHING). These create cinematic scale. Mix in MS, LOW, OTS, MCU, CU for variety. NEVER same shot type consecutively. Close-ups (CU/ECU) max 15% of total scenes.
 4. ALWAYS name specific objects from the narration (cellphone, laptop, bill, receipt, etc.) as PROPS — "clutching her cellphone", "staring at the overdue bill". But NEVER describe what's ON the screen/paper — no text, UI, dollar amounts, app names.
 5. Abstract concepts → PHYSICAL METAPHORS. Use the EXACT nouns from the script.
-6. Characters must be IN a detailed environment doing an ACTION — never isolated against blank/blurred background.
-7. Adjacent scenes share a CONTINUITY element (shared prop, color shift, gesture echo).
-8. IMMERSION — every scene must include at least 2 of: (a) foreground element between camera and subject, (b) sensory texture (steam, rain, dust, wind-blown hair), (c) character micro-action (tapping fingers, adjusting glasses, biting lip), (d) background storytelling detail (half-eaten meal, wilting plant, child's drawing), (e) specific time-of-day lighting ("4AM blue pre-dawn glow"), (f) scale contrast (person dwarfed by lobby).
-9. NICHE: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palette} | AVOID: ${nicheProfile.avoid}
+6. **POPULATED WORLD:** Most scenes should include MULTIPLE PEOPLE — passersby, crowds, coworkers, family members, bystanders. The world feels alive and busy. Even if the narration focuses on one person, the visual should show them WITHIN a populated environment. Include 3-10+ background people in wide shots.
+7. **CHARACTER PRESENCE RULE:** Only include human characters when the narration implies or requires them. If the narration describes a concept, place, object, landscape, statistic, or abstract idea — render it as a PURE ENVIRONMENT or OBJECT scene WITHOUT forcing a character into it. Not every scene needs a human subject.
+8. **SCENE FLOW & CONTINUITY (CRITICAL for smooth transitions):** Adjacent scenes MUST share visual elements that create a FLOWING sequence. Use these techniques:
+   - SHARED COLOR: Adjacent scenes share a dominant color that shifts gradually (e.g. warm amber → golden → cool blue)
+   - SHARED GEOMETRY: Match composition lines across scenes (a horizon line, diagonal, architectural shape)
+   - MOTION ECHO: If scene N ends with a rightward movement, scene N+1 starts with continued rightward energy
+   - ENVIRONMENTAL BRIDGE: Same location from a different angle, same weather/time of day, same foreground object repositioned
+   - LIGHT CONTINUITY: Adjacent scenes share similar lighting direction and warmth — never jump from golden sunset to blue noon
+   The continuity_bridge field MUST describe EXACTLY which visual thread connects this scene to the next.
+9. IMMERSION — every scene must include at least 2 of: (a) foreground element between camera and subject, (b) sensory texture (steam, rain, dust, wind-blown hair), (c) character micro-action (tapping fingers, adjusting glasses, biting lip), (d) background storytelling detail (half-eaten meal, wilting plant, child's drawing), (e) specific time-of-day lighting ("4AM blue pre-dawn glow"), (f) scale contrast (person dwarfed by lobby).
+10. NICHE: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palette} | AVOID: ${nicheProfile.avoid}
 
 **RESPONSE FORMAT:**
 {
@@ -554,7 +561,7 @@ Respond with this JSON:
     "color_arc": "e.g. cool blues → warm amber → vibrant gold",
     "characters": [{
       "name": "Name/archetype",
-      "identity_core": "Casting-sheet: exact age, SPECIFIC gender (must be 'male' or 'female' — NEVER 'neutral' or 'any'), skin tone shade, face shape, eye color+shape, nose, lips, hair (color/length/style), build+height, 2-3 distinguishing marks. Must be specific enough for 20 artists to draw the SAME person. If the script doesn't specify gender, pick one and commit to it for consistency.",
+      "identity_core": "Casting-sheet: exact age, SPECIFIC gender (must be 'male' or 'female' — NEVER 'neutral' or 'any'), skin tone shade, face shape, eye color+shape, nose, lips, hair (color/length/style), build+height, 2-3 distinguishing marks. Must be specific enough for 20 artists to draw the SAME person. GENDER RULE: Analyze the story context, niche, and cultural norms to pick the gender that BEST FITS the narrative. Finance/corporate stories may suit male or female depending on the arc. Parenting stories should match the parent described. Crime/history should match the real subjects. If truly ambiguous, pick the gender that creates the most compelling visual contrast with the story's conflict. NEVER default to female automatically.",
       "default_clothing": "Typical outfit (can change per scene)",
       "emotional_arc": "How they change emotionally"
     }]
