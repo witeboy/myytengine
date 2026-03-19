@@ -63,12 +63,15 @@ async function searchPixabay(query) {
 }
 
 Deno.serve(async (req) => {
+  const base44 = createClientFromRequest(req);
+  let job_id = null;
+
   try {
-    const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { job_id } = await req.json();
+    const body = await req.json();
+    job_id = body.job_id;
     if (!job_id) return Response.json({ error: 'job_id required' }, { status: 400 });
 
     const jobs = await base44.entities.AutoEditJobs.filter({ id: job_id });
@@ -270,16 +273,13 @@ Return JSON only:
     });
   } catch (error) {
     console.error('autoEditPipeline error:', error.message);
-    // Try to update job status
-    try {
-      const base44 = createClientFromRequest(req);
-      const { job_id } = await req.json().catch(() => ({}));
-      if (job_id) {
+    if (job_id) {
+      try {
         await base44.entities.AutoEditJobs.update(job_id, {
           status: 'failed', error_message: error.message, phase_message: 'Pipeline failed: ' + error.message,
         });
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
