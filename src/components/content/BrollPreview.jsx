@@ -50,7 +50,7 @@ export default function BrollPreview({ scene, onRemove }) {
           className="relative rounded overflow-hidden bg-gray-900 cursor-pointer group"
           onClick={() => setShowVideo(true)}
         >
-          {scene.broll_thumbnail ? (
+          {scene.broll_thumbnail && !scene.broll_thumbnail.includes('undefined') ? (
             <img
               src={scene.broll_thumbnail}
               alt="B-roll thumbnail"
