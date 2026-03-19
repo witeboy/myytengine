@@ -428,6 +428,34 @@ export default function ChannelDetail() {
                     queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
                   }}
                 />
+                {channel.script_mode === 'youtube_shorts' && (
+                  <div className="mt-4 pt-4 border-t">
+                    <p className="text-sm font-medium text-gray-800 mb-2">Shorts Niche</p>
+                    <p className="text-xs text-gray-500 mb-3">Determines the script structure, hook style, and visual spec for your Shorts</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { id: 'finance', label: '💰 Finance / Wealth', desc: 'Hook → Tension → Pivot → 3 Rules → CTA' },
+                        { id: 'book', label: '📚 Book Summaries', desc: 'Hook → Context → 3 Lessons → Transformation → CTA' },
+                      ].map(n => (
+                        <button
+                          key={n.id}
+                          onClick={async () => {
+                            await base44.entities.Channels.update(channel.id, { shorts_niche: n.id });
+                            queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
+                          }}
+                          className={`text-left p-3 rounded-lg border-2 transition-all ${
+                            (channel.shorts_niche || 'finance') === n.id
+                              ? 'border-green-500 bg-green-50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          <p className="text-sm font-medium text-gray-900">{n.label}</p>
+                          <p className="text-[11px] text-gray-500 mt-0.5">{n.desc}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
             <Card>
