@@ -314,39 +314,33 @@ export default function ChannelDetail() {
             <TabsTrigger value="settings"><Settings className="w-3.5 h-3.5 mr-1" /> Settings</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="calendar" className="mt-4">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2">
-                <Card>
-                  <CardContent className="p-4">
-                    <ContentCalendar
-                      topics={topics}
-                      channel={channel}
-                      onDateClick={handleDateClick}
-                    />
-                  </CardContent>
-                </Card>
-              </div>
-              <div>
-                {selectedDate ? (
-                  <DayTopicsPanel
-                    date={selectedDate}
-                    topics={selectedTopicsLive}
-                    channel={channel}
-                    onStartPipeline={handleStartPipeline}
-                    onClose={() => setSelectedDate(null)}
-                    onTopicUpdated={() => refetchTopics()}
-                  />
-                ) : (
-                  <Card>
-                    <CardContent className="p-6 text-center text-gray-400">
-                      <Calendar className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                      <p className="text-sm">Click a date to see scheduled topics</p>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-            </div>
+          <TabsContent value="calendar" className="mt-4 space-y-4">
+            <Card>
+              <CardContent className="p-4">
+                <ContentCalendar
+                  topics={topics}
+                  channel={channel}
+                  onDateClick={handleDateClick}
+                />
+              </CardContent>
+            </Card>
+            {selectedDate ? (
+              <DayTopicsPanel
+                date={selectedDate}
+                topics={selectedTopicsLive}
+                channel={channel}
+                onStartPipeline={handleStartPipeline}
+                onClose={() => setSelectedDate(null)}
+                onTopicUpdated={() => refetchTopics()}
+              />
+            ) : (
+              <Card>
+                <CardContent className="p-6 text-center text-gray-400">
+                  <Calendar className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                  <p className="text-sm">Click a date to see scheduled topics</p>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="topics" className="mt-4">
