@@ -231,23 +231,75 @@ Deno.serve(async (req) => {
       offset += chunk.length;
     }
 
-    // Upload to Cloudflare R2
-    const r2Client = new S3Client({
-      region: 'auto',
-      endpoint: `https://${(Deno.env.get('CLOUDFLARE_ACCOUNT_ID') || '').trim()}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId: (Deno.env.get('CLOUDFLARE_R2_ACCESS_KEY_ID') || '').trim(),
-        secretAccessKey: (Deno.env.get('CLOUDFLARE_R2_SECRET_ACCESS_KEY') || '').trim(),
-      },
+    // Upload to Cloudflare R2 using AWS SigV4
+    const fileName = `voiceovers/${project_id}-${Date.now()}.mp3`;
+    const accountId = (Deno.env.get('CLOUDFLARE_ACCOUNT_ID') || '').trim();
+    const bucket = (Deno.env.get('CLOUDFLARE_R2_BUCKET_NAME') || '').trim();
+    const accessKeyId = (Deno.env.get('CLOUDFLARE_R2_ACCESS_KEY_ID') || '').trim();
+    const secretAccessKey = (Deno.env.get('CLOUDFLARE_R2_SECRET_ACCESS_KEY') || '').trim();
+
+    const r2Url = `https://${accountId}.r2.cloudflarestorage.com/${bucket}/${fileName}`;
+    const now = new Date();
+    const dateStamp = now.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+    const shortDate = dateStamp.substring(0, 8);
+    const region = 'auto';
+    const service = 's3';
+    const scope = `${shortDate}/${region}/${service}/aws4_request`;
+
+    // Hash payload
+    const payloadHash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', audioBytes)))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+
+    const headers = {
+      'Host': `${accountId}.r2.cloudflarestorage.com`,
+      'Content-Type': 'audio/mpeg',
+      'x-amz-content-sha256': payloadHash,
+      'x-amz-date': dateStamp,
+    };
+
+    const signedHeaderKeys = Object.keys(headers).sort().map(k => k.toLowerCase()).join(';');
+    const canonicalHeaders = Object.keys(headers).sort()
+      .map(k => `${k.toLowerCase()}:${headers[k]}`).join('\n') + '\n';
+
+    const canonicalRequest = [
+      'PUT',
+      `/${bucket}/${fileName}`,
+      '',
+      canonicalHeaders,
+      signedHeaderKeys,
+      payloadHash,
+    ].join('\n');
+
+    const canonicalRequestHash = Array.from(new Uint8Array(
+      await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalRequest))
+    )).map(b => b.toString(16).padStart(2, '0')).join('');
+
+    const stringToSign = ['AWS4-HMAC-SHA256', dateStamp, scope, canonicalRequestHash].join('\n');
+
+    async function hmacSha256(key, msg) {
+      const cryptoKey = await crypto.subtle.importKey('raw', typeof key === 'string' ? new TextEncoder().encode(key) : key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+      return new Uint8Array(await crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(msg)));
+    }
+
+    const kDate = await hmacSha256('AWS4' + secretAccessKey, shortDate);
+    const kRegion = await hmacSha256(kDate, region);
+    const kService = await hmacSha256(kRegion, service);
+    const kSigning = await hmacSha256(kService, 'aws4_request');
+    const signature = Array.from(await hmacSha256(kSigning, stringToSign))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+
+    const authHeader = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${scope}, SignedHeaders=${signedHeaderKeys}, Signature=${signature}`;
+
+    const uploadRes = await fetch(r2Url, {
+      method: 'PUT',
+      headers: { ...headers, 'Authorization': authHeader },
+      body: audioBytes,
     });
 
-    const fileName = `voiceovers/${project_id}-${Date.now()}.mp3`;
-    await r2Client.send(new PutObjectCommand({
-      Bucket: (Deno.env.get('CLOUDFLARE_R2_BUCKET_NAME') || '').trim(),
-      Key: fileName,
-      Body: audioBytes,
-      ContentType: 'audio/mpeg',
-    }));
+    if (!uploadRes.ok) {
+      const errText = await uploadRes.text();
+      throw new Error(`R2 upload failed (${uploadRes.status}): ${errText.substring(0, 200)}`);
+    }
 
     const publicUrl = (Deno.env.get('CLOUDFLARE_R2_PUBLIC_URL') || '').trim().replace(/\/$/, '');
     const audioUrl = `${publicUrl}/${fileName}`;
