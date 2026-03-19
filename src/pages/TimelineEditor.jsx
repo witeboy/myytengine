@@ -379,7 +379,7 @@ function TransitionsPanel({ selectedClip, onApplyTransition, onRemoveTransition,
 
 function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, transcriptionState, onOffsetCaptions, captionOffset, captionClips, onSetCaptionClips }) {
   const [del, setDel] = useState(true);
-  const { status, wordCount, error } = transcriptionState;
+  const { status, wordCount, error, source } = transcriptionState;
 
   return (
     <div className="h-full flex flex-col">
@@ -389,27 +389,39 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, t
         <div className={`p-3 rounded-lg border text-xs space-y-1.5 ${
           status === 'idle'         ? 'bg-gray-800/50 border-gray-700' :
           status === 'transcribing' ? 'bg-blue-900/30 border-blue-700/50' :
-          status === 'done'         ? 'bg-green-900/30 border-green-700/50' :
+          status === 'done'         ? (source === 'asr' ? 'bg-emerald-900/30 border-emerald-700/50' : 'bg-green-900/30 border-green-700/50') :
           status === 'error'        ? 'bg-red-900/30 border-red-700/50' :
           'bg-gray-800/50 border-gray-700'
         }`}>
           <div className="flex items-center gap-2 font-medium">
-            {status === 'idle'         && <><Radio size={12} className="text-gray-400" /><span className="text-gray-300">Syllable-Weighted Timing</span></>}
-            {status === 'transcribing' && <><Loader2 size={12} className="animate-spin text-blue-400" /><span className="text-blue-300">Calculating word timings…</span></>}
-            {status === 'done'         && <><CheckCircle size={12} className="text-green-400" /><span className="text-green-300">Captions timed</span></>}
+            {status === 'idle'         && <><Mic size={12} className="text-gray-400" /><span className="text-gray-300">{voiceoverUrl ? 'Speech Recognition Ready' : 'Syllable-Weighted Timing'}</span></>}
+            {status === 'transcribing' && <><Loader2 size={12} className="animate-spin text-blue-400" /><span className="text-blue-300">{voiceoverUrl ? 'Transcribing audio…' : 'Calculating word timings…'}</span></>}
+            {status === 'done' && source === 'asr' && <><CheckCircle size={12} className="text-emerald-400" /><span className="text-emerald-300">ASR Transcription Complete</span></>}
+            {status === 'done' && source !== 'asr' && <><CheckCircle size={12} className="text-green-400" /><span className="text-green-300">Captions timed (estimate)</span></>}
             {status === 'error'        && <><AlertCircle size={12} className="text-red-400" /><span className="text-red-300">No script text found</span></>}
           </div>
 
-          {status === 'idle' && (
+          {status === 'idle' && voiceoverUrl && (
             <p className="text-gray-500 leading-relaxed">
-              Times each word by syllable count — short words like "a" and "the" get less time, longer words get more. Breaks captions at natural sentence and clause boundaries.
+              Uses speech recognition to get exact word-level timestamps from your voiceover audio — the same approach as CapCut. Every word is timed to the actual speech waveform.
             </p>
           )}
-          {status === 'transcribing' && (
+          {status === 'idle' && !voiceoverUrl && (
+            <p className="text-gray-500 leading-relaxed">
+              No voiceover audio — will estimate timing from script text using syllable weighting.
+            </p>
+          )}
+          {status === 'transcribing' && voiceoverUrl && (
+            <p className="text-blue-400">Sending audio to speech recognition… This takes 15-30 seconds.</p>
+          )}
+          {status === 'transcribing' && !voiceoverUrl && (
             <p className="text-blue-400">Calculating syllable-weighted word timings…</p>
           )}
-          {status === 'done' && (
-            <p className="text-green-400">{wordCount} words timed by syllable weight.</p>
+          {status === 'done' && source === 'asr' && (
+            <p className="text-emerald-400">{wordCount} words with exact timestamps from audio waveform.</p>
+          )}
+          {status === 'done' && source !== 'asr' && (
+            <p className="text-green-400">{wordCount} words timed by syllable weight (estimate).</p>
           )}
           {status === 'error' && (
             <p className="text-red-400">{error || 'Could not transcribe audio.'}<br />
@@ -420,7 +432,7 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, t
 
         {!voiceoverUrl && (
           <div className="p-2 bg-yellow-900/30 border border-yellow-700/50 rounded text-[10px] text-yellow-300">
-            No voiceover loaded. Captions will use script text estimates.
+            No voiceover loaded. Add a voiceover for frame-accurate caption timing.
           </div>
         )}
 
