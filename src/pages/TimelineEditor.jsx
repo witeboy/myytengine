@@ -1375,6 +1375,7 @@ export default function TimelineEditorV10() {
       const payload = {
         timeline_video_clips: JSON.stringify(videoClips),
         timeline_caption_clips: JSON.stringify(captionClips),
+        timeline_overlay_clips: JSON.stringify(overlayClips),
       };
       if (overrideBeatDurations) {
         payload.beat_durations = JSON.stringify(overrideBeatDurations);
