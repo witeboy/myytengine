@@ -7,7 +7,7 @@ import { createPageUrl } from '@/utils';
 import StageProgress from '@/components/StageProgress';
 import BatchCard from '@/components/script/BatchCard';
 import ScriptEditor from '@/components/script/ScriptEditor';
-import { Loader2, RefreshCw, Download, ArrowRight, ArrowLeft, FileText } from 'lucide-react';
+import { Loader2, RefreshCw, Download, ArrowRight, FileText } from 'lucide-react';
 
 export default function StoryScript() {
   const navigate = useNavigate();
@@ -329,14 +329,7 @@ export default function StoryScript() {
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => {
-              const isSleep = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
-              const isYTShorts = project?.project_mode === 'youtube_shorts';
-              navigate(createPageUrl((isSleep || isYTShorts) ? `StoryDuration?project_id=${projectId}` : `StoryHooks?project_id=${projectId}`));
-            }} className="gap-2" size="sm">
-              <ArrowLeft className="w-4 h-4" /> {(project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story' || project?.project_mode === 'youtube_shorts') ? 'Duration' : 'Hooks'}
-            </Button>
+          <div>
             <h1 className="text-3xl font-bold">Script Generation</h1>
           </div>
                     <div className="flex gap-2">
