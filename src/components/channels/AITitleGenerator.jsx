@@ -123,8 +123,7 @@ Be specific, data-driven, and actionable.`,
     for (let batch = 0; batch < 2; batch++) {
       setPhase(`Generating titles ${batch * 50 + 1}-${(batch + 1) * 50}...`);
 
-      const batchResult = await base44.integrations.Core.InvokeLLM({
-        prompt: `You are an elite YouTube SEO strategist. Generate ${50} HIGH-CTR video titles for this channel.
+      const batchPrompt = `You are an elite YouTube SEO strategist. Generate exactly 50 HIGH-CTR video titles for this channel.
 
 CHANNEL: "${channel.name}" | NICHE: ${channel.niche_label || channel.niche}
 TONE: ${channel.tone || 'dramatic'} | MODE: ${channel.script_mode || 'standard'}
@@ -153,30 +152,46 @@ REQUIREMENTS:
 - Include a trend_score (0-100) based on current search trends
 - Include a brief SEO note explaining the keyword strategy
 
-Return EXACTLY 50 titles as JSON array.`,
-        response_json_schema: {
-          type: "object",
-          properties: {
-            titles: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  title: { type: "string" },
-                  category: { type: "string" },
-                  format: { type: "string" },
-                  ctr_score: { type: "number" },
-                  trend_score: { type: "number" },
-                  seo_note: { type: "string" }
-                }
+Return EXACTLY 50 titles.`;
+
+      const schema = {
+        type: "object",
+        properties: {
+          titles: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                category: { type: "string" },
+                format: { type: "string" },
+                ctr_score: { type: "number" },
+                trend_score: { type: "number" },
+                seo_note: { type: "string" }
               }
             }
           }
-        },
-        add_context_from_internet: true
-      });
+        }
+      };
 
-      allTitles.push(...(batchResult.titles || []));
+      // Try with internet context first (gemini), fall back to non-search model on JSON parse failure
+      let batchResult = null;
+      try {
+        batchResult = await base44.integrations.Core.InvokeLLM({
+          prompt: batchPrompt,
+          response_json_schema: schema,
+          add_context_from_internet: true,
+        });
+      } catch (e) {
+        console.warn('Search model JSON failed, retrying with standard model:', e.message);
+        batchResult = await base44.integrations.Core.InvokeLLM({
+          prompt: batchPrompt,
+          response_json_schema: schema,
+          model: 'gemini_3_flash',
+        });
+      }
+
+      allTitles.push(...(batchResult?.titles || []));
     }
 
     // Sort by CTR score descending
