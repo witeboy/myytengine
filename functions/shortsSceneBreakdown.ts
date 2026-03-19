@@ -144,9 +144,17 @@ Return JSON:
       await base44.asServiceRole.entities.ProductionSettings.create({ project_id, ...psPayload });
     }
 
-    // Create scene records
-    let scenesCreated = 0;
-    for (const aiScene of scenesArr) {
+    // Create scene records in bulk
+    const cameraMap = {
+      'zoom_in': 'slow_zoom_in',
+      'zoom_out': 'slow_zoom_out',
+      'pan_left': 'slow_pan',
+      'pan_right': 'slow_pan',
+      'push_in': 'slow_zoom_in',
+      'static': 'static',
+    };
+
+    const sceneRecords = scenesArr.map(aiScene => {
       const directorNotes = {
         section: aiScene.section,
         visual_description: aiScene.visual_description,
@@ -156,17 +164,7 @@ Return JSON:
         audio_note: aiScene.audio_note || '',
         shorts_format: true,
       };
-
-      const cameraMap = {
-        'zoom_in': 'slow_zoom_in',
-        'zoom_out': 'slow_zoom_out',
-        'pan_left': 'slow_pan',
-        'pan_right': 'slow_pan',
-        'push_in': 'slow_zoom_in',
-        'static': 'static',
-      };
-
-      await base44.asServiceRole.entities.Scenes.create({
+      return {
         project_id,
         scene_number: aiScene.scene_number,
         narration_text: aiScene.narration_text || '',
@@ -178,9 +176,11 @@ Return JSON:
         status: 'breakdown_ready',
         act: aiScene.section || '',
         notes: aiScene.text_overlay || '',
-      });
-      scenesCreated++;
-    }
+      };
+    });
+
+    await base44.asServiceRole.entities.Scenes.bulkCreate(sceneRecords);
+    const scenesCreated = sceneRecords.length;
 
     await base44.asServiceRole.entities.Projects.update(project_id, {
       status: 'breakdown_complete',
