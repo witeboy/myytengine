@@ -6,7 +6,9 @@ Deno.serve(async (req) => {
   if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
   const AI33_KEY = Deno.env.get('AI33_API_KEY');
-  const { voice_id, provider } = await req.json();
+  let body = {};
+  try { body = await req.json(); } catch (_) {}
+  const { voice_id, provider } = body;
 
   // Test 1: ElevenLabs endpoint
   if (provider === 'elevenlabs') {
