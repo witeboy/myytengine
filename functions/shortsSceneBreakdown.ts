@@ -114,13 +114,10 @@ Return JSON:
       throw new Error('AI failed to generate scene breakdown');
     }
 
-    // Delete old scenes
+    // Delete old scenes in parallel
     const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-    for (const s of oldScenes) {
-      try { await base44.asServiceRole.entities.Scenes.delete(s.id); } catch (_) {
-        await new Promise(r => setTimeout(r, 1000));
-        try { await base44.asServiceRole.entities.Scenes.delete(s.id); } catch (_) {}
-      }
+    if (oldScenes.length > 0) {
+      await Promise.all(oldScenes.map(s => base44.asServiceRole.entities.Scenes.delete(s.id).catch(() => {})));
     }
 
     // Calculate beat durations and start times
