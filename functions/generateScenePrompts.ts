@@ -1111,8 +1111,8 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
 **═══════════════════════════════════════════════════════════════**
 ${ranked.map((s, i) => `
 EXAMPLE ${i + 1} (Scene ${s.scene_number} — ${s.image_prompt.length} chars):
-image_prompt: "${s.image_prompt.substring(0, 500)}"
-animation_prompt: "${(s.animation_prompt || '').substring(0, 200)}"
+image_prompt: ${s.image_prompt.substring(0, 500)}
+animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
 `).join('\n')}
 **Every prompt you write MUST be at least this detailed. Prompts shorter than 150 characters will be REJECTED.**
 **═══════════════════════════════════════════════════════════════**`;
