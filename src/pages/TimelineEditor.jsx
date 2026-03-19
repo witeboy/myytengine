@@ -112,45 +112,6 @@ function useHistory(initialState) {
   return { state, setState, undo, redo, reset, canUndo: index > 0, canRedo: index < history.length - 1 };
 }
 
-async function getSmartWordTimings(sceneText, beatDuration, sceneNumber) {
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1000,
-        system: `You are a speech timing expert. Given a voiceover script and its exact audio duration, assign realistic word-level timestamps.
-
-Rules:
-- Total duration MUST fit within the given seconds (last word end <= duration)
-- Short function words (a, the, is, in, of, to, and) = 0.15-0.20s
-- Normal content words = 0.25-0.40s
-- Long or stressed words = 0.40-0.60s
-- Add ~0.15s gap after commas, ~0.30s after periods/question marks
-- Return ONLY a raw JSON array, no markdown, no extra text
-
-Format: [{"word":"hello","start":0.00,"end":0.35},{"word":"world","start":0.38,"end":0.75}]`,
-        messages: [{
-          role: 'user',
-          content: `Scene ${sceneNumber} voiceover: "${sceneText}"\nAudio duration: ${beatDuration.toFixed(2)}s\n\nReturn word timing JSON array:`
-        }]
-      })
-    });
-
-    if (!response.ok) throw new Error(`API ${response.status}`);
-    const data = await response.json();
-    const raw  = (data.content || []).map(b => b.text || '').join('');
-    const clean = raw.replace(/```json|```/g, '').trim();
-    const words = JSON.parse(clean);
-    if (!Array.isArray(words) || words.length === 0) throw new Error('Empty response');
-    return { success: true, words };
-  } catch (err) {
-    console.warn(`Scene ${sceneNumber} timing failed:`, err.message);
-    return { success: false, words: [] };
-  }
-}
-
 function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport, onDownloadAssets, onShowExporter, onNext, onSave, isSaving, saveStatus }) {
   const panels = [
     { id: 'media',       label: 'Media',       icon: Film     },
