@@ -896,10 +896,12 @@ export default function ContentGeneration() {
     }
 
     console.log(`📤 Submit phase complete: ${submitCount} tasks submitted`);
+    console.log(`🔍 DEBUG: About to start polling. scene1=${!!scene1}, hasReference=${!!hasReference}, pollAbortRef=${pollAbortRef.current}`);
 
     // If Scene 1 was submitted solo for reference lock, wait for it to complete
     // before polling the rest (so pollSceneImage can lock the reference)
     if (scene1 && !hasReference) {
+      console.log('🔍 DEBUG: Entering Scene 1 poll wait loop');
       setImageProgress({ current: 0, total, sceneName: 'Waiting for Scene 1 reference to generate...' });
       let scene1Done = false;
       for (let i = 0; i < 30 && !scene1Done && !pollAbortRef.current; i++) {
@@ -925,6 +927,7 @@ export default function ContentGeneration() {
     // ════════════════════════════════════════════════════════════
     // PHASE 2: POLL UNTIL ALL DONE
     // ════════════════════════════════════════════════════════════
+    console.log('🔍 DEBUG: Entering main poll loop');
     setImageProgress({ current: 0, total, sceneName: 'All submitted — polling for results...' });
 
     let pollCount = 0;
