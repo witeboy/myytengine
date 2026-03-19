@@ -28,14 +28,25 @@ export default function StoryDuration() {
     enabled: !!projectId,
   });
 
+  // Load channel's shorts niche
+  const { data: channel } = useQuery({
+    queryKey: ['channel-for-niche', project?.channel_id],
+    queryFn: async () => {
+      const list = await base44.entities.Channels.filter({ id: project.channel_id });
+      return list[0];
+    },
+    enabled: !!project?.channel_id,
+  });
+
   useEffect(() => {
     if (project && !hasInitialized) {
       const saved = project.video_duration_minutes;
       setDuration(saved && saved > 0 ? saved : 8);
       setScriptMode(project.project_mode || '');
+      if (channel?.shorts_niche) setShortsNiche(channel.shorts_niche);
       setHasInitialized(true);
     }
-  }, [project, hasInitialized]);
+  }, [project, channel, hasInitialized]);
 
   const { data: topic } = useQuery({
     queryKey: ['topic', project?.selected_topic_id],
