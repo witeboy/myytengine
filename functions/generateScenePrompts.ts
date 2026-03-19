@@ -35,7 +35,7 @@ If the prompt includes ANY text, UI, or screen elements:
 - Treat text as a digital UI overlay, NOT part of the environment
 - Place all text inside a defined container (no floating text)
 - Use minimal, short, clean text only
-- Enforce legibility: "all text must be perfectly spelled, sharp, readable, high contrast"
+- Enforce legibility: all text must be perfectly spelled, sharp, readable, high contrast
 - Specify position (e.g., top banner, inside phone screen)
 - Prevent hallucination with: "no garbled text, no distorted letters, no stylized typography"
 
