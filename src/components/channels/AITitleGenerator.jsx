@@ -200,8 +200,8 @@ Return EXACTLY 50 titles as JSON array.`,
     const shortsPerDay = channel.shorts_per_day || 5;
     const longPerWeek = channel.longform_per_week || 3;
 
-    const shorts = selected.filter(t => t.format === 'short');
-    const longs = selected.filter(t => t.format === 'long');
+    const shorts = selected.filter(t => (t.format || '').toLowerCase() === 'short');
+    const longs = selected.filter(t => (t.format || '').toLowerCase() !== 'short');
 
     // Build date assignments starting tomorrow
     const startDate = new Date();
