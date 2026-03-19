@@ -85,18 +85,24 @@ export default function StoryDuration() {
   };
 
   const handleContinue = async () => {
-    const finalDuration = Math.max(1, Math.round(safeDuration));
+    const finalDuration = isShorts ? 1.5 : Math.max(1, Math.round(safeDuration));
     const modeChanged = (scriptMode || '') !== (project.project_mode || '');
     if (finalDuration !== project.video_duration_minutes || modeChanged) {
       setLoading(true);
-      await base44.entities.Projects.update(projectId, { video_duration_minutes: finalDuration, project_mode: scriptMode || '' });
-      await base44.functions.invoke('generateOutline', {
-        project_id: projectId,
-        topic_id: project.selected_topic_id,
-        topic_title: topic?.title || project.name,
-        niche: project.niche,
-        duration_minutes: finalDuration,
+      await base44.entities.Projects.update(projectId, {
+        video_duration_minutes: finalDuration,
+        project_mode: scriptMode || '',
+        orientation: isShorts ? 'portrait' : (project?.orientation || 'landscape'),
       });
+      if (!isShorts) {
+        await base44.functions.invoke('generateOutline', {
+          project_id: projectId,
+          topic_id: project.selected_topic_id,
+          topic_title: topic?.title || project.name,
+          niche: project.niche,
+          duration_minutes: finalDuration,
+        });
+      }
       setLoading(false);
     }
     navigate(createPageUrl(`StoryScript?project_id=${projectId}`));
