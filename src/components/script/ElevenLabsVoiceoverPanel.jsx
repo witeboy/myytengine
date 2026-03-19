@@ -33,7 +33,7 @@ export default function ElevenLabsVoiceoverPanel({ project, script, onUpdate }) 
       ]);
       const loadedVoices = voiceRes.data?.voices || [];
       // Only show AI33/ElevenLabs voices
-      const elVoices = loadedVoices.filter(v => v.provider === 'ai33');
+      const elVoices = loadedVoices.filter(v => v.provider === 'elevenlabs');
       setVoices(elVoices);
       if (settingsRes.length > 0) {
         setSettings(settingsRes[0]);
@@ -75,7 +75,7 @@ export default function ElevenLabsVoiceoverPanel({ project, script, onUpdate }) 
         project_id: project.id,
         script_id: script?.id,
         voice_id: selectedVoice,
-        provider: 'ai33', // Force ElevenLabs via AI33
+        provider: 'elevenlabs',
       });
     } catch (err) {
       const errMsg = err?.response?.data?.error || err.message || 'Voiceover generation failed';
