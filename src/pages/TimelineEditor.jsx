@@ -14,6 +14,7 @@ import ClipPropertiesPanel from '@/components/timeline/ClipPropertiesPanel';
 import CanvasPreview from '@/components/timeline/CanvasPreview';
 import SnapTimelineTrack from '@/components/timeline/SnapTimeline';
 import SnapGuide from '@/components/timeline/SnapGuide';
+import SilenceDetector from '@/components/timeline/SilenceDetector';
 import usePlaybackEngine from '@/hooks/usePlaybackEngine';
 import { closeGaps } from '@/hooks/useSnapEngine';
 import {
@@ -155,6 +156,7 @@ function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport,
     { id: 'effects',     label: 'Effects',     icon: Sparkles },
     { id: 'transitions', label: 'Transitions', icon: Blend    },
     { id: 'captions',    label: 'Captions',    icon: Type     },
+    { id: 'jumpcuts',    label: 'Jump Cuts',   icon: Scissors },
     { id: 'filters',     label: 'Filters',     icon: Palette  },
     { id: 'adjustment',  label: 'Adjustment',  icon: Settings },
   ];
@@ -1458,7 +1460,18 @@ export default function TimelineEditorV10() {
               captionOffset={captionOffset}
             />
           )}
-          {!['media','effects','transitions','captions'].includes(activePanel) && <div className="flex items-center justify-center h-full text-xs text-gray-500">Coming soon</div>}
+          {activePanel === 'jumpcuts'    && (
+            <SilenceDetector
+              voiceoverUrl={voiceoverUrl}
+              videoClips={videoClips}
+              captionClips={captionClips}
+              onSetVideoClips={setVideoClips}
+              onSetCaptionClips={setCaptionClips}
+              onSeek={handleSeek}
+              totalDuration={totalDuration}
+            />
+          )}
+          {!['media','effects','transitions','captions','jumpcuts'].includes(activePanel) && <div className="flex items-center justify-center h-full text-xs text-gray-500">Coming soon</div>}
         </div>
 
         {/* Center */}
