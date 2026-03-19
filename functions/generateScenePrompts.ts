@@ -1674,12 +1674,35 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
             rawPrompt, styleConfig, orientationConfig, s.scene_number, visualStyle
           );
           animationPrompt = generated.animation_prompt || '';
+
+          // ═══ SLEEP MODE: sanitize animation prompt — strip all light/shine animation ═══
+          if (useSleepStyle && animationPrompt) {
+            animationPrompt = animationPrompt
+              .replace(/\b(light|rays?|god\s*rays?|rim\s*light|candle\s*light|fire\s*light|moon\s*light|glow|shine|shining|glowing|illuminat\w*|flicker\w*|shimmer\w*|sparkl\w*|gleam\w*|luminous|radiant|bright\w*)\s*(shift\w*|creep\w*|danc\w*|drift\w*|evolv\w*|mov\w*|chang\w*|puls\w*|sweep\w*|expand\w*|warm\w*|cool\w*|pool\w*|spill\w*|pour\w*|streak\w*|play\w*|flicker\w*|breath\w*|intensif\w*)\w*[^.]*[.,]?\s*/gi, '')
+              .replace(/\b(rack\s*focus|focus\s*pull|DOF\s*shift|depth\s*of\s*field\s*breath\w*|focus\s*snap\w*)\b[^.]*[.,]?\s*/gi, '')
+              .replace(/\blight\s+is\s+alive\b[^.]*\.\s*/gi, '')
+              .replace(/\b(dramatic|urgent|assertive|peak\s+intensity|escalating)\b/gi, 'gentle')
+              .replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').replace(/\s{2,}/g, ' ').trim();
+          }
+
           if (animationPrompt.length < 80) {
             const arcPosition = s.director?.phase || s.director?.arc_position || 'rising';
             const mood = s.director?.mood || 'contemplative';
             const movement = s.director?.camera_movement || 'slow drift forward';
             const vc = s.director?.visual_concept || s.narration_text || '';
-            animationPrompt = `${movement} over ${sceneDuration} seconds. ${getArcAnimationGuidance(arcPosition)} Foreground elements shift with parallax depth against the background. Subject's body language carries the emotion — micro-movements in hands, shoulders, breathing rhythm. Environmental details respond: ${vc.includes('rain') ? 'rain streaks down surfaces, pooling light reflections ripple' : vc.includes('wind') ? 'fabric and hair catch the wind, leaves scatter across frame' : vc.includes('night') ? 'shadows crawl across walls, distant lights pulse faintly' : 'ambient textures shift — dust motes, fabric settling, light evolving across surfaces'}. The emotional quality is ${mood} — motion weight and speed match this energy. Shallow depth of field breathes subtly between foreground and subject.`;
+
+            if (useSleepStyle) {
+              // Sleep fallback: camera-only + subtle nature motion, NO light animation
+              const sleepEnv = vc.includes('forest') || vc.includes('tree') ? 'gentle breeze rustling distant leaves, soft mist drifting between trees'
+                : vc.includes('ocean') || vc.includes('water') || vc.includes('lake') || vc.includes('river') ? 'gentle water ripples spreading slowly across the surface'
+                : vc.includes('rain') ? 'soft rain falling steadily, tiny ripples forming in still puddles'
+                : vc.includes('snow') ? 'soft snowflakes drifting down slowly through still air'
+                : vc.includes('mountain') || vc.includes('valley') ? 'thin clouds drifting slowly across distant peaks'
+                : 'very faint mist drifting slowly through the still scene';
+              animationPrompt = `Ultra-slow ${movement} over ${sceneDuration} seconds. ${sleepEnv}. Completely still atmosphere, no changes in lighting or brightness.`;
+            } else {
+              animationPrompt = `${movement} over ${sceneDuration} seconds. ${getArcAnimationGuidance(arcPosition)} Foreground elements shift with parallax depth against the background. Subject's body language carries the emotion — micro-movements in hands, shoulders, breathing rhythm. Environmental details respond: ${vc.includes('rain') ? 'rain streaks down surfaces, pooling light reflections ripple' : vc.includes('wind') ? 'fabric and hair catch the wind, leaves scatter across frame' : vc.includes('night') ? 'shadows crawl across walls, distant lights pulse faintly' : 'ambient textures shift — dust motes, fabric settling, light evolving across surfaces'}. The emotional quality is ${mood} — motion weight and speed match this energy. Shallow depth of field breathes subtly between foreground and subject.`;
+            }
           }
         } else {
           console.warn(`⚠️ Scene ${s.scene_number} missing from response — building fallback`);
