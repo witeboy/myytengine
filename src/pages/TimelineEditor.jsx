@@ -621,7 +621,7 @@ function TimelineDivider({ timelineHeight, onResize, collapsed, onToggle }) {
   );
 }
 
-export default function TimelineEditorV10() {
+export default function TimelineEditor() {
   const navigate       = useNavigate();
   const [searchParams] = useSearchParams();
   const projectId      = searchParams.get('project_id');
