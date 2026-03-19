@@ -18,6 +18,7 @@ import SilenceDetector from '@/components/timeline/SilenceDetector';
 import CaptionStylePresets from '@/components/timeline/CaptionStylePresets';
 import OverlayPanel from '@/components/timeline/OverlayPanel';
 import OverlayPropertiesPanel from '@/components/timeline/OverlayPropertiesPanel';
+import MotionPresetsPanel from '@/components/timeline/MotionPresetsPanel';
 import usePlaybackEngine from '@/hooks/usePlaybackEngine';
 import { closeGaps } from '@/hooks/useSnapEngine';
 import {
@@ -121,6 +122,7 @@ function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport,
     { id: 'transitions', label: 'Transitions', icon: Blend    },
     { id: 'captions',    label: 'Captions',    icon: Type     },
     { id: 'overlays',    label: 'Overlays',    icon: Layers   },
+    { id: 'motion',      label: 'Motion',      icon: Camera   },
     { id: 'jumpcuts',    label: 'Jump Cuts',   icon: Scissors },
     { id: 'filters',     label: 'Filters',     icon: Palette  },
     { id: 'adjustment',  label: 'Adjustment',  icon: Settings },
@@ -1443,6 +1445,14 @@ export default function TimelineEditorV10() {
               totalDuration={totalDuration}
             />
           )}
+          {activePanel === 'motion'      && (
+            <MotionPresetsPanel
+              selectedClip={selectedVideo}
+              videoClips={videoClips}
+              onUpdateClip={c => setVideoClips(videoClips.map(x => x.id === c.id ? c : x))}
+              onUpdateAllClips={setVideoClips}
+            />
+          )}
           {activePanel === 'jumpcuts'    && (
             <SilenceDetector
               voiceoverUrl={voiceoverUrl}
@@ -1454,7 +1464,7 @@ export default function TimelineEditorV10() {
               totalDuration={totalDuration}
             />
           )}
-          {!['media','effects','transitions','captions','overlays','jumpcuts'].includes(activePanel) && <div className="flex items-center justify-center h-full text-xs text-gray-500">Coming soon</div>}
+          {!['media','effects','transitions','captions','overlays','motion','jumpcuts'].includes(activePanel) && <div className="flex items-center justify-center h-full text-xs text-gray-500">Coming soon</div>}
         </div>
 
         {/* Center */}
