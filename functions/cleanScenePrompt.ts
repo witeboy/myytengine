@@ -84,7 +84,7 @@ IMPORTANT:
  */
 export async function cleanPrompt(messyPrompt, visualStyle) {
   const styleConstraint = visualStyle
-    ? `\n\nThe visual style is strictly "${visualStyle}". Lock this style and prevent any realism bleed or style mixing.`
+    ? `\n\nThe visual style is strictly ${visualStyle.replace(/_/g, ' ')}. Lock this style and prevent any realism bleed or style mixing.`
     : '';
 
   const response = await openai.chat.completions.create({
