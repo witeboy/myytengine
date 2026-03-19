@@ -1302,7 +1302,7 @@ ${sceneDirections}
       • Character description depth MUST match shot type — wide shots get minimal, medium gets moderate, close-ups get full. NEVER dump a full casting-sheet description into a wide shot.
       • If the narration mentions a specific prop (iPhone, MacBook, Tesla, etc.), use that exact name — but keep it as a prop in the character's hand or environment, NOT the visual subject.
       • ${orientationConfig.composition}
-    - When text, UI, or screen content appears in a scene, describe it as a clean digital overlay INSIDE a defined container (phone screen, monitor, sign). Keep text minimal, short, and specify exact position. Include: "all text must be perfectly spelled, sharp, readable, high contrast, no garbled text, no distorted letters"
+    - When text, UI, or screen content appears in a scene, describe it as a clean digital overlay INSIDE a defined container (phone screen, monitor, sign). Keep text minimal, short, and specify exact position. Include: all text must be perfectly spelled, sharp, readable, high contrast, no garbled text, no distorted letters
     - When a character holds or uses an object (phone, document, tool, weapon, cup), describe it from a MEDIUM or WIDER shot. Let the object be PART of the scene, not the SUBJECT of it.
     - Abstract concepts → PHYSICAL METAPHORS
 
