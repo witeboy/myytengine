@@ -85,8 +85,8 @@ ${nicheBlock}
 
 Return JSON: {"title":"string under 60 chars","script":"full formatted script","word_count":number}`;
 
-    console.log(`📱 Calling Gemini for "${topicTitle}" (${shortsNiche})...`);
-    const result = await callGemini(prompt, 0.75);
+    console.log(`📱 Calling Claude for "${topicTitle}" (${shortsNiche})...`);
+    const result = await callClaude(prompt, 0.75);
 
     const fullScript = result.script || '';
     const wordCount = fullScript.split(/\s+/).filter(w => w.length > 0).length;
