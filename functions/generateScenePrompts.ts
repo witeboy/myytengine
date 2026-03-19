@@ -52,7 +52,7 @@ IMPORTANT: Do NOT explain anything. Do NOT add commentary. Output ONLY the final
 async function cleanPromptWithOpenAI(messyPrompt, visualStyle) {
   try {
     const styleConstraint = visualStyle
-      ? `\nThe visual style is strictly "${visualStyle}". Lock this style and prevent any realism bleed or style mixing.`
+      ? `\nThe visual style is strictly ${visualStyle.replace(/_/g, ' ')}. Lock this style and prevent any realism bleed or style mixing.`
       : '';
     const response = await _openai.chat.completions.create({
       model: "gpt-4o-mini",
