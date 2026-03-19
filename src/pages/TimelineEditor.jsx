@@ -1479,6 +1479,15 @@ export default function TimelineEditorV10() {
               onSetCaptionClips={setCaptionClips}
             />
           )}
+          {activePanel === 'overlays'    && (
+            <OverlayPanel
+              overlayClips={overlayClips}
+              onAddOverlay={(clip) => { setOverlayClips([...overlayClips, clip]); setSelectedOverlayId(clip.id); setSelectedVideoId(null); setSelectedCaptionId(null); }}
+              onRemoveOverlay={(id) => { setOverlayClips(overlayClips.filter(c => c.id !== id)); if (selectedOverlayId === id) setSelectedOverlayId(null); }}
+              currentTime={currentTime}
+              totalDuration={totalDuration}
+            />
+          )}
           {activePanel === 'jumpcuts'    && (
             <SilenceDetector
               voiceoverUrl={voiceoverUrl}
@@ -1516,7 +1525,18 @@ export default function TimelineEditorV10() {
 
         {/* Right panel */}
         <div className="w-64 flex-shrink-0 bg-[#12121f]">
-          {selectedCaption ? (
+          {selectedOverlay ? (
+            <OverlayPropertiesPanel
+              overlay={selectedOverlay}
+              onUpdate={c => setOverlayClips(overlayClips.map(x => x.id === c.id ? c : x))}
+              onDelete={() => { setOverlayClips(overlayClips.filter(c => c.id !== selectedOverlayId)); setSelectedOverlayId(null); }}
+              onDuplicate={() => {
+                const dup = { ...selectedOverlay, id: `overlay-dup-${Date.now()}`, startTime: selectedOverlay.startTime + selectedOverlay.duration + 0.5 };
+                setOverlayClips([...overlayClips, dup]);
+                setSelectedOverlayId(dup.id);
+              }}
+            />
+          ) : selectedCaption ? (
             <TextPropertiesPanel caption={selectedCaption} onUpdate={c => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))} onDelete={handleDeleteCaption} onDuplicate={handleDuplicateCaption} onApplyStyleToAll={handleApplyStyleToAllCaptions} />
           ) : selectedVideo ? (
             <ClipPropertiesPanel clip={selectedVideo} audioBeatDuration={audioBeatDurations[selectedVideoIdx]} onUpdate={c => setVideoClips(videoClips.map(x => x.id === c.id ? c : x))} onApplyToAll={handleApplyToAll} />
@@ -1534,8 +1554,8 @@ export default function TimelineEditorV10() {
           <div className="w-px h-4 bg-gray-700 mx-1" />
           <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10" title="Split"><Scissors size={16} /></button>
           <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10" title="Duplicate"><Copy size={16} /></button>
-          <button onClick={handleDelete} disabled={!selectedVideoId && !selectedCaptionId}
-            className={`p-1.5 rounded ${(selectedVideoId || selectedCaptionId) ? 'text-red-400 hover:text-red-300' : 'text-gray-600'}`} title="Delete"><Trash2 size={16} /></button>
+          <button onClick={handleDelete} disabled={!selectedVideoId && !selectedCaptionId && !selectedOverlayId}
+            className={`p-1.5 rounded ${(selectedVideoId || selectedCaptionId || selectedOverlayId) ? 'text-red-400 hover:text-red-300' : 'text-gray-600'}`} title="Delete"><Trash2 size={16} /></button>
           <div className="w-px h-4 bg-gray-700 mx-1" />
           <button onClick={() => setSnappingEnabled(!snappingEnabled)}
             className={`p-1.5 rounded flex items-center gap-1 text-[10px] ${snappingEnabled ? 'text-cyan-400 bg-cyan-500/15' : 'text-gray-600 hover:text-gray-400'}`}
@@ -1597,6 +1617,7 @@ export default function TimelineEditorV10() {
           <span>{videoClips.filter(c => c.mediaType === 'video').length}🎬 {videoClips.filter(c => c.mediaType === 'broll').length}📎 {videoClips.filter(c => c.mediaType === 'image' || (!c.mediaType)).length}🖼</span>
           <span>{audioClips.length} audio</span>
           <span>{captionClips.length} captions</span>
+          {overlayClips.length > 0 && <span className="text-pink-400">{overlayClips.length} overlays</span>}
           {motionCount     > 0 && <span className="text-amber-400">{motionCount} zooms</span>}
           {transitionCount > 0 && <span className="text-purple-400">{transitionCount} transitions</span>}
           <div className="w-px h-4 bg-gray-700" />
@@ -1638,24 +1659,28 @@ export default function TimelineEditorV10() {
       )}
 
       {/* Timeline — Phase 3+4: Snap-enabled tracks with virtual scrolling */}
-      <div className="h-48 flex-shrink-0 bg-[#0a0a14] border-t border-gray-700 overflow-x-auto relative">
+      <div className="h-60 flex-shrink-0 bg-[#0a0a14] border-t border-gray-700 overflow-x-auto relative">
         <TimelineRuler totalDuration={totalDuration} pps={pps} onSeek={handleSeek} />
         {scenes.length === 0
           ? <div className="flex items-center justify-center h-32 text-gray-500">No scenes</div>
           : <>
-              <SnapTimelineTrack type="video" clips={videoClips} allClips={[...videoClips, ...captionClips]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={selectedVideoId}
-                onSelect={id => { setSelectedVideoId(id); setSelectedCaptionId(null); }}
+              <SnapTimelineTrack type="overlay" clips={overlayClips} allClips={[...videoClips, ...overlayClips, ...captionClips]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={selectedOverlayId}
+                onSelect={id => { setSelectedOverlayId(id); setSelectedVideoId(null); setSelectedCaptionId(null); }}
+                onUpdate={c => setOverlayClips(overlayClips.map(x => x.id === c.id ? c : x))}
+                editable snappingEnabled={snappingEnabled} onSnapLine={setSnapLinePx} />
+              <SnapTimelineTrack type="video" clips={videoClips} allClips={[...videoClips, ...overlayClips, ...captionClips]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={selectedVideoId}
+                onSelect={id => { setSelectedVideoId(id); setSelectedCaptionId(null); setSelectedOverlayId(null); }}
                 onUpdate={c => { let updated = videoClips.map(x => x.id === c.id ? c : x); if (magneticMode) updated = closeGaps(updated); setVideoClips(updated); }}
                 editable snappingEnabled={snappingEnabled} onSnapLine={setSnapLinePx} />
               <SnapTimelineTrack type="audio" clips={audioClips} allClips={[]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={null}
                 onSelect={() => {}} onUpdate={() => {}} editable={false} snappingEnabled={false} />
-              <SnapTimelineTrack type="caption" clips={captionClips} allClips={[...videoClips, ...captionClips]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={selectedCaptionId}
-                onSelect={id => { setSelectedCaptionId(id); setSelectedVideoId(null); }}
+              <SnapTimelineTrack type="caption" clips={captionClips} allClips={[...videoClips, ...overlayClips, ...captionClips]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={selectedCaptionId}
+                onSelect={id => { setSelectedCaptionId(id); setSelectedVideoId(null); setSelectedOverlayId(null); }}
                 onUpdate={c => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))}
                 editable snappingEnabled={snappingEnabled} onSnapLine={setSnapLinePx} />
             </>
         }
-        <SnapGuide snapLinePx={snapLinePx} trackAreaHeight={168} />
+        <SnapGuide snapLinePx={snapLinePx} trackAreaHeight={224} />
       </div>
 
       {/* Exporter modal */}
