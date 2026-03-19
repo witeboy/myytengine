@@ -1683,7 +1683,13 @@ export default function TimelineEditorV10() {
   const handleUndo   = () => { videoHistory.undo(); captionHistory.undo(); };
   const handleRedo   = () => { videoHistory.redo(); captionHistory.redo(); };
   const handleDelete = () => {
-    if (selectedVideoId)   { setVideoClips(videoClips.filter(c => c.id !== selectedVideoId));       setSelectedVideoId(null);   }
+    if (selectedVideoId) {
+      let remaining = videoClips.filter(c => c.id !== selectedVideoId);
+      // Phase 3: Magnetic gap-closing on main track
+      if (magneticMode) remaining = closeGaps(remaining);
+      setVideoClips(remaining);
+      setSelectedVideoId(null);
+    }
     if (selectedCaptionId) { setCaptionClips(captionClips.filter(c => c.id !== selectedCaptionId)); setSelectedCaptionId(null); }
   };
   const handleBack             = () => navigate(createPageUrl('ContentGeneration') + `?project_id=${projectId}`);
