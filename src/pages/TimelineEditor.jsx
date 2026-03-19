@@ -1454,7 +1454,7 @@ export default function TimelineEditorV10() {
               totalDuration={totalDuration}
             />
           )}
-          {!['media','effects','transitions','captions','jumpcuts'].includes(activePanel) && <div className="flex items-center justify-center h-full text-xs text-gray-500">Coming soon</div>}
+          {!['media','effects','transitions','captions','overlays','jumpcuts'].includes(activePanel) && <div className="flex items-center justify-center h-full text-xs text-gray-500">Coming soon</div>}
         </div>
 
         {/* Center */}
