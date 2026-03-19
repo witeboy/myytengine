@@ -1648,7 +1648,8 @@ export default function TimelineEditorV10() {
               <span className="text-indigo-400">•</span>
               <span>Avg {(actualVoiceoverDuration / Math.max(scenes.length, 1)).toFixed(1)}s per scene</span>
               {measuredAudioDuration > 0 && <span className="text-green-400 flex items-center gap-1"><CheckCircle size={10} /> Measured from audio file</span>}
-              {transcription.status === 'done' && <span className="text-orange-400 flex items-center gap-1"><CheckCircle size={10} /> {transcription.wordCount} words AI-timed</span>}
+              {transcription.status === 'done' && transcription.source === 'asr' && <span className="text-emerald-400 flex items-center gap-1"><CheckCircle size={10} /> {transcription.wordCount} words ASR-timed</span>}
+              {transcription.status === 'done' && transcription.source !== 'asr' && <span className="text-orange-400 flex items-center gap-1"><CheckCircle size={10} /> {transcription.wordCount} words estimate</span>}
             </>
           ) : (
             <span>No voiceover loaded - using text estimates</span>
