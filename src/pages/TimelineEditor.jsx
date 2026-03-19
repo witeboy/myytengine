@@ -15,6 +15,7 @@ import CanvasPreview from '@/components/timeline/CanvasPreview';
 import SnapTimelineTrack from '@/components/timeline/SnapTimeline';
 import SnapGuide from '@/components/timeline/SnapGuide';
 import SilenceDetector from '@/components/timeline/SilenceDetector';
+import CaptionStylePresets from '@/components/timeline/CaptionStylePresets';
 import usePlaybackEngine from '@/hooks/usePlaybackEngine';
 import { closeGaps } from '@/hooks/useSnapEngine';
 import {
@@ -373,7 +374,7 @@ function TransitionsPanel({ selectedClip, onApplyTransition, onRemoveTransition,
   );
 }
 
-function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, transcriptionState, onOffsetCaptions, captionOffset }) {
+function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, transcriptionState, onOffsetCaptions, captionOffset, captionClips, onSetCaptionClips }) {
   const [del, setDel] = useState(true);
   const { status, wordCount, error } = transcriptionState;
 
@@ -425,6 +426,12 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, t
             {captionCount} captions on timeline
           </div>
         )}
+
+        {/* Preset Styles & Animations */}
+        <CaptionStylePresets
+          captionClips={captionClips}
+          onSetCaptionClips={onSetCaptionClips}
+        />
       </div>
 
       <div className="p-3 border-t border-gray-800 space-y-2">
@@ -1458,6 +1465,8 @@ export default function TimelineEditorV10() {
               transcriptionState={transcription}
               onOffsetCaptions={handleOffsetCaptions}
               captionOffset={captionOffset}
+              captionClips={captionClips}
+              onSetCaptionClips={setCaptionClips}
             />
           )}
           {activePanel === 'jumpcuts'    && (
