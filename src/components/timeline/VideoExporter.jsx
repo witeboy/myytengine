@@ -30,8 +30,10 @@ export default function VideoExporter({
   projectId,
   exportHook,
 }) {
-  const [quality, setQuality] = useState('720p');
+  const [quality, setQuality] = useState('1080p');
   const [fps, setFps] = useState(30);
+  const [aspectRatio, setAspectRatio] = useState(orientation === 'portrait' ? '9:16' : '16:9');
+  const [watermark, setWatermark] = useState(false);
   const { exporting, progress, phase, error, exportVideo, checkSupport, cancel } = exportHook;
   const [downloadUrl, setDownloadUrl] = useState(null);
   const [unsupported, setUnsupported] = useState(null);
@@ -61,13 +63,18 @@ export default function VideoExporter({
       setUnsupported(null);
     }
 
+    // Map aspect ratio to orientation for the export engine
+    const exportOrientation = aspectRatio === '9:16' ? 'portrait' : 'landscape';
+
     const blob = await exportVideo(scenes, {
       quality,
-      orientation: orientation || 'landscape',
+      orientation: exportOrientation,
+      aspectRatio,
       fps,
       voiceoverUrl,
       musicUrl,
       musicVolume,
+      watermark,
     });
 
     if (blob) {
@@ -125,9 +132,16 @@ export default function VideoExporter({
   };
 
   const qualityOptions = [
-    { value: '480p', label: '480p', desc: 'Fast export, smaller file' },
-    { value: '720p', label: '720p', desc: 'Good balance of speed & quality' },
-    { value: '1080p', label: '1080p', desc: 'Full HD, larger file' },
+    { value: '480p', label: '480p', desc: 'Fast, small file' },
+    { value: '720p', label: '720p', desc: 'Good balance' },
+    { value: '1080p', label: '1080p', desc: 'Full HD' },
+    { value: '4k', label: '4K', desc: '2160p, large file' },
+  ];
+
+  const aspectRatioOptions = [
+    { value: '16:9', label: '16:9', desc: 'Landscape', icon: Monitor },
+    { value: '9:16', label: '9:16', desc: 'Portrait', icon: Smartphone },
+    { value: '4:5', label: '4:5', desc: 'Social', icon: Monitor },
   ];
 
   return (
@@ -143,58 +157,99 @@ export default function VideoExporter({
           </Button>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="flex gap-3 text-sm">
+          <div className="flex gap-3 text-sm flex-wrap">
             <Badge variant="outline" className="gap-1">
-              {orientation === 'portrait' ? <Smartphone className="w-3 h-3" /> : <Monitor className="w-3 h-3" />}
-              {orientation === 'portrait' ? '9:16' : '16:9'}
+              {aspectRatio === '9:16' ? <Smartphone className="w-3 h-3" /> : <Monitor className="w-3 h-3" />}
+              {aspectRatio}
             </Badge>
             <Badge variant="outline">{scenes.length} scenes</Badge>
             <Badge variant="outline">{Math.round(totalDuration)}s ({Math.round(totalDuration / 60)} min)</Badge>
+            {watermark && <Badge variant="outline" className="text-amber-600 border-amber-300">Watermark ON</Badge>}
           </div>
 
           {!exporting && !downloadUrl && (
             <>
+              {/* Resolution */}
               <div>
-                <p className="text-sm font-medium mb-2">Quality</p>
-                <div className="grid grid-cols-3 gap-2">
+                <p className="text-sm font-medium mb-2">Resolution</p>
+                <div className="grid grid-cols-4 gap-2">
                   {qualityOptions.map(opt => (
                     <button
                       key={opt.value}
                       onClick={() => setQuality(opt.value)}
-                      className={`p-3 rounded-lg border text-left transition-all ${
+                      className={`p-2.5 rounded-lg border text-left transition-all ${
                         quality === opt.value
                           ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500'
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
                     >
                       <div className="font-semibold text-sm">{opt.label}</div>
-                      <div className="text-[11px] text-gray-500 mt-0.5">{opt.desc}</div>
+                      <div className="text-[10px] text-gray-500 mt-0.5">{opt.desc}</div>
                     </button>
                   ))}
                 </div>
               </div>
 
+              {/* Aspect Ratio */}
               <div>
-                <p className="text-sm font-medium mb-2">Frame Rate</p>
-                <div className="flex gap-2">
-                  {[24, 30].map(f => (
+                <p className="text-sm font-medium mb-2">Aspect Ratio</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {aspectRatioOptions.map(opt => (
                     <button
-                      key={f}
-                      onClick={() => setFps(f)}
-                      className={`px-4 py-2 rounded-lg border text-sm transition-all ${
-                        fps === f
-                          ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500 font-semibold'
+                      key={opt.value}
+                      onClick={() => setAspectRatio(opt.value)}
+                      className={`p-2.5 rounded-lg border text-center transition-all ${
+                        aspectRatio === opt.value
+                          ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500'
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
                     >
-                      {f} FPS
+                      <opt.icon className={`w-4 h-4 mx-auto mb-1 ${aspectRatio === opt.value ? 'text-blue-600' : 'text-gray-400'}`} />
+                      <div className="font-semibold text-sm">{opt.label}</div>
+                      <div className="text-[10px] text-gray-500">{opt.desc}</div>
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* Frame Rate + Watermark row */}
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <p className="text-sm font-medium mb-2">Frame Rate</p>
+                  <div className="flex gap-2">
+                    {[24, 30].map(f => (
+                      <button
+                        key={f}
+                        onClick={() => setFps(f)}
+                        className={`flex-1 px-3 py-2 rounded-lg border text-sm transition-all ${
+                          fps === f
+                            ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500 font-semibold'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        {f} FPS
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium mb-2">Watermark</p>
+                  <button
+                    onClick={() => setWatermark(!watermark)}
+                    className={`w-full px-3 py-2 rounded-lg border text-sm transition-all flex items-center justify-center gap-2 ${
+                      watermark
+                        ? 'border-amber-500 bg-amber-50 ring-1 ring-amber-500 text-amber-700 font-semibold'
+                        : 'border-gray-200 hover:border-gray-300 text-gray-500'
+                    }`}
+                  >
+                    {watermark ? <><CheckCircle className="w-4 h-4" /> Enabled</> : 'Disabled'}
+                  </button>
                 </div>
               </div>
 
               <div className="text-xs text-gray-500 bg-gray-50 rounded-lg p-3">
-                <strong>Estimated:</strong> ~{totalFrames} frames will be rendered using your browser's hardware encoder (WebCodecs H.264). No server needed.
+                <strong>Estimated:</strong> ~{totalFrames} frames at {quality} ({aspectRatio}) using your browser's hardware encoder (WebCodecs H.264). No server needed.
+                {quality === '4k' && <span className="block mt-1 text-amber-600 font-medium">⚠ 4K export is memory-intensive — ensure enough RAM available.</span>}
               </div>
             </>
           )}
@@ -265,7 +320,7 @@ export default function VideoExporter({
               disabled={scenes.length === 0}
             >
               <Film className="w-4 h-4" />
-              Start Export ({quality}, {fps}fps)
+              Start Export ({quality}, {aspectRatio}, {fps}fps)
             </Button>
           )}
         </CardContent>
