@@ -797,9 +797,7 @@ function TextPropertiesPanel({ caption, onUpdate, onDelete, onDuplicate, onApply
           </div>
         )}
       </div>
-    </div>
-  );
-}
+END OF REMOVED BLOCK */
 
 function TransportControls({ isPlaying, onPlayPause, currentTime, totalDuration, onSeek }) {
   return (
