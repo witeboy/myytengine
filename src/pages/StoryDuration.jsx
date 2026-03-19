@@ -52,12 +52,21 @@ export default function StoryDuration() {
   const numBatches = isShorts ? 1 : Math.max(2, Math.ceil(totalWords / (isSleepProject ? 1100 : 800)));
 
   const handleGenerate = async () => {
-    const finalDuration = Math.max(1, Math.round(safeDuration));
+    const finalDuration = isShorts ? 1.5 : Math.max(1, Math.round(safeDuration));
     setLoading(true);
     await base44.entities.Projects.update(projectId, {
       video_duration_minutes: finalDuration,
       project_mode: scriptMode || '',
+      orientation: isShorts ? 'portrait' : (project?.orientation || 'landscape'),
     });
+
+    // Shorts skip outline — go straight to script page which uses shortsGenerateScript
+    if (isShorts) {
+      await base44.entities.Projects.update(projectId, { status: 'hooks_ready' });
+      navigate(createPageUrl(`StoryScript?project_id=${projectId}`));
+      setLoading(false);
+      return;
+    }
 
     const res = await base44.functions.invoke('generateOutline', {
       project_id: projectId,
