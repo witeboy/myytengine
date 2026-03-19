@@ -37,7 +37,7 @@ If the prompt includes ANY text, UI, or screen elements:
 - Use minimal, short, clean text only
 - Enforce legibility: all text must be perfectly spelled, sharp, readable, high contrast
 - Specify position (e.g., top banner, inside phone screen)
-- Prevent hallucination with: "no garbled text, no distorted letters, no stylized typography"
+- Prevent hallucination with: no garbled text, no distorted letters, no stylized typography
 
 STYLE ENFORCEMENT:
 If a style is mentioned (e.g., 3D whiteboard cartoon):
