@@ -3,8 +3,9 @@ import { base44 } from '@/api/base44Client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Play, Clock, FileText, Zap, CheckCircle2, Loader2, ChevronDown, ChevronUp, Package, RotateCcw, Globe } from 'lucide-react';
+import { Play, Clock, FileText, Zap, CheckCircle2, Loader2, ChevronDown, ChevronUp, Package, RotateCcw, Globe, Wand2 } from 'lucide-react';
 import { ExpandableAssets } from './TopicAssetsPanel';
+import AutoEditButton from './AutoEditButton';
 
 export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose, channel, onTopicUpdated }) {
   if (!date) return null;
@@ -123,19 +124,22 @@ export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose,
           )}
 
           {canStart && (
-            <Button
-              size="sm"
-              className="h-7 text-xs bg-blue-600 hover:bg-blue-700 opacity-0 group-hover:opacity-100 transition-opacity"
-              onClick={() => {
-                if (isArchived) {
-                  handleRestart(topic);
-                } else {
-                  onStartPipeline?.(topic);
-                }
-              }}
-            >
-              <Play className="w-3 h-3 mr-1" /> Start
-            </Button>
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <AutoEditButton topic={topic} channel={channel} onJobCreated={() => onTopicUpdated?.()} />
+              <Button
+                size="sm"
+                className="h-7 text-xs bg-blue-600 hover:bg-blue-700"
+                onClick={() => {
+                  if (isArchived) {
+                    handleRestart(topic);
+                  } else {
+                    onStartPipeline?.(topic);
+                  }
+                }}
+              >
+                <Play className="w-3 h-3 mr-1" /> Start
+              </Button>
+            </div>
           )}
 
           {isInProgress && !isArchived && (
