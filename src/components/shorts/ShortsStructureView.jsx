@@ -8,11 +8,6 @@ function TimelineBar({ sections }) {
       {sections.map((s, i) => (
         <div
           key={i}
-          style={{
-            width: `${(s.seconds / total) * 100}%`,
-            backgroundColor: s.color + '44',
-            borderRight: i < sections.length - 1 ? '1px solid #0a0a0a' : 'none',
-          }}
           className="flex items-center justify-center text-[8px] font-bold overflow-hidden whitespace-nowrap px-0.5"
           style={{
             width: `${(s.seconds / total) * 100}%`,
