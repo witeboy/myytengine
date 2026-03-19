@@ -5,31 +5,29 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // Generates a 200-240 word, 90-second YouTube Shorts script.
 // ══════════════════════════════════════════════════════════════════
 
-async function callClaude(prompt, temperature = 0.7) {
-  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 2048,
-      temperature,
-      messages: [{ role: "user", content: prompt + "\n\nRespond with ONLY valid JSON, no markdown or explanation." }],
-    }),
-  });
+async function callGemini(prompt, temperature = 0.7) {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt + "\n\nRespond with ONLY valid JSON." }] }],
+        generationConfig: { temperature, maxOutputTokens: 2048, responseMimeType: "application/json" },
+      }),
+    }
+  );
   if (!response.ok) {
     const errBody = await response.text();
-    throw new Error(`Claude ${response.status}: ${errBody.substring(0, 200)}`);
+    throw new Error(`Gemini ${response.status}: ${errBody.substring(0, 200)}`);
   }
   const data = await response.json();
-  const rawText = data.content?.[0]?.text || '';
-  const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("Failed to parse Claude JSON response");
-  return JSON.parse(jsonMatch[0]);
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+  try { return JSON.parse(rawText); } catch (_) {
+    const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+    return JSON.parse(cleaned);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -85,8 +83,8 @@ ${nicheBlock}
 
 Return JSON: {"title":"string under 60 chars","script":"full formatted script","word_count":number}`;
 
-    console.log(`📱 Calling Claude for "${topicTitle}" (${shortsNiche})...`);
-    const result = await callClaude(prompt, 0.75);
+    console.log(`📱 Calling Gemini for "${topicTitle}" (${shortsNiche})...`);
+    const result = await callGemini(prompt, 0.75);
 
     const fullScript = result.script || '';
     const wordCount = fullScript.split(/\s+/).filter(w => w.length > 0).length;
