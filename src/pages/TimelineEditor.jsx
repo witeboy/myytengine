@@ -1689,7 +1689,12 @@ export default function TimelineEditorV10() {
   const handleBack             = () => navigate(createPageUrl('ContentGeneration') + `?project_id=${projectId}`);
   const handleExport           = () => alert('Export MP4 coming soon!');
   const handleDownloadAssets   = () => alert('Download Assets coming soon!');
-  const handleSeek             = t  => { const ct = Math.max(0, Math.min(totalDuration, t)); setCurrentTime(ct); if (audioRef.current) audioRef.current.currentTime = ct; };
+  const handleSeek             = t  => {
+    const ct = Math.max(0, Math.min(totalDuration, t));
+    setCurrentTime(ct);
+    playbackEngine.seek(ct);
+    if (audioRef.current) audioRef.current.currentTime = ct;
+  };
   const handleNext             = () => navigate(createPageUrl('PostProduction') + `?project_id=${projectId}`);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState(null); // 'saved' | 'error'
