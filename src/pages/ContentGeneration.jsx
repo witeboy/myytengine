@@ -796,9 +796,16 @@ export default function ContentGeneration() {
   // ══════════════════════════════════════════════════════════════════
   // GENERATE ALL IMAGES
   // ══════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════
+  // GENERATE ALL IMAGES — Submit-then-Poll architecture
+  // Phase 1: Submit all tasks via generateSceneImage (fast, ~2s per batch)
+  // Phase 2: Poll pollSceneImage every 5s until all resolved
+  // ══════════════════════════════════════════════════════════════════
   const handleGenerateImages = async () => {
     setGeneratingImages(true);
+    pollAbortRef.current = false;
 
+    // ── Auto-convert director notes if needed ──
     const pending = scenes.filter(s =>
       (s.status === 'prompts_ready' || !s.image_url) &&
       !s.image_prompt?.startsWith('DIRECTOR_NOTES:')
@@ -814,9 +821,10 @@ export default function ContentGeneration() {
       }
     }
 
+    // ── Refresh scene list ──
     const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
     const readyScenes = freshScenes
-      .filter(s => s.status === 'prompts_ready' || (!s.image_url && !s.image_prompt?.startsWith('DIRECTOR_NOTES:')))
+      .filter(s => s.status === 'prompts_ready' || s.status === 'image_failed' || (!s.image_url && !s.image_prompt?.startsWith('DIRECTOR_NOTES:')))
       .sort((a, b) => a.scene_number - b.scene_number);
 
     const total = readyScenes.length;
@@ -825,46 +833,43 @@ export default function ContentGeneration() {
       return;
     }
 
-    let completed = 0;
-    let failed = 0;
+    // ════════════════════════════════════════════════════════════
+    // PHASE 1: SUBMIT ALL TASKS (fast — no polling in backend)
+    // ════════════════════════════════════════════════════════════
+    setImageProgress({ current: 0, total, sceneName: `Submitting ${total} scenes...` });
 
-    setImageProgress({ current: 0, total, sceneName: `Starting ${total} scenes...` });
-
-    // ── SCENE 1 FIRST: Generate alone to lock character reference ──
+    // Scene 1 first for reference lock
     const freshProject = (await base44.entities.Projects.filter({ id: projectId }))?.[0];
     const hasReference = freshProject?.reference_image_url;
     const scene1 = readyScenes.find(s => s.scene_number === 1);
+    let submitCount = 0;
 
     if (scene1 && !hasReference) {
-      setImageProgress({ current: 0, total, sceneName: 'Generating Scene 1 (character reference lock)...' });
+      setImageProgress({ current: 0, total, sceneName: 'Submitting Scene 1 (reference lock)...' });
       try {
         await base44.functions.invoke('generateSceneImage', { scene_id: scene1.id });
-        completed++;
-        console.log('📌 Scene 1 generated — character reference locked');
+        submitCount++;
+        console.log('📤 Scene 1 submitted for reference lock');
       } catch (err) {
-        console.warn('Scene 1 generation failed:', err.message);
-        failed++;
-        completed++;
+        console.warn('Scene 1 submit failed:', err.message);
       }
-      await refetchScenes();
-      await refetchProject();
     }
 
-    // ── REMAINING SCENES: backend batch mode (server handles concurrency) ──
+    // Submit remaining in batches of 8 (submits are fast now — no polling)
     const remainingScenes = readyScenes.filter(s => !(s.scene_number === 1 && !hasReference));
-    const BATCH_SIZE = 6;
-    const BATCH_DELAY_MS = 3000;
+    const SUBMIT_BATCH = 8;
 
-    for (let i = 0; i < remainingScenes.length; i += BATCH_SIZE) {
-      const batch = remainingScenes.slice(i, i + BATCH_SIZE);
-      const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-      const totalBatches = Math.ceil(remainingScenes.length / BATCH_SIZE);
-      const batchSceneNums = batch.map(s => s.scene_number).join(', ');
+    for (let i = 0; i < remainingScenes.length; i += SUBMIT_BATCH) {
+      if (pollAbortRef.current) break;
+
+      const batch = remainingScenes.slice(i, i + SUBMIT_BATCH);
+      const batchNum = Math.floor(i / SUBMIT_BATCH) + 1;
+      const totalBatches = Math.ceil(remainingScenes.length / SUBMIT_BATCH);
 
       setImageProgress({
-        current: completed,
+        current: submitCount,
         total,
-        sceneName: `Batch ${batchNum}/${totalBatches} — Scenes ${batchSceneNums} (server-side concurrency: 3)`
+        sceneName: `Submitting batch ${batchNum}/${totalBatches} — Scenes ${batch.map(s => s.scene_number).join(', ')}`
       });
 
       try {
@@ -872,74 +877,164 @@ export default function ContentGeneration() {
           scene_ids: batch.map(s => s.id)
         });
         const data = response.data || response;
-
-        if (data.results && Array.isArray(data.results)) {
-          for (const r of data.results) {
-            if (r.status === 'success') {
-              completed++;
-            } else if (r.status === 'failed') {
-              failed++;
-              completed++;
-              console.warn(`Scene ${r.scene_number} failed: ${r.error}`);
-            } else if (r.status === 'skipped') {
-              completed++;
-            }
-          }
-        } else {
-          completed += batch.length;
-        }
+        submitCount += data.submitted || batch.length;
       } catch (err) {
-        console.warn(`Batch ${batchNum} call failed: ${err.message} — checking scene states...`);
         const status = err?.response?.status || err?.status;
         if (status === 504) {
-          setImageProgress({ current: completed, total, sceneName: `Batch ${batchNum} timed out — waiting for backend...` });
-          await new Promise(r => setTimeout(r, 15000));
-        }
-        const updatedScenes = await base44.entities.Scenes.filter({ project_id: projectId });
-        for (const batchScene of batch) {
-          const current = updatedScenes.find(s => s.id === batchScene.id);
-          if (current?.image_url && current.status === 'image_generated') {
-            completed++;
-          } else {
-            failed++;
-            completed++;
-          }
+          // Function timed out but tasks may have been submitted — continue
+          console.log(`Submit batch ${batchNum} timed out (504) — tasks may still be processing`);
+          submitCount += batch.length; // Assume submitted, poll will verify
+        } else {
+          console.warn(`Submit batch ${batchNum} failed: ${err.message}`);
         }
       }
 
-      setImageProgress({
-        current: completed,
-        total,
-        sceneName: `${completed - failed} generated · ${failed > 0 ? `${failed} failed · ` : ''}${total - completed} remaining`
-      });
-
-      await refetchScenes();
-      if (i + BATCH_SIZE < remainingScenes.length) {
-        await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
+      // Brief delay between submit batches
+      if (i + SUBMIT_BATCH < remainingScenes.length) {
+        await new Promise(r => setTimeout(r, 1500));
       }
     }
 
-    // ── RETRY PASS: individually retry failed scenes ──
-    if (failed > 0) {
-      setImageProgress({ current: completed, total, sceneName: `Retrying ${failed} failed scenes (1 at a time)...` });
+    console.log(`📤 Submit phase complete: ${submitCount} tasks submitted`);
+
+    // If Scene 1 was submitted solo for reference lock, wait for it to complete
+    // before polling the rest (so pollSceneImage can lock the reference)
+    if (scene1 && !hasReference) {
+      setImageProgress({ current: 0, total, sceneName: 'Waiting for Scene 1 reference to generate...' });
+      let scene1Done = false;
+      for (let i = 0; i < 30 && !scene1Done && !pollAbortRef.current; i++) {
+        await new Promise(r => setTimeout(r, 5000));
+        try {
+          const pollRes = await base44.functions.invoke('pollSceneImage', { scene_id: scene1.id });
+          const pollData = pollRes.data || pollRes;
+          const s1result = pollData.results?.[0];
+          if (s1result?.status === 'done') {
+            scene1Done = true;
+            console.log('📌 Scene 1 reference locked via poll');
+            await refetchProject();
+          } else if (s1result?.status === 'failed') {
+            console.warn('Scene 1 failed — proceeding without reference');
+            scene1Done = true;
+          }
+        } catch (err) {
+          console.warn(`Scene 1 poll error: ${err.message}`);
+        }
+      }
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 2: POLL UNTIL ALL DONE
+    // ════════════════════════════════════════════════════════════
+    setImageProgress({ current: 0, total, sceneName: 'All submitted — polling for results...' });
+
+    let pollCount = 0;
+    const MAX_POLLS = 120; // 120 × 5s = 10 min max wait
+    let lastCompleted = 0;
+    let lastFailed = 0;
+
+    while (pollCount < MAX_POLLS && !pollAbortRef.current) {
+      await new Promise(r => setTimeout(r, 5000)); // Poll every 5 seconds
+      pollCount++;
+
+      try {
+        const pollResponse = await base44.functions.invoke('pollSceneImage', { project_id: projectId });
+        const pollData = pollResponse.data || pollResponse;
+
+        const done = pollData.completed || 0;
+        const failed = pollData.failed || 0;
+        const stillPending = pollData.pending || 0;
+        const errors = pollData.errors || 0;
+
+        lastCompleted = done;
+        lastFailed = failed;
+
+        setImageProgress({
+          current: done + failed + errors,
+          total,
+          sceneName: [
+            done > 0 ? `${done} generated` : null,
+            stillPending > 0 ? `${stillPending} rendering` : null,
+            failed > 0 ? `${failed} failed` : null,
+            `poll #${pollCount}`
+          ].filter(Boolean).join(' · ')
+        });
+
+        // Refresh the scene grid so user sees images appearing
+        if (done > 0 && pollCount % 2 === 0) {
+          await refetchScenes();
+        }
+
+        if (pollData.done) {
+          console.log(`✅ All images complete: ${done} generated, ${failed} failed`);
+          break;
+        }
+      } catch (err) {
+        console.warn(`Poll #${pollCount} error: ${err.message}`);
+        // Don't break — transient errors are normal, just retry next cycle
+      }
+    }
+
+    if (pollCount >= MAX_POLLS) {
+      console.warn(`⏱️ Polling timed out after ${MAX_POLLS * 5}s — some images may still be processing`);
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // PHASE 3: RETRY FAILED SCENES (submit + poll individually)
+    // ════════════════════════════════════════════════════════════
+    if (lastFailed > 0 && !pollAbortRef.current) {
+      setImageProgress({ current: lastCompleted, total, sceneName: `Retrying ${lastFailed} failed scenes...` });
+
       const retryScenes = await base44.entities.Scenes.filter({ project_id: projectId });
       const stillFailed = retryScenes
-        .filter(s => (s.status === 'prompts_ready' || s.status === 'image_failed') && !s.image_url)
+        .filter(s => s.status === 'image_failed')
         .sort((a, b) => a.scene_number - b.scene_number);
 
       for (const scene of stillFailed) {
+        if (pollAbortRef.current) break;
+
+        setImageProgress({ current: lastCompleted, total, sceneName: `Retrying Scene ${scene.scene_number}...` });
+
         try {
+          // Submit
           await base44.functions.invoke('generateSceneImage', { scene_id: scene.id });
-          failed--;
-          setImageProgress({ current: completed, total, sceneName: `Retry: Scene ${scene.scene_number} ✓ · ${failed} remaining` });
+
+          // Poll this single scene until done (max 60s)
+          for (let i = 0; i < 12; i++) {
+            await new Promise(r => setTimeout(r, 5000));
+            try {
+              const pollRes = await base44.functions.invoke('pollSceneImage', { scene_id: scene.id });
+              const pollData = pollRes.data || pollRes;
+              const result = pollData.results?.[0];
+              if (result?.status === 'done') {
+                lastCompleted++;
+                lastFailed--;
+                console.log(`✅ Retry Scene ${scene.scene_number} succeeded`);
+                break;
+              }
+              if (result?.status === 'failed') {
+                console.warn(`❌ Retry Scene ${scene.scene_number} failed again: ${result.error}`);
+                break;
+              }
+            } catch (_) {}
+          }
         } catch (err) {
-          console.warn(`Retry scene ${scene.scene_number} failed again:`, err.message);
+          console.warn(`Retry submit Scene ${scene.scene_number} failed: ${err.message}`);
         }
-        await new Promise(r => setTimeout(r, 5000));
+
+        setImageProgress({
+          current: lastCompleted + lastFailed,
+          total,
+          sceneName: `${lastCompleted} generated · ${lastFailed > 0 ? `${lastFailed} failed · ` : ''}retrying...`
+        });
+
+        // 3s gap between retries
+        await new Promise(r => setTimeout(r, 3000));
       }
-      await refetchScenes();
     }
 
+    // ── Final cleanup ──
+    await refetchScenes();
+    await refetchProject();
     setGeneratingImages(false);
     setImageProgress({ current: 0, total: 0, sceneName: '' });
   };
