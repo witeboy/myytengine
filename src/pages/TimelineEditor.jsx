@@ -1154,149 +1154,23 @@ export default function TimelineEditorV10() {
   const transitionCount = videoClips.filter(c => c.transition).length;
 
   // ═══════════════════════════════════════════════════════════════
-  // CAPTION GENERATION — Claude smart timing
+  // CAPTION GENERATION — CapCut-style ASR + syllable fallback
   //
-  // For each scene: sends the script text + beat duration to Claude
-  // via the Anthropic API. Claude returns word-level timestamps that
-  // account for natural speech rhythm and punctuation pauses.
-  // Scenes are processed in parallel (Promise.all) for speed.
-  // Falls back to simple linear math if the API call fails.
-  // ═══════════════════════════════════════════════════════════════
-
-  // ─────────────────────────────────────────────────────────────────
-  // CAPTION GENERATION — syllable-weighted local timing
+  // Priority 1 (when voiceover exists):
+  //   Send audio to AssemblyAI via backend → get real word-level
+  //   timestamps measured from the actual waveform. This is how
+  //   CapCut, Premiere, and DaVinci achieve frame-accurate captions.
   //
-  // Core insight: a word's spoken duration correlates strongly with its
-  // syllable count.  "a" = 1 syllable ≈ 0.12s.  "beautiful" = 3 syllables
-  // ≈ 0.42s.  Punctuation adds pause time on top.
+  // Priority 2 (fallback when no audio or ASR fails):
+  //   Syllable-weighted heuristic — estimates timing from text.
   //
-  // Algorithm per scene:
-  //   1. Count syllables in every word using a vowel-cluster heuristic.
-  //   2. Add punctuation weight (period/! → +0.30s, comma → +0.15s).
-  //   3. Normalise so the total weight sums to exactly beatDuration.
-  //   4. Derive {start, end} for each word from cumulative weights.
-  //
-  // This runs instantly (no API), works offline, and produces timing
-  // that tracks the audio much more closely than equal-duration math.
-  //
-  // Caption chunks respect clause boundaries:
+  // Caption chunking respects natural speech boundaries:
   //   - Hard break after sentence-ending punctuation (. ! ?)
   //   - Soft break after commas when chunk already has ≥4 words
   //   - Never exceed MAX_CHUNK_WORDS (6) or MAX_CHUNK_SECS (2.5s)
-  // ─────────────────────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════
 
-  const handleGenerateCaptions = (deleteExisting) => {
-    setIsGenCaptions(true);
-    setTranscription({ status: 'transcribing', words: [], wordCount: 0, error: null });
-
-    // ── Syllable counter (vowel-cluster heuristic) ────────────────
-    const countSyllables = (word) => {
-      const w = word.toLowerCase().replace(/[^a-z]/g, '');
-      if (!w) return 1;
-      if (w.length <= 3) return 1;
-      // Strip silent trailing e, then count vowel clusters
-      const stripped = w
-        .replace(/(?:[^laeiouy]es|[^laeiouy]ed|[aeiou]es?)$/, '')
-        .replace(/^y/, '');
-      const clusters = stripped.match(/[aeiouy]{1,2}/g);
-      return Math.max(1, clusters ? clusters.length : 1);
-    };
-
-    // ── Function words spoken quickly ────────────────────────────
-    const FAST_WORDS = new Set([
-      'a','an','the','and','or','but','in','on','at','to','for',
-      'of','with','is','it','its','be','as','by','he','she','we',
-      'they','this','that','was','are','has','have','had','do',
-      'did','not','so','if','up','out','from','into','than','then',
-      'when','where','who','which','i','you','my','your','our',
-    ]);
-
-    // ── Base duration per word (seconds) ─────────────────────────
-    // syllable weight × seconds-per-syllable, with fast-word discount
-    const SECS_PER_SYL  = 0.165; // average syllable duration at normal pace
-    const FAST_DISCOUNT = 0.60;  // function words spoken 40% faster
-
-    const wordWeight = (raw) => {
-      const clean = raw.toLowerCase().replace(/[^a-z]/g, '');
-      const syls  = countSyllables(clean);
-      const fast  = FAST_WORDS.has(clean);
-      return Math.max(0.10, syls * SECS_PER_SYL * (fast ? FAST_DISCOUNT : 1.0));
-    };
-
-    // ── Punctuation pause added AFTER the word ────────────────────
-    const pauseAfter = (raw) => {
-      if (/[.!?]$/.test(raw)) return 0.32;
-      if (/[,;:]$/.test(raw)) return 0.16;
-      return 0;
-    };
-
-    const scenesWithText = scenes.filter(s => (s.narration_text || s.voiceover_text)?.trim());
-
-    if (scenesWithText.length === 0) {
-      setTranscription({ status: 'error', words: [], wordCount: 0, error: 'No script text found on any scene.' });
-      setIsGenCaptions(false);
-      return;
-    }
-
-    const allWords = [];
-
-    scenesWithText.forEach((scene) => {
-      // Always use full-array index so beat timings are correct
-      const idx       = scenes.findIndex(s => s.id === scene.id);
-      const text      = (scene.narration_text || scene.voiceover_text).trim();
-      const beatDur   = audioBeatDurations[idx] ?? scene.duration_seconds ?? 5;
-      const beatStart = audioStartTimes[idx] ?? 0;
-      // Hard ceiling: no word can end past this point.
-      // The 0.12s margin ensures the last caption clears before the scene cut,
-      // preventing the "first 2 words of next scene" bleed problem.
-      const SCENE_END_MARGIN = 0.12;
-      const beatEnd   = beatStart + beatDur - SCENE_END_MARGIN;
-
-      const tokens = text.split(/\s+/).filter(Boolean);
-      if (tokens.length === 0) return;
-
-      // ── 1. Raw weights ────────────────────────────────────────
-      const weights = tokens.map(t => wordWeight(t) + pauseAfter(t));
-      const rawSum  = weights.reduce((s, w) => s + w, 0);
-
-      // ── 2. Scale to natural speech pace ───────────────────────
-      // Use natural speech timing if it fits within the beat.
-      // Only compress if natural pace exceeds the beat.
-      // Never stretch beyond natural pace — captions follow speech, not beats.
-      const usableDur = beatDur - SCENE_END_MARGIN;
-      const scale = rawSum > usableDur
-        ? usableDur / rawSum
-        : 1.0;
-
-      // ── 3. Build word timeline ────────────────────────────────
-      let cursor = beatStart;
-      tokens.forEach((token, wi) => {
-        const dur  = weights[wi] * scale;
-        const word = token.replace(/[.,!?;:""'']/g, '').trim();
-        if (!word) { cursor += dur; return; }
-        // Hard clamp — never let a caption bleed into the next scene
-        if (cursor >= beatEnd) return;
-        const wordEnd = Math.min(cursor + dur, beatEnd);
-        allWords.push({
-          word,
-          raw:      token,
-          start:    parseFloat(cursor.toFixed(3)),
-          end:      parseFloat(wordEnd.toFixed(3)),
-          sceneIdx: idx,
-        });
-        cursor += dur;
-      });
-    });
-
-    setTranscription({ status: 'done', words: allWords, wordCount: allWords.length, error: null });
-
-    // ── 4. Group into caption chunks ─────────────────────────────
-    // Rules:
-    //   • Hard break after sentence-end punctuation (. ! ?)
-    //   • Soft break after comma/semicolon when chunk ≥ 4 words
-    //   • Hard break when chunk hits MAX_CHUNK_WORDS
-    //   • Hard break when chunk duration hits MAX_CHUNK_SECS
-    //   • Hard break at scene boundaries (sceneIdx changes)
+  const buildCaptionsFromWords = useCallback((allWords, deleteExisting) => {
     const MAX_CHUNK_WORDS = 6;
     const MAX_CHUNK_SECS  = 2.5;
 
@@ -1320,32 +1194,130 @@ export default function TimelineEditorV10() {
       chunk = [];
     };
 
-    allWords.forEach((w, wi) => {
+    allWords.forEach((w) => {
       const chunkDur = chunk.length > 0 ? w.end - chunk[0].start : 0;
-      const sceneBreak = chunk.length > 0 && w.sceneIdx !== chunk[chunk.length - 1].sceneIdx;
+      const sceneBreak = chunk.length > 0 && w.sceneIdx !== undefined &&
+        chunk[chunk.length - 1].sceneIdx !== undefined &&
+        w.sceneIdx !== chunk[chunk.length - 1].sceneIdx;
 
-      // Decide whether to flush BEFORE adding this word
-      if (sceneBreak) {
-        flushChunk();
-      } else if (chunk.length >= MAX_CHUNK_WORDS) {
-        flushChunk();
-      } else if (chunkDur >= MAX_CHUNK_SECS) {
-        flushChunk();
-      }
+      if (sceneBreak) flushChunk();
+      else if (chunk.length >= MAX_CHUNK_WORDS) flushChunk();
+      else if (chunkDur >= MAX_CHUNK_SECS) flushChunk();
 
       chunk.push(w);
 
-      // Decide whether to flush AFTER adding this word
-      const isSentenceEnd = /[.!?]$/.test(w.raw);
-      const isClauseEnd   = /[,;:]$/.test(w.raw) && chunk.length >= 4;
-
-      if (isSentenceEnd || isClauseEnd) {
-        flushChunk();
-      }
+      const isSentenceEnd = /[.!?]$/.test(w.raw || w.word);
+      const isClauseEnd   = /[,;:]$/.test(w.raw || w.word) && chunk.length >= 4;
+      if (isSentenceEnd || isClauseEnd) flushChunk();
     });
-    flushChunk(); // flush any remainder
+    flushChunk();
 
     setCaptionClips(deleteExisting ? caps : [...captionClips, ...caps]);
+  }, [captionClips, setCaptionClips]);
+
+  const generateSyllableFallback = useCallback(() => {
+    const countSyllables = (word) => {
+      const w = word.toLowerCase().replace(/[^a-z]/g, '');
+      if (!w) return 1;
+      if (w.length <= 3) return 1;
+      const stripped = w.replace(/(?:[^laeiouy]es|[^laeiouy]ed|[aeiou]es?)$/, '').replace(/^y/, '');
+      const clusters = stripped.match(/[aeiouy]{1,2}/g);
+      return Math.max(1, clusters ? clusters.length : 1);
+    };
+    const FAST_WORDS = new Set(['a','an','the','and','or','but','in','on','at','to','for','of','with','is','it','its','be','as','by','he','she','we','they','this','that','was','are','has','have','had','do','did','not','so','if','up','out','from','into','than','then','when','where','who','which','i','you','my','your','our']);
+    const SECS_PER_SYL = 0.165;
+    const FAST_DISCOUNT = 0.60;
+    const wordWeight = (raw) => {
+      const clean = raw.toLowerCase().replace(/[^a-z]/g, '');
+      return Math.max(0.10, countSyllables(clean) * SECS_PER_SYL * (FAST_WORDS.has(clean) ? FAST_DISCOUNT : 1.0));
+    };
+    const pauseAfter = (raw) => /[.!?]$/.test(raw) ? 0.32 : /[,;:]$/.test(raw) ? 0.16 : 0;
+
+    const scenesWithText = scenes.filter(s => (s.narration_text || s.voiceover_text)?.trim());
+    if (scenesWithText.length === 0) return [];
+
+    const allWords = [];
+    scenesWithText.forEach((scene) => {
+      const idx = scenes.findIndex(s => s.id === scene.id);
+      const text = (scene.narration_text || scene.voiceover_text).trim();
+      const beatDur = audioBeatDurations[idx] ?? scene.duration_seconds ?? 5;
+      const beatStart = audioStartTimes[idx] ?? 0;
+      const SCENE_END_MARGIN = 0.12;
+      const beatEnd = beatStart + beatDur - SCENE_END_MARGIN;
+      const tokens = text.split(/\s+/).filter(Boolean);
+      if (tokens.length === 0) return;
+
+      const weights = tokens.map(t => wordWeight(t) + pauseAfter(t));
+      const rawSum = weights.reduce((s, w) => s + w, 0);
+      const usableDur = beatDur - SCENE_END_MARGIN;
+      const scale = rawSum > usableDur ? usableDur / rawSum : 1.0;
+
+      let cursor = beatStart;
+      tokens.forEach((token, wi) => {
+        const dur = weights[wi] * scale;
+        const word = token.replace(/[.,!?;:""'']/g, '').trim();
+        if (!word) { cursor += dur; return; }
+        if (cursor >= beatEnd) return;
+        const wordEnd = Math.min(cursor + dur, beatEnd);
+        allWords.push({ word, raw: token, start: parseFloat(cursor.toFixed(3)), end: parseFloat(wordEnd.toFixed(3)), sceneIdx: idx });
+        cursor += dur;
+      });
+    });
+    return allWords;
+  }, [scenes, audioBeatDurations, audioStartTimes]);
+
+  const handleGenerateCaptions = async (deleteExisting) => {
+    setIsGenCaptions(true);
+    setTranscription({ status: 'transcribing', words: [], wordCount: 0, error: null });
+
+    let allWords = [];
+    let usedASR = false;
+
+    // ── Priority 1: Real ASR transcription (CapCut approach) ────
+    if (voiceoverUrl) {
+      try {
+        console.log('[Captions] Transcribing voiceover via AssemblyAI...');
+        const res = await base44.functions.invoke('transcribeVoiceover', {
+          voiceover_url: voiceoverUrl,
+        });
+
+        if (res.data?.success && res.data.words?.length > 0) {
+          allWords = res.data.words.map(w => ({
+            word: w.word,
+            raw:  w.word,
+            start: w.start,
+            end:   w.end,
+          }));
+          usedASR = true;
+          console.log(`[Captions] ASR returned ${allWords.length} words with real timestamps`);
+        } else {
+          console.warn('[Captions] ASR returned no words, falling back to syllable timing');
+        }
+      } catch (err) {
+        console.warn('[Captions] ASR failed, falling back to syllable timing:', err.message || err);
+      }
+    }
+
+    // ── Priority 2: Syllable-weighted fallback ──────────────────
+    if (!usedASR) {
+      console.log('[Captions] Using syllable-weighted fallback timing');
+      allWords = generateSyllableFallback();
+      if (allWords.length === 0) {
+        setTranscription({ status: 'error', words: [], wordCount: 0, error: 'No script text found on any scene.' });
+        setIsGenCaptions(false);
+        return;
+      }
+    }
+
+    setTranscription({
+      status: 'done',
+      words: allWords,
+      wordCount: allWords.length,
+      error: null,
+      source: usedASR ? 'asr' : 'syllable',
+    });
+
+    buildCaptionsFromWords(allWords, deleteExisting);
     setIsGenCaptions(false);
   };
 
