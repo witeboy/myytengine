@@ -84,6 +84,7 @@ export default function AutoBrollButton({ projectId, sceneCount, onComplete, pro
                 <CheckCircle2 className="w-4 h-4 text-cyan-600" />
                 <p className="font-medium">
                   {result.populated}/{result.total} scenes matched with B-roll
+                  {result.remaining > 0 && ` (${result.remaining} remaining...)`}
                 </p>
               </div>
               {result.results && (
