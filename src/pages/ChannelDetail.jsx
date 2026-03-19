@@ -76,13 +76,13 @@ export default function ChannelDetail() {
       const existingProjects = await base44.entities.Projects.filter({ id: topic.project_id });
       if (existingProjects[0]) {
         const ep = existingProjects[0];
-        // Route sleep projects to their own pipeline
+        // Route sleep projects to their dedicated pipeline
         if (ep.project_mode === 'sleep_meditation' || ep.project_mode === 'sleep_story') {
           navigate(`/SleepPipeline?project_id=${ep.id}`);
           return;
         }
-        // Route shorts projects to their own pipeline
-        if (ep.project_mode === 'youtube_shorts') {
+        // Shorts projects with existing progress go to ShortsPipeline
+        if (ep.project_mode === 'youtube_shorts' && ep.status !== 'created' && ep.status !== 'topic_selected') {
           navigate(`/ShortsPipeline?project_id=${ep.id}`);
           return;
         }
@@ -92,23 +92,20 @@ export default function ChannelDetail() {
       }
     }
 
-    const scriptMode = channel.script_mode || 'standard';
-    const isSleep = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
-    const isShorts = scriptMode === 'youtube_shorts';
-
+    // Always create project in standard mode — user picks format at script stage
     const project = await base44.entities.Projects.create({
       name: topic.title,
       niche: channel.niche,
-      tone: isSleep ? 'soothing' : (channel.tone || 'dramatic'),
+      tone: channel.tone || 'dramatic',
       visual_style: channel.visual_style || 'cinematic_realistic',
-      video_duration_minutes: isShorts ? 1.5 : (topic.format === 'short' ? 1 : (channel.long_form_duration_minutes || 15)),
-      orientation: isShorts ? 'portrait' : (topic.format === 'short' ? 'portrait' : 'landscape'),
+      video_duration_minutes: channel.long_form_duration_minutes || 15,
+      orientation: 'landscape',
       status: 'created',
       current_step: 0,
       channel_id: channel.id,
       channel_topic_id: topic.id,
       script_strategy_override: channel.script_strategy || '',
-      project_mode: isSleep ? scriptMode : (isShorts ? 'youtube_shorts' : ''),
+      project_mode: '',
     });
 
     const importedTopic = await base44.entities.Topics.create({
@@ -135,14 +132,8 @@ export default function ChannelDetail() {
 
     queryClient.invalidateQueries({ queryKey: ['channel-topics', channelId] });
 
-    // Route to dedicated pipelines
-    if (isSleep) {
-      navigate(`/SleepPipeline?project_id=${project.id}`);
-    } else if (isShorts) {
-      navigate(`/ShortsPipeline?project_id=${project.id}`);
-    } else {
-      navigate(`/StoryTopics?project_id=${project.id}`);
-    }
+    // Always go through standard pipeline — user chooses format at script stage
+    navigate(`/StoryDuration?project_id=${project.id}`);
   };
 
   if (loadingChannel) {
