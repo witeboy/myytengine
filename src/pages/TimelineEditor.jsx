@@ -1936,17 +1936,25 @@ export default function TimelineEditorV10() {
         </div>
       )}
 
-      {/* Timeline */}
-      <div className="h-48 flex-shrink-0 bg-[#0a0a14] border-t border-gray-700 overflow-x-auto">
+      {/* Timeline — Phase 3+4: Snap-enabled tracks with virtual scrolling */}
+      <div className="h-48 flex-shrink-0 bg-[#0a0a14] border-t border-gray-700 overflow-x-auto relative">
         <TimelineRuler totalDuration={totalDuration} pps={pps} onSeek={handleSeek} />
         {scenes.length === 0
           ? <div className="flex items-center justify-center h-32 text-gray-500">No scenes</div>
           : <>
-              <TimelineTrack type="video"   clips={videoClips}   pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={selectedVideoId}   onSelect={id => { setSelectedVideoId(id); setSelectedCaptionId(null); }} onUpdate={c => setVideoClips(videoClips.map(x => x.id === c.id ? c : x))} editable={true} />
-              <TimelineTrack type="audio"   clips={audioClips}   pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={null}              onSelect={() => {}} onUpdate={() => {}} editable={false} />
-              <TimelineTrack type="caption" clips={captionClips} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={selectedCaptionId} onSelect={id => { setSelectedCaptionId(id); setSelectedVideoId(null); }} onUpdate={c => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))} editable={true} />
+              <SnapTimelineTrack type="video" clips={videoClips} allClips={[...videoClips, ...captionClips]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={selectedVideoId}
+                onSelect={id => { setSelectedVideoId(id); setSelectedCaptionId(null); }}
+                onUpdate={c => { let updated = videoClips.map(x => x.id === c.id ? c : x); if (magneticMode) updated = closeGaps(updated); setVideoClips(updated); }}
+                editable snappingEnabled={snappingEnabled} onSnapLine={setSnapLinePx} />
+              <SnapTimelineTrack type="audio" clips={audioClips} allClips={[]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={null}
+                onSelect={() => {}} onUpdate={() => {}} editable={false} snappingEnabled={false} />
+              <SnapTimelineTrack type="caption" clips={captionClips} allClips={[...videoClips, ...captionClips]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={selectedCaptionId}
+                onSelect={id => { setSelectedCaptionId(id); setSelectedVideoId(null); }}
+                onUpdate={c => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))}
+                editable snappingEnabled={snappingEnabled} onSnapLine={setSnapLinePx} />
             </>
         }
+        <SnapGuide snapLinePx={snapLinePx} trackAreaHeight={168} />
       </div>
 
       {/* Exporter modal */}
