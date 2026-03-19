@@ -45,8 +45,7 @@ Deno.serve(async (req) => {
       headers,
       body: JSON.stringify({
         audio_url: voiceover_url,
-        // Word-level timestamps are included by default
-        // language_detection: true enables auto language detection
+        speech_model: 'universal-3-pro',
         language_detection: true,
       }),
     });
