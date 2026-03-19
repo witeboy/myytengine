@@ -953,6 +953,10 @@ export default function TimelineEditorV10() {
   const [isMuted,        setIsMuted]        = useState(false);
   const [musicVol,       setMusicVol]       = useState(0.3);
   const [previewOrientation, setPreviewOrientation] = useState(null);
+  // Phase 3: Magnetic snapping state
+  const [snappingEnabled, setSnappingEnabled] = useState(true);
+  const [magneticMode,    setMagneticMode]    = useState(true); // gap-closing on main track
+  const [snapLinePx,      setSnapLinePx]      = useState(null);
 
   const videoHistory    = useHistory([]);
   const captionHistory  = useHistory([]);
