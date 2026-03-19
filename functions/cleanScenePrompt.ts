@@ -57,7 +57,7 @@ STYLE ENFORCEMENT:
 If a style is mentioned (e.g., 3D whiteboard cartoon):
 - Lock it strictly
 - Add constraints to prevent realism bleed:
-  "no photorealism, no complex textures, no cinematic blur unless specified"
+  no photorealism, no complex textures, no cinematic blur unless specified
 
 -------------------------------------
 
