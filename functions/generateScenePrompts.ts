@@ -1755,7 +1755,18 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
           const mood = s.director?.mood || 'contemplative';
           const movement = s.director?.camera_movement || 'slow drift forward';
           const vc = s.director?.visual_concept || s.narration_text || '';
-          animationPrompt = `${movement} over ${sceneDuration} seconds. ${getArcAnimationGuidance(arcPosition)} Camera reveals the scene through parallax — foreground elements drift at different speed than background, creating cinematic depth. Subject exhibits natural micro-motion: breathing rhythm visible in chest and shoulders, weight shifts, small involuntary gestures. Environmental physics respond to the world: ${vc.includes('rain') ? 'water streaks surfaces, reflections ripple in puddles, droplets catch light' : vc.includes('wind') ? 'fabric ripples, hair lifts and settles, loose objects shift' : vc.includes('crowd') ? 'background figures move at varied speeds, creating depth layers' : 'ambient textures evolve — light creeps across surfaces, shadows rotate, particles drift through beams'}. Light is alive — ${mood.includes('tense') || mood.includes('anxiety') ? 'flickering, unstable, casting nervous shadows' : mood.includes('warm') || mood.includes('hope') ? 'gradually warming, golden rays expanding across frame' : 'shifting slowly, painting the scene with evolving tones'}. Shallow DOF breathes between planes, drawing focus where emotion lives.`;        }
+
+          if (useSleepStyle) {
+            const sleepEnv = vc.includes('forest') || vc.includes('tree') ? 'gentle breeze rustling distant leaves, soft mist drifting between trees'
+              : vc.includes('ocean') || vc.includes('water') || vc.includes('lake') || vc.includes('river') ? 'gentle water ripples spreading slowly across the surface'
+              : vc.includes('rain') ? 'soft rain falling steadily, tiny ripples forming in still puddles'
+              : vc.includes('snow') ? 'soft snowflakes drifting down slowly through still air'
+              : 'very faint mist drifting slowly through the still scene';
+            animationPrompt = `Ultra-slow ${movement} over ${sceneDuration} seconds. ${sleepEnv}. Completely still atmosphere, no changes in lighting or brightness.`;
+          } else {
+            animationPrompt = `${movement} over ${sceneDuration} seconds. ${getArcAnimationGuidance(arcPosition)} Camera reveals the scene through parallax — foreground elements drift at different speed than background, creating cinematic depth. Subject exhibits natural micro-motion: breathing rhythm visible in chest and shoulders, weight shifts, small involuntary gestures. Environmental physics respond to the world: ${vc.includes('rain') ? 'water streaks surfaces, reflections ripple in puddles, droplets catch light' : vc.includes('wind') ? 'fabric ripples, hair lifts and settles, loose objects shift' : vc.includes('crowd') ? 'background figures move at varied speeds, creating depth layers' : 'ambient textures evolve — light creeps across surfaces, shadows rotate, particles drift through beams'}. Light is alive — ${mood.includes('tense') || mood.includes('anxiety') ? 'flickering, unstable, casting nervous shadows' : mood.includes('warm') || mood.includes('hope') ? 'gradually warming, golden rays expanding across frame' : 'shifting slowly, painting the scene with evolving tones'}. Shallow DOF breathes between planes, drawing focus where emotion lives.`;
+          }
+        }
 
 
         // ═══ OPENAI PROMPT CLEANER — final structuring pass ═══
