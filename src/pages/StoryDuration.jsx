@@ -45,10 +45,11 @@ export default function StoryDuration() {
     enabled: !!project?.selected_topic_id,
   });
 
-  const safeDuration = duration || 8;
-  const totalWords = safeDuration * 150;
+  const isShorts = scriptMode === 'youtube_shorts';
   const isSleepProject = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
-  const numBatches = Math.max(2, Math.ceil(totalWords / (isSleepProject ? 1100 : 800)));
+  const safeDuration = isShorts ? 1.5 : (duration || 8);
+  const totalWords = isShorts ? 220 : safeDuration * 150;
+  const numBatches = isShorts ? 1 : Math.max(2, Math.ceil(totalWords / (isSleepProject ? 1100 : 800)));
 
   const handleGenerate = async () => {
     const finalDuration = Math.max(1, Math.round(safeDuration));
