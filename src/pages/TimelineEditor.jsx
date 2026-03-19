@@ -1167,18 +1167,26 @@ export default function TimelineEditorV10() {
     setInitialized(true);
   }, [scenes.length, prodSettings]);
 
-  // ── Playback loop ───────────────────────────────────────────────
+  // ── Phase 1: rAF Playback Engine (60fps, bypasses React render cycle) ──
+  const playbackEngine = usePlaybackEngine({
+    totalDuration,
+    onTimeUpdate: useCallback((t) => setCurrentTime(t), []),
+    onPlaybackEnd: useCallback(() => setIsPlaying(false), []),
+  });
+
+  // Sync engine play/pause with React state
   useEffect(() => {
-    if (isPlaying) {
-      const start = Date.now() - currentTime * 1000;
-      playRef.current = setInterval(() => {
-        const elapsed = (Date.now() - start) / 1000;
-        if (elapsed >= totalDuration) { setIsPlaying(false); setCurrentTime(0); }
-        else setCurrentTime(elapsed);
-      }, 33);
-    } else if (playRef.current) clearInterval(playRef.current);
-    return () => { if (playRef.current) clearInterval(playRef.current); };
-  }, [isPlaying, totalDuration]);
+    if (isPlaying) playbackEngine.play();
+    else playbackEngine.pause();
+  }, [isPlaying]);
+
+  // Keep engine in sync when totalDuration changes
+  useEffect(() => {
+    if (currentTime > totalDuration) {
+      playbackEngine.seek(0);
+      setCurrentTime(0);
+    }
+  }, [totalDuration]);
 
   // ── Audio sync ──────────────────────────────────────────────────
   useEffect(() => {
