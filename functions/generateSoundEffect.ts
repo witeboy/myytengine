@@ -98,7 +98,27 @@ Deno.serve(async (req) => {
     // If T2A failed, try using the music generation API as a fallback for atmospheric sounds
     console.log('T2A SFX failed, trying music generation for atmospheric SFX...');
     const musicResponse = await fetch('https://api.minimax.io/v1/music_generation', {
-...
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${minimaxKey}`,
+      },
+      body: JSON.stringify({
+        model: 'music-2.5',
+        prompt: `Sound effect: ${text}. Short ambient sound, no vocals, no lyrics, purely atmospheric foley sound.`,
+        lyrics: "[Inst]\n[Outro]",
+        output_format: 'hex',
+        audio_setting: {
+          sample_rate: 44100,
+          bitrate: 128000,
+          format: 'mp3'
+        }
+      }),
+    });
+
+    const musicData = await musicResponse.json();
+    console.log('MiniMax music SFX response:', JSON.stringify(musicData.base_resp || {}));
+
     if (musicData.base_resp?.status_code === 0 && musicData.data?.audio) {
       const audioHex = musicData.data.audio;
       const bytes = new Uint8Array(audioHex.length / 2);
