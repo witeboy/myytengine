@@ -1204,7 +1204,7 @@ animation_prompt: "${(s.animation_prompt || '').substring(0, 200)}"
       const styleBodyRules = getStyleSceneBodyRules(visualStyle);
       const styleBodyBlock = styleBodyRules ? `
 **═══════════════════════════════════════════════════════════════**
-**HOW TO DESCRIBE SCENE CONTENT IN "${visualStyle}" STYLE:**
+**HOW TO DESCRIBE SCENE CONTENT IN ${visualStyle.replace(/_/g, ' ')} STYLE:**
 **Characters:** ${styleBodyRules.characters}
 **Environments:** ${styleBodyRules.environments}
 **Objects & Props:** ${styleBodyRules.objects}
