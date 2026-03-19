@@ -788,6 +788,13 @@ export default function TimelineEditorV10() {
         if (Array.isArray(savedVideo) && savedVideo.length > 0) {
           videoHistory.reset(savedVideo);
           if (savedCaptions.length > 0) captionHistory.reset(savedCaptions);
+          // Restore overlays
+          if (prodSettings.timeline_overlay_clips) {
+            try {
+              const savedOverlays = JSON.parse(prodSettings.timeline_overlay_clips);
+              if (Array.isArray(savedOverlays) && savedOverlays.length > 0) overlayHistory.reset(savedOverlays);
+            } catch (e) {}
+          }
           setInitialized(true);
           console.log('[Timeline] Restored', savedVideo.length, 'clips +', savedCaptions.length, 'captions from DB');
           return;
