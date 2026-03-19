@@ -101,7 +101,7 @@ async function searchPixabay(searchTerms, duration, quality) {
         quality: best === vids.large ? '1080p+' : best === vids.medium ? '720p' : 'SD',
         width: best.width,
         height: best.height,
-        thumbnail: `https://i.vimeocdn.com/video/${video.picture_id}_295x166.jpg`,
+        thumbnail: video.picture_id ? `https://i.vimeocdn.com/video/${video.picture_id}_295x166.jpg` : '',
         preview: (vids.small || vids.tiny || {}).url,
         downloadUrl: best.url,
         author: video.user,

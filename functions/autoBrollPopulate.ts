@@ -10,6 +10,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 // ══════════════════════════════════════════════════════════════════
 
 const BATCH_SIZE = 10; // Scenes per Gemini call
+const MAX_SCENES_PER_CALL = 20; // Limit per invocation to avoid timeout
 
 async function callGemini(prompt, temperature = 0.3) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
@@ -87,7 +88,7 @@ async function searchPixabay(query) {
         id: `pixabay-${v.id}`,
         source: 'pixabay',
         name: v.tags || '',
-        thumbnail: `https://i.vimeocdn.com/video/${v.picture_id}_295x166.jpg`,
+        thumbnail: v.picture_id ? `https://i.vimeocdn.com/video/${v.picture_id}_295x166.jpg` : '',
         downloadUrl: best.url,
         duration: v.duration,
         width: best.width,
@@ -115,13 +116,20 @@ Deno.serve(async (req) => {
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-    const scenes = allScenes
+    const allEligible = allScenes
       .filter(s => s.narration_text?.trim())
       .sort((a, b) => a.scene_number - b.scene_number);
 
-    if (scenes.length === 0) {
-      return Response.json({ success: true, populated: 0, message: 'No scenes with narration found' });
+    // Only process scenes that don't already have b-roll
+    const unpopulated = allEligible.filter(s => !s.broll_url || !s.broll_url.startsWith('http'));
+    
+    if (unpopulated.length === 0) {
+      return Response.json({ success: true, done: true, populated: 0, total: allEligible.length, message: 'All scenes already have B-roll' });
     }
+
+    // Limit per call to avoid platform timeout
+    const scenes = unpopulated.slice(0, MAX_SCENES_PER_CALL);
+    const hasMore = unpopulated.length > MAX_SCENES_PER_CALL;
 
     const orientation = project.orientation || 'landscape';
     const niche = project.niche || 'general';
@@ -276,8 +284,10 @@ Return JSON:
 
     return Response.json({
       success: true,
+      done: !hasMore,
       populated: totalPopulated,
-      total: scenes.length,
+      total: allEligible.length,
+      remaining: hasMore ? unpopulated.length - scenes.length : 0,
       results,
     });
   } catch (error) {

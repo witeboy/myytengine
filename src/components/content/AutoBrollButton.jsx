@@ -19,11 +19,25 @@ export default function AutoBrollButton({ projectId, sceneCount, onComplete, pro
     try {
       // Use sleep-specific b-roll function for sleep projects
       const fnName = isSleep ? 'sleepBrollPopulate' : 'autoBrollPopulate';
-      const res = await base44.functions.invoke(fnName, {
-        project_id: projectId,
-      });
-      const data = res.data || res;
-      setResult(data);
+      let totalPopulated = 0;
+      let done = false;
+
+      while (!done) {
+        const res = await base44.functions.invoke(fnName, {
+          project_id: projectId,
+        });
+        const data = res.data || res;
+        totalPopulated += data.populated || 0;
+        done = data.done !== false;
+        
+        if (!done) {
+          setResult({ populated: totalPopulated, total: data.total, remaining: data.remaining });
+          if (onComplete) await onComplete();
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+
+      setResult({ populated: totalPopulated, total: totalPopulated });
       if (onComplete) await onComplete();
     } catch (err) {
       console.error('Auto B-Roll failed:', err);
