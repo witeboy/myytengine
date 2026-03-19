@@ -335,7 +335,7 @@ export default function StoryScript() {
                     <div className="flex gap-2">
             {allCompleted && (
               <>
-                {!latestScript && (
+                {!isShorts && !latestScript && (
                   <Button 
                     variant="outline" 
                     onClick={async () => {
