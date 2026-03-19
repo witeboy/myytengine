@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, Save, Eye, Pencil, Download } from 'lucide-react';
-import ReactQuill from 'react-quill';
+import { Textarea } from '@/components/ui/textarea';
+import { Loader2, Save, Eye, Pencil } from 'lucide-react';
 
 export default function ScriptEditor({ script, onSaved }) {
   const [editing, setEditing] = useState(false);
@@ -12,26 +12,16 @@ export default function ScriptEditor({ script, onSaved }) {
 
   useEffect(() => {
     if (script?.full_script) {
-      // Convert plain text to HTML for the editor
-      const html = script.full_script
-        .split('\n\n')
-        .map(p => `<p>${p.replace(/\n/g, '<br/>')}</p>`)
-        .join('');
-      setContent(html);
+      setContent(script.full_script);
     }
   }, [script?.id]);
 
   const handleSave = async () => {
     setSaving(true);
-    // Convert HTML back to plain text
-    const temp = document.createElement('div');
-    temp.innerHTML = content;
-    const plainText = temp.innerText || temp.textContent;
-    const wordCount = plainText.split(/\s+/).filter(w => w.length > 0).length;
+    const wordCount = content.split(/\s+/).filter(w => w.length > 0).length;
 
-    // Update the EXISTING script in place (so final_aggregated stays current)
     await base44.entities.Scripts.update(script.id, {
-      full_script: plainText,
+      full_script: content,
       word_count: wordCount,
       estimated_duration_sec: Math.round((wordCount / 150) * 60),
       editor_notes: `Edited ${new Date().toLocaleString()}`,
@@ -76,15 +66,11 @@ export default function ScriptEditor({ script, onSaved }) {
       </CardHeader>
       <CardContent>
         {editing ? (
-          <ReactQuill
+          <Textarea
             value={content}
-            onChange={setContent}
-            theme="snow"
-            className="bg-white [&_.ql-toolbar]:border-gray-200 [&_.ql-container]:border-gray-200"
-            style={{ minHeight: 400 }}
-            modules={{
-              toolbar: false,
-            }}
+            onChange={e => setContent(e.target.value)}
+            className="min-h-[400px] font-mono text-sm leading-relaxed resize-y"
+            placeholder="Edit your script..."
           />
         ) : (
           <div className="bg-gray-50 p-6 rounded-lg text-sm text-gray-700 whitespace-pre-wrap max-h-[600px] overflow-y-auto leading-relaxed">
