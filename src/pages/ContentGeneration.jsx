@@ -802,6 +802,7 @@ export default function ContentGeneration() {
   // Phase 2: Poll pollSceneImage every 5s until all resolved
   // ══════════════════════════════════════════════════════════════════
   const handleGenerateImages = async () => {
+    console.log('🚀🚀🚀 NEW handleGenerateImages v2 — submit+poll architecture');
     setGeneratingImages(true);
     pollAbortRef.current = false;
 
