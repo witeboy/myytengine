@@ -389,9 +389,15 @@ async function processScene(base44, scene, project, kieApiKey, ai33ApiKey, aspec
   console.log(`📐 Scene ${sceneNum}: ${finalPrompt.length} chars, prompt: "${finalPrompt.substring(0, 150)}..."`);
 
   // ── Provider order ────────────────────────────────────────
+  // If scene previously failed, skip AI33 (likely content safety) and try fallbacks
+  const wasFailedBefore = scene.status === 'image_failed';
   const providers = isSleepProject
-    ? [ai33ApiKey ? 'ai33_seedream' : null, 'nano_banana', 'grok'].filter(Boolean)
-    : [ai33ApiKey ? 'ai33_seedream' : null, 'grok', 'nano_banana'].filter(Boolean);
+    ? [(!wasFailedBefore && ai33ApiKey) ? 'ai33_seedream' : null, 'nano_banana', 'grok'].filter(Boolean)
+    : [(!wasFailedBefore && ai33ApiKey) ? 'ai33_seedream' : null, 'grok', 'nano_banana'].filter(Boolean);
+
+  if (wasFailedBefore) {
+    console.log(`🔄 Scene ${sceneNum}: previously failed — skipping AI33, trying ${providers.join(' → ')}`);
+  }
 
   // ── TRY EACH PROVIDER (submit only) ──────────────────────
   for (const provider of providers) {
