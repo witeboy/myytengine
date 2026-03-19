@@ -80,15 +80,10 @@ export default function ScriptEditor({ script, onSaved }) {
             value={content}
             onChange={setContent}
             theme="snow"
-            className="bg-white"
+            className="bg-white [&_.ql-toolbar]:border-gray-200 [&_.ql-container]:border-gray-200"
             style={{ minHeight: 400 }}
             modules={{
-              toolbar: [
-                ['bold', 'italic', 'underline'],
-                [{ header: [1, 2, 3, false] }],
-                [{ list: 'ordered' }, { list: 'bullet' }],
-                ['clean'],
-              ],
+              toolbar: false,
             }}
           />
         ) : (
