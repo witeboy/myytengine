@@ -885,11 +885,16 @@ Deno.serve(async (req) => {
     // ── Project settings ──────────────────────────────────────
     const aspectRatio = project.orientation === "portrait" ? "9:16" : "16:9";
 
+    const isSleep = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story' || project.visual_style === 'sleep_ambient';
+    const providerOrder = isSleep
+      ? [AI33_API_KEY ? 'AI33 Seedream' : null, 'Nano Banana', 'Grok'].filter(Boolean)
+      : [AI33_API_KEY ? 'AI33 Seedream' : null, 'Grok', 'Nano Banana'].filter(Boolean);
+
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`🎨 IMAGE GENERATION — ${scenesToProcess.length} scenes`);
+    console.log(`🏗️ Provider chain: ${providerOrder.join(' → ')}`);
     console.log(`📐 Aspect ratio: ${aspectRatio} | ⚡ Concurrency: ${MAX_CONCURRENT}`);
-    console.log(`🔄 Retries: ${MAX_RETRIES} | ⏱️ Poll timeout: ${POLL_TIMEOUT_MS / 1000}s`);
-    console.log(`🔗 Character reference: ${project.reference_image_url ? 'YES (Scene 2+ will use image-to-image)' : 'NONE (Scene 1 will establish reference)'}`);
+    console.log(`🔗 Character reference: ${project.reference_image_url ? 'YES' : 'NONE (Scene 1 establishes reference)'}`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     // ── Process with concurrency pool ─────────────────────────
