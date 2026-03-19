@@ -1407,7 +1407,12 @@ export default function ContentGeneration() {
       <StageProgress currentStage={2} />
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-2">
-          <h1 className="text-3xl font-bold">Content Generation</h1>
+          <div>
+            <h1 className="text-3xl font-bold">Content Generation</h1>
+            {project?.name && (
+              <p className="text-lg text-purple-700 font-semibold mt-1 truncate max-w-xl">{project.name}</p>
+            )}
+          </div>
           <div className="flex gap-2">
             {scenes.length > 0 && (
               <Button variant="outline" onClick={handleExport} disabled={exporting}>
