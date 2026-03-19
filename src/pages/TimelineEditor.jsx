@@ -1839,6 +1839,17 @@ export default function TimelineEditorV10() {
           <button className="p-1.5 rounded text-gray-400 hover:text-white hover:bg-white/10" title="Duplicate"><Copy size={16} /></button>
           <button onClick={handleDelete} disabled={!selectedVideoId && !selectedCaptionId}
             className={`p-1.5 rounded ${(selectedVideoId || selectedCaptionId) ? 'text-red-400 hover:text-red-300' : 'text-gray-600'}`} title="Delete"><Trash2 size={16} /></button>
+          <div className="w-px h-4 bg-gray-700 mx-1" />
+          <button onClick={() => setSnappingEnabled(!snappingEnabled)}
+            className={`p-1.5 rounded flex items-center gap-1 text-[10px] ${snappingEnabled ? 'text-cyan-400 bg-cyan-500/15' : 'text-gray-600 hover:text-gray-400'}`}
+            title="Toggle Snapping (N)">
+            <Magnet size={14} />{snappingEnabled && <span>Snap</span>}
+          </button>
+          <button onClick={() => setMagneticMode(!magneticMode)}
+            className={`p-1.5 rounded flex items-center gap-1 text-[10px] ${magneticMode ? 'text-green-400 bg-green-500/15' : 'text-gray-600 hover:text-gray-400'}`}
+            title="Toggle Magnetic Timeline">
+            {magneticMode ? <Link2 size={14} /> : <Unlink2 size={14} />}{magneticMode && <span>Magnet</span>}
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
