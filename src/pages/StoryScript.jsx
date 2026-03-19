@@ -373,9 +373,9 @@ export default function StoryScript() {
         </div>
                 <p className="text-gray-600 mb-8">
           {generating
-            ? 'AI is writing your script batch by batch...'
+            ? isShorts ? 'AI is generating your 90-second Shorts script...' : 'AI is writing your script batch by batch...'
             : (allCompleted && !latestScript)
-            ? 'Batches finished! Merging and cleaning the final documentary script...'
+            ? isShorts ? 'Finalizing your Shorts script...' : 'Batches finished! Merging and cleaning the final documentary script...'
             : allCompleted
             ? 'Script generation complete.'
             : 'Preparing script...'}
