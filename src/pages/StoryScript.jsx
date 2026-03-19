@@ -388,7 +388,7 @@ export default function StoryScript() {
             <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
               <Loader2 className="w-8 h-8 animate-spin text-green-600 mx-auto mb-3" />
               <p className="text-sm font-medium text-green-800">Generating YouTube Shorts script...</p>
-              <p className="text-xs text-green-600 mt-1">~90 seconds • 200–240 words • Hook → Tension → Value → CTA</p>
+              <p className="text-xs text-green-600 mt-1">~90 seconds • 200–240 words • Niche-specific storytelling structure</p>
             </div>
           )}
 
