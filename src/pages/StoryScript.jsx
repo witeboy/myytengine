@@ -438,8 +438,8 @@ export default function StoryScript() {
             </div>
           )}
 
-          {/* Batch Cards — show while generating or when not all complete */}
-          {!allCompleted &&
+          {/* Batch Cards — show while generating or when not all complete (standard/sleep only) */}
+          {!isShorts && !allCompleted && batches.length > 0 &&
             batches.map((batch) => (
               <BatchCard
                 key={batch.id}
