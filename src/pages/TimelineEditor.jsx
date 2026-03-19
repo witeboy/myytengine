@@ -11,10 +11,15 @@ import { Textarea } from '@/components/ui/textarea';
 import VideoExporter from '@/components/timeline/VideoExporter';
 import useVideoExport from '@/components/timeline/useVideoExport';
 import ClipPropertiesPanel from '@/components/timeline/ClipPropertiesPanel';
+import CanvasPreview from '@/components/timeline/CanvasPreview';
+import SnapTimelineTrack from '@/components/timeline/SnapTimeline';
+import SnapGuide from '@/components/timeline/SnapGuide';
+import usePlaybackEngine from '@/hooks/usePlaybackEngine';
+import { closeGaps } from '@/hooks/useSnapEngine';
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Volume1,
-  ZoomIn, ZoomOut, Undo2, Redo2, Scissors, Trash2, Copy,
-  Image, Music, Type, Wand2, Film, Mic, Settings,
+  ZoomIn, ZoomOut, Undo2, Redo2, Scissors, Trash2, Copy, Magnet,
+  Image, Music, Type, Wand2, Film, Mic, Settings, Link2, Unlink2,
   Loader2, CheckCircle, Sparkles, Star, Move, ArrowLeft, ArrowRight, FileVideo,
   LayoutGrid, FolderOpen, X, Package, Camera, AlertCircle, Clapperboard,
   Bold, Italic, Underline, Palette,
