@@ -232,12 +232,26 @@ Deno.serve(async (req) => {
       offset += chunk.length;
     }
 
-    // Upload
-    const audioBlob = new Blob([audioBytes], { type: 'audio/mpeg' });
-    const uploadResult = await base44.asServiceRole.integrations.Core.UploadFile({
-      file: new File([audioBlob], 'voiceover.mp3', { type: 'audio/mpeg' }),
+    // Upload to Cloudflare R2
+    const r2Client = new S3Client({
+      region: 'auto',
+      endpoint: `https://${Deno.env.get('CLOUDFLARE_ACCOUNT_ID')}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: Deno.env.get('CLOUDFLARE_R2_ACCESS_KEY_ID'),
+        secretAccessKey: Deno.env.get('CLOUDFLARE_R2_SECRET_ACCESS_KEY'),
+      },
     });
-    const audioUrl = uploadResult.file_url;
+
+    const fileName = `voiceovers/${project_id}-${Date.now()}.mp3`;
+    await r2Client.send(new PutObjectCommand({
+      Bucket: Deno.env.get('CLOUDFLARE_R2_BUCKET_NAME'),
+      Key: fileName,
+      Body: audioBytes,
+      ContentType: 'audio/mpeg',
+    }));
+
+    const publicUrl = Deno.env.get('CLOUDFLARE_R2_PUBLIC_URL').replace(/\/$/, '');
+    const audioUrl = `${publicUrl}/${fileName}`;
 
     totalDuration = Math.round(totalDuration * 10) / 10;
 
