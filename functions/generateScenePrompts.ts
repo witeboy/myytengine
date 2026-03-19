@@ -42,7 +42,7 @@ If the prompt includes ANY text, UI, or screen elements:
 STYLE ENFORCEMENT:
 If a style is mentioned (e.g., 3D whiteboard cartoon):
 - Lock it strictly
-- Add constraints to prevent realism bleed: "no photorealism, no complex textures, no cinematic blur unless specified"
+- Add constraints to prevent realism bleed: no photorealism, no complex textures, no cinematic blur unless specified
 
 OUTPUT: Return ONLY a single clean structured prompt as ONE continuous text block. Structure it in this internal order as flowing prose (NOT labeled sections):
 [MAIN SUBJECT] → [ENVIRONMENT] → [OBJECTS & DETAILS] → [CHARACTERS & POSITIONS] → [ACTIONS] → [CAMERA / COMPOSITION] → [LIGHTING] → [STYLE / MOOD] → [TEXT / UI if applicable] → [TECHNICAL SPECS] → [CONSTRAINTS / NEGATIVES]
