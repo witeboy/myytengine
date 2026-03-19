@@ -18,7 +18,7 @@ import usePlaybackEngine from '@/hooks/usePlaybackEngine';
 import { closeGaps } from '@/hooks/useSnapEngine';
 import {
   Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Volume1,
-  ZoomIn, ZoomOut, Undo2, Redo2, Scissors, Trash2, Copy, Magnet,
+  ZoomIn, ZoomOut, Undo2, Redo2, Scissors, Trash2, Copy,
   Image, Music, Type, Wand2, Film, Mic, Settings, Link2, Unlink2,
   Loader2, CheckCircle, Sparkles, Star, Move, ArrowLeft, ArrowRight, FileVideo,
   LayoutGrid, FolderOpen, X, Package, Camera, AlertCircle, Clapperboard,
