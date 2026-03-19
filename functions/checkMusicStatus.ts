@@ -1,4 +1,5 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { S3Client, PutObjectCommand } from 'npm:@aws-sdk/client-s3@3.600.0';
 
 Deno.serve(async (req) => {
   try {
@@ -66,19 +67,37 @@ Deno.serve(async (req) => {
       }
 
       if (track_id) {
-        // Download and re-upload to our storage
+        // Download and re-upload to Cloudflare R2
         const audioResp = await fetch(audioUrl);
-        const audioBlob = await audioResp.blob();
-        const file = new File([audioBlob], `music_${track_id}.mp3`, { type: 'audio/mpeg' });
-        const uploaded = await base44.asServiceRole.integrations.Core.UploadFile({ file });
+        const audioBytes = new Uint8Array(await audioResp.arrayBuffer());
+
+        const r2Client = new S3Client({
+          region: 'auto',
+          endpoint: `https://${(Deno.env.get('CLOUDFLARE_ACCOUNT_ID') || '').trim()}.r2.cloudflarestorage.com`,
+          credentials: {
+            accessKeyId: (Deno.env.get('CLOUDFLARE_R2_ACCESS_KEY_ID') || '').trim(),
+            secretAccessKey: (Deno.env.get('CLOUDFLARE_R2_SECRET_ACCESS_KEY') || '').trim(),
+          },
+        });
+
+        const fileName = `music/${track_id}-${Date.now()}.mp3`;
+        await r2Client.send(new PutObjectCommand({
+          Bucket: (Deno.env.get('CLOUDFLARE_R2_BUCKET_NAME') || '').trim(),
+          Key: fileName,
+          Body: audioBytes,
+          ContentType: 'audio/mpeg',
+        }));
+
+        const publicUrl = (Deno.env.get('CLOUDFLARE_R2_PUBLIC_URL') || '').trim().replace(/\/$/, '');
+        const permanentUrl = `${publicUrl}/${fileName}`;
 
         await base44.asServiceRole.entities.MusicTracks.update(track_id, {
-          audio_url: uploaded.file_url,
+          audio_url: permanentUrl,
           status: 'completed',
           duration_seconds: Math.round(duration) || 120,
         });
 
-        return Response.json({ status: 'COMPLETED', audio_url: uploaded.file_url, duration });
+        return Response.json({ status: 'COMPLETED', audio_url: permanentUrl, duration });
       }
 
       return Response.json({ status: 'COMPLETED', audio_url: audioUrl, duration });

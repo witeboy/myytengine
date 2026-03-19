@@ -1,4 +1,5 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { S3Client, PutObjectCommand } from 'npm:@aws-sdk/client-s3@3.600.0';
 
 Deno.serve(async (req) => {
   try {
@@ -35,13 +36,30 @@ Deno.serve(async (req) => {
           const videoUrls = data?.output || [];
 
           if (status === "SUCCEEDED" && videoUrls.length > 0 && scene_id) {
-            // Runway URLs are ephemeral — upload to our storage
+            // Runway URLs are ephemeral — upload to Cloudflare R2
             const videoUrl = videoUrls[0];
             const videoRes = await fetch(videoUrl);
-            const videoBlob = await videoRes.blob();
-            const file = new File([videoBlob], `scene_${scene_id}.mp4`, { type: "video/mp4" });
-            const uploaded = await base44.asServiceRole.integrations.Core.UploadFile({ file });
-            const permanentUrl = uploaded.file_url;
+            const videoBytes = new Uint8Array(await videoRes.arrayBuffer());
+
+            const r2Client = new S3Client({
+              region: 'auto',
+              endpoint: `https://${(Deno.env.get('CLOUDFLARE_ACCOUNT_ID') || '').trim()}.r2.cloudflarestorage.com`,
+              credentials: {
+                accessKeyId: (Deno.env.get('CLOUDFLARE_R2_ACCESS_KEY_ID') || '').trim(),
+                secretAccessKey: (Deno.env.get('CLOUDFLARE_R2_SECRET_ACCESS_KEY') || '').trim(),
+              },
+            });
+
+            const fileName = `videos/scene-${scene_id}-${Date.now()}.mp4`;
+            await r2Client.send(new PutObjectCommand({
+              Bucket: (Deno.env.get('CLOUDFLARE_R2_BUCKET_NAME') || '').trim(),
+              Key: fileName,
+              Body: videoBytes,
+              ContentType: 'video/mp4',
+            }));
+
+            const r2PublicUrl = (Deno.env.get('CLOUDFLARE_R2_PUBLIC_URL') || '').trim().replace(/\/$/, '');
+            const permanentUrl = `${r2PublicUrl}/${fileName}`;
 
             await base44.asServiceRole.entities.Scenes.update(scene_id, {
               video_url: permanentUrl,

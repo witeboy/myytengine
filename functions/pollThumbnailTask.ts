@@ -1,4 +1,5 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { S3Client, PutObjectCommand } from 'npm:@aws-sdk/client-s3@3.600.0';
 
 // pollThumbnailTask — Check if a KIE task has completed
 // Called by the frontend when generateNewThumbnailImage returns pending=true
@@ -49,23 +50,40 @@ Deno.serve(async (req) => {
       }
       if (!url) url = pollData?.data?.imageUrl || pollData?.data?.image_url || pollData?.data?.url;
 
-      // Re-upload to Base44 storage for CORS-safe access
+      // Re-upload to Cloudflare R2 for CORS-safe access
       let persistentUrl = url;
       if (url) {
         try {
-          console.log('📦 Re-uploading to Base44 storage...');
+          console.log('📦 Re-uploading to R2 storage...');
           const imgResp = await fetch(url);
           if (imgResp.ok) {
-            const imgBlob = await imgResp.blob();
-            const imgFile = new File([imgBlob], `thumbnail_${concept_id || 'poll'}_${Date.now()}.png`, { type: imgBlob.type || 'image/png' });
-            const uploadResult = await base44.integrations.Core.UploadFile({ file: imgFile });
-            if (uploadResult?.file_url) {
-              persistentUrl = uploadResult.file_url;
-              console.log('✅ Re-uploaded:', persistentUrl);
-            }
+            const imgBytes = new Uint8Array(await imgResp.arrayBuffer());
+            const contentType = imgResp.headers.get('content-type') || 'image/png';
+            const ext = contentType.includes('jpeg') || contentType.includes('jpg') ? 'jpg' : 'png';
+
+            const r2Client = new S3Client({
+              region: 'auto',
+              endpoint: `https://${(Deno.env.get('CLOUDFLARE_ACCOUNT_ID') || '').trim()}.r2.cloudflarestorage.com`,
+              credentials: {
+                accessKeyId: (Deno.env.get('CLOUDFLARE_R2_ACCESS_KEY_ID') || '').trim(),
+                secretAccessKey: (Deno.env.get('CLOUDFLARE_R2_SECRET_ACCESS_KEY') || '').trim(),
+              },
+            });
+
+            const fileName = `thumbnails/thumb_${concept_id || 'poll'}_${Date.now()}.${ext}`;
+            await r2Client.send(new PutObjectCommand({
+              Bucket: (Deno.env.get('CLOUDFLARE_R2_BUCKET_NAME') || '').trim(),
+              Key: fileName,
+              Body: imgBytes,
+              ContentType: contentType,
+            }));
+
+            const r2PublicUrl = (Deno.env.get('CLOUDFLARE_R2_PUBLIC_URL') || '').trim().replace(/\/$/, '');
+            persistentUrl = `${r2PublicUrl}/${fileName}`;
+            console.log('✅ Re-uploaded to R2:', persistentUrl);
           }
         } catch (e) {
-          console.warn('Re-upload failed (using KIE URL):', e.message);
+          console.warn('R2 re-upload failed (using KIE URL):', e.message);
         }
       }
 
