@@ -53,7 +53,8 @@ export default function CanvasPreview({
   currentTime, currentClip, prevClip, currentScene,
   captions, selectedCaption, onSelectCaption, onUpdateCaption,
   orientation, onOrientationChange, videoClips, scenes,
-  captionStyle // global style overrides via CSS variables
+  captionStyle, // global style overrides via CSS variables
+  overlayClips = [], selectedOverlayId, onSelectOverlay, onUpdateOverlay
 }) {
   const canvasRef = useRef(null);
   const wrapperRef = useRef(null);
@@ -98,6 +99,11 @@ export default function CanvasPreview({
   const activeCaptions = useMemo(() =>
     captions.filter(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration)
   , [captions, currentTime]);
+
+  // Active overlays at current time
+  const activeOverlays = useMemo(() =>
+    overlayClips.filter(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration)
+  , [overlayClips, currentTime]);
 
   // Transition state
   const getTransitionState = useCallback(() => {
@@ -221,6 +227,94 @@ export default function CanvasPreview({
                 ) : null}
               </div>
             )}
+
+            {/* Overlay clips — emoji, stickers, video overlays */}
+            {activeOverlays.map(ov => {
+              const sel = selectedOverlayId === ov.id;
+              const elapsed = currentTime - ov.startTime;
+              const animDuration = 0.4;
+              const animProgress = Math.min(1, elapsed / animDuration);
+              
+              // Animation transforms
+              let animStyle = {};
+              const anim = ov.animation || 'none';
+              if (anim === 'fade_in') {
+                animStyle = { opacity: animProgress * (ov.opacity ?? 1) };
+              } else if (anim === 'pop') {
+                const s = animProgress < 1 ? 0.3 + 0.7 * (1 - Math.pow(1 - animProgress, 3)) : 1;
+                animStyle = { transform: `translate(-50%, -50%) scale(${s * (ov.scale || 1)})` };
+              } else if (anim === 'bounce') {
+                const bounce = animProgress < 1 ? Math.abs(Math.sin(animProgress * Math.PI * 2.5)) * (1 - animProgress) * 0.3 : 0;
+                animStyle = { transform: `translate(-50%, -50%) scale(${(ov.scale || 1)}) translateY(${-bounce * 30}px)` };
+              } else if (anim === 'slide_up') {
+                const offset = (1 - animProgress) * 40;
+                animStyle = { transform: `translate(-50%, -50%) translateY(${offset}px)`, opacity: animProgress * (ov.opacity ?? 1) };
+              } else if (anim === 'spin') {
+                const rot = (1 - animProgress) * 360;
+                animStyle = { transform: `translate(-50%, -50%) scale(${(ov.scale || 1)}) rotate(${rot}deg)`, opacity: animProgress };
+              } else if (anim === 'shake') {
+                const shakeX = elapsed < 0.5 ? Math.sin(elapsed * 40) * 4 * (1 - elapsed * 2) : 0;
+                animStyle = { transform: `translate(-50%, -50%) scale(${(ov.scale || 1)}) translateX(${shakeX}px)` };
+              }
+
+              const baseTransform = animStyle.transform || `translate(-50%, -50%) scale(${ov.scale || 1})`;
+
+              return (
+                <div key={ov.id}
+                  className={`absolute z-30 ${sel ? 'ring-2 ring-pink-400 ring-offset-1 ring-offset-transparent rounded' : ''}`}
+                  style={{
+                    left: `${ov.x || 50}%`,
+                    top: `${ov.y || 50}%`,
+                    transform: baseTransform,
+                    opacity: animStyle.opacity ?? (ov.opacity ?? 1),
+                    cursor: 'move',
+                    pointerEvents: 'auto',
+                  }}
+                  onClick={(e) => { e.stopPropagation(); onSelectOverlay?.(ov); }}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    onSelectOverlay?.(ov);
+                    // Simple drag for overlay repositioning
+                    const startX = e.clientX;
+                    const startY = e.clientY;
+                    const ix = ov.x || 50;
+                    const iy = ov.y || 50;
+                    const rect = canvasRef.current?.getBoundingClientRect();
+                    if (!rect) return;
+                    const moveHandler = (me) => {
+                      const dx = ((me.clientX - startX) / rect.width) * 100;
+                      const dy = ((me.clientY - startY) / rect.height) * 100;
+                      onUpdateOverlay?.({ ...ov, x: Math.max(0, Math.min(100, ix + dx)), y: Math.max(0, Math.min(100, iy + dy)) });
+                    };
+                    const upHandler = () => {
+                      document.removeEventListener('mousemove', moveHandler);
+                      document.removeEventListener('mouseup', upHandler);
+                    };
+                    document.addEventListener('mousemove', moveHandler);
+                    document.addEventListener('mouseup', upHandler);
+                  }}
+                >
+                  {ov.overlayType === 'emoji' && (
+                    <span style={{ fontSize: `${Math.round(48 * (ov.scale || 1))}px`, lineHeight: 1 }}>{ov.content}</span>
+                  )}
+                  {ov.overlayType === 'sticker' && (
+                    <div className="flex flex-col items-center gap-1">
+                      <span style={{ fontSize: `${Math.round(40 * (ov.scale || 1))}px`, lineHeight: 1 }}>{ov.content}</span>
+                      {ov.stickerText && (
+                        <span className="px-2 py-0.5 rounded font-bold text-white text-xs"
+                          style={{ backgroundColor: ov.stickerBg || '#EF4444', fontSize: `${Math.round(12 * (ov.scale || 1))}px` }}>
+                          {ov.stickerText}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  {ov.overlayType === 'video' && ov.videoUrl && (
+                    <video src={ov.videoUrl} autoPlay muted loop playsInline
+                      style={{ width: `${Math.round(200 * (ov.scale || 0.3))}px`, borderRadius: 8 }} />
+                  )}
+                </div>
+              );
+            })}
 
             {/* Captions — rendered as positioned overlays with float-precision sync */}
             {activeCaptions.map(cap => {
