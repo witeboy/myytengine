@@ -273,7 +273,7 @@ Deno.serve(async (req) => {
       try { await base44.asServiceRole.entities.Scripts.delete(s.id); } catch (_) {}
     }
 
-    await base44.asServiceRole.entities.Scripts.create({
+    const newScript = await base44.asServiceRole.entities.Scripts.create({
       project_id,
       version: 'final_aggregated',
       title,
@@ -285,6 +285,7 @@ Deno.serve(async (req) => {
     await base44.asServiceRole.entities.Projects.update(project_id, {
       status: 'script_complete',
       current_step: 3,
+      script_id: newScript.id,
     });
 
     console.log(`✅ Script saved and project updated`);
