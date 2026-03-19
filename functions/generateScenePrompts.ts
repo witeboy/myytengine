@@ -1223,7 +1223,7 @@ ${styleReinforcement}
 ${qualityAnchors}
 
 
-**VISUAL STYLE: "${visualStyle}"**
+**VISUAL STYLE: ${visualStyle.replace(/_/g, ' ')}**
 **ORIENTATION:** ${orientationConfig.format}
 
 
