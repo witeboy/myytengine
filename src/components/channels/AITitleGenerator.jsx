@@ -342,7 +342,7 @@ Return EXACTLY 50 titles.`;
   }, {});
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!loading && !scheduling) { if (!v) reset(); onOpenChange(v); } }}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
