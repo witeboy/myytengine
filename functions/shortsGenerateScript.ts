@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
-// SHORTS SCRIPT GENERATION ENGINE
+// SHORTS SCRIPT GENERATION ENGINE v2
 // Generates a 200-240 word, 90-second YouTube Shorts script.
 // ══════════════════════════════════════════════════════════════════
 
