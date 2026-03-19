@@ -822,8 +822,9 @@ Deno.serve(async (req) => {
     const { scene_id, scene_ids, project_id } = body;
 
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
-    if (!KIE_API_KEY) {
-      return Response.json({ error: "KIE_API_KEY not configured" }, { status: 500 });
+    const AI33_API_KEY = Deno.env.get("AI33_API_KEY");
+    if (!KIE_API_KEY && !AI33_API_KEY) {
+      return Response.json({ error: "No image API keys configured (AI33_API_KEY or KIE_API_KEY)" }, { status: 500 });
     }
 
     // ── Resolve which scenes to process ──────────────────────
