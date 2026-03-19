@@ -59,13 +59,19 @@ export default function PostProduction() {
   });
 
   const { data: script } = useQuery({
-    queryKey: ['script-postprod', projectId],
+    queryKey: ['script-postprod', projectId, project?.script_id],
     queryFn: async () => {
-      if (!project?.script_id) return null;
-      const list = await base44.entities.Scripts.filter({ id: project.script_id });
-      return list[0] || null;
+      // Try by script_id first
+      if (project?.script_id) {
+        const list = await base44.entities.Scripts.filter({ id: project.script_id });
+        if (list[0]) return list[0];
+      }
+      // Fallback: find final_aggregated script by project_id
+      const allScripts = await base44.entities.Scripts.filter({ project_id: projectId });
+      const final = allScripts.find(s => s.version === 'final_aggregated') || allScripts[0];
+      return final || null;
     },
-    enabled: !!project?.script_id,
+    enabled: !!projectId && !!project,
   });
 
   // Scene images from Content Generation
