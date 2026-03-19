@@ -1227,8 +1227,8 @@ ${qualityAnchors}
 **ORIENTATION:** ${orientationConfig.format}
 
 
-**STYLE QUALITY SUFFIX (append at the END of each image_prompt, NOT the beginning):**
-"${styleConfig.positive}"
+**STYLE QUALITY SUFFIX (append at the END of each image_prompt as plain descriptive text, NOT the beginning):**
+${styleConfig.positive}
 ${styleBodyBlock}
 
 
