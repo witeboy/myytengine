@@ -262,8 +262,8 @@ const styleMap = {
     negative: "photorealistic, photograph, realistic anatomy, detailed muscles, curved joints, high-poly mesh, smooth skin, realistic face, wrinkles, pores, film grain, bokeh, lens flare, anime, watercolor, oil painting, sketch, dark horror, scary, complex textures, realistic hair strands, chibi, funko pop"
   },
   skeleton_protagonist: {
-   positive: "wide shot showing complete scene, photorealistic detailed environment with sharp focused background, multiple people in frame, cinematic establishing shot composition, golden hour volumetric lighting, HDR cinematic lens, warm amber grading, masterpiece quality",
-   negative: "cartoon skeleton, halloween decoration, flat 2D, anime, comic, x-ray medical, horror gore, neon, plastic toy, low quality, blurry, abstract, minimalist, sketch, painting, chibi, dia de los muertos, empty dark eye sockets, bare bones without transparent body, scary horror skeleton, torso only, bust shot, head and shoulders only, cropped at waist, isolated character on blank background, portrait crop, close-up, macro, extreme close-up, chest detail, upper body only, dark background, black background"
+   positive: "cinematic establishing shot composition, golden hour volumetric lighting, HDR cinematic lens, warm amber grading, photorealistic detailed environment with sharp focused background, masterpiece quality",
+   negative: "real human skin, real human face, realistic flesh, normal human appearance, human skin visible through skeleton, dual character overlay, skeleton overlaid on human, x-ray medical scan, cartoon skeleton, halloween decoration, flat 2D, anime, comic, horror gore, neon, plastic toy, low quality, blurry, abstract, minimalist, sketch, painting, chibi, dia de los muertos, empty dark eye sockets, bare bones without transparent body, scary horror skeleton, torso only, bust shot, head and shoulders only, cropped at waist, isolated character on blank background, portrait crop, dark background, black background, text, words, letters, numbers, UI elements, screen content, garbled text"
   }
 };
 
@@ -371,10 +371,10 @@ function getStyleSceneBodyRules(styleName) {
       rendering: "Roblox game engine aesthetic — clean geometric edges, flat shading with no smoothing, bright studio lighting, vibrant saturated colors. No film grain, no bokeh, no lens effects. Think toy-like plastic world with matte finish."
     },
     skeleton_protagonist: {
-      characters: "Protagonist in EVERY scene: photorealistic transparent skeleton with clear glass-like body shell, glossy ivory bones visible through translucent torso, big round expressive brown/amber EYEBALLS in skull sockets. MUST be shown according to director's notes — standing, sitting, kneeling, walking, running. Wears context-appropriate clothing. Must be DOING an action (holding objects, gesturing, interacting with people). Other characters are photorealistic normal humans shown alongside or interacting with the skeleton.",
-      environments: "Photorealistic DETAILED real-world environments shown in SHARP FOCUS — NOT blurred bokeh backgrounds. Every scene has a specific location with visible architecture, landscape features, props, furniture, tools, weather effects. The skeleton exists INSIDE this world, not floating in front of it. Include foreground elements for depth.",
-      objects: "Photorealistic props the skeleton is actively interacting with — tools in hand, objects being held or carried, furniture being used, vehicles, food, weapons, documents. Props tell the story and connect scenes together.",
-      rendering: "Cinematic wide-to-medium framing showing within environment. HDR cinematic lens, warm amber grading, dramatic volumetric golden hour lighting, strong rim light separating skeleton from background. Sharp detailed backgrounds. Favor 9:16 vertical framing with character visible."
+      characters: "The protagonist is a transparent skeleton with a clear glass-like humanoid body shell and glossy ivory bones visible through the translucent torso, with big round expressive brown/amber EYEBALLS in the skull sockets. The skeleton wears context-appropriate clothing over its transparent body. The skeleton must be DOING an action — holding objects, gesturing, interacting with people. Other characters in the scene are normal photorealistic humans. CRITICAL: The skeleton REPLACES the human — it is NOT overlaid on top of a real person. There is NO real human skin or flesh visible. The skeleton IS the character.",
+      environments: "Photorealistic DETAILED real-world environments in SHARP FOCUS — visible architecture, landscape features, props, furniture, tools, weather effects. The skeleton exists INSIDE this world. Include foreground elements for depth. NEVER blurred bokeh backgrounds.",
+      objects: "Photorealistic props the skeleton is actively interacting with — tools in hand, objects being held, furniture being used. Props tell the story. NEVER show readable text, numbers, or screen content on any object — describe the CHARACTER'S REACTION to information, not the information itself.",
+      rendering: "Cinematic wide-to-medium framing. HDR cinematic lens, warm amber grading, dramatic volumetric golden hour lighting, strong rim light on bone edges. Sharp detailed backgrounds."
     }
   };
 
@@ -426,21 +426,21 @@ CONTINUITY: Each scene must contain a visual element that connects to the next s
 
   const instructions = {
     skeleton_protagonist: universalReinforcement + `
-**🦴 SKELETON PROTAGONIST STYLE — ADDITIONAL RULES:**
-The protagonist in EVERY image prompt must be described as: a photorealistic transparent skeleton with a clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through the translucent torso, big round expressive brown amber eyeballs in the skull sockets
+**🦴 SKELETON PROTAGONIST STYLE — CRITICAL RULES:**
 
+The character identity tag system will inject the skeleton description automatically. Do NOT write "Skeleton protagonist" or "skeleton character" as a label/prefix in the prompt. Just describe the scene naturally and let the identity injection handle the skeleton appearance.
+
+The skeleton REPLACES the human entirely — it is NOT an overlay or x-ray effect on top of a real person. There must be NO real human skin, flesh, or face visible anywhere on the protagonist. The skeleton IS the person. Other characters in the scene are normal photorealistic humans.
 
 MANDATORY FRAMING:
-- Show the skeleton  — NOT torso-only, NOT bust shots
-- Describe the ENVIRONMENT in detail FIRST (location, props, weather, textures) THEN place the skeleton within it
-- The skeleton must be DOING an action — holding, reaching, kneeling, walking — NOT standing static
+- Describe the ENVIRONMENT in detail FIRST (location, props, weather, textures) THEN place the skeleton within it doing an action
+- The skeleton must be DOING something — holding, reaching, kneeling, walking — NOT standing static
 - Include other photorealistic humans in most scenes — crowds, companions, onlookers
 - Backgrounds must be SHARP and DETAILED — NOT blurred bokeh
-- Each scene must contain a visual CONTINUITY element connecting to the next scene
-- The skeleton wears context-appropriate clothing per scene
 - Lighting: golden hour, volumetric rays, warm amber grading, rim light on bone edges
 - NEVER empty dark eye sockets — always BIG ROUND EXPRESSIVE BROWN/AMBER EYEBALLS
-- NEVER torso-only portrait against blurred background`
+- NEVER show readable text, numbers, dollar amounts, or screen content — use physical metaphors instead
+- NEVER write the style name as a prefix (e.g. "Skeleton protagonist →") — just describe the scene`
   };
   return instructions[visualStyle] || universalReinforcement;
 }
@@ -821,7 +821,7 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
       roblox: (bodyDesc, faceDesc) =>
         `Roblox-style 3D blocky ${bodyDesc} with cube head, rectangular torso and limbs, simple 2D cartoon face (two round eyes, curved mouth) painted on the cube head, ${faceDesc}, bright flat-shaded colors, toy-like plastic matte finish, R15 avatar proportions`,
       skeleton_protagonist: (bodyDesc, faceDesc) =>
-        `photorealistic transparent skeleton with clear glass-like body shell, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets`
+        `a photorealistic transparent skeleton with clear glass-like body shell, glossy ivory bones visible through the translucent torso, big round expressive brown amber eyeballs in skull sockets, wearing context-appropriate clothing, NO real human skin or flesh visible`
     };
 
 
