@@ -241,6 +241,29 @@ export default function StoryScript() {
   const handleRegenerate = async () => {
     setRegenerating(true);
 
+    // Delete all old scripts
+    for (const s of scripts) {
+      await base44.entities.Scripts.delete(s.id);
+    }
+
+    if (isShorts) {
+      // Shorts regeneration — just re-run the shorts script generator
+      await base44.entities.Projects.update(projectId, { status: 'hooks_ready', script_id: '' });
+      await refetchScripts();
+      setGenerating(true);
+      setRegenerating(false);
+
+      try {
+        await base44.functions.invoke('shortsGenerateScript', { project_id: projectId });
+        await Promise.all([refetchProject(), refetchScripts()]);
+      } catch (err) {
+        console.error('Shorts regeneration error:', err);
+      } finally {
+        setGenerating(false);
+      }
+      return;
+    }
+
     // Reset all batches to pending
     for (const b of batches) {
       await base44.entities.ScriptBatches.update(b.id, {
@@ -249,11 +272,6 @@ export default function StoryScript() {
         status: 'pending',
         scene_image_url: '',
       });
-    }
-
-    // Delete all old scripts
-    for (const s of scripts) {
-      await base44.entities.Scripts.delete(s.id);
     }
 
     const isSleepProject = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
