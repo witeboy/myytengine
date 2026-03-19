@@ -52,7 +52,9 @@ IMPORTANT: Do NOT explain anything. Do NOT add commentary. Output ONLY the final
 async function cleanPromptWithOpenAI(messyPrompt, visualStyle) {
   try {
     const styleConstraint = visualStyle
-      ? `\nThe visual style is strictly ${visualStyle.replace(/_/g, ' ')}. Lock this style and prevent any realism bleed or style mixing.`
+      ? (visualStyle === 'skeleton_protagonist'
+        ? `\nThe visual style is skeleton protagonist — a transparent skeleton with glass-like body replaces the human character entirely. The skeleton is NOT overlaid on a real person. No real human skin or flesh on the protagonist. Other characters are normal humans. Do NOT write "Skeleton protagonist" as a label prefix.`
+        : `\nThe visual style is strictly ${visualStyle.replace(/_/g, ' ')}. Lock this style and prevent any realism bleed or style mixing.`)
       : '';
     const response = await _openai.chat.completions.create({
       model: "gpt-4o-mini",
