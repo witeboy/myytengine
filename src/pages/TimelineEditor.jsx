@@ -16,6 +16,8 @@ import SnapTimelineTrack from '@/components/timeline/SnapTimeline';
 import SnapGuide from '@/components/timeline/SnapGuide';
 import SilenceDetector from '@/components/timeline/SilenceDetector';
 import CaptionStylePresets from '@/components/timeline/CaptionStylePresets';
+import OverlayPanel from '@/components/timeline/OverlayPanel';
+import OverlayPropertiesPanel from '@/components/timeline/OverlayPropertiesPanel';
 import usePlaybackEngine from '@/hooks/usePlaybackEngine';
 import { closeGaps } from '@/hooks/useSnapEngine';
 import {
@@ -26,7 +28,7 @@ import {
   LayoutGrid, FolderOpen, X, Package, Camera, AlertCircle, Clapperboard,
   Bold, Italic, Underline, Palette,
   Minimize2, Focus, Blend, ArrowUpRight, ArrowDownLeft,
-  Monitor, Smartphone, Radio
+  Monitor, Smartphone, Radio, Smile, Layers
 } from 'lucide-react';
 
 const TRACK_HEIGHT = 56;
@@ -157,6 +159,7 @@ function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport,
     { id: 'effects',     label: 'Effects',     icon: Sparkles },
     { id: 'transitions', label: 'Transitions', icon: Blend    },
     { id: 'captions',    label: 'Captions',    icon: Type     },
+    { id: 'overlays',    label: 'Overlays',    icon: Layers   },
     { id: 'jumpcuts',    label: 'Jump Cuts',   icon: Scissors },
     { id: 'filters',     label: 'Filters',     icon: Palette  },
     { id: 'adjustment',  label: 'Adjustment',  icon: Settings },
@@ -622,6 +625,12 @@ export default function TimelineEditorV10() {
 
   const [selectedVideoId,   setSelectedVideoId]   = useState(null);
   const [selectedCaptionId, setSelectedCaptionId] = useState(null);
+  const [selectedOverlayId, setSelectedOverlayId] = useState(null);
+
+  // Overlay track state
+  const overlayHistory  = useHistory([]);
+  const overlayClips    = overlayHistory.state;
+  const setOverlayClips = overlayHistory.setState;
   const [isSyncing,         setIsSyncing]         = useState(false);
   const [syncStatus,        setSyncStatus]        = useState(null);
   const [isGenCaptions,     setIsGenCaptions]     = useState(false);
@@ -1334,17 +1343,17 @@ export default function TimelineEditorV10() {
   };
 
   // ── Misc handlers ───────────────────────────────────────────────
-  const handleUndo   = () => { videoHistory.undo(); captionHistory.undo(); };
-  const handleRedo   = () => { videoHistory.redo(); captionHistory.redo(); };
+  const handleUndo   = () => { videoHistory.undo(); captionHistory.undo(); overlayHistory.undo(); };
+  const handleRedo   = () => { videoHistory.redo(); captionHistory.redo(); overlayHistory.redo(); };
   const handleDelete = () => {
     if (selectedVideoId) {
       let remaining = videoClips.filter(c => c.id !== selectedVideoId);
-      // Phase 3: Magnetic gap-closing on main track
       if (magneticMode) remaining = closeGaps(remaining);
       setVideoClips(remaining);
       setSelectedVideoId(null);
     }
     if (selectedCaptionId) { setCaptionClips(captionClips.filter(c => c.id !== selectedCaptionId)); setSelectedCaptionId(null); }
+    if (selectedOverlayId) { setOverlayClips(overlayClips.filter(c => c.id !== selectedOverlayId)); setSelectedOverlayId(null); }
   };
   const handleBack             = () => navigate(createPageUrl('ContentGeneration') + `?project_id=${projectId}`);
   const handleExport           = () => alert('Export MP4 coming soon!');
@@ -1424,8 +1433,9 @@ export default function TimelineEditorV10() {
   const selectedVideo    = videoClips.find(c => c.id === selectedVideoId);
   const selectedCaption  = captionClips.find(c => c.id === selectedCaptionId);
   const selectedVideoIdx = videoClips.findIndex(c => c.id === selectedVideoId);
-  const canUndo = videoHistory.canUndo || captionHistory.canUndo;
-  const canRedo = videoHistory.canRedo || captionHistory.canRedo;
+  const selectedOverlay = overlayClips.find(c => c.id === selectedOverlayId);
+  const canUndo = videoHistory.canUndo || captionHistory.canUndo || overlayHistory.canUndo;
+  const canRedo = videoHistory.canRedo || captionHistory.canRedo || overlayHistory.canRedo;
 
   return (
     <div className="h-screen flex flex-col bg-[#0a0a14] text-white overflow-hidden">

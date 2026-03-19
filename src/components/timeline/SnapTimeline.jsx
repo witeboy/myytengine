@@ -3,7 +3,7 @@
  * Virtual Scrolling, Multi-track Layering, and Snap Guides
  */
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Image, Mic, Type, Film, Camera, Blend, Clapperboard } from 'lucide-react';
+import { Image, Mic, Type, Film, Camera, Blend, Clapperboard, Smile, Sticker } from 'lucide-react';
 import { findSnapPoint } from '@/hooks/useSnapEngine';
 
 const TRACK_HEIGHT = 56;
@@ -14,8 +14,8 @@ export default function SnapTimelineTrack({
   selectedId, onSelect, onUpdate, editable = true,
   snappingEnabled = true, onSnapLine
 }) {
-  const colors = { video: '#059669', audio: '#4f46e5', caption: '#d97706' };
-  const icons = { video: Image, audio: Mic, caption: Type };
+  const colors = { video: '#059669', audio: '#4f46e5', caption: '#d97706', overlay: '#db2777' };
+  const icons = { video: Image, audio: Mic, caption: Type, overlay: Smile };
   const Icon = icons[type];
   const color = colors[type];
   const [drag, setDrag] = useState(null);
@@ -122,6 +122,9 @@ export default function SnapTimelineTrack({
               style={{ left, width, backgroundColor: bgColor }}>
               {type === 'video' && clip.thumbnail && (
                 <img src={clip.thumbnail} className="absolute inset-0 w-full h-full object-cover opacity-70" alt="" />
+              )}
+              {type === 'overlay' && clip.content && (
+                <div className="absolute inset-0 flex items-center justify-center text-lg opacity-80">{clip.content}</div>
               )}
               {editable && type === 'caption' && (
                 <div className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 z-10" onMouseDown={e => down(e, clip, 'resize-left')} />
