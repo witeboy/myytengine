@@ -739,7 +739,7 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
         }
       }
 
-      console.log(`✓ Scene ${sceneNum}: image generated via ${useNanoBanana ? 'Nano Banana 🍌' : 'Grok'} (${promptToSend.length} chars → ${imageUrl.substring(0, 60)}...)`);
+      console.log(`✓ Scene ${sceneNum}: image generated via ${provider} (${promptToSend.length} chars → ${imageUrl.substring(0, 60)}...)`);
 
       return {
         scene_id: scene.id,
@@ -748,7 +748,7 @@ async function processScene(base44, scene, project, apiKey, aspectRatio) {
         image_url: imageUrl,
         prompt_length: promptToSend.length,
         attempts: attempt + 1,
-        model: useNanoBanana ? 'nano_banana' : 'grok'
+        model: provider
       };
 
     } catch (error) {
