@@ -555,15 +555,7 @@ function TextPropertiesPanel({ caption, onUpdate, onDelete, onDuplicate, onApply
 }
 
 // VideoPreview → CanvasPreview.jsx | TimelineTrack → SnapTimeline.jsx
-/* REMOVED — old inline components replaced by imports above
-    const ro = new ResizeObserver(entries => {
-      for (const entry of entries) {
-        setWrapperSize({ w: entry.contentRect.width, h: entry.contentRect.height });
-      }
-    });
-    ro.observe(wrapperRef.current);
-    return () => ro.disconnect();
-  }, []);
+// Old inline components removed — now imported from separate files
 
   // ── Sync video playback to timeline ─────────────────────────────
   // video.playbackRate = rate already makes the browser slow/speed the video.
