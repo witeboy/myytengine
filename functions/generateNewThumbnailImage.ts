@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { S3Client, PutObjectCommand } from 'npm:@aws-sdk/client-s3@3.600.0';
 
 // generateNewThumbnailImage — Nano Banana 2 via KIE API
 
@@ -548,23 +549,37 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── STEP 9: Re-upload to Base44 storage (CORS-safe) ────────
+    // ── STEP 9: Re-upload to Cloudflare R2 (CORS-safe) ────────
     let persistentUrl = finalUrl;
     if (timeLeft() > 8000) {
       try {
-        console.log('📦 Re-uploading to Base44 storage for CORS-safe access...');
+        console.log('📦 Re-uploading to Cloudflare R2 for CORS-safe access...');
         const imgResp = await fetch(finalUrl);
         if (imgResp.ok) {
-          const imgBlob = await imgResp.blob();
-          const imgFile = new File([imgBlob], `thumbnail_${concept_id}_${Date.now()}.png`, { type: imgBlob.type || 'image/png' });
-          const uploadResult = await base44.integrations.Core.UploadFile({ file: imgFile });
-          if (uploadResult?.file_url) {
-            persistentUrl = uploadResult.file_url;
-            console.log('✅ Re-uploaded to Base44:', persistentUrl);
-          }
+          const imgBytes = new Uint8Array(await imgResp.arrayBuffer());
+          const contentType = imgResp.headers.get('content-type') || 'image/png';
+          const ext = contentType.includes('jpeg') ? 'jpg' : 'png';
+          const fileName = `thumbnails/${concept_id}-${Date.now()}.${ext}`;
+          const r2Client = new S3Client({
+            region: 'auto',
+            endpoint: `https://${(Deno.env.get('CLOUDFLARE_ACCOUNT_ID') || '').trim()}.r2.cloudflarestorage.com`,
+            credentials: {
+              accessKeyId: (Deno.env.get('CLOUDFLARE_R2_ACCESS_KEY_ID') || '').trim(),
+              secretAccessKey: (Deno.env.get('CLOUDFLARE_R2_SECRET_ACCESS_KEY') || '').trim(),
+            },
+          });
+          await r2Client.send(new PutObjectCommand({
+            Bucket: (Deno.env.get('CLOUDFLARE_R2_BUCKET_NAME') || '').trim(),
+            Key: fileName,
+            Body: imgBytes,
+            ContentType: contentType,
+          }));
+          const publicBase = (Deno.env.get('CLOUDFLARE_R2_PUBLIC_URL') || '').trim().replace(/\/$/, '');
+          persistentUrl = `${publicBase}/${fileName}`;
+          console.log('✅ Re-uploaded to R2:', persistentUrl);
         }
       } catch (e) {
-        console.warn('Re-upload to Base44 failed (non-fatal, using KIE URL):', e.message);
+        console.warn('Re-upload to R2 failed (non-fatal, using KIE URL):', e.message);
       }
     } else {
       console.log('⏱ Skipping re-upload — not enough time left');

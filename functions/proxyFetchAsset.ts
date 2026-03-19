@@ -1,8 +1,9 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { S3Client, PutObjectCommand } from 'npm:@aws-sdk/client-s3@3.600.0';
 
 // ══════════════════════════════════════════════════════════════════
 // PROXY FETCH — Downloads CORS-blocked URLs server-side
-// Re-uploads to Base44 storage and returns a CORS-safe URL
+// Re-uploads to Cloudflare R2 and returns a CORS-safe URL
 // For small files (<500KB), returns base64 inline as fallback
 // ══════════════════════════════════════════════════════════════════
 
@@ -57,40 +58,36 @@ Deno.serve(async (req) => {
       : contentType.includes('webp') ? 'webp'
       : 'jpg';
 
-    // Always re-upload to Base44 storage for a CORS-safe URL
-    const fileName = `proxy_${Date.now()}.${ext}`;
-    const file = new File([blob], fileName, { type: contentType });
-    const uploadResult = await base44.integrations.Core.UploadFile({ file });
+    // Re-upload to Cloudflare R2 for a CORS-safe URL
+    const fileName = `proxy/${Date.now()}.${ext}`;
+    const fileBytes = new Uint8Array(await blob.arrayBuffer());
 
-    if (uploadResult?.file_url) {
-      console.log(`✅ Re-uploaded to Base44: ${uploadResult.file_url}`);
-      return Response.json({
-        success: true,
-        file_url: uploadResult.file_url,
-        content_type: contentType,
-        size: blob.size,
-      });
-    }
+    const r2Client = new S3Client({
+      region: 'auto',
+      endpoint: `https://${(Deno.env.get('CLOUDFLARE_ACCOUNT_ID') || '').trim()}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: (Deno.env.get('CLOUDFLARE_R2_ACCESS_KEY_ID') || '').trim(),
+        secretAccessKey: (Deno.env.get('CLOUDFLARE_R2_SECRET_ACCESS_KEY') || '').trim(),
+      },
+    });
 
-    // Fallback: return base64 for small files only
-    if (blob.size < 512000) {
-      const arrayBuffer = await blob.arrayBuffer();
-      const bytes = new Uint8Array(arrayBuffer);
-      let binary = '';
-      const chunkSize = 8192;
-      for (let i = 0; i < bytes.length; i += chunkSize) {
-        const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-        binary += String.fromCharCode.apply(null, chunk);
-      }
-      return Response.json({
-        success: true,
-        data: btoa(binary),
-        content_type: contentType,
-        size: bytes.length,
-      });
-    }
+    await r2Client.send(new PutObjectCommand({
+      Bucket: (Deno.env.get('CLOUDFLARE_R2_BUCKET_NAME') || '').trim(),
+      Key: fileName,
+      Body: fileBytes,
+      ContentType: contentType,
+    }));
 
-    return Response.json({ error: 'Upload failed and file too large for base64' }, { status: 500 });
+    const publicBase = (Deno.env.get('CLOUDFLARE_R2_PUBLIC_URL') || '').trim().replace(/\/$/, '');
+    const fileUrl = `${publicBase}/${fileName}`;
+    console.log(`✅ Re-uploaded to R2: ${fileUrl}`);
+
+    return Response.json({
+      success: true,
+      file_url: fileUrl,
+      content_type: contentType,
+      size: blob.size,
+    });
 
   } catch (error) {
     console.error('proxyFetchAsset error:', error.message);
