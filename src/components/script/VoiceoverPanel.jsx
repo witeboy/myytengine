@@ -263,18 +263,30 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
               )}
 
               {/* Voice Tabs */}
-              <div className="flex gap-1 mb-2 bg-gray-100 p-0.5 rounded-lg">
+              <div className="flex gap-1 mb-2 bg-gray-100 p-0.5 rounded-lg flex-wrap">
                 <button
                   onClick={() => setVoiceTab('all')}
-                  className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'all' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
+                  className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'all' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
                 >
-                  All Voices ({standardVoices.length})
+                  All ({voices.length})
+                </button>
+                <button
+                  onClick={() => setVoiceTab('minimax')}
+                  className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'minimax' ? 'bg-white shadow text-orange-700' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  AI33 MiniMax ({minimaxVoices.length})
+                </button>
+                <button
+                  onClick={() => setVoiceTab('elevenlabs')}
+                  className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'elevenlabs' ? 'bg-white shadow text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  AI33 ElevenLabs ({elevenlabsVoices.length})
                 </button>
                 <button
                   onClick={() => setVoiceTab('cloned')}
-                  className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'cloned' ? 'bg-white shadow text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}
+                  className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'cloned' ? 'bg-white shadow text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}
                 >
-                  My Cloned ({clonedVoices.length})
+                  Cloned ({clonedVoices.length})
                 </button>
               </div>
 
