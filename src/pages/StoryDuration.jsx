@@ -45,8 +45,13 @@ export default function StoryDuration() {
       setScriptMode(project.project_mode || '');
       if (channel?.shorts_niche) setShortsNiche(channel.shorts_niche);
       setHasInitialized(true);
+
+      // Redirect long_viral projects to their dedicated pipeline
+      if (project.project_mode === 'long_viral') {
+        navigate(`/LongViralPipeline?project_id=${projectId}`, { replace: true });
+      }
     }
-  }, [project, channel, hasInitialized]);
+  }, [project, channel, hasInitialized, navigate, projectId]);
 
   const { data: topic } = useQuery({
     queryKey: ['topic', project?.selected_topic_id],
