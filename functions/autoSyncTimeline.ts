@@ -558,7 +558,7 @@ Deno.serve(async (req) => {
         const submitRes = await fetch('https://api.assemblyai.com/v2/transcript', {
           method: 'POST',
           headers: { 'Authorization': assemblyKey, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ audio_url: voiceoverUrl, speech_models: ['universal-3-pro'], language_detection: true }),
+          body: JSON.stringify({ audio_url: voiceoverUrl, language_detection: true }),
         });
         if (!submitRes.ok) throw new Error(`ASR submit ${submitRes.status}`);
         const { id: txId } = await submitRes.json();
