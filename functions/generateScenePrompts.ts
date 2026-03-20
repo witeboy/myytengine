@@ -395,7 +395,7 @@ function getStyleSceneBodyRules(styleName) {
   // ═══ UNIVERSAL FRAMING — appended to ALL styles ═══
   const base = rules[styleName] || null;
   if (base) {
-    base.rendering = (base.rendering || '') + ' Frame characters according to the Body Proportion directive for each scene. Show detailed sharp environments with visible props and architecture, not empty blurred backgrounds. Characters should be mid-action interacting with environment and other people.';
+    base.rendering = (base.rendering || '') + ' Use the Camera Feel directive to determine how the character relates to the frame. Show detailed sharp environments with visible props and architecture, not empty blurred backgrounds. Characters should be mid-action interacting with environment and other people.';
   }
   return base;
 }
