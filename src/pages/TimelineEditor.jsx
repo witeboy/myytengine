@@ -1418,6 +1418,55 @@ export default function TimelineEditor() {
         </div>
       </div>
 
+      {/* ASR Processing Bar */}
+      {asrProgress && (
+        <div className="flex items-center gap-3 px-3 py-2 bg-gradient-to-r from-indigo-900/60 to-cyan-900/60 border-t border-cyan-700/50">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {asrProgress.phase === 'done' ? (
+              <CheckCircle size={14} className="text-emerald-400" />
+            ) : asrProgress.phase === 'error' ? (
+              <AlertCircle size={14} className="text-red-400" />
+            ) : (
+              <Loader2 size={14} className="animate-spin text-cyan-400" />
+            )}
+            <span className={`text-xs font-medium ${
+              asrProgress.phase === 'done' ? 'text-emerald-300' :
+              asrProgress.phase === 'error' ? 'text-red-300' :
+              'text-cyan-300'
+            }`}>
+              {asrProgress.phase === 'submitting' ? 'Submitting' :
+               asrProgress.phase === 'submitted' ? 'Submitted' :
+               asrProgress.phase === 'processing' ? 'Transcribing' :
+               asrProgress.phase === 'done' ? 'Complete' :
+               asrProgress.phase === 'error' ? 'Failed' : 'ASR'}
+            </span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <div className="flex-1 h-1.5 bg-gray-700/80 rounded-full overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-700 ${
+                    asrProgress.phase === 'done' ? 'bg-emerald-400' :
+                    asrProgress.phase === 'error' ? 'bg-red-400' :
+                    'bg-gradient-to-r from-cyan-400 to-indigo-400'
+                  }`}
+                  style={{
+                    width: asrProgress.phase === 'submitting' ? '5%' :
+                           asrProgress.phase === 'submitted' ? '10%' :
+                           asrProgress.phase === 'processing' ? `${Math.min(90, 10 + asrProgress.pollCount * 12)}%` :
+                           asrProgress.phase === 'done' ? '100%' : '50%'
+                  }}
+                />
+              </div>
+              <span className="text-[10px] text-gray-400 flex-shrink-0 font-mono">
+                {asrProgress.phase === 'processing' ? `~${asrProgress.pollCount * 3}s` : ''}
+              </span>
+            </div>
+            <p className="text-[10px] text-gray-400 mt-0.5 truncate">{asrProgress.message}</p>
+          </div>
+        </div>
+      )}
+
       {/* Bottom compact toolbar + cinematic intensity */}
       <div className="flex items-center justify-between px-2 py-1.5 bg-[#12121f] border-t border-gray-800">
         <div className="flex items-center gap-1">
