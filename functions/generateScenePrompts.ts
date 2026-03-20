@@ -586,6 +586,18 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
     .replace(/\b\d{1,2}:\d{1,2}\s*(widescreen|vertical|horizontal|frame|format|ratio)\b/gi, '')
     .replace(/\b(wide|tall)\s+(cinematic|vertical|horizontal)\s+(framing|composition)\b/gi, '');
 
+  // Strip mechanical body-crop language — the camera angle should imply framing
+  enhanced = enhanced
+    .replace(/\b(from|shown|framed|visible|captured)\s+(from\s+)?(waist|chest|shoulders?|torso|hips?|knees?)\s+(up|down|upward|upwards)\b/gi, '')
+    .replace(/\bwaist[- ]up\b/gi, '')
+    .replace(/\bchest[- ]up\b/gi, '')
+    .replace(/\bshoulders?\s+up\b/gi, '')
+    .replace(/\btorso[- ]only\b/gi, '')
+    .replace(/\bhead to (feet|toe)\b/gi, '')
+    .replace(/\bfull[- ]body\s+(wide\s+)?shot\s+(showing|of)\b/gi, '')
+    .replace(/\bmedium\s+shot\s+(from|of)\b/gi, '')
+    .replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').replace(/\s{2,}/g, ' ');
+
 
   // DO NOT add anti-text instruction — Grok renders it as visible text
   // The LLM prompt already instructs physical metaphors for abstract concepts
