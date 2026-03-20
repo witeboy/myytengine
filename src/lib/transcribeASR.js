@@ -12,9 +12,11 @@ const POLL_TIMEOUT = 180000; // 3 min max
 
 /**
  * Transcribe a voiceover URL using AssemblyAI via submit/poll backend functions.
+ * @param {string} voiceoverUrl
+ * @param {function} [onProgress] - optional callback({ phase, message, pollCount })
  * Returns { words: [{word, start, end}], word_count, confidence } or throws.
  */
-export async function transcribeVoiceover(voiceoverUrl) {
+export async function transcribeVoiceover(voiceoverUrl, onProgress) {
   // Step 1: Submit the transcription job (fast, <2s)
   const submitRes = await base44.functions.invoke('submitTranscription', {
     voiceover_url: voiceoverUrl,
