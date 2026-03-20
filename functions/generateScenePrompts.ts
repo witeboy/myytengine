@@ -411,29 +411,23 @@ function getStyleReinforcementInstruction(visualStyle) {
   const universalReinforcement = `
 **🎬 MANDATORY PRODUCTION RULES (ALL STYLES):**
 
+CAMERA-FIRST: Every image_prompt must LEAD with the camera angle (low angle, dutch angle, bird's-eye, OTS, POV, eye-level) and what the lens discovers. The environment emerges through the camera's perspective. NEVER start with "Medium shot of" or "Full body wide shot showing."
 
-ENVIRONMENT-FIRST: Every image_prompt must describe the LOCATION and SETTING in the first 1-2 sentences BEFORE mentioning any character. Include: specific place, architecture/landscape, weather/time of day, foreground props, atmospheric details.
+ACTION, NOT POSING: Characters must be MID-ACTION — walking, reaching, gripping, kneeling, turning. NEVER static standing portrait facing camera. The body tells the story through what it's DOING.
 
-
-FULL-BODY ACTION: Characters shown. They must be DOING an action — walking, sitting, reaching, holding, kneeling, gesturing. NEVER static standing portrait facing camera. Close-ups allowed for max 2 scenes.
-
-
-CAMERA DIRECTION: Each image_prompt must specify a SHOT TYPE (wide, medium, low angle, overhead, OTS, tracking, dutch angle, POV) and it must DIFFER from adjacent scenes.
-
+VARY ANGLES: Each scene must use a DIFFERENT camera angle from the scene before it. Low angle → Dutch → OTS → Bird's-eye → POV. Never repeat the same angle twice in a row. Shift at least 30 degrees between cuts.
 
 POPULATED WORLD: Include other people, objects, vehicles, animals in MOST scenes. The character lives in a busy, living world — not alone in empty space.
 
-
-THREE-LAYER DEPTH: Every scene has foreground (edge objects, blurred props), midground (character + action), background (environment stretching into distance).
-
+THREE-LAYER DEPTH: Every scene has foreground (edge objects, partial frames), midground (character + action), background (environment stretching into distance).
 
 EMOTIONAL LIGHTING: Specify light SOURCE (sun, lamp, fire, neon, window), DIRECTION (from left, backlit, overhead, rim), and MOOD (warm golden, cold blue, harsh white, dramatic chiaroscuro).
 
-
-BODY LANGUAGE: Characters express emotion through POSTURE — slumped, wide stance, hunched, arms spread, hands clasped, leaning forward, stepping back. NOT just facial expression.
-
+WOVEN IDENTITY: Character traits are revealed THROUGH interaction with the world — "silver hair catching the lamplight" not "silver hair." "Scarred brow pulling tight as he frowns" not "scar above left eyebrow." Every feature connects to action, light, or emotion.
 
 CONTINUITY: Each scene must contain a visual element that connects to the next scene — shared prop, color shift, gesture echo, location transform.
+
+FORBIDDEN LANGUAGE: Never write "from waist up", "from chest up", "from shoulders up", "torso visible", "head to feet", "shown full body". The camera angle implies the framing.
 `;
 
 
