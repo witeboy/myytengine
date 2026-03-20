@@ -13,7 +13,7 @@ async function callGemini(prompt, temperature = 0.75) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt + "\n\nRespond with ONLY valid JSON." }] }],
+        contents: [{ parts: [{ text: prompt + "\n\nRespond with ONLY valid JSON. IMPORTANT: Escape all double quotes inside string values with backslash. Do NOT use unescaped quotes inside JSON string values." }] }],
         generationConfig: { temperature, maxOutputTokens: 16384, responseMimeType: "application/json" },
       }),
     }
@@ -24,10 +24,53 @@ async function callGemini(prompt, temperature = 0.75) {
   }
   const data = await response.json();
   const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-  try { return JSON.parse(rawText); } catch (_) {
-    const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-    return JSON.parse(cleaned);
+
+  // Try direct parse first
+  try { return JSON.parse(rawText); } catch (_) {}
+
+  // Clean markdown fences
+  let cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+  try { return JSON.parse(cleaned); } catch (_) {}
+
+  // Fallback: extract title and script manually from malformed JSON
+  console.warn('⚠️ JSON parse failed, attempting manual extraction...');
+  let title = '';
+  let script = '';
+  let wordCount = 0;
+
+  const titleMatch = cleaned.match(/"title"\s*:\s*"([^"]{1,100})"/);
+  if (titleMatch) title = titleMatch[1];
+
+  // Extract script field — find the value between "script": " and the last "word_count" or "} 
+  const scriptStart = cleaned.indexOf('"script"');
+  if (scriptStart >= 0) {
+    const colonPos = cleaned.indexOf(':', scriptStart);
+    const quoteStart = cleaned.indexOf('"', colonPos + 1);
+    if (quoteStart >= 0) {
+      // Find the closing pattern: ","word_count" or just the last few chars
+      const endPatterns = [/",\s*"word_count"/, /"\s*,\s*"word/, /"\s*\}\s*$/];
+      let quoteEnd = -1;
+      for (const pat of endPatterns) {
+        const match = cleaned.substring(quoteStart + 1).search(pat);
+        if (match >= 0) { quoteEnd = quoteStart + 1 + match; break; }
+      }
+      if (quoteEnd > quoteStart) {
+        script = cleaned.substring(quoteStart + 1, quoteEnd);
+        // Unescape basic JSON escapes
+        script = script.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      }
+    }
   }
+
+  const wcMatch = cleaned.match(/"word_count"\s*:\s*(\d+)/);
+  if (wcMatch) wordCount = parseInt(wcMatch[1]);
+
+  if (script) {
+    console.log(`✅ Manual extraction recovered ${script.split(/\s+/).length} words`);
+    return { title, script, word_count: wordCount };
+  }
+
+  throw new Error('Failed to parse Gemini response as JSON');
 }
 
 // Duration-aware prompt builders
