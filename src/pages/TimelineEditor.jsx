@@ -1199,8 +1199,9 @@ export default function TimelineEditor() {
 
     if (voiceoverUrl) {
       try {
+        setAsrProgress({ phase: 'submitting', message: 'Submitting audio for speech recognition…', pollCount: 0 });
         const { transcribeVoiceover: transcribeASR } = await import('@/lib/transcribeASR');
-        const result = await transcribeASR(voiceoverUrl);
+        const result = await transcribeASR(voiceoverUrl, (p) => setAsrProgress(p));
         if (result?.success && result.words?.length > 0) {
           allWords = result.words.map(w => {
             let sceneIdx = 0;
