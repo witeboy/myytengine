@@ -222,98 +222,43 @@ async function processScene(base44, scene, project, kieApiKey, ai33ApiKey, aspec
   let finalPrompt = scene.image_prompt;
 
   if (isSleepProject) {
+    // Sleep projects: strip ALL human/character references, enforce dark palette
     finalPrompt = finalPrompt
-      .replace(/\b(photorealistic|DSLR|Canon|Sony|Nikon)\b[^.]{0,60}/gi, '')
-      .replace(/\bnatural skin texture[^,.]*/gi, '')
-      .replace(/\beditorial photography[^,.]*/gi, '')
-      .replace(/\brazor[\s-]sharp detail[^,.]*/gi, '')
       .replace(/\b(a\s+)?(photorealistic\s+)?(female|male|woman|man|person|figure|girl|boy|lady|gentleman),?\s+[A-Z][a-z]+,?\s+(with\s+)?[^.]{20,300}(pajamas|clothing|dressed|wearing|shirt|pants|outfit|build|slender|muscular)[^.]*\.\s*/gi, '')
       .replace(/\b[A-Z][a-z]{2,15}\s*(→|is|sits?|stands?|lies?|rests?|gazes?|walks?|holds?|closes?|faces?)\s+/gi, '')
       .replace(/\b(Sarah|The Listener|the listener|the figure|the character|the protagonist)\b/gi, '')
       .replace(/\b(light\s+ivory\s+skin|oval\s+face|hazel\s+eyes?|almond[- ]shaped|chestnut[- ]brown\s+hair|wavy\s+hair|upturned\s+nose|full\s+lips|slender\s+build)\b[^,.]{0,60}[.,]\s*/gi, '')
       .replace(/\b(wearing|dressed\s+in|clothed\s+in)\s+[^.]{5,80}(pajamas|cotton|silk|comfortable)[^.]*\.\s*/gi, '')
-      .replace(/\bcomfortable\s+(cotton\s+)?pajamas?\b/gi, '')
-      .replace(/\b(is\s+)?(the\s+)?(main|primary)\s+subject\b/gi, '')
       .replace(/\b(her|his)\s+(hands?|face|eyes?|arms?|legs?|chest|shoulders?|skin|lips?|hair)\b/gi, 'the scene')
       .replace(/\b(from\s+the\s+waist\s+up|head\s+to\s+feet|complete\s+body|full\s+body)\b/gi, '')
-      .replace(/^Full (body |scene )?wide shot showing[^.]*\.\s*/i, '')
-      .replace(/\bcharacter shown head to feet[^.]*\.\s*/gi, '')
-      .replace(/\bmid-action in a populated world[^.]*\.\s*/gi, '')
+      .replace(/\b(photorealistic|DSLR|Canon|Sony|Nikon|ARRI|Panavision|Hollywood|Kodak)\b[^.]{0,80}\./gi, '')
+      .replace(/(dark moody oil painting[^.]*\.)\s*(dark moody oil painting)/gi, '$1')
       .replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').replace(/\s{2,}/g, ' ').trim();
 
-    finalPrompt = finalPrompt
-      .replace(/Cinematic film still shot on ARRI[^.]*\./gi, '')
-      .replace(/shot on ARRI[^.]*\./gi, '')
-      .replace(/Hollywood blockbuster[^.]*\./gi, '')
-      .replace(/photorealistic rendering[^,.]*/gi, '')
-      .replace(/8K resolution[^,.]*/gi, '')
-      .replace(/color graded with professional[^,.]*/gi, '')
-      .replace(/Kodak Vision3[^,.]*/gi, '')
-      .replace(/volumetric god rays[^,.]*/gi, '')
-      .replace(/(dark moody oil painting[^.]*\.)\s*(dark moody oil painting)/gi, '$1');
-
-    finalPrompt = cleanPromptForGrok(finalPrompt, true);
-
+    // Enforce dark lighting for sleep
     finalPrompt = finalPrompt
       .replace(/\bbright\s+(daylight|sunlight|sunshine|light|white|blue)\b/gi, 'very dim warm glow')
       .replace(/\bhigh[- ]key\s+lighting\b/gi, 'ultra low-key lighting')
-      .replace(/\boverexposed\b/gi, 'underexposed')
       .replace(/\bvibrant\s+(saturated\s+)?colors?\b/gi, 'muted dark tones')
       .replace(/\bneon\b/gi, 'very dim candlelight')
-      .replace(/\bsoft glow\b/gi, 'very faint glow')
-      .replace(/\bwarm glow\b/gi, 'very dim warm glow')
-      .replace(/\bgentle glow\b/gi, 'very faint glow')
-      .replace(/\bsoft light\b/gi, 'very dim light')
-      .replace(/\bwarm light\b/gi, 'very dim warm light')
-      .replace(/\bgentle light\b/gi, 'very dim light')
-      .replace(/\bsoft moonlight\b/gi, 'very dim moonlight')
-      .replace(/\bsoft candlelight\b/gi, 'very dim candlelight')
-      .replace(/\bsoft amber\b/gi, 'very dim amber')
       .replace(/(?<!(very |faint |dim ))\b(candlelight)\b(?!\s+atmosphere)/gi, 'very dim candlelight')
       .replace(/(?<!(very |faint |dim ))\b(moonlight)\b(?!\s+atmosphere)/gi, 'very dim moonlight')
-      .replace(/(?<!(very |faint |dim ))\b(firelight)\b/gi, 'very faint firelight')
-      .replace(/(?<!(very |faint |dim ))\b(lantern\s*light)\b/gi, 'very dim lantern light');
+      .replace(/\bbedroom\b/gi, 'room').replace(/\bbed\b(?!\s*rock|\s*of)/gi, 'couch')
+      .replace(/\bpillow\b/gi, 'cushion').replace(/\bblanket\b/gi, 'cloth')
+      .replace(/\bsleeping\b/gi, 'resting');
 
-    if (finalPrompt.length > 500) {
-      const cutPatterns = [/\.\s*(Cinematic|dark moody|Deep shadow|Rembrandt|ARRI|shallow depth|dramatic three)/i];
-      for (const pattern of cutPatterns) {
-        const match = finalPrompt.match(pattern);
-        if (match && match.index > 80) {
-          finalPrompt = finalPrompt.substring(0, match.index + 1).trim();
-          break;
-        }
-      }
+    // Ensure dark suffix
+    if (!/dark moody oil painting/i.test(finalPrompt)) {
       finalPrompt += ' Dark moody oil painting, deep shadows, very dim warm amber candlelight, ultra low-key lighting.';
     }
 
-    finalPrompt = finalPrompt
-      .replace(/\bbedroom\b/gi, 'room')
-      .replace(/\bbed\b(?!\s*rock|\s*of)/gi, 'couch')
-      .replace(/\bpillow\b/gi, 'cushion')
-      .replace(/\bblanket\b/gi, 'cloth')
-      .replace(/\bsleeping\b/gi, 'resting')
-      .replace(/\bnight\s*stand\b/gi, 'side table')
-      .replace(/\bnight\s*gown\b/gi, 'robe')
-      .replace(/,?\s*no people\b[^.]*/gi, '')
-      .replace(/,?\s*no human figures\b[^.]*/gi, '');
-
-    // Final sleep cleanup
-    finalPrompt = finalPrompt
-      .replace(/^Full scene wide shot showing the character's complete body[^.]*\.\s*/i, '')
-      .replace(/^Full body wide shot[^.]*\.\s*/i, '')
-      .replace(/\bthe character's\b/gi, '')
-      .replace(/\bcomplete body head to feet\b/gi, '')
-      .replace(/\bcharacter\b/gi, '')
-      .replace(/Cinematic film still[^.]*\./gi, '')
-      .replace(/\bARRI\s+Alexa[^,.]*/gi, '')
-      .replace(/\banamorphic\s+Panavision[^,.]*/gi, '')
-      .replace(/\bHollywood blockbuster[^,.]*/gi, '')
-      .replace(/\bphotorealistic rendering[^,.]*/gi, '')
-      .replace(/\s{2,}/g, ' ').trim();
-
+    finalPrompt = preparePromptForProvider(finalPrompt, 'ai33_seedream', true);
     console.log(`🌙 Scene ${sceneNum}: sleep prompt (${finalPrompt.length}ch): ${finalPrompt.substring(0, 200)}`);
   } else {
-    finalPrompt = cleanPromptForGrok(finalPrompt);
+    // Standard projects: the prompt from generateScenePrompts + OpenAI Cleaner
+    // is already production-ready. Only do minimal provider cleanup.
+    // NO framing injection, NO camera angle overrides, NO style suffix additions.
+    finalPrompt = preparePromptForProvider(finalPrompt, 'grok');
   }
 
   console.log(`📐 Scene ${sceneNum}: ${finalPrompt.length} chars, prompt: "${finalPrompt.substring(0, 150)}..."`);
