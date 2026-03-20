@@ -16,6 +16,21 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
 const AI33_BASE = "https://api.ai33.pro";
 
+// ── Character presence detection for smart reference locking ──
+// Only lock a scene as reference if it actually contains a character
+function detectCharacterInScene(scene) {
+  // Check director notes first (most reliable)
+  if (scene.image_prompt?.startsWith('DIRECTOR_NOTES:')) {
+    try {
+      const notes = JSON.parse(scene.image_prompt.substring('DIRECTOR_NOTES:'.length));
+      if (notes.characters_present?.length > 0) return true;
+    } catch (_) {}
+  }
+  // Prompt content analysis
+  const prompt = (scene.image_prompt || '').toLowerCase();
+  return /\b(woman|man|person|figure|character|boy|girl|child|worker|doctor|soldier|officer|teacher|scientist|skeleton|people|crowd|couple|family|mother|father|husband|wife|protagonist|narrator)\b/.test(prompt);
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
