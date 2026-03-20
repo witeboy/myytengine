@@ -320,6 +320,9 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
       duration: (lastTs?.end ?? 0) - (firstTs?.start ?? 0),
       matchScore,
       empty: false,
+      // Keep raw speech boundaries for gap validation
+      speechStart: firstTs?.start ?? null,
+      speechEnd: lastTs?.end ?? null,
     };
   });
 
