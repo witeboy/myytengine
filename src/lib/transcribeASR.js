@@ -29,9 +29,11 @@ export async function transcribeVoiceover(voiceoverUrl, onProgress) {
 
   const transcriptId = submitData.transcript_id;
   console.log(`[ASR] Job submitted: ${transcriptId}`);
+  onProgress?.({ phase: 'submitted', message: 'Audio submitted — waiting for speech recognition…', pollCount: 0 });
 
   // Step 2: Poll for completion (in browser — no CPU limit)
   const startTime = Date.now();
+  let pollCount = 0;
 
   while (true) {
     if (Date.now() - startTime > POLL_TIMEOUT) {
