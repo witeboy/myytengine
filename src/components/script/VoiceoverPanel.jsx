@@ -81,68 +81,55 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
     setGenerating(true);
     setError('');
 
+    // Phase 1: Submit TTS task (fast — just submits to AI33)
     let res;
-    let timedOut = false;
     try {
       res = await base44.functions.invoke('generateVoiceover', {
         project_id: project.id,
-        script_id: script?.id,
         voice_id: selectedVoice,
       });
     } catch (err) {
-      const status = err?.response?.status || err?.status;
-      if (status === 502 || status === 504) {
-        // Gateway timeout — function is still running in the background
-        console.log('Voiceover request timed out (502/504) — polling for completion...');
-        timedOut = true;
-      } else {
-        const errMsg = err?.response?.data?.error || err.message || 'Voiceover generation failed';
-        setError(errMsg);
-        setGenerating(false);
-        return;
-      }
+      const errMsg = err?.response?.data?.error || err.message || 'Voiceover generation failed';
+      setError(errMsg);
+      setGenerating(false);
+      return;
     }
 
-    if (!timedOut) {
-      if (res?.data?.error) {
-        setError(res.data.error);
-        setGenerating(false);
-        return;
-      }
-
-      // Direct success — function completed within timeout
-      if (res?.data?.success && res?.data?.voiceover_url) {
-        const settingsRes = await base44.entities.ProductionSettings.filter({ project_id: project.id });
-        if (settingsRes.length > 0) {
-          setSettings({ ...settingsRes[0], voiceover_status: 'completed', voiceover_url: res.data.voiceover_url });
-        }
-        setGenerating(false);
-        onUpdate?.();
-        return;
-      }
+    if (res?.data?.error) {
+      setError(res.data.error);
+      setGenerating(false);
+      return;
     }
 
-    // Either timed out or got a task_id — poll ProductionSettings for completion
-    setError('');
+    console.log('TTS task submitted:', res.data?.task_id);
+
+    // Phase 2: Poll pollVoiceover until ready/failed
     const pollInterval = setInterval(async () => {
-      const settingsRes = await base44.entities.ProductionSettings.filter({ project_id: project.id });
-      const ps = settingsRes[0];
-      if (ps?.voiceover_status === 'ready' && ps?.voiceover_url) {
-        setSettings({ ...ps, voiceover_status: 'completed' });
-        setGenerating(false);
-        clearInterval(pollInterval);
-        onUpdate?.();
-      } else if (ps?.voiceover_status === 'failed') {
-        setError('Voiceover generation failed. Please try again.');
-        setGenerating(false);
-        clearInterval(pollInterval);
+      try {
+        const pollRes = await base44.functions.invoke('pollVoiceover', { project_id: project.id });
+        const data = pollRes.data;
+        console.log('Voiceover poll:', data?.status);
+
+        if (data?.status === 'ready' && data?.voiceover_url) {
+          const settingsRes = await base44.entities.ProductionSettings.filter({ project_id: project.id });
+          if (settingsRes[0]) setSettings({ ...settingsRes[0], voiceover_status: 'completed', voiceover_url: data.voiceover_url });
+          setGenerating(false);
+          clearInterval(pollInterval);
+          onUpdate?.();
+        } else if (data?.status === 'failed') {
+          setError(data.error || 'Voiceover generation failed. Please try again.');
+          setGenerating(false);
+          clearInterval(pollInterval);
+        }
+      } catch (pollErr) {
+        console.warn('Poll error:', pollErr.message);
       }
-    }, 8000);
+    }, 6000);
 
     setTimeout(() => {
       clearInterval(pollInterval);
       setGenerating(prev => {
-        if (prev) setError('Voiceover generation is taking longer than expected. Refresh the page to check if it completed.');
+        if (prev) setError('Voiceover generation is taking longer than expected. Refresh the page to check.');
         return false;
       });
     }, 300000);
