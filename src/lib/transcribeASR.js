@@ -64,6 +64,7 @@ export async function transcribeVoiceover(voiceoverUrl, onProgress) {
     }
 
     if (pollData?.status === 'error') {
+      onProgress?.({ phase: 'error', message: pollData.error || 'Transcription failed', pollCount });
       throw new Error(pollData.error || 'Transcription failed');
     }
 
