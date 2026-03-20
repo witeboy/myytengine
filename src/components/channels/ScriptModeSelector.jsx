@@ -1,6 +1,6 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Moon, Sparkles, Zap, Film } from 'lucide-react';
+import { Moon, Sparkles, Zap, Film, Clapperboard } from 'lucide-react';
 
 const MODES = [
   {
@@ -16,6 +16,13 @@ const MODES = [
     description: '90s shorts — Hook → Tension → 3 Rules → CTA. Visual every 2-3s. 9:16 portrait.',
     icon: Film,
     color: '#22c55e',
+  },
+  {
+    id: 'long_viral',
+    label: 'Long Viral',
+    description: 'Same viral Shorts structures scaled to any duration — 5 to 60 min. Set your own length.',
+    icon: Clapperboard,
+    color: '#f59e0b',
   },
   {
     id: 'sleep_meditation',
