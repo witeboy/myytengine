@@ -122,6 +122,10 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ── Staleness detection: scenes stuck in image_pending too long ──
+    const STALE_THRESHOLD_MS = 4 * 60 * 1000; // 4 minutes
+    const now = Date.now();
+
     console.log(`🔍 Polling ${scenesToPoll.length} pending image tasks...`);
 
     const results = [];
@@ -129,6 +133,30 @@ Deno.serve(async (req) => {
     for (const scene of scenesToPoll) {
       const imageUrl = scene.image_url || '';
       const sceneNum = scene.scene_number;
+
+      // ── Check for stale tasks (stuck too long) ──
+      const updatedAt = scene.updated_date ? new Date(scene.updated_date).getTime() : 0;
+      const age = now - updatedAt;
+      const isStale = updatedAt > 0 && age > STALE_THRESHOLD_MS;
+
+      if (isStale && !imageUrl.startsWith('http')) {
+        console.warn(`⏰ Scene ${sceneNum}: STALE (${Math.round(age / 1000)}s old) — auto-resubmitting via Grok`);
+        const aspectRatio = projectForRef?.orientation === 'portrait' ? '9:16' : '16:9';
+        const refUrl = projectForRef?.reference_image_url || null;
+        const grokTaskId = await submitGrokFallback(KIE_API_KEY, scene, aspectRatio, refUrl);
+        if (grokTaskId) {
+          await base44.asServiceRole.entities.Scenes.update(scene.id, {
+            image_url: `grok_img_task:${grokTaskId}`,
+            status: 'image_pending'
+          });
+          console.log(`🔄 Scene ${sceneNum}: stale → resubmitted to Grok (${grokTaskId})`);
+          results.push({ scene_number: sceneNum, status: 'processing', fallback: 'grok_stale_recovery' });
+        } else {
+          await base44.asServiceRole.entities.Scenes.update(scene.id, { status: 'image_failed', image_url: '' });
+          results.push({ scene_number: sceneNum, status: 'failed', error: 'Stale task, Grok fallback failed' });
+        }
+        continue;
+      }
 
       try {
         // ════════════════════════════════════════════════════════
@@ -143,11 +171,32 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          const pollRes = await fetch(`${AI33_BASE}/v1/task/${taskId}`, {
-            headers: { 'Content-Type': 'application/json', 'xi-api-key': AI33_API_KEY }
-          });
+          let pollRes;
+          try {
+            pollRes = await fetch(`${AI33_BASE}/v1/task/${taskId}`, {
+              headers: { 'Content-Type': 'application/json', 'xi-api-key': AI33_API_KEY }
+            });
+          } catch (fetchErr) {
+            console.warn(`⚠️ Scene ${sceneNum}: AI33 poll network error — ${fetchErr.message}`);
+            results.push({ scene_number: sceneNum, status: 'processing' });
+            continue;
+          }
 
           if (!pollRes.ok) {
+            // HTTP 404/410 = task expired or not found → fallback immediately
+            if (pollRes.status === 404 || pollRes.status === 410) {
+              console.warn(`❌ Scene ${sceneNum}: AI33 task not found (${pollRes.status}) → Grok fallback`);
+              const aspectRatio = projectForRef?.orientation === 'portrait' ? '9:16' : '16:9';
+              const grokTaskId = await submitGrokFallback(KIE_API_KEY, scene, aspectRatio, projectForRef?.reference_image_url);
+              if (grokTaskId) {
+                await base44.asServiceRole.entities.Scenes.update(scene.id, { image_url: `grok_img_task:${grokTaskId}`, status: 'image_pending' });
+                results.push({ scene_number: sceneNum, status: 'processing', fallback: 'grok' });
+              } else {
+                await base44.asServiceRole.entities.Scenes.update(scene.id, { status: 'image_failed', image_url: '' });
+                results.push({ scene_number: sceneNum, status: 'failed', error: `AI33 ${pollRes.status}, Grok fallback failed` });
+              }
+              continue;
+            }
             console.log(`⏳ Scene ${sceneNum}: AI33 poll returned HTTP ${pollRes.status}, still processing`);
             results.push({ scene_number: sceneNum, status: 'processing' });
             continue;
@@ -155,8 +204,8 @@ Deno.serve(async (req) => {
 
           const pollData = await pollRes.json();
 
-          // ── DONE ──
-          if (pollData.status === 'done') {
+          // ── DONE — check multiple possible success statuses ──
+          if (pollData.status === 'done' || pollData.status === 'completed' || pollData.status === 'success') {
             const images = pollData.metadata?.result_images;
             const finalUrl = images?.[0]?.imageUrl;
 
