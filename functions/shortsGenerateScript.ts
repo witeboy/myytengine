@@ -425,14 +425,14 @@ Deno.serve(async (req) => {
       estimated_duration_sec: 90,
     });
 
-    await base44.asServiceRole.entities.Projects.update(project_id, {
+    // Fire project update without awaiting — saves CPU time
+    base44.asServiceRole.entities.Projects.update(project_id, {
       status: 'script_complete',
       current_step: 3,
       script_id: newScript.id,
-    });
+    }).catch(e => console.error('Project update failed:', e.message));
 
-    console.log(`✅ Script saved and project updated (niche: ${shortsNiche})`);
-
+    console.log(`✅ Script saved (niche: ${shortsNiche})`);
     return Response.json({ success: true, title, word_count: wordCount, niche: shortsNiche });
 
   } catch (error) {
