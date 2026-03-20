@@ -367,7 +367,9 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         {v.provider && (
-                          <Badge variant="outline" className="text-[9px] px-1.5">{v.provider === 'minimax' ? 'MM' : 'EL'}</Badge>
+                          <Badge variant="outline" className={`text-[9px] px-1.5 ${v.provider === 'elevenlabs' ? 'border-indigo-300 text-indigo-600' : 'border-orange-300 text-orange-600'}`}>
+                            {v.provider === 'minimax' ? 'AI33 MM' : 'AI33 EL'}
+                          </Badge>
                         )}
                         {v.category === 'minimax_cloned' && (
                           <Badge className="bg-amber-100 text-amber-700 text-[9px] px-1.5">Clone</Badge>
