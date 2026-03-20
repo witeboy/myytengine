@@ -894,38 +894,11 @@ export default function ContentGeneration() {
     }
 
     console.log(`📤 Submit phase complete: ${submitCount} tasks submitted`);
-    console.log(`🔍 DEBUG: About to start polling. scene1=${!!scene1}, hasReference=${!!hasReference}, pollAbortRef=${pollAbortRef.current}`);
-
-    // If Scene 1 was submitted solo for reference lock, wait for it to complete
-    // before polling the rest (so pollSceneImage can lock the reference)
-    if (scene1 && !hasReference) {
-      console.log('🔍 DEBUG: Entering Scene 1 poll wait loop');
-      setImageProgress({ current: 0, total, sceneName: 'Waiting for Scene 1 reference to generate...' });
-      let scene1Done = false;
-      for (let i = 0; i < 30 && !scene1Done && !pollAbortRef.current; i++) {
-        await new Promise(r => setTimeout(r, 5000));
-        try {
-          const pollRes = await base44.functions.invoke('pollSceneImage', { scene_id: scene1.id });
-          const pollData = pollRes.data || pollRes;
-          const s1result = pollData.results?.[0];
-          if (s1result?.status === 'done') {
-            scene1Done = true;
-            console.log('📌 Scene 1 reference locked via poll');
-            await refetchProject();
-          } else if (s1result?.status === 'failed') {
-            console.warn('Scene 1 failed — proceeding without reference');
-            scene1Done = true;
-          }
-        } catch (err) {
-          console.warn(`Scene 1 poll error: ${err.message}`);
-        }
-      }
-    }
 
     // ════════════════════════════════════════════════════════════
     // PHASE 2: POLL UNTIL ALL DONE
     // ════════════════════════════════════════════════════════════
-    console.log('🔍 DEBUG: Entering main poll loop');
+    console.log('🔍 Entering main poll loop');
     setImageProgress({ current: 0, total, sceneName: 'All submitted — polling for results...' });
 
     let pollCount = 0;
