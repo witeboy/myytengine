@@ -82,6 +82,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
     setError('');
 
     let res;
+    let timedOut = false;
     try {
       res = await base44.functions.invoke('generateVoiceover', {
         project_id: project.id,
@@ -89,78 +90,61 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
         voice_id: selectedVoice,
       });
     } catch (err) {
-      const errMsg = err?.response?.data?.error || err.message || 'Voiceover generation failed';
-      setError(errMsg);
-      setGenerating(false);
-      return;
-    }
-
-    if (res.data?.error) {
-      setError(res.data.error);
-      setGenerating(false);
-      return;
-    }
-
-    // generateVoiceover now completes synchronously — check for direct success
-    if (res.data?.success && res.data?.voiceover_url) {
-      const settingsRes = await base44.entities.ProductionSettings.filter({ project_id: project.id });
-      if (settingsRes.length > 0) {
-        setSettings({ ...settingsRes[0], voiceover_status: 'completed', voiceover_url: res.data.voiceover_url });
+      const status = err?.response?.status || err?.status;
+      if (status === 502 || status === 504) {
+        // Gateway timeout — function is still running in the background
+        console.log('Voiceover request timed out (502/504) — polling for completion...');
+        timedOut = true;
+      } else {
+        const errMsg = err?.response?.data?.error || err.message || 'Voiceover generation failed';
+        setError(errMsg);
+        setGenerating(false);
+        return;
       }
-      setGenerating(false);
-      onUpdate?.();
-      return;
     }
 
-    const taskId = res.data?.task_id;
+    if (!timedOut) {
+      if (res?.data?.error) {
+        setError(res.data.error);
+        setGenerating(false);
+        return;
+      }
 
-    if (settings) {
-      await base44.entities.ProductionSettings.update(settings.id, {
-        selected_voice_id: selectedVoice,
-        voiceover_status: 'generating',
-        generation_task_id: taskId,
-      });
-    } else {
-      const created = await base44.entities.ProductionSettings.create({
-        project_id: project.id,
-        selected_voice_id: selectedVoice,
-        voiceover_status: 'generating',
-        generation_task_id: taskId,
-      });
-      setSettings(created);
-    }
-
-    const pollInterval = setInterval(async () => {
-      const statusRes = await base44.functions.invoke('checkVoiceoverStatus', {
-        task_id: taskId,
-        project_id: project.id,
-      });
-      const status = statusRes.data?.status;
-      if (status === 'done') {
+      // Direct success — function completed within timeout
+      if (res?.data?.success && res?.data?.voiceover_url) {
         const settingsRes = await base44.entities.ProductionSettings.filter({ project_id: project.id });
-        if (settingsRes[0]) {
-          await base44.entities.ProductionSettings.update(settingsRes[0].id, {
-            voiceover_status: 'completed',
-            voiceover_url: statusRes.data?.audio_url,
-          });
-          setSettings({ ...settingsRes[0], voiceover_status: 'completed', voiceover_url: statusRes.data?.audio_url });
+        if (settingsRes.length > 0) {
+          setSettings({ ...settingsRes[0], voiceover_status: 'completed', voiceover_url: res.data.voiceover_url });
         }
+        setGenerating(false);
+        onUpdate?.();
+        return;
+      }
+    }
+
+    // Either timed out or got a task_id — poll ProductionSettings for completion
+    setError('');
+    const pollInterval = setInterval(async () => {
+      const settingsRes = await base44.entities.ProductionSettings.filter({ project_id: project.id });
+      const ps = settingsRes[0];
+      if (ps?.voiceover_status === 'ready' && ps?.voiceover_url) {
+        setSettings({ ...ps, voiceover_status: 'completed' });
         setGenerating(false);
         clearInterval(pollInterval);
         onUpdate?.();
-      } else if (status === 'failed') {
-        setError(statusRes.data?.error_message || 'Voiceover generation failed');
+      } else if (ps?.voiceover_status === 'failed') {
+        setError('Voiceover generation failed. Please try again.');
         setGenerating(false);
         clearInterval(pollInterval);
       }
-    }, 5000);
+    }, 8000);
 
     setTimeout(() => {
       clearInterval(pollInterval);
-      if (generating) {
-        setError('Voiceover generation timed out. Check back later.');
-        setGenerating(false);
-      }
+      setGenerating(prev => {
+        if (prev) setError('Voiceover generation is taking longer than expected. Refresh the page to check if it completed.');
+        return false;
+      });
     }, 300000);
   };
 
