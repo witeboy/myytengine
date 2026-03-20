@@ -121,7 +121,7 @@ export default function StoryDuration() {
         project_mode: scriptMode || '',
         orientation: isShorts ? 'portrait' : (project?.orientation || 'landscape'),
       });
-      if (!isShorts) {
+      if (!isShorts && !isLongViral) {
         await base44.functions.invoke('generateOutline', {
           project_id: projectId,
           topic_id: project.selected_topic_id,
