@@ -436,10 +436,18 @@ ${scriptText}
       "depth_of_field": "e.g. Shallow f/1.4",
       "continuity_bridge": "Visual thread to next scene",
       "emotional_intensity": 0.5,
-      "duration_seconds": 5
+      "duration_seconds": 5,
+      "characters_present": ["Name1"]
     }
   ]
 }
+
+**CHARACTER PRESENCE TAGGING (CRITICAL):**
+For each scene, list the characters_present — the names of characters who VISUALLY APPEAR in this scene.
+- Only include characters who would be SEEN on screen. Narrated references alone don't count.
+- If a scene is a pure environment/landscape/concept shot with NO people, use an empty array [].
+- Use the EXACT character names from the CHARACTER block above.
+- This field is used by the image generator to know which character DNA to inject.
 
 **CRITICAL:** Generate EXACTLY ${sceneCount} scenes. Use ONLY script words for narration_text.`;
 }
