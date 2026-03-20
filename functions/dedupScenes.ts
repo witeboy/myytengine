@@ -1,28 +1,11 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
-// DEDUP SCENES — Remove duplicate scenes from batch overlap
-// ══════════════════════════════════════════════════════════════════
-//
-// Optimized: Uses normalized-text hash for exact duplicates (O(n)),
-// then only checks similarity for scenes with similar word counts.
+// DEDUP SCENES — Fast duplicate removal
 // ══════════════════════════════════════════════════════════════════
 
 function normalizeText(text) {
-  return (text || '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function wordOverlap(textA, textB) {
-  const wordsA = normalizeText(textA).split(' ').filter(w => w.length > 2);
-  const wordsB = normalizeText(textB).split(' ').filter(w => w.length > 2);
-  if (wordsA.length === 0 || wordsB.length === 0) return 0;
-  const setB = new Set(wordsB);
-  const intersection = wordsA.filter(w => setB.has(w)).length;
-  return intersection / Math.max(wordsA.length, wordsB.length);
+  return (text || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').replace(/\s+/g, ' ').trim();
 }
 
 Deno.serve(async (req) => {
@@ -34,64 +17,67 @@ Deno.serve(async (req) => {
     const { project_id, dry_run = false, threshold = 0.80 } = await req.json();
     if (!project_id) return Response.json({ error: 'project_id required' }, { status: 400 });
 
-    const scenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-    const sorted = scenes.sort((a, b) => a.scene_number - b.scene_number);
+    // Fetch scenes in batches to avoid timeout on large projects
+    let allScenes = [];
+    let offset = 0;
+    const PAGE = 200;
+    while (true) {
+      const batch = await base44.asServiceRole.entities.Scenes.filter({ project_id }, 'scene_number', PAGE, offset);
+      allScenes = allScenes.concat(batch);
+      if (batch.length < PAGE) break;
+      offset += PAGE;
+    }
 
-    console.log(`🔍 Dedup: scanning ${sorted.length} scenes (threshold: ${threshold})`);
+    const sorted = allScenes.sort((a, b) => (a.scene_number || 0) - (b.scene_number || 0));
+    console.log(`🔍 Dedup: ${sorted.length} scenes`);
 
-    // Phase 1: Find duplicates — hash-first, then similarity
+    // Find duplicates using normalized text hash (O(n))
     const keep = [];
     const duplicates = [];
-    const seenHashes = new Map(); // normalizedText → kept scene
+    const seenHashes = new Map();
 
     for (const scene of sorted) {
       const narration = (scene.narration_text || '').trim();
-
-      if (!narration) {
-        keep.push(scene);
-        continue;
-      }
+      if (!narration) { keep.push(scene); continue; }
 
       const normalized = normalizeText(narration);
 
-      // Fast path: exact match via hash
       if (seenHashes.has(normalized)) {
-        const matchedScene = seenHashes.get(normalized);
+        const matched = seenHashes.get(normalized);
         duplicates.push({
-          scene_id: scene.id,
-          scene_number: scene.scene_number,
+          scene_id: scene.id, scene_number: scene.scene_number,
           narration_preview: narration.substring(0, 60) + '...',
-          matched_scene_number: matchedScene.scene_number,
-          matched_preview: (matchedScene.narration_text || '').substring(0, 60) + '...',
+          matched_scene_number: matched.scene_number,
+          matched_preview: (matched.narration_text || '').substring(0, 60) + '...',
         });
         continue;
       }
 
-      // Slow path: similarity check only against scenes with similar length
-      const wordCount = normalized.split(' ').length;
+      // Near-match: only check scenes with similar word count (within 50%)
       let isDuplicate = false;
       let matchedScene = null;
+      const words = normalized.split(' ').filter(w => w.length > 2);
+      const wc = words.length;
 
-      for (const kept of keep) {
-        const keptNarration = (kept.narration_text || '').trim();
-        if (!keptNarration) continue;
-
-        // Skip similarity check if word counts are too different (>2x)
-        const keptWordCount = normalizeText(keptNarration).split(' ').length;
-        if (wordCount > keptWordCount * 2 || keptWordCount > wordCount * 2) continue;
-
-        const sim = wordOverlap(narration, keptNarration);
-        if (sim >= threshold) {
-          isDuplicate = true;
-          matchedScene = kept;
-          break;
+      if (wc >= 4) {
+        const wordSet = new Set(words);
+        for (const kept of keep) {
+          const kn = (kept.narration_text || '').trim();
+          if (!kn) continue;
+          const kWords = normalizeText(kn).split(' ').filter(w => w.length > 2);
+          if (kWords.length < wc * 0.5 || kWords.length > wc * 2) continue;
+          const overlap = kWords.filter(w => wordSet.has(w)).length;
+          if (overlap / Math.max(wc, kWords.length) >= threshold) {
+            isDuplicate = true;
+            matchedScene = kept;
+            break;
+          }
         }
       }
 
       if (isDuplicate) {
         duplicates.push({
-          scene_id: scene.id,
-          scene_number: scene.scene_number,
+          scene_id: scene.id, scene_number: scene.scene_number,
           narration_preview: narration.substring(0, 60) + '...',
           matched_scene_number: matchedScene.scene_number,
           matched_preview: (matchedScene.narration_text || '').substring(0, 60) + '...',
@@ -102,12 +88,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`  Found ${duplicates.length} duplicates, keeping ${keep.length} unique scenes`);
+    console.log(`  ${duplicates.length} duplicates, ${keep.length} unique`);
 
     if (dry_run) {
       return Response.json({
-        success: true,
-        dry_run: true,
+        success: true, dry_run: true,
         total_scenes: sorted.length,
         duplicates_found: duplicates.length,
         unique_scenes: keep.length,
@@ -115,51 +100,43 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Phase 2: Delete duplicates
+    // Delete duplicates in parallel batches
     let deleted = 0;
-    let deleteFailed = 0;
-
-    for (const dup of duplicates) {
-      try {
-        await base44.asServiceRole.entities.Scenes.delete(dup.scene_id);
-        deleted++;
-      } catch (err) {
-        deleteFailed++;
-        console.warn(`  Failed to delete scene ${dup.scene_number}: ${err.message}`);
-      }
+    const BATCH = 10;
+    for (let i = 0; i < duplicates.length; i += BATCH) {
+      const batch = duplicates.slice(i, i + BATCH);
+      const results = await Promise.allSettled(
+        batch.map(d => base44.asServiceRole.entities.Scenes.delete(d.scene_id))
+      );
+      deleted += results.filter(r => r.status === 'fulfilled').length;
     }
+    console.log(`✓ Deleted ${deleted}/${duplicates.length}`);
 
-    console.log(`✓ Deleted ${deleted} duplicate scenes (${deleteFailed} failed)`);
-
-    // Phase 3: Renumber remaining scenes sequentially
-    const remaining = keep.sort((a, b) => a.scene_number - b.scene_number);
+    // Renumber in parallel batches
+    const remaining = keep.sort((a, b) => (a.scene_number || 0) - (b.scene_number || 0));
     let renumbered = 0;
+    const renumberOps = remaining
+      .map((s, i) => ({ id: s.id, oldNum: s.scene_number, newNum: i + 1 }))
+      .filter(op => op.oldNum !== op.newNum);
 
-    for (let i = 0; i < remaining.length; i++) {
-      const newNumber = i + 1;
-      if (remaining[i].scene_number !== newNumber) {
-        try {
-          await base44.asServiceRole.entities.Scenes.update(remaining[i].id, { scene_number: newNumber });
-          renumbered++;
-        } catch (err) {
-          console.warn(`  Failed to renumber scene ${remaining[i].scene_number} → ${newNumber}`);
-        }
-      }
+    for (let i = 0; i < renumberOps.length; i += BATCH) {
+      const batch = renumberOps.slice(i, i + BATCH);
+      const results = await Promise.allSettled(
+        batch.map(op => base44.asServiceRole.entities.Scenes.update(op.id, { scene_number: op.newNum }))
+      );
+      renumbered += results.filter(r => r.status === 'fulfilled').length;
     }
-
-    console.log(`✓ Renumbered ${renumbered} scenes`);
+    console.log(`✓ Renumbered ${renumbered}`);
 
     const stats = {
       original_scenes: sorted.length,
       duplicates_found: duplicates.length,
       deleted,
-      delete_failed: deleteFailed,
+      delete_failed: duplicates.length - deleted,
       remaining_scenes: remaining.length,
       renumbered,
-      reduction_percent: Math.round((duplicates.length / sorted.length) * 100),
+      reduction_percent: sorted.length > 0 ? Math.round((duplicates.length / sorted.length) * 100) : 0,
     };
-
-    console.log(`✓ Dedup complete: ${sorted.length} → ${remaining.length} scenes (${stats.reduction_percent}% reduction)`);
 
     return Response.json({ success: true, stats, sample_duplicates: duplicates.slice(0, 10) });
 
