@@ -1852,12 +1852,6 @@ export default function ContentGeneration() {
         {/* Audio Section */}
         {project && (
           <div className="mb-8 space-y-4">
-            {latestScript && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <VoiceoverPanel project={project} script={latestScript} onUpdate={() => refetchProject()} />
-                <ElevenLabsVoiceoverPanel project={project} script={latestScript} onUpdate={() => refetchProject()} />
-              </div>
-            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <MusicPanel project={project} />
               <AudioMixerPanel
