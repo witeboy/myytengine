@@ -54,8 +54,9 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
     setProgress(null);
 
     const stats = data.stats || {};
+    const method = data.sync_method === 'asr' ? '🎙 ASR' : '📐 Est';
     const parts = [
-      `${data.applied || stats.total_scenes} scenes synced`,
+      `${method} · ${data.applied || stats.total_scenes} scenes`,
       `${Math.floor((stats.total_duration || 0) / 60)}:${String(Math.floor((stats.total_duration || 0) % 60)).padStart(2, '0')}`,
     ];
     if (stats.dissolves > 0) parts.push(`${stats.dissolves} dissolves`);
