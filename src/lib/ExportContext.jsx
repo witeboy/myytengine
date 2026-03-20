@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useRef, useCallback } from 'react';
 import { saveExportedVideo } from '@/utils/videoStorage';
+import { base44 } from '@/api/base44Client';
 
 const ExportContext = createContext(null);
 
@@ -55,7 +56,55 @@ export function ExportProvider({ children }) {
       fileSize,
       downloadUrl,
       completedAt: Date.now(),
+      r2Status: 'uploading',
     });
+
+    // Auto-upload to R2 in background
+    uploadToR2(projectId, blob, filename).catch(err => {
+      console.error('[ExportContext] R2 upload failed:', err);
+      updateJob(projectId, { r2Status: 'failed', r2Error: err.message });
+    });
+  }, [updateJob]);
+
+  const uploadToR2 = useCallback(async (projectId, blob, filename) => {
+    const MAX_CHUNK = 4 * 1024 * 1024; // 4MB base64 safe limit per request
+    const sizeMB = blob.size / (1024 * 1024);
+
+    updateJob(projectId, { r2Status: 'uploading', r2Progress: 0 });
+
+    // Get project name from job
+    const job = jobsRef.current[projectId];
+    const projectName = job?.projectName || '';
+
+    // Convert blob to base64
+    const reader = new FileReader();
+    const base64 = await new Promise((resolve, reject) => {
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+    updateJob(projectId, { r2Progress: 30 });
+
+    const res = await base44.functions.invoke('uploadToR2', {
+      file_base64: base64,
+      filename,
+      content_type: 'video/mp4',
+      project_id: projectId,
+      project_name: projectName,
+    });
+
+    const data = res.data || res;
+    if (data.success && data.url) {
+      updateJob(projectId, {
+        r2Status: 'done',
+        r2Url: data.url,
+        r2Progress: 100,
+      });
+      console.log(`☁️ Uploaded to R2: ${data.url} (${data.size_mb}MB)`);
+    } else {
+      throw new Error(data.error || 'R2 upload failed');
+    }
   }, [updateJob]);
 
   const failJob = useCallback((projectId, errorMsg) => {

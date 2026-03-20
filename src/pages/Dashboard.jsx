@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import OverallStats from '@/components/dashboard/OverallStats';
@@ -6,10 +6,12 @@ import QuickShortcuts from '@/components/dashboard/QuickShortcuts';
 import NicheStatsGrid from '@/components/dashboard/NicheStatsGrid';
 import ViralTrendsPanel from '@/components/dashboard/ViralTrendsPanel';
 import ActiveProjectsStrip from '@/components/dashboard/ActiveProjectsStrip';
-import { Loader2 } from 'lucide-react';
+import CloudExportsPanel from '@/components/dashboard/CloudExportsPanel';
+import { Loader2, LayoutDashboard, Cloud } from 'lucide-react';
 
 export default function Dashboard() {
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState('dashboard');
 
   const { data: channels = [], isLoading: loadingCh } = useQuery({
     queryKey: ['dashboard-channels'],
@@ -37,11 +39,43 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
         {/* Header */}
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">AI Video Engine</h1>
-          <p className="text-gray-500 mt-1">Your faceless YouTube content command center</p>
+        <div className="flex items-end justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 tracking-tight">AI Video Engine</h1>
+            <p className="text-gray-500 mt-1">Your faceless YouTube content command center</p>
+          </div>
         </div>
 
+        {/* Tabs */}
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              activeTab === 'dashboard'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <LayoutDashboard className="w-4 h-4" />
+            Dashboard
+          </button>
+          <button
+            onClick={() => setActiveTab('cloud')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              activeTab === 'cloud'
+                ? 'bg-white text-gray-900 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Cloud className="w-4 h-4" />
+            Cloud Exports
+          </button>
+        </div>
+
+        {activeTab === 'cloud' ? (
+          <CloudExportsPanel />
+        ) : (
+        <>
         {/* Quick Shortcuts */}
         <section>
           <QuickShortcuts />
@@ -77,6 +111,8 @@ export default function Dashboard() {
               <ViralTrendsPanel channels={channels} />
             </section>
           </>
+        )}
+        </>
         )}
       </div>
     </div>

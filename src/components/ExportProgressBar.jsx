@@ -1,7 +1,7 @@
 import React from 'react';
 import { useExport } from '@/lib/ExportContext';
 import { Progress } from '@/components/ui/progress';
-import { Download, X, Loader2, CheckCircle, AlertCircle, Film } from 'lucide-react';
+import { Download, X, Loader2, CheckCircle, AlertCircle, Film, Cloud, CloudOff } from 'lucide-react';
 
 const PHASE_LABELS = {
   checking: 'Checking browser...',
@@ -70,6 +70,25 @@ export default function ExportProgressBar() {
                 <Download className="w-3.5 h-3.5" />
                 Download MP4
               </button>
+              {/* R2 upload status */}
+              {job.r2Status === 'uploading' && (
+                <div className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 rounded-md px-2 py-1">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Uploading to cloud backup...
+                </div>
+              )}
+              {job.r2Status === 'done' && (
+                <div className="flex items-center gap-1.5 text-xs text-emerald-600 bg-emerald-50 rounded-md px-2 py-1">
+                  <Cloud className="w-3 h-3" />
+                  Saved to cloud
+                </div>
+              )}
+              {job.r2Status === 'failed' && (
+                <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 rounded-md px-2 py-1">
+                  <CloudOff className="w-3 h-3" />
+                  Cloud upload failed
+                </div>
+              )}
             </div>
           )}
 
