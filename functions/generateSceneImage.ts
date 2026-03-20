@@ -202,7 +202,7 @@ function preparePromptForProvider(rawPrompt, provider = 'grok', isSleep = false)
 // SINGLE SCENE PROCESSOR — SUBMIT ONLY
 // ─────────────────────────────────────────────
 
-async function processScene(base44, scene, project, kieApiKey, ai33ApiKey, aspectRatio) {
+async function processScene(base44, scene, project, kieApiKey, ai33ApiKey, aspectRatio, referenceImageUrl) {
   const sceneNum = scene.scene_number;
   const isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story' || project.visual_style === 'sleep_ambient';
 
@@ -217,6 +217,9 @@ async function processScene(base44, scene, project, kieApiKey, ai33ApiKey, aspec
   if (scene.status === 'image_pending') {
     return { scene_id: scene.id, scene_number: sceneNum, status: 'skipped', reason: 'already_pending' };
   }
+
+  // ── Determine if this scene has characters (for reference locking) ──
+  const sceneHasCharacter = detectCharacterPresence(scene);
 
   // ── Build cleaned prompt ──────────────────────────────────
   let finalPrompt = scene.image_prompt;
