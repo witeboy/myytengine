@@ -30,17 +30,25 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
   useEffect(() => {
     const fetchData = async () => {
       setLoadingVoices(true);
-      const [voiceRes, settingsRes] = await Promise.all([
-        base44.functions.invoke('listVoices', {}),
-        base44.entities.ProductionSettings.filter({ project_id: project.id }),
-      ]);
-      const loadedVoices = voiceRes.data?.voices || [];
-      console.log('VoiceoverPanel loaded voices:', loadedVoices.length, 'categories:', loadedVoices.reduce((acc, v) => { acc[v.category] = (acc[v.category] || 0) + 1; return acc; }, {}));
-      setVoices(loadedVoices);
+      
+      // Load settings first (fast, never fails)
+      const settingsRes = await base44.entities.ProductionSettings.filter({ project_id: project.id });
       if (settingsRes.length > 0) {
         setSettings(settingsRes[0]);
         if (settingsRes[0].selected_voice_id) setSelectedVoice(settingsRes[0].selected_voice_id);
       }
+
+      // Load voices separately — can 502/timeout, shouldn't break the panel
+      try {
+        const voiceRes = await base44.functions.invoke('listVoices', {});
+        const loadedVoices = voiceRes.data?.voices || [];
+        console.log('VoiceoverPanel loaded voices:', loadedVoices.length, 'categories:', loadedVoices.reduce((acc, v) => { acc[v.category] = (acc[v.category] || 0) + 1; return acc; }, {}));
+        setVoices(loadedVoices);
+      } catch (err) {
+        console.warn('Failed to load voices:', err.message);
+        setError('Voice list temporarily unavailable. Refresh to retry.');
+      }
+
       setLoadingVoices(false);
     };
     if (project?.id) fetchData();
