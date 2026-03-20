@@ -19,6 +19,7 @@ import CaptionStylePresets from '@/components/timeline/CaptionStylePresets';
 import OverlayPanel from '@/components/timeline/OverlayPanel';
 import OverlayPropertiesPanel from '@/components/timeline/OverlayPropertiesPanel';
 import MotionPresetsPanel from '@/components/timeline/MotionPresetsPanel';
+import SyncDiagnosticPanel from '@/components/timeline/SyncDiagnosticPanel';
 import usePlaybackEngine from '@/hooks/usePlaybackEngine';
 import { closeGaps } from '@/hooks/useSnapEngine';
 import {
