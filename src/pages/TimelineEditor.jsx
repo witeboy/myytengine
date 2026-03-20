@@ -1594,6 +1594,21 @@ export default function TimelineEditor() {
         )}
       </div>
 
+      {/* Sync Diagnostic Panel */}
+      <SyncDiagnosticPanel
+        open={showSyncDiag}
+        onClose={() => setShowSyncDiag(false)}
+        onProceed={handleAutoSync}
+        scenes={scenes}
+        voiceoverUrl={voiceoverUrl}
+        audioDuration={actualVoiceoverDuration}
+        audioLoading={audioLoading}
+        audioError={audioError}
+        videoClips={videoClips}
+        captionClips={captionClips}
+        prodSettings={prodSettings}
+      />
+
       {/* Exporter modal */}
       {showExporter && (() => {
         const exportScenes = videoClips.map(clip => {
