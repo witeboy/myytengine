@@ -1,387 +1,360 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
-// BEAT SYNC ENGINE v2 — Character-Position Beat Alignment
+// BEAT SYNC ENGINE v4 — ASR-First Scene Alignment
 // ══════════════════════════════════════════════════════════════════
 //
-// Instead of word-count proportional math, this maps each scene's
-// narration to exact time positions using character-position ratios.
-// Scene boundaries snap to sentence endings so cuts never happen
-// mid-sentence.
+// Strategy: Each scene has narration_text (e.g. "While everyone's
+// fighting over dropshipping...custom t-shirts"). We use ASR to
+// get word-level timestamps from the actual voiceover audio, then
+// fuzzy-match each scene's narration_text to find EXACTLY where
+// those words are spoken. This gives us frame-accurate scene
+// start/end times with zero drift.
 //
-// Also generates caption_data (word-level timestamps) for the
-// caption overlay system.
-//
-// ONE backend call:
-//   1. Build full script from all scenes
-//   2. Map each scene's char position → time position
-//   3. Snap boundaries to sentence ends
-//   4. Generate word-level timestamps for captions
-//   5. Analyze transitions (narrative cues)
-//   6. Enforce transition rules
-//   7. Apply all updates server-side
+// Flow:
+//   1. Transcribe voiceover → ASR words [{word, start, end}, ...]
+//   2. For each scene, match narration_text to ASR word stream
+//   3. Scene start = first matched word's start time
+//      Scene end   = last matched word's end time
+//   4. Close gaps, enforce minimums, snap boundaries
+//   5. Generate word-level caption data
+//   6. Analyze & apply transitions
+//   7. Save everything server-side
 // ══════════════════════════════════════════════════════════════════
 
-const MAX_VIDEO_DURATION = 6.0;
-const MIN_SCENE_DURATION = 3.0;
+const MIN_SCENE_DURATION = 1.5;
 
 // ══════════════════════════════════════════════════════════════════
-// Character-Position Duration Mapping
+// ASR WORD MATCHING — find scene narration in the audio word stream
 // ══════════════════════════════════════════════════════════════════
 
-function computeDurations(scenes, totalVoDuration) {
-  // Step 1: Build the full concatenated script
+function normalize(w) {
+  return (w || '').toLowerCase().replace(/[^a-z0-9'']/g, '');
+}
+
+function sequenceMatchScore(asrWords, scriptWords, asrStart, scriptLen) {
+  if (asrStart + scriptLen > asrWords.length) return 0;
+  let matches = 0;
+  for (let i = 0; i < scriptLen; i++) {
+    const asrNorm = normalize(asrWords[asrStart + i].word);
+    const scriptNorm = normalize(scriptWords[i]);
+    if (asrNorm === scriptNorm) {
+      matches++;
+    } else if (asrNorm.length > 2 && scriptNorm.length > 2) {
+      if (asrNorm.startsWith(scriptNorm.slice(0, 3)) || scriptNorm.startsWith(asrNorm.slice(0, 3))) {
+        matches += 0.5;
+      }
+    }
+  }
+  return matches / scriptLen;
+}
+
+function findBestMatch(asrWords, scriptWords, expectedStart, searchRadius) {
+  const scriptLen = scriptWords.length;
+  if (scriptLen === 0) return { start: expectedStart, end: expectedStart, score: 0 };
+
+  const sampleSize = Math.min(scriptLen, 8);
+  const sampleScript = scriptWords.slice(0, sampleSize);
+
+  let bestScore = -1;
+  let bestStart = expectedStart;
+
+  const lo = Math.max(0, expectedStart - searchRadius);
+  const hi = Math.min(asrWords.length - sampleSize, expectedStart + searchRadius);
+
+  for (let i = lo; i <= hi; i++) {
+    const score = sequenceMatchScore(asrWords, sampleScript, i, sampleSize);
+    if (score > bestScore) {
+      bestScore = score;
+      bestStart = i;
+    }
+  }
+
+  let endIdx = Math.min(bestStart + scriptLen - 1, asrWords.length - 1);
+
+  // Verify tail match for longer scenes
+  if (scriptLen > 8) {
+    const tailSample = scriptWords.slice(-4);
+    let bestTailScore = -1;
+    let bestTailPos = endIdx - 3;
+    const tailLo = Math.max(bestStart + scriptLen - 20, bestStart);
+    const tailHi = Math.min(bestStart + scriptLen + 20, asrWords.length - 4);
+    for (let i = tailLo; i <= tailHi; i++) {
+      const score = sequenceMatchScore(asrWords, tailSample, i, 4);
+      if (score > bestTailScore) {
+        bestTailScore = score;
+        bestTailPos = i;
+      }
+    }
+    endIdx = bestTailPos + 3;
+  }
+
+  return {
+    start: bestStart,
+    end: Math.min(endIdx, asrWords.length - 1),
+    score: bestScore,
+  };
+}
+
+function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
+  if (!asrWords?.length || !scenes?.length) return null;
+
+  const results = [];
+  let asrCursor = 0;
+
+  for (let i = 0; i < scenes.length; i++) {
+    const scene = scenes[i];
+    const text = (scene.narration_text || '').trim();
+    const scriptWords = text.split(/\s+/).filter(Boolean);
+
+    if (scriptWords.length === 0) {
+      results.push({
+        scene_id: scene.id, scene_number: scene.scene_number,
+        startTime: null, endTime: null, duration: 0,
+        asrWordStart: null, asrWordEnd: null, empty: true,
+      });
+      continue;
+    }
+
+    const radius = i === 0
+      ? Math.min(asrWords.length, 50)
+      : Math.min(80, Math.max(20, scriptWords.length * 2));
+    const match = findBestMatch(asrWords, scriptWords, asrCursor, radius);
+
+    const wordStart = asrWords[match.start];
+    const wordEnd = asrWords[match.end];
+
+    results.push({
+      scene_id: scene.id, scene_number: scene.scene_number,
+      startTime: wordStart?.start ?? null,
+      endTime: wordEnd?.end ?? null,
+      duration: (wordEnd?.end ?? 0) - (wordStart?.start ?? 0),
+      asrWordStart: match.start,
+      asrWordEnd: match.end,
+      matchScore: match.score,
+      empty: false,
+    });
+
+    asrCursor = match.end + 1;
+  }
+
+  // ── Post-processing ──
+
+  // First scene starts at 0
+  if (results.length > 0 && results[0].startTime !== null) {
+    results[0].startTime = 0;
+  }
+
+  // Last scene ends at total duration
+  const lastNonEmpty = [...results].reverse().find(r => !r.empty);
+  if (lastNonEmpty) lastNonEmpty.endTime = totalAudioDuration;
+
+  // Close gaps between consecutive non-empty scenes
+  for (let i = 0; i < results.length - 1; i++) {
+    const curr = results[i];
+    const next = results[i + 1];
+    if (curr.empty || next.empty) continue;
+    if (curr.endTime === null || next.startTime === null) continue;
+    // Visual cuts exactly when next narration starts
+    curr.endTime = next.startTime;
+  }
+
+  // Handle empty scenes
+  for (let i = 0; i < results.length; i++) {
+    if (!results[i].empty) continue;
+    const prev = i > 0 ? results[i - 1] : null;
+    const next = i < results.length - 1 ? results[i + 1] : null;
+    const MIN_EMPTY = 1.5;
+
+    if (prev?.endTime !== null && next?.startTime !== null) {
+      const available = next.startTime - prev.endTime;
+      if (available > MIN_EMPTY) {
+        results[i].startTime = prev.endTime;
+        results[i].endTime = prev.endTime + MIN_EMPTY;
+        next.startTime = results[i].endTime;
+      } else {
+        results[i].startTime = prev.endTime - MIN_EMPTY / 2;
+        results[i].endTime = prev.endTime + MIN_EMPTY / 2;
+        prev.endTime = results[i].startTime;
+        if (next.startTime < results[i].endTime) next.startTime = results[i].endTime;
+      }
+    } else if (prev?.endTime !== null) {
+      results[i].startTime = prev.endTime;
+      results[i].endTime = Math.min(prev.endTime + MIN_EMPTY, totalAudioDuration);
+    } else if (next?.startTime !== null) {
+      results[i].endTime = next.startTime;
+      results[i].startTime = Math.max(0, next.startTime - MIN_EMPTY);
+    }
+  }
+
+  // Recalculate & round
+  results.forEach(r => {
+    if (r.startTime !== null && r.endTime !== null) {
+      r.startTime = Math.round(r.startTime * 1000) / 1000;
+      r.endTime = Math.round(r.endTime * 1000) / 1000;
+      r.duration = Math.round((r.endTime - r.startTime) * 1000) / 1000;
+    }
+  });
+
+  // Enforce minimum duration
+  for (let i = 0; i < results.length; i++) {
+    if (results[i].duration < MIN_SCENE_DURATION) {
+      const deficit = MIN_SCENE_DURATION - results[i].duration;
+      if (i < results.length - 1 && results[i + 1].duration > MIN_SCENE_DURATION + deficit) {
+        results[i].endTime += deficit;
+        results[i + 1].startTime += deficit;
+      } else if (i > 0 && results[i - 1].duration > MIN_SCENE_DURATION + deficit) {
+        results[i].startTime -= deficit;
+        results[i - 1].endTime -= deficit;
+      }
+      results[i].duration = Math.round((results[i].endTime - results[i].startTime) * 1000) / 1000;
+    }
+  }
+
+  // Check quality
+  const nonEmpty = results.filter(r => !r.empty);
+  const avgScore = nonEmpty.length > 0
+    ? nonEmpty.reduce((s, r) => s + (r.matchScore || 0), 0) / nonEmpty.length
+    : 0;
+
+  // If average match quality is too low, ASR didn't align well
+  if (avgScore < 0.3) {
+    console.warn(`⚠ ASR alignment quality too low (avg score: ${(avgScore * 100).toFixed(0)}%) — falling back`);
+    return null;
+  }
+
+  console.log(`✓ ASR alignment: ${results.length} scenes, avg match score: ${(avgScore * 100).toFixed(0)}%`);
+  return results;
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// FALLBACK: Character-Position Duration Mapping
+// ══════════════════════════════════════════════════════════════════
+
+function computeDurationsFallback(scenes, totalVoDuration) {
   const sceneTexts = scenes.map(s => (s.narration_text || '').trim());
-  const fullScript = sceneTexts.join(' ');
-  const totalChars = fullScript.length;
+  const totalChars = sceneTexts.reduce((sum, t) => sum + t.length, 0);
 
   if (totalChars === 0) {
     const perScene = totalVoDuration / scenes.length;
     return scenes.map(s => ({
-      scene_id: s.id,
-      scene_number: s.scene_number,
-      duration_seconds: Math.max(MIN_SCENE_DURATION, Math.round(perScene * 10) / 10),
-      char_start: 0,
-      char_end: 0,
-      time_start: 0,
-      time_end: perScene,
-      narration_text: '',
-      media_type: classifyMedia(s),
-      video_hold: false,
-      video_play_seconds: 0,
+      scene_id: s.id, scene_number: s.scene_number,
+      startTime: 0, endTime: perScene,
+      duration: Math.max(MIN_SCENE_DURATION, Math.round(perScene * 10) / 10),
     }));
   }
 
-  // Step 2: Find each scene's character start/end in the full script
+  const charsPerSecond = totalChars / totalVoDuration;
   let charCursor = 0;
-  const sceneData = scenes.map((s, i) => {
-    const text = sceneTexts[i];
+  const results = scenes.map(s => {
+    const text = (s.narration_text || '').trim();
     const charStart = charCursor;
     const charEnd = charCursor + text.length;
-    charCursor = charEnd + 1; // +1 for the space between scenes
-
+    charCursor = charEnd + 1;
+    const startTime = charStart / charsPerSecond;
+    const endTime = charEnd / charsPerSecond;
     return {
-      scene_id: s.id,
-      scene_number: s.scene_number,
-      narration_text: text,
-      char_start: charStart,
-      char_end: charEnd,
-      media_type: classifyMedia(s),
+      scene_id: s.id, scene_number: s.scene_number,
+      startTime, endTime,
+      duration: Math.max(MIN_SCENE_DURATION, Math.round((endTime - startTime) * 10) / 10),
     };
   });
 
-  // Step 3: Map character positions → time positions
-  const charsPerSecond = totalChars / totalVoDuration;
+  // Fix first/last
+  results[0].startTime = 0;
+  results[results.length - 1].endTime = totalVoDuration;
+  results[results.length - 1].duration = Math.round((totalVoDuration - results[results.length - 1].startTime) * 10) / 10;
 
-  sceneData.forEach(s => {
-    s.time_start_raw = s.char_start / charsPerSecond;
-    s.time_end_raw = s.char_end / charsPerSecond;
-    s.duration_raw = s.time_end_raw - s.time_start_raw;
-  });
-
-  // Step 4: Snap scene boundaries to sentence endings
-  const sentenceEnds = [];
-  for (let i = 0; i < fullScript.length; i++) {
-    if ((fullScript[i] === '.' || fullScript[i] === '!' || fullScript[i] === '?') &&
-        (i === fullScript.length - 1 || fullScript[i + 1] === ' ' || fullScript[i + 1] === '"')) {
-      sentenceEnds.push(i);
-    }
-  }
-
-  for (let i = 0; i < sceneData.length - 1; i++) {
-    const boundaryChar = sceneData[i].char_end;
-    let bestEnd = boundaryChar;
-    let bestDist = Infinity;
-    for (const se of sentenceEnds) {
-      const dist = Math.abs(se - boundaryChar);
-      if (dist < bestDist && dist < 200) {
-        bestDist = dist;
-        bestEnd = se + 1;
-      }
-    }
-
-    if (bestEnd !== boundaryChar) {
-      sceneData[i].char_end = bestEnd;
-      if (i + 1 < sceneData.length) {
-        sceneData[i + 1].char_start = bestEnd + 1;
-      }
-    }
-  }
-
-  // Step 5: Recalculate times after snapping
-  sceneData.forEach(s => {
-    s.time_start = Math.max(0, s.char_start / charsPerSecond);
-    s.time_end = Math.min(totalVoDuration, s.char_end / charsPerSecond);
-    s.duration_seconds = Math.round((s.time_end - s.time_start) * 10) / 10;
-  });
-
-  sceneData[0].time_start = 0;
-  sceneData[sceneData.length - 1].time_end = totalVoDuration;
-  sceneData[sceneData.length - 1].duration_seconds =
-    Math.round((totalVoDuration - sceneData[sceneData.length - 1].time_start) * 10) / 10;
-
-  // Step 6: Enforce minimum 3s per scene
-  for (let pass = 0; pass < 3; pass++) {
-    for (let i = 0; i < sceneData.length; i++) {
-      if (sceneData[i].duration_seconds < MIN_SCENE_DURATION) {
-        const deficit = MIN_SCENE_DURATION - sceneData[i].duration_seconds;
-        sceneData[i].duration_seconds = MIN_SCENE_DURATION;
-        const neighbors = [];
-        if (i > 0) neighbors.push(i - 1);
-        if (i < sceneData.length - 1) neighbors.push(i + 1);
-        const longestNeighbor = neighbors.reduce((best, idx) =>
-          sceneData[idx].duration_seconds > sceneData[best].duration_seconds ? idx : best,
-          neighbors[0]
-        );
-        sceneData[longestNeighbor].duration_seconds =
-          Math.max(MIN_SCENE_DURATION, sceneData[longestNeighbor].duration_seconds - deficit);
-      }
-    }
-  }
-
-  // Step 7: Normalize to exact total
-  const rawTotal = sceneData.reduce((sum, s) => sum + s.duration_seconds, 0);
+  // Normalize
+  const rawTotal = results.reduce((sum, r) => sum + r.duration, 0);
   const scale = totalVoDuration / rawTotal;
-  sceneData.forEach(s => {
-    s.duration_seconds = Math.max(MIN_SCENE_DURATION, Math.round(s.duration_seconds * scale * 10) / 10);
+  results.forEach(r => { r.duration = Math.max(MIN_SCENE_DURATION, Math.round(r.duration * scale * 10) / 10); });
+
+  // Recalculate start times
+  let timeAcc = 0;
+  results.forEach(r => {
+    r.startTime = Math.round(timeAcc * 100) / 100;
+    timeAcc += r.duration;
+    r.endTime = Math.round(timeAcc * 100) / 100;
   });
 
-  const adjustedTotal = sceneData.reduce((sum, s) => sum + s.duration_seconds, 0);
-  const diff = Math.round((totalVoDuration - adjustedTotal) * 10) / 10;
-  if (Math.abs(diff) > 0.05) {
-    const longestIdx = sceneData.reduce((mi, s, i, arr) =>
-      s.duration_seconds > arr[mi].duration_seconds ? i : mi, 0);
-    sceneData[longestIdx].duration_seconds =
-      Math.max(MIN_SCENE_DURATION, Math.round((sceneData[longestIdx].duration_seconds + diff) * 10) / 10);
+  return results;
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// CAPTION DATA — word-level timestamps from ASR or estimation
+// ══════════════════════════════════════════════════════════════════
+
+function generateCaptionData(sceneData, asrWords) {
+  // If we have ASR words, use them directly (they already have perfect timestamps)
+  if (asrWords?.length > 0) {
+    return asrWords.map(w => {
+      // Find which scene this word belongs to
+      let sceneNumber = 1;
+      for (const sd of sceneData) {
+        if (w.start >= sd.startTime && w.start < sd.endTime) {
+          sceneNumber = sd.scene_number;
+          break;
+        }
+      }
+      return {
+        word: w.word,
+        start: Math.round(w.start * 100) / 100,
+        end: Math.round(w.end * 100) / 100,
+        scene_number: sceneNumber,
+      };
+    });
   }
 
-  // Step 8: Recalculate start times sequentially
-  let timeAcc = 0;
-  sceneData.forEach(s => {
-    s.time_start = Math.round(timeAcc * 100) / 100;
-    timeAcc += s.duration_seconds;
-    s.time_end = Math.round(timeAcc * 100) / 100;
-  });
-
-  // Step 9: Video hold detection
-  sceneData.forEach(s => {
-    s.video_hold = (s.media_type === 'video' && s.duration_seconds > MAX_VIDEO_DURATION);
-    s.video_play_seconds = s.video_hold
-      ? MAX_VIDEO_DURATION
-      : (s.media_type === 'video' ? Math.min(s.duration_seconds, MAX_VIDEO_DURATION) : s.duration_seconds);
-  });
-
-  return sceneData;
-}
-
-function classifyMedia(scene) {
-  const hasVideo = scene.video_url && scene.video_url.startsWith('http') &&
-    !scene.video_url.startsWith('http://placeholder');
-  const hasImage = scene.image_url && scene.image_url.startsWith('http');
-  if (hasVideo) return 'video';
-  if (hasImage) return 'image';
-  return 'none';
-}
-
-
-// ══════════════════════════════════════════════════════════════════
-// PHASE 2: Generate Word-Level Timestamps (Caption Data)
-// ══════════════════════════════════════════════════════════════════
-
-function generateCaptionData(sceneData) {
+  // Fallback: estimate from scene durations
   const captionData = [];
-
   for (const scene of sceneData) {
     const text = scene.narration_text || '';
     if (!text) continue;
-
     const words = text.split(/\s+/).filter(Boolean);
     if (words.length === 0) continue;
-
-    const sceneDuration = scene.duration_seconds;
-    const sceneStart = scene.time_start;
     const totalWordChars = words.reduce((sum, w) => sum + w.length, 0);
-
-    let wordTime = sceneStart;
-    for (let i = 0; i < words.length; i++) {
-      const word = words[i];
+    let wordTime = scene.startTime;
+    for (const word of words) {
       const wordProportion = word.length / totalWordChars;
-      const wordDuration = sceneDuration * wordProportion;
-
+      const wordDuration = scene.duration * wordProportion;
       captionData.push({
-        word: word,
-        start: Math.round(wordTime * 100) / 100,
+        word, start: Math.round(wordTime * 100) / 100,
         end: Math.round((wordTime + wordDuration) * 100) / 100,
         scene_number: scene.scene_number,
       });
-
       wordTime += wordDuration;
     }
   }
-
   return captionData;
 }
 
 
 // ══════════════════════════════════════════════════════════════════
-// PHASE 3: Narrative-Aware Transitions
+// TRANSITIONS — narrative-aware
 // ══════════════════════════════════════════════════════════════════
-
-async function analyzeTransitions(sceneData, openaiKey) {
-  if (sceneData.length <= 50 && openaiKey) {
-    try {
-      return await analyzeTransitionsLLM(sceneData, openaiKey);
-    } catch (err) {
-      console.warn(`LLM transition analysis failed: ${err.message} — using rules`);
-    }
-  }
-  return analyzeTransitionsRuleBased(sceneData);
-}
-
-async function analyzeTransitionsLLM(sceneData, openaiKey) {
-  const summaries = sceneData.map(s => {
-    const words = (s.narration_text || '').split(/\s+/);
-    const first = words.slice(0, 15).join(' ');
-    const last = words.length > 20 ? '...' + words.slice(-10).join(' ') : '';
-    return `S${s.scene_number} [${s.duration_seconds}s]: "${first}${last}"`;
-  }).join('\n');
-
-  const prompt = `You are a professional film editor. Analyze scene transitions for a video.
-
-SCENES:
-${summaries}
-
-For each scene, decide the transition INTO it.
-Rules:
-- "cut" (0s): default, 70-80% of all transitions. Same topic continuation.
-- "dissolve" (0.7s): mood/topic shift, time passing, perspective change.
-- "fade_to_black" (1.2s): major act break. MAX 3 total.
-- "fade_from_black" (1.0s): scene 1 ONLY.
-
-Return JSON: {"transitions":[{"scene_number":1,"transition":"fade_from_black","duration":1.0,"reason":"Opening"}]}
-
-CRITICAL: 70%+ must be "cut". Only cut/dissolve/fade_to_black/fade_from_black allowed.`;
-
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${openaiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: 'You are a professional film editor. Always respond in valid JSON only.' },
-        { role: 'user', content: prompt }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.3,
-      max_tokens: 4096,
-    }),
-  });
-
-  if (!response.ok) throw new Error(`OpenAI ${response.status}`);
-  const data = await response.json();
-  const text = data.choices?.[0]?.message?.content || '{}';
-  let parsed;
-  try { parsed = JSON.parse(text); } catch (_) {
-    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fenced) parsed = JSON.parse(fenced[1]);
-    else throw new Error('JSON parse failed');
-  }
-
-  const transitions = Array.isArray(parsed) ? parsed : (parsed.transitions || []);
-  if (transitions.length < sceneData.length * 0.5) {
-    throw new Error(`Only got ${transitions.length} transitions`);
-  }
-
-  return transitions.map((t, i) => ({
-    scene_number: t.scene_number || sceneData[i]?.scene_number || i + 1,
-    transition_type: (t.transition || t.type || 'cut').toLowerCase().replace(/\s+/g, '_'),
-    transition_duration: parseFloat(t.duration || t.transition_duration || 0) || 0,
-    reason: t.reason || '',
-  }));
-}
 
 function analyzeTransitionsRuleBased(sceneData) {
   return sceneData.map((scene, i) => {
-    if (i === 0) return { scene_number: scene.scene_number, transition_type: 'fade_from_black', transition_duration: 1.0, reason: 'Opening' };
-    if (i === sceneData.length - 1) return { scene_number: scene.scene_number, transition_type: 'fade_to_black', transition_duration: 1.5, reason: 'Closing' };
+    if (i === 0) return { scene_number: scene.scene_number, transition_type: 'fade_from_black', transition_duration: 1.0 };
+    if (i === sceneData.length - 1) return { scene_number: scene.scene_number, transition_type: 'fade_to_black', transition_duration: 1.5 };
 
     const currText = (scene.narration_text || '').toLowerCase();
-    const prevText = (sceneData[i - 1].narration_text || '').toLowerCase();
-
-    const timeJumpCues = ['years later', 'months later', 'the next day', 'meanwhile', 'on the other side', 'across the world'];
-    if (timeJumpCues.some(cue => currText.startsWith(cue) || currText.includes(cue))) {
-      return { scene_number: scene.scene_number, transition_type: 'fade_to_black', transition_duration: 1.2, reason: 'Time jump' };
+    const timeJumpCues = ['years later', 'months later', 'the next day', 'meanwhile', 'on the other side'];
+    if (timeJumpCues.some(cue => currText.includes(cue))) {
+      return { scene_number: scene.scene_number, transition_type: 'fade_to_black', transition_duration: 1.2 };
     }
 
-    const pivotCues = ['but ', 'however', 'on the other hand', 'in contrast', 'nevertheless', 'yet ', 'instead'];
+    const pivotCues = ['but ', 'however', 'on the other hand', 'in contrast', 'nevertheless'];
     const hasPivot = pivotCues.some(cue => currText.startsWith(cue));
-    const prevWords = new Set(prevText.split(/\s+/).filter(w => w.length > 4));
-    const currWords = new Set(currText.split(/\s+/).filter(w => w.length > 4));
-    const overlap = [...currWords].filter(w => prevWords.has(w)).length;
-    const sim = overlap / Math.max(currWords.size, 1);
-
-    if ((sim < 0.03 || hasPivot) && i % 3 === 0) {
-      return { scene_number: scene.scene_number, transition_type: 'dissolve', transition_duration: 0.7, reason: hasPivot ? 'Pivot' : 'Topic shift' };
+    if (hasPivot && i % 3 === 0) {
+      return { scene_number: scene.scene_number, transition_type: 'dissolve', transition_duration: 0.7 };
     }
 
-    return { scene_number: scene.scene_number, transition_type: 'cut', transition_duration: 0, reason: 'Flow' };
+    return { scene_number: scene.scene_number, transition_type: 'cut', transition_duration: 0 };
   });
-}
-
-
-// ══════════════════════════════════════════════════════════════════
-// PHASE 4: Rules Engine
-// ══════════════════════════════════════════════════════════════════
-
-function enforceRules(transitions, sceneData) {
-  const VALID = ['cut', 'dissolve', 'fade_to_black', 'fade_from_black'];
-  const DUR = { cut: 0, dissolve: 0.7, fade_to_black: 1.2, fade_from_black: 1.0 };
-
-  transitions = transitions.map(t => {
-    let type = (t.transition_type || 'cut').toLowerCase().replace(/\s+/g, '_');
-    if (['wipe', 'slide', 'zoom', 'spin', 'flip'].includes(type)) type = 'cut';
-    if (type === 'fade') type = 'dissolve';
-    if (!VALID.includes(type)) type = 'cut';
-    let dur = parseFloat(t.transition_duration || DUR[type]) || 0;
-    if (type === 'cut') dur = 0;
-    return { ...t, transition_type: type, transition_duration: Math.round(dur * 10) / 10 };
-  });
-
-  if (transitions.length > 0) { transitions[0].transition_type = 'fade_from_black'; transitions[0].transition_duration = 1.0; }
-  if (transitions.length > 1) { transitions[transitions.length - 1].transition_type = 'fade_to_black'; transitions[transitions.length - 1].transition_duration = 1.5; }
-
-  transitions.forEach((t, i) => {
-    if (i === 0 || i === transitions.length - 1) return;
-    const scene = sceneData.find(s => s.scene_number === t.scene_number);
-    if (scene && scene.duration_seconds < 4 && t.transition_type !== 'cut') {
-      t.transition_type = 'cut'; t.transition_duration = 0;
-    }
-  });
-
-  let fc = 0;
-  for (let i = 1; i < transitions.length - 1; i++) {
-    if (transitions[i].transition_type === 'fade_to_black') { fc++; if (fc > 3) { transitions[i].transition_type = 'dissolve'; transitions[i].transition_duration = 0.8; } }
-  }
-
-  let cc = 0;
-  for (let i = 1; i < transitions.length - 1; i++) {
-    if (transitions[i].transition_type === 'dissolve') { cc++; if (cc > 2) { transitions[i].transition_type = 'cut'; transitions[i].transition_duration = 0; cc = 0; } } else { cc = 0; }
-  }
-
-  const mid = transitions.slice(1, -1);
-  const nc = mid.filter(t => t.transition_type !== 'cut').length;
-  const mx = Math.floor(mid.length * 0.30);
-  if (nc > mx) {
-    let ex = nc - mx;
-    for (let i = transitions.length - 2; i >= 1 && ex > 0; i--) {
-      if (transitions[i].transition_type === 'dissolve') { transitions[i].transition_type = 'cut'; transitions[i].transition_duration = 0; ex--; }
-    }
-  }
-
-  return transitions;
 }
 
 
@@ -397,8 +370,6 @@ Deno.serve(async (req) => {
 
     const { project_id } = await req.json();
     if (!project_id) return Response.json({ error: 'project_id required' }, { status: 400 });
-
-    const openaiKey = Deno.env.get('OPENAI_API_KEY');
 
     const [allScenes, prodSettings] = await Promise.all([
       base44.asServiceRole.entities.Scenes.filter({ project_id }),
@@ -417,22 +388,89 @@ Deno.serve(async (req) => {
     }
 
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`🎵 Beat Sync v3 (ASR-first): ${scenes.length} scenes · ${totalVoDuration}s voiceover`);
+    console.log(`🎵 Beat Sync v4 (ASR-first): ${scenes.length} scenes · ${totalVoDuration}s voiceover`);
 
-    // PHASE 1: Compute durations
-    const sceneData = computeDurations(scenes, totalVoDuration);
-    const usedASR = false;
-    console.log(`✓ Durations: ${sceneData.filter(s => s.media_type === 'video').length} video · ${sceneData.filter(s => s.media_type === 'image').length} image · ${sceneData.filter(s => s.video_hold).length} holds`);
+    // ═══════════════════════════════════════════════════════════════
+    // PHASE 1: Get ASR word-level timestamps from actual audio
+    // ═══════════════════════════════════════════════════════════════
 
-    // PHASE 2: Caption data
-    const captionData = generateCaptionData(sceneData);
-    console.log(`✓ Captions: ${captionData.length} words timestamped`);
+    let asrWords = null;
+    let sceneData = null;
+    let syncMethod = 'char_position';
 
+    try {
+      console.log(`🎙 Calling ASR transcription...`);
+      const asrRes = await base44.asServiceRole.functions.invoke('transcribeVoiceover', {
+        voiceover_url: voiceoverUrl,
+      });
+      const asrData = asrRes.data || asrRes;
+
+      if (asrData.success && asrData.words?.length > 0) {
+        asrWords = asrData.words;
+        console.log(`✓ ASR returned ${asrWords.length} words (confidence: ${((asrData.confidence || 0) * 100).toFixed(0)}%)`);
+
+        // ── Match each scene's narration_text to the ASR word stream ──
+        const alignment = alignScenesToASR(asrWords, scenes, totalVoDuration);
+
+        if (alignment) {
+          // Merge scene metadata with alignment results
+          sceneData = alignment.map(a => {
+            const scene = scenes.find(s => s.id === a.scene_id);
+            return {
+              ...a,
+              narration_text: scene?.narration_text || '',
+              media_type: classifyMedia(scene),
+            };
+          });
+          syncMethod = 'asr';
+
+          // Log alignment quality per scene
+          for (const sd of sceneData) {
+            const score = sd.matchScore !== undefined ? `${(sd.matchScore * 100).toFixed(0)}%` : 'N/A';
+            console.log(`  S${sd.scene_number}: ${sd.startTime?.toFixed(2)}s → ${sd.endTime?.toFixed(2)}s (${sd.duration?.toFixed(1)}s) match: ${score}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`⚠ ASR transcription failed: ${err.message} — falling back to estimation`);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // FALLBACK: Character-position estimation (if ASR failed)
+    // ═══════════════════════════════════════════════════════════════
+
+    if (!sceneData) {
+      console.log(`📐 Using character-position fallback`);
+      const fallback = computeDurationsFallback(scenes, totalVoDuration);
+      sceneData = fallback.map(f => {
+        const scene = scenes.find(s => s.id === f.scene_id);
+        return {
+          ...f,
+          narration_text: scene?.narration_text || '',
+          media_type: classifyMedia(scene),
+        };
+      });
+    }
+
+    console.log(`✓ Durations computed via ${syncMethod}: ${sceneData.length} scenes`);
+
+    // ═══════════════════════════════════════════════════════════════
+    // PHASE 2: Caption data (word-level timestamps)
+    // ═══════════════════════════════════════════════════════════════
+
+    const captionData = generateCaptionData(sceneData, syncMethod === 'asr' ? asrWords : null);
+    console.log(`✓ Captions: ${captionData.length} words timestamped (source: ${syncMethod})`);
+
+    // ═══════════════════════════════════════════════════════════════
     // PHASE 3: Transitions
-    let transitions = await analyzeTransitions(sceneData, openaiKey);
-    transitions = enforceRules(transitions, sceneData);
+    // ═══════════════════════════════════════════════════════════════
 
-    // PHASE 4: Apply server-side
+    const transitions = analyzeTransitionsRuleBased(sceneData);
+
+    // ═══════════════════════════════════════════════════════════════
+    // PHASE 4: Apply all updates server-side
+    // ═══════════════════════════════════════════════════════════════
+
     console.log(`📝 Applying ${sceneData.length} scene updates...`);
     let applied = 0;
     let failed = 0;
@@ -442,61 +480,75 @@ Deno.serve(async (req) => {
       const tr = transitions.find(t => t.scene_number === sd.scene_number) || {};
 
       const payload = {
-        duration_seconds: sd.duration_seconds,
-        start_time: sd.time_start,
+        duration_seconds: sd.duration,
+        start_time: sd.startTime,
       };
       if (tr.transition_type) {
         payload.transition_type = tr.transition_type;
         payload.transition_duration = tr.transition_duration || 0;
       }
-      if (sd.video_hold) {
-        payload.video_hold = true;
-        payload.video_play_seconds = sd.video_play_seconds;
-      }
 
       let ok = false;
-      for (let a = 0; a < 5; a++) {
+      for (let a = 0; a < 3; a++) {
         try {
           await base44.asServiceRole.entities.Scenes.update(sd.scene_id, payload);
           ok = true;
           break;
         } catch (_) {
-          if (a < 4) await new Promise(r => setTimeout(r, 500 * (a + 1)));
+          if (a < 2) await new Promise(r => setTimeout(r, 500 * (a + 1)));
         }
       }
       if (ok) applied++; else failed++;
-      if ((i + 1) % 50 === 0 || i === sceneData.length - 1) console.log(`  ${applied}/${sceneData.length} done · ${failed} failed`);
     }
 
-    // Save caption data
+    // Save beat data + caption data
+    const beatDurations = sceneData.map(s => s.duration);
+    const beatStartTimes = sceneData.map(s => s.startTime);
+
     try {
       await base44.asServiceRole.entities.ProductionSettings.update(prod.id, {
         caption_data: JSON.stringify(captionData),
+        beat_durations: JSON.stringify(beatDurations),
+        beat_start_times: JSON.stringify(beatStartTimes),
       });
-      console.log(`✓ Caption data saved`);
+      console.log(`✓ Caption data + beat data saved`);
     } catch (err) {
-      console.warn(`⚠ Caption save failed: ${err.message}`);
+      console.warn(`⚠ Save failed: ${err.message}`);
     }
 
     const stats = {
       total_scenes: sceneData.length,
       total_duration: totalVoDuration,
-      video_scenes: sceneData.filter(s => s.media_type === 'video').length,
-      image_scenes: sceneData.filter(s => s.media_type === 'image').length,
-      video_holds: sceneData.filter(s => s.video_hold).length,
+      caption_words: captionData.length,
       cuts: transitions.filter(t => t.transition_type === 'cut').length,
       dissolves: transitions.filter(t => t.transition_type === 'dissolve').length,
       fades: transitions.filter(t => t.transition_type.includes('fade')).length,
-      caption_words: captionData.length,
     };
 
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`✓ Complete: ${applied} scenes · ${stats.cuts} cuts · ${stats.dissolves} dissolves · ${stats.fades} fades`);
+    console.log(`✓ Complete (${syncMethod}): ${applied} scenes · ${stats.caption_words} caption words`);
 
-    return Response.json({ success: true, apply_mode: 'server', sync_method: usedASR ? 'asr' : 'char_position', applied, failed, total_duration: totalVoDuration, stats });
+    return Response.json({
+      success: true,
+      apply_mode: 'server',
+      sync_method: syncMethod,
+      applied,
+      failed,
+      total_duration: totalVoDuration,
+      stats,
+    });
 
   } catch (error) {
     console.error('autoSyncTimeline error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
+
+function classifyMedia(scene) {
+  if (!scene) return 'none';
+  const hasVideo = scene.video_url?.startsWith('http') && !scene.video_url?.startsWith('http://placeholder');
+  const hasImage = scene.image_url?.startsWith('http');
+  if (hasVideo) return 'video';
+  if (hasImage) return 'image';
+  return 'none';
+}
