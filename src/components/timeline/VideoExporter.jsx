@@ -65,6 +65,11 @@ export default function VideoExporter({
       setUnsupported(null);
     }
 
+    // Register with global export context so progress persists across navigation
+    if (exportCtx && projectId) {
+      exportCtx.startJob(projectId, projectName || 'Video');
+    }
+
     // Map aspect ratio to orientation for the export engine
     const exportOrientation = aspectRatio === '9:16' ? 'portrait' : 'landscape';
 
@@ -93,27 +98,19 @@ export default function VideoExporter({
       a.click();
       a.remove();
 
-      // Store in memory for same-page access
-      window.__exportedVideo = {
-        blob,
-        filename: exportFilename,
-        size: blob.size,
-      };
-      console.log('[Export] Saving with projectId:', projectId, 'type:', typeof projectId, 'blob:', blob.size);
-      if (projectId) {
-        saveExportedVideo(String(projectId), blob, exportFilename)
-          .then(ok => console.log('[Export] IndexedDB save result:', ok))
-          .catch(err => console.error('[Export] IndexedDB save FAILED:', err));
+      // Save via global export context (handles IndexedDB + download URL)
+      if (exportCtx && projectId) {
+        await exportCtx.completeJob(projectId, blob, exportFilename);
       } else {
-        console.warn('[Export] NO projectId — check VideoExporter props!');
+        // Fallback: save directly to IndexedDB
+        if (projectId) {
+          saveExportedVideo(String(projectId), blob, exportFilename).catch(err =>
+            console.error('[Export] IndexedDB save FAILED:', err)
+          );
+        }
       }
-      if (projectId) {
-        saveExportedVideo(projectId, blob, exportFilename).then(ok => {
-          console.log('[Export] IndexedDB save result:', ok);
-        });
-      } else {
-        console.warn('[Export] NO projectId — cannot save to IndexedDB!');
-      }
+    } else if (exportCtx && projectId) {
+      exportCtx.failJob(projectId, error || 'Export cancelled or failed');
     }
   };
 
