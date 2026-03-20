@@ -179,13 +179,12 @@ Deno.serve(async (req) => {
         prompt += `\n\n⚠️ CRITICAL: Your previous attempt was only ${wordCount} words. The MINIMUM is ${totalWords} words. You MUST write at least ${totalWords} words. Expand every section with more examples, more detail, more stories, more data. Do NOT summarize — go DEEP. ${totalWords} words minimum or the script will be rejected.`;
       }
 
-      console.log(`🎬 Attempt ${attempt}/${MAX_ATTEMPTS}: Calling Gemini for "${topicTitle}" (niche: ${nicheId}, ${durationMin}min, ~${totalWords}w)...`);
-      const result = await callGemini(prompt, attempt > 1 ? 0.8 : 0.75);
+      console.log(`🎬 Attempt ${attempt}/${MAX_ATTEMPTS}: Calling Claude for "${topicTitle}" (niche: ${nicheId}, ${durationMin}min, ~${totalWords}w)...`);
+      const rawText = await callClaude(prompt, attempt > 1 ? 0.8 : 0.75);
 
-      const rawScript = result.script || '';
-      fullScript = rawScript.replace(/\[.*?\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+      fullScript = rawText.replace(/\[.*?\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
       wordCount = fullScript.split(/\s+/).filter(w => w.length > 0).length;
-      title = result.title || topicTitle;
+      title = topicTitle;
 
       console.log(`📝 Attempt ${attempt}: got ${wordCount} words (target: ${totalWords}, min: ${minAcceptableWords})`);
 
