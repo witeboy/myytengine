@@ -441,15 +441,11 @@ Deno.serve(async (req) => {
     let syncMethod = 'char_position';
 
     try {
-      console.log(`🎙 Calling ASR transcription...`);
-      const asrRes = await base44.asServiceRole.functions.invoke('transcribeVoiceover', {
-        voiceover_url: voiceoverUrl,
-      });
-      const asrData = asrRes.data || asrRes;
+      console.log(`🎙 Calling ASR transcription directly...`);
+      const words = await transcribeWithASR(voiceoverUrl);
 
-      if (asrData.success && asrData.words?.length > 0) {
-        asrWords = asrData.words;
-        console.log(`✓ ASR returned ${asrWords.length} words (confidence: ${((asrData.confidence || 0) * 100).toFixed(0)}%)`);
+      if (words?.length > 0) {
+        asrWords = words;
 
         // ── Match each scene's narration_text to the ASR word stream ──
         const alignment = alignScenesToASR(asrWords, scenes, totalVoDuration);
