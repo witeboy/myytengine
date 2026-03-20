@@ -102,7 +102,8 @@ Return JSON:
       "camera_direction": "push_in",
       "text_overlay": "bold text on screen if any",
       "mood": "2-3 words",
-      "audio_note": "voice and background direction"
+      "audio_note": "voice and background direction",
+      "characters_present": ["Character Name"]
     }
   ]
 }`;
