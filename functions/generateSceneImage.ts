@@ -94,86 +94,63 @@ async function submitAI33Seedream(apiKey, prompt, aspectRatio) {
 }
 
 // ─────────────────────────────────────────────
-// PROMPT CLEANING — strip metadata Grok renders as visible text
+// PROMPT PREPARATION — lightweight provider-specific cleanup
+// ─────────────────────────────────────────────
+// DESIGN PRINCIPLE: The prompt from generateScenePrompts + OpenAI Cleaner
+// is the AUTHORITATIVE source. This function does MINIMAL adjustments:
+// 1. Strip things image models render as visible text (numbers, markdown, resolution)
+// 2. Strip screen/document content descriptions (models render them as text)
+// 3. Deduplicate repeated sentences
+// 4. Apply provider-specific length cap
+// DOES NOT: re-inject framing, override camera angles, add style suffixes
 // ─────────────────────────────────────────────
 
-function cleanPromptForGrok(rawPrompt, isSleep = false) {
+function preparePromptForProvider(rawPrompt, provider = 'grok', isSleep = false) {
   let p = rawPrompt;
 
-  // 1. Strip orientation/format directives
+  // ── 1. Strip metadata image models render as visible text ──
+  // Orientation directives (aspect ratio handled by API param)
   p = p
     .replace(/\b(LANDSCAPE|PORTRAIT)\s+(HORIZONTAL|VERTICAL)\b/gi, '')
-    .replace(/\b(widescreen|wide\s*screen)\b/gi, '')
-    .replace(/\b\d{1,2}\s*:\s*\d{1,2}\s*(frame|format|ratio|widescreen|vertical|horizontal)?\s*,?\s*/gi, '')
-    .replace(/\b(wide|tall)\s+(cinematic|vertical|horizontal)\s+(framing|composition)\b/gi, '')
-    .replace(/\bvertical\s+\d+:\d+\b/gi, '')
-    .replace(/\bhorizontal\s+\d+:\d+\b/gi, '');
+    .replace(/\b\d{1,2}\s*:\s*\d{1,2}\s*(frame|format|ratio|widescreen|vertical|horizontal)?\s*,?\s*/gi, '');
 
-  // 2. Strip anti-text instructions
-  p = p
-    .replace(/,?\s*ABSOLUTELY\s+NO\s+text[\s\S]{0,120}?(in the image|of any kind)[.\s]*/gi, '')
-    .replace(/,?\s*NO\s+text,?\s*words,?\s*letters[\s\S]{0,80}?(in the image|of any kind)[.\s]*/gi, '')
-    .replace(/,?\s*FORBIDDEN:?\s*text[\s\S]{0,80}?(in the image|of any kind)[.\s]*/gi, '');
-
-  // 2.5 Strip readable content descriptions
-  p = p
-    .replace(/\b(open\s+)?(iphone|phone|android|smartphone|tablet|ipad)\s+(settings|home\s*screen|lock\s*screen|notifications?|messages?|app\s*store|control\s*center|safari|browser)/gi, 'phone held in hand')
-    .replace(/\b(settings|notifications?|messages?|home)\s+(menu|screen|page|interface|panel|app)\s+(on\s+)?(a\s+)?(digital\s+)?(display|screen|phone|device)/gi, 'phone glowing softly')
-    .replace(/\b(tap|tapping|scroll|scrolling|swipe|swiping|click|clicking|press|pressing|toggle|toggling)\s+(a\s+)?(setting|option|button|toggle|switch|menu\s+item|notification|link|icon)\s+(on|in)\s+(the\s+)?(phone|screen|device|display|iphone|tablet)/gi, 'interacting with the phone')
-    .replace(/\b(phone|iphone|smartphone|tablet|ipad|mobile)\s+(screen|display)\s+(showing|displaying|with|reading|open\s+to)\s+[^,.]{5,80}[.,]/gi, 'phone screen glowing with soft blue-white light,')
-    .replace(/\b(laptop|computer|monitor|desktop|macbook)\s+(screen|display)\s+(showing|displaying|with|open\s+to)\s+[^,.]{5,80}[.,]/gi, 'laptop screen casting cool light,')
-    .replace(/\b(screen|display)\s+(showing|displaying|that\s+reads|reading|with\s+the\s+text|with\s+text)\s+[^,.]{5,80}[.,]/gi, 'screen glowing softly,')
-    .replace(/\ba\s+list\s+of\s+(options|items|settings|menu\s+items)\s*,?\s*including\s+[^.]{5,100}\./gi, 'a glowing interface.')
-    .replace(/\b(Settings\s+app|Messages\s+app|Gmail|Instagram|Twitter|TikTok|YouTube|Facebook|Safari|Chrome)\b/gi, 'app interface')
-    .replace(/\bon\s+a\s+digital\s+(display|screen)\b/gi, '')
-    .replace(/\b(receipt|bill|invoice|statement|contract|form|report|check|cheque|notice|certificate|diploma|ticket|prescription|memo|letter|document|page|note|card|paper|flyer|brochure|foreclosure\s+notice|eviction\s+notice|medical\s+bill|bank\s+statement|tax\s+return)\s+(showing|displaying|that\s+reads|that\s+says|reading|with\s+the\s+text|with\s+text|with\s+the\s+words|stamped\s+with|marked\s+with|printed\s+with)\s+[^,.]{3,100}[.,]/gi, '$1 clutched tightly,')
-    .replace(/\b(book|document|letter|newspaper|folder|file|binder)\s+(open\s+to|showing|reading|displaying|that\s+reads|with\s+the\s+text)\s+[^,.]{5,80}[.,]/gi, '$1 visible in the scene,')
-    .replace(/\b(fine\s+print|small\s+text|printed\s+text|handwritten\s+text|typed\s+text|the\s+words|the\s+text|legible\s+text|readable\s+text)\b/gi, 'visible markings')
-    .replace(/\b(signature\s+line|dotted\s+line\s+for|sign\s+here|printed\s+name|date\s+line)\b/gi, 'document details')
-    .replace(/\$[\d,]+\.?\d*\s*(in\s+)?(outstanding|owed|due|remaining|total|balance|charges?|debt|worth|dollars?)?\s*/gi, '')
-    .replace(/\b(total|balance|sum|amount|cost|price|fee|charge|payment|debt)\s+of\s+\$[\d,]+\.?\d*/gi, 'significant amount')
-    .replace(/\b(from|between)\s+\$[\d,]+\.?\d*\s*(to|and)\s+\$[\d,]+\.?\d*/gi, 'changing dramatically')
-    .replace(/\b\d+\.?\d*\s*(%|percent)\b/gi, '')
-    .replace(/\bthat\s+(reads|says)\s+['''""][^''""\n]{3,100}['''""][.,]?\s*/gi, '')
-    .replace(/\bwith\s+the\s+words?\s+['''""][^''""\n]{3,100}['''""][.,]?\s*/gi, '')
-    .replace(/,?\s*(including|such\s+as|like)\s+['''""]?[A-Z][^.]{3,80}\./gi, '.')
-    .replace(/['''""][A-Z][a-z]+[,'''""][\s'''""]*/g, '');
-
-  // 3. Strip resolution/quality metadata
+  // Resolution numbers (Grok renders "8K" as text)
   p = p
     .replace(/\b\d{3,4}\s*[x×]\s*\d{3,4}\s*(pixels?|px)?\b/gi, '')
     .replace(/\b(8K|4K|1080p|720p)\s*(resolution|quality|detail)?\b/gi, 'highly detailed');
 
-  // 4. Strip numbers/measurements
-  p = p
-    .replace(/\b\d+\s*mm\b/gi, '')
-    .replace(/\b\d+\s*m\b/gi, '')
-    .replace(/\b\d+\s*meters?\b/gi, '')
-    .replace(/\bf[/:]?\s*\d+\.?\d*\b/gi, '')
-    .replace(/\b\d+\s*degrees?\b/gi, '')
-    .replace(/\b\d+\s*°\b/g, '')
-    .replace(/\b\d+k\b/gi, '')
-    .replace(/\b\d+p\b/gi, '')
-    .replace(/\b\d+\s*mers?\b/gi, '')
-    .replace(/\b\d+\s*x\s*\d+\b/gi, '');
+  // F-stop numbers (rendered as text)
+  p = p.replace(/\bf[/:]?\s*\d+\.?\d*\b/gi, 'shallow depth of field');
 
-  // 5. Strip markdown artifacts
+  // Markdown artifacts
   p = p
-    .replace(/\*\*[^*]+\*\*/g, (match) => match.replace(/\*\*/g, ''))
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*/g, '')
     .replace(/#{1,3}\s*/g, '');
 
-  p = p
-    .replace(/^Skeleton\s+protagonist\s*→\s*/i, '')
-    .replace(/\bSkeleton\s+protagonist\s*→\s*/gi, '');
+  // Skeleton protagonist label prefix
+  p = p.replace(/^Skeleton\s+protagonist\s*→\s*/i, '').replace(/\bSkeleton\s+protagonist\s*→\s*/gi, '');
 
-  // 6. Clean up artifacts
+  // ── 2. Strip screen/document readable content ──
+  // Image models attempt to render any described text/numbers/UI content
   p = p
-    .replace(/\.['''""][\s]*/g, '. ')
-    .replace(/\ban\s+(phone|document|receipt|bill|laptop|screen)\b/gi, 'a $1')
-    .replace(/\bto\s+(interacting|holding|reaching|tapping)\b/gi, '$1')
-    .replace(/\ba\s+menu\b/gi, '')
-    .replace(/\bshowing\s+an?\s+(phone\s+)?held\s+in\s+hand\s+(menu|screen|page)?\s*/gi, 'in ')
+    .replace(/\b(phone|iphone|smartphone|tablet|ipad|mobile)\s+(screen|display)\s+(showing|displaying|with|reading|open\s+to)\s+[^,.]{5,80}[.,]/gi, 'phone screen glowing with soft light,')
+    .replace(/\b(laptop|computer|monitor|desktop|macbook)\s+(screen|display)\s+(showing|displaying|with|open\s+to)\s+[^,.]{5,80}[.,]/gi, 'laptop screen casting cool light,')
+    .replace(/\b(screen|display)\s+(showing|displaying|that\s+reads|reading|with\s+the\s+text|with\s+text)\s+[^,.]{5,80}[.,]/gi, 'screen glowing softly,')
+    .replace(/\b(receipt|bill|invoice|statement|contract|form|report|check|cheque|notice|certificate|diploma|ticket|prescription|memo|letter|document|page|note|card|paper|flyer|brochure|foreclosure\s+notice|eviction\s+notice|medical\s+bill|bank\s+statement|tax\s+return)\s+(showing|displaying|that\s+reads|that\s+says|reading|with\s+the\s+text|with\s+text|with\s+the\s+words|stamped\s+with|marked\s+with|printed\s+with)\s+[^,.]{3,100}[.,]/gi, '$1 clutched tightly,')
+    .replace(/\bthat\s+(reads|says)\s+['''""][^''""\n]{3,100}['''""][.,]?\s*/gi, '')
+    .replace(/\bwith\s+the\s+words?\s+['''""][^''""\n]{3,100}['''""][.,]?\s*/gi, '')
+    .replace(/\$[\d,]+\.?\d*\s*(in\s+)?(outstanding|owed|due|remaining|total|balance|charges?|debt|worth|dollars?)?\s*/gi, '')
+    .replace(/\b\d+\.?\d*\s*(%|percent)\b/gi, '');
+
+  // Anti-text instructions (models render these as text too)
+  p = p
+    .replace(/,?\s*ABSOLUTELY\s+NO\s+text[^.]*\.\s*/gi, '')
+    .replace(/,?\s*NO\s+text,?\s*words,?\s*letters[^.]*\.\s*/gi, '')
+    .replace(/,?\s*FORBIDDEN:?\s*text[^.]*\.\s*/gi, '');
+
+  // ── 3. Clean punctuation artifacts ──
+  p = p
     .replace(/,\s*,/g, ',')
     .replace(/\.\s*\./g, '.')
     .replace(/,\s*\./g, '.')
@@ -181,7 +158,7 @@ function cleanPromptForGrok(rawPrompt, isSleep = false) {
     .replace(/^[\s,.]+/, '')
     .trim();
 
-  // 6.25 DEDUP
+  // ── 4. Deduplicate repeated sentences ──
   const sentences = p.split(/(?<=\.)\s+/).filter(s => s.length > 0);
   if (sentences.length > 3) {
     const kept = [];
@@ -203,66 +180,19 @@ function cleanPromptForGrok(rawPrompt, isSleep = false) {
     }
   }
 
-  // 6.5 OBJECT CLOSE-UP REFRAME
-  const objectFocusPattern = /^(close[\s-]*up|tight|macro|detail|insert)\s+(shot\s+)?(of|on|showing)\s+(an?\s+)?(iphone|phone|smartphone|tablet|laptop|computer|screen|document|book|letter|newspaper|sign|menu|interface|settings|dashboard|receipt|bill|invoice|statement|contract|form|report|check|cheque|notice|certificate|diploma|ticket|prescription|note|memo|flyer|brochure|pamphlet|paper|page|card|postcard|telegram|bank\s+statement|medical\s+bill|foreclosure|eviction|tax\s+return)/i;
+  // ── 5. Provider-specific length cap ──
+  // Grok: 1500 chars (was 1200 — too aggressive, was cutting style suffixes)
+  // Seedream: 4000 chars
+  // Nano: 1500 chars
+  const maxChars = provider === 'ai33_seedream' ? AI33_MAX_PROMPT_CHARS : 1500;
 
-  if (objectFocusPattern.test(p)) {
-    const objectMatch = p.match(objectFocusPattern);
-    const objectName = objectMatch[5] || 'document';
-    let firstSentenceEnd = -1;
-    for (let i = objectMatch[0].length; i < p.length - 1; i++) {
-      if (p[i] === '.' && i + 2 < p.length && p[i + 1] === ' ' && /[A-Z]/.test(p[i + 2])) {
-        firstSentenceEnd = i; break;
-      }
-    }
-    if (firstSentenceEnd === -1) firstSentenceEnd = p.indexOf('.', objectMatch[0].length);
-    if (firstSentenceEnd > 0) {
-      p = `Medium shot showing the character holding a ${objectName}, ${p.substring(firstSentenceEnd + 2).trim()}`;
-    } else {
-      p = `Medium shot showing the character holding a ${objectName}.`;
-    }
-    console.log(`🔄 Reframed object close-up → medium shot (object: ${objectName})`);
-  }
-
-  // 7. FRAMING ANCHOR
-  const alreadyFramed = /^(full\s+(body|scene)|wide\s+shot|medium\s+(wide\s+)?shot|low\s+angle|high\s+angle|overhead|establishing|tracking|dutch\s+angle|pov\s+shot|landscape)/i.test(p);
-
-  if (alreadyFramed || isSleep) {
-    // No prepend needed
-  } else {
-    const isIntentionalCloseUp = /\b(ecu|extreme\s*close[\s-]*up|ecu\s*—|macro\s*shot)\b/i.test(p);
-    const isIntentionalCU = /\b(cu\s*—|close[\s-]*up\s*—|mcu\s*—|medium\s*close[\s-]*up)\b/i.test(p) && !isIntentionalCloseUp;
-
-    if (isIntentionalCloseUp) {
-      p = `Extreme close-up shot showing face and upper shoulders with detailed background environment visible behind, shallow depth of field. ${p}`;
-    } else if (isIntentionalCU) {
-      p = `Close-up portrait from chest up, showing shoulders and upper body, detailed environment visible in background. ${p}`;
-    } else {
-      p = p
-        .replace(/\bextreme\s*close[\s-]*up\b/gi, 'medium wide shot')
-        .replace(/\bclose[\s-]*up\s*(shot|portrait|of|showing)?\b/gi, 'medium shot')
-        .replace(/\bheadshot\b/gi, 'medium wide shot')
-        .replace(/\bportrait\s*(shot|crop|of)?\b/gi, 'medium wide shot')
-        .replace(/\bbust\s*shot\b/gi, 'medium wide shot')
-        .replace(/\bface\s*only\b/gi, 'full scene')
-        .replace(/\bfloating\s*head\b/gi, '');
-      p = `Full scene wide shot showing the character's complete body head to feet in a detailed environment with visible architecture and props, multiple depth layers with foreground and background elements. ${p}`;
-    }
-  }
-
-  p = p
-    .replace(/\bshown full (?:body|figure)\s*(?:in the scene)?\b/gi, '')
-    .replace(/\s{2,}/g, ' ').replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.');
-
-  // 8. Smart cap
-  if (p.length > MAX_PROMPT_CHARS) {
-    const cutZone = p.substring(MAX_PROMPT_CHARS - 100, MAX_PROMPT_CHARS);
+  if (p.length > maxChars) {
+    // Smart truncation: find last sentence boundary before the cap
+    const cutZone = p.substring(maxChars - 150, maxChars);
     const lastPeriod = cutZone.lastIndexOf('.');
-    const lastComma = cutZone.lastIndexOf(',');
-    const cutPoint = lastPeriod >= 0 ? (MAX_PROMPT_CHARS - 100) + lastPeriod + 1
-                   : lastComma >= 0 ? (MAX_PROMPT_CHARS - 100) + lastComma + 1
-                   : MAX_PROMPT_CHARS;
+    const cutPoint = lastPeriod >= 0 ? (maxChars - 150) + lastPeriod + 1 : maxChars;
     p = p.substring(0, cutPoint).trim();
+    console.log(`✂️ Truncated to ${p.length} chars for ${provider}`);
   }
 
   return p;
