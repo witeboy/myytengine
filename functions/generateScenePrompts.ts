@@ -1410,14 +1410,14 @@ ${sceneDirections}
    If subject = vehicle → NO skin, pores, wrinkles, eyes, face
    For non-human subjects, use: surface texture, material details, subtle imperfections, natural wear, reflections, creases
 
-   **PROMPT BLOCK ORDER (never change this order):**
-   1. SUBJECT — clearly defined in one sentence
-   2. ENVIRONMENT — surroundings without symbolism or metaphors
-   3. MOOD — ONE emotional tone only (melancholic, peaceful, tense, nostalgic, lonely, etc). NEVER stack multiple emotions.
-   4. COLOR PALETTE — 3-5 color descriptors maximum
-   5. LIGHTING — physically realistic (soft natural window light, dim ambient lighting, warm sunset lighting). NEVER "sad lighting" or "emotional lighting"
-   6. CAMERA — real photography language (medium shot, shallow depth of field, Canon EOS R5)
-   7. QUALITY — one concise quality phrase, never stack 20 buzzwords
+   **PROMPT FLOW (weave these naturally — NOT as labeled blocks):**
+   The prompt should read like one continuous cinematic description. Weave these elements together:
+   - Camera placement and what it discovers
+   - Environment alive around the subject
+   - Character identity revealed through action and light
+   - ONE emotional tone (melancholic, tense, nostalgic, etc.)
+   - Physically realistic lighting (soft window light, dim amber, warm sunset). NEVER "sad lighting."
+   - Style quality suffix at the end
 
    **WORD LIMIT:** 60-120 words per prompt. Long prompts confuse image models.
 
