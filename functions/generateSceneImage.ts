@@ -15,7 +15,6 @@ const AI33_BASE = "https://api.ai33.pro";
 // ── Tuning knobs ──────────────────────────────────────────────
 const MAX_CONCURRENT = 4;           // Parallel SUBMIT jobs (submits are fast ~1-2s each)
 const MAX_RETRIES = 2;              // Retries per provider submit
-const MAX_PROMPT_CHARS = 1200;      // Grok's sweet spot ceiling
 const AI33_MAX_PROMPT_CHARS = 4000; // Seedream supports longer prompts
 const RETRY_BASE_MS = 2000;         // Base delay for exponential backoff
 
