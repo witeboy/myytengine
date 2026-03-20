@@ -12,6 +12,7 @@ import VoiceoverPanel from '@/components/script/VoiceoverPanel';
 import ElevenLabsVoiceoverPanel from '@/components/script/ElevenLabsVoiceoverPanel';
 import VisualStyleSelector from '@/components/content/VisualStyleSelector';
 import OrientationSelector from '@/components/content/OrientationSelector';
+import ImageProviderSelector from '@/components/content/ImageProviderSelector';
 import MusicPanel from '@/components/content/MusicPanel';
 
 import AudioMixerPanel from '@/components/content/AudioMixerPanel';
@@ -872,7 +873,8 @@ export default function ContentGeneration() {
 
       try {
         const response = await base44.functions.invoke('generateSceneImage', {
-          scene_ids: batch.map(s => s.id)
+          scene_ids: batch.map(s => s.id),
+          preferred_provider: freshProject?.image_provider || 'auto'
         });
         const data = response.data || response;
         submitCount += data.submitted || batch.length;
@@ -970,7 +972,7 @@ export default function ContentGeneration() {
 
         try {
           // Submit
-          await base44.functions.invoke('generateSceneImage', { scene_id: scene.id });
+          await base44.functions.invoke('generateSceneImage', { scene_id: scene.id, preferred_provider: freshProject?.image_provider || 'auto' });
 
           // Poll this single scene until done (max 60s)
           for (let i = 0; i < 12; i++) {
@@ -1545,13 +1547,20 @@ export default function ContentGeneration() {
           </div>
         )}
 
-        {/* Visual Style Selector */}
+        {/* Visual Style + Image Provider */}
         {project && (
-          <div className="bg-white p-5 rounded-lg shadow-sm border mb-6">
+          <div className="bg-white p-5 rounded-lg shadow-sm border mb-6 space-y-5">
             <VisualStyleSelector
               selectedStyle={project.visual_style}
               onSelect={async (style) => {
                 await base44.entities.Projects.update(projectId, { visual_style: style });
+                refetchProject();
+              }}
+            />
+            <ImageProviderSelector
+              selected={project.image_provider || 'auto'}
+              onSelect={async (provider) => {
+                await base44.entities.Projects.update(projectId, { image_provider: provider });
                 refetchProject();
               }}
             />
@@ -1743,6 +1752,12 @@ export default function ContentGeneration() {
                 <Badge className="bg-purple-100 text-purple-800 text-xs">
                   <Palette className="w-3 h-3 mr-1" />
                   {project.visual_style.replace(/_/g, ' ')}
+                </Badge>
+              )}
+              {project?.image_provider && project.image_provider !== 'auto' && (
+                <Badge className="bg-emerald-100 text-emerald-800 text-xs">
+                  {project.image_provider === 'ai33_seedream' ? '🌱' : project.image_provider === 'grok' ? '⚡' : '🍌'}
+                  {' '}{project.image_provider === 'ai33_seedream' ? 'Seedream' : project.image_provider === 'grok' ? 'Grok' : 'Nano'}
                 </Badge>
               )}
               {project?.reference_image_url ? (
