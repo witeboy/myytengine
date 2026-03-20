@@ -72,7 +72,7 @@ STRUCTURE — same viral formula as a 90-second Short, expanded for long-form de
 
 CRITICAL: ${wc} words target. Include 10+ specific numbers. Every section must deliver value. NO filler.
 
-Return JSON: {"title":"string under 60 chars","script":"full script text with [SECTION] markers","word_count":number}`,
+Write ONLY the script text with [SECTION] markers. No JSON wrapping.`,
 
     book: `You are a long-form YouTube scriptwriter specializing in book summaries.
 Write a ${dur} book summary script (~${wc} words) for: "${topicTitle}"
@@ -88,7 +88,7 @@ STRUCTURE:
 
 ${wc} words target. Use the author's stories. Make each lesson feel worth the book price alone.
 
-Return JSON: {"title":"string under 60 chars","script":"full script with [SECTION] markers","word_count":number}`,
+Write ONLY the script text with [SECTION] markers. No JSON wrapping.`,
 
     crime_story: `You are a long-form YouTube scriptwriter specializing in true crime.
 Write a ${dur} true crime script (~${wc} words) for: "${topicTitle}"
@@ -102,7 +102,7 @@ STRUCTURE:
 
 ${wc} words target. Use specific dates, amounts, locations. Pure STORYTELLING — present tense.
 
-Return JSON: {"title":"string under 60 chars","script":"full script with [SECTION] markers","word_count":number}`,
+Write ONLY the script text with [SECTION] markers. No JSON wrapping.`,
 
     tech_explainer: `You are a long-form YouTube scriptwriter in Fireship style — rapid, witty tech explainers.
 Write a ${dur} tech explainer (~${wc} words) for: "${topicTitle}"
@@ -118,7 +118,7 @@ STRUCTURE:
 
 ${wc} words target. Use analogies religiously. Make complex simple.
 
-Return JSON: {"title":"string under 60 chars","script":"full script with [SECTION] markers","word_count":number}`,
+Write ONLY the script text with [SECTION] markers. No JSON wrapping.`,
 
     side_hustle: `You are a long-form YouTube scriptwriter for side hustle / money-making content.
 Write a ${dur} side hustle tutorial (~${wc} words) for: "${topicTitle}"
@@ -134,10 +134,10 @@ STRUCTURE:
 
 ${wc} words target. Use specific dollar amounts, platform names, timeframes. Every step doable tonight.
 
-Return JSON: {"title":"string under 60 chars","script":"full script with [SECTION] markers","word_count":number}`,
+Write ONLY the script text with [SECTION] markers. No JSON wrapping.`,
   };
 
-  return PROMPTS[nicheId] || `You are a long-form YouTube scriptwriter. Write a ${dur} script (~${wc} words) for: "${topicTitle}"\n\nUse a viral storytelling structure with hook, 3-part value core, and CTA. Include specific numbers. NO filler.\n\nReturn JSON: {"title":"string under 60 chars","script":"full script","word_count":number}`;
+  return PROMPTS[nicheId] || `You are a long-form YouTube scriptwriter. Write a ${dur} script (~${wc} words) for: "${topicTitle}"\n\nUse a viral storytelling structure with hook, 3-part value core, and CTA. Include specific numbers. NO filler.\n\nWrite ONLY the script text with [SECTION] markers. No JSON wrapping.`;
 }
 
 Deno.serve(async (req) => {
