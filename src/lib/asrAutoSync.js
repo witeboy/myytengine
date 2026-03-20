@@ -171,8 +171,8 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     lastNonEmpty.endTime = totalAudioDuration;
   }
 
-  // 3. For consecutive non-empty scenes, split the gap at the midpoint
-  //    (so scene A's visual holds until the halfway point to scene B's speech)
+  // 3. For consecutive non-empty scenes, close gaps so visuals cut
+  //    RIGHT when the next scene's narration begins (no lag).
   for (let i = 0; i < results.length - 1; i++) {
     const curr = results[i];
     const next = results[i + 1];
@@ -181,15 +181,12 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     if (curr.endTime === null || next.startTime === null) continue;
 
     if (next.startTime > curr.endTime) {
-      // There's a gap — split it at the midpoint
-      const mid = (curr.endTime + next.startTime) / 2;
-      curr.endTime = mid;
-      next.startTime = mid;
+      // Gap between scenes — extend current scene to fill it,
+      // so the visual cuts exactly when the next narration starts.
+      curr.endTime = next.startTime;
     } else if (next.startTime < curr.endTime) {
-      // Overlap — snap to the boundary
-      const boundary = (curr.endTime + next.startTime) / 2;
-      curr.endTime = boundary;
-      next.startTime = boundary;
+      // Overlap — snap: next scene's speech wins (visual cuts to it)
+      curr.endTime = next.startTime;
     }
   }
 
