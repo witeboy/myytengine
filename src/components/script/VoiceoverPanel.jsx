@@ -47,10 +47,15 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
   }, [project?.id]);
 
   const clonedVoices = useMemo(() => voices.filter(v => v.category === 'minimax_cloned' || v.category === 'cloned'), [voices]);
+  const minimaxVoices = useMemo(() => voices.filter(v => v.provider === 'minimax' && v.category !== 'minimax_cloned' && v.category !== 'cloned'), [voices]);
+  const elevenlabsVoices = useMemo(() => voices.filter(v => v.provider === 'elevenlabs'), [voices]);
   const standardVoices = useMemo(() => voices.filter(v => v.category !== 'minimax_cloned' && v.category !== 'cloned'), [voices]);
 
   const filteredVoices = useMemo(() => {
-    const source = voiceTab === 'cloned' ? clonedVoices : voices;
+    let source = voices;
+    if (voiceTab === 'cloned') source = clonedVoices;
+    else if (voiceTab === 'minimax') source = minimaxVoices;
+    else if (voiceTab === 'elevenlabs') source = elevenlabsVoices;
     return source.filter(v => {
       const q = searchQuery.toLowerCase();
       if (q) {
