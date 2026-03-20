@@ -667,6 +667,7 @@ export default function TimelineEditor() {
   const [isApplyingZoom,    setIsApplyingZoom]    = useState(false);
   const [initialized,       setInitialized]       = useState(false);
   const [showExporter,      setShowExporter]      = useState(false);
+  const [showSyncDiag,      setShowSyncDiag]      = useState(false);
   const [asrProgress,       setAsrProgress]       = useState(null); // {phase, message, pollCount}
   const initializedRef = useRef(false);
 
