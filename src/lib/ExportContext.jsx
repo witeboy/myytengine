@@ -67,44 +67,98 @@ export function ExportProvider({ children }) {
   }, [updateJob]);
 
   const uploadToR2 = useCallback(async (projectId, blob, filename) => {
-    const MAX_CHUNK = 4 * 1024 * 1024; // 4MB base64 safe limit per request
-    const sizeMB = blob.size / (1024 * 1024);
+    const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB raw → ~6.7MB base64 per chunk
+    const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
+    const totalChunks = Math.ceil(blob.size / CHUNK_SIZE);
 
     updateJob(projectId, { r2Status: 'uploading', r2Progress: 0 });
 
-    // Get project name from job
     const job = jobsRef.current[projectId];
     const projectName = job?.projectName || '';
 
-    // Convert blob to base64
-    const reader = new FileReader();
-    const base64 = await new Promise((resolve, reject) => {
-      reader.onload = () => resolve(reader.result.split(',')[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(blob);
-    });
+    console.log(`☁️ Starting R2 upload: ${sizeMB}MB in ${totalChunks} chunks`);
 
-    updateJob(projectId, { r2Progress: 30 });
-
-    const res = await base44.functions.invoke('uploadToR2', {
-      file_base64: base64,
+    // Step 1: Init multipart upload
+    const initRes = await base44.functions.invoke('uploadToR2', {
+      action: 'init',
       filename,
       content_type: 'video/mp4',
       project_id: projectId,
       project_name: projectName,
+      total_chunks: totalChunks,
+      total_size: blob.size,
     });
+    const initData = initRes.data || initRes;
+    if (!initData.success) throw new Error(initData.error || 'Init failed');
 
-    const data = res.data || res;
-    if (data.success && data.url) {
-      updateJob(projectId, {
-        r2Status: 'done',
-        r2Url: data.url,
-        r2Progress: 100,
+    const { upload_id, r2_key } = initData;
+    const parts = [];
+
+    // Step 2: Upload chunks sequentially
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, blob.size);
+      const chunkBlob = blob.slice(start, end);
+
+      // Convert chunk to base64
+      const chunkBase64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(chunkBlob);
       });
-      console.log(`☁️ Uploaded to R2: ${data.url} (${data.size_mb}MB)`);
-    } else {
-      throw new Error(data.error || 'R2 upload failed');
+
+      const partNumber = i + 1;
+      let chunkRes;
+      let retries = 0;
+      while (retries < 3) {
+        try {
+          chunkRes = await base44.functions.invoke('uploadToR2', {
+            action: 'chunk',
+            upload_id,
+            r2_key,
+            part_number: partNumber,
+            chunk_base64: chunkBase64,
+          });
+          break;
+        } catch (err) {
+          retries++;
+          if (retries >= 3) {
+            // Abort the multipart upload on failure
+            await base44.functions.invoke('uploadToR2', { action: 'abort', upload_id, r2_key }).catch(() => {});
+            throw new Error(`Chunk ${partNumber} failed after 3 retries: ${err.message}`);
+          }
+          await new Promise(r => setTimeout(r, 2000 * retries));
+        }
+      }
+
+      const chunkData = chunkRes.data || chunkRes;
+      if (!chunkData.success) {
+        await base44.functions.invoke('uploadToR2', { action: 'abort', upload_id, r2_key }).catch(() => {});
+        throw new Error(chunkData.error || `Chunk ${partNumber} failed`);
+      }
+
+      parts.push({ part_number: partNumber, etag: chunkData.etag });
+      const progress = Math.round(((i + 1) / totalChunks) * 95);
+      updateJob(projectId, { r2Progress: progress });
     }
+
+    // Step 3: Complete multipart upload
+    const completeRes = await base44.functions.invoke('uploadToR2', {
+      action: 'complete',
+      upload_id,
+      r2_key,
+      parts,
+    });
+    const completeData = completeRes.data || completeRes;
+    if (!completeData.success) throw new Error(completeData.error || 'Complete failed');
+
+    updateJob(projectId, {
+      r2Status: 'done',
+      r2Url: completeData.url,
+      r2Progress: 100,
+    });
+    console.log(`☁️ Uploaded to R2: ${completeData.url} (${sizeMB}MB, ${totalChunks} chunks)`);
   }, [updateJob]);
 
   const failJob = useCallback((projectId, errorMsg) => {
