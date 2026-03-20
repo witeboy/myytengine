@@ -255,16 +255,14 @@ async function processScene(base44, scene, project, kieApiKey, ai33ApiKey, aspec
     finalPrompt = preparePromptForProvider(finalPrompt, 'ai33_seedream', true);
     console.log(`🌙 Scene ${sceneNum}: sleep prompt (${finalPrompt.length}ch): ${finalPrompt.substring(0, 200)}`);
   } else {
-    // Standard projects: the prompt from generateScenePrompts + OpenAI Cleaner
-    // is already production-ready. Only do minimal provider cleanup.
-    // NO framing injection, NO camera angle overrides, NO style suffix additions.
-    finalPrompt = preparePromptForProvider(finalPrompt, 'grok');
+    // Standard projects: prompt is already production-ready from generateScenePrompts + OpenAI Cleaner.
+    // Provider-specific prep (length cap, text stripping) happens per-provider below.
+    finalPrompt = scene.image_prompt;
   }
 
-  console.log(`📐 Scene ${sceneNum}: ${finalPrompt.length} chars, prompt: "${finalPrompt.substring(0, 150)}..."`);
+  console.log(`📐 Scene ${sceneNum}: raw prompt ${finalPrompt.length} chars: "${finalPrompt.substring(0, 150)}..."`);
 
   // ── Provider order ────────────────────────────────────────
-  // If scene previously failed, skip AI33 (likely content safety) and try fallbacks
   const wasFailedBefore = scene.status === 'image_failed';
   const providers = isSleepProject
     ? [(!wasFailedBefore && ai33ApiKey) ? 'ai33_seedream' : null, 'nano_banana', 'grok'].filter(Boolean)
@@ -279,11 +277,11 @@ async function processScene(base44, scene, project, kieApiKey, ai33ApiKey, aspec
     try {
       let taskId;
       let taskPrefix;
-      // Prepare provider-specific prompt (different length caps)
-      const providerPrompt = isSleepProject ? finalPrompt : preparePromptForProvider(scene.image_prompt, provider);
+      // Each provider gets its own length-optimized prompt
+      const providerPrompt = preparePromptForProvider(finalPrompt, provider, isSleepProject);
 
       if (provider === 'ai33_seedream') {
-        taskId = await submitAI33Seedream(ai33ApiKey, isSleepProject ? finalPrompt : preparePromptForProvider(scene.image_prompt, 'ai33_seedream'), aspectRatio);
+        taskId = await submitAI33Seedream(ai33ApiKey, providerPrompt, aspectRatio);
         taskPrefix = 'ai33_task';
       } else if (provider === 'grok') {
         taskId = await kieCreateTask(kieApiKey, "grok-imagine/text-to-image", {
