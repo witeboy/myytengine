@@ -875,14 +875,14 @@ export default function TimelineEditor() {
     currentClip ? scenes.find(s => s.id === currentClip.sceneId) : null
   , [currentClip, scenes]);
 
-  // ── AutoSync ────────────────────────────────────────────────────
+  // ── AutoSync — ASR-driven exact alignment ────────────────────────
   const handleAutoSync = async () => {
     setIsSyncing(true);
     setSyncStatus(null);
 
     try {
+      // Step 1: Measure audio duration
       let audioDuration = measuredAudioDuration;
-
       if (!audioDuration && voiceoverUrl) {
         audioDuration = await new Promise((resolve) => {
           const tmp = new Audio();
@@ -893,59 +893,88 @@ export default function TimelineEditor() {
           setTimeout(() => resolve(0), 8000);
         });
       }
-
-      const countSyllables = (word) => {
-        const w = word.toLowerCase().replace(/[^a-z]/g, '');
-        if (!w || w.length <= 2) return 1;
-        const stripped = w.replace(/(?:[^laeiouy]es|[^laeiouy]ed|[aeiou]es?)$/, '').replace(/^y/, '');
-        const clusters = stripped.match(/[aeiouy]{1,2}/g);
-        return Math.max(1, clusters ? clusters.length : 1);
-      };
-
-      const FAST_WORDS = new Set(['a','an','the','and','or','but','in','on','at','to','for','of','with','is','it','its','be','as','by','he','she','we','they','this','that','was','are','has','have','had','do','did','not','so','if','up','out','from','into','than','then','when','where','who','which','i','you','my','your','our','their','its']);
-      const SECS_PER_SYL = 0.165;
-      const FAST_DISCOUNT = 0.60;
-      const SCENE_GAP_SECS = 0.20;
-
-      const sceneWeights = scenes.map(scene => {
-        const text = (scene.narration_text || scene.voiceover_text || '').trim();
-        const tokens = text.split(/\s+/).filter(Boolean);
-        if (tokens.length === 0) return SCENE_GAP_SECS;
-
-        let weight = SCENE_GAP_SECS;
-        tokens.forEach(token => {
-          const clean = token.toLowerCase().replace(/[^a-z]/g, '');
-          const syls = countSyllables(clean);
-          const fast = FAST_WORDS.has(clean);
-          const base = Math.max(0.10, syls * SECS_PER_SYL * (fast ? FAST_DISCOUNT : 1.0));
-          const pause = /[.!?]$/.test(token) ? 0.30 : /[,;:]$/.test(token) ? 0.14 : 0;
-          weight += base + pause;
-        });
-        return weight;
-      });
-
-      const totalWeight = sceneWeights.reduce((s, w) => s + w, 0);
-
-      let newBeatDurations;
-      if (audioDuration > 0 && totalWeight > 0) {
-        newBeatDurations = sceneWeights.map(w => parseFloat(((w / totalWeight) * audioDuration).toFixed(3)));
-        const MIN_PER_SCENE = 0.8;
-        newBeatDurations = newBeatDurations.map(d => Math.max(MIN_PER_SCENE, d));
-        const scaledSum = newBeatDurations.reduce((s, d) => s + d, 0);
-        const scaleFactor = audioDuration / scaledSum;
-        newBeatDurations = newBeatDurations.map(d => parseFloat((d * scaleFactor).toFixed(3)));
-        const drift = audioDuration - newBeatDurations.reduce((s, d) => s + d, 0);
-        newBeatDurations[newBeatDurations.length - 1] = parseFloat((newBeatDurations[newBeatDurations.length - 1] + drift).toFixed(3));
-      } else {
-        newBeatDurations = sceneWeights.map(w => parseFloat(Math.max(1.5, w).toFixed(3)));
+      if (!audioDuration || audioDuration <= 0) {
+        throw new Error('No voiceover audio to sync against');
       }
 
-      const newStartTimes = [];
-      let offset = 0;
-      newBeatDurations.forEach(dur => { newStartTimes.push(offset); offset += dur; });
+      // Step 2: Get ASR word-level timestamps
+      let asrWords = null;
+      if (voiceoverUrl) {
+        try {
+          const res = await base44.functions.invoke('transcribeVoiceover', { voiceover_url: voiceoverUrl });
+          if (res.data?.success && res.data.words?.length > 0) {
+            asrWords = res.data.words; // [{word, start, end}, ...]
+            console.log(`[AutoSync] ASR: ${asrWords.length} words transcribed`);
+          }
+        } catch (err) {
+          console.warn('[AutoSync] ASR failed, will fall back to estimation:', err.message);
+        }
+      }
 
+      let newBeatDurations;
+      let newStartTimes;
+      let syncSource;
+
+      if (asrWords && asrWords.length > 0) {
+        // ── ASR PATH: exact alignment via word matching ──────────
+        const { alignScenesToASR } = await import('@/lib/asrAutoSync');
+        const alignment = alignScenesToASR(asrWords, scenes, audioDuration);
+
+        newBeatDurations = alignment.map(a => a.duration);
+        newStartTimes = alignment.map(a => a.startTime);
+        syncSource = 'asr';
+
+        const avgScore = alignment.filter(a => !a.empty).reduce((s, a) => s + (a.matchScore || 0), 0) / alignment.filter(a => !a.empty).length;
+        console.log(`[AutoSync] ASR alignment: ${alignment.length} scenes, avg match score: ${(avgScore * 100).toFixed(0)}%`);
+      } else {
+        // ── FALLBACK: syllable-weighted estimation ───────────────
+        const countSyllables = (word) => {
+          const w = word.toLowerCase().replace(/[^a-z]/g, '');
+          if (!w || w.length <= 2) return 1;
+          const stripped = w.replace(/(?:[^laeiouy]es|[^laeiouy]ed|[aeiou]es?)$/, '').replace(/^y/, '');
+          const clusters = stripped.match(/[aeiouy]{1,2}/g);
+          return Math.max(1, clusters ? clusters.length : 1);
+        };
+        const FAST_WORDS = new Set(['a','an','the','and','or','but','in','on','at','to','for','of','with','is','it','its','be','as','by','he','she','we','they','this','that','was','are','has','have','had','do','did','not','so','if','up','out','from','into','than','then','when','where','who','which','i','you','my','your','our','their','its']);
+        const SECS_PER_SYL = 0.165;
+        const FAST_DISCOUNT = 0.60;
+        const SCENE_GAP_SECS = 0.20;
+
+        const sceneWeights = scenes.map(scene => {
+          const text = (scene.narration_text || scene.voiceover_text || '').trim();
+          const tokens = text.split(/\s+/).filter(Boolean);
+          if (tokens.length === 0) return SCENE_GAP_SECS;
+          let weight = SCENE_GAP_SECS;
+          tokens.forEach(token => {
+            const clean = token.toLowerCase().replace(/[^a-z]/g, '');
+            const syls = countSyllables(clean);
+            const fast = FAST_WORDS.has(clean);
+            weight += Math.max(0.10, syls * SECS_PER_SYL * (fast ? FAST_DISCOUNT : 1.0));
+            weight += /[.!?]$/.test(token) ? 0.30 : /[,;:]$/.test(token) ? 0.14 : 0;
+          });
+          return weight;
+        });
+
+        const totalWeight = sceneWeights.reduce((s, w) => s + w, 0);
+        newBeatDurations = sceneWeights.map(w => parseFloat(((w / totalWeight) * audioDuration).toFixed(3)));
+        newBeatDurations = newBeatDurations.map(d => Math.max(0.8, d));
+        const scaledSum = newBeatDurations.reduce((s, d) => s + d, 0);
+        const sf = audioDuration / scaledSum;
+        newBeatDurations = newBeatDurations.map(d => parseFloat((d * sf).toFixed(3)));
+        const drift = audioDuration - newBeatDurations.reduce((s, d) => s + d, 0);
+        newBeatDurations[newBeatDurations.length - 1] += drift;
+
+        newStartTimes = [];
+        let off = 0;
+        newBeatDurations.forEach(dur => { newStartTimes.push(off); off += dur; });
+        syncSource = 'words';
+      }
+
+      // Step 3: Build synced video clips
       const synced = scenes.map((scene, idx) => {
         const existing = videoClips.find(c => c.sceneId === scene.id);
+        const hasVideo = scene.video_url && scene.video_url.startsWith('http') && !scene.video_url.startsWith('veo_task:') && !scene.video_url.startsWith('grok_vid_task:');
+        const hasBroll = scene.broll_url && scene.broll_url.startsWith('http');
         return {
           ...(existing || {}),
           id: `video-${scene.id}`, sceneId: scene.id, sceneNumber: scene.scene_number,
@@ -953,9 +982,9 @@ export default function TimelineEditor() {
           label: `Scene ${scene.scene_number}`, thumbnail: scene.image_url,
           effects: existing?.effects || [], audioMuted: existing?.audioMuted || false,
           imageUrl: existing?.imageUrl || scene.image_url || null,
-          videoUrl: existing?.videoUrl || (scene.video_url && scene.video_url.startsWith('http') && !scene.video_url.startsWith('veo_task:') && !scene.video_url.startsWith('grok_vid_task:') ? scene.video_url : null),
-          mediaType: existing?.mediaType || (scene.video_url && scene.video_url.startsWith('http') && !scene.video_url.startsWith('veo_task:') && !scene.video_url.startsWith('grok_vid_task:') ? 'video' : 'image'),
-          brollUrl: existing?.brollUrl || (scene.broll_url?.startsWith('http') ? scene.broll_url : null),
+          videoUrl: existing?.videoUrl || (hasVideo ? scene.video_url : null),
+          mediaType: existing?.mediaType || (hasVideo ? 'video' : 'image'),
+          brollUrl: existing?.brollUrl || (hasBroll ? scene.broll_url : null),
           brollSource: existing?.brollSource || scene.broll_source || null,
           brollQuery: existing?.brollQuery || scene.broll_query || null,
           cinematicMotion: existing?.cinematicMotion || null,
@@ -970,6 +999,7 @@ export default function TimelineEditor() {
         };
       });
 
+      // Step 4: Measure video durations and set playback rates
       const videoDurationCache = {};
       const measureVideoDur = (url) => {
         if (videoDurationCache[url]) return Promise.resolve(videoDurationCache[url]);
@@ -991,16 +1021,21 @@ export default function TimelineEditor() {
         const rate = beatDur > vidDur ? Math.max(0.25, parseFloat((vidDur / beatDur).toFixed(3))) : 1.0;
         return { ...clip, playbackRate: rate, videoDuration: vidDur };
       }));
+
       setVideoClips(syncedWithRates);
       setOverrideBeatDurations(newBeatDurations);
 
+      // Step 5: Persist
       if (prodSettings?.id) {
         try {
-          await base44.entities.ProductionSettings.update(prodSettings.id, { beat_durations: JSON.stringify(newBeatDurations) });
-        } catch (e) { console.warn('Could not save beat_durations to DB:', e.message); }
+          await base44.entities.ProductionSettings.update(prodSettings.id, {
+            beat_durations: JSON.stringify(newBeatDurations),
+            beat_start_times: JSON.stringify(newStartTimes),
+          });
+        } catch (e) { console.warn('Could not save beat data to DB:', e.message); }
       }
 
-      setSyncStatus(audioDuration > 0 ? 'audio' : 'words');
+      setSyncStatus(syncSource === 'asr' ? 'audio' : 'words');
     } catch (err) {
       console.error('AutoSync failed:', err);
       setSyncStatus('error');
