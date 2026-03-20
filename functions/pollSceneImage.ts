@@ -195,12 +195,58 @@ Deno.serve(async (req) => {
             }
           }
 
-          // ── FAILED ──
+          // ── FAILED — auto-fallback to Grok ──
           if (pollData.status === 'error' || pollData.status === 'failed') {
-            const errMsg = pollData.error_message || 'AI33 task failed';
-            console.warn(`❌ Scene ${sceneNum}: AI33 failed — ${errMsg}`);
-            await base44.asServiceRole.entities.Scenes.update(scene.id, { status: 'image_failed', image_url: '' });
-            results.push({ scene_number: sceneNum, status: 'failed', error: errMsg });
+            const errMsg = pollData.error_message || pollData.message || 'AI33 task failed';
+            console.warn(`❌ Scene ${sceneNum}: AI33 failed — ${errMsg} → trying Grok fallback`);
+
+            // Try Grok as automatic fallback
+            const aspectRatio = projectForRef?.orientation === 'portrait' ? '9:16' : '16:9';
+            const refUrl = projectForRef?.reference_image_url || null;
+            const grokTaskId = await submitGrokFallback(KIE_API_KEY, scene, aspectRatio, refUrl);
+
+            if (grokTaskId) {
+              // Switch to Grok task — scene stays image_pending, next poll picks it up
+              await base44.asServiceRole.entities.Scenes.update(scene.id, {
+                image_url: `grok_img_task:${grokTaskId}`,
+                status: 'image_pending'
+              });
+              console.log(`🔄 Scene ${sceneNum}: auto-fallback to Grok (${grokTaskId})`);
+              results.push({ scene_number: sceneNum, status: 'processing', fallback: 'grok' });
+            } else {
+              // Grok also couldn't submit — try Nano Banana
+              let nanoTaskId = null;
+              if (KIE_API_KEY) {
+                try {
+                  const nanoPrompt = (scene.image_prompt || '').substring(0, 1500);
+                  const nanoRes = await fetch(`${KIE_BASE}/createTask`, {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${KIE_API_KEY}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      model: "google/nano-banana",
+                      input: { prompt: nanoPrompt, output_format: "png", image_size: projectForRef?.orientation === 'portrait' ? '9:16' : '16:9' }
+                    })
+                  });
+                  const nanoResult = await nanoRes.json();
+                  if (nanoRes.ok && nanoResult.code === 200) {
+                    nanoTaskId = nanoResult.data.taskId;
+                  }
+                } catch (_) {}
+              }
+
+              if (nanoTaskId) {
+                await base44.asServiceRole.entities.Scenes.update(scene.id, {
+                  image_url: `nano_task:${nanoTaskId}`,
+                  status: 'image_pending'
+                });
+                console.log(`🔄 Scene ${sceneNum}: auto-fallback to Nano (${nanoTaskId})`);
+                results.push({ scene_number: sceneNum, status: 'processing', fallback: 'nano' });
+              } else {
+                // All fallbacks failed
+                await base44.asServiceRole.entities.Scenes.update(scene.id, { status: 'image_failed', image_url: '' });
+                results.push({ scene_number: sceneNum, status: 'failed', error: errMsg });
+              }
+            }
             continue;
           }
 
