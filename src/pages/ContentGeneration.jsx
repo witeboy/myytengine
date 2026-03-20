@@ -848,25 +848,13 @@ export default function ContentGeneration() {
     // ════════════════════════════════════════════════════════════
     setImageProgress({ current: 0, total, sceneName: `Submitting ${total} scenes...` });
 
-    // Scene 1 first for reference lock
+    // Check if reference already exists
     const freshProject = (await base44.entities.Projects.filter({ id: projectId }))?.[0];
     const hasReference = freshProject?.reference_image_url;
-    const scene1 = readyScenes.find(s => s.scene_number === 1);
     let submitCount = 0;
 
-    if (scene1 && !hasReference) {
-      setImageProgress({ current: 0, total, sceneName: 'Submitting Scene 1 (reference lock)...' });
-      try {
-        await base44.functions.invoke('generateSceneImage', { scene_id: scene1.id });
-        submitCount++;
-        console.log('📤 Scene 1 submitted for reference lock');
-      } catch (err) {
-        console.warn('Scene 1 submit failed:', err.message);
-      }
-    }
-
-    // Submit remaining in batches of 8 (submits are fast now — no polling)
-    const remainingScenes = readyScenes.filter(s => !(s.scene_number === 1 && !hasReference));
+    // Submit ALL scenes in batches (Scene 1 included — reference lock happens in pollSceneImage)
+    const remainingScenes = [...readyScenes];
     const SUBMIT_BATCH = 8;
 
     for (let i = 0; i < remainingScenes.length; i += SUBMIT_BATCH) {
