@@ -8,28 +8,53 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 async function callClaude(prompt, temperature = 0.75) {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 8192,
-      temperature,
-      messages: [
-        { role: "user", content: prompt }
-      ],
-    }),
-  });
-  if (!response.ok) {
-    const errBody = await response.text();
-    throw new Error(`Claude ${response.status}: ${errBody.substring(0, 300)}`);
+  const MAX_RETRIES = 3;
+
+  for (let retry = 0; retry < MAX_RETRIES; retry++) {
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 8192,
+          temperature,
+          messages: [
+            { role: "user", content: prompt }
+          ],
+        }),
+      });
+
+      if (response.status === 529 || response.status === 503 || response.status === 502) {
+        console.warn(`Claude ${response.status} (overloaded), retry ${retry + 1}/${MAX_RETRIES}...`);
+        await new Promise(r => setTimeout(r, (retry + 1) * 5000));
+        continue;
+      }
+
+      if (!response.ok) {
+        const errBody = await response.text();
+        throw new Error(`Claude ${response.status}: ${errBody.substring(0, 300)}`);
+      }
+
+      const data = await response.json();
+      return data.content?.[0]?.text || '';
+    } catch (err) {
+      const isNetworkError = err.message.includes('connection') || err.message.includes('reset') ||
+        err.message.includes('ECONNREFUSED') || err.message.includes('fetch failed') ||
+        err.message.includes('SendRequest');
+      if (isNetworkError && retry < MAX_RETRIES - 1) {
+        console.warn(`Claude network error, retry ${retry + 1}/${MAX_RETRIES}: ${err.message.substring(0, 100)}`);
+        await new Promise(r => setTimeout(r, (retry + 1) * 5000));
+        continue;
+      }
+      throw err;
+    }
   }
-  const data = await response.json();
-  return data.content?.[0]?.text || '';
+  throw new Error('Claude API failed after all retries');
 }
 
 // ══════════════════════════════════════════════════════════════════
