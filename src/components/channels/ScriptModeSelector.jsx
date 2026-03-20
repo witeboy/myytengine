@@ -47,7 +47,7 @@ export default function ScriptModeSelector({ value, onChange }) {
     <div>
       <p className="text-sm font-medium text-gray-800 mb-2">Script Generation Mode</p>
       <p className="text-xs text-gray-500 mb-3">Controls how scripts are structured and written for this channel</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         {MODES.map(mode => {
           const selected = current === mode.id;
           return (
