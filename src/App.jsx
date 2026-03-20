@@ -14,6 +14,7 @@ import CompetitorMonitor from '@/pages/CompetitorMonitor';
 import SleepPipeline from '@/pages/SleepPipeline';
 import AutoEditReview from '@/pages/AutoEditReview';
 import ShortsPipeline from '@/pages/ShortsPipeline';
+import LongViralPipeline from '@/pages/LongViralPipeline';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -72,6 +73,7 @@ const AuthenticatedApp = () => {
       <Route path="/SleepPipeline" element={<SleepPipeline />} />
       <Route path="/AutoEditReview" element={<AutoEditReview />} />
       <Route path="/ShortsPipeline" element={<ShortsPipeline />} />
+      <Route path="/LongViralPipeline" element={<LongViralPipeline />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
