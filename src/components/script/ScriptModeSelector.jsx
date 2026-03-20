@@ -1,8 +1,9 @@
 import React from 'react';
-import { Flame, Moon, BookOpen, Film } from 'lucide-react';
+import { Flame, Moon, BookOpen, Film, Clapperboard } from 'lucide-react';
 
 const MODES = [
   { id: '', label: 'Standard (Viral)', desc: 'Documentary / storytelling with TVF retention formula', Icon: Flame, color: 'orange' },
+  { id: 'long_viral', label: 'Long Viral', desc: 'Same viral Shorts structures scaled to any duration — 5 to 60 min', Icon: Clapperboard, color: 'amber' },
   { id: 'youtube_shorts', label: 'YouTube Shorts', desc: '90s high-retention shorts — multiple niche structures available', Icon: Film, color: 'green' },
   { id: 'sleep_meditation', label: 'Sleep Meditation', desc: 'Soothing affirmations, breathing cues, nature imagery', Icon: Moon, color: 'indigo' },
   { id: 'sleep_story', label: 'Sleep Story', desc: 'Peaceful narrative bedtime story with rich sensory detail', Icon: BookOpen, color: 'purple' },
