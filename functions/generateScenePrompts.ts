@@ -1131,14 +1131,14 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
       const ps = psList[0];
       if (ps?.story_analysis) {
         const sa = JSON.parse(ps.story_analysis);
-        storyContext = `**STORY:** Theme: ${sa.central_theme || ''} | Visual World: ${sa.visual_world || ''} | Color Arc: ${sa.color_arc || ''} | Motifs: ${JSON.stringify(sa.recurring_visual_motifs || [])}`;
+        storyContext = `**STORY PLOT:** ${sa.plot_summary || sa.narrative_arc_summary || 'Not available'}\n**THEME:** ${sa.central_theme || ''}\n**VISUAL WORLD:** ${sa.visual_world || ''}\n**COLOR ARC:** ${sa.color_arc || ''}\n\n**CRITICAL: Every scene must show a moment from THIS plot. The character in THEIR real situation performing REAL actions. No abstract metaphors, no surreal imagery, no symbolic visuals disconnected from the story.**`;
         console.log(`📋 Story analysis loaded from ProductionSettings`);
       } else {
         // Fallback: try scene_blueprint (backward compat with older projects)
         const blueprint = JSON.parse(project.scene_blueprint || '{}');
         const sa = blueprint.story_analysis || blueprint.sa;
         if (sa) {
-          storyContext = `**STORY:** Theme: ${sa.central_theme || sa.t || ''} | Visual World: ${sa.visual_world || sa.v || ''} | Color Arc: ${sa.color_arc || sa.c || ''} | Motifs: ${JSON.stringify(sa.recurring_visual_motifs || sa.m || [])}`;
+          storyContext = `**STORY PLOT:** ${sa.plot_summary || sa.narrative_arc_summary || sa.t || 'Not available'}\n**THEME:** ${sa.central_theme || sa.t || ''}\n**VISUAL WORLD:** ${sa.visual_world || sa.v || ''}\n\n**CRITICAL: Every scene must show a moment from THIS plot. No abstract metaphors.**`;
         }
       }
       // Director notes are now stored on each Scene record (DIRECTOR_NOTES: prefix)
