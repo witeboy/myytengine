@@ -1,9 +1,9 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
-// VOICEOVER GENERATOR — Submit-then-Poll Architecture
-// Phase 1 (this function): Submit TTS task to AI33, return task_id
-// Phase 2 (pollVoiceover): Poll AI33, download audio, upload to R2
+// VOICEOVER GENERATOR — Ultra-lean submit-only
+// Submits TTS task to AI33, saves settings, returns task_id
+// Frontend then polls via pollVoiceover
 // ══════════════════════════════════════════════════════════════════
 
 function cleanScript(text, isSleepMode = false) {
@@ -85,29 +85,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Use AbortController to enforce a 15s timeout on the AI33 call
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-
-    let submitRes;
-    try {
-      submitRes = await fetch(submitUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'xi-api-key': AI33_KEY },
-        body: submitBody,
-        signal: controller.signal,
-      });
-    } catch (abortErr) {
-      clearTimeout(timeout);
-      if (abortErr.name === 'AbortError') {
-        throw new Error('AI33 TTS request timed out after 15s. The text may be too long for synchronous generation. Try a shorter script or MiniMax voice.');
-      }
-      throw abortErr;
-    }
-    clearTimeout(timeout);
+    const submitRes = await fetch(submitUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'xi-api-key': AI33_KEY },
+      body: submitBody,
+    });
 
     const submitData = await submitRes.json();
-    console.log(`AI33 response status=${submitRes.status}, keys=${Object.keys(submitData).join(',')}`);
 
     if (!submitData.success || !submitData.task_id) {
       throw new Error(`AI33 submit failed: ${JSON.stringify(submitData).substring(0, 300)}`);
@@ -116,22 +100,19 @@ Deno.serve(async (req) => {
     const taskId = submitData.task_id;
     console.log(`✅ TTS task submitted: ${taskId}`);
 
-    // Save task_id to ProductionSettings (fire-and-forget to save CPU time)
+    // Save settings — must await to ensure task_id is persisted before poll starts
+    const settingsList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
     const settingsPayload = {
       project_id,
       selected_voice_id: selectedVoiceId,
       voiceover_status: 'generating',
       generation_task_id: taskId,
     };
-
-    // Don't await — let the DB write happen in background
-    base44.asServiceRole.entities.ProductionSettings.filter({ project_id }).then(existing => {
-      if (existing[0]) {
-        return base44.asServiceRole.entities.ProductionSettings.update(existing[0].id, settingsPayload);
-      } else {
-        return base44.asServiceRole.entities.ProductionSettings.create(settingsPayload);
-      }
-    }).catch(e => console.error('Settings save error:', e.message));
+    if (settingsList[0]) {
+      await base44.asServiceRole.entities.ProductionSettings.update(settingsList[0].id, settingsPayload);
+    } else {
+      await base44.asServiceRole.entities.ProductionSettings.create(settingsPayload);
+    }
 
     return Response.json({
       success: true,
