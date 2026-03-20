@@ -665,7 +665,7 @@ Deno.serve(async (req) => {
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`✓ Complete: ${applied} scenes · ${stats.cuts} cuts · ${stats.dissolves} dissolves · ${stats.fades} fades`);
 
-    return Response.json({ success: true, apply_mode: 'server', applied, failed, total_duration: totalVoDuration, stats });
+    return Response.json({ success: true, apply_mode: 'server', sync_method: usedASR ? 'asr' : 'char_position', applied, failed, total_duration: totalVoDuration, stats });
 
   } catch (error) {
     console.error('autoSyncTimeline error:', error.message);
