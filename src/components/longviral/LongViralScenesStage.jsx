@@ -8,6 +8,7 @@ import { Loader2, Wand2, CheckCircle2, ImageIcon, Layers } from 'lucide-react';
 export default function LongViralScenesStage({ projectId, project, scenes, onRefetch }) {
   const [generating, setGenerating] = useState(false);
   const [phase, setPhase] = useState('');
+  const [progress, setProgress] = useState('');
 
   const hasScenes = scenes.length > 0;
   const allPromptsReady = hasScenes && scenes.every(s => s.status === 'prompts_ready' || s.status === 'image_generated');
@@ -15,22 +16,92 @@ export default function LongViralScenesStage({ projectId, project, scenes, onRef
   const handleBreakdown = async () => {
     setGenerating(true);
     setPhase('Extracting character DNA...');
+    setProgress('');
+
     try {
+      // ── Step 1: Character DNA (non-fatal) ──
       try {
         await base44.functions.invoke('extractCharacterDNA', { project_id: projectId });
       } catch (e) {
         console.warn('Character DNA extraction failed (non-fatal):', e.message);
       }
 
-      setPhase('Breaking script into visual scenes...');
-      await base44.functions.invoke('longViralSceneBreakdown', { project_id: projectId });
+      // ── Step 2: Scene Breakdown (batched — same as standard pipeline) ──
+      setPhase('Breaking script into cinematic scenes...');
+      let breakdownDone = false;
+      let nextBatch = 0;
+
+      while (!breakdownDone) {
+        try {
+          if (nextBatch > 0) {
+            const delay = nextBatch === 1 ? 8000 : 3000;
+            await new Promise(r => setTimeout(r, delay));
+          }
+
+          const bdResult = await base44.functions.invoke('generateSceneBreakdown', {
+            project_id: projectId,
+            batch_index: nextBatch
+          });
+          const bdData = bdResult.data || bdResult;
+          breakdownDone = bdData.done === true;
+          nextBatch = bdData.next_batch ?? (nextBatch + 1);
+
+          const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+          const target = bdData.total_target || freshScenes.length;
+          setProgress(`${freshScenes.length}/${target} scenes created`);
+        } catch (err) {
+          const status = err?.response?.status || err?.status;
+          const errMsg = err?.response?.data?.error || '';
+
+          if (status === 400 && errMsg.includes('blueprint')) {
+            await new Promise(r => setTimeout(r, 5000));
+            continue;
+          }
+          if (status === 500 || status === 502) {
+            await new Promise(r => setTimeout(r, 8000));
+            continue;
+          }
+          if (status === 504) {
+            await new Promise(r => setTimeout(r, 8000));
+            const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+            setProgress(`Recovering... ${freshScenes.length} scenes so far`);
+            continue;
+          }
+          throw err;
+        }
+      }
+
+      await onRefetch();
+
+      // ── Step 3: Prompt Generation (batched — same as standard pipeline) ──
       setPhase('Generating image prompts...');
-      await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
+      let promptsDone = false;
+
+      while (!promptsDone) {
+        try {
+          const prResult = await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
+          const prData = prResult.data || prResult;
+          promptsDone = prData.done === true;
+
+          const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+          const ready = freshScenes.filter(s => s.status === 'prompts_ready');
+          setProgress(`${ready.length}/${freshScenes.length} prompts ready`);
+        } catch (err) {
+          const status = err?.response?.status || err?.status;
+          if (status === 500 || status === 502 || status === 504) {
+            await new Promise(r => setTimeout(r, 8000));
+            continue;
+          }
+          throw err;
+        }
+      }
+
       setPhase('Scenes ready!');
+      setProgress('');
       await onRefetch();
     } catch (err) {
       console.error('Long Viral scene breakdown failed:', err);
-      setPhase('Failed: ' + (err.message || 'Unknown error'));
+      setPhase('Failed: ' + (err?.response?.data?.error || err.message || 'Unknown error'));
     }
     setGenerating(false);
   };
@@ -45,19 +116,22 @@ export default function LongViralScenesStage({ projectId, project, scenes, onRef
           </div>
           <Button onClick={handleBreakdown} disabled={generating} className="bg-blue-600 hover:bg-blue-700 gap-2">
             {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-            {generating ? phase : hasScenes ? 'Regenerate Scenes' : 'Break Down into Scenes'}
+            {generating ? 'Processing...' : hasScenes ? 'Regenerate Scenes' : 'Break Down into Scenes'}
           </Button>
         </div>
       </CardHeader>
       <CardContent>
         <p className="text-sm text-gray-500 mb-4">
-          Visual change every 4-6 seconds. Each section gets its own set of scenes with visual specs, audio direction, and timing.
+          Uses the full cinematic scene breakdown engine with batched processing, character DNA, and visual prompts.
         </p>
 
         {generating && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
             <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-            <p className="text-sm text-blue-700">{phase}</p>
+            <div>
+              <p className="text-sm font-medium text-blue-700">{phase}</p>
+              {progress && <p className="text-xs text-blue-500 mt-0.5">{progress}</p>}
+            </div>
           </div>
         )}
 
