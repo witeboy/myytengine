@@ -1297,21 +1297,34 @@ ${styleConfig.positive}
 ${styleBodyBlock}
 
 
-**UNIVERSAL FRAMING RULES (apply to ALL visual styles):**
-- Show characters FULL where needed — NOT torso-only or bust crops unless specifically an ECU emotional beat
-- Describe the ENVIRONMENT in detail FIRST (location, architecture, props, weather, textures) THEN place characters within it doing an ACTION
+**CINEMATIC LANGUAGE & CAMERA ANGLES (use these instead of generic "medium shot" or "wide shot"):**
+Write prompts the way a cinematographer thinks — through CAMERA PLACEMENT and what it REVEALS about the character.
+
+**Essential angles to use (VARY across scenes — never repeat the same angle consecutively):**
+- **Low Angle:** Camera below subject's eyeline, shooting upward. Makes subject powerful, heroic, intimidating. Use for moments of dominance, revelation, or threat.
+- **High Angle:** Camera above, looking down. Makes subject vulnerable, small, overwhelmed. Use for moments of defeat, realization, or insignificance.
+- **Dutch Angle (Canted):** Camera tilted to one side. Creates unease, psychological distress, disorientation. Use for tension, madness, or moral ambiguity.
+- **Over-the-Shoulder (OTS):** Shot from behind one person looking at another or at something. Gold standard for connection, confrontation, or discovery.
+- **Eye-Level:** Neutral, at subject's height. Objective, realistic, documentary feel. Use sparingly — it's the "default" and can feel flat if overused.
+- **Bird's-Eye (Overhead):** Directly above the scene. Emphasizes environment scale, isolation, or the pattern of human activity. Use for establishing shots or moments of existential weight.
+- **Point-of-View (POV):** Shows exactly what the character sees. Immerses audience in character's experience. Use for discoveries, threats, or intimate moments.
+
+**Core cinematography rules (ENFORCE in every prompt):**
+- **180-Degree Rule:** In dialogue/confrontation scenes, maintain spatial consistency — characters stay on the same side of frame.
+- **30-Degree Rule:** Never describe two consecutive scenes from nearly the same angle — shift at least 30° between cuts.
+- **90-Degree Rule:** NEVER frame a character straight-on like a mugshot. Always describe the camera slightly off-center — this creates depth and dimension.
+
+**SCENE CONSTRUCTION RULES:**
+- Lead with the CAMERA ANGLE and what it reveals about the emotional beat — NOT with "Medium shot from waist up"
+- NEVER use mechanical framing language: "from waist up", "from chest up", "from shoulders up", "torso visible", "head to feet"
+- Instead, let the camera angle IMPLY the framing: "Low angle through the glass tabletop" tells the renderer everything about framing without a single body-crop instruction
 - Characters must be DOING something — holding, reaching, walking, gesturing, interacting — NOT standing static facing camera
 - Backgrounds must be SHARP and DETAILED with visible props and architecture, not blurred to nothing
-- Include foreground elements for depth and scene richness (objects on tables, plants, tools, fences, etc.)
-- **SCENE FLOW (CRITICAL):** Each scene must VISUALLY FLOW into the next. Use these specific techniques:
-  • SHARED COLOR THREAD: Adjacent scenes share a dominant color or color temperature
-  • MATCHING GEOMETRY: Composition lines (horizons, diagonals) align across scene transitions
-  • MOTION CONTINUITY: If scene ends with rightward movement, next starts with continued rightward energy
-  • LIGHT CONTINUITY: Adjacent scenes share similar lighting warmth and direction — never jump from golden sunset to harsh noon
-  • ENVIRONMENTAL BRIDGE: Share a recognizable element (same building seen from afar then close, same weather, same foreground object)
+- Include foreground elements for depth (objects on tables, plants, tools, fences, etc.)
 - NEVER generate an isolated character portrait against a blank or blurred background — always place them IN a detailed world
-- **POPULATED WORLD:** Include MULTIPLE other people in most scenes — crowds, passersby, coworkers, family, neighbors, onlookers. Wide shots should show 5-15+ people. The world feels ALIVE and BUSY, not empty.
-- **CHARACTER PRESENCE:** Only include human characters when the narration calls for them. If the narration describes a concept, landscape, object, building, or abstract idea — render a PURE ENVIRONMENT or OBJECT scene. Do NOT force a character into every scene.
+- **POPULATED WORLD:** Include other people in most scenes — crowds, passersby, onlookers. The world feels ALIVE.
+- **CHARACTER PRESENCE:** Only include human characters when the narration calls for them. If the narration describes a concept, landscape, or abstract idea — render a PURE ENVIRONMENT scene.
+- **SCENE FLOW:** Adjacent scenes share color temperature, lighting direction, and environmental elements for visual continuity.
 
 
 **DIRECTOR'S SCENE NOTES:**
