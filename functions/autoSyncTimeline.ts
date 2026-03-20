@@ -552,7 +552,7 @@ Deno.serve(async (req) => {
     let usedASR = false;
 
     const assemblyKey = Deno.env.get('ASSEMBLYAI_API_KEY');
-    if (assemblyKey && voiceoverUrl) {
+    if (false && assemblyKey && voiceoverUrl) {
       try {
         console.log(`🎙 Requesting ASR transcription...`);
         const submitRes = await fetch('https://api.assemblyai.com/v2/transcript', {
