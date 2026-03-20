@@ -86,6 +86,11 @@ export default function ChannelDetail() {
           navigate(`/ShortsPipeline?project_id=${ep.id}`);
           return;
         }
+        // Long Viral projects go to LongViralPipeline
+        if (ep.project_mode === 'long_viral' && ep.status !== 'created' && ep.status !== 'topic_selected') {
+          navigate(`/LongViralPipeline?project_id=${ep.id}`);
+          return;
+        }
         const route = getProjectRoute(ep);
         navigate(`/${route}`);
         return;
@@ -183,8 +188,14 @@ export default function ChannelDetail() {
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold text-gray-900">{channel.name}</h1>
               {channel.script_mode && channel.script_mode !== 'standard' && (
-                <Badge className={`text-[10px] ${channel.script_mode === 'youtube_shorts' ? 'bg-green-100 text-green-700' : 'bg-indigo-100 text-indigo-700'}`}>
-                  {channel.script_mode === 'youtube_shorts' ? '📱 YouTube Shorts' : channel.script_mode === 'sleep_meditation' ? '🧘 Sleep Meditation' : '🌙 Sleep Story'}
+                <Badge className={`text-[10px] ${
+                  channel.script_mode === 'youtube_shorts' ? 'bg-green-100 text-green-700' :
+                  channel.script_mode === 'long_viral' ? 'bg-amber-100 text-amber-700' :
+                  'bg-indigo-100 text-indigo-700'
+                }`}>
+                  {channel.script_mode === 'youtube_shorts' ? '📱 YouTube Shorts' :
+                   channel.script_mode === 'long_viral' ? '🎬 Long Viral' :
+                   channel.script_mode === 'sleep_meditation' ? '🧘 Sleep Meditation' : '🌙 Sleep Story'}
                 </Badge>
               )}
             </div>
@@ -419,10 +430,10 @@ export default function ChannelDetail() {
                     queryClient.invalidateQueries({ queryKey: ['channel', channelId] });
                   }}
                 />
-                {channel.script_mode === 'youtube_shorts' && (
+                {(channel.script_mode === 'youtube_shorts' || channel.script_mode === 'long_viral') && (
                   <div className="mt-4 pt-4 border-t">
-                    <p className="text-sm font-medium text-gray-800 mb-2">Shorts Niche</p>
-                    <p className="text-xs text-gray-500 mb-3">Determines the script structure, hook style, and visual spec for your Shorts</p>
+                    <p className="text-sm font-medium text-gray-800 mb-2">{channel.script_mode === 'long_viral' ? 'Long Viral Niche' : 'Shorts Niche'}</p>
+                    <p className="text-xs text-gray-500 mb-3">Determines the script structure, hook style, and visual spec</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {[
                         { id: 'crime_story', label: '🔪 Crime Story', desc: 'Cold Open → Setup → Escalation → Twist → CTA' },
