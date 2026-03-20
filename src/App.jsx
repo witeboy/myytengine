@@ -6,6 +6,8 @@ import { pagesConfig } from './pages.config'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
+import { ExportProvider } from '@/lib/ExportContext';
+import ExportProgressBar from '@/components/ExportProgressBar';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ChannelsHub from '@/pages/ChannelsHub';
 import ChannelDetail from '@/pages/ChannelDetail';
