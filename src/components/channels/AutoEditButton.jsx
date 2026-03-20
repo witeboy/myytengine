@@ -16,6 +16,7 @@ export default function AutoEditButton({ topic, channel, onJobCreated }) {
       const job = await base44.entities.AutoEditJobs.create({
         channel_id: channel.id,
         topic_id: topic.id,
+        project_id: topic.project_id || null,
         title: topic.title,
         status: 'pending',
         progress: 0,
