@@ -165,6 +165,7 @@ Return JSON:
         mood: aiScene.mood || '',
         audio_note: aiScene.audio_note || '',
         shorts_format: true,
+        characters_present: aiScene.characters_present || [],
       };
       return {
         project_id,
