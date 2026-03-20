@@ -666,6 +666,7 @@ export default function TimelineEditor() {
   const [isApplyingZoom,    setIsApplyingZoom]    = useState(false);
   const [initialized,       setInitialized]       = useState(false);
   const [showExporter,      setShowExporter]      = useState(false);
+  const [asrProgress,       setAsrProgress]       = useState(null); // {phase, message, pollCount}
   const initializedRef = useRef(false);
 
   const [transcription, setTranscription] = useState({ status: 'idle', words: [], wordCount: 0, error: null });
