@@ -24,6 +24,48 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 const MIN_SCENE_DURATION = 1.5;
 
+const ASSEMBLYAI_BASE = 'https://api.assemblyai.com/v2';
+const ASR_POLL_INTERVAL = 3000;
+const ASR_POLL_TIMEOUT = 180000; // 3 min
+
+async function transcribeWithASR(voiceoverUrl) {
+  const API_KEY = Deno.env.get('ASSEMBLYAI_API_KEY');
+  if (!API_KEY) throw new Error('ASSEMBLYAI_API_KEY not configured');
+
+  const headers = { 'Authorization': API_KEY, 'Content-Type': 'application/json' };
+
+  const submitRes = await fetch(`${ASSEMBLYAI_BASE}/transcript`, {
+    method: 'POST', headers,
+    body: JSON.stringify({ audio_url: voiceoverUrl, language_detection: true }),
+  });
+  if (!submitRes.ok) {
+    const errText = await submitRes.text();
+    throw new Error(`AssemblyAI submit failed (${submitRes.status}): ${errText}`);
+  }
+  const { id: transcriptId } = await submitRes.json();
+  console.log(`📡 ASR job submitted: ${transcriptId}`);
+
+  const start = Date.now();
+  while (true) {
+    if (Date.now() - start > ASR_POLL_TIMEOUT) throw new Error('ASR timed out');
+    await new Promise(r => setTimeout(r, ASR_POLL_INTERVAL));
+    const pollRes = await fetch(`${ASSEMBLYAI_BASE}/transcript/${transcriptId}`, {
+      headers: { 'Authorization': API_KEY },
+    });
+    if (!pollRes.ok) continue;
+    const result = await pollRes.json();
+    if (result.status === 'completed') {
+      const words = (result.words || []).map(w => ({
+        word: w.text, start: w.start / 1000, end: w.end / 1000,
+      }));
+      console.log(`✓ ASR complete: ${words.length} words, confidence: ${((result.confidence || 0) * 100).toFixed(0)}%`);
+      return words;
+    }
+    if (result.status === 'error') throw new Error(`ASR failed: ${result.error}`);
+    console.log(`⏳ ASR status: ${result.status}...`);
+  }
+}
+
 // ══════════════════════════════════════════════════════════════════
 // ASR WORD MATCHING — find scene narration in the audio word stream
 // ══════════════════════════════════════════════════════════════════
@@ -398,74 +440,41 @@ Deno.serve(async (req) => {
     let sceneData = null;
     let syncMethod = 'char_position';
 
-    const ASSEMBLYAI_KEY = Deno.env.get('ASSEMBLYAI_API_KEY');
+    try {
+      console.log(`🎙 Calling ASR transcription...`);
+      const asrRes = await base44.asServiceRole.functions.invoke('transcribeVoiceover', {
+        voiceover_url: voiceoverUrl,
+      });
+      const asrData = asrRes.data || asrRes;
 
-    if (ASSEMBLYAI_KEY) {
-      try {
-        console.log(`🎙 Calling AssemblyAI transcription directly...`);
+      if (asrData.success && asrData.words?.length > 0) {
+        asrWords = asrData.words;
+        console.log(`✓ ASR returned ${asrWords.length} words (confidence: ${((asrData.confidence || 0) * 100).toFixed(0)}%)`);
 
-        // Submit transcription job
-        const submitRes = await fetch('https://api.assemblyai.com/v2/transcript', {
-          method: 'POST',
-          headers: { 'Authorization': ASSEMBLYAI_KEY, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            audio_url: voiceoverUrl,
-            speech_models: ['universal-3-pro', 'universal-2'],
-            language_detection: true,
-          }),
-        });
-        if (!submitRes.ok) throw new Error(`AssemblyAI submit failed (${submitRes.status})`);
-        const { id: transcriptId } = await submitRes.json();
-        console.log(`📡 Transcription job: ${transcriptId}`);
+        // ── Match each scene's narration_text to the ASR word stream ──
+        const alignment = alignScenesToASR(asrWords, scenes, totalVoDuration);
 
-        // Poll until complete (max 3 minutes)
-        const pollStart = Date.now();
-        const POLL_TIMEOUT = 180000;
-        while (true) {
-          if (Date.now() - pollStart > POLL_TIMEOUT) throw new Error('Transcription timed out');
-          await new Promise(r => setTimeout(r, 3000));
-          const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
-            headers: { 'Authorization': ASSEMBLYAI_KEY },
+        if (alignment) {
+          // Merge scene metadata with alignment results
+          sceneData = alignment.map(a => {
+            const scene = scenes.find(s => s.id === a.scene_id);
+            return {
+              ...a,
+              narration_text: scene?.narration_text || '',
+              media_type: classifyMedia(scene),
+            };
           });
-          if (!pollRes.ok) continue;
-          const result = await pollRes.json();
-          if (result.status === 'completed') {
-            asrWords = (result.words || []).map(w => ({
-              word: w.text, start: w.start / 1000, end: w.end / 1000,
-            }));
-            console.log(`✓ ASR: ${asrWords.length} words, confidence: ${((result.confidence || 0) * 100).toFixed(0)}%`);
-            break;
-          }
-          if (result.status === 'error') throw new Error(`Transcription failed: ${result.error}`);
-          console.log(`⏳ ASR status: ${result.status}...`);
-        }
+          syncMethod = 'asr';
 
-        if (asrWords?.length > 0) {
-          // ── Match each scene's narration_text to the ASR word stream ──
-          const alignment = alignScenesToASR(asrWords, scenes, totalVoDuration);
-
-          if (alignment) {
-            sceneData = alignment.map(a => {
-              const scene = scenes.find(s => s.id === a.scene_id);
-              return {
-                ...a,
-                narration_text: scene?.narration_text || '',
-                media_type: classifyMedia(scene),
-              };
-            });
-            syncMethod = 'asr';
-
-            for (const sd of sceneData) {
-              const score = sd.matchScore !== undefined ? `${(sd.matchScore * 100).toFixed(0)}%` : 'N/A';
-              console.log(`  S${sd.scene_number}: ${sd.startTime?.toFixed(2)}s → ${sd.endTime?.toFixed(2)}s (${sd.duration?.toFixed(1)}s) match: ${score}`);
-            }
+          // Log alignment quality per scene
+          for (const sd of sceneData) {
+            const score = sd.matchScore !== undefined ? `${(sd.matchScore * 100).toFixed(0)}%` : 'N/A';
+            console.log(`  S${sd.scene_number}: ${sd.startTime?.toFixed(2)}s → ${sd.endTime?.toFixed(2)}s (${sd.duration?.toFixed(1)}s) match: ${score}`);
           }
         }
-      } catch (err) {
-        console.warn(`⚠ ASR transcription failed: ${err.message} — falling back to estimation`);
       }
-    } else {
-      console.warn(`⚠ ASSEMBLYAI_API_KEY not set — using char-position fallback`);
+    } catch (err) {
+      console.warn(`⚠ ASR transcription failed: ${err.message} — falling back to estimation`);
     }
 
     // ═══════════════════════════════════════════════════════════════
