@@ -342,7 +342,12 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     lastNonEmpty.endTime = totalAudioDuration;
   }
 
-  // Close gaps between consecutive non-empty scenes
+  // Close gaps between consecutive non-empty scenes.
+  // If the gap is small (≤ MAX_ABSORB), the current scene absorbs it
+  // (visual holds until next narration starts). If it's large (a long
+  // silence/music break), split the excess evenly so no single scene
+  // balloons to an absurd duration.
+  const MAX_ABSORB = 5.0; // max seconds a scene can absorb beyond its speech
   for (let i = 0; i < results.length - 1; i++) {
     const curr = results[i];
     const next = results[i + 1];
@@ -350,8 +355,16 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     if (curr.endTime === null || next.startTime === null) continue;
 
     if (next.startTime > curr.endTime) {
-      // Gap — extend current to fill
-      curr.endTime = next.startTime;
+      const gap = next.startTime - curr.endTime;
+      if (gap <= MAX_ABSORB) {
+        // Small gap — current scene absorbs it
+        curr.endTime = next.startTime;
+      } else {
+        // Large gap (silence/music break) — split evenly
+        const mid = curr.endTime + gap / 2;
+        curr.endTime = mid;
+        next.startTime = mid;
+      }
     } else if (next.startTime < curr.endTime) {
       // Overlap — snap to next scene's start
       curr.endTime = next.startTime;
