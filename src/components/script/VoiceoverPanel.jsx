@@ -399,7 +399,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
         {error && <p className="text-sm text-red-600">{error}</p>}
 
         {/* Audio Player */}
-        {settings?.voiceover_url && settings.voiceover_status === 'completed' && (
+        {settings?.voiceover_url && (settings.voiceover_status === 'completed' || settings.voiceover_status === 'ready') && (
           <div className="bg-gray-50 p-4 rounded-lg space-y-3">
             <audio
               ref={audioRef}
