@@ -1566,6 +1566,13 @@ export default function ContentGeneration() {
           </div>
         )}
 
+        {/* Voiceover Panel — full width, right after style settings */}
+        {project && latestScript && (
+          <div className="mb-6">
+            <VoiceoverPanel project={project} script={latestScript} onUpdate={() => refetchProject()} />
+          </div>
+        )}
+
         {/* Import Progress */}
         <ProcessingNotifier
           active={importing}
