@@ -97,7 +97,9 @@ export default function ChannelDetail() {
       }
     }
 
-    // Always create project in standard mode — user picks format at script stage
+    const isLongViral = channel.script_mode === 'long_viral';
+    const projectMode = isLongViral ? 'long_viral' : '';
+
     const project = await base44.entities.Projects.create({
       name: topic.title,
       niche: channel.niche,
@@ -110,7 +112,7 @@ export default function ChannelDetail() {
       channel_id: channel.id,
       channel_topic_id: topic.id,
       script_strategy_override: channel.script_strategy || '',
-      project_mode: '',
+      project_mode: projectMode,
     });
 
     const importedTopic = await base44.entities.Topics.create({
@@ -137,8 +139,11 @@ export default function ChannelDetail() {
 
     queryClient.invalidateQueries({ queryKey: ['channel-topics', channelId] });
 
-    // Always go through standard pipeline — user chooses format at script stage
-    navigate(`/StoryDuration?project_id=${project.id}`);
+    if (isLongViral) {
+      navigate(`/LongViralPipeline?project_id=${project.id}`);
+    } else {
+      navigate(`/StoryDuration?project_id=${project.id}`);
+    }
   };
 
   if (loadingChannel) {
