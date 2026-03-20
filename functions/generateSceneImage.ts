@@ -279,19 +279,21 @@ async function processScene(base44, scene, project, kieApiKey, ai33ApiKey, aspec
     try {
       let taskId;
       let taskPrefix;
+      // Prepare provider-specific prompt (different length caps)
+      const providerPrompt = isSleepProject ? finalPrompt : preparePromptForProvider(scene.image_prompt, provider);
 
       if (provider === 'ai33_seedream') {
-        taskId = await submitAI33Seedream(ai33ApiKey, finalPrompt, aspectRatio);
+        taskId = await submitAI33Seedream(ai33ApiKey, isSleepProject ? finalPrompt : preparePromptForProvider(scene.image_prompt, 'ai33_seedream'), aspectRatio);
         taskPrefix = 'ai33_task';
       } else if (provider === 'grok') {
         taskId = await kieCreateTask(kieApiKey, "grok-imagine/text-to-image", {
-          prompt: finalPrompt,
+          prompt: providerPrompt,
           aspect_ratio: aspectRatio
         });
         taskPrefix = 'grok_img_task';
       } else if (provider === 'nano_banana') {
         taskId = await kieCreateTask(kieApiKey, "google/nano-banana", {
-          prompt: finalPrompt,
+          prompt: providerPrompt,
           output_format: "png",
           image_size: aspectRatio
         });
