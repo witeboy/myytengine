@@ -1,5 +1,4 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-const SDK_VER = '0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
 // BEAT SYNC ENGINE v2 — Character-Position Beat Alignment
