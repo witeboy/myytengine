@@ -233,83 +233,72 @@ function getNicheDirectorProfile(niche) {
       emotional_palette: "Cool institutional blues/grays shifting to warm ambers/golds"
     },
     retirement: {
-      visual_world: "Golden-hour suburbs, well-worn family homes, nature trails, generational gatherings",
-      signature_shots: "Photo-filled mantles, weathered hands, homes at different times of day",
-      metaphor_language: "Seasons, paths and horizons, light through windows, roots and branches",
-      emotional_palette: "Warm amber/honey tones, soft golden hour light, earth tones",
-      avoid: "Depressing lonely elderly stereotypes, clinical medical settings"
+      visual_world: "Real retirement life — family homes, nature walks, financial planning sessions, grandchildren visits, community activities",
+      signature_shots: "Character reviewing their retirement plan, at home with family, walking through their neighborhood, at a financial advisor's office",
+      metaphor_language: "Show the actual life moments — planning, saving, enjoying the results of preparation.",
+      emotional_palette: "Warm amber/honey tones, soft golden hour light, earth tones"
     },
     motivation: {
-      visual_world: "Mountain peaks, training spaces, pre-dawn cities, determination made beautiful",
-      signature_shots: "Low-angle hero shots, tracking forward motion, silhouettes against epic backdrops",
-      metaphor_language: "Elevation, fire and forge, dawn breaking, chains breaking, doors opening",
-      emotional_palette: "Dark blues/blacks building to fiery oranges and triumphant golds",
-      avoid: "Cheesy flexing/posing, generic mountain top arms raised"
+      visual_world: "Real training and self-improvement moments — gyms, early morning routines, study sessions, work environments, personal projects",
+      signature_shots: "Character waking up early, at the gym, studying, working on their craft, overcoming a specific obstacle",
+      metaphor_language: "Show the real work — the alarm clock, the repetitions, the late nights, the breakthroughs.",
+      emotional_palette: "Dark blues/blacks building to fiery oranges and triumphant golds"
     },
     horror: {
-      visual_world: "Liminal spaces, barely-lit corridors, familiar places made wrong",
+      visual_world: "Liminal spaces, barely-lit corridors, familiar places made wrong, isolated locations",
       signature_shots: "Dutch angles, long corridors, POV approaches, static wide shots with something wrong",
-      metaphor_language: "Decay, doors that shouldn't be open, reflections that don't match",
-      emotional_palette: "Sickly greens, desaturated blues, deep blacks, crimson accents",
-      avoid: "Over-the-top gore, cheap jump scare framing, cliché haunted house"
+      metaphor_language: "Show the actual events of the horror narrative as they unfold.",
+      emotional_palette: "Sickly greens, desaturated blues, deep blacks, crimson accents"
     },
     technology: {
-      visual_world: "Clean labs and messy maker spaces, human hand meeting digital interface",
-      signature_shots: "Macro components, rack focus human/machine, clean architectural frames",
-      metaphor_language: "Networks, light through fiber, emergence, the spark of creation",
-      emotional_palette: "Electric blues/whites, warm ambers for human moments, neon for innovation",
-      avoid: "Matrix code rain, cliché robots, glowing hologram interfaces"
+      visual_world: "Real tech environments — offices, labs, maker spaces, home setups, coffee shops with laptops, server rooms",
+      signature_shots: "Character using the technology, building something, debugging, presenting, collaborating with teammates",
+      metaphor_language: "Show the actual tech work and its real-world impact on people's lives.",
+      emotional_palette: "Electric blues/whites, warm ambers for human moments, neon for innovation"
     },
     health: {
-      visual_world: "Body as landscape, kitchens as labs, nature as pharmacy, self-care rituals",
-      signature_shots: "Macro food shots, mindful human moments, nature parallels",
-      metaphor_language: "Growth, water/nourishment, dawn as renewal, body as garden",
-      emotional_palette: "Fresh greens, clean whites, sunrise golds, cool blues",
-      avoid: "Clinical imagery, shame shots, pill focus"
+      visual_world: "Real health journeys — kitchens cooking meals, gyms, doctor visits, grocery shopping, morning routines, outdoor exercise",
+      signature_shots: "Character preparing healthy food, exercising, at the doctor, reading nutrition labels, meditating",
+      metaphor_language: "Show the real daily health decisions and their tangible effects.",
+      emotional_palette: "Fresh greens, clean whites, sunrise golds, cool blues"
     },
     crime: {
-      visual_world: "Rain-slicked streets, interrogation rooms, evidence boards, moral gray zones",
-      signature_shots: "Noir low-key lighting, over-shoulder reveals, bird's-eye evidence layouts",
-      metaphor_language: "Masks/mirrors, threads/webs, predator/prey, the weight of truth",
-      emotional_palette: "Noir blues/blacks, sodium oranges, forensic whites, blood red accents",
-      avoid: "Gratuitous violence imagery, sensationalized victim portrayal"
+      visual_world: "Real crime investigation environments — police stations, crime scenes, courtrooms, neighborhoods, detective offices",
+      signature_shots: "Investigators working the case, evidence being examined, witnesses being interviewed, the crime as it unfolds",
+      metaphor_language: "Show the actual events, investigations, and consequences as the story narrates them.",
+      emotional_palette: "Noir blues/blacks, sodium oranges, forensic whites, blood red accents"
     },
     history: {
-      visual_world: "Weathered textures, vast landscapes, artifacts as time portals",
-      signature_shots: "Epic wides, slow zooms to period details, then/now juxtaposition",
-      metaphor_language: "Layers, rivers of time, monuments rising/crumbling, flame being passed",
-      emotional_palette: "Sepia warmth, stone grays, jewel tones for power, golden glory light",
-      avoid: "Cartoonish stereotypes, overly clean historical settings, anachronisms"
+      visual_world: "Period-accurate historical settings — the actual locations, buildings, landscapes, and daily life of the era",
+      signature_shots: "Historical figures in their real environments, key events as they happened, period-accurate details",
+      metaphor_language: "Show the actual historical events and settings as the narrative describes them.",
+      emotional_palette: "Sepia warmth, stone grays, jewel tones for power, golden glory light"
     },
     education: {
-      visual_world: "Light-filled spaces, moment of understanding, abstract→tangible",
-      signature_shots: "Revealing wides, diagram-like compositions, POV discovery",
-      metaphor_language: "Illumination, puzzle pieces connecting, seeds growing, lenses focusing",
-      emotional_palette: "Bright clear colors, warm yellows for aha-moments, cool blues for contemplation",
-      avoid: "Boring classroom stereotypes, lecturing framing"
+      visual_world: "Real learning environments — classrooms, libraries, labs, home study spaces, workshops, online learning setups",
+      signature_shots: "Character learning, practicing, having breakthroughs, applying knowledge in real situations",
+      metaphor_language: "Show the real process of learning and applying knowledge in concrete situations.",
+      emotional_palette: "Bright clear colors, warm yellows for aha-moments, cool blues for contemplation"
     },
     travel: {
-      visual_world: "Golden hour landscapes, local markets, tourist gaze vs authentic life",
-      signature_shots: "Drone establishing shots, street-level handheld, food macros",
-      metaphor_language: "Horizons, bridges between cultures, paths less traveled",
-      emotional_palette: "Rich saturated palettes, golden light, azure skies, warm market tones",
-      avoid: "Tourist brochure clichés, Instagram filters, cultural stereotypes"
+      visual_world: "Real travel moments — airports, local streets, markets, restaurants, landmarks, transportation, accommodations",
+      signature_shots: "Character navigating new places, experiencing local culture, at landmarks, trying food, meeting locals",
+      metaphor_language: "Show the actual travel experiences and cultural encounters as they happen.",
+      emotional_palette: "Rich saturated palettes, golden light, azure skies, warm market tones"
     },
     relationship: {
-      visual_world: "Intimate shared spaces, geometry of two people, environment reflecting emotions",
-      signature_shots: "Two-shots with negative space, OTS perspectives, hand details",
-      metaphor_language: "Bridges/walls, weather reflecting mood, growing/wilting, light finding its way in",
-      emotional_palette: "Warm amber for connection, cool blues for distance, soft rose for intimacy",
-      avoid: "Cheesy romance clichés, toxic relationship glorification"
+      visual_world: "Real relationship moments — shared meals, conversations, arguments, reconciliations, daily life together",
+      signature_shots: "Characters interacting in their real shared spaces — kitchen, living room, car, restaurant, walking together",
+      metaphor_language: "Show the actual relationship dynamics — the conversations, the silences, the gestures, the daily reality.",
+      emotional_palette: "Warm amber for connection, cool blues for distance, soft rose for intimacy"
     }
   };
 
   return profiles[niche?.toLowerCase()] || {
-    visual_world: "Environments reflecting emotional state, contrast between open/enclosed spaces",
-    signature_shots: "Establishing wides, medium shots, close-up emotion, macro details",
-    metaphor_language: "Light/shadow, open/closed doors, rising/falling, seeds→trees",
-    emotional_palette: "Cooler for tension, warmer for resolution, high contrast for conflict",
-    avoid: "Generic stock aesthetics, repetitive compositions"
+    visual_world: "Real-world environments appropriate to the story — the actual places where the narrative events happen",
+    signature_shots: "Character in their real environment performing actions relevant to the plot",
+    metaphor_language: "Show the actual events, situations, and consequences as the story describes them. No abstract metaphors.",
+    emotional_palette: "Cooler for tension, warmer for resolution, high contrast for conflict"
   };
 }
 
@@ -556,6 +545,7 @@ ${finalScript}
 Respond with this JSON:
 {
   "story_analysis": {
+    "plot_summary": "What ACTUALLY HAPPENS in this story from start to finish — the concrete sequence of events, situations, and outcomes. This is the backbone that every scene must connect to.",
     "central_theme": "The deeper human truth (NOT the topic)",
     "narrative_arc_summary": "2-3 sentence emotional journey",
     "emotional_trajectory": ["curiosity","concern","empathy","hope"],
