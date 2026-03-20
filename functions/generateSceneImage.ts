@@ -299,6 +299,17 @@ async function processScene(base44, scene, project, kieApiKey, ai33ApiKey, aspec
     console.log(`🔄 Scene ${sceneNum}: previously failed — skipping AI33, trying ${providers.join(' → ')}`);
   }
 
+  // ── Determine if we can use image-to-image with reference ──
+  // Conditions: reference exists, scene has a character, not the reference scene itself
+  const useReference = !isSleepProject
+    && referenceImageUrl
+    && sceneHasCharacter
+    && referenceImageUrl.startsWith('http');
+
+  if (useReference) {
+    console.log(`🔗 Scene ${sceneNum}: using character reference (image-to-image)`);
+  }
+
   // ── TRY EACH PROVIDER (submit only) ──────────────────────
   for (const provider of providers) {
     try {
@@ -311,10 +322,18 @@ async function processScene(base44, scene, project, kieApiKey, ai33ApiKey, aspec
         taskId = await submitAI33Seedream(ai33ApiKey, providerPrompt, aspectRatio);
         taskPrefix = 'ai33_task';
       } else if (provider === 'grok') {
-        taskId = await kieCreateTask(kieApiKey, "grok-imagine/text-to-image", {
-          prompt: providerPrompt,
-          aspect_ratio: aspectRatio
-        });
+        if (useReference) {
+          // Use image-to-image model with reference for character consistency
+          taskId = await kieCreateTask(kieApiKey, "grok-imagine/image-to-image", {
+            prompt: providerPrompt,
+            image_urls: [referenceImageUrl]
+          });
+        } else {
+          taskId = await kieCreateTask(kieApiKey, "grok-imagine/text-to-image", {
+            prompt: providerPrompt,
+            aspect_ratio: aspectRatio
+          });
+        }
         taskPrefix = 'grok_img_task';
       } else if (provider === 'nano_banana') {
         taskId = await kieCreateTask(kieApiKey, "google/nano-banana", {
