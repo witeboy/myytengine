@@ -36,7 +36,7 @@ async function transcribeWithASR(voiceoverUrl) {
 
   const submitRes = await fetch(`${ASSEMBLYAI_BASE}/transcript`, {
     method: 'POST', headers,
-    body: JSON.stringify({ audio_url: voiceoverUrl, language_detection: true }),
+    body: JSON.stringify({ audio_url: voiceoverUrl, language_detection: true, speech_model: 'universal' }),
   });
   if (!submitRes.ok) {
     const errText = await submitRes.text();
