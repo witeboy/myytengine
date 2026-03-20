@@ -470,9 +470,15 @@ Deno.serve(async (req) => {
     console.log(`🏗️ Providers: ${AI33_API_KEY ? 'AI33' : '—'} → ${KIE_API_KEY ? 'Grok → Nano' : '—'}`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
+    // ── Reference image for character consistency ──────────────
+    const referenceImageUrl = project.reference_image_url || null;
+    if (referenceImageUrl) {
+      console.log(`🔗 Reference image available: ${referenceImageUrl.substring(0, 60)}...`);
+    }
+
     // ── Submit all with concurrency pool ───────────────────────
     const tasks = scenesToProcess.map(scene => () =>
-      processScene(base44, scene, project, KIE_API_KEY, AI33_API_KEY, aspectRatio)
+      processScene(base44, scene, project, KIE_API_KEY, AI33_API_KEY, aspectRatio, referenceImageUrl)
     );
 
     const results = await processWithConcurrency(tasks, MAX_CONCURRENT);
