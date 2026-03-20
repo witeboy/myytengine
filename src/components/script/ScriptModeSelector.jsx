@@ -21,32 +21,32 @@ export default function ScriptModeSelector({ value, onChange, shortsNiche, onSho
   return (
     <div className="space-y-2">
       <label className="text-sm font-medium block">Script Mode</label>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         {MODES.map(m => {
           const selected = (value || '') === m.id;
+          const borderColor = selected
+            ? m.color === 'orange' ? 'border-orange-500 bg-orange-50'
+            : m.color === 'amber' ? 'border-amber-500 bg-amber-50'
+            : m.color === 'green' ? 'border-green-500 bg-green-50'
+            : m.color === 'indigo' ? 'border-indigo-500 bg-indigo-50'
+            : 'border-purple-500 bg-purple-50'
+            : 'border-gray-200 hover:border-gray-300 bg-white';
+          const iconColor = selected
+            ? m.color === 'orange' ? 'text-orange-600'
+            : m.color === 'amber' ? 'text-amber-600'
+            : m.color === 'green' ? 'text-green-600'
+            : m.color === 'indigo' ? 'text-indigo-600'
+            : 'text-purple-600'
+            : 'text-gray-400';
           return (
             <button
               key={m.id}
               type="button"
               onClick={() => onChange(m.id)}
-              className={`flex flex-col items-start gap-1.5 p-3 rounded-lg border-2 text-left transition-all ${
-                selected
-                  ? m.color === 'orange' ? 'border-orange-500 bg-orange-50'
-                    : m.color === 'green' ? 'border-green-500 bg-green-50'
-                    : m.color === 'indigo' ? 'border-indigo-500 bg-indigo-50'
-                    : 'border-purple-500 bg-purple-50'
-                  : 'border-gray-200 hover:border-gray-300 bg-white'
-              }`}
+              className={`flex flex-col items-start gap-1.5 p-3 rounded-lg border-2 text-left transition-all ${borderColor}`}
             >
               <div className="flex items-center gap-2">
-                <m.Icon className={`w-4 h-4 ${
-                  selected
-                    ? m.color === 'orange' ? 'text-orange-600'
-                      : m.color === 'green' ? 'text-green-600'
-                      : m.color === 'indigo' ? 'text-indigo-600'
-                      : 'text-purple-600'
-                    : 'text-gray-400'
-                }`} />
+                <m.Icon className={`w-4 h-4 ${iconColor}`} />
                 <span className={`text-sm font-semibold ${selected ? 'text-gray-900' : 'text-gray-600'}`}>{m.label}</span>
               </div>
               <span className="text-xs text-gray-500 leading-tight">{m.desc}</span>
