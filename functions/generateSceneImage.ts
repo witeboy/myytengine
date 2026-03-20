@@ -237,7 +237,7 @@ function detectCharacterPresence(scene) {
 // SINGLE SCENE PROCESSOR — SUBMIT ONLY
 // ─────────────────────────────────────────────
 
-async function processScene(base44, scene, project, kieApiKey, ai33ApiKey, aspectRatio, referenceImageUrl) {
+async function processScene(base44, scene, project, kieApiKey, ai33ApiKey, aspectRatio, referenceImageUrl, providerPref = 'auto') {
   const sceneNum = scene.scene_number;
   const isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story' || project.visual_style === 'sleep_ambient';
 
@@ -300,14 +300,31 @@ async function processScene(base44, scene, project, kieApiKey, ai33ApiKey, aspec
 
   console.log(`📐 Scene ${sceneNum}: raw prompt ${finalPrompt.length} chars: "${finalPrompt.substring(0, 150)}..."`);
 
-  // ── Provider order ────────────────────────────────────────
+  // ── Provider order (respects user preference) ────────────
   const wasFailedBefore = scene.status === 'image_failed';
-  const providers = isSleepProject
-    ? [(!wasFailedBefore && ai33ApiKey) ? 'ai33_seedream' : null, 'nano_banana', 'grok'].filter(Boolean)
-    : [(!wasFailedBefore && ai33ApiKey) ? 'ai33_seedream' : null, 'grok', 'nano_banana'].filter(Boolean);
+  let providers;
 
-  if (wasFailedBefore) {
+  if (providerPref === 'auto') {
+    // Default cascade: AI33 → Grok → Nano (skip AI33 on retry)
+    providers = isSleepProject
+      ? [(!wasFailedBefore && ai33ApiKey) ? 'ai33_seedream' : null, 'nano_banana', 'grok'].filter(Boolean)
+      : [(!wasFailedBefore && ai33ApiKey) ? 'ai33_seedream' : null, 'grok', 'nano_banana'].filter(Boolean);
+  } else {
+    // User explicitly picked a provider — use it FIRST, then fallback to others
+    const allProviders = ['ai33_seedream', 'grok', 'nano_banana'];
+    providers = [providerPref, ...allProviders.filter(p => p !== providerPref)];
+    // Filter out unavailable providers
+    providers = providers.filter(p => {
+      if (p === 'ai33_seedream' && !ai33ApiKey) return false;
+      if ((p === 'grok' || p === 'nano_banana') && !kieApiKey) return false;
+      return true;
+    });
+  }
+
+  if (wasFailedBefore && providerPref === 'auto') {
     console.log(`🔄 Scene ${sceneNum}: previously failed — skipping AI33, trying ${providers.join(' → ')}`);
+  } else {
+    console.log(`🎯 Scene ${sceneNum}: provider order [${providers.join(' → ')}]`);
   }
 
   // ── Determine if we can use image-to-image with reference ──
@@ -425,7 +442,7 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await req.json();
-    const { scene_id, scene_ids, project_id } = body;
+    const { scene_id, scene_ids, project_id, preferred_provider } = body;
 
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
     const AI33_API_KEY = Deno.env.get("AI33_API_KEY");
@@ -475,10 +492,15 @@ Deno.serve(async (req) => {
 
     const aspectRatio = project.orientation === "portrait" ? "9:16" : "16:9";
 
+    // ── Resolve preferred provider from payload or project setting ──
+    let providerPref = preferred_provider || project?.image_provider || 'auto';
+    // Validate
+    if (!['auto', 'ai33_seedream', 'grok', 'nano_banana'].includes(providerPref)) providerPref = 'auto';
+
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`🎨 IMAGE SUBMIT — ${scenesToProcess.length} scenes`);
-    console.log(`📐 Aspect: ${aspectRatio} | ⚡ Concurrency: ${MAX_CONCURRENT}`);
-    console.log(`🏗️ Providers: ${AI33_API_KEY ? 'AI33' : '—'} → ${KIE_API_KEY ? 'Grok → Nano' : '—'}`);
+    console.log(`📐 Aspect: ${aspectRatio} | ⚡ Concurrency: ${MAX_CONCURRENT} | 🎯 Provider: ${providerPref}`);
+    console.log(`🏗️ Available: ${AI33_API_KEY ? 'AI33' : '—'} | ${KIE_API_KEY ? 'Grok + Nano' : '—'}`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     // ── Reference image for character consistency ──────────────
@@ -489,7 +511,7 @@ Deno.serve(async (req) => {
 
     // ── Submit all with concurrency pool ───────────────────────
     const tasks = scenesToProcess.map(scene => () =>
-      processScene(base44, scene, project, KIE_API_KEY, AI33_API_KEY, aspectRatio, referenceImageUrl)
+      processScene(base44, scene, project, KIE_API_KEY, AI33_API_KEY, aspectRatio, referenceImageUrl, providerPref)
     );
 
     const results = await processWithConcurrency(tasks, MAX_CONCURRENT);
