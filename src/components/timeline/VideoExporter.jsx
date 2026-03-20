@@ -8,6 +8,7 @@ import {
   CheckCircle, Loader2, HardDrive
 } from 'lucide-react';
 import { saveExportedVideo } from '@/utils/videoStorage';
+import { useExport } from '@/lib/ExportContext';
 
 const PHASE_LABELS = {
   checking: 'Checking browser support...',
@@ -38,6 +39,7 @@ export default function VideoExporter({
   const [downloadUrl, setDownloadUrl] = useState(null);
   const [unsupported, setUnsupported] = useState(null);
   const [fileSize, setFileSize] = useState(null);
+  const exportCtx = useExport();
 
   if (!open) return null;
 
