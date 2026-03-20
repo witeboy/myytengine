@@ -911,27 +911,27 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
     // ══════════════════════════════════════════════════════════════
 
     function getBodyProportionDirective(shotType) {
-      if (!shotType) return 'shown from waist up, interacting with nearby objects';
+      if (!shotType) return 'actively engaged with their surroundings';
       const st = shotType.toLowerCase();
       if (/\b(ews|extreme\s*wide|establishing|aerial|drone|bird.?s?\s*eye)\b/.test(st))
-        return 'visible as a small full-body figure within the vast environment, body language readable from distance, surrounded by architecture and landscape';
+        return 'a distant figure dwarfed by the vast environment, their silhouette and movement telling the story';
       if (/\b(ws\b|wide\s*shot|mws|medium\s*wide)\b/.test(st))
-        return 'shown full body head to feet within the environment, body proportions natural against surrounding objects and architecture, actively moving through the space';
+        return 'moving through the space, their whole presence felt against the architecture and landscape around them';
       if (/\b(high\s*angle|overhead|god.?s?\s*eye)\b/.test(st))
-        return 'seen from above, full body visible against the ground plane, body creating a shape within the environment geometry';
+        return 'seen from above, their body creating a shape against the ground, vulnerable beneath the camera';
       if (/\b(low\s*angle)\b/.test(st))
-        return 'seen from below looking up, showing full body from feet upward, figure towering against sky or ceiling, environment visible behind and around';
+        return 'towering into frame from below, powerful against the sky or ceiling behind them';
       if (/\b(ots|over[\s-]*the[\s-]*shoulder)\b/.test(st))
-        return 'shown from behind another person\'s shoulder, upper body and hands visible, actively engaged with something in front of them';
+        return 'glimpsed past another person\'s shoulder, leaning into whatever holds their attention';
       if (/\b(ms\b|medium\s*shot|tracking|dutch)\b/.test(st))
-        return 'framed from waist up, hands and arms visible and actively doing something — holding, gesturing, reaching, gripping — torso and posture conveying emotion';
+        return 'caught mid-action, hands busy, posture carrying the weight of the moment';
       if (/\b(mcu|medium\s*close)\b/.test(st))
-        return 'framed from chest up, shoulders and upper arms visible, hands partially in frame if gesturing, facial expression prominent but body posture still readable';
+        return 'close enough to read every flicker of emotion, shoulders tense, hands just visible at the edge of frame';
       if (/\b(cu\b|close[\s-]*up)\b/.test(st))
-        return 'framed from shoulders up, face dominant but neck and shoulder tension visible, environment still present as soft context behind';
+        return 'filling the frame, every line on their face a sentence, the world soft and distant behind them';
       if (/\b(ecu|extreme\s*close|insert|detail)\b/.test(st))
-        return 'extreme close-up filling the frame — face details, skin texture, and micro-expressions dominant, but eyes reflecting the environment';
-      return 'shown from waist up, interacting with nearby objects';
+        return 'so close the screen becomes skin — pores, the tremor of a lip, light pooling in the iris';
+      return 'actively engaged with their surroundings';
     }
 
     const characterTieredTags = {};  // name → { minimal, moderate, full }
