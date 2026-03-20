@@ -1432,9 +1432,9 @@ export default function TimelineEditor() {
               syncStatus === 'audio' ? 'bg-green-600' : syncStatus === 'words' ? 'bg-teal-600' : syncStatus === 'error' ? 'bg-red-600' :
               'bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-700 hover:to-purple-700'
             }`}>
-            {isSyncing ? <><Loader2 size={12} className="animate-spin" /> Syncing…</> :
-             syncStatus === 'audio' ? <><CheckCircle size={12} /> Synced!</> :
-             syncStatus === 'words' ? <><CheckCircle size={12} /> Words!</> :
+            {isSyncing ? <><Loader2 size={12} className="animate-spin" /> ASR Syncing…</> :
+             syncStatus === 'audio' ? <><CheckCircle size={12} /> ASR Synced!</> :
+             syncStatus === 'words' ? <><CheckCircle size={12} /> Estimated</> :
              <><Wand2 size={12} /> AutoSync</>}
           </Button>
 
