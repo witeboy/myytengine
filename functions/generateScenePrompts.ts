@@ -1530,20 +1530,42 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
 
 
           // ═══ SHOT-TYPE-AWARE CHARACTER IDENTITY INJECTION ═══
+          // Uses characters_present from director notes (scene breakdown) as PRIMARY source.
+          // Falls back to regex name matching if director notes don't have the field.
           // The amount of character detail injected depends on the shot type.
-          // Wide shots: minimal (silhouette). Medium: moderate. Close-ups: full.
-          // This prevents the floating-head problem where detailed face descriptions
-          // in wide shots cause Grok to zoom into the face.
 
           const shotType = s.director?.shot_type || 'MS — Medium Shot';
           const identityTier = getIdentityTier(shotType);
 
-          // Step 1: Find which known characters appear in this scene
+          // Step 1: Determine which characters appear in this scene
           const sceneCast = [];
-          for (const [charName] of Object.entries(characterTieredTags)) {
-            const namePattern = new RegExp(`\\b${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-            if (namePattern.test(rawPrompt)) {
-              sceneCast.push({ name: charName, tiers: characterTieredTags[charName] });
+          const directorCast = s.director?.characters_present || [];
+
+          if (directorCast.length > 0) {
+            // PRIMARY: Use scene breakdown's character tagging
+            for (const castName of directorCast) {
+              const normalizedCast = castName.toLowerCase().trim();
+              // Match against our character identity tags
+              for (const [charName, tiers] of Object.entries(characterTieredTags)) {
+                if (charName === normalizedCast || normalizedCast.includes(charName) || charName.includes(normalizedCast)) {
+                  if (!sceneCast.find(c => c.name === charName)) {
+                    sceneCast.push({ name: charName, tiers });
+                  }
+                }
+              }
+            }
+            if (sceneCast.length > 0) {
+              console.log(`🎯 Scene ${s.scene_number}: director-tagged cast: [${sceneCast.map(c => c.name).join(', ')}]`);
+            }
+          }
+
+          // FALLBACK: regex name matching (backward compat + safety net)
+          if (sceneCast.length === 0) {
+            for (const [charName] of Object.entries(characterTieredTags)) {
+              const namePattern = new RegExp(`\\b${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+              if (namePattern.test(rawPrompt)) {
+                sceneCast.push({ name: charName, tiers: characterTieredTags[charName] });
+              }
             }
           }
 
@@ -1553,6 +1575,24 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
             const primaryName = (characters[0].name || '').toLowerCase().trim();
             if (primaryName && characterTieredTags[primaryName] && !sceneCast.find(c => c.name === primaryName)) {
               sceneCast.unshift({ name: primaryName, tiers: characterTieredTags[primaryName] });
+            }
+          }
+
+          // Step 3: scene_keywords fallback — check if narration matches character keywords
+          if (sceneCast.length === 0 && characters.length > 0) {
+            const narrLower = (s.narration_text || '').toLowerCase();
+            const promptLower = rawPrompt.toLowerCase();
+            for (const c of characters) {
+              const keywords = c.scene_keywords || [];
+              const name = (c.name || '').toLowerCase().trim();
+              const matched = keywords.some(kw => {
+                const kwLower = kw.toLowerCase();
+                return narrLower.includes(kwLower) || promptLower.includes(kwLower);
+              });
+              if (matched && characterTieredTags[name] && !sceneCast.find(sc => sc.name === name)) {
+                sceneCast.push({ name, tiers: characterTieredTags[name] });
+                console.log(`🔑 Scene ${s.scene_number}: keyword-matched "${c.name}" via scene_keywords`);
+              }
             }
           }
 
