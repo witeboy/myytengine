@@ -875,7 +875,7 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
       skeleton_protagonist: (bodyDesc, faceDesc) =>
         `a transparent skeleton with glass-like body shell, glossy ivory bones visible through the translucent torso, big round expressive brown amber eyeballs alive in the skull sockets, dressed in context-appropriate clothing — no human skin or flesh anywhere`,
       afro_nolly_global: (bodyDesc, faceDesc) =>
-        `a 3D Pixar-quality ${bodyDesc}, ${faceDesc}, warm brown skin glowing with subsurface scattering, individually strand-rendered African hairstyle, vibrant traditional clothing heavy with realistic fabric weight, gold jewelry catching the light`
+        `a 3D Pixar-quality ${bodyDesc}, ${faceDesc}, skin glowing with warm subsurface scattering, individually strand-rendered hair with fiber detail, vibrant colorful clothing heavy with realistic fabric weight, gold jewelry catching the light`
     };
 
 
