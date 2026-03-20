@@ -356,6 +356,62 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
 
   // ── Step 5: Post-processing — full coverage ────────────────────
 
+  // ── Step 5a: Detect & fix over-stretched scenes ─────────────────
+  // If a scene's direct ASR matches span much longer than expected
+  // for its word count, it means some words were misaligned to the
+  // wrong part of the audio. Clamp the scene using the next scene's
+  // speech start as an upper bound.
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    if (r.empty || r.speechStart === null || r.speechEnd === null) continue;
+
+    const range = sceneWordRanges[i];
+    const wordCount = range.wordCount;
+    const expectedDur = Math.max(2.0, wordCount * 0.4); // ~0.4s per word
+    const actualSpan = r.speechEnd - r.speechStart;
+
+    if (actualSpan > expectedDur * 3 && actualSpan > 15) {
+      // This scene is over-stretched. Find the next scene's speech start
+      // to use as an upper bound.
+      let nextSpeechStart = null;
+      for (let j = i + 1; j < results.length; j++) {
+        if (!results[j].empty && results[j].speechStart !== null) {
+          nextSpeechStart = results[j].speechStart;
+          break;
+        }
+      }
+
+      // Also check: where do the MAJORITY of this scene's matched words fall?
+      // Use the median matched timestamp as the anchor.
+      const matchedTimestamps = [];
+      for (let wi = range.firstWordIdx; wi <= range.lastWordIdx; wi++) {
+        if (alignment[wi] >= 0) {
+          matchedTimestamps.push(asrWords[alignment[wi]].end);
+        }
+      }
+
+      if (matchedTimestamps.length >= 2) {
+        matchedTimestamps.sort((a, b) => a - b);
+        // Use the 75th percentile as the scene's true end
+        const p75Idx = Math.floor(matchedTimestamps.length * 0.75);
+        const clampedEnd = matchedTimestamps[p75Idx];
+
+        // Only clamp if the 75th percentile is significantly earlier than the raw end
+        if (r.speechEnd - clampedEnd > 10) {
+          console.log(`[ASR Fix] Scene ${r.sceneNumber}: clamping speechEnd from ${r.speechEnd.toFixed(1)}s to ${clampedEnd.toFixed(1)}s (p75 of ${matchedTimestamps.length} matches)`);
+          r.speechEnd = clampedEnd;
+          r.endTime = clampedEnd;
+        }
+      }
+
+      // If next scene starts before our clamped end, don't overlap
+      if (nextSpeechStart !== null && r.endTime > nextSpeechStart) {
+        r.endTime = nextSpeechStart;
+        r.speechEnd = nextSpeechStart;
+      }
+    }
+  }
+
   // First scene starts at 0
   if (results.length > 0 && results[0].startTime !== null) {
     results[0].startTime = 0;
