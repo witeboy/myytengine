@@ -41,6 +41,9 @@ export async function transcribeVoiceover(voiceoverUrl, onProgress) {
     }
 
     await new Promise(r => setTimeout(r, POLL_INTERVAL));
+    pollCount++;
+
+    onProgress?.({ phase: 'processing', message: `Recognizing speech… (${pollCount * 3}s)`, pollCount });
 
     const pollRes = await base44.functions.invoke('pollTranscription', {
       transcript_id: transcriptId,
@@ -49,6 +52,7 @@ export async function transcribeVoiceover(voiceoverUrl, onProgress) {
     const pollData = pollRes.data;
 
     if (pollData?.status === 'completed') {
+      onProgress?.({ phase: 'done', message: `Done — ${pollData.word_count} words detected`, pollCount });
       console.log(`[ASR] Complete: ${pollData.word_count} words, confidence: ${((pollData.confidence || 0) * 100).toFixed(0)}%`);
       return {
         success: true,
