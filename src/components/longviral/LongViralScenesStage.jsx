@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Wand2, CheckCircle2, ImageIcon, Layers } from 'lucide-react';
 
@@ -37,20 +37,20 @@ export default function LongViralScenesStage({ projectId, project, scenes, onRef
 
   return (
     <Card>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between mb-4">
+      <CardHeader>
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Layers className="w-5 h-5 text-blue-500" />
-            <h3 className="text-lg font-bold text-gray-900">Stage 2: Scene Breakdown</h3>
+            <CardTitle>Scene Breakdown</CardTitle>
             {allPromptsReady && <Badge className="bg-green-100 text-green-700 text-[10px]">Complete</Badge>}
           </div>
-          <Button onClick={handleBreakdown} disabled={generating} className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
+          <Button onClick={handleBreakdown} disabled={generating} className="bg-blue-600 hover:bg-blue-700 gap-2">
             {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
             {generating ? phase : hasScenes ? 'Regenerate Scenes' : 'Break Down into Scenes'}
           </Button>
         </div>
-
-        <p className="text-xs text-gray-500 mb-4">
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-gray-500 mb-4">
           Visual change every 4-6 seconds. Each section gets its own set of scenes with visual specs, audio direction, and timing.
         </p>
 
@@ -65,7 +65,7 @@ export default function LongViralScenesStage({ projectId, project, scenes, onRef
           <div className="space-y-2 mt-4">
             <div className="flex items-center gap-2 mb-3">
               <Badge variant="secondary" className="text-[10px]">{scenes.length} scenes</Badge>
-              <Badge className="bg-amber-100 text-amber-700 text-[10px]">
+              <Badge className="bg-blue-100 text-blue-700 text-[10px]">
                 {scenes.filter(s => s.status === 'prompts_ready').length} prompts ready
               </Badge>
               <Badge variant="secondary" className="text-[10px]">
@@ -86,7 +86,7 @@ export default function LongViralScenesStage({ projectId, project, scenes, onRef
                   <p className="text-[10px] text-gray-500 leading-relaxed line-clamp-2">
                     {scene.narration_text?.substring(0, 60)}...
                   </p>
-                  <p className="text-[9px] text-blue-500 mt-1">{scene.duration_seconds?.toFixed(1)}s</p>
+                  <p className="text-[9px] text-blue-600 mt-1">{scene.duration_seconds?.toFixed(1)}s</p>
                 </div>
               ))}
             </div>

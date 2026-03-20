@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Wand2, CheckCircle2, FileText, Copy } from 'lucide-react';
 
@@ -33,29 +33,29 @@ export default function LongViralScriptStage({ projectId, project, scripts, onRe
 
   return (
     <Card>
-      <CardContent className="p-6">
-        <div className="flex items-center justify-between mb-4">
+      <CardHeader>
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-amber-500" />
-            <h3 className="text-lg font-bold text-gray-900">Stage 1: Script Generation</h3>
+            <CardTitle>Script Generation</CardTitle>
             {hasFinalScript && <Badge className="bg-green-100 text-green-700 text-[10px]">Complete</Badge>}
           </div>
           {!hasFinalScript && (
-            <Button onClick={handleGenerate} disabled={generating} className="bg-amber-600 hover:bg-amber-700 text-white gap-2">
+            <Button onClick={handleGenerate} disabled={generating} className="bg-blue-600 hover:bg-blue-700 gap-2">
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
               {generating ? phase : `Generate ${dur}-Min Script`}
             </Button>
           )}
         </div>
-
-        <p className="text-xs text-gray-500 mb-4">
+      </CardHeader>
+      <CardContent>
+        <p className="text-sm text-gray-500 mb-4">
           AI generates a ~{dur * 160} word script using the same viral niche structure, expanded for {dur}-minute long-form depth.
         </p>
 
         {generating && !hasFinalScript && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center gap-3">
-            <Loader2 className="w-5 h-5 animate-spin text-amber-500" />
-            <p className="text-sm text-amber-700">{phase}</p>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
+            <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+            <p className="text-sm text-blue-700">{phase}</p>
           </div>
         )}
 
@@ -64,7 +64,7 @@ export default function LongViralScriptStage({ projectId, project, scripts, onRe
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-green-500" />
-                <span className="text-sm text-gray-900 font-medium">{finalScript.title || project?.name}</span>
+                <span className="text-sm font-medium">{finalScript.title || project?.name}</span>
               </div>
               <div className="flex gap-2">
                 <Badge variant="secondary" className="text-[10px]">

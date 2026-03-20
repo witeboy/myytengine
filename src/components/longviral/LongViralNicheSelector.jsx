@@ -4,7 +4,7 @@ import { LONG_VIRAL_NICHE_IDS } from '@/lib/longViralNicheData';
 export default function LongViralNicheSelector({ value, onChange }) {
   return (
     <div>
-      <p className="text-xs text-amber-600 tracking-widest font-bold mb-3">SELECT NICHE</p>
+      <label className="text-sm font-medium mb-3 block">Select Niche</label>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {LONG_VIRAL_NICHE_IDS.map(niche => {
           const selected = value === niche.id;
@@ -14,7 +14,7 @@ export default function LongViralNicheSelector({ value, onChange }) {
               onClick={() => onChange(niche.id)}
               className={`text-left p-3 rounded-lg border-2 transition-all ${
                 selected
-                  ? 'border-amber-500 bg-amber-50'
+                  ? 'border-blue-500 bg-blue-50'
                   : 'border-gray-200 hover:border-gray-300 bg-white'
               }`}
             >
