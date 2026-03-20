@@ -34,26 +34,47 @@ function norm(w) {
 function wordsMatch(a, b) {
   if (!a || !b) return false;
   if (a === b) return true;
+
   // One is substring of the other (e.g. "its" vs "it's" → both "its")
   if (a.length >= 3 && b.length >= 3) {
     if (a.startsWith(b) || b.startsWith(a)) return true;
   }
-  // Edit distance 1 for words of 4+ chars (ASR often swaps a letter)
-  if (a.length >= 4 && b.length >= 4 && Math.abs(a.length - b.length) <= 1) {
-    let diffs = 0;
+
+  // Edit distance 1 for words of 3+ chars (ASR often swaps/drops a letter)
+  if (a.length >= 3 && b.length >= 3 && Math.abs(a.length - b.length) <= 1) {
     const longer = a.length >= b.length ? a : b;
     const shorter = a.length >= b.length ? b : a;
     if (longer.length === shorter.length) {
+      // Same length: allow 1 substitution
+      let diffs = 0;
       for (let i = 0; i < longer.length; i++) {
         if (longer[i] !== shorter[i]) diffs++;
         if (diffs > 1) break;
       }
       if (diffs <= 1) return true;
+    } else {
+      // Length differs by 1: allow 1 insertion/deletion
+      let diffs = 0;
+      let li = 0, si = 0;
+      while (li < longer.length && si < shorter.length) {
+        if (longer[li] !== shorter[si]) {
+          diffs++;
+          if (diffs > 1) break;
+          li++; // skip the extra char in longer
+        } else {
+          li++; si++;
+        }
+      }
+      if (diffs <= 1) return true;
     }
   }
+
   // Phonetic: common number words
-  const numMap = { '1': 'one', '2': 'two', '3': 'three', '4': 'four', '5': 'five', '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine', '10': 'ten' };
+  const numMap = { '1': 'one', '2': 'two', '3': 'three', '4': 'four', '5': 'five',
+                   '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine', '10': 'ten',
+                   '100': 'hundred', '1000': 'thousand', '0': 'zero' };
   if (numMap[a] === b || numMap[b] === a) return true;
+
   return false;
 }
 
