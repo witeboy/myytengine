@@ -41,6 +41,13 @@ export default function VideoExporter({
   const [fileSize, setFileSize] = useState(null);
   const exportCtx = useExport();
 
+  // Sync local export progress to global context so it persists across navigation
+  useEffect(() => {
+    if (exportCtx && projectId && exporting) {
+      exportCtx.updateJob(projectId, { progress, phase });
+    }
+  }, [progress, phase, exporting, projectId]);
+
   if (!open) return null;
 
   const totalDuration = scenes.reduce((sum, s) => sum + (s.duration || s.duration_seconds || 8), 0);
