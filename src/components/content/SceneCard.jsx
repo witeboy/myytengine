@@ -306,6 +306,9 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
           <FixPromptButton sceneId={scene.id} projectId={scene.project_id} onFixed={onSceneUpdated} />
         )}
 
+        {/* Per-provider regeneration */}
+        <ProviderRegenButtons scene={scene} onComplete={onSceneUpdated} />
+
         {/* Actions */}
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={handleImage} disabled={loadingImage} className="flex-1">
