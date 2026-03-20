@@ -5,72 +5,31 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // Same 5 niche-specific viral structures as Shorts, scaled to user-defined duration.
 // ══════════════════════════════════════════════════════════════════
 
-async function callGemini(prompt, temperature = 0.75) {
-  const apiKey = Deno.env.get("GEMINI_API_KEY");
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt + "\n\nRespond with ONLY valid JSON. IMPORTANT: Escape all double quotes inside string values with backslash. Do NOT use unescaped quotes inside JSON string values." }] }],
-        generationConfig: { temperature, maxOutputTokens: 16384, responseMimeType: "application/json" },
-      }),
-    }
-  );
+async function callClaude(prompt, temperature = 0.75) {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 16384,
+      temperature,
+      messages: [
+        { role: "user", content: prompt + "\n\nRespond with the script text ONLY. Do NOT wrap in JSON or markdown. Just the raw script with [SECTION] markers." }
+      ],
+    }),
+  });
   if (!response.ok) {
     const errBody = await response.text();
-    throw new Error(`Gemini ${response.status}: ${errBody.substring(0, 200)}`);
+    throw new Error(`Claude ${response.status}: ${errBody.substring(0, 300)}`);
   }
   const data = await response.json();
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-
-  // Try direct parse first
-  try { return JSON.parse(rawText); } catch (_) {}
-
-  // Clean markdown fences
-  let cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-  try { return JSON.parse(cleaned); } catch (_) {}
-
-  // Fallback: extract title and script manually from malformed JSON
-  console.warn('⚠️ JSON parse failed, attempting manual extraction...');
-  let title = '';
-  let script = '';
-  let wordCount = 0;
-
-  const titleMatch = cleaned.match(/"title"\s*:\s*"([^"]{1,100})"/);
-  if (titleMatch) title = titleMatch[1];
-
-  // Extract script field — find the value between "script": " and the last "word_count" or "} 
-  const scriptStart = cleaned.indexOf('"script"');
-  if (scriptStart >= 0) {
-    const colonPos = cleaned.indexOf(':', scriptStart);
-    const quoteStart = cleaned.indexOf('"', colonPos + 1);
-    if (quoteStart >= 0) {
-      // Find the closing pattern: ","word_count" or just the last few chars
-      const endPatterns = [/",\s*"word_count"/, /"\s*,\s*"word/, /"\s*\}\s*$/];
-      let quoteEnd = -1;
-      for (const pat of endPatterns) {
-        const match = cleaned.substring(quoteStart + 1).search(pat);
-        if (match >= 0) { quoteEnd = quoteStart + 1 + match; break; }
-      }
-      if (quoteEnd > quoteStart) {
-        script = cleaned.substring(quoteStart + 1, quoteEnd);
-        // Unescape basic JSON escapes
-        script = script.replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-      }
-    }
-  }
-
-  const wcMatch = cleaned.match(/"word_count"\s*:\s*(\d+)/);
-  if (wcMatch) wordCount = parseInt(wcMatch[1]);
-
-  if (script) {
-    console.log(`✅ Manual extraction recovered ${script.split(/\s+/).length} words`);
-    return { title, script, word_count: wordCount };
-  }
-
-  throw new Error('Failed to parse Gemini response as JSON');
+  const text = data.content?.[0]?.text || '';
+  return text;
 }
 
 // Duration-aware prompt builders
