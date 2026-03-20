@@ -107,16 +107,21 @@ Deno.serve(async (req) => {
                 status: 'image_generated'
               });
 
-              // Lock Scene 1 as character reference
-              if (sceneNum === 1 && projectForRef && !projectForRef.reference_image_url) {
-                try {
-                  await base44.asServiceRole.entities.Projects.update(projectForRef.id, {
-                    reference_image_url: finalUrl
-                  });
-                  projectForRef.reference_image_url = finalUrl;
-                  console.log(`📌 Scene 1 reference locked: ${finalUrl.substring(0, 60)}`);
-                } catch (refErr) {
-                  console.warn(`⚠️ Failed to lock reference: ${refErr.message}`);
+              // Smart reference locking: lock first scene WITH a character, not blindly Scene 1
+              if (projectForRef && !projectForRef.reference_image_url) {
+                const hasCharacter = detectCharacterInScene(scene);
+                if (hasCharacter) {
+                  try {
+                    await base44.asServiceRole.entities.Projects.update(projectForRef.id, {
+                      reference_image_url: finalUrl
+                    });
+                    projectForRef.reference_image_url = finalUrl;
+                    console.log(`📌 Scene ${sceneNum} reference locked (has character): ${finalUrl.substring(0, 60)}`);
+                  } catch (refErr) {
+                    console.warn(`⚠️ Failed to lock reference: ${refErr.message}`);
+                  }
+                } else {
+                  console.log(`⏭️ Scene ${sceneNum}: no character detected, skipping reference lock`);
                 }
               }
 
