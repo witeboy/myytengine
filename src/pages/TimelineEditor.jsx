@@ -1491,7 +1491,7 @@ export default function TimelineEditor() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button onClick={handleAutoSync} disabled={isSyncing} size="sm"
+          <Button onClick={() => isSyncing ? null : setShowSyncDiag(true)} disabled={isSyncing} size="sm"
             className={`gap-1.5 text-xs px-3 h-7 ${
               syncStatus === 'audio' ? 'bg-green-600' : syncStatus === 'words' ? 'bg-teal-600' : syncStatus === 'error' ? 'bg-red-600' :
               'bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-700 hover:to-purple-700'
