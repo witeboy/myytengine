@@ -1736,6 +1736,23 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
 
 
 
+          // ═══ STRIP REMAINING BARE CHARACTER NAMES — image gen renders them as text ═══
+          // After identity injection, any remaining bare name occurrences are dangerous:
+          // Grok/Seedream will render "NAME" or "Sarah" as literal on-screen text.
+          for (const c of characters) {
+            const cName = (c.name || '').trim();
+            if (!cName) continue;
+            // Replace remaining bare name with nothing (identity was already injected above)
+            const nameRx = new RegExp(`\\b${cName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+            rawPrompt = rawPrompt.replace(nameRx, '');
+          }
+          // Also catch the literal placeholder "NAME" if character DNA used it
+          rawPrompt = rawPrompt.replace(/\bNAME(?:'s)?\b/g, '');
+          // Clean orphaned artifacts from name removal
+          rawPrompt = rawPrompt
+            .replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').replace(/\s{2,}/g, ' ')
+            .replace(/^\s*,\s*/, '').replace(/\(\s*\)/g, '').trim();
+
           // ═══ FINAL PROMPT SANITIZATION — catch anything tier system missed ═══
           // Derive gender dynamically from primary character
           const primaryChar = characters[0] || {};

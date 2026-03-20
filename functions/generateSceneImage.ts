@@ -148,6 +148,17 @@ function preparePromptForProvider(rawPrompt, provider = 'grok', isSleep = false)
     .replace(/,?\s*NO\s+text,?\s*words,?\s*letters[^.]*\.\s*/gi, '')
     .replace(/,?\s*FORBIDDEN:?\s*text[^.]*\.\s*/gi, '');
 
+  // ── 2b. Strip remaining character NAME placeholders rendered as text ──
+  // If character DNA used "NAME" or actual character names survived prompt generation,
+  // the image model will render them as on-screen text overlays
+  p = p.replace(/\bNAME(?:'s)?\b/g, '');
+  // Strip any ALL-CAPS single words that look like name placeholders (2-15 chars, not common words)
+  p = p.replace(/\b([A-Z]{2,15})\b/g, (match) => {
+    const commonCaps = ['ARRI', 'DSLR', 'HDR', 'LUT', 'POV', 'OTS', 'RGB', 'LED', 'CGI', 'DOF', 'ECU', 'MCU', 'CU', 'MS', 'WS', 'EWS', 'MWS', 'DM', 'UI', 'NO', 'ON', 'IN', 'AT', 'TO', 'BY', 'OF', 'OR', 'IF', 'AS', 'IS', 'IT', 'AN', 'DO', 'SO', 'UP', 'THE', 'AND', 'FOR', 'NOT', 'BUT', 'ALL', 'HAS', 'HIS', 'HER', 'RAW', 'RED', 'BMW', 'USA'];
+    if (commonCaps.includes(match)) return match;
+    return '';
+  });
+
   // ── 3. Clean punctuation artifacts ──
   p = p
     .replace(/,\s*,/g, ',')
@@ -155,6 +166,7 @@ function preparePromptForProvider(rawPrompt, provider = 'grok', isSleep = false)
     .replace(/,\s*\./g, '.')
     .replace(/\s{2,}/g, ' ')
     .replace(/^[\s,.]+/, '')
+    .replace(/\(\s*\)/g, '')
     .trim();
 
   // ── 4. Deduplicate repeated sentences ──

@@ -332,6 +332,18 @@ function sanitizePrompt(prompt, characterTieredTags, characters, visualStyle, sh
     }
   }
 
+  // ═══ 11b. Strip remaining bare character names — image gen renders as text ═══
+  for (const c of characters) {
+    const cName = (c.name || '').trim();
+    if (!cName) continue;
+    const nameRx = new RegExp(`\\b${cName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+    const before = p;
+    p = p.replace(nameRx, '');
+    if (p !== before) fixes.push(`stripped_name_${cName}`);
+  }
+  p = p.replace(/\bNAME(?:'s)?\b/g, '');
+  p = p.replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').replace(/\s{2,}/g, ' ').replace(/\(\s*\)/g, '').trim();
+
   // ═══ 12. Gender sanitization ═══
   if (characters.length > 0) {
     const pc = characters[0];
