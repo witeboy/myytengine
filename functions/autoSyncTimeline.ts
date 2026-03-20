@@ -417,11 +417,56 @@ Deno.serve(async (req) => {
     }
 
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-    console.log(`🎵 Beat Sync v2: ${scenes.length} scenes · ${totalVoDuration}s voiceover`);
+    console.log(`🎵 Beat Sync v3 (ASR-first): ${scenes.length} scenes · ${totalVoDuration}s voiceover`);
 
-    // PHASE 1: Compute durations
-    const sceneData = computeDurations(scenes, totalVoDuration);
-    console.log(`✓ Durations: ${sceneData.filter(s => s.media_type === 'video').length} video · ${sceneData.filter(s => s.media_type === 'image').length} image · ${sceneData.filter(s => s.video_hold).length} holds`);
+    // PHASE 1: Try ASR-based alignment, fall back to character-position
+    let sceneData;
+    let usedASR = false;
+
+    const assemblyKey = Deno.env.get('ASSEMBLYAI_API_KEY');
+    if (assemblyKey && voiceoverUrl) {
+      try {
+        console.log(`🎙 Requesting ASR transcription...`);
+        const submitRes = await fetch('https://api.assemblyai.com/v2/transcript', {
+          method: 'POST',
+          headers: { 'Authorization': assemblyKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audio_url: voiceoverUrl, speech_models: ['universal-3-pro'], language_detection: true }),
+        });
+        if (!submitRes.ok) throw new Error(`ASR submit ${submitRes.status}`);
+        const { id: txId } = await submitRes.json();
+
+        // Poll for completion (max 4 min)
+        let asrWords = null;
+        for (let poll = 0; poll < 80; poll++) {
+          await new Promise(r => setTimeout(r, 3000));
+          const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${txId}`, {
+            headers: { 'Authorization': assemblyKey },
+          });
+          if (!pollRes.ok) continue;
+          const result = await pollRes.json();
+          if (result.status === 'completed') {
+            asrWords = (result.words || []).map(w => ({ word: w.text, start: w.start / 1000, end: w.end / 1000 }));
+            console.log(`✓ ASR complete: ${asrWords.length} words`);
+            break;
+          }
+          if (result.status === 'error') throw new Error(result.error || 'ASR failed');
+        }
+
+        if (asrWords && asrWords.length > 0) {
+          // Match scenes to ASR words
+          sceneData = alignScenesASR(scenes, asrWords, totalVoDuration);
+          usedASR = true;
+          console.log(`✓ ASR alignment applied: ${sceneData.length} scenes`);
+        }
+      } catch (asrErr) {
+        console.warn(`⚠ ASR failed (falling back to char-position): ${asrErr.message}`);
+      }
+    }
+
+    if (!sceneData) {
+      sceneData = computeDurations(scenes, totalVoDuration);
+    }
+    console.log(`✓ Durations (${usedASR ? 'ASR' : 'char-position'}): ${sceneData.filter(s => s.media_type === 'video').length} video · ${sceneData.filter(s => s.media_type === 'image').length} image · ${sceneData.filter(s => s.video_hold).length} holds`);
 
     // PHASE 2: Caption data
     const captionData = generateCaptionData(sceneData);
