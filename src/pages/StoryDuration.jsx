@@ -132,7 +132,11 @@ export default function StoryDuration() {
       }
       setLoading(false);
     }
-    navigate(createPageUrl(`StoryScript?project_id=${projectId}`));
+    if (isLongViral) {
+      navigate(`/LongViralPipeline?project_id=${projectId}`);
+    } else {
+      navigate(createPageUrl(`StoryScript?project_id=${projectId}`));
+    }
   };
 
   return (
