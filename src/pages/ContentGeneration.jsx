@@ -695,6 +695,15 @@ export default function ContentGeneration() {
         setImportProgress(`Created ${freshScenes.length} ambient image definitions`);
       } else {
         // Standard projects use the full cinematic breakdown
+        // ── Pre-step: Extract Character DNA from script ──
+        setImportProgress('Extracting character DNA from script...');
+        try {
+          await base44.functions.invoke('extractCharacterDNA', { project_id: projectId });
+          console.log('🧬 Character DNA extracted');
+        } catch (err) {
+          console.warn('Character DNA extraction failed (non-fatal):', err.message);
+        }
+
         setImportProgress('Analyzing script & breaking down into cinematic scenes...');
 
         let breakdownDone = false;
