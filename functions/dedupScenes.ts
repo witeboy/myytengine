@@ -4,19 +4,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // DEDUP SCENES — Remove duplicate scenes from batch overlap
 // ══════════════════════════════════════════════════════════════════
 //
-// Problem: generateSceneBreakdown batches can produce overlapping
-// scenes where batch N+1 re-generates scenes already in batch N.
-// This causes: 200 unique scenes → 400 total → double video length.
-//
-// Solution:
-//   1. Sort scenes by scene_number
-//   2. For each scene, check if narration matches any earlier scene
-//      - Exact match: identical text
-//      - Near match: >80% word overlap (catches minor rewording)
-//   3. Delete duplicates (keep first occurrence)
-//   4. Renumber remaining scenes 1, 2, 3... sequentially
-//
-// Run this BEFORE beat sync to get accurate durations.
+// Optimized: Uses normalized-text hash for exact duplicates (O(n)),
+// then only checks similarity for scenes with similar word counts.
 // ══════════════════════════════════════════════════════════════════
 
 function normalizeText(text) {
@@ -27,16 +16,13 @@ function normalizeText(text) {
     .trim();
 }
 
-function wordSet(text) {
-  return new Set(normalizeText(text).split(' ').filter(w => w.length > 2));
-}
-
-function similarity(textA, textB) {
-  const setA = wordSet(textA);
-  const setB = wordSet(textB);
-  if (setA.size === 0 || setB.size === 0) return 0;
-  const intersection = [...setA].filter(w => setB.has(w)).length;
-  return intersection / Math.max(setA.size, setB.size);
+function wordOverlap(textA, textB) {
+  const wordsA = normalizeText(textA).split(' ').filter(w => w.length > 2);
+  const wordsB = normalizeText(textB).split(' ').filter(w => w.length > 2);
+  if (wordsA.length === 0 || wordsB.length === 0) return 0;
+  const setB = new Set(wordsB);
+  const intersection = wordsA.filter(w => setB.has(w)).length;
+  return intersection / Math.max(wordsA.length, wordsB.length);
 }
 
 Deno.serve(async (req) => {
@@ -48,29 +34,41 @@ Deno.serve(async (req) => {
     const { project_id, dry_run = false, threshold = 0.80 } = await req.json();
     if (!project_id) return Response.json({ error: 'project_id required' }, { status: 400 });
 
-    // Fetch all scenes
     const scenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
     const sorted = scenes.sort((a, b) => a.scene_number - b.scene_number);
 
     console.log(`🔍 Dedup: scanning ${sorted.length} scenes (threshold: ${threshold})`);
 
-    // Phase 1: Find duplicates
-    const keep = [];       // scenes to keep
-    const duplicates = [];  // scenes to delete
+    // Phase 1: Find duplicates — hash-first, then similarity
+    const keep = [];
+    const duplicates = [];
+    const seenHashes = new Map(); // normalizedText → kept scene
 
-    for (let i = 0; i < sorted.length; i++) {
-      const scene = sorted[i];
+    for (const scene of sorted) {
       const narration = (scene.narration_text || '').trim();
 
-      // Skip empty narration scenes — always keep them
       if (!narration) {
         keep.push(scene);
         continue;
       }
 
-      const normalizedCurrent = normalizeText(narration);
+      const normalized = normalizeText(narration);
 
-      // Check if this scene's narration matches any KEPT scene
+      // Fast path: exact match via hash
+      if (seenHashes.has(normalized)) {
+        const matchedScene = seenHashes.get(normalized);
+        duplicates.push({
+          scene_id: scene.id,
+          scene_number: scene.scene_number,
+          narration_preview: narration.substring(0, 60) + '...',
+          matched_scene_number: matchedScene.scene_number,
+          matched_preview: (matchedScene.narration_text || '').substring(0, 60) + '...',
+        });
+        continue;
+      }
+
+      // Slow path: similarity check only against scenes with similar length
+      const wordCount = normalized.split(' ').length;
       let isDuplicate = false;
       let matchedScene = null;
 
@@ -78,17 +76,11 @@ Deno.serve(async (req) => {
         const keptNarration = (kept.narration_text || '').trim();
         if (!keptNarration) continue;
 
-        const normalizedKept = normalizeText(keptNarration);
+        // Skip similarity check if word counts are too different (>2x)
+        const keptWordCount = normalizeText(keptNarration).split(' ').length;
+        if (wordCount > keptWordCount * 2 || keptWordCount > wordCount * 2) continue;
 
-        // Exact match (after normalization)
-        if (normalizedCurrent === normalizedKept) {
-          isDuplicate = true;
-          matchedScene = kept;
-          break;
-        }
-
-        // Near match
-        const sim = similarity(narration, keptNarration);
+        const sim = wordOverlap(narration, keptNarration);
         if (sim >= threshold) {
           isDuplicate = true;
           matchedScene = kept;
@@ -106,11 +98,11 @@ Deno.serve(async (req) => {
         });
       } else {
         keep.push(scene);
+        seenHashes.set(normalized, scene);
       }
     }
 
-    console.log(`  Found ${duplicates.length} duplicates out of ${sorted.length} scenes`);
-    console.log(`  Keeping ${keep.length} unique scenes`);
+    console.log(`  Found ${duplicates.length} duplicates, keeping ${keep.length} unique scenes`);
 
     if (dry_run) {
       return Response.json({
@@ -119,7 +111,7 @@ Deno.serve(async (req) => {
         total_scenes: sorted.length,
         duplicates_found: duplicates.length,
         unique_scenes: keep.length,
-        duplicates: duplicates.slice(0, 30), // show first 30
+        duplicates: duplicates.slice(0, 30),
       });
     }
 
@@ -135,11 +127,6 @@ Deno.serve(async (req) => {
         deleteFailed++;
         console.warn(`  Failed to delete scene ${dup.scene_number}: ${err.message}`);
       }
-
-      // Log progress
-      if ((deleted + deleteFailed) % 25 === 0) {
-        console.log(`  Deleted ${deleted} / ${duplicates.length}...`);
-      }
     }
 
     console.log(`✓ Deleted ${deleted} duplicate scenes (${deleteFailed} failed)`);
@@ -152,17 +139,11 @@ Deno.serve(async (req) => {
       const newNumber = i + 1;
       if (remaining[i].scene_number !== newNumber) {
         try {
-          await base44.asServiceRole.entities.Scenes.update(remaining[i].id, {
-            scene_number: newNumber,
-          });
+          await base44.asServiceRole.entities.Scenes.update(remaining[i].id, { scene_number: newNumber });
           renumbered++;
         } catch (err) {
           console.warn(`  Failed to renumber scene ${remaining[i].scene_number} → ${newNumber}`);
         }
-      }
-
-      if ((i + 1) % 50 === 0 || i === remaining.length - 1) {
-        console.log(`  Renumbered ${i + 1}/${remaining.length}...`);
       }
     }
 
@@ -171,22 +152,16 @@ Deno.serve(async (req) => {
     const stats = {
       original_scenes: sorted.length,
       duplicates_found: duplicates.length,
-      deleted: deleted,
+      deleted,
       delete_failed: deleteFailed,
       remaining_scenes: remaining.length,
-      renumbered: renumbered,
+      renumbered,
       reduction_percent: Math.round((duplicates.length / sorted.length) * 100),
     };
 
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`✓ Dedup complete: ${sorted.length} → ${remaining.length} scenes (${stats.reduction_percent}% reduction)`);
-    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
-    return Response.json({
-      success: true,
-      stats,
-      sample_duplicates: duplicates.slice(0, 10),
-    });
+    return Response.json({ success: true, stats, sample_duplicates: duplicates.slice(0, 10) });
 
   } catch (error) {
     console.error('dedupScenes error:', error.message);
