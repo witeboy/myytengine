@@ -1319,16 +1319,17 @@ Write prompts the way a cinematographer thinks — through CAMERA PLACEMENT and 
 - **90-Degree Rule:** NEVER frame a character straight-on like a mugshot. Always describe the camera slightly off-center — this creates depth and dimension.
 
 **SCENE CONSTRUCTION RULES:**
-- Lead with the CAMERA ANGLE and what it reveals about the emotional beat — NOT with "Medium shot from waist up"
-- NEVER use mechanical framing language: "from waist up", "from chest up", "from shoulders up", "torso visible", "head to feet"
-- Instead, let the camera angle IMPLY the framing: "Low angle through the glass tabletop" tells the renderer everything about framing without a single body-crop instruction
-- Characters must be DOING something — holding, reaching, walking, gesturing, interacting — NOT standing static facing camera
-- Backgrounds must be SHARP and DETAILED with visible props and architecture, not blurred to nothing
-- Include foreground elements for depth (objects on tables, plants, tools, fences, etc.)
-- NEVER generate an isolated character portrait against a blank or blurred background — always place them IN a detailed world
-- **POPULATED WORLD:** Include other people in most scenes — crowds, passersby, onlookers. The world feels ALIVE.
-- **CHARACTER PRESENCE:** Only include human characters when the narration calls for them. If the narration describes a concept, landscape, or abstract idea — render a PURE ENVIRONMENT scene.
-- **SCENE FLOW:** Adjacent scenes share color temperature, lighting direction, and environmental elements for visual continuity.
+- **PLOT-FIRST:** Every scene must show what is ACTUALLY HAPPENING in the story at this moment. The character in their real situation, performing real actions relevant to the narrative. NOT abstract metaphors or symbolic imagery.
+- **STORY GROUNDED:** If the narration says "automate your savings," show the character ON THEIR PHONE setting up an auto-transfer — in their apartment, at a coffee shop, wherever makes sense for THEIR story. NOT a surreal image of coins flowing into a piggy bank.
+- Lead with the CAMERA ANGLE and what it reveals about the emotional beat
+- NEVER use mechanical framing language: "from waist up", "from chest up", etc.
+- Characters must be DOING something relevant to the PLOT — NOT standing static
+- Backgrounds must be SHARP and DETAILED — always place characters IN a detailed world
+- **POPULATED WORLD:** Include other people in most scenes — the world feels ALIVE.
+- **CHARACTER PRESENCE:** Include characters when the narration describes a situation or action. Render pure environment only when narration truly describes a place or landscape.
+- **SCENE FLOW:** Adjacent scenes share color temperature, lighting direction, and environmental elements.
+- **NO ABSTRACT METAPHORS:** Never create surreal, symbolic, or metaphorical visuals. Every scene must be a plausible moment from the character's life. No floating objects, no impossible scenarios, no visual poetry that disconnects from the actual story.
+- **TONE SAFETY:** Never create visuals that could be misread as violence, self-harm, or danger when the story tone is positive/educational.
 
 
 **DIRECTOR'S SCENE NOTES:**
@@ -1384,7 +1385,7 @@ ${sceneDirections}
    Additional rules:
       • ${orientationConfig.composition}
     - Text/UI on surfaces: describe as clean overlay INSIDE a container (phone screen, monitor, sign). Keep text minimal, spelled perfectly.
-    - Abstract concepts → PHYSICAL METAPHORS. Never "symbolizing" or "representing."
+    - Abstract concepts → show the CHARACTER experiencing the real-world version of that concept. "Leaving money on the table" = character at their actual table/desk missing an opportunity. NEVER surreal metaphors.
 
    **═══════════════════════════════════════════════════════════════**
    **🚨 PROMPT ENGINE RULEBOOK — MANDATORY COMPLIANCE 🚨**
@@ -1413,7 +1414,7 @@ ${sceneDirections}
 
    **WORD LIMIT:** 60-120 words per prompt. Long prompts confuse image models.
 
-   **SYMBOLISM PREVENTION:** NEVER use: representing, symbolizing, embodying, illustrating, metaphor. Models render literal scenes.
+   **SYMBOLISM PREVENTION:** NEVER use: representing, symbolizing, embodying, illustrating, metaphor. NEVER create abstract or surreal visual metaphors. Every scene must show a REAL, PLAUSIBLE moment from the character's journey that directly serves the plot.
 
    **SCENE CONSISTENCY:** All elements must logically coexist. No balloon + ocean waves + mountain sunset.
 

@@ -227,11 +227,10 @@ function calculateStartTimes(durations) {
 function getNicheDirectorProfile(niche) {
   const profiles = {
     finance: {
-      visual_world: "Corporate glass towers vs intimate kitchen tables, Wall Street grandeur vs suburban vulnerability",
-      signature_shots: "Overhead desk chaos, CU hands gripping objects, empty rooms, silhouettes against windows",
-      metaphor_language: "Weight/lightness, overflowing/empty containers, bridges and chasms, erosion and growth",
-      emotional_palette: "Cool institutional blues/grays shifting to warm ambers/golds",
-      avoid: "Literal money shots (cash flying), generic stock office scenes, cliché calculator close-ups"
+      visual_world: "Real everyday financial moments — kitchen tables with bills, phone screens with banking apps, office desks, coffee shop laptop sessions, apartment living rooms",
+      signature_shots: "Character at their desk/table working on finances, hands on keyboard, looking at phone, walking through their neighborhood, at the bank, in their car",
+      metaphor_language: "Show the ACTUAL situation — the real moments of earning, saving, spending, planning. Ground every scene in the character's daily financial life.",
+      emotional_palette: "Cool institutional blues/grays shifting to warm ambers/golds"
     },
     retirement: {
       visual_world: "Golden-hour suburbs, well-worn family homes, nature trails, generational gatherings",
@@ -403,22 +402,19 @@ ${durLine}
 ${scriptText}
 
 **RULES:**
-1. Scenes are VISUAL BEATS, not sentences. Change scene when the visual changes.
-2. visual_concept: 2-4 sentences. Environment FIRST, then character ACTION, then atmosphere.
-3. **CINEMATIC SHOT DISTRIBUTION (MANDATORY):** At least 50% of scenes must use WIDE or WIDER framing (WS, EWS, MWS, HIGH ANGLE, ESTABLISHING). These create cinematic scale. Mix in MS, LOW, OTS, MCU, CU for variety. NEVER same shot type consecutively. Close-ups (CU/ECU) max 15% of total scenes.
-4. ALWAYS name specific objects from the narration (cellphone, laptop, bill, receipt, etc.) as PROPS — "clutching her cellphone", "staring at the overdue bill". But NEVER describe what's ON the screen/paper — no text, UI, dollar amounts, app names.
-5. Abstract concepts → PHYSICAL METAPHORS. Use the EXACT nouns from the script.
-6. **POPULATED WORLD:** Most scenes should include MULTIPLE PEOPLE — passersby, crowds, coworkers, family members, bystanders. The world feels alive and busy. Even if the narration focuses on one person, the visual should show them WITHIN a populated environment. Include 3-10+ background people in wide shots.
-7. **CHARACTER PRESENCE RULE:** Only include human characters when the narration implies or requires them. If the narration describes a concept, place, object, landscape, statistic, or abstract idea — render it as a PURE ENVIRONMENT or OBJECT scene WITHOUT forcing a character into it. Not every scene needs a human subject.
-8. **SCENE FLOW & CONTINUITY (CRITICAL for smooth transitions):** Adjacent scenes MUST share visual elements that create a FLOWING sequence. Use these techniques:
-   - SHARED COLOR: Adjacent scenes share a dominant color that shifts gradually (e.g. warm amber → golden → cool blue)
-   - SHARED GEOMETRY: Match composition lines across scenes (a horizon line, diagonal, architectural shape)
-   - MOTION ECHO: If scene N ends with a rightward movement, scene N+1 starts with continued rightward energy
-   - ENVIRONMENTAL BRIDGE: Same location from a different angle, same weather/time of day, same foreground object repositioned
-   - LIGHT CONTINUITY: Adjacent scenes share similar lighting direction and warmth — never jump from golden sunset to blue noon
-   The continuity_bridge field MUST describe EXACTLY which visual thread connects this scene to the next.
-9. IMMERSION — every scene must include at least 2 of: (a) foreground element between camera and subject, (b) sensory texture (steam, rain, dust, wind-blown hair), (c) character micro-action (tapping fingers, adjusting glasses, biting lip), (d) background storytelling detail (half-eaten meal, wilting plant, child's drawing), (e) specific time-of-day lighting ("4AM blue pre-dawn glow"), (f) scale contrast (person dwarfed by lobby).
-10. NICHE: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palette} | AVOID: ${nicheProfile.avoid}
+1. **PLOT-DRIVEN SCENES (MOST IMPORTANT RULE):** Every scene must serve the STORY'S PLOT. Before creating any scene, ask: "What is happening in the STORY at this moment?" The visual must show THAT — the actual narrative event, situation, or consequence being described. If the narration says "You're leaving $1200 on the table every month" and the story is about side hustles, show someone at their kitchen table with bills and a laptop showing missed freelance opportunities — NOT an abstract metaphor of someone hanging from a building.
+2. **STORY CONTEXT OVER SENTENCE LITERAL:** Each scene exists within the FULL story arc. A scene for "Rule #3: Automate your savings" in a finance story should show the CHARACTER performing that action in THEIR world (e.g., setting up auto-transfer on their phone at their desk) — not a generic savings concept. The CHARACTER, their ENVIRONMENT, and their JOURNEY inform every visual.
+3. Scenes are VISUAL BEATS, not sentences. Change scene when the visual changes.
+4. visual_concept: 2-4 sentences. Environment FIRST, then character ACTION, then atmosphere. The visual concept must clearly connect to what is HAPPENING in the plot at this moment.
+5. **CINEMATIC SHOT DISTRIBUTION (MANDATORY):** At least 50% of scenes must use WIDE or WIDER framing (WS, EWS, MWS, HIGH ANGLE, ESTABLISHING). Mix in MS, LOW, OTS, MCU, CU for variety. NEVER same shot type consecutively. Close-ups (CU/ECU) max 15% of total scenes.
+6. ALWAYS name specific objects from the narration (cellphone, laptop, bill, receipt, etc.) as PROPS — "clutching her cellphone", "staring at the overdue bill". But NEVER describe what's ON the screen/paper — no text, UI, dollar amounts, app names.
+7. **NO ABSTRACT METAPHORS.** Do NOT create symbolic or metaphorical visuals. If the narration talks about "leaving money on the table," show the CHARACTER in their actual life situation where they're missing that opportunity — NOT a surreal image of floating money or someone dangling from a building. Every visual must be a PLAUSIBLE SCENE from the character's life that illustrates the narrative point.
+8. **POPULATED WORLD:** Most scenes should include MULTIPLE PEOPLE — passersby, crowds, coworkers, family members, bystanders. The world feels alive and busy.
+9. **CHARACTER PRESENCE RULE:** Only include human characters when the narration implies or requires them. If the narration describes a pure environment — render it as environment. But when the narration describes a situation, action, or consequence — the CHARACTER should be IN that situation.
+10. **SCENE FLOW & CONTINUITY:** Adjacent scenes MUST share visual elements. Use: shared color shifts, matched geometry, motion echo, environmental bridges, light continuity. The continuity_bridge field MUST describe which visual thread connects this scene to the next.
+11. IMMERSION — every scene must include at least 2 of: (a) foreground element, (b) sensory texture, (c) character micro-action, (d) background storytelling detail, (e) specific time-of-day lighting, (f) scale contrast.
+12. **TONE SAFETY:** NEVER create visuals that could be misread as violence, self-harm, suicide, or danger — especially when the story tone is about opportunity, education, or motivation. A finance video about saving money must NEVER show imagery that looks like someone falling, hanging, drowning, or in peril.
+13. NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palette}
 
 **RESPONSE FORMAT:**
 {
@@ -576,7 +572,10 @@ Respond with this JSON:
   }
 }
 
-NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palette} | AVOID: ${nicheProfile.avoid}`;
+NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palette}
+
+**PLOT SUMMARY (use this to ground EVERY scene in the story):**
+Analyze the script above and identify: WHO is the main character? WHAT is their situation? WHAT journey do they go through? Every scene must show a moment from THIS character's journey — not a disconnected visual metaphor.`;
 
       console.log(`🎬 Story analysis...`);
       const analysis = await callGemini(analysisPrompt, 0.6);
