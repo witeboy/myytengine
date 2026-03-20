@@ -72,9 +72,16 @@ export default function ExportProgressBar() {
               </button>
               {/* R2 upload status */}
               {job.r2Status === 'uploading' && (
-                <div className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 rounded-md px-2 py-1">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Uploading to cloud backup...
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 rounded-md px-2 py-1">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Uploading to cloud... {job.r2Progress > 0 ? `${job.r2Progress}%` : ''}
+                  </div>
+                  {job.r2Progress > 0 && (
+                    <div className="w-full bg-blue-100 rounded-full h-1">
+                      <div className="bg-blue-500 h-1 rounded-full transition-all duration-300" style={{ width: `${job.r2Progress}%` }} />
+                    </div>
+                  )}
                 </div>
               )}
               {job.r2Status === 'done' && (
