@@ -70,49 +70,72 @@ function wordsMatch(a, b) {
  * index into asrWords that it matched, or -1 if unmatched.
  */
 function globalAlign(scriptWords, asrWords) {
-  const WINDOW = 12; // look-ahead window size
   const alignment = new Array(scriptWords.length).fill(-1);
   let asrIdx = 0;
 
+  // Pre-normalize all words once for speed
+  const normScript = scriptWords.map(w => norm(w.word));
+  const normASR = asrWords.map(w => norm(w.word));
+
+  // Build an inverted index: normWord → [asrIdx, asrIdx, ...]
+  // This lets us jump directly to candidate positions
+  const asrIndex = {};
+  normASR.forEach((w, i) => {
+    if (!w) return;
+    if (!asrIndex[w]) asrIndex[w] = [];
+    asrIndex[w].push(i);
+  });
+
   for (let si = 0; si < scriptWords.length; si++) {
-    const sw = norm(scriptWords[si].word);
+    const sw = normScript[si];
     if (!sw) continue;
 
-    // Look ahead in ASR stream for a match
+    // ── Strategy 1: Look ahead in a local window (fast path) ────
+    const WINDOW = 25;
     let found = false;
     const limit = Math.min(asrIdx + WINDOW, asrWords.length);
 
     for (let ai = asrIdx; ai < limit; ai++) {
-      const aw = norm(asrWords[ai].word);
-      if (wordsMatch(sw, aw)) {
+      if (wordsMatch(sw, normASR[ai])) {
         alignment[si] = ai;
         asrIdx = ai + 1;
         found = true;
         break;
       }
     }
+    if (found) continue;
 
-    // If not found in window, try a wider emergency search (rare skips)
-    if (!found) {
-      const emergencyLimit = Math.min(asrIdx + WINDOW * 3, asrWords.length);
-      // But only if the NEXT few script words also match ahead (confirms
-      // we're not just latching onto a random duplicate word)
-      for (let ai = asrIdx + WINDOW; ai < emergencyLimit; ai++) {
-        const aw = norm(asrWords[ai].word);
-        if (wordsMatch(sw, aw)) {
-          // Verify: does the next script word also match nearby?
-          const nextSw = si + 1 < scriptWords.length ? norm(scriptWords[si + 1].word) : null;
-          if (nextSw) {
-            const nextLimit = Math.min(ai + 4, asrWords.length);
-            let nextFound = false;
-            for (let nai = ai + 1; nai < nextLimit; nai++) {
-              if (wordsMatch(nextSw, norm(asrWords[nai].word))) {
-                nextFound = true;
-                break;
-              }
+    // ── Strategy 2: Use inverted index to find next occurrence ──
+    // Find the smallest ASR index >= asrIdx for this exact word
+    const candidates = asrIndex[sw];
+    if (candidates) {
+      // Binary search for first candidate >= asrIdx
+      let lo = 0, hi = candidates.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (candidates[mid] < asrIdx) lo = mid + 1;
+        else hi = mid;
+      }
+      // Check candidates near this position
+      for (let ci = lo; ci < Math.min(lo + 3, candidates.length); ci++) {
+        const ai = candidates[ci];
+        if (ai < asrIdx) continue;
+        // Don't jump too far ahead — max 150 ASR words skip
+        if (ai > asrIdx + 150) break;
+
+        // Verify: do the next 2 script words also match nearby?
+        let confirmCount = 0;
+        for (let k = 1; k <= 2 && si + k < scriptWords.length; k++) {
+          const nextSw = normScript[si + k];
+          if (!nextSw) continue;
+          for (let nai = ai + k; nai < Math.min(ai + k + 4, asrWords.length); nai++) {
+            if (wordsMatch(nextSw, normASR[nai])) {
+              confirmCount++;
+              break;
             }
-            if (!nextFound) continue; // False match, skip
           }
+        }
+        if (confirmCount >= 1) {
           alignment[si] = ai;
           asrIdx = ai + 1;
           found = true;
@@ -120,9 +143,30 @@ function globalAlign(scriptWords, asrWords) {
         }
       }
     }
+    if (found) continue;
 
-    // If still not found, this script word has no ASR match.
-    // asrIdx stays where it is — we'll try the next script word.
+    // ── Strategy 3: Fuzzy search in wider window (edit distance) ─
+    const WIDE_WINDOW = 60;
+    const wideLimit = Math.min(asrIdx + WIDE_WINDOW, asrWords.length);
+    for (let ai = asrIdx + WINDOW; ai < wideLimit; ai++) {
+      if (wordsMatch(sw, normASR[ai])) {
+        // Confirm with next word
+        const nextSw = si + 1 < scriptWords.length ? normScript[si + 1] : null;
+        if (nextSw) {
+          let nextFound = false;
+          for (let nai = ai + 1; nai < Math.min(ai + 5, asrWords.length); nai++) {
+            if (wordsMatch(nextSw, normASR[nai])) { nextFound = true; break; }
+          }
+          if (!nextFound) continue;
+        }
+        alignment[si] = ai;
+        asrIdx = ai + 1;
+        found = true;
+        break;
+      }
+    }
+
+    // If still not found, script word is unmatched — asrIdx stays put
   }
 
   return alignment;
