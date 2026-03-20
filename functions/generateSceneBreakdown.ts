@@ -839,7 +839,8 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
             depth_of_field: scene.depth_of_field,
             continuity_bridge: scene.continuity_bridge,
             emotional_intensity: scene.emotional_intensity || 0.5,
-            phase: currentChunk.phase
+            phase: currentChunk.phase,
+            characters_present: scene.characters_present || []
           };
 
           await base44.asServiceRole.entities.Scenes.create({
