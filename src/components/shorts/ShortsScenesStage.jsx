@@ -18,6 +18,15 @@ export default function ShortsScenesStage({ projectId, project, scenes, onRefetc
     setPhase('Breaking script into visual scenes...');
 
     try {
+      // Extract character DNA before breakdown
+      setPhase('Extracting character DNA...');
+      try {
+        await base44.functions.invoke('extractCharacterDNA', { project_id: projectId });
+      } catch (e) {
+        console.warn('Character DNA extraction failed (non-fatal):', e.message);
+      }
+
+      setPhase('Breaking script into visual scenes...');
       await base44.functions.invoke('shortsSceneBreakdown', { project_id: projectId });
       setPhase('Generating image prompts...');
       await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
