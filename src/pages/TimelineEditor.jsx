@@ -1215,6 +1215,7 @@ export default function TimelineEditor() {
       } catch (err) {
         console.warn('[Captions] ASR failed, falling back:', err.message || err);
       }
+      setAsrProgress(null);
     }
 
     if (!usedASR) {
