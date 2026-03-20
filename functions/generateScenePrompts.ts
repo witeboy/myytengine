@@ -1334,61 +1334,53 @@ ${sceneDirections}
 **YOUR TASK — for EACH scene produce:**
 
 
-1. **image_prompt** — Production-ready AI image generation prompt. The image generator renders whatever it reads FIRST as the dominant element. STRUCTURE MATTERS:
+1. **image_prompt** — Write each prompt as a CINEMATOGRAPHER would describe a shot to their crew. NOT a feature catalog. NOT a mechanical breakdown. A living, breathing scene description.
 
-   **STEP A — SHOT FRAMING + BODY PROPORTION (first sentence, most important):**
-   Start EVERY prompt with the shot type AND how much of the character's body is visible: "Full body wide shot showing a woman walking head to feet through..." or "Medium shot from waist up showing hands gripping..." or "Low angle looking up at a figure towering against..."
-   This MUST be the very first thing in the prompt. The image generator commits to this framing before reading anything else.
-   USE THE "Body Proportion" FIELD from the scene notes — it tells you EXACTLY how much body to show and how the character relates to objects in the frame.
-
-   **STEP B — ENVIRONMENT (next 1-2 sentences):**
-   Describe the COMPLETE environment: location, architecture, weather, time of day, foreground props, background depth.
-   Example: "...a rain-slicked Tokyo street at dusk, neon signs reflecting in puddles between parked cars, steam rising from a ramen cart in the foreground, office towers vanishing into low clouds behind."
-
-   **STEP C — CHARACTER IN CONTEXT (depth depends on shot type):**
-   The amount of character detail must match the shot framing. Over-describing a character in a wide shot causes the image generator to zoom into their face.
-
-   **CRITICAL — WEAVE, DON'T ISOLATE:**
-   Character descriptions must be WOVEN INTO THE ACTION AND ENVIRONMENT — never as a separate catalog of features.
-   The character exists IN the world, interacting with objects, affected by lighting, touching surfaces.
+   **HOW TO WRITE (the most important instruction in this entire prompt):**
    
-   BAD (isolated): "A woman with brown hair, oval face, light skin, brown eyes, 5ft4, wearing a blue jacket. She is in a kitchen."
-   GOOD (woven): "A brown-haired woman in a rumpled blue jacket leans against the kitchen counter, her light skin catching the warm glow of the overhead lamp as she scrolls through her phone, coffee steam curling past her face."
+   Write the way Roger Deakins talks about a shot — camera placement first, then what the lens DISCOVERS as it finds the scene.
    
-   The GOOD version weaves identity (brown hair, light skin, blue jacket) INTO the action (leaning, scrolling) and environment (kitchen counter, lamp glow, coffee steam). Every character trait connects to something in the scene.
+   **LEAD WITH THE CAMERA, NOT THE BODY:**
+   The first sentence tells the image generator WHERE THE CAMERA IS and what it's LOOKING AT.
+   
+   WRONG (mechanical): "Medium shot from waist up of a man in a dimly lit office."
+   WRONG (feature dump): "A 60-year-old male, thin build, 5'10, weathered tan skin, square face, deep-set ice-blue eyes..."
+   
+   RIGHT (cinematic): "Low angle through the dusty glass of a desk lamp — a gaunt figure hunches over scattered papers in a back-office thick with cigarette haze, the amber light carving deep shadows under ice-blue eyes that haven't blinked in minutes."
+   
+   RIGHT (cinematic): "Dutch angle down a rain-slicked alley at dusk, neon kanji reflected in puddles, a silver-haired man in a dark wool coat pausing mid-stride to glance over his shoulder, the scar above his brow catching the red glow of a bar sign."
+   
+   RIGHT (cinematic): "Bird's-eye view of a vast trading floor, hundreds of screens glowing blue-white, and in the center of the chaos a single figure sits motionless — slicked-back silver hair visible even from above, hands flat on the desk, perfectly still while the world moves around him."
+   
+   Notice: NO "from waist up", NO "from chest up", NO "from shoulders up", NO height measurements in the prompt, NO feature catalogs. The camera angle IMPLIES the framing. The character traits are WOVEN into what the camera discovers.
 
-   **WIDE/ENVIRONMENTAL shots (WS, EWS, MWS, HIGH ANGLE, OVERHEAD, ESTABLISHING):**
-   Character is SMALL in frame. Use MINIMAL description — just silhouette identifiers woven into movement:
-   "A woman with a dark-brown bob in a lavender jacket walks through the crosswalk, phone in hand."
-   NO face details, NO eye color, NO skin texture. The character is a figure in a landscape.
+   **CHARACTER IDENTITY — WEAVE, NEVER CATALOG:**
+   Character features must be revealed THROUGH action, environment interaction, and light — never listed.
+   
+   Every physical trait connects to something happening in the scene:
+   - Hair: "silver-white hair catching the desk lamp's glow" (not "receding silver-white hair, slicked back")
+   - Eyes: "ice-blue eyes narrowing at the document" (not "deep-set ice-blue eyes")
+   - Skin: "weathered skin gone pale under the fluorescent" (not "weathered tan skin")
+   - Build: "thin shoulders hunched inside an oversized coat" (not "thin build, 5'10")
+   - Scars/marks: "the scar above his brow pulling tight as he frowns" (not "prominent scar above left eyebrow")
+   
+   The character EXISTS in the world. Light hits them. Fabric wraps them. Gravity pulls them. They touch surfaces. Their body REACTS to the moment.
 
-   **MEDIUM/ACTION shots (MS, LOW ANGLE, OTS, TRACKING, DUTCH):**
-   Character is visible but environment shares the frame. Use MODERATE description — body, hair, skin tone WOVEN INTO action:
-   "A 5ft4 woman with dark-brown hair strides through the crowd, light-beige skin catching the neon glow, clutching her phone mid-step."
-   Brief identifying features WOVEN INTO ACTION — not a feature catalog.
-
-   **CLOSE-UP shots (CU, MCU, ECU, POV, INSERT):**
-   Character's face IS the subject. Use FULL description for consistency, WOVEN with emotion:
-   "Extreme close-up — a woman's light-beige face with warm undertones crumples as wide-set light-brown eyes glisten with unshed tears, dark-brown hair falling across her forehead as she bites her lower lip."
+   **DEPTH BY CAMERA ANGLE (not by body-crop instructions):**
+   - **Bird's-eye / High angle / Wide establishing:** Character is a shape in a landscape. Just silhouette identifiers — hair color, jacket, posture. No face details.
+   - **Low angle / Dutch / OTS / Tracking:** Character shares the frame with environment. Moderate identity — enough to recognize them. Woven into action.
+   - **Eye-level close / POV / ECU:** Face IS the subject. Full identity for consistency — but still woven with emotion, never cataloged.
 
    **PROP FIDELITY:**
-   When the narration mentions a specific device or object (iPhone, MacBook, Tesla, Starbucks cup), use that EXACT name in the prompt — NOT a generic replacement. But the prop is part of the scene, never the subject. The character and environment dominate; the prop is in their hand or nearby.
-   GOOD: "...clutching her iPhone as she crosses the street"
-   BAD: "...a close-up of an iPhone screen showing settings" ← prop became the subject
-
-   **STEP D — ATMOSPHERE + STYLE (final sentence):**
-   End with mood, lighting, and the style quality suffix.
-   Example: "...warm golden hour backlight casting long shadows, volumetric dust in the air. ${styleConfig.positive.substring(0, 80)}."
-
-   **THE GOLDEN RULE:** If the image generator only renders the first 200 characters of your prompt, would it produce a SCENE or a PORTRAIT? It MUST produce a scene. That means FRAMING + ENVIRONMENT must come first, ALWAYS.
-
+   When the narration mentions a specific device or object (iPhone, MacBook, Tesla, Starbucks cup), use that EXACT name — but as part of the scene, never the subject.
+   
+   **ATMOSPHERE (final beat):**
+   End with mood and style quality suffix. Let it feel like the last line of a shot description in a screenplay.
+   
    Additional rules:
-      • Character description depth MUST match shot type — wide shots get minimal, medium gets moderate, close-ups get full. NEVER dump a full casting-sheet description into a wide shot.
-      • If the narration mentions a specific prop (iPhone, MacBook, Tesla, etc.), use that exact name — but keep it as a prop in the character's hand or environment, NOT the visual subject.
       • ${orientationConfig.composition}
-    - When text, UI, or screen content appears in a scene, describe it as a clean digital overlay INSIDE a defined container (phone screen, monitor, sign). Keep text minimal, short, and specify exact position. Include: all text must be perfectly spelled, sharp, readable, high contrast, no garbled text, no distorted letters
-    - When a character holds or uses an object (phone, document, tool, weapon, cup), describe it from a MEDIUM or WIDER shot. Let the object be PART of the scene, not the SUBJECT of it.
-    - Abstract concepts → PHYSICAL METAPHORS
+    - Text/UI on surfaces: describe as clean overlay INSIDE a container (phone screen, monitor, sign). Keep text minimal, spelled perfectly.
+    - Abstract concepts → PHYSICAL METAPHORS. Never "symbolizing" or "representing."
 
    **═══════════════════════════════════════════════════════════════**
    **🚨 PROMPT ENGINE RULEBOOK — MANDATORY COMPLIANCE 🚨**
