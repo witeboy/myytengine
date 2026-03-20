@@ -300,7 +300,7 @@ Deno.serve(async (req) => {
           }
 
           // ── STILL PROCESSING (handle various AI33 status values) ──
-          const knownProcessing = ['processing', 'pending', 'in_progress', 'queued', 'running', 'started'];
+          const knownProcessing = ['processing', 'pending', 'in_progress', 'queued', 'running', 'started', 'doing'];
           if (knownProcessing.includes(pollData.status)) {
             const progress = pollData.progress || pollData.percentage || null;
             console.log(`⏳ Scene ${sceneNum}: AI33 ${pollData.status}${progress ? ` (${progress}%)` : ''}...`);
