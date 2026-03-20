@@ -25,7 +25,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [genderFilter, setGenderFilter] = useState('all');
   const [ageFilter, setAgeFilter] = useState('all');
-  const [voiceTab, setVoiceTab] = useState('all'); // 'all', 'cloned'
+  const [voiceTab, setVoiceTab] = useState('all'); // 'all', 'minimax', 'elevenlabs', 'cloned'
 
   useEffect(() => {
     const fetchData = async () => {
