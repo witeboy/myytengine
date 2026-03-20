@@ -163,15 +163,40 @@ Deno.serve(async (req) => {
     const totalWords = Math.round(durationMin * wpm);
     const topicTitle = project.name;
 
-    const prompt = buildPrompt(nicheId, topicTitle, durationMin, totalWords);
+    const basePrompt = buildPrompt(nicheId, topicTitle, durationMin, totalWords);
+    const minAcceptableWords = Math.round(totalWords * 0.75); // Must hit at least 75% of target
 
-    console.log(`🎬 Calling Gemini for "${topicTitle}" (niche: ${nicheId}, ${durationMin}min, ~${totalWords}w)...`);
-    const result = await callGemini(prompt, 0.75);
+    let fullScript = '';
+    let wordCount = 0;
+    let title = topicTitle;
+    const MAX_ATTEMPTS = 3;
 
-    const rawScript = result.script || '';
-    const fullScript = rawScript.replace(/\[.*?\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
-    const wordCount = fullScript.split(/\s+/).filter(w => w.length > 0).length;
-    const title = result.title || topicTitle;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      let prompt = basePrompt;
+      if (attempt > 1) {
+        prompt += `\n\n⚠️ CRITICAL: Your previous attempt was only ${wordCount} words. The MINIMUM is ${totalWords} words. You MUST write at least ${totalWords} words. Expand every section with more examples, more detail, more stories, more data. Do NOT summarize — go DEEP. ${totalWords} words minimum or the script will be rejected.`;
+      }
+
+      console.log(`🎬 Attempt ${attempt}/${MAX_ATTEMPTS}: Calling Gemini for "${topicTitle}" (niche: ${nicheId}, ${durationMin}min, ~${totalWords}w)...`);
+      const result = await callGemini(prompt, attempt > 1 ? 0.8 : 0.75);
+
+      const rawScript = result.script || '';
+      fullScript = rawScript.replace(/\[.*?\]/g, '').replace(/\n{3,}/g, '\n\n').trim();
+      wordCount = fullScript.split(/\s+/).filter(w => w.length > 0).length;
+      title = result.title || topicTitle;
+
+      console.log(`📝 Attempt ${attempt}: got ${wordCount} words (target: ${totalWords}, min: ${minAcceptableWords})`);
+
+      if (wordCount >= minAcceptableWords) break;
+      if (attempt < MAX_ATTEMPTS) {
+        console.warn(`⚠️ Script too short (${wordCount}/${totalWords}), retrying...`);
+      }
+    }
+
+    if (wordCount < minAcceptableWords) {
+      console.warn(`⚠️ Final script still short: ${wordCount}/${totalWords} words after ${MAX_ATTEMPTS} attempts`);
+    }
+
     const estimatedDuration = Math.round(wordCount / (wpm / 60));
 
     console.log(`✅ Got script: ${wordCount} words, ~${estimatedDuration}s, title: "${title}"`);
