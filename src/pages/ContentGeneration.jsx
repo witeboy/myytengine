@@ -9,7 +9,6 @@ import { createPageUrl } from '@/utils';
 import StageProgress from '@/components/StageProgress';
 import SceneGrid from '@/components/content/SceneGrid';
 import VoiceoverPanel from '@/components/script/VoiceoverPanel';
-import ElevenLabsVoiceoverPanel from '@/components/script/ElevenLabsVoiceoverPanel';
 import VisualStyleSelector from '@/components/content/VisualStyleSelector';
 import OrientationSelector from '@/components/content/OrientationSelector';
 import ImageProviderSelector from '@/components/content/ImageProviderSelector';
