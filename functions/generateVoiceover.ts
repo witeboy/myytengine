@@ -41,12 +41,14 @@ Deno.serve(async (req) => {
     const AI33_KEY = Deno.env.get('AI33_API_KEY');
     if (!AI33_KEY) return Response.json({ error: 'AI33_API_KEY not configured' }, { status: 500 });
 
-    // Fetch project & script
-    const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
+    // Fetch project & script in parallel
+    const [projects, allScripts] = await Promise.all([
+      base44.asServiceRole.entities.Projects.filter({ id: project_id }),
+      base44.asServiceRole.entities.Scripts.filter({ project_id }),
+    ]);
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-    const allScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
     const script = allScripts.find(s => s.version === 'final_aggregated');
     if (!script?.full_script) {
       return Response.json({ error: 'No final_aggregated script found.' }, { status: 400 });
