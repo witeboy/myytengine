@@ -902,8 +902,9 @@ export default function TimelineEditor() {
       let asrWords = null;
       if (voiceoverUrl) {
         try {
+          setAsrProgress({ phase: 'submitting', message: 'Submitting audio for speech recognition…', pollCount: 0 });
           const { transcribeVoiceover: transcribeASR } = await import('@/lib/transcribeASR');
-          const result = await transcribeASR(voiceoverUrl);
+          const result = await transcribeASR(voiceoverUrl, (p) => setAsrProgress(p));
           if (result?.success && result.words?.length > 0) {
             asrWords = result.words;
             console.log(`[AutoSync] ASR: ${asrWords.length} words transcribed`);
@@ -911,6 +912,7 @@ export default function TimelineEditor() {
         } catch (err) {
           console.warn('[AutoSync] ASR failed, will fall back to estimation:', err.message);
         }
+        setAsrProgress(null);
       }
 
       let newBeatDurations;
