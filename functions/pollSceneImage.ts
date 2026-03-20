@@ -322,12 +322,42 @@ Deno.serve(async (req) => {
             }
           }
 
-          // ── FAIL ──
+          // ── FAIL — auto-fallback to Nano Banana ──
           if (poll.data?.state === 'fail') {
             const errMsg = poll.data?.failMsg || 'Grok task failed';
-            console.warn(`❌ Scene ${sceneNum}: Grok failed — ${errMsg}`);
-            await base44.asServiceRole.entities.Scenes.update(scene.id, { status: 'image_failed', image_url: '' });
-            results.push({ scene_number: sceneNum, status: 'failed', error: errMsg });
+            console.warn(`❌ Scene ${sceneNum}: Grok failed — ${errMsg} → trying Nano fallback`);
+
+            // Try Nano Banana as fallback
+            let nanoTaskId = null;
+            if (KIE_API_KEY) {
+              try {
+                const nanoPrompt = (scene.image_prompt || '').substring(0, 1500);
+                const nanoRes = await fetch(`${KIE_BASE}/createTask`, {
+                  method: "POST",
+                  headers: { "Authorization": `Bearer ${KIE_API_KEY}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    model: "google/nano-banana",
+                    input: { prompt: nanoPrompt, output_format: "png", image_size: projectForRef?.orientation === 'portrait' ? '9:16' : '16:9' }
+                  })
+                });
+                const nanoResult = await nanoRes.json();
+                if (nanoRes.ok && nanoResult.code === 200) {
+                  nanoTaskId = nanoResult.data.taskId;
+                }
+              } catch (_) {}
+            }
+
+            if (nanoTaskId) {
+              await base44.asServiceRole.entities.Scenes.update(scene.id, {
+                image_url: `nano_task:${nanoTaskId}`,
+                status: 'image_pending'
+              });
+              console.log(`🔄 Scene ${sceneNum}: auto-fallback to Nano (${nanoTaskId})`);
+              results.push({ scene_number: sceneNum, status: 'processing', fallback: 'nano' });
+            } else {
+              await base44.asServiceRole.entities.Scenes.update(scene.id, { status: 'image_failed', image_url: '' });
+              results.push({ scene_number: sceneNum, status: 'failed', error: errMsg });
+            }
             continue;
           }
 
