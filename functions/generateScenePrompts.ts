@@ -323,7 +323,7 @@ function getStyleSceneBodyRules(styleName) {
       rendering: "CoComelon/Pixar Junior 3D rendering — soft shadows, warm studio lighting, smooth plastic textures."
     },
     cinematic_picstory: {
-      characters: "Pixar/DreamWorks quality 3D characters — expressive stylized faces, realistic proportions, subsurface scattering on skin, detailed clothing. Body framing defined per-scene by the Body Proportion directive.",
+      characters: "Pixar/DreamWorks quality 3D characters — expressive stylized faces, realistic proportions, subsurface scattering on skin, detailed clothing.",
       environments: "Cinematic 3D environments — dramatic studio lighting, rich color grading, volumetric atmosphere, detailed textures.",
       objects: "High-quality 3D rendered objects with detailed materials, dramatic lighting, cinematic depth.",
       rendering: "Pixar/DreamWorks animated feature film quality — dramatic lighting, subsurface scattering, cinematic composition."
