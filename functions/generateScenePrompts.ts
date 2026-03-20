@@ -761,7 +761,7 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
 
     const framingPrefix = useSleepStyle
       ? "Wide ambient shot of a dark atmospheric environment"
-      : "Full body wide shot showing complete scene with detailed sharp environment, visible architecture and props, character shown head to feet mid-action in a populated world";
+      : "Cinematic scene with detailed sharp environment, visible architecture and props, character mid-action in a living world";
     const promptPrefix = `${framingPrefix}. `;
 
 
