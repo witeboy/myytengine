@@ -62,6 +62,21 @@ export default function SceneGrid({ scenes, onRefetch }) {
     onRegenerateImage: async () => {
       try {
         await base44.functions.invoke('generateSceneImage', { scene_id: scene.id });
+        onRefetch();
+
+        // Poll until resolved (max 2 min)
+        for (let i = 0; i < 24; i++) {
+          await new Promise(r => setTimeout(r, 5000));
+          try {
+            const pollRes = await base44.functions.invoke('pollSceneImage', { scene_id: scene.id });
+            const pollData = pollRes.data || pollRes;
+            const result = pollData.results?.[0];
+            if (result?.status === 'done' || result?.status === 'failed') {
+              break;
+            }
+          } catch (_) {}
+          onRefetch();
+        }
       } catch (err) {
         console.warn(`Scene ${scene.scene_number} image failed:`, err?.response?.data?.error || err.message);
       }
