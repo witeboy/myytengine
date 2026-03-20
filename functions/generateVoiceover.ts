@@ -85,13 +85,30 @@ Deno.serve(async (req) => {
       });
     }
 
-    const submitRes = await fetch(submitUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'xi-api-key': AI33_KEY },
-      body: submitBody,
-    });
+    // Use AbortController to enforce a 15s timeout on the AI33 call
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    let submitRes;
+    try {
+      submitRes = await fetch(submitUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'xi-api-key': AI33_KEY },
+        body: submitBody,
+        signal: controller.signal,
+      });
+    } catch (abortErr) {
+      clearTimeout(timeout);
+      if (abortErr.name === 'AbortError') {
+        throw new Error('AI33 TTS request timed out after 15s. The text may be too long for synchronous generation. Try a shorter script or MiniMax voice.');
+      }
+      throw abortErr;
+    }
+    clearTimeout(timeout);
 
     const submitData = await submitRes.json();
+    console.log(`AI33 response status=${submitRes.status}, keys=${Object.keys(submitData).join(',')}`);
+
     if (!submitData.success || !submitData.task_id) {
       throw new Error(`AI33 submit failed: ${JSON.stringify(submitData).substring(0, 300)}`);
     }
