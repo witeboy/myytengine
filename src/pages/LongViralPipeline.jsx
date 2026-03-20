@@ -12,7 +12,6 @@ import StageProgress from '@/components/StageProgress';
 import LongViralNicheSelector from '@/components/longviral/LongViralNicheSelector';
 import LongViralStructureView from '@/components/longviral/LongViralStructureView';
 import LongViralScriptStage from '@/components/longviral/LongViralScriptStage';
-import LongViralScenesStage from '@/components/longviral/LongViralScenesStage';
 import {
   ArrowLeft, ArrowRight, Film, Loader2, CheckCircle2,
   FileText, Layers, ImageIcon, Zap, Clock
@@ -41,28 +40,14 @@ export default function LongViralPipeline() {
     enabled: !!projectId,
   });
 
-  const { data: scenes = [], refetch: refetchScenes } = useQuery({
-    queryKey: ['longviral-scenes', projectId],
-    queryFn: async () => {
-      const all = await base44.entities.Scenes.filter({ project_id: projectId });
-      return all.sort((a, b) => a.scene_number - b.scene_number);
-    },
-    enabled: !!projectId,
-  });
-
   useEffect(() => {
     if (project?.video_duration_minutes) setDurationMin(project.video_duration_minutes);
   }, [project?.video_duration_minutes]);
 
   const hasFinalScript = scripts.some(s => s.version === 'final_aggregated');
-  const hasScenes = scenes.length > 0;
-  const allPromptsReady = hasScenes && scenes.every(s => s.status === 'prompts_ready' || s.status === 'image_generated');
 
   let activeStage = 'blueprint';
-  if (hasFinalScript && !hasScenes) activeStage = 'scenes';
-  else if (hasFinalScript && hasScenes && !allPromptsReady) activeStage = 'scenes';
-  else if (hasFinalScript && allPromptsReady) activeStage = 'handoff';
-  else if (hasFinalScript) activeStage = 'scenes';
+  if (hasFinalScript) activeStage = 'handoff';
   if (userAdvanced && !hasFinalScript) activeStage = 'script';
 
   const structure = buildNicheForDuration(selectedNiche, durationMin);
@@ -182,26 +167,18 @@ export default function LongViralPipeline() {
           </div>
         )}
 
-        {/* Scenes Stage */}
-        {hasFinalScript && (
-          <div className="mt-6">
-            <LongViralScenesStage projectId={projectId} project={project} scenes={scenes}
-              onRefetch={async () => { await Promise.all([refetchScenes(), refetchProject()]); }} />
-          </div>
-        )}
-
         {/* Handoff */}
         {activeStage === 'handoff' && (
           <Card className="mt-6">
             <CardContent className="p-6 text-center">
               <CheckCircle2 className="w-10 h-10 text-green-500 mx-auto mb-3" />
-              <h3 className="text-lg font-bold mb-1">Long Viral Pipeline Complete</h3>
+              <h3 className="text-lg font-bold mb-1">Script Complete</h3>
               <p className="text-gray-500 text-sm mb-4">
-                {scenes.length} scenes with visual prompts ready. Hand off to Content Generation for image/video production.
+                Your {durationMin}-minute script is ready. Continue to Content Generation for scene breakdown, images, and video production.
               </p>
               <Button onClick={() => navigate(createPageUrl(`ContentGeneration?project_id=${projectId}`))}
                 className="bg-blue-600 hover:bg-blue-700 gap-2">
-                <ImageIcon className="w-4 h-4" /> Go to Content Generation <ArrowRight className="w-4 h-4" />
+                <ImageIcon className="w-4 h-4" /> Continue to Content Generation <ArrowRight className="w-4 h-4" />
               </Button>
             </CardContent>
           </Card>
