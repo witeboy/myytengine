@@ -228,7 +228,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       <CardHeader className="pb-3">
         <CardTitle className="text-base flex items-center gap-2">
           <Volume2 className="w-4 h-4" /> Voiceover
-          {settings?.voiceover_status === 'completed' && (
+          {(settings?.voiceover_status === 'completed' || settings?.voiceover_status === 'ready') && (
             <Badge className="bg-green-100 text-green-800 text-xs">Ready</Badge>
           )}
         </CardTitle>
