@@ -441,9 +441,15 @@ Deno.serve(async (req) => {
           }
 
           // ── STILL PROCESSING ──
-          console.log(`⏳ Scene ${sceneNum}: Grok processing (state: ${poll.data?.state || 'unknown'})...`);
-          results.push({ scene_number: sceneNum, status: 'processing' });
-          continue;
+          // KIE API known in-progress states: doing, processing, pending, queued, running, waiting, uploading
+          // Treat ANY non-success/non-fail state as still processing
+          {
+            const state = poll.data?.state || 'unknown';
+            const progress = poll.data?.progress || null;
+            console.log(`⏳ Scene ${sceneNum}: Grok ${state}${progress ? ` (${progress}%)` : ''}...`);
+            results.push({ scene_number: sceneNum, status: 'processing', progress });
+            continue;
+          }
         }
 
         // ════════════════════════════════════════════════════════
