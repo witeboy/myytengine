@@ -299,12 +299,24 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
       };
     }
 
-    // Find first and last words with timestamps for this scene
+    // Find first and last words with timestamps for this scene.
+    // Track both interpolated timestamps (for scene boundaries) and
+    // direct ASR matches (for gap validation — more trustworthy).
     let firstTs = null, lastTs = null;
+    let firstDirectTs = null, lastDirectTs = null;
     let matched = 0;
 
     for (let wi = range.firstWordIdx; wi <= range.lastWordIdx; wi++) {
-      if (alignment[wi] >= 0) matched++;
+      if (alignment[wi] >= 0) {
+        matched++;
+        // Direct ASR match — trustworthy timestamp
+        const directTs = {
+          start: asrWords[alignment[wi]].start,
+          end: asrWords[alignment[wi]].end,
+        };
+        if (!firstDirectTs) firstDirectTs = directTs;
+        lastDirectTs = directTs;
+      }
       if (timestamps[wi]) {
         if (!firstTs) firstTs = timestamps[wi];
         lastTs = timestamps[wi];
@@ -313,6 +325,16 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
 
     const matchScore = range.wordCount > 0 ? matched / range.wordCount : 0;
 
+    // Log scenes with suspiciously wide word spans (direct matches far apart)
+    if (firstDirectTs && lastDirectTs) {
+      const directSpan = lastDirectTs.end - firstDirectTs.start;
+      const wordCount = range.wordCount;
+      const expectedDur = wordCount * 0.35; // ~0.35s per word is normal speech
+      if (directSpan > expectedDur * 3 && directSpan > 15) {
+        console.warn(`[ASR Align] ⚠️ Scene ${scene.scene_number}: direct matches span ${directSpan.toFixed(1)}s for ${wordCount} words (expected ~${expectedDur.toFixed(1)}s) — possible misalignment`);
+      }
+    }
+
     return {
       sceneId: scene.id, sceneNumber: scene.scene_number,
       startTime: firstTs?.start ?? null,
@@ -320,9 +342,9 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
       duration: (lastTs?.end ?? 0) - (firstTs?.start ?? 0),
       matchScore,
       empty: false,
-      // Keep raw speech boundaries for gap validation
-      speechStart: firstTs?.start ?? null,
-      speechEnd: lastTs?.end ?? null,
+      // Raw direct-match boundaries (from ASR, not interpolated)
+      speechStart: firstDirectTs?.start ?? firstTs?.start ?? null,
+      speechEnd: lastDirectTs?.end ?? lastTs?.end ?? null,
     };
   });
 
