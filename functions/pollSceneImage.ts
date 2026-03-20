@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
 // POLL SCENE IMAGE — checks pending image tasks and resolves them
@@ -7,14 +7,16 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 // Checks AI33 Seedream, Grok Imagine, and Nano Banana task statuses.
 // Resolves task IDs (ai33_task:xxx, grok_img_task:xxx, nano_task:xxx)
 // into final image URLs and updates scene records.
-// ══════════════════════════════════════════════════════════════════
-// Inputs:
-//   { scene_id: "abc" }           — poll single scene
-//   { project_id: "xyz" }         — poll all image_pending scenes in project
+//
+// AUTO-FALLBACK: When AI33 fails (e.g. invalid_generation from content
+// moderation), this function automatically resubmits to Grok Imagine
+// as a fallback, keeping the scene in image_pending state so the poll
+// loop continues seamlessly without marking it as failed.
 // ══════════════════════════════════════════════════════════════════
 
 const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
 const AI33_BASE = "https://api.ai33.pro";
+const RETRY_BASE_MS = 2000;
 
 // ── Character presence detection for smart reference locking ──
 // Only lock a scene as reference if it actually contains a character
