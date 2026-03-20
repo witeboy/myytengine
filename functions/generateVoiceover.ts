@@ -99,8 +99,7 @@ Deno.serve(async (req) => {
     const taskId = submitData.task_id;
     console.log(`✅ TTS task submitted: ${taskId}`);
 
-    // Save task_id to ProductionSettings so pollVoiceover can find it
-    const existingSettings = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
+    // Save task_id to ProductionSettings (fire-and-forget to save CPU time)
     const settingsPayload = {
       project_id,
       selected_voice_id: selectedVoiceId,
@@ -108,11 +107,14 @@ Deno.serve(async (req) => {
       generation_task_id: taskId,
     };
 
-    if (existingSettings[0]) {
-      await base44.asServiceRole.entities.ProductionSettings.update(existingSettings[0].id, settingsPayload);
-    } else {
-      await base44.asServiceRole.entities.ProductionSettings.create(settingsPayload);
-    }
+    // Don't await — let the DB write happen in background
+    base44.asServiceRole.entities.ProductionSettings.filter({ project_id }).then(existing => {
+      if (existing[0]) {
+        return base44.asServiceRole.entities.ProductionSettings.update(existing[0].id, settingsPayload);
+      } else {
+        return base44.asServiceRole.entities.ProductionSettings.create(settingsPayload);
+      }
+    }).catch(e => console.error('Settings save error:', e.message));
 
     return Response.json({
       success: true,
