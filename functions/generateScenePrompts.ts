@@ -1255,15 +1255,15 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
         const bodyDirective = getBodyProportionDirective(s.director?.shot_type || 'MS — Medium Shot');
 
         if (!s.director) {
-          return `Scene ${s.scene_number}: (No director notes — generate from narration)\n  Narration: "${s.narration_text}"\n  Duration: ${sceneDuration}s\n  Character Detail Level: ${identityTier.toUpperCase()} (match description depth to this)\n  Body Proportion: ${bodyDirective}\n  Arc Phase: ${arcPosition}\n  Arc Animation: ${arcAnim}${propsLine}`;
+          return `Scene ${s.scene_number}: (No director notes — generate from narration)\n  Narration: "${s.narration_text}"\n  Duration: ${sceneDuration}s\n  Character Detail Level: ${identityTier.toUpperCase()} (match description depth to this)\n  Camera Feel: ${bodyDirective}\n  Arc Phase: ${arcPosition}\n  Arc Animation: ${arcAnim}${propsLine}`;
         }
         return `Scene ${s.scene_number}:
   Narration: "${s.narration_text}"
   Duration: ${sceneDuration}s
   Visual Concept: ${s.director.visual_concept}
   Shot Type: ${s.director.shot_type}
-  Character Detail Level: ${identityTier.toUpperCase()} (${identityTier === 'minimal' ? 'wide shot — silhouette only, NO face details' : identityTier === 'moderate' ? 'medium shot — body + hair + skin, brief features' : 'close-up — full identity for face consistency'})
-  Body Proportion: ${bodyDirective}
+  Character Detail Level: ${identityTier.toUpperCase()} (${identityTier === 'minimal' ? 'character is distant — silhouette only, NO face details' : identityTier === 'moderate' ? 'character shares frame with world — weave identity into action' : 'face is the subject — full identity woven with emotion'})
+  Camera Feel: ${bodyDirective}
   Camera Angle: ${s.director.camera_angle}
   Camera Movement: ${s.director.camera_movement}
   Lighting: ${s.director.lighting}
