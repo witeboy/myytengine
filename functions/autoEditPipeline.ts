@@ -263,17 +263,29 @@ Return JSON only:
 
     for (let i = 0; i < sceneDescriptions.length; i++) {
       const scene = sceneDescriptions[i];
-      const query = scene.keywords;
+      const primaryQuery = scene.keywords;
+      const altQuery = scene.alternative || '';
 
-      await update({ progress: 15 + Math.round((i / sceneDescriptions.length) * 35), phase_message: `Searching: "${query}" (${i + 1}/${sceneDescriptions.length})...` });
+      const arcLabel = scene.arc_position ? ` [${scene.arc_position}]` : '';
+      await update({ progress: 15 + Math.round((i / sceneDescriptions.length) * 35), phase_message: `Searching${arcLabel}: "${primaryQuery}" (${i + 1}/${sceneDescriptions.length})...` });
 
-      // Search both sources in parallel
+      // Search both sources in parallel with primary query
       const [pexels, pixabay] = await Promise.all([
-        searchPexels(query, orientation),
-        searchPixabay(query),
+        searchPexels(primaryQuery, orientation),
+        searchPixabay(primaryQuery),
       ]);
 
-      const combined = [...pexels, ...pixabay];
+      let combined = [...pexels, ...pixabay];
+
+      // If primary query found nothing, try the alternative query
+      if (combined.length === 0 && altQuery) {
+        console.log(`  ↻ S${i+1}: "${primaryQuery}" → 0 results, trying alternative: "${altQuery}"`);
+        const [altPexels, altPixabay] = await Promise.all([
+          searchPexels(altQuery, orientation),
+          searchPixabay(altQuery),
+        ]);
+        combined = [...altPexels, ...altPixabay];
+      }
 
       if (combined.length > 0) {
         // Pick the best clip (prefer HD, appropriate duration)
@@ -285,8 +297,10 @@ Return JSON only:
 
         allScenes.push({
           sceneNumber: i + 1,
-          keywords: query,
+          keywords: primaryQuery,
           description: scene.description,
+          arcPosition: scene.arc_position || null,
+          emotionalTone: scene.emotional_tone || null,
           targetDuration: scene.duration,
           videoUrl: bestClip.url,
           thumbnail: bestClip.thumbnail,
@@ -297,13 +311,14 @@ Return JSON only:
           height: bestClip.height,
         });
       } else {
-        // No results — use a generic fallback search
+        // No results from either query — use a generic fallback
         const fallback = await searchPexels('abstract background', orientation);
         const clip = fallback[0];
         allScenes.push({
           sceneNumber: i + 1,
-          keywords: query,
+          keywords: primaryQuery,
           description: scene.description,
+          arcPosition: scene.arc_position || null,
           targetDuration: scene.duration,
           videoUrl: clip?.url || null,
           thumbnail: clip?.thumbnail || null,
