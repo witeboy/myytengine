@@ -274,12 +274,14 @@ Deno.serve(async (req) => {
                 status: 'image_generated'
               });
 
-              if (sceneNum === 1 && projectForRef && !projectForRef.reference_image_url) {
+              // Smart reference locking
+              if (projectForRef && !projectForRef.reference_image_url && detectCharacterInScene(scene)) {
                 try {
                   await base44.asServiceRole.entities.Projects.update(projectForRef.id, {
                     reference_image_url: finalUrl
                   });
                   projectForRef.reference_image_url = finalUrl;
+                  console.log(`📌 Scene ${sceneNum} reference locked (has character): ${finalUrl.substring(0, 60)}`);
                 } catch (_) {}
               }
 
