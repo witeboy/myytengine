@@ -339,6 +339,31 @@ Deno.serve(async (req) => {
           const poll = await pollRes.json();
 
           if (poll.code !== 200) {
+            // Code 500+ or -1 likely means the task doesn't exist — fallback
+            if (poll.code >= 500 || poll.code === -1 || poll.code === 404) {
+              console.warn(`❌ Scene ${sceneNum}: Grok poll error code ${poll.code} — trying Nano fallback`);
+              let nanoTaskId = null;
+              if (KIE_API_KEY) {
+                try {
+                  const nanoPrompt = (scene.image_prompt || '').substring(0, 1500);
+                  const nanoRes = await fetch(`${KIE_BASE}/createTask`, {
+                    method: "POST",
+                    headers: { "Authorization": `Bearer ${KIE_API_KEY}`, "Content-Type": "application/json" },
+                    body: JSON.stringify({ model: "google/nano-banana", input: { prompt: nanoPrompt, output_format: "png", image_size: projectForRef?.orientation === 'portrait' ? '9:16' : '16:9' } })
+                  });
+                  const nanoResult = await nanoRes.json();
+                  if (nanoRes.ok && nanoResult.code === 200) nanoTaskId = nanoResult.data.taskId;
+                } catch (_) {}
+              }
+              if (nanoTaskId) {
+                await base44.asServiceRole.entities.Scenes.update(scene.id, { image_url: `nano_task:${nanoTaskId}`, status: 'image_pending' });
+                results.push({ scene_number: sceneNum, status: 'processing', fallback: 'nano' });
+              } else {
+                await base44.asServiceRole.entities.Scenes.update(scene.id, { status: 'image_failed', image_url: '' });
+                results.push({ scene_number: sceneNum, status: 'failed', error: `Grok code ${poll.code}` });
+              }
+              continue;
+            }
             console.log(`⏳ Scene ${sceneNum}: Grok poll code ${poll.code}, still processing`);
             results.push({ scene_number: sceneNum, status: 'processing' });
             continue;
