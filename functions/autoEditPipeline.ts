@@ -80,34 +80,139 @@ Deno.serve(async (req) => {
 
     const update = (data) => base44.entities.AutoEditJobs.update(job_id, data);
 
-    // ── PHASE 1: Extract keywords from topic title ──────────────
-    await update({ status: 'searching_media', progress: 5, phase_message: 'Analyzing topic and extracting search keywords...' });
+    // ── PHASE 1: Extract keywords — SCRIPT-AWARE ──────────────
+    await update({ status: 'searching_media', progress: 3, phase_message: 'Loading script and story context...' });
 
     const topicTitle = job.title;
     const isShort = job.format === 'short';
-    const targetDuration = isShort ? 30 : 120; // 30s for shorts, 2min for long preview
+    const targetDuration = isShort ? 30 : 120;
     const scenesNeeded = isShort ? 5 : 10;
 
     const geminiKey = Deno.env.get('GEMINI_API_KEY');
     let keywords = [];
     let sceneDescriptions = [];
 
+    // ── Gather script + story context if a project exists ──────
+    let scriptText = '';
+    let storyAnalysis = '';
+    let characterDescriptions = '';
+    let projectNiche = '';
+    let projectTone = '';
+
+    const projectId = job.project_id || null;
+    if (projectId) {
+      try {
+        const [projects, scripts, prodSettings] = await Promise.all([
+          base44.entities.Projects.filter({ id: projectId }),
+          base44.entities.Scripts.filter({ project_id: projectId }),
+          base44.entities.ProductionSettings.filter({ project_id: projectId }),
+        ]);
+        const project = projects[0];
+        if (project) {
+          projectNiche = project.niche || '';
+          projectTone = project.tone || '';
+          characterDescriptions = project.character_descriptions || '';
+        }
+        // Get best script (prefer final_aggregated → final → edited → draft)
+        const scriptPriority = ['final_aggregated', 'final', 'edited', 'draft'];
+        let bestScript = null;
+        for (const version of scriptPriority) {
+          bestScript = scripts.find(s => s.version === version);
+          if (bestScript) break;
+        }
+        if (bestScript?.full_script) {
+          scriptText = bestScript.full_script.substring(0, 8000); // Cap for prompt size
+          console.log(`📖 Script loaded: ${bestScript.version}, ${scriptText.length} chars`);
+        }
+        // Story analysis from production settings
+        if (prodSettings[0]?.story_analysis) {
+          storyAnalysis = prodSettings[0].story_analysis.substring(0, 2000);
+          console.log(`📊 Story analysis loaded: ${storyAnalysis.length} chars`);
+        }
+      } catch (err) {
+        console.warn('Script/project fetch failed (non-fatal):', err.message);
+      }
+    }
+
+    // Also check if there's a channel with niche info
+    if (!projectNiche && job.channel_id) {
+      try {
+        const channels = await base44.entities.Channels.filter({ id: job.channel_id });
+        if (channels[0]) {
+          projectNiche = channels[0].niche || '';
+          projectTone = channels[0].tone || '';
+        }
+      } catch (_) {}
+    }
+
+    const hasScriptContext = scriptText.length > 100;
+    await update({ status: 'searching_media', progress: 5, phase_message: hasScriptContext ? 'Analyzing script narrative arc for B-roll matching...' : 'Analyzing topic and extracting search keywords...' });
+
     if (geminiKey) {
       try {
-        const prompt = `You are a video editor. Given this video topic: "${topicTitle}"
+        // ── Script-aware prompt vs title-only prompt ──────────
+        let prompt;
+        if (hasScriptContext) {
+          prompt = `You are a cinematic B-roll researcher with deep understanding of visual storytelling.
+
+VIDEO TOPIC: "${topicTitle}"
+NICHE: ${projectNiche || 'general'}
+TONE: ${projectTone || 'dramatic'}
+${storyAnalysis ? `\nSTORY ANALYSIS:\n${storyAnalysis}\n` : ''}
+${characterDescriptions ? `\nCHARACTERS:\n${characterDescriptions}\n` : ''}
+
+FULL SCRIPT:
+${scriptText}
+
+Your job: Break this script into ${scenesNeeded} visual segments and find the PERFECT stock B-roll for each.
+
+CRITICAL RULES:
+- Each search keyword must be 2-5 words, optimized for Pexels/Pixabay stock video search
+- Keywords must MATCH THE PLOT CONTEXT — not just the surface topic
+  Example: If the script says "She lost everything in the market crash" → use "stock market crash screens" or "empty office abandoned", NOT generic "woman sad"
+- Follow the NARRATIVE ARC: setup → rising tension → climax → resolution
+  - Early scenes: establishing shots, calm environments, world-building
+  - Middle scenes: tension visuals, motion, conflict imagery
+  - Climax scenes: dramatic visuals, extreme close-ups, high-energy footage
+  - Resolution scenes: calm aftermath, hopeful imagery, wide shots
+- Match the EMOTIONAL TONE of each script segment
+- Use METAPHORICAL visuals when literal footage won't exist (e.g. "time running out" → "hourglass sand falling")
+- Provide an "alternative" query as backup in case the primary returns no results
+- NO character names, NO branded content, NO text-heavy footage
+
+Return JSON:
+{
+  "scenes": [
+    {
+      "keywords": "abandoned factory dark",
+      "alternative": "industrial ruins empty",
+      "description": "Establishing the world of decay — matches script intro about economic collapse",
+      "arc_position": "setup",
+      "emotional_tone": "ominous",
+      "duration": ${Math.round(targetDuration / scenesNeeded)}
+    }
+  ]
+}
+
+Generate exactly ${scenesNeeded} scenes. Total duration must equal ${targetDuration}s.`;
+        } else {
+          prompt = `You are a video editor. Given this video topic: "${topicTitle}"
+Niche: ${projectNiche || 'general'}, Tone: ${projectTone || 'dramatic'}
 
 Generate ${scenesNeeded} scenes for a ${isShort ? '30-second short-form' : '2-minute'} stock footage video.
 For each scene, provide:
 - A 2-4 word stock video search keyword (generic, visually descriptive, no proper nouns)
+- An alternative search query as backup
 - A brief scene description
 - Suggested duration in seconds (total must equal ${targetDuration})
 
 Return JSON only:
 {
   "scenes": [
-    { "keywords": "city skyline night", "description": "Establishing shot of city", "duration": 6 }
+    { "keywords": "city skyline night", "alternative": "urban lights aerial", "description": "Establishing shot of city", "duration": 6 }
   ]
 }`;
+        }
 
         const res = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
@@ -116,7 +221,7 @@ Return JSON only:
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: { temperature: 0.4, maxOutputTokens: 4096, responseMimeType: 'application/json' }
+              generationConfig: { temperature: 0.4, maxOutputTokens: 8192, responseMimeType: 'application/json' }
             })
           }
         );
@@ -128,6 +233,10 @@ Return JSON only:
             const parsed = JSON.parse(text);
             sceneDescriptions = parsed.scenes || [];
             keywords = sceneDescriptions.map(s => s.keywords);
+            if (hasScriptContext) {
+              console.log(`🎯 Script-aware B-roll: ${sceneDescriptions.length} scenes mapped to narrative arc`);
+              sceneDescriptions.forEach((s, i) => console.log(`  S${i+1} [${s.arc_position || '?'}] "${s.keywords}" — ${s.description?.substring(0, 60)}`));
+            }
           }
         }
       } catch (e) {
@@ -142,11 +251,11 @@ Return JSON only:
         keywords.push(words.slice(i % words.length, i % words.length + 3).join(' ') || topicTitle);
       }
       sceneDescriptions = keywords.map((kw, i) => ({
-        keywords: kw, description: `Scene ${i + 1}`, duration: Math.round(targetDuration / scenesNeeded)
+        keywords: kw, alternative: topicTitle, description: `Scene ${i + 1}`, duration: Math.round(targetDuration / scenesNeeded)
       }));
     }
 
-    await update({ progress: 15, phase_message: `Found ${keywords.length} scene keywords, searching stock libraries...`, keywords_used: JSON.stringify(keywords) });
+    await update({ progress: 15, phase_message: `${hasScriptContext ? '📖 Script-aware: ' : ''}${keywords.length} scene keywords mapped, searching stock libraries...`, keywords_used: JSON.stringify(keywords) });
 
     // ── PHASE 2: Search stock media for each scene ──────────────
     const orientation = job.orientation || 'landscape';
