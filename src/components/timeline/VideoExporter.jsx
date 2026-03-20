@@ -292,9 +292,17 @@ export default function VideoExporter({
               </div>
               <Progress value={progress} className="h-2" />
               <p className="text-xs text-gray-500 text-right">{progress}%</p>
-              <Button variant="outline" size="sm" onClick={cancel} className="w-full">
-                Cancel Export
-              </Button>
+              <p className="text-xs text-blue-600 bg-blue-50 rounded-md px-2.5 py-1.5 text-center">
+                You can close this dialog and navigate away — export progress will appear in the bottom-right corner.
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={onClose} className="flex-1">
+                  Minimize
+                </Button>
+                <Button variant="outline" size="sm" onClick={cancel} className="flex-1 text-red-600 border-red-200 hover:bg-red-50">
+                  Cancel
+                </Button>
+              </div>
             </div>
           )}
 
