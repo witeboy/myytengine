@@ -79,7 +79,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       }
       return true;
     });
-  }, [voices, searchQuery, genderFilter, ageFilter, voiceTab, clonedVoices]);
+  }, [voices, searchQuery, genderFilter, ageFilter, voiceTab, clonedVoices, minimaxVoices, elevenlabsVoices]);
 
   const handleGenerate = async () => {
     if (!script?.id || !selectedVoice) return;
