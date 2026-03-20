@@ -525,9 +525,14 @@ Deno.serve(async (req) => {
           }
 
           // ── STILL PROCESSING ──
-          console.log(`⏳ Scene ${sceneNum}: Nano Banana processing...`);
-          results.push({ scene_number: sceneNum, status: 'processing' });
-          continue;
+          // Same KIE API states as Grok — treat any non-terminal state as processing
+          {
+            const state = poll.data?.state || 'unknown';
+            const progress = poll.data?.progress || null;
+            console.log(`⏳ Scene ${sceneNum}: Nano ${state}${progress ? ` (${progress}%)` : ''}...`);
+            results.push({ scene_number: sceneNum, status: 'processing', progress });
+            continue;
+          }
         }
 
         // ════════════════════════════════════════════════════════
