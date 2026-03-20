@@ -897,13 +897,14 @@ export default function TimelineEditor() {
         throw new Error('No voiceover audio to sync against');
       }
 
-      // Step 2: Get ASR word-level timestamps
+      // Step 2: Get ASR word-level timestamps (submit/poll from browser)
       let asrWords = null;
       if (voiceoverUrl) {
         try {
-          const res = await base44.functions.invoke('transcribeVoiceover', { voiceover_url: voiceoverUrl });
-          if (res.data?.success && res.data.words?.length > 0) {
-            asrWords = res.data.words; // [{word, start, end}, ...]
+          const { transcribeVoiceover: transcribeASR } = await import('@/lib/transcribeASR');
+          const result = await transcribeASR(voiceoverUrl);
+          if (result?.success && result.words?.length > 0) {
+            asrWords = result.words;
             console.log(`[AutoSync] ASR: ${asrWords.length} words transcribed`);
           }
         } catch (err) {
