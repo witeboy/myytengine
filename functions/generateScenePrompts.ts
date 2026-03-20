@@ -435,37 +435,36 @@ FORBIDDEN LANGUAGE: Never write "from waist up", "from chest up", "from shoulder
     afro_nolly_global: universalReinforcement + `
 **🌍 AFRO-NOLLY-GLOBAL STYLE — CRITICAL RULES:**
 
-This is a 3D Pixar/Illumination quality CGI style depicting African stories — Nollywood drama meets Disney animation.
+This is a 3D Pixar/Illumination quality CGI style for community drama storytelling — Nollywood-style compound drama meets Disney Pixar animation quality. The style is about the 3D CGI AESTHETIC, dramatic expressions, and colorful community settings — NOT limited to any specific race or ethnicity. Characters should be DIVERSE.
 
 **MANDATORY VISUAL RULES:**
 - EVERY scene must be rendered as high-quality 3D CGI that mimics Pixar/Illumination quality — NOT actual 3D renders, NOT photorealistic, NOT flat cartoon
 - Skin has subsurface scattering (realistic light transmission), visible pores at close-up but smoothed at mid-range. Warm undertone ALWAYS — NEVER grey, NEVER ashy
-- Hair is individually strand-rendered — braids, afros, headwraps ALL show fiber detail
-- Cloth shows realistic folds, wrinkles, and weight (wrapper sag, blouse crease, ankara patterns)
+- Hair is individually strand-rendered with fiber detail — any hairstyle appropriate to the character
+- Cloth shows realistic folds, wrinkles, and weight
 - Camera positioned slightly below eye level for heroic/dramatic feel
 - Slight wide-angle lens distortion making foreground characters larger/more imposing
 - 3-layer depth staging: foreground characters → mid-ground action → background crowd of 6-15 onlookers
 - Background crowd ALWAYS has dramatic expressions: SHOCKED (mouths open, hands on face), AMUSED (laughing, pointing), SCARED (pulling children close)
 
 **ENVIRONMENTAL WORLD-BUILDING:**
-- MODERN SCENES: Colorful compound buildings around central courtyard, red laterite dirt ground, wooden doors with metal handles, louvered windows, corrugated iron roofing. INCLUDE hand-painted SIGNS on buildings with proverbs/rules that foreshadow the story's moral (e.g. "PRIDE COMES BEFORE THE FALL", "TIME WAITS FOR NO ONE"). Signs: black text on white/cream wood, all caps, slightly uneven hand-lettered look.
-- TRADITIONAL SCENES: Thatched-roof round/rectangular huts, central village clearing, large shade trees, campfire with smoke, cooking pots, baskets, wooden stools, lush green vegetation at edges.
-- Night village: central campfire as primary light, HUGE stylized full moon, warm fire glow on near faces, cool blue moonlight on shoulders/back.
+- COMPOUND SCENES: Colorful buildings around central courtyard (mustard, terracotta, blue, green, pink walls), warm-colored dirt or paved ground, wooden doors, louvered windows, corrugated iron or tile roofing. INCLUDE hand-painted SIGNS on buildings with proverbs/rules that foreshadow the story's moral (e.g. "PRIDE COMES BEFORE THE FALL", "TIME WAITS FOR NO ONE", "COMPOUND RULES: LANDLADY IS ALWAYS RIGHT"). Signs: black text on white/cream wood, all caps, slightly uneven hand-lettered look. Hanging laundry, potted flowers, street signs with place names.
+- INDOOR SCENES: Warm-toned living rooms, kitchens, hallways with doorways where crowds peek in, candles on shelves, furniture, picture frames.
+- Night: warm artificial or candlelight as primary light, HUGE stylized full moon, warm fire/lamp glow on near faces, cool blue moonlight on shoulders/back.
 
-**CHARACTER ARCHETYPES (use these recurring templates):**
-- MAMA/LANDLADY: Heavyset, physically imposing, gold lace blouse + patterned ankara wrapper, headwrap or dyed short curly hair, gold hoop earrings + bangles, often wielding wooden stick, SCREAMING angry expression (70% of scenes) or crying/pleading (20%) or smug (10%)
-- YOUNG WOMAN: Tall slim, long flowing black hair (wind-blown), modern African fusion clothing (dashiki crop top + jeans, pink sneakers), defiant unbothered expression, arms crossed
+**CHARACTER ARCHETYPES (use these recurring templates — diverse ethnicities):**
+- MAMA/LANDLADY: Heavyset, physically imposing, colorful clothing (patterned dress, headwrap or styled hair), gold hoop earrings + bangles, often wielding wooden stick or pointing finger, SCREAMING angry expression (70% of scenes) or crying/pleading (20%) or smug (10%)
+- YOUNG WOMAN: Tall slim, long flowing hair (wind-blown), modern casual clothing (crop top + jeans, sneakers), defiant unbothered expression, arms crossed
 - POLICE: Large overweight, light blue uniform + dark navy pants, police cap with badge, baton, stern expression
-- ELDER: Thin weathered dignified, white beard, brown agbada/dashiki, colorful striped kufi cap, carved walking stick, kind wise eyes
-- CHILD: 8-12 years old, HUGE Disney-style eyes (30%+ of face), cornrow braids with beads, traditional wrapped cloth, barefoot
+- ELDER: Thin weathered dignified, white beard or hair, formal or traditional clothing, walking stick, kind wise eyes
+- CHILD: 8-12 years old, HUGE Disney-style eyes (30%+ of face), styled hair, casual clothing
 
 **COLOR PALETTE:**
-- Modern: building walls mustard/terracotta/blue/green/pink, red-orange dirt, saturated punchy clothing
-- Traditional: warm mud browns, golden straw, deep forest green, golden hour amber or deep night blue
-- Skin tones: #4A2E1A dark to #A07850 warm brown, ALL with warm undertone
-- Clothing: gold, emerald green lace, purple, blue, orange dashiki, patterned ankara
+- Compound: building walls mustard/terracotta/blue/green/pink, warm dirt ground, saturated punchy clothing
+- Indoor: warm amber, candlelight, deep shadows, cozy furniture tones
+- Clothing: gold, emerald green, purple, blue, orange, pink, patterned fabrics — vibrant and saturated
 
-**FORBIDDEN:** photorealistic, live action, dark/gloomy, anime, watercolor, sketch, grey/ashy skin, western features, empty backgrounds`,
+**FORBIDDEN:** photorealistic, live action, dark/gloomy, anime, watercolor, sketch, grey/ashy skin, empty backgrounds, isolated portraits`,
 
     skeleton_protagonist: universalReinforcement + `
 **🦴 SKELETON PROTAGONIST STYLE — CRITICAL RULES:**
