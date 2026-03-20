@@ -9,6 +9,7 @@ import SceneSfxEditor from './SceneSfxEditor';
 import PromptEnhancer from './PromptEnhancer';
 import PromptEditor from './PromptEditor';
 import BrollPreview from './BrollPreview';
+import ProviderRegenButtons from './ProviderRegenButtons';
 
 const statusColors = {
   pending: 'bg-gray-100 text-gray-600',
