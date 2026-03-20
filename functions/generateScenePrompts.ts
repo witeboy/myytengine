@@ -1461,7 +1461,7 @@ ${useSleepStyle ? `   **🌙 SLEEP MODE ANIMATION — STRICT RULES:**
   "prompts": [
     {
       "scene_number": 1,
-      "image_prompt": "[SHOT FRAMING first]. [ENVIRONMENT]. [CHARACTER body-first in action with compact identity]. [ATMOSPHERE + style quality suffix]",
+      "image_prompt": "[CAMERA ANGLE + what it discovers]. [Environment breathing around the character]. [Character identity woven into action and light]. [Mood + style suffix]",
       "animation_prompt": "[motion direction for this scene's specific duration]"
     }
   ]
