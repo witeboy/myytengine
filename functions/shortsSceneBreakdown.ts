@@ -80,6 +80,7 @@ For each scene, provide:
 - text_overlay: any text that appears on screen (key numbers, rule labels, etc.)
 - mood: emotional tone of this specific visual
 - audio_note: voice energy and background audio direction
+- characters_present: array of character names who VISUALLY APPEAR in this scene (empty array [] if pure environment/text/graphic shot)
 
 VISUAL RULES:
 - Hook (0-5s): 2-3 scenes. Full-screen kinetic text + dramatic background. Word-by-word text animation.
