@@ -75,12 +75,22 @@ export default function StoryDuration() {
 
     // Shorts skip outline — save niche, go straight to script page
     if (isShorts) {
-      // Save shorts niche to channel if project has one
       if (project?.channel_id) {
         try { await base44.entities.Channels.update(project.channel_id, { shorts_niche: shortsNiche }); } catch (_) {}
       }
       await base44.entities.Projects.update(projectId, { status: 'hooks_ready' });
       navigate(createPageUrl(`StoryScript?project_id=${projectId}`));
+      setLoading(false);
+      return;
+    }
+
+    // Long Viral skip outline — save niche, go to LongViralPipeline
+    if (isLongViral) {
+      if (project?.channel_id) {
+        try { await base44.entities.Channels.update(project.channel_id, { shorts_niche: shortsNiche }); } catch (_) {}
+      }
+      await base44.entities.Projects.update(projectId, { status: 'topic_selected' });
+      navigate(`/LongViralPipeline?project_id=${projectId}`);
       setLoading(false);
       return;
     }
