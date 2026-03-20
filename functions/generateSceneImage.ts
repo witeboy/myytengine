@@ -199,6 +199,30 @@ function preparePromptForProvider(rawPrompt, provider = 'grok', isSleep = false)
 }
 
 // ─────────────────────────────────────────────
+// CHARACTER PRESENCE DETECTION
+// ─────────────────────────────────────────────
+// Determines if a scene contains a human character.
+// Used for: (1) smart reference locking, (2) deciding text-to-image vs image-to-image
+// Sources: director notes characters_present, prompt content analysis
+
+function detectCharacterPresence(scene) {
+  // Priority 1: Director notes (most reliable — set by scene breakdown)
+  if (scene.image_prompt?.startsWith('DIRECTOR_NOTES:')) {
+    try {
+      const notes = JSON.parse(scene.image_prompt.substring('DIRECTOR_NOTES:'.length));
+      if (notes.characters_present && Array.isArray(notes.characters_present) && notes.characters_present.length > 0) {
+        return true;
+      }
+    } catch (_) {}
+  }
+
+  // Priority 2: Prompt content analysis
+  const prompt = (scene.image_prompt || '').toLowerCase();
+  const humanIndicators = /\b(woman|man|person|figure|character|boy|girl|child|worker|doctor|soldier|officer|teacher|scientist|skeleton|people|crowd|couple|family|mother|father|husband|wife|protagonist|narrator)\b/;
+  return humanIndicators.test(prompt);
+}
+
+// ─────────────────────────────────────────────
 // SINGLE SCENE PROCESSOR — SUBMIT ONLY
 // ─────────────────────────────────────────────
 
