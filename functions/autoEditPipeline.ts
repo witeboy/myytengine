@@ -331,7 +331,7 @@ Return JSON only:
 
     await update({ status: 'assembling_timeline', progress: 55, phase_message: `Found media for ${allScenes.filter(s => s.videoUrl).length}/${allScenes.length} scenes. Assembling timeline...` });
 
-    // ── PHASE 3: Assemble timeline with effects ─────────────────
+    // ── PHASE 3: Assemble timeline with effects + audio ducking ──
     let offset = 0;
     const timelineClips = allScenes.map((scene, idx) => {
       const duration = scene.targetDuration || 5;
@@ -339,6 +339,13 @@ Return JSON only:
       const transition = idx < allScenes.length - 1
         ? TRANSITIONS[idx % TRANSITIONS.length]
         : null;
+
+      // ── Audio ducking: simulate narration peaks for broadcast-style mix ──
+      // Every scene is assumed to have narration over B-roll.
+      // Duck B-roll audio to -18dB during narration, fade in/out at boundaries.
+      const duckFadeIn = 0.3;  // seconds — fade B-roll audio down at scene start
+      const duckFadeOut = 0.5; // seconds — fade B-roll audio back up at scene end
+      const narrationGap = duration > 6 ? 0.8 : 0.3; // breathing room at end of each scene
 
       const clip = {
         id: `auto-${idx}`,
@@ -353,19 +360,41 @@ Return JSON only:
         brollSource: scene.source,
         mediaType: 'broll',
         cinematicMotion: motionId,
-        motionSpeed: 0.8 + Math.random() * 0.4, // 0.8-1.2 for variety
+        motionSpeed: 0.8 + Math.random() * 0.4,
         motionIntensity: 0.8 + Math.random() * 0.4,
         transition,
-        transitionDuration: transition ? (0.4 + Math.random() * 0.4) : null, // 0.4-0.8s
+        transitionDuration: transition ? (0.4 + Math.random() * 0.4) : null,
         playbackRate: scene.videoDuration > duration ? 1.0 : Math.max(0.5, duration > 0 ? scene.videoDuration / duration : 1.0),
         videoDuration: scene.videoDuration,
         effects: [],
-        audioMuted: false,
         synced: true,
         // Metadata
         keywords: scene.keywords,
+        alternativeKeywords: scene.alternativeKeywords || scene.alternative || '',
+        arcPosition: scene.arcPosition || null,
+        emotionalTone: scene.emotionalTone || null,
         stockSource: scene.source,
         stockId: scene.sourceId,
+        // ── Audio ducking envelope ──
+        // Describes how B-roll audio should behave relative to narration
+        audioDucking: {
+          enabled: true,
+          brollVolume: 0.12,        // Base B-roll volume during narration (0-1) ~= -18dB
+          brollVolumeNoDuck: 0.6,   // B-roll volume when no narration playing
+          narrationVolume: 1.0,     // Narration at full
+          duckFadeInSec: duckFadeIn,
+          duckFadeOutSec: duckFadeOut,
+          narrationGapSec: narrationGap,
+          // Keyframe envelope: [{time, volume}] relative to clip start
+          envelope: [
+            { time: 0, volume: 0.6 },                              // B-roll starts audible
+            { time: duckFadeIn, volume: 0.12 },                    // Duck down for narration
+            { time: duration - narrationGap - duckFadeOut, volume: 0.12 }, // Stay ducked
+            { time: duration - narrationGap, volume: 0.6 },        // Fade up in gap
+            { time: duration, volume: 0.6 },                       // Full at boundary
+          ],
+        },
+        audioMuted: false,
       };
       offset += duration;
       return clip;
@@ -374,7 +403,7 @@ Return JSON only:
     await update({
       status: 'applying_effects',
       progress: 75,
-      phase_message: 'Applied cinematic motions and transitions to all clips...',
+      phase_message: 'Applied cinematic motions, transitions, and audio ducking to all clips...',
       scenes_data: JSON.stringify(timelineClips),
       total_duration_seconds: offset,
     });
@@ -383,7 +412,7 @@ Return JSON only:
     await update({
       status: 'ready_for_review',
       progress: 100,
-      phase_message: `Draft ready! ${timelineClips.length} scenes, ${Math.round(offset)}s total. Ready for your review.`,
+      phase_message: `Draft ready! ${timelineClips.length} scenes, ${Math.round(offset)}s total, with broadcast-style audio ducking. Ready for review.`,
       thumbnail_url: allScenes[0]?.thumbnail || null,
     });
 
