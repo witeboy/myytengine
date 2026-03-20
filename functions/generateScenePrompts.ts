@@ -839,39 +839,39 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
     // Pattern: "[style] [body build], [compressed face/hair clause], [style rendering]"
     const styleCharacterRules = {
       cinematic_realistic: (bodyDesc, faceDesc) =>
-        `photorealistic ${bodyDesc}, ${faceDesc}, natural skin texture, cinematic lighting`,
+        `a ${bodyDesc} whose ${faceDesc} catches the light naturally`,
       photorealistic_4k: (bodyDesc, faceDesc) =>
-        `DSLR-quality photorealistic ${bodyDesc}, ${faceDesc}, razor-sharp detail, editorial photography`,
+        `a ${bodyDesc} — ${faceDesc}, every detail razor-sharp as if captured by a DSLR`,
       anime: (bodyDesc, faceDesc) =>
-        `anime-style ${bodyDesc}, ${faceDesc}, large expressive eyes with highlight reflections, clean linework, cel-shaded`,
+        `an anime-rendered ${bodyDesc} with ${faceDesc}, large expressive eyes catching highlight reflections, clean cel-shaded linework`,
       cinematic_anime: (bodyDesc, faceDesc) =>
-        `cinematic anime ${bodyDesc}, ${faceDesc}, Makoto Shinkai quality, dramatic volumetric lighting, flowing hair`,
+        `a cinematic anime ${bodyDesc}, ${faceDesc} rendered in Makoto Shinkai detail, light playing through flowing hair`,
      cartoon_2d: (bodyDesc, faceDesc) =>
-        `2D cartoon ${bodyDesc} with bold outlines, ${faceDesc}, flat vibrant colors, dynamic pose, normal proportions`,
+        `a bold-outlined 2D cartoon ${bodyDesc} with ${faceDesc}, vibrant flat colors, dynamic energy`,
      picstory_cocomelon: (bodyDesc, faceDesc) =>
-        `3D rendered ${bodyDesc}, ${faceDesc}, soft rounded plastic-smooth features, pastel colors, Pixar Junior quality`,
+        `a soft rounded 3D ${bodyDesc} with ${faceDesc}, plastic-smooth pastel features, Pixar Junior warmth`,
       cinematic_picstory: (bodyDesc, faceDesc) =>
-        `Pixar-quality 3D animated ${bodyDesc}, ${faceDesc}, subsurface scattering on skin, expressive features, dramatic studio rim lighting`,
+        `a Pixar-quality 3D ${bodyDesc}, ${faceDesc} lit by dramatic studio rim lighting, skin glowing with subsurface scattering`,
       oil_painting: (bodyDesc, faceDesc) =>
-        `oil-painted ${bodyDesc}, ${faceDesc}, visible impasto brushstrokes, Rembrandt chiaroscuro lighting`,
+        `a ${bodyDesc} rendered in thick impasto brushstrokes, ${faceDesc} emerging from Rembrandt shadow`,
       watercolor: (bodyDesc, faceDesc) =>
-        `watercolor-rendered ${bodyDesc}, ${faceDesc}, soft translucent washes, paper grain showing through`,
+        `a ${bodyDesc} dissolving into soft watercolor washes, ${faceDesc} bleeding gently into paper grain`,
       comic_book: (bodyDesc, faceDesc) =>
-        `comic book ${bodyDesc}, ${faceDesc}, bold black ink outlines, halftone shading, Marvel/DC quality`,
+        `a bold ink-outlined ${bodyDesc}, ${faceDesc} rendered in halftone dots and dramatic shadow, Marvel-quality`,
       humpty_dumpty: (bodyDesc, faceDesc) =>
-        `storybook ${bodyDesc}, ${faceDesc}, rounded friendly shapes, gentle watercolor washes, fairy tale warmth`,
+        `a whimsical storybook ${bodyDesc} with ${faceDesc}, rounded and warm like a fairy tale illustration`,
       harry_potter: (bodyDesc, faceDesc) =>
-        `fantasy ${bodyDesc}, ${faceDesc}, warm candlelit tones, magical golden particles, gothic atmosphere`,
+        `a ${bodyDesc} bathed in candlelight, ${faceDesc} touched by magical golden particles in the gothic air`,
       "3d_whiteboard_cartoon": (bodyDesc, faceDesc) =>
-        `3D whiteboard cartoon ${bodyDesc} with bold outlines, ${faceDesc}, flat color fills, normal proportions, warm peach-brown skin`,
+        `a bold-outlined 3D whiteboard cartoon ${bodyDesc}, ${faceDesc} in flat warm color fills`,
      low_poly_3d_cartoon: (bodyDesc, faceDesc) =>
-        `low-poly 3D ${bodyDesc} from flat-shaded polygons, ${faceDesc}, angular geometric features, matte clay-toy quality`,
+        `a low-poly ${bodyDesc} built from flat-shaded polygon facets, ${faceDesc} angular and geometric like a clay toy`,
       roblox: (bodyDesc, faceDesc) =>
-        `Roblox-style 3D blocky ${bodyDesc} with cube head, rectangular torso and limbs, simple 2D cartoon face (two round eyes, curved mouth) painted on the cube head, ${faceDesc}, bright flat-shaded colors, toy-like plastic matte finish, R15 avatar proportions`,
+        `a Roblox-style blocky ${bodyDesc} with cube head and rectangular limbs, simple cartoon dot-eyes and curved mouth painted on the face, ${faceDesc}, bright plastic matte colors`,
       skeleton_protagonist: (bodyDesc, faceDesc) =>
-        `a photorealistic transparent skeleton with clear glass-like body shell, glossy ivory bones visible through the translucent torso, big round expressive brown amber eyeballs in skull sockets, wearing context-appropriate clothing, NO real human skin or flesh visible`,
+        `a transparent skeleton with glass-like body shell, glossy ivory bones visible through the translucent torso, big round expressive brown amber eyeballs alive in the skull sockets, dressed in context-appropriate clothing — no human skin or flesh anywhere`,
       afro_nolly_global: (bodyDesc, faceDesc) =>
-        `3D Pixar-quality animated ${bodyDesc}, ${faceDesc}, warm brown skin with subsurface scattering, expressive dramatic features, detailed African hairstyle with individually rendered strands, vibrant traditional clothing with realistic fabric weight and folds, gold jewelry accents`
+        `a 3D Pixar-quality ${bodyDesc}, ${faceDesc}, warm brown skin glowing with subsurface scattering, individually strand-rendered African hairstyle, vibrant traditional clothing heavy with realistic fabric weight, gold jewelry catching the light`
     };
 
 
