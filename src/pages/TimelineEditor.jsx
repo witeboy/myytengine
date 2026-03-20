@@ -1196,10 +1196,10 @@ export default function TimelineEditor() {
 
     if (voiceoverUrl) {
       try {
-        const res = await base44.functions.invoke('transcribeVoiceover', { voiceover_url: voiceoverUrl });
-        if (res.data?.success && res.data.words?.length > 0) {
-          // Tag each ASR word with its scene index based on beat start times
-          allWords = res.data.words.map(w => {
+        const { transcribeVoiceover: transcribeASR } = await import('@/lib/transcribeASR');
+        const result = await transcribeASR(voiceoverUrl);
+        if (result?.success && result.words?.length > 0) {
+          allWords = result.words.map(w => {
             let sceneIdx = 0;
             for (let i = audioStartTimes.length - 1; i >= 0; i--) {
               if (w.start >= (audioStartTimes[i] || 0)) { sceneIdx = i; break; }
