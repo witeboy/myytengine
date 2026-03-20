@@ -414,9 +414,7 @@ Deno.serve(async (req) => {
 
     // Delete old scripts then create new one
     const oldScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
-    for (const s of oldScripts) {
-      try { await base44.asServiceRole.entities.Scripts.delete(s.id); } catch (_) {}
-    }
+    await Promise.all(oldScripts.map(s => base44.asServiceRole.entities.Scripts.delete(s.id).catch(() => {})));
 
     const newScript = await base44.asServiceRole.entities.Scripts.create({
       project_id,
