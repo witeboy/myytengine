@@ -18,6 +18,48 @@ const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
 const AI33_BASE = "https://api.ai33.pro";
 const RETRY_BASE_MS = 2000;
 
+// ── Fallback submit to Grok via KIE when AI33 fails ──────────
+async function submitGrokFallback(kieApiKey, scene, aspectRatio, referenceImageUrl) {
+  if (!kieApiKey) return null;
+
+  // Clean prompt for Grok (strip to 1500 chars, remove text artifacts)
+  let prompt = (scene.image_prompt || '').substring(0, 1500);
+  // Strip DIRECTOR_NOTES prefix if still present
+  if (prompt.startsWith('DIRECTOR_NOTES:')) return null;
+  // Strip resolution/aspect text
+  prompt = prompt
+    .replace(/\b(8K|4K|1080p)\s*(resolution|quality|detail)?\b/gi, 'highly detailed')
+    .replace(/\b\d{3,4}\s*[x×]\s*\d{3,4}\b/gi, '')
+    .replace(/\bf[/:]?\s*\d+\.?\d*\b/gi, 'shallow depth of field');
+
+  // Detect if scene has a character for image-to-image
+  const hasChar = /\b(woman|man|person|figure|character|boy|girl|child|worker|doctor|soldier|officer|people|couple|family|protagonist)\b/i.test(prompt);
+  const useRef = hasChar && referenceImageUrl && referenceImageUrl.startsWith('http');
+
+  const model = useRef ? "grok-imagine/image-to-image" : "grok-imagine/text-to-image";
+  const input = useRef
+    ? { prompt, image_urls: [referenceImageUrl] }
+    : { prompt, aspect_ratio: aspectRatio };
+
+  const res = await fetch(`${KIE_BASE}/createTask`, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${kieApiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ model, input })
+  });
+
+  const result = await res.json();
+  if (res.status === 429) {
+    await new Promise(r => setTimeout(r, RETRY_BASE_MS));
+    return null; // Will retry next poll cycle
+  }
+  if (!res.ok || result.code !== 200) {
+    console.warn(`⚠️ Grok fallback failed: ${result.msg || res.status}`);
+    return null;
+  }
+
+  return result.data.taskId;
+}
+
 // ── Character presence detection for smart reference locking ──
 // Only lock a scene as reference if it actually contains a character
 function detectCharacterInScene(scene) {
