@@ -1502,7 +1502,7 @@ ${useSleepStyle ? `   **🌙 SLEEP MODE ANIMATION — STRICT RULES:**
             console.warn(`⚠️ Scene ${s.scene_number}: only ${promptWords} words — regenerating...`);
             try {
               const bodyRules = getStyleSceneBodyRules(visualStyle);
-              const soloPrompt = `Generate ONE detailed image prompt for this scene.
+              const soloPrompt = `Generate ONE detailed cinematic image prompt for this scene.
 
 ${bodyRules ? `**STYLE RENDERING RULES:**\n**Characters:** ${bodyRules.characters}\n**Environments:** ${bodyRules.environments}` : ''}
 
@@ -1510,14 +1510,13 @@ ${bodyRules ? `**STYLE RENDERING RULES:**\n**Characters:** ${bodyRules.character
 Narration: "${s.narration_text}"
 ${s.director ? `Visual Concept: ${s.director.visual_concept}\nShot: ${s.director.shot_type} | Angle: ${s.director.camera_angle} | Lighting: ${s.director.lighting} | Mood: ${s.director.mood}` : ''}
 
-**STRUCTURE (follow this order EXACTLY):**
-1. FIRST sentence: Shot framing — "Full body wide shot showing..." or "Medium shot of..."
-2. NEXT 1-2 sentences: Environment — location, architecture, weather, props, atmosphere
-3. NEXT 1-2 sentences: Character BODY-FIRST (build, height, posture, action), then face features as compact clause
-4. FINAL sentence: Mood, lighting, then style quality: ${styleConfig.positive.substring(0, 100)}
+**HOW TO WRITE:**
+Write like a cinematographer describing a shot. Lead with WHERE THE CAMERA IS (low angle, dutch angle, bird's-eye, OTS, POV), then what the lens discovers.
+NEVER use "medium shot from waist up" or "from chest up" — let the camera angle imply the framing.
+Weave character identity into action and light — "ice-blue eyes narrowing at the document" not "deep-set ice-blue eyes."
+End with mood and style: ${styleConfig.positive.substring(0, 100)}
 
-**FORBIDDEN:** text/words/numbers on any surface, screen content descriptions, dollar amounts, close-ups of hands holding objects.
-If the scene mentions a phone/document/receipt, describe the CHARACTER'S REACTION to it, not the content on it.
+**FORBIDDEN:** "from waist up", "from chest up", feature catalogs, text on surfaces, screen content.
 
 Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
 
