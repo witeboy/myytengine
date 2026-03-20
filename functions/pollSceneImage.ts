@@ -299,10 +299,18 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          // ── STILL PROCESSING ──
-          const progress = pollData.progress || pollData.percentage || null;
-          console.log(`⏳ Scene ${sceneNum}: AI33 processing${progress ? ` (${progress}%)` : ''}...`);
-          results.push({ scene_number: sceneNum, status: 'processing', progress });
+          // ── STILL PROCESSING (handle various AI33 status values) ──
+          const knownProcessing = ['processing', 'pending', 'in_progress', 'queued', 'running', 'started'];
+          if (knownProcessing.includes(pollData.status)) {
+            const progress = pollData.progress || pollData.percentage || null;
+            console.log(`⏳ Scene ${sceneNum}: AI33 ${pollData.status}${progress ? ` (${progress}%)` : ''}...`);
+            results.push({ scene_number: sceneNum, status: 'processing', progress });
+            continue;
+          }
+
+          // ── UNKNOWN STATUS — log it and treat as still processing ──
+          console.warn(`❓ Scene ${sceneNum}: AI33 unknown status="${pollData.status}" — treating as processing`);
+          results.push({ scene_number: sceneNum, status: 'processing' });
           continue;
         }
 
