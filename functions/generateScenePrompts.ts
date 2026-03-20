@@ -565,9 +565,8 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
     enhanced = enhanced.replace(/\b(bokeh|lens flare)\b/gi, '');
     // Clean up "depth of field with ," left after bokeh removal
     enhanced = enhanced.replace(/\bdepth of field with\s*,/gi, 'cinematic depth of field,');
-    enhanced = enhanced// Strip rendering instructions that leaked into prompt
+    enhanced = enhanced
             .replace(/\bshown full (?:body|figure)\s*(?:in the scene)?\b/gi, '')
-            .replace(/\bshown full body in the scene\b/gi, '')
             .replace(/\s{2,}/g, ' ').replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.');
   }
 
