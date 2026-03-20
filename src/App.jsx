@@ -87,11 +87,14 @@ function App() {
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
-        <Router>
-          <NavigationTracker />
-          <AuthenticatedApp />
-        </Router>
-        <Toaster />
+        <ExportProvider>
+          <Router>
+            <NavigationTracker />
+            <AuthenticatedApp />
+            <ExportProgressBar />
+          </Router>
+          <Toaster />
+        </ExportProvider>
       </QueryClientProvider>
     </AuthProvider>
   )
