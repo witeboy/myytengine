@@ -55,6 +55,34 @@ export default function ScriptModeSelector({ value, onChange, shortsNiche, onSho
         })}
       </div>
 
+      {/* Long Viral Niche Sub-selector */}
+      {(value || '') === 'long_viral' && onShortsNicheChange && (
+        <div className="mt-4 pt-4 border-t border-amber-200">
+          <label className="text-sm font-medium text-amber-800 block mb-2">Long Viral Niche Structure</label>
+          <p className="text-xs text-gray-500 mb-3">Same viral structures as Shorts, scaled to your chosen duration (5–60 min)</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {SHORTS_NICHES.map(n => {
+              const nicheSelected = (shortsNiche || 'finance') === n.id;
+              return (
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => onShortsNicheChange(n.id)}
+                  className={`text-left p-2.5 rounded-lg border-2 transition-all ${
+                    nicheSelected
+                      ? 'border-amber-500 bg-amber-50'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}
+                >
+                  <p className="text-sm font-medium text-gray-900">{n.label}</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5 leading-tight">{n.desc}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Shorts Niche Sub-selector */}
       {(value || '') === 'youtube_shorts' && onShortsNicheChange && (
         <div className="mt-4 pt-4 border-t border-green-200">
