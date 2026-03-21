@@ -686,14 +686,36 @@ export function applyDriftFix(results, driftedIndices) {
   // Then extend the NEXT scene backward to fill the gap. All other scenes
   // keep their ASR-anchored positions — audio sync is preserved.
 
-  for (const i of driftedIndices) {
-    if (i < 0 || i >= results.length) continue;
-    const r = results[i];
-    if (!r || r.empty || !r.driftDetected) continue;
-    const info = r.driftInfo;
-    if (!info) continue;
+  const SECS_PER_WORD = 0.38;
 
-    // Duration = how long the words actually take to speak + small padding
+  // Helper: check if a scene is bloated and tag it
+  const detectBloat = (r) => {
+    if (!r || r.empty || r.startTime === null || r.endTime === null) return;
+    const wordCount = r.driftInfo?.wordCount ?? 0;
+    if (wordCount === 0) return;
+    const wordEstimate = Math.max(1.0, wordCount * SECS_PER_WORD);
+    const isBloated = r.duration > wordEstimate * 2.5 && r.duration > 8;
+    if (isBloated) {
+      const suggestedDur = Math.round(Math.max(MIN_DUR, Math.min(10, wordEstimate + 1.0)) * 100) / 100;
+      r.driftDetected = true;
+      r.driftInfo = {
+        ...(r.driftInfo || {}),
+        currentDuration: r.duration,
+        wordCount,
+        wordEstimate: Math.round(wordEstimate * 100) / 100,
+        suggestedDuration: suggestedDur,
+        deadAir: Math.round((r.duration - wordEstimate) * 100) / 100,
+      };
+    }
+  };
+
+  // Helper: fix a single bloated scene
+  const fixScene = (i) => {
+    const r = results[i];
+    if (!r || r.empty || !r.driftDetected) return;
+    const info = r.driftInfo;
+    if (!info) return;
+
     const targetDur = Math.max(MIN_DUR, Math.min(10, info.wordEstimate + 1.0));
 
     console.log(`[Drift Fix] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s → ${targetDur.toFixed(1)}s (${info.wordCount} words, est ${info.wordEstimate.toFixed(1)}s)`);
@@ -713,8 +735,29 @@ export function applyDriftFix(results, driftedIndices) {
       if (next.startTime > r.endTime) {
         next.startTime = r.endTime;
         next.duration = next.endTime - next.startTime;
+        // Re-check: extending the next scene backward may have made IT bloated
+        detectBloat(next);
       }
     }
+  };
+
+  // Fix all initially-flagged scenes
+  for (const i of driftedIndices) {
+    if (i < 0 || i >= results.length) continue;
+    fixScene(i);
+  }
+
+  // Cascade: keep fixing any newly-bloated scenes until stable
+  // (max 20 passes to prevent infinite loops)
+  for (let pass = 0; pass < 20; pass++) {
+    let foundMore = false;
+    for (let i = 0; i < results.length; i++) {
+      if (results[i].driftDetected && !results[i].driftFixed) {
+        fixScene(i);
+        foundMore = true;
+      }
+    }
+    if (!foundMore) break;
   }
 
   // Round everything
