@@ -99,13 +99,34 @@ function globalAlign(scriptWords, asrWords) {
   const normASR = asrWords.map(w => norm(w.word));
 
   // Build an inverted index: normWord → [asrIdx, asrIdx, ...]
-  // This lets us jump directly to candidate positions
   const asrIndex = {};
   normASR.forEach((w, i) => {
     if (!w) return;
     if (!asrIndex[w]) asrIndex[w] = [];
     asrIndex[w].push(i);
   });
+
+  // Estimate expected ASR position for each script word.
+  // This acts as a time anchor to prevent wild jumps.
+  const totalAsrDur = asrWords.length > 0 ? asrWords[asrWords.length - 1].end : 0;
+  const expectedAsrTime = (si) => {
+    if (scriptWords.length <= 1) return 0;
+    return (si / scriptWords.length) * totalAsrDur;
+  };
+
+  // Time-based guard: reject a candidate if it would jump more than
+  // MAX_TIME_JUMP seconds ahead of where we expect to be.
+  const MAX_TIME_JUMP = 15.0; // seconds
+
+  const isTimeReasonable = (ai, si) => {
+    const asrTime = asrWords[ai]?.start ?? 0;
+    const expected = expectedAsrTime(si);
+    // Allow generous forward drift but prevent huge jumps
+    return (asrTime - expected) < MAX_TIME_JUMP;
+  };
+
+  // Track last matched ASR time for local jump detection
+  let lastMatchedTime = 0;
 
   for (let si = 0; si < scriptWords.length; si++) {
     const sw = normScript[si];
@@ -120,6 +141,7 @@ function globalAlign(scriptWords, asrWords) {
       if (wordsMatch(sw, normASR[ai])) {
         alignment[si] = ai;
         asrIdx = ai + 1;
+        lastMatchedTime = asrWords[ai].end;
         found = true;
         break;
       }
@@ -127,22 +149,22 @@ function globalAlign(scriptWords, asrWords) {
     if (found) continue;
 
     // ── Strategy 2: Use inverted index to find next occurrence ──
-    // Find the smallest ASR index >= asrIdx for this exact word
     const candidates = asrIndex[sw];
     if (candidates) {
-      // Binary search for first candidate >= asrIdx
       let lo = 0, hi = candidates.length;
       while (lo < hi) {
         const mid = (lo + hi) >> 1;
         if (candidates[mid] < asrIdx) lo = mid + 1;
         else hi = mid;
       }
-      // Check candidates near this position
       for (let ci = lo; ci < Math.min(lo + 3, candidates.length); ci++) {
         const ai = candidates[ci];
         if (ai < asrIdx) continue;
-        // Don't jump too far ahead — max 150 ASR words skip
         if (ai > asrIdx + 150) break;
+
+        // TIME GUARD: reject if this would jump too far from expected position
+        const jumpTime = asrWords[ai].start - lastMatchedTime;
+        if (jumpTime > MAX_TIME_JUMP && !isTimeReasonable(ai, si)) continue;
 
         // Verify: do the next 2 script words also match nearby?
         let confirmCount = 0;
@@ -156,9 +178,12 @@ function globalAlign(scriptWords, asrWords) {
             }
           }
         }
-        if (confirmCount >= 1) {
+        // Require stronger confirmation for large jumps
+        const minConfirm = jumpTime > 8.0 ? 2 : 1;
+        if (confirmCount >= minConfirm) {
           alignment[si] = ai;
           asrIdx = ai + 1;
+          lastMatchedTime = asrWords[ai].end;
           found = true;
           break;
         }
@@ -166,11 +191,15 @@ function globalAlign(scriptWords, asrWords) {
     }
     if (found) continue;
 
-    // ── Strategy 3: Fuzzy search in wider window (edit distance) ─
+    // ── Strategy 3: Fuzzy search in wider window ─────────────────
     const WIDE_WINDOW = 60;
     const wideLimit = Math.min(asrIdx + WIDE_WINDOW, asrWords.length);
     for (let ai = asrIdx + WINDOW; ai < wideLimit; ai++) {
       if (wordsMatch(sw, normASR[ai])) {
+        // TIME GUARD
+        const jumpTime = asrWords[ai].start - lastMatchedTime;
+        if (jumpTime > MAX_TIME_JUMP) continue;
+
         // Confirm with next word
         const nextSw = si + 1 < scriptWords.length ? normScript[si + 1] : null;
         if (nextSw) {
@@ -182,6 +211,7 @@ function globalAlign(scriptWords, asrWords) {
         }
         alignment[si] = ai;
         asrIdx = ai + 1;
+        lastMatchedTime = asrWords[ai].end;
         found = true;
         break;
       }
