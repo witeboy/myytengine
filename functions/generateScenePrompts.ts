@@ -21,6 +21,7 @@ const CLEANER_SYSTEM_PROMPT = `You are a principal prompt engineer specialized i
 Your task is to CLEAN and STRUCTURE the following messy prompt WITHOUT changing, paraphrasing, or adding new creative ideas.
 
 DO NOT rewrite creatively.
+
 DO NOT expand or embellish.
 ONLY organize, clarify relationships, remove ambiguity, and enforce visual hierarchy so an AI model can interpret it correctly without hallucination.
 
