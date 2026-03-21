@@ -58,6 +58,11 @@ const AuthenticatedApp = () => {
           }
         />
       ))}
+      <Route path="/BulkUGCPipeline" element={
+            <LayoutWrapper currentPageName="BulkUGCPipeline">
+              <BulkUGCPipeline />
+            </LayoutWrapper>
+          } />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
