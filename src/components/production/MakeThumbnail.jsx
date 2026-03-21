@@ -1005,6 +1005,11 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
             <RefreshCw size={13} /> Re-render
           </button>
           {finalUrl && (
+            <button onClick={() => setShowBlend(true)} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: 'linear-gradient(135deg, #7c3aed, #2563eb)', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Wand2 size={13} /> Blend
+            </button>
+          )}
+          {finalUrl && (
             <button onClick={handleDownload} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#7c3aed', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
               <Download size={13} /> Download
             </button>
