@@ -165,11 +165,13 @@ Output: YouTube thumbnail 16:9, 1920×1080, photorealistic.`;
 
     return `You have been given ${photoCount} CHARACTER REFERENCE PHOTO${photoCount > 1 ? 'S' : ''} (${photoLabels.join(', ')}).
 
-Generate the following YouTube thumbnail scene, but the person(s) in the scene MUST be the exact person(s) from the reference photo(s):
+⚠️ HIGHEST PRIORITY RULE: The reference photo(s) show the REAL PERSON who MUST appear in the generated image. Do NOT create a generic or different person. The output must feature the EXACT same person from the reference — same face, same skin, same hair, same everything.
+
+Generate the following YouTube thumbnail scene using the EXACT person(s) from the reference photo(s):
 
 ${imagePrompt}
 
-FACE PRESERVATION RULES (CRITICAL):
+FACE PRESERVATION RULES (CRITICAL — VIOLATING ANY = FAILURE):
 1. BONE STRUCTURE: Reproduce the exact skull shape, jawline, chin, forehead from the reference.
 2. SKIN: Exact same skin tone, texture, complexion — no lightening or darkening.
 3. NOSE: Same bridge width, nostril shape, tip shape.
@@ -178,8 +180,10 @@ FACE PRESERVATION RULES (CRITICAL):
 6. HAIR: Exact same color, texture, length, style.
 7. BODY: Match build and proportions from the reference.
 8. AGE: Same apparent age — do not age up or down.
+9. GENDER: Same gender as the reference. If reference is male, output MUST be male. Never swap genders.
+10. ETHNICITY: Same ethnicity and racial features. Never alter.
 
-The person in the output must be IMMEDIATELY recognizable as the same person from the reference photo. Anyone who knows this person should be able to identify them instantly.
+The person in the output must be IMMEDIATELY recognizable as the same person from the reference photo. Anyone who knows this person should be able to identify them instantly. If the output person looks different from the reference, the generation has FAILED.
 
 Output: YouTube thumbnail 16:9, 1920×1080, photorealistic, cinematic quality.`;
 
