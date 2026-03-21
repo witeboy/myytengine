@@ -1038,12 +1038,7 @@ export default function TimelineEditor() {
       setVideoClips(syncedWithRates);
       setOverrideBeatDurations(newBeatDurations);
 
-      // Step 4b: Log any drift fixes that were auto-applied
-      const fixedCount = alignment.filter(a => a.driftFixed).length;
-      if (fixedCount > 0) {
-        console.log(`[AutoSync] ${fixedCount} bloated scene(s) were auto-fixed during alignment`);
-      }
-      setDriftedScenes([]); // auto-fix handles it now
+      setDriftedScenes([]); // auto-fix handles bloated scenes now
 
       // Step 5: Persist
       if (prodSettings?.id) {
