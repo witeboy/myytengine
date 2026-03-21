@@ -652,7 +652,7 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
   // Auto-fix all drifted scenes
   if (driftedIndices.length > 0) {
     console.log(`[AutoFix] Auto-fixing ${driftedIndices.length} bloated scene(s)…`);
-    applyDriftFix(results, driftedIndices);
+    applyDriftFix(results, driftedIndices, sceneWordRanges);
 
     // Final gap-closing after auto-fix to ensure seamless coverage
     for (let i = 0; i < results.length - 1; i++) {
