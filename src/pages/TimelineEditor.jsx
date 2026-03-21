@@ -1168,8 +1168,7 @@ export default function TimelineEditor() {
       } catch (e) { console.warn('Could not save drift fix to DB:', e.message); }
     }
 
-    // Auto-regenerate captions with new timings
-    setTimeout(() => handleGenerateCaptions(true), 500);
+    // No caption regen needed — only bloated scenes changed, all others stay audio-anchored
   };
 
   // ── Cinematic zoom with intensity ───────────────────────────────
