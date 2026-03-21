@@ -718,9 +718,27 @@ export function applyDriftFix(results, driftedIndices) {
     const info = r.driftInfo;
     if (!info) return;
 
-    const targetDur = Math.max(MIN_DUR, Math.min(10, info.wordEstimate + 1.0));
+    // Use ACTUAL ASR speech span when available and reasonable.
+    // speechStart/speechEnd are the timestamps of the first/last ASR-matched
+    // words for this scene. If the span is reasonable (not itself bloated),
+    // use it directly. Otherwise fall back to word estimate.
+    const wordEstimate = info.wordEstimate;
+    let speechDur = null;
+    if (r.speechStart != null && r.speechEnd != null) {
+      const rawSpan = r.speechEnd - r.speechStart;
+      // Trust the ASR span if it's within 3x of the word estimate
+      // (if it's bigger, speechEnd was probably misaligned)
+      if (rawSpan > 0 && rawSpan <= wordEstimate * 3) {
+        speechDur = rawSpan;
+      }
+    }
 
-    console.log(`[Drift Fix] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s → ${targetDur.toFixed(1)}s (${info.wordCount} words, est ${info.wordEstimate.toFixed(1)}s)`);
+    // Target duration: ASR speech span + small padding, or word estimate + padding
+    const baseDur = speechDur ?? wordEstimate;
+    const targetDur = Math.max(MIN_DUR, Math.min(10, baseDur + 0.5));
+
+    const source = speechDur ? 'ASR span' : 'word est';
+    console.log(`[Drift Fix] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s → ${targetDur.toFixed(1)}s (${source}: ${baseDur.toFixed(1)}s, ${info.wordCount} words)`);
 
     // Keep startTime anchored, shrink endTime
     r.endTime = r.startTime + targetDur;
