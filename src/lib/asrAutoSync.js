@@ -670,18 +670,21 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
  * @param {Array} [wordRanges] - optional sceneWordRanges for accurate word counts
  * @returns {Array} - the mutated results array
  */
-export function applyDriftFix(results, driftedIndices, wordRanges) {
+export function applyDriftFix(results, driftedIndices) {
   if (!driftedIndices?.length || !results?.length) return results;
 
   const MIN_DUR = 1.0;
 
-  // Strategy: Shrink each bloated scene but keep its startTime anchored.
-  // The next scene's startTime stays where ASR placed it (audio-anchored).
-  // The gap between the shrunk scene's new endTime and the next scene's
-  // startTime is absorbed by extending the shrunk scene's *previous* neighbor
-  // backward, or simply left as a hold-frame on the shrunk scene.
-  //
-  // This preserves audio-to-video sync for ALL scenes after the bloated one.
+  // Strategy:
+  // Each bloated scene already has speechStart/speechEnd from ASR — these
+  // tell us where the scene's FIRST and LAST words are spoken in the audio.
+  // But for bloated scenes, speechEnd may be wrong (ASR matched a word far
+  // away). So we use:
+  //   - startTime: keep the scene's current startTime (where the previous
+  //     scene ends — maintains continuity)
+  //   - duration: wordEstimate + 1.0s padding (how long the words take)
+  // Then extend the NEXT scene backward to fill the gap. All other scenes
+  // keep their ASR-anchored positions — audio sync is preserved.
 
   for (const i of driftedIndices) {
     if (i < 0 || i >= results.length) continue;
@@ -690,20 +693,21 @@ export function applyDriftFix(results, driftedIndices, wordRanges) {
     const info = r.driftInfo;
     if (!info) continue;
 
-    const targetDur = Math.max(MIN_DUR, Math.min(10, info.wordEstimate + 1.5));
-    const oldDur = r.duration;
+    // Duration = how long the words actually take to speak + small padding
+    const targetDur = Math.max(MIN_DUR, Math.min(10, info.wordEstimate + 1.0));
 
-    console.log(`[Drift Fix] Scene ${r.sceneNumber}: ${oldDur.toFixed(1)}s → ${targetDur.toFixed(1)}s`);
+    console.log(`[Drift Fix] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s → ${targetDur.toFixed(1)}s (${info.wordCount} words, est ${info.wordEstimate.toFixed(1)}s)`);
 
-    // Shrink the scene but keep startTime anchored
-    r.duration = targetDur;
+    // Keep startTime anchored, shrink endTime
     r.endTime = r.startTime + targetDur;
+    r.duration = targetDur;
     r.driftFixed = true;
     r.driftDetected = false;
 
-    // The gap between this scene's new endTime and the next scene's startTime:
-    // extend the NEXT scene backward to fill it (the gap is silence/dead-air
-    // in the audio, so showing the next scene's image earlier is fine).
+    // Extend the NEXT scene backward to fill the gap.
+    // The gap is dead air — showing the next scene's visual earlier is fine.
+    // The next scene's endTime stays put (preserving its audio sync and all
+    // scenes after it).
     if (i + 1 < results.length) {
       const next = results[i + 1];
       if (next.startTime > r.endTime) {
