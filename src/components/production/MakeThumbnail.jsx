@@ -482,23 +482,32 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
     setStep(3);
   };
 
+  const [downloading, setDownloading] = useState(false);
   const handleDownload = async () => {
     const url = generatedUrl || selectedConcept?.image_url;
-    if (!url) return;
+    if (!url || downloading) return;
+    setDownloading(true);
     try {
-      const resp = await fetch(url);
-      const blob = await resp.blob();
+      const res = await base44.functions.invoke('proxyDownload', { url });
+      const { b64, contentType } = res?.data ?? res;
+      const ext = (contentType || '').includes('jpeg') ? 'jpg' : 'png';
+      const byteStr = atob(b64);
+      const bytes = new Uint8Array(byteStr.length);
+      for (let i = 0; i < byteStr.length; i++) bytes[i] = byteStr.charCodeAt(i);
+      const blob = new Blob([bytes], { type: contentType || 'image/png' });
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
-      a.download = `thumbnail-${title.replace(/\s+/g, '-').toLowerCase()}.png`;
+      a.download = `thumbnail-${title.replace(/\s+/g, '-').toLowerCase()}.${ext}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
     } catch (e) {
+      console.error('Download error:', e);
       window.open(url, '_blank');
     }
+    setDownloading(false);
   };
 
   // detectedMood from backend can be pipe-separated (e.g. "crime|drama") — take first segment
