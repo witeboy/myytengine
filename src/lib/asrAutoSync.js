@@ -454,10 +454,16 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
   }
 
   // Close gaps between consecutive non-empty scenes.
-  // Uses LOOKAHEAD VALIDATION: before deciding how to handle a gap,
-  // check where the next scene's speech *actually* starts (from ASR).
-  // This distinguishes real silence gaps from alignment artifacts.
-  const MAX_ABSORB = 5.0; // max seconds a scene can absorb beyond its speech
+  // KEY PRINCIPLE: never let gap-closing inflate a scene beyond a
+  // word-count-reasonable duration. This prevents the "ballooned scene" bug.
+  const MAX_ABSORB = 5.0;
+  const SECS_PER_WORD_EST = 0.40; // used to estimate max reasonable duration
+
+  const maxReasonableDur = (sceneIdx) => {
+    const wc = sceneWordRanges[sceneIdx]?.wordCount || 0;
+    // A scene's duration should never exceed 2x its word-count estimate + a buffer
+    return Math.max(3.0, wc * SECS_PER_WORD_EST * 2.0 + 2.0);
+  };
 
   for (let i = 0; i < results.length - 1; i++) {
     const curr = results[i];
@@ -467,64 +473,40 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
 
     if (next.startTime > curr.endTime) {
       const gap = next.startTime - curr.endTime;
+      const currDurNow = curr.endTime - curr.startTime;
+      const currMaxAbsorb = Math.max(0, maxReasonableDur(i) - currDurNow);
 
-      if (gap <= MAX_ABSORB) {
-        // Small gap — current scene absorbs it
+      if (gap <= Math.min(MAX_ABSORB, currMaxAbsorb)) {
+        // Small gap that won't over-stretch — current scene absorbs it
         curr.endTime = next.startTime;
       } else {
-        // ── LOOKAHEAD: Is this gap real or a false gap? ──────
-        // Check where the next scene's speech actually starts
-        // vs where the current scene's speech actually ends.
-        // If the next scene's ASR-matched speech starts close to
-        // the current scene's speech end, the "gap" is an artifact
-        // and we should close it. If it's truly far away, it's a
-        // real silence/music break — distribute evenly.
-
         const currSpeechEnd = curr.speechEnd ?? curr.endTime;
         const nextSpeechStart = next.speechStart ?? next.startTime;
         const actualGap = nextSpeechStart - currSpeechEnd;
 
-        // Also look 2-3 scenes ahead to find the next speech anchor
-        let nearestAheadSpeech = nextSpeechStart;
-        for (let look = i + 2; look < Math.min(i + 4, results.length); look++) {
-          if (!results[look].empty && results[look].speechStart !== null) {
-            // If a scene ahead has speech closer to current speech end,
-            // it means intermediate scenes may have been misplaced
-            nearestAheadSpeech = Math.min(nearestAheadSpeech, results[look].speechStart);
-            break;
-          }
-        }
-
         if (actualGap <= MAX_ABSORB) {
-          // ASR words are actually close — the gap is an artifact.
-          // Close it: extend current to next speech start, and snap next.
-          console.log(`[Gap Close] Scene ${curr.sceneNumber}→${next.sceneNumber}: gap ${gap.toFixed(1)}s is artifact (actual speech gap ${actualGap.toFixed(1)}s) — closing`);
-          curr.endTime = nextSpeechStart;
-          next.startTime = nextSpeechStart;
-        } else {
-          // Real gap — distribute proportionally based on speech density.
-          // Give each side a small tail (MAX_ABSORB/2) and leave the
-          // remaining gap as dead time split evenly.
-          const tail = Math.min(MAX_ABSORB / 2, gap * 0.1);
-          const deadZoneStart = currSpeechEnd + tail;
-          const deadZoneEnd = nextSpeechStart - tail;
-
-          if (deadZoneEnd > deadZoneStart) {
-            // Split the dead zone at midpoint
-            const mid = (deadZoneStart + deadZoneEnd) / 2;
-            curr.endTime = mid;
-            next.startTime = mid;
+          // ASR words are close — artifact gap. Close it but respect max.
+          const canAbsorb = Math.min(gap, currMaxAbsorb);
+          if (canAbsorb >= gap * 0.8) {
+            curr.endTime = next.startTime;
           } else {
-            // Tails overlap — just split the whole gap at midpoint
-            const mid = currSpeechEnd + (nextSpeechStart - currSpeechEnd) / 2;
-            curr.endTime = mid;
-            next.startTime = mid;
+            // Absorb what we can, push next scene start earlier
+            curr.endTime = curr.endTime + canAbsorb;
+            next.startTime = curr.endTime;
           }
+        } else {
+          // Real gap — distribute, but cap each side by word-count max
+          const nextDurNow = next.endTime - next.startTime;
+          const nextMaxAbsorb = Math.max(0, maxReasonableDur(i + 1) - nextDurNow);
+          const currTail = Math.min(currMaxAbsorb, MAX_ABSORB / 2, gap * 0.3);
+          const nextTail = Math.min(nextMaxAbsorb, MAX_ABSORB / 2, gap * 0.3);
+          const mid = curr.endTime + currTail + (gap - currTail - nextTail) / 2;
+          curr.endTime = curr.endTime + currTail + (gap - currTail - nextTail) / 2;
+          next.startTime = curr.endTime;
           console.log(`[Gap Close] Scene ${curr.sceneNumber}→${next.sceneNumber}: real gap ${actualGap.toFixed(1)}s — split at ${curr.endTime.toFixed(1)}s`);
         }
       }
     } else if (next.startTime < curr.endTime) {
-      // Overlap — snap to next scene's start
       curr.endTime = next.startTime;
     }
   }
