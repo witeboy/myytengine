@@ -1,6 +1,15 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+
+// ══════════════════════════════════════════════════════════════════
+// THUMBNAIL IMAGE GENERATION
+// Primary: AI33 SeedDream 4.5 (async submit → poll via pollThumbnailTask)
+// Fallback: Ideogram V3 via KIE (sync poll in-function)
+// ══════════════════════════════════════════════════════════════════
 
 const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
+const AI33_BASE = "https://api.ai33.pro";
+
+// ── KIE helpers (for Ideogram fallback) ─────────────────────────
 
 async function kieCreate(apiKey, model, input) {
   const r = await fetch(KIE_BASE + "/createTask", {
@@ -29,6 +38,58 @@ async function kiePoll(apiKey, taskId) {
   throw new Error("timeout");
 }
 
+// ── AI33 SeedDream submit (async, returns task_id) ──────────────
+
+async function submitAI33Thumbnail(apiKey, prompt, aspectRatio) {
+  const ai33Aspect = aspectRatio === "9:16" ? "9:16" : "16:9";
+  console.log(`🌱 AI33 Seedream thumbnail: submitting (${prompt.length} chars, ratio=${ai33Aspect})...`);
+
+  const formData = new FormData();
+  formData.append('prompt', prompt.substring(0, 4000));
+  formData.append('model_id', 'bytedance-seedream-4.5');
+  formData.append('generations_count', '1');
+  formData.append('model_parameters', JSON.stringify({
+    aspect_ratio: ai33Aspect,
+    resolution: "2K"
+  }));
+
+  const submitRes = await fetch(`${AI33_BASE}/v1i/task/generate-image`, {
+    method: 'POST',
+    headers: { 'xi-api-key': apiKey },
+    body: formData
+  });
+
+  const submitData = await submitRes.json();
+
+  if (!submitData.success || !submitData.task_id) {
+    throw new Error(`AI33 submit failed: ${submitData.message || JSON.stringify(submitData)}`);
+  }
+
+  console.log(`📡 AI33 thumbnail task submitted: ${submitData.task_id}`);
+  return submitData.task_id;
+}
+
+// ── Prompt prep for thumbnail ───────────────────────────────────
+
+function prepareThumbnailPrompt(rawPrompt) {
+  let p = rawPrompt;
+  // Strip resolution numbers (models render them as text)
+  p = p
+    .replace(/\b\d{3,4}\s*[x×]\s*\d{3,4}\s*(pixels?|px)?\b/gi, '')
+    .replace(/\b(8K|4K|1080p|720p)\s*(resolution|quality|detail)?\b/gi, 'highly detailed');
+  // Strip f-stop numbers
+  p = p.replace(/\bf[/:]?\s*\d+\.?\d*\b/gi, 'shallow depth of field');
+  // Markdown artifacts
+  p = p.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*/g, '').replace(/#{1,3}\s*/g, '');
+  // Clean punctuation
+  p = p.replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').replace(/\s{2,}/g, ' ').trim();
+  return p;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MAIN HANDLER
+// ══════════════════════════════════════════════════════════════════
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -36,7 +97,8 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const KIE_KEY = Deno.env.get("KIE_API_KEY");
-    if (!KIE_KEY) return Response.json({ error: 'KIE_API_KEY missing' }, { status: 500 });
+    const AI33_KEY = Deno.env.get("AI33_API_KEY");
+    if (!KIE_KEY && !AI33_KEY) return Response.json({ error: 'No image API keys configured' }, { status: 500 });
 
     const { concept_id } = await req.json();
     if (!concept_id) return Response.json({ error: 'concept_id required' }, { status: 400 });
@@ -50,10 +112,39 @@ Deno.serve(async (req) => {
 
     // Detect shorts from prompt content
     const isShorts = prompt.includes('9:16') || prompt.includes('1080x1920');
-    const imageSize = isShorts ? "portrait_9_16" : "landscape_16_9";
     const aspectRatio = isShorts ? "9:16" : "16:9";
+    const imageSize = isShorts ? "portrait_9_16" : "landscape_16_9";
 
-    console.log(`🖼️ Generating thumbnail image for concept ${concept_id}`);
+    const cleanPrompt = prepareThumbnailPrompt(prompt);
+
+    console.log(`🖼️ Generating thumbnail for concept ${concept_id} (${cleanPrompt.length} chars)`);
+
+    // ═══════════════════════════════════════════════════════════
+    // PRIMARY: AI33 SeedDream (async submit → frontend polls)
+    // ═══════════════════════════════════════════════════════════
+    if (AI33_KEY) {
+      try {
+        const ai33Prompt = cleanPrompt + ". Ultra high resolution, crisp sharp details, professional YouTube thumbnail quality, cinematic lighting.";
+        const taskId = await submitAI33Thumbnail(AI33_KEY, ai33Prompt, aspectRatio);
+
+        // Return immediately — frontend will poll via pollThumbnailTask
+        return Response.json({
+          success: false,
+          pending: true,
+          task_id: taskId,
+          task_type: 'ai33',
+          concept_id,
+          model: 'ai33-seedream-4.5',
+        });
+      } catch (e) {
+        console.warn("AI33 SeedDream submit failed:", e.message, "→ falling back to Ideogram");
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // FALLBACK: Ideogram V3 via KIE (sync poll in-function)
+    // ═══════════════════════════════════════════════════════════
+    if (!KIE_KEY) return Response.json({ error: 'AI33 failed and no KIE_API_KEY for fallback' }, { status: 500 });
 
     let url = null;
     let model = 'none';
@@ -61,7 +152,7 @@ Deno.serve(async (req) => {
     // Try Ideogram V3 Quality
     try {
       const tid = await kieCreate(KIE_KEY, "ideogram/v3-text-to-image", {
-        prompt: prompt.substring(0, 2000) + ". Ultra high resolution, crisp sharp details, professional quality.",
+        prompt: cleanPrompt.substring(0, 2000) + ". Ultra high resolution, crisp sharp details, professional quality.",
         image_size: imageSize, style: "DESIGN", rendering_speed: "QUALITY",
         expand_prompt: false,
         negative_prompt: "no text, no words, no letters, no numbers, no typography, no titles, no labels, no captions, no watermark, no signature, " + (concept.negative_prompt || "blurry, low quality, pixelated, distorted")
@@ -74,7 +165,7 @@ Deno.serve(async (req) => {
     if (!url) {
       try {
         const tid = await kieCreate(KIE_KEY, "ideogram/v3-text-to-image", {
-          prompt: prompt.substring(0, 1200),
+          prompt: cleanPrompt.substring(0, 1200),
           image_size: imageSize, style: "DESIGN", rendering_speed: "BALANCED",
           expand_prompt: false,
           negative_prompt: "blurry, low quality, pixelated, watermark"
@@ -88,7 +179,7 @@ Deno.serve(async (req) => {
     if (!url) {
       try {
         const tid = await kieCreate(KIE_KEY, "grok-imagine/text-to-image", {
-          prompt: prompt.substring(0, 1500), aspect_ratio: aspectRatio
+          prompt: cleanPrompt.substring(0, 1500), aspect_ratio: aspectRatio
         });
         url = await kiePoll(KIE_KEY, tid);
         if (url) model = "grok-imagine";
