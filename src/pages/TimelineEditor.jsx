@@ -461,9 +461,17 @@ function CaptionsPanel({ onGenerate, isGenerating, captionCount, voiceoverUrl, t
   );
 }
 
-function TextPropertiesPanel({ caption, onUpdate, onDelete, onDuplicate, onApplyStyleToAll }) {
+const STYLE_KEYS = ['fontSize', 'color', 'bgColor', 'x', 'y', 'strokeColor', 'strokeWidth', 'fontFamily', 'animation'];
+
+function TextPropertiesPanel({ caption, onUpdate, onDelete, onDuplicate, onApplyStyleToAll, onUpdateStyleToAll }) {
   if (!caption) return <div className="h-full flex items-center justify-center text-xs text-gray-500">Select a caption</div>;
-  const u = (k, v) => onUpdate({ ...caption, [k]: v });
+  const u = (k, v) => {
+    onUpdate({ ...caption, [k]: v });
+    // Auto-propagate style changes to all captions
+    if (STYLE_KEYS.includes(k)) {
+      onUpdateStyleToAll(k, v);
+    }
+  };
 
   return (
     <div className="h-full flex flex-col bg-[#12121f] p-3 space-y-4 overflow-y-auto">
