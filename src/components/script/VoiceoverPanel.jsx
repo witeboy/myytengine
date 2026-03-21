@@ -20,6 +20,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
   const [loadingPreview, setLoadingPreview] = useState(null); // voice_id currently loading
   const [previewCache, setPreviewCache] = useState({}); // voice_id -> preview_url
   const [settings, setSettings] = useState(null);
+  const [chunkProgress, setChunkProgress] = useState(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -116,28 +117,41 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
 
     console.log('TTS task submitted:', res.data?.task_id);
 
-    // Phase 2: Poll pollVoiceover until ready/failed
+    // Phase 2: Poll pollVoiceover until ready/failed (supports chunked)
     const pollInterval = setInterval(async () => {
       try {
         const pollRes = await base44.functions.invoke('pollVoiceover', { project_id: project.id });
         const data = pollRes.data;
-        console.log('Voiceover poll:', data?.status);
+        console.log('Voiceover poll:', data?.status, data?.chunks_completed, '/', data?.chunks_total);
+
+        // Update chunk progress for UI
+        if (data?.chunks_total > 1) {
+          setChunkProgress({
+            completed: data.chunks_completed || 0,
+            total: data.chunks_total || 1,
+            failed: data.chunks_failed || 0,
+            generating: data.chunks_generating || 0,
+            percent: data.progress_percent || 0,
+          });
+        }
 
         if (data?.status === 'ready' && data?.voiceover_url) {
           const settingsRes = await base44.entities.ProductionSettings.filter({ project_id: project.id });
           if (settingsRes[0]) setSettings({ ...settingsRes[0], voiceover_status: 'completed', voiceover_url: data.voiceover_url });
           setGenerating(false);
+          setChunkProgress(null);
           clearInterval(pollInterval);
           onUpdate?.();
         } else if (data?.status === 'failed') {
           setError(data.error || 'Voiceover generation failed. Please try again.');
           setGenerating(false);
+          setChunkProgress(null);
           clearInterval(pollInterval);
         }
       } catch (pollErr) {
         console.warn('Poll error:', pollErr.message);
       }
-    }, 6000);
+    }, 8000);
 
     setTimeout(() => {
       clearInterval(pollInterval);
@@ -145,7 +159,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
         if (prev) setError('Voiceover generation is taking longer than expected. Refresh the page to check.');
         return false;
       });
-    }, 1800000);
+    }, 3600000);
   };
 
   const handlePreviewVoice = async (voice) => {
@@ -409,6 +423,32 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
             <><Mic className="w-4 h-4 mr-2" /> Generate Voiceover</>
           )}
         </Button>
+
+        {/* Chunk progress bar */}
+        {generating && chunkProgress && chunkProgress.total > 1 && (
+          <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium text-purple-700">
+                Generating {chunkProgress.total} audio chunks...
+              </span>
+              <span className="text-purple-600 font-mono">
+                {chunkProgress.completed}/{chunkProgress.total}
+              </span>
+            </div>
+            <div className="w-full bg-purple-100 rounded-full h-2">
+              <div
+                className="bg-purple-500 h-2 rounded-full transition-all duration-700"
+                style={{ width: `${chunkProgress.percent || 0}%` }}
+              />
+            </div>
+            <p className="text-[11px] text-purple-500">
+              {chunkProgress.completed > 0 && `${chunkProgress.completed} done`}
+              {chunkProgress.generating > 0 && ` · ${chunkProgress.generating} rendering`}
+              {chunkProgress.failed > 0 && ` · ${chunkProgress.failed} failed`}
+              {chunkProgress.completed === chunkProgress.total && ' · Concatenating audio...'}
+            </p>
+          </div>
+        )}
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
