@@ -670,7 +670,8 @@ export default function TimelineEditor() {
   const [showExporter,      setShowExporter]      = useState(false);
   const [showSyncDiag,      setShowSyncDiag]      = useState(false);
   const [asrProgress,       setAsrProgress]       = useState(null); // {phase, message, pollCount}
-  const [driftedScenes,     setDriftedScenes]     = useState([]); // scenes with alignment drift (auto-fixed now)
+  const [driftedScenes,     setDriftedScenes]     = useState([]); // scenes with alignment drift detected after sync
+  const [lastAlignmentResults, setLastAlignmentResults] = useState(null); // stored for manual drift fix
   const initializedRef = useRef(false);
 
   const [transcription, setTranscription] = useState({ status: 'idle', words: [], wordCount: 0, error: null });
