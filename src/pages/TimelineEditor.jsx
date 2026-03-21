@@ -923,11 +923,13 @@ export default function TimelineEditor() {
       let newBeatDurations;
       let newStartTimes;
       let syncSource;
+      let alignmentResults = null;
 
       if (asrWords && asrWords.length > 0) {
-        // ── ASR PATH: exact alignment via word matching (auto-fixes bloated scenes) ──
+        // ── ASR PATH: exact alignment via word matching ──
         const { alignScenesToASR } = await import('@/lib/asrAutoSync');
         const alignment = alignScenesToASR(asrWords, scenes, audioDuration);
+        alignmentResults = alignment;
 
         newBeatDurations = alignment.map(a => a.duration);
         newStartTimes = alignment.map(a => a.startTime);
@@ -935,11 +937,6 @@ export default function TimelineEditor() {
 
         const avgScore = alignment.filter(a => !a.empty).reduce((s, a) => s + (a.matchScore || 0), 0) / alignment.filter(a => !a.empty).length;
         console.log(`[AutoSync] ASR alignment: ${alignment.length} scenes, avg match score: ${(avgScore * 100).toFixed(0)}%`);
-
-        const fixedCount = alignment.filter(a => a.driftFixed).length;
-        if (fixedCount > 0) {
-          console.log(`[AutoSync] ${fixedCount} bloated scene(s) were auto-fixed during alignment`);
-        }
       } else {
         // ── FALLBACK: syllable-weighted estimation ───────────────
         const countSyllables = (word) => {
