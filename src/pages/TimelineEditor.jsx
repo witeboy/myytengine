@@ -1074,23 +1074,25 @@ export default function TimelineEditor() {
   const handleApplyDriftFix = async (driftedIndices) => {
     const { applyDriftFix } = await import('@/lib/asrAutoSync');
 
-    // Rebuild alignment results from current videoClips + scenes
+    // Use stored ASR alignment results (with real speechStart/speechEnd)
+    // and update their startTime/endTime/duration from current clips
     const currentAlignment = scenes.map((scene, idx) => {
       const clip = videoClips.find(c => c.sceneId === scene.id);
-      if (!clip) return null;
-      // Find the drift info from the detected drifts
+      const asrResult = lastAlignmentResults?.[idx];
       const drift = driftedScenes.find(d => d.index === idx);
+
       return {
         sceneId: scene.id,
         sceneNumber: scene.scene_number,
-        startTime: clip.startTime,
-        endTime: clip.startTime + clip.duration,
-        duration: clip.duration,
-        matchScore: 0.5, // trust current alignment for non-drifted
+        startTime: clip?.startTime ?? 0,
+        endTime: clip ? clip.startTime + clip.duration : 0,
+        duration: clip?.duration ?? 0,
+        matchScore: asrResult?.matchScore ?? 0.5,
         empty: !(scene.narration_text || scene.voiceover_text)?.trim(),
-        speechStart: clip.startTime, // fallback
-        speechEnd: clip.startTime + clip.duration,
-        ...(drift ? { driftDetected: true, driftInfo: drift.info, speechStart: clip.startTime, speechEnd: clip.startTime + drift.info.speechSpan } : {}),
+        // Use real ASR speech boundaries when available
+        speechStart: asrResult?.speechStart ?? clip?.startTime ?? 0,
+        speechEnd: asrResult?.speechEnd ?? (clip ? clip.startTime + clip.duration : 0),
+        ...(drift ? { driftDetected: true, driftInfo: drift.info } : {}),
       };
     });
 
