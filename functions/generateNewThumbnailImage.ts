@@ -324,18 +324,7 @@ Deno.serve(async (req) => {
     // ═══════════════════════════════════════════════════════════
     if (AI33_API_KEY) {
       try {
-        const suffix = "\n\nUltra high resolution, crisp sharp details, professional YouTube thumbnail quality, cinematic lighting.";
-        // Hard cap at 3900 chars (API limit is 4000, leave room for suffix)
-        const maxPromptLen = 3900 - suffix.length;
-        let trimmedPrompt = prompt;
-        if (trimmedPrompt.length > maxPromptLen) {
-          // Smart truncate at last sentence boundary
-          const cut = trimmedPrompt.substring(0, maxPromptLen);
-          const lastPeriod = cut.lastIndexOf('.');
-          trimmedPrompt = lastPeriod > maxPromptLen * 0.5 ? cut.substring(0, lastPeriod + 1) : cut;
-          console.log(`✂️ Prompt trimmed from ${prompt.length} to ${trimmedPrompt.length} chars for AI33`);
-        }
-        const ai33Prompt = trimmedPrompt + suffix;
+        const ai33Prompt = prompt + " Ultra high resolution, crisp sharp details, professional YouTube thumbnail quality, cinematic lighting.";
         const taskId = await submitAI33Thumbnail(AI33_API_KEY, ai33Prompt);
 
         // Return immediately — frontend will poll via pollThumbnailTask
