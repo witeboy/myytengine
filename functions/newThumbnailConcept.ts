@@ -221,7 +221,7 @@ Return ONLY a valid JSON object. No markdown. No explanation. No backticks.
   "concepts": [
     {
       "rank": 1,
-      "text_overlay": "MAX 3 WORDS ALL CAPS — no title words",
+      "text_overlay": "3-5 WORDS ALL CAPS (follow word count assignment above) — no title words",
       "emotion_triggered": "FEAR|GREED|SHOCK|CURIOSITY",
       "why_this_works": "one sentence psychological explanation",
       "objects_used": ["which extracted objects appear in this thumbnail"],
