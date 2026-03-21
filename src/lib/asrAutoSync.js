@@ -484,8 +484,49 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     }
   });
 
-  // Enforce minimum duration
+  // ── AUTO-FIX BLOATED SCENES ──────────────────────────────────────
+  // After gap stitching, some scenes absorb dead air from their neighbors
+  // and become much longer than their actual speech content.
+  // Automatically shrink any scene whose duration exceeds its word-based
+  // estimate by more than 1.8x, and redistribute the freed time to the
+  // next scene (extend it backward).
+  const SECS_PER_WORD = 0.38;
+  const MAX_RATIO = 1.8; // max allowed duration / wordEstimate ratio
   const MIN_DURATION = 1.0;
+
+  // Multiple passes: shrinking one scene extends the next, which may need shrinking too
+  for (let pass = 0; pass < 30; pass++) {
+    let fixedAny = false;
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      if (r.empty || r.startTime === null || r.endTime === null) continue;
+
+      const wordCount = r.wordCount ?? 0;
+      if (wordCount === 0) continue;
+      const wordEstimate = Math.max(MIN_DURATION, wordCount * SECS_PER_WORD);
+      const maxAllowed = Math.max(MIN_DURATION + 1, wordEstimate * MAX_RATIO);
+
+      if (r.duration > maxAllowed) {
+        const targetDur = Math.max(MIN_DURATION, wordEstimate + 0.5);
+        const freed = r.duration - targetDur;
+
+        console.log(`[Auto-Fix] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s → ${targetDur.toFixed(1)}s (${wordCount}w, est ${wordEstimate.toFixed(1)}s, freed ${freed.toFixed(1)}s)`);
+
+        r.endTime = r.startTime + targetDur;
+        r.duration = targetDur;
+
+        // Give freed time to next scene (extend it backward)
+        if (i + 1 < results.length && !results[i + 1].empty) {
+          results[i + 1].startTime = r.endTime;
+          results[i + 1].duration = results[i + 1].endTime - results[i + 1].startTime;
+        }
+        fixedAny = true;
+      }
+    }
+    if (!fixedAny) break;
+  }
+
+  // Enforce minimum duration
   for (let i = 0; i < results.length; i++) {
     if (results[i].duration < MIN_DURATION) {
       const deficit = MIN_DURATION - results[i].duration;
@@ -500,39 +541,27 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     }
   }
 
-  // ── DRIFT DETECTION (report only — user applies fix manually) ────
-  // Scan for scenes whose FINAL duration is much longer than their
-  // actual speech content. Flag them with driftDetected + driftInfo
-  // so the UI can show them and let the user trigger the fix.
-  const SECS_PER_WORD = 0.38;
-
+  // ── DRIFT DETECTION (report remaining — user can apply manual fix) ──
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
     if (r.empty || r.startTime === null || r.endTime === null) continue;
 
-    const speechSpan = (r.speechEnd ?? r.endTime) - (r.speechStart ?? r.startTime);
-    const range = sceneWordRanges[i];
-    const wordCount = range?.wordCount || 0;
+    const wordCount = r.wordCount ?? 0;
     const wordEstimate = Math.max(1.0, wordCount * SECS_PER_WORD);
 
-    const deadAir = r.duration - speechSpan;
-    const isBloated =
-      (speechSpan > 0 && r.duration > speechSpan * 2.0 && deadAir > 5) ||
-      (r.duration > wordEstimate * 2.5 && r.duration > 10);
-
-    if (isBloated) {
-      // Use word estimate (not speech span) as basis — speechSpan can be bloated from misalignment
-      const suggestedDur = Math.round(Math.max(1.0, Math.min(10, wordEstimate + 1.5)) * 100) / 100;
+    // Flag anything still over 2x word estimate after auto-fix
+    if (r.duration > wordEstimate * 2.0 && r.duration > 6) {
+      const suggestedDur = Math.round(Math.max(1.0, Math.min(10, wordEstimate + 0.5)) * 100) / 100;
       r.driftDetected = true;
       r.driftInfo = {
         currentDuration: r.duration,
-        speechSpan: Math.round(speechSpan * 100) / 100,
+        speechSpan: Math.round(((r.speechEnd ?? r.endTime) - (r.speechStart ?? r.startTime)) * 100) / 100,
         wordCount,
         wordEstimate: Math.round(wordEstimate * 100) / 100,
         suggestedDuration: suggestedDur,
         deadAir: Math.round((r.duration - wordEstimate) * 100) / 100,
       };
-      console.warn(`[Drift Detected] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s (speech: ${speechSpan.toFixed(1)}s, words: ${wordCount}, dead air: ${deadAir.toFixed(1)}s)`);
+      console.warn(`[Drift Detected] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s (words: ${wordCount}, est: ${wordEstimate.toFixed(1)}s)`);
     }
   }
 
