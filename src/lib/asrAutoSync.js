@@ -578,25 +578,25 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
   //      proportionally by word count across the intermediate scenes.
   //   4. Snap the anchor scene back to its ASR position.
 
-  const DRIFT_THRESHOLD = 12.0; // a scene over 12s is suspicious
   const LOOKAHEAD = 5;
   const SECS_PER_WORD = 0.38;
-  const processed = new Set(); // avoid re-processing scenes in a correction window
+  const processed = new Set();
 
   for (let i = 0; i < results.length; i++) {
     if (processed.has(i)) continue;
     const r = results[i];
     if (r.empty || r.startTime === null || r.endTime === null) continue;
 
-    // Recalculate fresh duration
+    // Recalculate fresh duration from times
     r.duration = r.endTime - r.startTime;
 
     const range = sceneWordRanges[i];
     const wordCount = range?.wordCount || 0;
     const expectedDur = Math.max(MIN_DURATION, wordCount * SECS_PER_WORD);
 
-    // Is this scene over-stretched?
-    if (r.duration <= Math.max(DRIFT_THRESHOLD, expectedDur * 2.5)) continue;
+    // Trigger: scene is > 2x its word-count estimate OR > 10s absolute
+    const driftThreshold = Math.min(10.0, Math.max(5.0, expectedDur * 2.0));
+    if (r.duration <= driftThreshold) continue;
 
     console.log(`[Drift Fix] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s vs expected ${expectedDur.toFixed(1)}s (${wordCount} words) — initiating correction window`);
 
