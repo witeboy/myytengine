@@ -736,45 +736,34 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     driftFixed = true;
   }
 
-  // ── Gap-closing pass inside the drift loop ──────────────────────
-  // Close gaps but NEVER inflate a scene beyond 2x its word-count estimate
-  for (let i = 0; i < results.length - 1; i++) {
-    const curr = results[i];
-    const next = results[i + 1];
-    if (curr.empty || next.empty) continue;
-    if (curr.endTime === null || next.startTime === null) continue;
+    // ── Gap-closing pass inside the drift loop ────────────────────
+    // Close gaps but NEVER inflate a scene beyond 2x its word-count estimate
+    for (let gi = 0; gi < results.length - 1; gi++) {
+      const curr = results[gi];
+      const next = results[gi + 1];
+      if (curr.empty || next.empty) continue;
+      if (curr.endTime === null || next.startTime === null) continue;
 
-    const gap = next.startTime - curr.endTime;
-    if (gap > 0) {
-      const currWordCount = sceneWordRanges[i]?.wordCount || 1;
-      const currExpected = Math.max(MIN_DURATION, currWordCount * SECS_PER_WORD);
-      const currDur = curr.endTime - curr.startTime;
-      // Max this scene can absorb without becoming over-stretched
-      const maxExpand = Math.max(0, currExpected * 2 - currDur);
+      const gap = next.startTime - curr.endTime;
+      if (gap > 0) {
+        const cwc = sceneWordRanges[gi]?.wordCount || 1;
+        const cExp = Math.max(MIN_DURATION, cwc * SECS_PER_WORD);
+        const cDur = curr.endTime - curr.startTime;
+        const maxExp = Math.max(0, cExp * 2 - cDur);
 
-      if (gap <= Math.min(MAX_ABSORB, maxExpand)) {
-        curr.endTime = next.startTime;
-      } else {
-        // Split gap but respect the expand limit
-        const absorb = Math.min(gap / 2, maxExpand, MAX_ABSORB / 2);
-        curr.endTime += absorb;
-        next.startTime = curr.endTime + (gap - absorb * 2 > 0.5 ? (gap - absorb) / 2 : 0);
-        if (next.startTime < curr.endTime) next.startTime = curr.endTime;
-        // If still a gap, push next.startTime down
-        if (next.startTime > curr.endTime) {
-          const remaining = next.startTime - curr.endTime;
-          const mid = curr.endTime + remaining / 2;
-          curr.endTime = mid;
-          next.startTime = mid;
+        if (gap <= Math.min(MAX_ABSORB, maxExp)) {
+          curr.endTime = next.startTime;
+        } else {
+          var splitPt = curr.endTime + Math.min(gap * 0.5, maxExp);
+          curr.endTime = splitPt;
+          next.startTime = splitPt;
         }
+      } else if (gap < 0) {
+        var overlapMid = curr.endTime + gap / 2;
+        curr.endTime = overlapMid;
+        next.startTime = overlapMid;
       }
-    } else if (gap < 0) {
-      // Overlap — trim the longer scene
-      const mid = curr.endTime + gap / 2;
-      curr.endTime = mid;
-      next.startTime = mid;
     }
-  }
 
   } // end while(driftFixed)
 
