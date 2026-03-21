@@ -42,7 +42,36 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
     setRegenerating(true);
     setError(null);
     try {
-      await base44.functions.invoke('generateThumbnailImage', { concept_id: concept.id });
+      const res = await base44.functions.invoke('generateThumbnailImage', { concept_id: concept.id });
+      const data = res.data;
+
+      // AI33 SeedDream returns pending — need to poll
+      if (data.pending && data.task_id) {
+        const taskType = data.task_type || 'kie';
+        let completed = false;
+        for (let i = 0; i < 30; i++) {
+          await new Promise(r => setTimeout(r, 5000));
+          const pollRes = await base44.functions.invoke('pollThumbnailTask', {
+            task_id: data.task_id,
+            concept_id: concept.id,
+            task_type: taskType,
+          });
+          const pollData = pollRes.data;
+          if (pollData.completed) {
+            if (pollData.success && pollData.image_url) {
+              completed = true;
+            } else if (pollData.fallback_needed) {
+              // AI33 failed — retry with Ideogram fallback (generateThumbnailImage without AI33)
+              console.log('AI33 failed, falling back to Ideogram...');
+              setError(null);
+              await base44.functions.invoke('generateThumbnailImage', { concept_id: concept.id });
+            } else if (pollData.error) {
+              setError(pollData.error);
+            }
+            break;
+          }
+        }
+      }
       await onRefetch();
     } catch (e) {
       setError(e.message);
