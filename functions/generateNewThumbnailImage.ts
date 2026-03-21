@@ -456,6 +456,10 @@ Deno.serve(async (req) => {
     try { createData = JSON.parse(createText); } catch (_) {}
     const taskId = createData?.data?.taskId;
     if (!taskId) {
+      // Pass through billing/credit errors clearly
+      if (createData?.code === 402 || createText.includes('Credits insufficient')) {
+        return Response.json({ error: 'KIE API credits exhausted. Please top up your KIE account to continue generating thumbnails.' }, { status: 402 });
+      }
       return Response.json({ error: `Task creation failed: ${createText.substring(0, 200)}` }, { status: 500 });
     }
     console.log(`✅ Task: ${taskId}`);
