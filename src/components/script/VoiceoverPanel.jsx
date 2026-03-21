@@ -17,34 +17,31 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
   const audioRef = useRef(null);
   const previewAudioRef = useRef(null);
   const [previewingVoice, setPreviewingVoice] = useState(null);
-  const [loadingPreview, setLoadingPreview] = useState(null); // voice_id currently loading
-  const [previewCache, setPreviewCache] = useState({}); // voice_id -> preview_url
+  const [loadingPreview, setLoadingPreview] = useState(null);
+  const [previewCache, setPreviewCache] = useState({});
   const [settings, setSettings] = useState(null);
-  const [chunkProgress, setChunkProgress] = useState(null);
-  const [provider, setProvider] = useState('minimax_direct'); // 'minimax_direct' or 'ai33'
+  const [provider, setProvider] = useState('minimax_direct');
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [genderFilter, setGenderFilter] = useState('all');
   const [ageFilter, setAgeFilter] = useState('all');
-  const [voiceTab, setVoiceTab] = useState('all'); // 'all', 'minimax', 'elevenlabs', 'cloned'
+  const [voiceTab, setVoiceTab] = useState('all');
 
   useEffect(() => {
     const fetchData = async () => {
       setLoadingVoices(true);
-      
-      // Load settings first (fast, never fails)
+
       const settingsRes = await base44.entities.ProductionSettings.filter({ project_id: project.id });
       if (settingsRes.length > 0) {
         setSettings(settingsRes[0]);
         if (settingsRes[0].selected_voice_id) setSelectedVoice(settingsRes[0].selected_voice_id);
       }
 
-      // Load voices separately — can 502/timeout, shouldn't break the panel
       try {
         const voiceRes = await base44.functions.invoke('listVoices', {});
         const loadedVoices = voiceRes.data?.voices || [];
-        console.log('VoiceoverPanel loaded voices:', loadedVoices.length, 'categories:', loadedVoices.reduce((acc, v) => { acc[v.category] = (acc[v.category] || 0) + 1; return acc; }, {}));
+        console.log('VoiceoverPanel loaded voices:', loadedVoices.length);
         setVoices(loadedVoices);
       } catch (err) {
         console.warn('Failed to load voices:', err.message);
@@ -59,7 +56,6 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
   const clonedVoices = useMemo(() => voices.filter(v => v.category === 'minimax_cloned' || v.category === 'cloned'), [voices]);
   const minimaxVoices = useMemo(() => voices.filter(v => v.provider === 'minimax' && v.category !== 'minimax_cloned' && v.category !== 'cloned'), [voices]);
   const elevenlabsVoices = useMemo(() => voices.filter(v => v.provider === 'elevenlabs'), [voices]);
-  const standardVoices = useMemo(() => voices.filter(v => v.category !== 'minimax_cloned' && v.category !== 'cloned'), [voices]);
 
   const filteredVoices = useMemo(() => {
     let source = voices;
@@ -75,7 +71,6 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
         const vid = (v.voice_id || '').toLowerCase();
         if (!name.includes(q) && !desc.includes(q) && !accent.includes(q) && !vid.includes(q)) return false;
       }
-      // Skip gender/age filters for cloned voices since they don't have labels
       const isCloned = v.category === 'minimax_cloned' || v.category === 'cloned' || v.labels?.use_case === 'cloned';
       if (!isCloned) {
         if (genderFilter !== 'all') {
@@ -91,12 +86,14 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
     });
   }, [voices, searchQuery, genderFilter, ageFilter, voiceTab, clonedVoices, minimaxVoices, elevenlabsVoices]);
 
+  // ══════════════════════════════════════════════════════════════
+  // GENERATE — handles both MiniMax instant and AI33 async
+  // ══════════════════════════════════════════════════════════════
   const handleGenerate = async () => {
     if (!script?.id || !selectedVoice) return;
     setGenerating(true);
     setError('');
 
-    // Phase 1: Submit TTS task (fast — just submits to AI33)
     let res;
     try {
       res = await base44.functions.invoke('generateVoiceover', {
@@ -117,9 +114,18 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       return;
     }
 
-    console.log('TTS task submitted:', res.data?.task_id);
+    console.log('TTS submitted:', res.data?.provider, res.data?.instant ? 'instant' : res.data?.task_id);
 
-    // Phase 2: Poll until ready/failed
+    // ── MiniMax direct returned instantly — done, no polling ────
+    if (res.data?.instant && res.data?.voiceover_url) {
+      const settingsRes = await base44.entities.ProductionSettings.filter({ project_id: project.id });
+      if (settingsRes[0]) setSettings({ ...settingsRes[0], voiceover_status: 'completed', voiceover_url: res.data.voiceover_url });
+      setGenerating(false);
+      onUpdate?.();
+      return;
+    }
+
+    // ── AI33 async — poll until ready/failed ────────────────────
     const pollInterval = setInterval(async () => {
       try {
         const pollRes = await base44.functions.invoke('pollVoiceover', { project_id: project.id });
@@ -152,7 +158,6 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
   };
 
   const handlePreviewVoice = async (voice) => {
-    // If already playing this voice, stop it
     if (previewingVoice === voice.voice_id && previewAudioRef.current) {
       previewAudioRef.current.pause();
       previewAudioRef.current.currentTime = 0;
@@ -160,16 +165,13 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       return;
     }
 
-    // Stop any current playback
     if (previewAudioRef.current) {
       previewAudioRef.current.pause();
       setPreviewingVoice(null);
     }
 
-    // Check for existing preview URL (from voice data or cache)
     let url = voice.preview_url || previewCache[voice.voice_id];
 
-    // If no URL, generate one via backend
     if (!url) {
       setLoadingPreview(voice.voice_id);
       try {
@@ -409,14 +411,14 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
               className={`flex-1 px-3 py-2 rounded-md text-xs font-medium transition-colors ${provider === 'minimax_direct' ? 'bg-white shadow text-orange-700' : 'text-gray-500 hover:text-gray-700'}`}
             >
               ⚡ MiniMax Direct
-              <span className="block text-[10px] mt-0.5 font-normal opacity-70">Instant for short · Your API key</span>
+              <span className="block text-[10px] mt-0.5 font-normal opacity-70">Instant · Your API key</span>
             </button>
             <button
               onClick={() => setProvider('ai33')}
               className={`flex-1 px-3 py-2 rounded-md text-xs font-medium transition-colors ${provider === 'ai33' ? 'bg-white shadow text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}
             >
               🌐 AI33 Pro
-              <span className="block text-[10px] mt-0.5 font-normal opacity-70">Async · Any length · Submit + Poll</span>
+              <span className="block text-[10px] mt-0.5 font-normal opacity-70">Async · Submit + Poll</span>
             </button>
           </div>
         </div>
@@ -430,35 +432,9 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
           {generating ? (
             <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating Voiceover...</>
           ) : (
-            <><Mic className="w-4 h-4 mr-2" /> Generate Voiceover</>
+            <><Mic className="w-4 h-4 mr-2" /> Generate with {provider === 'minimax_direct' ? 'MiniMax' : 'AI33'}</>
           )}
         </Button>
-
-        {/* Chunk progress bar */}
-        {generating && chunkProgress && chunkProgress.total > 1 && (
-          <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="font-medium text-purple-700">
-                Generating {chunkProgress.total} audio chunks...
-              </span>
-              <span className="text-purple-600 font-mono">
-                {chunkProgress.completed}/{chunkProgress.total}
-              </span>
-            </div>
-            <div className="w-full bg-purple-100 rounded-full h-2">
-              <div
-                className="bg-purple-500 h-2 rounded-full transition-all duration-700"
-                style={{ width: `${chunkProgress.percent || 0}%` }}
-              />
-            </div>
-            <p className="text-[11px] text-purple-500">
-              {chunkProgress.completed > 0 && `${chunkProgress.completed} done`}
-              {chunkProgress.generating > 0 && ` · ${chunkProgress.generating} rendering`}
-              {chunkProgress.failed > 0 && ` · ${chunkProgress.failed} failed`}
-              {chunkProgress.completed === chunkProgress.total && ' · Concatenating audio...'}
-            </p>
-          </div>
-        )}
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 
