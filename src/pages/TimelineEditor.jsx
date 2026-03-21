@@ -1463,6 +1463,7 @@ export default function TimelineEditor() {
               onAddOverlay={(clip) => { setOverlayClips([...overlayClips, clip]); setSelectedOverlayId(clip.id); setSelectedVideoId(null); setSelectedCaptionId(null); }}
               onRemoveOverlay={(id) => { setOverlayClips(overlayClips.filter(c => c.id !== id)); if (selectedOverlayId === id) setSelectedOverlayId(null); }}
               currentTime={currentTime} totalDuration={totalDuration}
+              projectId={projectId}
             />
           )}
           {activePanel === 'motion'      && (
