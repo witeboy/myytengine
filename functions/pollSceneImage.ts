@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
-// POLL SCENE IMAGE — checks pending image tasks and resolves them
+// POLL SCENE IMAGE — checks pending tasks and resolves them
 // ══════════════════════════════════════════════════════════════════
 // Called by frontend every 5s after generateSceneImage submits tasks.
 // Checks AI33 Seedream, Grok Imagine, and Nano Banana task statuses.
