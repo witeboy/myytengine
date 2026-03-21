@@ -45,8 +45,6 @@ const yieldToMain = () => new Promise(r => {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CINEMATIC MOTION TRANSFORM
-// Returns { scale, tx_px, ty_px } to apply via ctx.setTransform().
-// Mirrors getMotionStyle() in VideoPreview exactly.
 // ═══════════════════════════════════════════════════════════════════════════
 function getMotionTransform(clip, elapsedInClip, W, H) {
   if (!clip?.cinematicMotion) return null;
@@ -65,7 +63,6 @@ function getMotionTransform(clip, elapsedInClip, W, H) {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DRAW MEDIA FRAME WITH OPTIONAL CINEMATIC MOTION
-// Bakes scale+translate into canvas pixels via ctx.save/setTransform/restore.
 // ═══════════════════════════════════════════════════════════════════════════
 function drawMediaFrame(ctx, W, H, media, mediaType, mxform) {
   const sw = mediaType === 'video' ? (media.videoWidth  || media.width  || 1) : (media.naturalWidth  || media.width  || 1);
@@ -85,8 +82,6 @@ function drawMediaFrame(ctx, W, H, media, mediaType, mxform) {
 
 // ═══════════════════════════════════════════════════════════════════════════
 // COMPOSITE TRANSITION FRAME
-// Draws outgoing + incoming bitmaps composited at `progress` (0..1).
-// Mirrors getTransitionStyle() in VideoPreview exactly.
 // ═══════════════════════════════════════════════════════════════════════════
 function compositeTransitionFrame(ctx, W, H, outBitmap, inBitmap, type, progress) {
   ctx.clearRect(0, 0, W, H);
@@ -138,7 +133,6 @@ function compositeTransitionFrame(ctx, W, H, outBitmap, inBitmap, type, progress
     ctx.drawImage(inBitmap, -slide, 0, W, H);
 
   } else {
-    // Simple cross-fade fallback for unknown types
     ctx.globalAlpha = 1 - e2;
     ctx.drawImage(outBitmap, 0, 0, W, H);
     ctx.globalAlpha = e2;
@@ -195,71 +189,150 @@ export default function useVideoExport() {
   }, []);
 
   // Domains known to block CORS — skip the HEAD check and go straight to proxy
-  const CORS_BLOCKED_DOMAINS = ['tempfile.aiquickdraw.com', 'api.kie.ai', 'ideogram.ai', 'storage.googleapis.com'];
+  const CORS_BLOCKED_DOMAINS = [
+    'tempfile.aiquickdraw.com',
+    'api.kie.ai',
+    'ideogram.ai',
+    'storage.googleapis.com',
+    'r2.dev',           // ← Cloudflare R2 public buckets (proxy re-uploads land here)
+    'r2.cloudflarestorage.com',
+  ];
 
-  // Resolve a URL through the proxy if needed, returns a CORS-safe URL
-  const resolveUrl = async (url) => {
+  // ═══════════════════════════════════════════════════════════════════════
+  // CORS-SAFE BLOB FETCHER
+  // Tries direct fetch → proxy → base64 fallback.
+  // ALWAYS returns a Blob URL that the browser can use on canvas without
+  // tainting it, or throws if all methods fail.
+  // ═══════════════════════════════════════════════════════════════════════
+  const fetchAsBlob = async (url) => {
+    if (!url || !url.startsWith('http')) throw new Error('Invalid URL');
+
     const hostname = new URL(url).hostname;
-    const needsProxy = CORS_BLOCKED_DOMAINS.some(d => hostname.includes(d));
-    // If not a known CORS-blocked domain, try direct
-    if (!needsProxy) {
+    const isKnownBlocked = CORS_BLOCKED_DOMAINS.some(d => hostname.includes(d));
+
+    // Strategy 1: Direct CORS fetch (skip if known-blocked)
+    if (!isKnownBlocked) {
       try {
-        const resp = await fetch(url, { method: 'HEAD', mode: 'cors' });
-        if (resp.ok) return url;
+        const resp = await fetch(url, { mode: 'cors' });
+        if (resp.ok) {
+          const blob = await resp.blob();
+          return URL.createObjectURL(blob);
+        }
       } catch {}
     }
-    // Use proxy to re-upload to Base44 storage
+
+    // Strategy 2: Proxy fetch — ask proxyFetchAsset to grab it server-side
     try {
+      console.log(`[Export] Proxying: ${url.substring(0, 80)}…`);
       const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url });
       const data = proxyRes.data || proxyRes;
-      if (data.success && data.file_url) return data.file_url;
+
+      // 2a: Proxy returned base64 data — best case, create blob directly
       if (data.success && data.data) {
         const bytes = Uint8Array.from(atob(data.data), c => c.charCodeAt(0));
-        return URL.createObjectURL(new Blob([bytes], { type: data.content_type || 'application/octet-stream' }));
+        const blob = new Blob([bytes], { type: data.content_type || 'image/jpeg' });
+        console.log(`[Export] ✅ Got base64 from proxy (${(blob.size/1024).toFixed(0)} KB)`);
+        return URL.createObjectURL(blob);
       }
-    } catch (e) { console.warn(`Proxy resolve failed: ${url.substring(0,60)} — ${e.message}`); }
-    return url;
+
+      // 2b: Proxy returned a new file_url (e.g. on R2) — try to fetch THAT as blob
+      if (data.success && data.file_url) {
+        try {
+          const resp2 = await fetch(data.file_url, { mode: 'cors' });
+          if (resp2.ok) {
+            const blob = await resp2.blob();
+            console.log(`[Export] ✅ Fetched proxied URL as blob (${(blob.size/1024).toFixed(0)} KB)`);
+            return URL.createObjectURL(blob);
+          }
+        } catch (e2) {
+          console.warn(`[Export] Proxied URL also CORS-blocked: ${data.file_url.substring(0, 80)}`);
+        }
+
+        // 2c: The proxied URL is ALSO CORS-blocked (R2 without headers).
+        //     Re-proxy the R2 URL to force base64 return.
+        try {
+          console.log(`[Export] Re-proxying R2 URL for base64…`);
+          const reProxy = await base44.functions.invoke('proxyFetchAsset', { url: data.file_url, return_base64: true });
+          const rd = reProxy.data || reProxy;
+          if (rd.success && rd.data) {
+            const bytes = Uint8Array.from(atob(rd.data), c => c.charCodeAt(0));
+            const blob = new Blob([bytes], { type: rd.content_type || 'image/jpeg' });
+            console.log(`[Export] ✅ Got base64 from re-proxy (${(blob.size/1024).toFixed(0)} KB)`);
+            return URL.createObjectURL(blob);
+          }
+          // If re-proxy also returns file_url, try fetching it
+          if (rd.success && rd.file_url) {
+            try {
+              const resp3 = await fetch(rd.file_url, { mode: 'cors' });
+              if (resp3.ok) {
+                const blob = await resp3.blob();
+                return URL.createObjectURL(blob);
+              }
+            } catch {}
+          }
+        } catch (e3) {
+          console.warn(`[Export] Re-proxy also failed:`, e3.message);
+        }
+      }
+    } catch (e) {
+      console.warn(`[Export] Proxy failed for: ${url.substring(0, 60)} — ${e.message}`);
+    }
+
+    // Strategy 3: Last resort — try no-cors fetch (will get opaque response, 
+    // but some CDNs actually allow it). This won't work for canvas but we try anyway.
+    throw new Error(`CORS_BLOCKED: Could not load ${url.substring(0, 80)}`);
   };
 
   const loadImage = async (url) => {
-    const safeUrl = await resolveUrl(url);
+    const blobUrl = await fetchAsBlob(url);
     try {
-      const resp = await fetch(safeUrl, { mode: 'cors' });
-      if (resp.ok) return await createImageBitmap(await resp.blob());
-    } catch {}
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload  = () => resolve(img);
-      img.onerror = () => reject(new Error('Image load failed: ' + url.substring(0, 60)));
-      img.src = safeUrl;
-    });
+      const resp = await fetch(blobUrl);
+      const blob = await resp.blob();
+      const bm = await createImageBitmap(blob);
+      // Don't revoke yet — caller might need it; we'll track blob URLs for cleanup
+      return bm;
+    } catch (e) {
+      // Fallback: try as <img> from the blob URL (should work since it's a blob:)
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload  = () => resolve(img);
+        img.onerror = () => reject(new Error('Image bitmap creation failed'));
+        img.src = blobUrl;
+      });
+    }
   };
 
   const loadVideoElement = async (url) => {
-    const safeUrl = await resolveUrl(url);
     let blobUrl = null;
     try {
-      const resp = await fetch(safeUrl, { mode: 'cors' });
-      if (resp.ok) blobUrl = URL.createObjectURL(await resp.blob());
-    } catch {}
-    if (!blobUrl) {
-      return new Promise((resolve, reject) => {
-        const v = document.createElement('video');
-        v.crossOrigin = 'anonymous'; v.muted = true; v.playsInline = true; v.preload = 'auto';
-        const t = setTimeout(() => reject(new Error('timeout')), 30000);
-        v.onloadeddata = () => { clearTimeout(t); resolve(v); };
-        v.onerror      = () => { clearTimeout(t); reject(new Error('failed')); };
-        v.src = safeUrl;
-      });
+      blobUrl = await fetchAsBlob(url);
+    } catch (e) {
+      console.warn(`[Export] Video blob fetch failed, trying direct:`, e.message);
     }
+
+    const srcUrl = blobUrl || url;
     return new Promise((resolve, reject) => {
       const v = document.createElement('video');
+      // Only set crossOrigin if NOT a blob URL (blob URLs don't need it)
+      if (!srcUrl.startsWith('blob:')) {
+        v.crossOrigin = 'anonymous';
+      }
       v.muted = true; v.playsInline = true; v.preload = 'auto';
-      const t = setTimeout(() => { URL.revokeObjectURL(blobUrl); reject(new Error('timeout')); }, 60000);
-      v.onloadeddata = () => { clearTimeout(t); v._blobUrl = blobUrl; resolve(v); };
-      v.onerror      = () => { clearTimeout(t); URL.revokeObjectURL(blobUrl); reject(new Error('failed')); };
-      v.src = blobUrl;
+      const t = setTimeout(() => {
+        if (blobUrl) URL.revokeObjectURL(blobUrl);
+        reject(new Error('Video load timeout'));
+      }, 60000);
+      v.onloadeddata = () => {
+        clearTimeout(t);
+        v._blobUrl = blobUrl; // track for cleanup
+        resolve(v);
+      };
+      v.onerror = () => {
+        clearTimeout(t);
+        if (blobUrl) URL.revokeObjectURL(blobUrl);
+        reject(new Error('Video load failed'));
+      };
+      v.src = srcUrl;
     });
   };
 
@@ -272,8 +345,21 @@ export default function useVideoExport() {
   });
 
   const decodeAudio = async (url) => {
-    const safeUrl = await resolveUrl(url);
-    const resp = await fetch(safeUrl, { mode: 'cors' });
+    let audioUrl = url;
+    try {
+      // Try direct fetch first
+      const testResp = await fetch(url, { method: 'HEAD', mode: 'cors' });
+      if (!testResp.ok) throw new Error('not ok');
+    } catch {
+      // CORS blocked — use proxy to get blob
+      try {
+        audioUrl = await fetchAsBlob(url);
+      } catch (e) {
+        console.warn(`[Export] Audio proxy failed, trying direct:`, e.message);
+        audioUrl = url; // last resort
+      }
+    }
+    const resp = await fetch(audioUrl, { mode: 'cors' });
     const buf  = await resp.arrayBuffer();
     const actx = new AudioContext({ sampleRate: 48000 });
     const dec  = await actx.decodeAudioData(buf);
@@ -307,13 +393,11 @@ export default function useVideoExport() {
         cinematicMotion:    s.cinematicMotion     || null,
         motionSpeed:        s.motionSpeed         ?? 1.0,
         motionIntensity:    s.motionIntensity     ?? 1.0,
-        // Transition stored on OUTGOING clip, plays at START of next clip
         transition:         s.transition          || null,
         transitionDuration: s.transitionDuration  ?? DEFAULT_TRANSITION_DURATION,
-        startTime:          0, // filled below
+        startTime:          0,
       }));
 
-      // Compute absolute start times
       let off = 0;
       clips.forEach(c => { c.startTime = off; off += c.duration; });
 
@@ -358,6 +442,8 @@ export default function useVideoExport() {
       // ─── PHASE 1: Load all media ──────────────────────────────────
       setPhase('loading');
       const clipMedia = [];
+      let loadSuccessCount = 0;
+      let loadFailCount = 0;
 
       for (let i = 0; i < clips.length; i++) {
         if (cancelledRef.current) throw new Error('cancelled');
@@ -366,32 +452,51 @@ export default function useVideoExport() {
         let media = null, mediaType = 'image', measuredVideoDur = null;
         const wantsVideo = clip.mediaType === 'video' && clip.videoUrl?.startsWith('http');
         const hasImg     = clip.imageUrl?.startsWith('http');
+
         if (wantsVideo) {
           try {
             media = await loadVideoElement(clip.videoUrl);
             mediaType = 'video';
             measuredVideoDur = (media.duration && isFinite(media.duration)) ? media.duration : (clip.videoDuration ?? 6);
+            loadSuccessCount++;
           } catch(e) {
-            console.warn(`Clip ${i} video failed, using image:`, e.message);
-            if (hasImg) try { media = await loadImage(clip.imageUrl); } catch (imgErr) {
-              console.error(`❌ Clip ${i} image fallback also failed:`, imgErr.message);
+            console.warn(`[Export] Clip ${i} video failed, trying image:`, e.message);
+            if (hasImg) {
+              try {
+                media = await loadImage(clip.imageUrl);
+                loadSuccessCount++;
+              } catch (imgErr) {
+                console.error(`[Export] ❌ Clip ${i} image fallback also failed:`, imgErr.message);
+                loadFailCount++;
+              }
+            } else {
+              loadFailCount++;
             }
           }
         } else if (hasImg) {
-          try { media = await loadImage(clip.imageUrl); } catch (e) {
-            console.error(`❌ Clip ${i} image load FAILED:`, clip.imageUrl?.substring(0, 80), e.message);
+          try {
+            media = await loadImage(clip.imageUrl);
+            loadSuccessCount++;
+          } catch (e) {
+            console.error(`[Export] ❌ Clip ${i} image load FAILED:`, clip.imageUrl?.substring(0, 80), e.message);
+            loadFailCount++;
           }
+        } else {
+          loadFailCount++;
         }
-        if (!media) console.warn(`⚠️ Clip ${i} has NO media — will render black. imageUrl: ${clip.imageUrl?.substring(0, 80)}, videoUrl: ${clip.videoUrl?.substring(0, 80)}`);
+
+        if (!media) {
+          console.warn(`[Export] ⚠️ Clip ${i} has NO media — will render black.`);
+        }
         clipMedia.push({ media, mediaType, measuredVideoDur });
       }
+
+      console.log(`[Export] Media loaded: ${loadSuccessCount}/${clips.length} success, ${loadFailCount} failed`);
 
       setPhase('encoding');
 
       // ─── Helper: draw one clip's frame into canvas ────────────────
-      // elapsedInClip = real seconds elapsed since the clip's startTime
-      // Applies cinematic motion transform + handles video seek/freeze
-      const lastVideoFrame = new Map(); // clipIndex → ImageBitmap (freeze-frame)
+      const lastVideoFrame = new Map();
 
       const drawClipFrame = async (ci, elapsedInClip) => {
         const clip   = clips[ci];
@@ -411,13 +516,11 @@ export default function useVideoExport() {
           const srcTime = Math.min((elapsedInClip * rate), maxSrc);
 
           if (srcTime >= maxSrc) {
-            // Past video end → freeze on last frame
             const frozen = lastVideoFrame.get(ci);
             if (frozen) drawMediaFrame(ctx, W, H, frozen, 'image', mxform);
           } else {
             await seekVideo(media, srcTime);
             drawMediaFrame(ctx, W, H, media, 'video', mxform);
-            // Cache last good frame for freeze-frame
             const bm = await createImageBitmap(canvas);
             lastVideoFrame.get(ci)?.close();
             lastVideoFrame.set(ci, bm);
@@ -435,7 +538,6 @@ export default function useVideoExport() {
 
         const absTime = f / fps;
 
-        // Find which clip this frame belongs to
         let ci = clips.length - 1;
         for (let i = 0; i < clips.length; i++) {
           if (absTime < clips[i].startTime + clips[i].duration) { ci = i; break; }
@@ -444,33 +546,24 @@ export default function useVideoExport() {
         const elapsed     = absTime - clip.startTime;
         const prevClip    = ci > 0 ? clips[ci-1] : null;
 
-        // Check transition: previous clip's transition plays at start of this clip
         const tType    = prevClip?.transition || null;
         const tDur     = prevClip?.transitionDuration ?? DEFAULT_TRANSITION_DURATION;
         const tProg    = tType ? Math.min(1, elapsed / tDur) : 0;
         const inTrans  = tType && elapsed < tDur;
 
         if (inTrans) {
-          // ── Transition: composite outgoing + incoming ─────────────
-          // Draw incoming (current clip at its current elapsed position)
           await drawClipFrame(ci, elapsed);
           const inBitmap = await createImageBitmap(canvas);
-
-          // Draw outgoing (prev clip frozen at its very last moment)
           await drawClipFrame(ci-1, prevClip.duration);
           const outBitmap = await createImageBitmap(canvas);
-
-          // Composite into final canvas
           ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
           compositeTransitionFrame(ctx, W, H, outBitmap, inBitmap, tType, tProg);
           inBitmap.close();
           outBitmap.close();
         } else {
-          // ── Normal frame ──────────────────────────────────────────
           await drawClipFrame(ci, elapsed);
         }
 
-        // Encode
         const timestamp = Math.round(f * (1_000_000 / fps));
         const vframe    = new VideoFrame(canvas, { timestamp });
         videoEncoder.encode(vframe, { keyFrame: f % (fps*2) === 0 });
