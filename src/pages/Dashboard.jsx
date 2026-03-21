@@ -8,6 +8,7 @@ import ViralTrendsPanel from '@/components/dashboard/ViralTrendsPanel';
 import ActiveProjectsStrip from '@/components/dashboard/ActiveProjectsStrip';
 import CloudExportsPanel from '@/components/dashboard/CloudExportsPanel';
 import { Loader2, LayoutDashboard, Cloud } from 'lucide-react';
+import HealthCheckButton from '@/components/HealthCheckButton';
 
 export default function Dashboard() {
   const queryClient = useQueryClient();
@@ -44,6 +45,7 @@ export default function Dashboard() {
             <h1 className="text-3xl font-bold text-gray-900 tracking-tight">AI Video Engine</h1>
             <p className="text-gray-500 mt-1">Your faceless YouTube content command center</p>
           </div>
+          <HealthCheckButton />
         </div>
 
         {/* Tabs */}
