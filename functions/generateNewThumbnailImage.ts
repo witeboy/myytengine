@@ -66,17 +66,29 @@ WHAT TO CHANGE:
 - Replace ALL people in the template with the person(s) from the reference photo(s)
 - The expression should match what the template person was doing (shocked face → reference person with shocked face, etc.) but with the reference person's REAL facial features
 
-OBJECT REPLACEMENT (CRITICAL FOR STORY RELEVANCE):
-- Study the image_prompt below CAREFULLY to identify the SPECIFIC SUBJECT of this video (e.g., custom t-shirts, crypto trading, a restaurant, a specific product)
-- If the template contains OBJECTS that are NOT related to this specific subject, you MUST REPLACE them with story-relevant objects
-- For example: if the template shows dump trucks but the story is about custom t-shirts → replace the trucks with colorful custom t-shirts, merch displays, a heat press, or stacks of branded clothing
-- If the template shows a car but our story is about Bitcoin → replace the car with Bitcoin/crypto imagery
-- NEVER keep generic "success" objects (luxury cars, mansions, trucks, yachts) if the story is about a specific product or business — replace them with THAT product
-- Keep the same SIZE, POSITION, and FRAMING of the original object — just swap what the object IS
-- The replacement object must look photorealistic and naturally composited into the scene
-- If the template uses split-screen/before-after layout, maintain that structure but with story-relevant content on each side
+OBJECT DETECTION + REPLACEMENT (CRITICAL — 3 STEPS):
 
-STORY CONTEXT FROM IMAGE PROMPT (read this to know what objects should appear):
+STEP 1 — DETECT OBJECTS IN THE TEMPLATE (Image 1):
+Look at every distinct object in the template: vehicles, products, buildings, animals, food, tools, symbols, decorative props, background items. List them mentally.
+
+STEP 2 — IDENTIFY THE STORY'S REAL SUBJECT:
+Read the image_prompt below. It describes the SPECIFIC subject of this video. Extract the PRIMARY PRODUCT/SUBJECT and all supporting objects mentioned.
+
+STEP 3 — SWAP EACH TEMPLATE OBJECT:
+For EVERY object you detected in Step 1, decide:
+- Is this object related to the story subject? → KEEP IT
+- Is this object UNRELATED to the story? → REPLACE it with the closest story-relevant equivalent
+- Match the SAME size, position, quantity, and visual weight as the original
+- Example: 3 trucks in template + story about t-shirts → 3 stacks/displays of colorful t-shirts in the same positions
+- Example: a sports car + story about cooking → a beautifully plated dish or kitchen scene
+- The replacements must look photorealistic and naturally composited
+
+ALSO — USE OBJECTS FROM THE CHARACTER PHOTOS:
+If the character reference photos (Images 2+) show real objects (their products, tools, workspace, clothing items), USE those real objects as props. Real objects from photos are MORE authentic than imagined ones.
+
+NEVER keep generic unrelated objects. NEVER add objects not mentioned in the story. The viewer must instantly understand the video topic from the thumbnail.
+
+STORY CONTEXT (from image_prompt — this is the source of truth for what objects should appear):
 ${imagePrompt}
 
 ${(() => {
