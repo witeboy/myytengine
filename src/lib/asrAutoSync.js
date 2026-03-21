@@ -541,6 +541,15 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     }
   }
 
+  // Recalculate durations and round after all fixes
+  results.forEach(r => {
+    if (r.startTime !== null && r.endTime !== null) {
+      r.startTime = Math.round(r.startTime * 1000) / 1000;
+      r.endTime = Math.round(r.endTime * 1000) / 1000;
+      r.duration = Math.round((r.endTime - r.startTime) * 1000) / 1000;
+    }
+  });
+
   // ── DRIFT DETECTION (report remaining — user can apply manual fix) ──
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
