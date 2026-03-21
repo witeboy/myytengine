@@ -221,8 +221,10 @@ Return ONLY a valid JSON object. No markdown. No explanation. No backticks.
       "layout_type": "split_screen|hero|reaction|progression|versus|mystery",
       "text_position": "upper-left|bottom-center",
       "text_color": "white|yellow|red",
+      "objects_used": ["which extracted objects appear in this thumbnail"],
+      "layout_type": "split_screen|hero|reaction|progression|versus|mystery",
       "ctr_score": 9,
-      "image_prompt": "1920x1080 YouTube thumbnail, photorealistic... (300+ words, includes extracted objects AS THE DOMINANT VISUAL ELEMENTS, NO text in image)"
+      "image_prompt": "1920x1080 YouTube thumbnail, photorealistic... (300+ words, the PRIMARY SUBJECT and extracted objects must be the DOMINANT visual elements, describe template object swaps explicitly, NO text in image)"
     }
   ]
 }
