@@ -141,6 +141,7 @@ Respond with ONLY valid JSON:
       current_step: 4
     });
 
+
     return Response.json({
       success: true,
       storytelling_format: outline.storytelling_format,
