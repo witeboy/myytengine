@@ -44,109 +44,25 @@ Deno.serve(async (req) => {
     console.log(`Object images: ${object_images.length}`);
     console.log(`Background: ${background_image_url ? 'yes' : 'no'}`);
 
-    // ── Build the blend prompt ──────────────────────────────────
+    // ── Build the blend prompt (SeedDream works best with 30-100 words) ──
     const allInputImages = [reference_image_url];
-    const imageRoles = ['Image 1 = REFERENCE IMAGE (the original thumbnail to edit — preserve its exact composition, layout, and framing)'];
-    let imageIndex = 2;
 
-    // Add face images
     for (const faceUrl of face_images) {
-      if (faceUrl) {
-        allInputImages.push(faceUrl);
-        imageRoles.push(`Image ${imageIndex} = FACE/CHARACTER REFERENCE (use this person's exact face, skin tone, hair, and features to replace the subject in the reference image)`);
-        imageIndex++;
-      }
+      if (faceUrl) allInputImages.push(faceUrl);
     }
-
-    // Add background image
-    if (background_image_url) {
-      allInputImages.push(background_image_url);
-      imageRoles.push(`Image ${imageIndex} = BACKGROUND IMAGE (replace the reference image's background with this)`);
-      imageIndex++;
-    }
-
-    // Add object images
+    if (background_image_url) allInputImages.push(background_image_url);
     for (const objUrl of object_images) {
-      if (objUrl) {
-        allInputImages.push(objUrl);
-        imageRoles.push(`Image ${imageIndex} = OBJECT/PROP IMAGE (replace corresponding objects in the reference image with this)`);
-        imageIndex++;
-      }
+      if (objUrl) allInputImages.push(objUrl);
     }
 
-    const prompt = `STRICT EDIT MODE:
-Preserve original pixel structure. Only modify masked/replaced areas.
+    // Build a concise editing prompt — SeedDream gets confused with long prompts
+    const tasks = [];
+    if (face_images.length > 0) tasks.push('Replace the subject face with the exact face from the character reference photo, matching lighting and skin tone seamlessly');
+    if (background_image_url) tasks.push('Replace the background with the provided background image, apply cinematic depth-of-field blur');
+    if (object_images.length > 0) tasks.push('Replace props/objects with the provided replacement images, maintain position and scale');
+    if (custom_instructions) tasks.push(custom_instructions.substring(0, 150));
 
-You are a professional photo editor and compositing expert.
-This is an IMAGE EDITING task — NOT image generation.
-
-PRIMARY GOAL:
-Preserve the original reference image composition while selectively replacing specific elements using provided assets.
-
-INPUT ASSETS (${allInputImages.length} images provided):
-${imageRoles.join('\n')}
-
-GLOBAL RULES (STRICT):
-- DO NOT redesign the scene
-- DO NOT change pose, framing, or layout
-- DO NOT reposition core elements unless necessary for realism
-- PRESERVE original composition as much as possible
-- Think like Photoshop compositing, not AI generation
-
-EDITING TASKS:
-
-${face_images.length > 0 ? `1. FACE / CHARACTER REPLACEMENT
-- Replace the subject's face (or full identity if needed) using the CHARACTER REFERENCE image(s)
-- Match: lighting direction, skin tone, color temperature, shadow depth
-- Blend seamlessly (no visible edges or distortion)
-- Adjust proportions slightly to fit naturally
-- The person must be IMMEDIATELY recognizable as the person from the reference photos
-- Preserve the EXACT pose and expression energy from the original thumbnail
-` : '1. FACE: Keep the existing subject as-is.\n'}
-
-${background_image_url ? `2. BACKGROUND REPLACEMENT
-- Replace original background with the BACKGROUND IMAGE provided
-- Apply strong depth-of-field blur (cinematic background blur)
-- Match lighting and color grading with subject
-- Ensure subject remains the focal point
-` : '2. BACKGROUND: Keep the existing background as-is.\n'}
-
-${object_images.length > 0 ? `3. OBJECT REPLACEMENT (CRITICAL)
-For each object in the reference image, replace with corresponding object from the provided OBJECT/PROP images.
-Rules:
-- Maintain original position, scale, and perspective
-- Match lighting, shadows, and reflections
-- Blend naturally into scene
-- Map intelligently based on similarity and position
-` : '3. OBJECTS: Keep existing objects as-is.\n'}
-
-4. REALISM & BLENDING
-- Ensure consistent lighting across ALL elements
-- Add natural shadows and contact shadows
-- Apply unified color grading
-- Add subtle grain/noise for realism
-- Maintain sharp subject + blurred background (thumbnail style)
-
-5. ORIGINAL ELEMENT PRESERVATION
-Keep unchanged unless explicitly replaced:
-- Pose and body position
-- Text, arrows, overlays (if present)
-- Composition and framing
-- Overall color grading and mood
-
-${custom_instructions ? `ADDITIONAL INSTRUCTIONS:\n${custom_instructions}\n` : ''}
-
-${video_title ? `VIDEO CONTEXT: "${video_title}"\n` : ''}
-
-STYLE OUTPUT:
-- Photorealistic, high contrast (YouTube thumbnail ready)
-- Clean, sharp subject, no AI artifacts, visually cohesive
-- 1920×1080 16:9 aspect ratio
-
-FINAL CHECK:
-- Does the image look like the ORIGINAL layout? Must be YES
-- Are all replacements seamlessly blended? Must be YES
-- Is lighting consistent across subject, objects, and background? Must be YES`;
+    const prompt = `Photo editing task. Preserve the original thumbnail composition, pose, framing, and text overlays exactly. ${tasks.length > 0 ? tasks.join('. ') + '.' : 'Enhance realism and blending.'} Photorealistic YouTube thumbnail, high contrast, sharp subject, consistent lighting, seamless compositing, no AI artifacts. 1920x1080 16:9.`;
 
     console.log(`Prompt length: ${prompt.length} chars`);
     console.log(`Total input images: ${allInputImages.length}`);
