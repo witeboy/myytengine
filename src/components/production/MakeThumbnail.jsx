@@ -1027,8 +1027,9 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
             <RefreshCw size={13} /> Re-render
           </button>
           {finalUrl && (
-            <button onClick={handleDownload} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#7c3aed', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Download size={13} /> Download
+            <button onClick={handleDownload} disabled={downloading} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: downloading ? '#374151' : '#7c3aed', color: '#fff', cursor: downloading ? 'wait' : 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+              {downloading ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={13} />}
+              {downloading ? 'Downloading…' : 'Download'}
             </button>
           )}
         </div>
