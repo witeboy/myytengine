@@ -7,6 +7,9 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import BulkUGCPipeline from './pages/BulkUGCPipeline';
+import LongViralPipeline from './pages/LongViralPipeline';
+import ShortsPipeline from './pages/ShortsPipeline';
+import AutoEditReview from './pages/AutoEditReview';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -61,6 +64,21 @@ const AuthenticatedApp = () => {
       <Route path="/BulkUGCPipeline" element={
             <LayoutWrapper currentPageName="BulkUGCPipeline">
               <BulkUGCPipeline />
+            </LayoutWrapper>
+          } />
+      <Route path="/LongViralPipeline" element={
+            <LayoutWrapper currentPageName="LongViralPipeline">
+              <LongViralPipeline />
+            </LayoutWrapper>
+          } />
+      <Route path="/ShortsPipeline" element={
+            <LayoutWrapper currentPageName="ShortsPipeline">
+              <ShortsPipeline />
+            </LayoutWrapper>
+          } />
+      <Route path="/AutoEditReview" element={
+            <LayoutWrapper currentPageName="AutoEditReview">
+              <AutoEditReview />
             </LayoutWrapper>
           } />
       <Route path="*" element={<PageNotFound />} />
