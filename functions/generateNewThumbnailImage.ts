@@ -91,10 +91,12 @@ Output: YouTube thumbnail 16:9, 1920×1080, photorealistic, cinematic DSLR quali
 
 // ── AI33 SeedDream submit (async, returns task_id) ──────────────
 async function submitAI33Thumbnail(apiKey, prompt) {
-  console.log(`🌱 AI33 Seedream thumbnail: submitting (${prompt.length} chars)...`);
+  // AI33 SeedDream hard limit: 2000 chars (API rejects "prompt_too_long" above this)
+  const safePrompt = prompt.length > 2000 ? prompt.substring(0, 1997) + '...' : prompt;
+  console.log(`🌱 AI33 Seedream thumbnail: submitting (${safePrompt.length} chars, was ${prompt.length})...`);
 
   const formData = new FormData();
-  formData.append('prompt', prompt.substring(0, 4000));
+  formData.append('prompt', safePrompt);
   formData.append('model_id', 'bytedance-seedream-4.5');
   formData.append('generations_count', '1');
   formData.append('model_parameters', JSON.stringify({
