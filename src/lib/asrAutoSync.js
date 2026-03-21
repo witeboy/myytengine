@@ -696,12 +696,15 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
 
 /**
  * Fix drifted scenes in-place.
+ * Shrinks bloated scenes to their speech span + padding, then
+ * redistributes freed time to intermediate neighbors using word counts.
  *
- * @param {Array} results - alignment results from alignScenesToASR (will be mutated)
- * @param {Array} driftedIndices - array of scene indices to fix (0-based into results)
+ * @param {Array} results - alignment results (mutated in place)
+ * @param {Array} driftedIndices - 0-based indices of bloated scenes
+ * @param {Array} [wordRanges] - optional sceneWordRanges for accurate word counts
  * @returns {Array} - the mutated results array
  */
-export function applyDriftFix(results, driftedIndices) {
+export function applyDriftFix(results, driftedIndices, wordRanges) {
   if (!driftedIndices?.length || !results?.length) return results;
 
   const LOOKAHEAD = 5;
@@ -709,18 +712,37 @@ export function applyDriftFix(results, driftedIndices) {
   const SECS_PER_WORD = 0.38;
   const processed = new Set();
 
+  // Helper: get word count for a scene index
+  const getWordCount = (idx) => {
+    // 1. From wordRanges (most accurate — from original script)
+    if (wordRanges?.[idx]) return wordRanges[idx].wordCount || 0;
+    // 2. From driftInfo (if scene was flagged as bloated)
+    if (results[idx]?.driftInfo?.wordCount) return results[idx].driftInfo.wordCount;
+    // 3. Estimate from speech span
+    const r = results[idx];
+    if (r && r.speechStart != null && r.speechEnd != null) {
+      const span = r.speechEnd - r.speechStart;
+      if (span > 0) return Math.max(1, Math.round(span / SECS_PER_WORD));
+    }
+    // 4. Estimate from current duration
+    if (r?.duration > 0) return Math.max(1, Math.round(r.duration / SECS_PER_WORD));
+    return 5; // fallback
+  };
+
   for (const i of driftedIndices) {
     if (processed.has(i) || i < 0 || i >= results.length) continue;
     const r = results[i];
     if (!r || r.empty || !r.driftDetected) continue;
 
     const info = r.driftInfo;
-    // Target duration: speech span + small padding, or word estimate — whichever is more reasonable
+    if (!info) continue;
+
+    // Target duration: speech span + padding, or word estimate
     const targetDur = Math.max(MIN_DUR,
       info.speechSpan > 0 ? info.speechSpan + 1.5 : info.wordEstimate
     );
 
-    console.log(`[Drift Fix] Fixing Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s → ${targetDur.toFixed(1)}s`);
+    console.log(`[Drift Fix] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s → ${targetDur.toFixed(1)}s (speech ${info.speechSpan.toFixed(1)}s, ${info.wordCount} words)`);
 
     const correctedEnd = r.startTime + targetDur;
 
@@ -730,8 +752,8 @@ export function applyDriftFix(results, driftedIndices) {
 
     for (let j = i + 1; j <= Math.min(i + LOOKAHEAD, results.length - 1); j++) {
       const c = results[j];
-      if (c.empty) continue;
-      if (c.matchScore >= 0.4 && c.speechStart !== null) {
+      if (c.empty || processed.has(j)) continue;
+      if (c.speechStart !== null && c.matchScore >= 0.4) {
         anchorIdx = j;
         anchorAsrStart = c.speechStart;
         break;
@@ -739,7 +761,7 @@ export function applyDriftFix(results, driftedIndices) {
     }
     if (anchorIdx === -1) {
       for (let j = i + 1; j <= Math.min(i + LOOKAHEAD, results.length - 1); j++) {
-        if (!results[j].empty && results[j].speechStart !== null) {
+        if (!results[j].empty && !processed.has(j) && results[j].speechStart !== null) {
           anchorIdx = j;
           anchorAsrStart = results[j].speechStart;
           break;
@@ -747,25 +769,29 @@ export function applyDriftFix(results, driftedIndices) {
       }
     }
 
+    // Apply fix to bloated scene FIRST
+    r.endTime = correctedEnd;
+    r.duration = targetDur;
+    r.driftFixed = true;
+    r.driftDetected = false;
+    processed.add(i);
+
     if (anchorIdx !== -1 && anchorAsrStart !== null) {
       const windowStart = correctedEnd;
       const windowEnd = anchorAsrStart;
       const windowDur = windowEnd - windowStart;
 
-      // Intermediate scenes between bloated and anchor
+      // Collect intermediate scenes between bloated and anchor
       const intermediates = [];
       for (let j = i + 1; j < anchorIdx; j++) {
-        intermediates.push({ idx: j, result: results[j], wordCount: results[j].driftInfo?.wordCount ?? 0 });
-        // Estimate word count from duration if driftInfo not present
-        if (!results[j].driftInfo) {
-          const speechS = results[j].speechEnd - results[j].speechStart;
-          intermediates[intermediates.length - 1].wordCount = Math.round(speechS / SECS_PER_WORD) || 5;
-        }
+        if (results[j].empty) continue;
+        intermediates.push({ idx: j, result: results[j], wordCount: getWordCount(j) });
       }
 
       const totalIntWords = intermediates.reduce((s, m) => s + Math.max(1, m.wordCount), 0);
 
-      if (windowDur > 0 && totalIntWords > 0) {
+      if (windowDur > 0 && intermediates.length > 0 && totalIntWords > 0) {
+        // Positive window: redistribute proportionally by word count
         let cursor = windowStart;
         for (const mid of intermediates) {
           const proportion = Math.max(1, mid.wordCount) / totalIntWords;
@@ -777,9 +803,9 @@ export function applyDriftFix(results, driftedIndices) {
           processed.add(mid.idx);
           cursor += midDur;
         }
-        console.log(`[Drift Fix] Redistributed ${intermediates.length} scenes across ${windowDur.toFixed(1)}s`);
+        console.log(`[Drift Fix] Redistributed ${intermediates.length} intermediate scene(s) across ${windowDur.toFixed(1)}s`);
       } else if (intermediates.length > 0) {
-        // Negative window — push forward with word estimates
+        // Negative or zero window: pack using word estimates
         let cursor = correctedEnd;
         for (const mid of intermediates) {
           const midDur = Math.max(MIN_DUR, mid.wordCount * SECS_PER_WORD);
@@ -793,7 +819,7 @@ export function applyDriftFix(results, driftedIndices) {
         anchorAsrStart = Math.max(anchorAsrStart, cursor);
       }
 
-      // Snap anchor
+      // Snap anchor scene to its ASR speech start
       const anchor = results[anchorIdx];
       const oldAnchorStart = anchor.startTime;
       anchor.startTime = anchorAsrStart;
@@ -805,23 +831,16 @@ export function applyDriftFix(results, driftedIndices) {
       processed.add(anchorIdx);
       console.log(`[Drift Fix] Anchor Scene ${anchor.sceneNumber}: ${oldAnchorStart.toFixed(1)}s → ${anchor.startTime.toFixed(1)}s`);
     } else {
-      // No anchor found — just shrink the scene, let next scene absorb the gap
+      // No anchor: push next scene to fill the gap
       if (i < results.length - 1) {
         results[i + 1].startTime = correctedEnd;
-        results[i + 1].duration = results[i + 1].endTime - results[i + 1].startTime;
+        results[i + 1].duration = Math.max(MIN_DUR, results[i + 1].endTime - results[i + 1].startTime);
         results[i + 1].driftFixed = true;
       }
     }
-
-    // Apply fix to bloated scene
-    r.endTime = correctedEnd;
-    r.duration = targetDur;
-    r.driftFixed = true;
-    r.driftDetected = false; // Clear the flag
-    processed.add(i);
   }
 
-  // Close any small gaps left between fixed scenes and their neighbors
+  // Close gaps between fixed scenes and their untouched neighbors
   for (const i of [...processed]) {
     if (i > 0 && !processed.has(i - 1)) {
       const prev = results[i - 1];
@@ -834,7 +853,7 @@ export function applyDriftFix(results, driftedIndices) {
     }
   }
 
-  // Recalculate durations on fixed scenes
+  // Recalculate durations
   results.forEach(r => {
     if (r.startTime !== null && r.endTime !== null) {
       r.startTime = Math.round(r.startTime * 1000) / 1000;
