@@ -1036,7 +1036,19 @@ export default function TimelineEditor() {
       setVideoClips(syncedWithRates);
       setOverrideBeatDurations(newBeatDurations);
 
-      setDriftedScenes([]); // auto-fix handles bloated scenes now
+      // Step 4b: Detect bloated scenes and show in DriftFixPanel
+      if (alignmentResults) {
+        setLastAlignmentResults(alignmentResults);
+        const drifted = alignmentResults
+          .map((a, i) => a.driftDetected ? { index: i, sceneNumber: a.sceneNumber, info: a.driftInfo } : null)
+          .filter(Boolean);
+        setDriftedScenes(drifted);
+        if (drifted.length > 0) {
+          console.log(`[AutoSync] ${drifted.length} bloated scene(s) detected — review in Drift Fix panel`);
+        }
+      } else {
+        setDriftedScenes([]);
+      }
 
       // Step 5: Persist
       if (prodSettings?.id) {
