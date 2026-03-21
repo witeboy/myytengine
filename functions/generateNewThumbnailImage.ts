@@ -66,8 +66,10 @@ WHAT TO KEEP FROM THE TEMPLATE (Image 1):
 - The emotional energy and thumbnail style
 
 WHAT TO CHANGE:
-- Replace ALL people in the template with the person(s) from the reference photo(s)
+- Replace ALL people in the template with the EXACT person(s) from the reference photo(s) — same face, same skin, same hair, same features
 - The expression should match what the template person was doing (shocked face → reference person with shocked face, etc.) but with the reference person's REAL facial features
+- If the template shows a woman but the reference photo is a man, use the MAN from the reference — the reference photos ALWAYS override the template's people
+- NEVER generate a generic/stock person — ALWAYS use the uploaded reference photos as the face source
 
 OBJECT DETECTION + REPLACEMENT (CRITICAL — 3 STEPS):
 
