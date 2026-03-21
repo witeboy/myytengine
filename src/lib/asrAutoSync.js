@@ -468,7 +468,13 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     if (next.startTime > curr.endTime) {
       const gap = next.startTime - curr.endTime;
 
-      if (gap <= MAX_ABSORB) {
+      // Guard: don't let a scene absorb so much it becomes over-stretched
+      const currWc = sceneWordRanges[i]?.wordCount || 1;
+      const currExpMax = Math.max(MIN_DURATION, currWc * 0.38) * 2;
+      const currDur = curr.endTime - curr.startTime;
+      const canAbsorb = Math.max(0, currExpMax - currDur);
+
+      if (gap <= Math.min(MAX_ABSORB, canAbsorb)) {
         // Small gap — current scene absorbs it
         curr.endTime = next.startTime;
       } else {
