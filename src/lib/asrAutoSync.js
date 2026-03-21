@@ -613,7 +613,7 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     driftFixed = false;
     driftPassCount++;
 
-  for (let i = 0; i < results.length; i++) {
+    for (let i = 0; i < results.length; i++) {
     if (processed.has(i)) continue;
     const r = results[i];
     if (r.empty || r.startTime === null || r.endTime === null) continue;
