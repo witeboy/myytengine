@@ -1128,12 +1128,30 @@ export default function TimelineEditor() {
     const newDurations = fixed.map(a => a.duration);
     const newStarts = fixed.map(a => a.startTime);
 
-    // Rebuild video clips with corrected timings
-    const updated = videoClips.map((clip, idx) => ({
-      ...clip,
-      startTime: newStarts[idx],
-      duration: newDurations[idx],
-    }));
+    // Rebuild video clips with corrected timings, preserving all clip properties
+    const updated = scenes.map((scene, idx) => {
+      const existing = videoClips.find(c => c.sceneId === scene.id);
+      const hasVideo = scene.video_url && scene.video_url.startsWith('http') && !scene.video_url.startsWith('veo_task:') && !scene.video_url.startsWith('grok_vid_task:');
+      const hasBroll = scene.broll_url && scene.broll_url.startsWith('http');
+      return {
+        ...(existing || {}),
+        id: `video-${scene.id}`, sceneId: scene.id, sceneNumber: scene.scene_number,
+        type: 'video', startTime: newStarts[idx], duration: newDurations[idx],
+        label: `Scene ${scene.scene_number}`, thumbnail: scene.image_url,
+        imageUrl: existing?.imageUrl || scene.image_url || null,
+        videoUrl: existing?.videoUrl || (hasVideo ? scene.video_url : null),
+        brollUrl: existing?.brollUrl || (hasBroll ? scene.broll_url : null),
+        mediaType: existing?.mediaType || (hasVideo ? 'video' : 'image'),
+        effects: existing?.effects || [],
+        cinematicMotion: existing?.cinematicMotion || null,
+        transition: existing?.transition || null,
+        transitionDuration: existing?.transitionDuration ?? null,
+        motionSpeed: existing?.motionSpeed ?? 1.0,
+        motionIntensity: existing?.motionIntensity ?? 1.0,
+        playbackRate: existing?.playbackRate ?? 1.0,
+        synced: true,
+      };
+    });
 
     setVideoClips(updated);
     setOverrideBeatDurations(newDurations);
@@ -1149,6 +1167,9 @@ export default function TimelineEditor() {
         });
       } catch (e) { console.warn('Could not save drift fix to DB:', e.message); }
     }
+
+    // Auto-regenerate captions with new timings
+    setTimeout(() => handleGenerateCaptions(true), 500);
   };
 
   // ── Cinematic zoom with intensity ───────────────────────────────
