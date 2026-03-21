@@ -756,25 +756,7 @@ export default function TimelineEditor() {
     if (prodSettings?.beat_durations) {
       try {
         const saved = JSON.parse(prodSettings.beat_durations);
-        if (Array.isArray(saved) && saved.length === scenes.length) {
-          // Hard-cap loaded durations: no single scene > 25s
-          const MAX_SCENE_DUR = 10;
-          const hasOverlong = saved.some(d => d > MAX_SCENE_DUR);
-          if (hasOverlong) {
-            const totalBefore = saved.reduce((s, d) => s + d, 0);
-            const capped = saved.map(d => Math.min(d, MAX_SCENE_DUR));
-            const totalAfter = capped.reduce((s, d) => s + d, 0);
-            // Redistribute reclaimed time proportionally to shorter scenes
-            const reclaimed = totalBefore - totalAfter;
-            if (reclaimed > 0) {
-              const shortScenes = capped.filter(d => d < MAX_SCENE_DUR);
-              const shortTotal = shortScenes.reduce((s, d) => s + d, 0);
-              return capped.map(d => d < MAX_SCENE_DUR ? d + (d / shortTotal) * reclaimed : d);
-            }
-            return capped;
-          }
-          return saved;
-        }
+        if (Array.isArray(saved) && saved.length === scenes.length) return saved;
       } catch (e) {}
     }
     return scenes.map(scene => Math.max(1.5, scene.duration_seconds || 5));
