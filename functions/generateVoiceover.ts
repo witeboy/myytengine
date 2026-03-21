@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
-// VOICEOVER GENERATOR — Ultra-lean submit-only
+// VOICEOVER GENERATOR — Submit-only
 // Submits TTS task to AI33, saves settings, returns task_id
 // Frontend then polls via pollVoiceover
 // ══════════════════════════════════════════════════════════════════
