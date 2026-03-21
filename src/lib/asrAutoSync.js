@@ -372,6 +372,7 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
       duration: (lastTs?.end ?? 0) - (firstTs?.start ?? 0),
       matchScore,
       empty: false,
+      wordCount: range.wordCount,
       // Raw direct-match boundaries (from ASR, not interpolated)
       speechStart: firstDirectTs?.start ?? firstTs?.start ?? null,
       speechEnd: lastDirectTs?.end ?? lastTs?.end ?? null,
