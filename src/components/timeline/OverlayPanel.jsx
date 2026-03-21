@@ -2,10 +2,12 @@
  * OverlayPanel — Left-side panel for adding overlay clips (emoji, stickers, video overlays)
  * to the secondary overlay track above the main timeline.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { base44 } from '@/api/base44Client';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Smile, Film, Plus, Trash2, Search, Sticker } from 'lucide-react';
+import { Smile, Film, Plus, Trash2, Search, Sticker, Image, Upload, Loader2, X } from 'lucide-react';
 
 const EMOJI_LIBRARY = [
   '🔥','💯','⭐','❤️','👀','😂','🎯','💰','🚀','💡',
