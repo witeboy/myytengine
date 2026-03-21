@@ -66,14 +66,18 @@ WHAT TO CHANGE:
 - Replace ALL people in the template with the person(s) from the reference photo(s)
 - The expression should match what the template person was doing (shocked face → reference person with shocked face, etc.) but with the reference person's REAL facial features
 
-OBJECT REPLACEMENT (CRITICAL FOR RELEVANCE):
-- If the template contains OBJECTS that are not relevant to this video's story, REPLACE them with story-relevant objects
-- For example: if the template shows a car but our story is about Bitcoin, replace the car with Bitcoin/crypto imagery
-- If the template shows a house but our story is about stocks, replace with stock charts or money imagery
+OBJECT REPLACEMENT (CRITICAL FOR STORY RELEVANCE):
+- Study the image_prompt below CAREFULLY to identify the SPECIFIC SUBJECT of this video (e.g., custom t-shirts, crypto trading, a restaurant, a specific product)
+- If the template contains OBJECTS that are NOT related to this specific subject, you MUST REPLACE them with story-relevant objects
+- For example: if the template shows dump trucks but the story is about custom t-shirts → replace the trucks with colorful custom t-shirts, merch displays, a heat press, or stacks of branded clothing
+- If the template shows a car but our story is about Bitcoin → replace the car with Bitcoin/crypto imagery
+- NEVER keep generic "success" objects (luxury cars, mansions, trucks, yachts) if the story is about a specific product or business — replace them with THAT product
 - Keep the same SIZE, POSITION, and FRAMING of the original object — just swap what the object IS
 - The replacement object must look photorealistic and naturally composited into the scene
 - If the template uses split-screen/before-after layout, maintain that structure but with story-relevant content on each side
-- Study the image_prompt for extracted objects and ensure they appear in the final image
+
+STORY CONTEXT FROM IMAGE PROMPT (read this to know what objects should appear):
+${imagePrompt}
 
 ${(() => {
       const descs = (charDescriptions || []).filter((d, i) => d && d.trim());
