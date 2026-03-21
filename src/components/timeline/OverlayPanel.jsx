@@ -178,6 +178,44 @@ export default function OverlayPanel({ overlayClips, onAddOverlay, onRemoveOverl
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-2 space-y-3">
+        {activeTab === 'image' && (
+          <div className="space-y-3">
+            <Button onClick={handleUploadImage} disabled={isUploading} className="w-full gap-2 bg-cyan-600 hover:bg-cyan-700 text-xs">
+              {isUploading ? <><Loader2 size={14} className="animate-spin" /> Uploading…</> : <><Upload size={14} /> Upload Image</>}
+            </Button>
+            <p className="text-[9px] text-gray-500 text-center">
+              Upload logos, icons, watermarks, or branding images to overlay on your video.
+            </p>
+            {uploadedAssets.length > 0 ? (
+              <div className="grid grid-cols-2 gap-2">
+                {uploadedAssets.map(asset => (
+                  <div key={asset.id} className="group relative aspect-square bg-gray-800 rounded-lg overflow-hidden cursor-pointer hover:ring-2 hover:ring-cyan-500 transition-all"
+                    onClick={() => addImageOverlay(asset)}>
+                    <img src={asset.file_url} className="w-full h-full object-contain p-1" alt={asset.filename} />
+                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 p-1">
+                      <p className="text-[8px] text-white truncate">{asset.filename}</p>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteAsset(asset.id); }}
+                      className="absolute top-1 right-1 p-0.5 bg-red-600/80 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X size={10} className="text-white" />
+                    </button>
+                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
+                      <Plus size={20} className="text-white" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center py-6 text-gray-600">
+                <Image size={24} className="mb-2 opacity-50" />
+                <p className="text-[10px]">No images uploaded yet</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {activeTab === 'emoji' && (
           <>
             <div className="grid grid-cols-5 gap-1.5">
