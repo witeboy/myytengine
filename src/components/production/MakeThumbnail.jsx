@@ -211,6 +211,9 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
   const [generatedUrl, setGeneratedUrl] = useState(null);
   const [error, setError]               = useState(null);
 
+  // Blend mode
+  const [showBlend, setShowBlend]       = useState(false);
+
   // ── helpers ──────────────────────────────────────────────────────
   const MAX_PHOTOS = 14; // nano-banana-2 supports up to 14 image inputs
   const handleUpload = (i, file) => {
