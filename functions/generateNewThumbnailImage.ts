@@ -127,18 +127,16 @@ OUTPUT REQUIREMENTS:
 
 Recreate this thumbnail with the same overall layout, composition, lighting, and energy.
 
-OBJECT REPLACEMENT (CRITICAL FOR STORY RELEVANCE):
-Study the image_prompt carefully for the SPECIFIC SUBJECT of this video. Then:
-- IDENTIFY all major objects in the template (products, items, symbols, props, vehicles, etc.)
-- REPLACE these objects with the STORY-RELEVANT objects described in the concept
-- Example: Template shows trucks but the video is about custom t-shirts → replace trucks with colorful custom t-shirts, merch displays, clothing racks
-- Example: Template has generic product → replace with the specific subject of our video (crypto coin, stock chart, food item, custom clothing, etc.)
-- NEVER keep generic objects (luxury cars, trucks, mansions) if the story is about a specific product — always replace with THAT product
-- Keep the same SIZE, POSITION, and FRAMING — just change WHAT the object is
-- If the template uses split-screen or before/after layout, keep that structure but fill each side with story-appropriate imagery
-- People in the template can stay (with appropriate expressions) unless the story requires different characters
+OBJECT DETECTION + REPLACEMENT (CRITICAL — DO THIS CAREFULLY):
 
-STORY CONTEXT FROM IMAGE PROMPT:
+1. SCAN the template for every distinct object: vehicles, products, buildings, animals, food, tools, symbols, props, backgrounds
+2. READ the image_prompt below to learn the SPECIFIC SUBJECT of this video
+3. For EACH template object: if it's unrelated to the story → REPLACE it with a story-relevant equivalent of the same size and position
+4. If the template uses split-screen or before/after layout, keep that structure but fill each side with story-appropriate content
+5. People in the template can stay (with appropriate expressions) unless the story requires different characters
+6. NEVER keep generic unrelated objects — always swap them for the actual story subject
+
+STORY CONTEXT (source of truth for what objects belong):
 ${imagePrompt}
 
 TEXT REPLACEMENT (CRITICAL):
