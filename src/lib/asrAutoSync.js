@@ -613,12 +613,11 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     }
   });
 
-  // ── DRIFT DETECTION + AUTO-FIX ────────────────────────────────────
+  // ── DRIFT DETECTION (report only — user applies fix manually) ────
   // Scan for scenes whose FINAL duration is much longer than their
-  // actual speech content. Auto-fix them inline so the output never
-  // contains bloated durations.
+  // actual speech content. Flag them with driftDetected + driftInfo
+  // so the UI can show them and let the user trigger the fix.
   const SECS_PER_WORD = 0.38;
-  const driftedIndices = [];
 
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
@@ -644,43 +643,8 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
         suggestedDuration: Math.round(Math.max(1.0, speechSpan + 1.5) * 100) / 100,
         deadAir: Math.round(deadAir * 100) / 100,
       };
-      driftedIndices.push(i);
       console.warn(`[Drift Detected] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s (speech: ${speechSpan.toFixed(1)}s, words: ${wordCount}, dead air: ${deadAir.toFixed(1)}s)`);
     }
-  }
-
-  // Auto-fix all drifted scenes
-  if (driftedIndices.length > 0) {
-    console.log(`[AutoFix] Auto-fixing ${driftedIndices.length} bloated scene(s)…`);
-    applyDriftFix(results, driftedIndices, sceneWordRanges);
-
-    // Final gap-closing after auto-fix to ensure seamless coverage
-    for (let i = 0; i < results.length - 1; i++) {
-      const curr = results[i];
-      const next = results[i + 1];
-      if (curr.endTime === null || next.startTime === null) continue;
-      const gap = next.startTime - curr.endTime;
-      if (gap > 0 && gap <= MAX_ABSORB) {
-        curr.endTime = next.startTime;
-      } else if (gap > MAX_ABSORB) {
-        const mid = curr.endTime + gap / 2;
-        curr.endTime = mid;
-        next.startTime = mid;
-      } else if (gap < 0) {
-        const mid = curr.endTime + gap / 2;
-        curr.endTime = mid;
-        next.startTime = mid;
-      }
-    }
-
-    // Recalculate final durations
-    results.forEach(r => {
-      if (r.startTime !== null && r.endTime !== null) {
-        r.startTime = Math.round(r.startTime * 1000) / 1000;
-        r.endTime = Math.round(r.endTime * 1000) / 1000;
-        r.duration = Math.round((r.endTime - r.startTime) * 1000) / 1000;
-      }
-    });
   }
 
   return results;
