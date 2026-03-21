@@ -142,7 +142,7 @@ Deno.serve(async (req) => {
 
     const res = await fetch(
       `${KIE_BASE}/recordInfo?taskId=${task_id}`,
-      { headers: { 'Authorization': `Bearer ${KIE_API_KEY}` } }
+      { headers: { 'Authorization': `Bearer ${KIE_API_KEY}` } } 
     );
     const text = await res.text();
     let pollData;
