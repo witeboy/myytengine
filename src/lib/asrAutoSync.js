@@ -394,11 +394,52 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
   // Between scene N's last word end and scene N+1's first word start,
   // there's natural silence. Split it at the midpoint so each scene
   // gets half the buffer.
+  //
+  // For UNRELIABLE scenes (bad ASR match), we anchor them from
+  // the previous scene's end and give them word-estimate duration.
+
+  // First: resolve unreliable scenes by anchoring from neighbors
+  const SECS_PER_WORD_STITCH = 0.38;
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    if (!r.unreliable && !r.empty) continue;
+    if (!r.unreliable) continue; // empty scenes handled separately below
+
+    // Find the nearest reliable scene before and after
+    let prevEnd = 0;
+    for (let j = i - 1; j >= 0; j--) {
+      if (!results[j].empty && !results[j].unreliable && results[j].speechEnd != null) {
+        prevEnd = results[j].speechEnd;
+        break;
+      } else if (results[j].endTime != null) {
+        prevEnd = results[j].endTime;
+        break;
+      }
+    }
+
+    let nextStart = totalAudioDuration;
+    for (let j = i + 1; j < results.length; j++) {
+      if (!results[j].empty && !results[j].unreliable && results[j].speechStart != null) {
+        nextStart = results[j].speechStart;
+        break;
+      }
+    }
+
+    // Give this scene its word-estimate duration, anchored after prev
+    const estDur = Math.max(1.0, r.wordCount * SECS_PER_WORD_STITCH + 0.5);
+    const available = nextStart - prevEnd;
+    const dur = Math.min(estDur, Math.max(1.0, available));
+
+    r.startTime = prevEnd;
+    r.endTime = prevEnd + dur;
+    r.duration = dur;
+
+    console.log(`[ASR Scene ${r.sceneNumber}] ⚠️ Unreliable → anchored: ${r.startTime.toFixed(2)}s → ${r.endTime.toFixed(2)}s = ${dur.toFixed(2)}s (est ${estDur.toFixed(1)}s)`);
+  }
 
   // First scene starts at 0
-  if (results.length > 0 && !results[0].empty && results[0].speechStart !== null) {
+  if (results.length > 0 && !results[0].empty && results[0].startTime !== null) {
     results[0].startTime = 0;
-    // endTime stays at speechEnd for now — will be stitched below
   }
 
   // Stitch adjacent scenes at the midpoint of silence between them
@@ -408,20 +449,20 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
 
     // Skip empty scenes for now
     if (curr.empty || next.empty) continue;
-    if (curr.speechEnd === null || next.speechStart === null) continue;
+
+    const currEnd = curr.speechEnd ?? curr.endTime;
+    const nextStart = next.speechStart ?? next.startTime;
+    if (currEnd === null || nextStart === null) continue;
 
     // The silence gap between this scene's last word and next scene's first word
-    const silenceStart = curr.speechEnd;
-    const silenceEnd = next.speechStart;
-
-    if (silenceEnd > silenceStart) {
+    if (nextStart > currEnd) {
       // Split silence at midpoint
-      const mid = silenceStart + (silenceEnd - silenceStart) / 2;
+      const mid = currEnd + (nextStart - currEnd) / 2;
       curr.endTime = mid;
       next.startTime = mid;
     } else {
       // Overlap or no gap — just butt them together
-      const boundary = (silenceStart + silenceEnd) / 2;
+      const boundary = (currEnd + nextStart) / 2;
       curr.endTime = boundary;
       next.startTime = boundary;
     }
@@ -447,7 +488,6 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
         results[i].endTime = prev.endTime + Math.min(MIN_EMPTY, available);
         next.startTime = results[i].endTime;
       } else {
-        // Not enough space — steal a bit from neighbors
         results[i].startTime = prev.endTime;
         results[i].endTime = prev.endTime + MIN_EMPTY;
         next.startTime = results[i].endTime;
