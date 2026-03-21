@@ -21,6 +21,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
   const [previewCache, setPreviewCache] = useState({}); // voice_id -> preview_url
   const [settings, setSettings] = useState(null);
   const [chunkProgress, setChunkProgress] = useState(null);
+  const [provider, setProvider] = useState('minimax_direct'); // 'minimax_direct' or 'ai33'
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -101,6 +102,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       res = await base44.functions.invoke('generateVoiceover', {
         project_id: project.id,
         voice_id: selectedVoice,
+        provider: provider,
       });
     } catch (err) {
       const errMsg = err?.response?.data?.error || err.message || 'Voiceover generation failed';
@@ -398,11 +400,32 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
           )}
         </div>
 
+        {/* Provider Toggle */}
+        <div>
+          <label className="text-sm font-medium mb-1.5 block">TTS Provider</label>
+          <div className="flex gap-1 bg-gray-100 p-0.5 rounded-lg">
+            <button
+              onClick={() => setProvider('minimax_direct')}
+              className={`flex-1 px-3 py-2 rounded-md text-xs font-medium transition-colors ${provider === 'minimax_direct' ? 'bg-white shadow text-orange-700' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              ⚡ MiniMax Direct
+              <span className="block text-[10px] mt-0.5 font-normal opacity-70">Instant for short · Your API key</span>
+            </button>
+            <button
+              onClick={() => setProvider('ai33')}
+              className={`flex-1 px-3 py-2 rounded-md text-xs font-medium transition-colors ${provider === 'ai33' ? 'bg-white shadow text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              🌐 AI33 Pro
+              <span className="block text-[10px] mt-0.5 font-normal opacity-70">Async · Any length · Submit + Poll</span>
+            </button>
+          </div>
+        </div>
+
         {/* Generate Button */}
         <Button
           onClick={handleGenerate}
           disabled={generating || !selectedVoice || !script}
-          className="w-full bg-purple-600 hover:bg-purple-700"
+          className={`w-full ${provider === 'minimax_direct' ? 'bg-orange-600 hover:bg-orange-700' : 'bg-purple-600 hover:bg-purple-700'}`}
         >
           {generating ? (
             <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating Voiceover...</>
