@@ -1038,6 +1038,7 @@ export default function TimelineEditor() {
 
       // Step 4b: Detect drifted scenes from alignment results (ASR path only)
       if (alignmentResults) {
+        setLastAlignmentResults(alignmentResults);
         const drifts = alignmentResults
           .map((a, idx) => (a.driftDetected ? { index: idx, sceneNumber: a.sceneNumber, info: a.driftInfo } : null))
           .filter(Boolean);
