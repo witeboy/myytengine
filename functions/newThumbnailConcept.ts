@@ -172,14 +172,17 @@ STEP 3 — IMAGE PROMPT RULES
 ════════════════════════════
 Each concept needs a detailed image_prompt (300+ words) that:
 - Starts with: "1920x1080 YouTube thumbnail, photorealistic, cinematic DSLR quality"
-- MUST include the extracted story objects prominently in the scene
+- MUST include the extracted story objects prominently in the scene — these are the PRIMARY visual elements
+- The SPECIFIC PRODUCT or SUBJECT from the summary must be the DOMINANT background/prop element (e.g., if the story is about selling custom t-shirts, the image MUST show colorful custom t-shirts, a heat press, merch displays — NOT generic wealth symbols)
+- NEVER substitute the actual story subject with generic "success" imagery (sports cars, mansions, gold chains) unless the summary literally mentions those items
 - For SPLIT SCREEN concepts: describe LEFT side and RIGHT side separately with contrasting mood/lighting
 - For BEFORE/AFTER: left side = dark, desaturated, struggling; right side = bright, saturated, successful
 - For FINANCE: include specific financial symbols (Bitcoin, stock charts going up/down, gold, cash stacks)
 - For CRIME: include evidence, shadows, red accents, police tape, mystery elements
+- For E-COMMERCE/MERCH: show the actual product being sold, the workspace/equipment, packaging, or displays
 - Describes character emotion/pose, lighting (rim lights, key light)
-- ${hasCharPhotos ? 'Describes the character(s) from the uploaded photos exactly — same face, skin tone, hair, features. Say "person matching reference photo exactly"' : 'Creates characters that match the video tone'}
-- ${hasUserTemplate ? `Recreates the layout from the uploaded template: "${template_name}" — same composition, positions, zones. REPLACE any objects in the template with the story-relevant objects extracted above.` : 'Uses the chosen strategy layout (split-screen, hero, etc.)'}
+- ${hasCharPhotos ? 'Describes the character(s) from the uploaded photos exactly — same face, skin tone, hair, features. Say "person matching reference photo exactly"' : 'Creates characters that match the video tone — if the summary describes a specific person (age, gender, setting), the character MUST match that description'}
+- ${hasUserTemplate ? `Recreates the layout from the uploaded template: "${template_name}" — same composition, positions, zones. REPLACE any objects in the template with the story-relevant objects extracted above. If the template shows objects unrelated to the story (e.g., cars when the story is about clothing), replace them with the actual story subject.` : 'Uses the chosen strategy layout (split-screen, hero, etc.)'}
 - Ends with: "NO text, letters, numbers, or watermarks anywhere in the image"
 
 ════════════════════════════
