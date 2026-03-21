@@ -1534,7 +1534,14 @@ export default function TimelineEditor() {
               }}
             />
           ) : selectedCaption ? (
-            <TextPropertiesPanel caption={selectedCaption} onUpdate={c => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))} onDelete={handleDeleteCaption} onDuplicate={handleDuplicateCaption} onApplyStyleToAll={handleApplyStyleToAllCaptions} />
+            <TextPropertiesPanel
+              caption={selectedCaption}
+              onUpdate={c => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))}
+              onDelete={handleDeleteCaption}
+              onDuplicate={handleDuplicateCaption}
+              onApplyStyleToAll={handleApplyStyleToAllCaptions}
+              onUpdateStyleToAll={(k, v) => setCaptionClips(captionClips.map(c => ({ ...c, [k]: v })))}
+            />
           ) : selectedVideo ? (
             <ClipPropertiesPanel clip={selectedVideo} audioBeatDuration={audioBeatDurations[selectedVideoIdx]} onUpdate={c => setVideoClips(videoClips.map(x => x.id === c.id ? c : x))} onApplyToAll={handleApplyToAll} />
           ) : (
