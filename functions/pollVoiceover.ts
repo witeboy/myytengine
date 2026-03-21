@@ -32,10 +32,22 @@ Deno.serve(async (req) => {
       return Response.json({ status: 'no_task', message: 'No generation task found' });
     }
 
-    // Check if task has been stuck too long (>5 min = likely dead at AI33)
+    // Check if task has been stuck too long — scale timeout with script length
+    // Short scripts (~500 words): 10 min, Long scripts (~18000 words / 2hr): 45 min
+    let timeoutMs = 10 * 60 * 1000; // default 10 min
+    try {
+      const scripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
+      const script = scripts.find(s => s.version === 'final_aggregated');
+      const wordCount = script?.word_count || (script?.full_script || '').split(/\s+/).length || 0;
+      if (wordCount > 1000) {
+        timeoutMs = Math.min(60 * 60 * 1000, Math.max(10 * 60 * 1000, Math.round(wordCount / 1000) * 5 * 60 * 1000));
+      }
+      console.log(`⏱ Timeout set to ${Math.round(timeoutMs / 60000)} min for ${wordCount} words`);
+    } catch (_) {}
+
     const taskAge = Date.now() - new Date(settings.updated_date).getTime();
-    if (taskAge > 5 * 60 * 1000 && settings.voiceover_status === 'generating') {
-      console.log(`⏰ Task ${taskId} has been generating for ${Math.round(taskAge / 1000)}s — marking as failed (stuck)`);
+    if (taskAge > timeoutMs && settings.voiceover_status === 'generating') {
+      console.log(`⏰ Task ${taskId} has been generating for ${Math.round(taskAge / 1000)}s (limit: ${Math.round(timeoutMs / 1000)}s) — marking as failed (stuck)`);
       await base44.asServiceRole.entities.ProductionSettings.update(settings.id, { voiceover_status: 'failed' });
       return Response.json({ status: 'failed', error: 'Voiceover generation timed out. Please try again.' });
     }

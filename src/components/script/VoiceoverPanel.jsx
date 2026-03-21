@@ -145,7 +145,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
         if (prev) setError('Voiceover generation is taking longer than expected. Refresh the page to check.');
         return false;
       });
-    }, 300000);
+    }, 1800000);
   };
 
   const handlePreviewVoice = async (voice) => {
