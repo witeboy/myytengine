@@ -303,7 +303,7 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
         template_mime:           templateMime,
       } : {};
 
-      setLoadingPhase('Gemini is engineering your 5 high-CTR concepts…');
+      setLoadingPhase('Step 1: Classifying photos → Character / Environment / Object…');
 
       let conceptsResult;
       try {
