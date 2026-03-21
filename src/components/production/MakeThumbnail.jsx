@@ -370,8 +370,8 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
     setStep(2);
 
     try {
-      // Resize photos to 512px max before sending
-      const resizeToBase64 = (file, maxDim = 512) => new Promise((resolve) => {
+      // Resize photos to 1024px max before sending (higher res = better face reference)
+      const resizeToBase64 = (file, maxDim = 1024) => new Promise((resolve) => {
         const img = new Image();
         img.onload = () => {
           const scale = Math.min(maxDim / img.width, maxDim / img.height, 1);
