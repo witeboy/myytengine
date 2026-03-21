@@ -274,9 +274,19 @@ FINAL VALIDATION BEFORE OUTPUT:
     const rawDetectedMood = (parsed.detected_mood || 'drama').toLowerCase().replace(/[,|]/g, '|');
     const detectedMood = rawDetectedMood.split('|')[0].trim() || 'drama';
     const concepts = parsed.concepts.slice(0, 5);
+    const primarySubject = parsed.primary_subject || '';
     const extractedObjects = parsed.extracted_objects || [];
+    const objectsFromPhotos = parsed.objects_from_photos || [];
+    const objectsInTemplate = parsed.objects_in_template || [];
+    const objectSwapMap = parsed.object_swap_map || {};
     const thumbnailStrategy = parsed.thumbnail_strategy || 'hero_shot';
-    console.log(`Mood: ${detectedMood} | Strategy: ${thumbnailStrategy} | Objects: ${extractedObjects.join(', ')} | Concepts: ${concepts.length}`);
+    console.log(`Mood: ${detectedMood} | Strategy: ${thumbnailStrategy}`);
+    console.log(`Primary subject: ${primarySubject}`);
+    console.log(`Objects from story: ${extractedObjects.join(', ')}`);
+    console.log(`Objects from photos: ${objectsFromPhotos.join(', ')}`);
+    console.log(`Objects in template: ${objectsInTemplate.join(', ')}`);
+    console.log(`Object swap map: ${JSON.stringify(objectSwapMap)}`);
+    console.log(`Concepts: ${concepts.length}`);
 
     // ── SAVE CONCEPT RECORDS ─────────────────────────────────────
     const sessionId = project_id || `thumb_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
