@@ -1005,6 +1005,7 @@ export default function TimelineEditor() {
           const dur = newBeatDurations[idx];
           const wordEstimate = Math.max(1.0, wordCount * 0.38);
           const isBloated = dur > wordEstimate * 2.5 && dur > 10;
+          const suggestedDur = Math.round(Math.max(1.0, Math.min(10, wordEstimate + 1.5)) * 100) / 100;
           return {
             sceneId: scene.id,
             sceneNumber: scene.scene_number,
@@ -1021,7 +1022,7 @@ export default function TimelineEditor() {
               speechSpan: Math.round(wordEstimate * 100) / 100,
               wordCount,
               wordEstimate: Math.round(wordEstimate * 100) / 100,
-              suggestedDuration: Math.round(Math.max(1.0, wordEstimate + 1.5) * 100) / 100,
+              suggestedDuration: suggestedDur,
               deadAir: Math.round((dur - wordEstimate) * 100) / 100,
             } : undefined,
           };

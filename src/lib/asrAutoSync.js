@@ -634,14 +634,16 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
       (r.duration > wordEstimate * 2.5 && r.duration > 10);
 
     if (isBloated) {
+      // Use word estimate (not speech span) as basis — speechSpan can be bloated from misalignment
+      const suggestedDur = Math.round(Math.max(1.0, Math.min(10, wordEstimate + 1.5)) * 100) / 100;
       r.driftDetected = true;
       r.driftInfo = {
         currentDuration: r.duration,
         speechSpan: Math.round(speechSpan * 100) / 100,
         wordCount,
         wordEstimate: Math.round(wordEstimate * 100) / 100,
-        suggestedDuration: Math.round(Math.max(1.0, speechSpan + 1.5) * 100) / 100,
-        deadAir: Math.round(deadAir * 100) / 100,
+        suggestedDuration: suggestedDur,
+        deadAir: Math.round((r.duration - wordEstimate) * 100) / 100,
       };
       console.warn(`[Drift Detected] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s (speech: ${speechSpan.toFixed(1)}s, words: ${wordCount}, dead air: ${deadAir.toFixed(1)}s)`);
     }
