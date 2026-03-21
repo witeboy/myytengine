@@ -1070,6 +1070,39 @@ export default function TimelineEditor() {
     setTimeout(() => setSyncStatus(null), 4000);
   };
 
+  // ── Manual drift fix handler ─────────────────────────────────────
+  const handleApplyDriftFix = async (driftedIndices) => {
+    if (!lastAlignmentResults || !driftedIndices?.length) return;
+
+    const { applyDriftFix } = await import('@/lib/asrAutoSync');
+    const fixed = applyDriftFix([...lastAlignmentResults], driftedIndices);
+
+    const newDurations = fixed.map(a => a.duration);
+    const newStarts = fixed.map(a => a.startTime);
+
+    // Rebuild video clips with corrected timings
+    const updated = videoClips.map((clip, idx) => ({
+      ...clip,
+      startTime: newStarts[idx],
+      duration: newDurations[idx],
+    }));
+
+    setVideoClips(updated);
+    setOverrideBeatDurations(newDurations);
+    setLastAlignmentResults(fixed);
+    setDriftedScenes([]);
+
+    // Persist
+    if (prodSettings?.id) {
+      try {
+        await base44.entities.ProductionSettings.update(prodSettings.id, {
+          beat_durations: JSON.stringify(newDurations),
+          beat_start_times: JSON.stringify(newStarts),
+        });
+      } catch (e) { console.warn('Could not save drift fix to DB:', e.message); }
+    }
+  };
+
   // ── Cinematic zoom with intensity ───────────────────────────────
   const handleApplyCinematicZoom = (intensity) => {
     setIsApplyingZoom(true);
