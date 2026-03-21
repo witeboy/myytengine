@@ -111,26 +111,39 @@ STEP 0 — EXTRACT STORY OBJECTS (CRITICAL)
 ════════════════════════════
 Analyze the title and summary to identify the CENTRAL VISUAL OBJECTS that viewers must see to instantly understand the video:
 
-OBJECT EXTRACTION RULES:
-- Read the ENTIRE summary carefully. The PRIMARY VISUAL SUBJECT is the specific product, item, business, or activity that the story is actually about.
-- FINANCE videos (stocks, crypto, money): Extract the specific asset (Bitcoin logo, stock chart, gold bars, dollar bills, specific company logo)
-- CRIME/DRAMA videos: Extract the central person/victim/villain, the weapon/evidence, the location
-- FOOD/LIFESTYLE: Extract the specific food item, product, or transformation result
-- TECH: Extract the specific device, app, or gadget
-- E-COMMERCE / MERCH / PRODUCTS: Extract the EXACT product being sold (custom t-shirts, candles, jewelry, shoes, etc.) — show the actual merchandise, packaging, printing equipment, or storefront
-- REAL ESTATE: Extract buildings, houses, property types mentioned
-- BEFORE/AFTER stories: Extract both the "before" state object and the "after" state object
-- COMPARISON stories: Extract both sides of the comparison
-- TUTORIAL/HOW-TO: Extract the end result or the tool being taught
-- BUSINESS/ENTREPRENEURSHIP: Extract the SPECIFIC business type and its physical product or service — NOT generic "success" symbols like luxury cars or mansions unless the story is literally about those things
+OBJECT EXTRACTION RULES — DYNAMIC (NO HARDCODED CATEGORIES):
+Do NOT rely on predefined categories. Instead, follow this 3-step process:
+
+STEP A — READ the title and summary word-by-word. Identify:
+  1. PRIMARY SUBJECT: The single most important thing the video is about (a product, person, event, place, concept, activity, etc.)
+  2. SECONDARY OBJECTS: Any supporting items, tools, locations, or props mentioned
+  3. EMOTIONAL STATE: The key emotion or transformation described
+  
+  Examples of what to extract (these are examples, NOT a fixed list):
+  - "19-year-old sells custom t-shirts from dorm room" → PRIMARY: custom t-shirts / merch. SECONDARY: dorm room, heat press, packaging. PERSON: 19-year-old female entrepreneur
+  - "Man catches wife cheating with neighbor" → PRIMARY: the confrontation moment. SECONDARY: phone/evidence, doorway, bedroom. PERSON: angry husband, guilty wife
+  - "How I mass produced 10,000 candles" → PRIMARY: candles. SECONDARY: wax pouring equipment, workshop, packaging line
+
+STEP B — If CHARACTER PHOTOS were uploaded, study them:
+  - What objects are visible in the photos? (clothing, tools, products, setting/background)
+  - Use these REAL objects from the photos as props in the thumbnail — they ground the image in reality
+  - The person's actual environment, outfit, and items are MORE valuable than imagined ones
+
+STEP C — If a TEMPLATE image was uploaded, study it:
+  - DETECT every major object in the template (vehicles, products, buildings, symbols, props, backgrounds)
+  - MAP each template object to its story-relevant replacement from Steps A and B
+  - Example: Template has dump trucks → story is about t-shirts → replace trucks with stacks of colorful custom t-shirts
+  - Example: Template has a luxury car → story is about cooking → replace car with a sizzling dish or restaurant
+  - KEEP the same size, position, framing, and visual weight — only change WHAT the object is
 
 ANTI-HALLUCINATION RULE (CRITICAL):
-- Do NOT add objects that are NOT mentioned in the title or summary. If the story is about selling t-shirts, show t-shirts — NOT trucks, NOT sports cars, NOT random luxury items.
-- If the summary mentions a specific product (t-shirts, candles, courses, etc.), that product MUST be the dominant visual element in the background/props.
-- Generic "wealth symbols" (supercars, mansions, yachts, stacks of gold) are BANNED unless the summary specifically mentions them.
-- The thumbnail must be INSTANTLY recognizable as being about the specific topic in the summary.
+- ONLY use objects that are mentioned in the title, summary, or visible in uploaded photos
+- NEVER invent generic "success" symbols (supercars, mansions, yachts, gold chains, private jets) unless the summary LITERALLY mentions them
+- If the story is about a specific product or business, THAT product/business must be the dominant visual — not a proxy or metaphor
+- The thumbnail must be INSTANTLY recognizable as being about the exact topic described in the summary
+- When in doubt, use the LITERAL objects from the summary, not abstract interpretations
 
-These objects MUST appear prominently in EVERY image prompt. They are what make the viewer instantly connect the thumbnail to the video.
+These extracted objects MUST appear prominently in EVERY image prompt.
 
 ════════════════════════════
 STEP 1 — DETECT MOOD + CHOOSE STRATEGY
