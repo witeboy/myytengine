@@ -546,7 +546,8 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
       }
     } catch (e) {
       console.error('handleGenerateImage error:', e);
-      setError(e.message);
+      const serverMsg = e?.response?.data?.error;
+      setError(serverMsg || e.message);
     }
 
     setGenerating(false);
