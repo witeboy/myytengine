@@ -148,8 +148,9 @@ These extracted objects MUST appear prominently in EVERY image prompt.
 ════════════════════════════
 STEP 1 — DETECT MOOD + CHOOSE STRATEGY
 ════════════════════════════
-From the title/summary, identify the single best niche:
-crime | drama | nollywood | comedy | finance | inspirational | educational
+From the title/summary, DEDUCE the single best emotional mood. Do NOT pick from a fixed list — derive it organically from the content.
+Examples: crime, drama, comedy, finance, inspirational, educational, horror, romantic, entrepreneurial, mystery, sports, gaming, cooking, beauty, travel, parenting, etc.
+Use whatever single word best captures the emotional tone. Be specific.
 
 Then choose the BEST thumbnail strategy:
 - SPLIT SCREEN (before/after, then/now, good/bad, rich/poor): Use when there's a contrast or comparison. One side dark/sorrowful, other side bright/successful. Like MrBeast "$1 vs $1,000,000" format.
