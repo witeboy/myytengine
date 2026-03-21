@@ -692,7 +692,8 @@ export function applyDriftFix(results, driftedIndices) {
   // Helper: check if a scene is bloated and tag it
   const detectBloat = (r) => {
     if (!r || r.empty || r.startTime === null || r.endTime === null) return;
-    const wordCount = r.driftInfo?.wordCount ?? 0;
+    // wordCount is stored directly on the result by alignScenesToASR
+    const wordCount = r.wordCount ?? r.driftInfo?.wordCount ?? 0;
     if (wordCount === 0) return;
     const wordEstimate = Math.max(1.0, wordCount * SECS_PER_WORD);
     const isBloated = r.duration > wordEstimate * 2.5 && r.duration > 8;
