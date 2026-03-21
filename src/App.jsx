@@ -1,22 +1,12 @@
 import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
-import NavigationTracker from '@/lib/NavigationTracker'
 import { pagesConfig } from './pages.config'
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
-import { ExportProvider } from '@/lib/ExportContext';
-import ExportProgressBar from '@/components/ExportProgressBar';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
-import ChannelsHub from '@/pages/ChannelsHub';
-import ChannelDetail from '@/pages/ChannelDetail';
-import ToolsHub from '@/pages/ToolsHub';
-import CompetitorMonitor from '@/pages/CompetitorMonitor';
-import SleepPipeline from '@/pages/SleepPipeline';
-import AutoEditReview from '@/pages/AutoEditReview';
-import ShortsPipeline from '@/pages/ShortsPipeline';
-import LongViralPipeline from '@/pages/LongViralPipeline';
+import BulkUGCPipeline from './pages/BulkUGCPipeline';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -68,14 +58,6 @@ const AuthenticatedApp = () => {
           }
         />
       ))}
-      <Route path="/ChannelsHub" element={<ChannelsHub />} />
-      <Route path="/ChannelDetail" element={<ChannelDetail />} />
-      <Route path="/ToolsHub" element={<ToolsHub />} />
-      <Route path="/CompetitorMonitor" element={<CompetitorMonitor />} />
-      <Route path="/SleepPipeline" element={<SleepPipeline />} />
-      <Route path="/AutoEditReview" element={<AutoEditReview />} />
-      <Route path="/ShortsPipeline" element={<ShortsPipeline />} />
-      <Route path="/LongViralPipeline" element={<LongViralPipeline />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
@@ -87,14 +69,10 @@ function App() {
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
-        <ExportProvider>
-          <Router>
-            <NavigationTracker />
-            <AuthenticatedApp />
-            <ExportProgressBar />
-          </Router>
-          <Toaster />
-        </ExportProvider>
+        <Router>
+          <AuthenticatedApp />
+        </Router>
+        <Toaster />
       </QueryClientProvider>
     </AuthProvider>
   )
