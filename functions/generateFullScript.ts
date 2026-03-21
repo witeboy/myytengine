@@ -130,6 +130,7 @@ Deno.serve(async (req) => {
         word_count: totalWords,
         estimated_duration_sec: estimatedDuration,
         title: topic?.title || project.name,
+        
       });
       script = { ...existingFinal, id: existingFinal.id };
     } else {
