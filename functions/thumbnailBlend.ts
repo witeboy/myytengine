@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
 
     // ── Submit to AI33 SeedDream ─────────────────────────────────
     const formData = new FormData();
-    formData.append('prompt', prompt.substring(0, 4000));
+    formData.append('prompt', prompt);
     formData.append('model_id', 'bytedance-seedream-4.5');
     formData.append('generations_count', '1');
     formData.append('model_parameters', JSON.stringify({
