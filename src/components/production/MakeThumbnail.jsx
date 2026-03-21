@@ -27,17 +27,9 @@ const MOODS = {
   },
 };
 
-function detectMood(title, summary) {
-  const text = `${title} ${summary}`.toLowerCase();
-  const scores = {};
-  for (const [mood, data] of Object.entries(MOODS)) {
-    scores[mood] = data.keywords.filter(kw => text.includes(kw)).length;
-  }
-  if (/bimbo|sonia|kunle|brodashaggi|naija|yoruba|igbo|woli|shaggi/.test(text)) scores.nollywood += 6;
-  if (/\$[0-9]|[0-9]k\/|per month|passive income/.test(text)) scores.finance += 4;
-  if (/murder|kill|blood|victim|stalker/.test(text)) scores.crime += 5;
-  const best = Object.entries(scores).sort((a,b) => b[1]-a[1])[0];
-  return best[1] > 0 ? best[0] : 'drama';
+// Mood is now detected dynamically by Gemini — no hardcoded keyword matching
+function detectMood() {
+  return 'default';
 }
 
 // ═══════════════════════════════════════════════════════════════════════
