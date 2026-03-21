@@ -734,7 +734,7 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
 
     console.log(`[Drift Fix] Scene ${r.sceneNumber}: corrected to ${r.startTime.toFixed(1)}s–${r.endTime.toFixed(1)}s (${r.duration.toFixed(1)}s)`);
     driftFixed = true;
-  }
+    }
 
     // ── Gap-closing pass inside the drift loop ────────────────────
     // Close gaps but NEVER inflate a scene beyond 2x its word-count estimate
