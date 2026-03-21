@@ -333,7 +333,7 @@ Do NOT add any other text.`;
           rank:                   c.rank ?? (i + 1),
           concept_type:           c.emotion_triggered ?? 'shock',
           psychological_trigger:  c.emotion_triggered ?? 'Shock',
-          concept_description:    `${c.why_this_works || ''} | Strategy: ${c.layout_type || thumbnailStrategy} | Objects: ${(c.objects_used || extractedObjects).join(', ')}`,
+          concept_description:    `${c.why_this_works || ''} | Strategy: ${c.layout_type || thumbnailStrategy} | Primary: ${primarySubject} | Objects: ${(c.objects_used || extractedObjects).join(', ')} | Swaps: ${JSON.stringify(objectSwapMap)}`,
           visual_metaphor:        detectedMood,
           color_scheme:           c.text_color ?? 'white | black outline',
           text_overlay:           c.text_overlay ?? '',
