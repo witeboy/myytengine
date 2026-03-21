@@ -207,10 +207,16 @@ Return ONLY a valid JSON object. No markdown. No explanation. No backticks.
       "text_position": "upper-left|bottom-center",
       "text_color": "white|yellow|red",
       "ctr_score": 9,
-      "image_prompt": "1920x1080 YouTube thumbnail, photorealistic... (300+ words, includes extracted objects, NO text in image)"
+      "image_prompt": "1920x1080 YouTube thumbnail, photorealistic... (300+ words, includes extracted objects AS THE DOMINANT VISUAL ELEMENTS, NO text in image)"
     }
   ]
-}` });
+}
+
+FINAL VALIDATION BEFORE OUTPUT:
+- Re-read the summary one more time
+- For EACH image_prompt, verify: does the PRIMARY PRODUCT/SUBJECT from the summary appear as a dominant visual element?
+- If any image_prompt contains objects NOT mentioned in the summary (random vehicles, buildings, animals, etc.), REMOVE them and replace with the actual story subject
+- The viewer should be able to look at the thumbnail and immediately know what the video is about` });
 
     // ── CALL GEMINI ──────────────────────────────────────────────
     const geminiModel = 'gemini-2.0-flash';
