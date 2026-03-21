@@ -129,6 +129,7 @@ ${previousContent ? `**PREVIOUSLY WRITTEN** (maintain continuity, do NOT repeat)
 - Sight: soft darkness, starlight, candlelight, gentle colors
 - Smell: rain, flowers, wood smoke, fresh air (subtle mentions)
 
+
 **NATURE METAPHORS** (core imagery):
 - Ocean: vast, constant, waves matching breath
 - Mountain: stable, grounded, enduring
