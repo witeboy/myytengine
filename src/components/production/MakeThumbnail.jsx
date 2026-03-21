@@ -319,12 +319,12 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
   const canSubmit = title.trim() && summary.trim() && uploadedChars.length >= 1 && selectedUserTemplate;
 
   // ── Poll helper for pending KIE tasks ─────────────────────────
-  const pollForTaskResult = async (taskId, conceptId) => {
+  const pollForTaskResult = async (taskId, conceptId, taskType) => {
     const maxAttempts = 40; // 40 × 5s = 200s max
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise(r => setTimeout(r, 5000));
       try {
-        const res = await base44.functions.invoke('pollThumbnailTask', { task_id: taskId, concept_id: conceptId });
+        const res = await base44.functions.invoke('pollThumbnailTask', { task_id: taskId, concept_id: conceptId, task_type: taskType || undefined });
         const data = res?.data ?? res;
         if (data?.completed) {
           if (data?.image_url) return { image_url: data.image_url };
