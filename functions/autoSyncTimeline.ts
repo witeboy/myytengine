@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
 
     await base44.asServiceRole.entities.ProductionSettings.update(prod.id, updatePayload);
 
-    console.log(`✓ Sync saved: ${applied} scenes updated, ${failed} failed`);
+    console.log(`✓ Sync saved: ${applied} scenes updated, ${failed} failed`); 
 
     return Response.json({
       success: true,
