@@ -11,7 +11,25 @@ async function pollAI33Task(taskId, apiKey) {
   const res = await fetch(pollUrl, {
     headers: { 'xi-api-key': apiKey },
   });
-  return await res.json();
+
+  const contentType = res.headers.get('content-type') || '';
+
+  // If AI33 returns audio directly (MP3/WAV bytes), the task is done
+  if (contentType.includes('audio/') || contentType.includes('octet-stream')) {
+    return { status: 'Success', audio_binary: true, raw_response: res };
+  }
+
+  // Try to parse as JSON
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    // If it starts with ID3 or binary bytes, it's MP3 data
+    if (text.length > 100 && (text.charCodeAt(0) === 0x49 || text.charCodeAt(0) === 0xFF)) {
+      return { status: 'Success', audio_binary: true, raw_response: res, raw_text: text };
+    }
+    throw new Error(`Non-JSON response: ${text.substring(0, 100)}`);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -76,7 +94,23 @@ Deno.serve(async (req) => {
       try {
         const pollResult = await pollAI33Task(chunk.task_id, AI33_KEY);
 
-        if (pollResult.status === 'Success' || pollResult.status === 'success') {
+        // Handle binary audio response (AI33 returns MP3 directly)
+        if (pollResult.audio_binary && pollResult.raw_response) {
+          try {
+            const audioBuffer = await pollResult.raw_response.arrayBuffer();
+            const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
+            const uploadResult = await base44.asServiceRole.storage.upload(blob, `voiceover_chunk_${chunk.index}_${project_id}.mp3`);
+            const uploadedUrl = uploadResult?.url || uploadResult;
+            chunk.status = 'done';
+            chunk.audio_url = uploadedUrl;
+            completedCount++;
+            updated = true;
+            console.log(`  ✅ Chunk ${chunk.index + 1}: done (binary) → ${String(uploadedUrl).substring(0, 60)}`);
+          } catch (uploadErr) {
+            console.warn(`  ⚠ Chunk ${chunk.index + 1}: got audio but upload failed: ${uploadErr.message}`);
+            stillGenerating++;
+          }
+        } else if (pollResult.status === 'Success' || pollResult.status === 'success') {
           // Task completed — extract audio URL
           const audioUrl = pollResult.audio_url || pollResult.file?.url || pollResult.data?.audio_url || pollResult.url;
           if (audioUrl) {
