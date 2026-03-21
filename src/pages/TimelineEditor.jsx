@@ -1521,10 +1521,10 @@ export default function TimelineEditor() {
         </div>
       )}
 
-      {/* Drift Fix Panel — kept for edge cases but auto-fix handles most drifts now */}
+      {/* Drift Fix Panel — shows detected bloated scenes after sync */}
       <DriftFixPanel
         driftedScenes={driftedScenes}
-        onApplyFix={() => setDriftedScenes([])}
+        onApplyFix={handleApplyDriftFix}
         onDismiss={() => setDriftedScenes([])}
       />
 
