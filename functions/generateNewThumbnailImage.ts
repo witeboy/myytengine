@@ -3,149 +3,195 @@ import { S3Client, PutObjectCommand } from 'npm:@aws-sdk/client-s3@3.600.0';
 
 // generateNewThumbnailImage — Nano Banana 2 via KIE API
 
-// ── Build the structured element prompt ──────────────────────────────────
-// Core innovation: Instead of dumping all images and hoping the AI figures
-// it out, we EXPLICITLY label each image by its role and tell the AI
-// exactly what to do with it.
-function buildFaceSwapPrompt({ overlayText, font, textColor, textPosition, hasTemplate, hasPhotos, photoCount, concept, charDescriptions, roleMapping, imageOrder }) {
+// ── Build the face-preservation prompt ──────────────────────────────────
+// This is the core innovation: Nano Banana has no dedicated "face swap" field,
+// so we engineer the prompt to achieve the same result.
+function buildFaceSwapPrompt({ overlayText, font, textColor, textPosition, hasTemplate, hasPhotos, photoCount, concept, charDescriptions }) {
   const imagePrompt = concept.image_prompt || '';
 
-  // Parse role mapping from concept_description
-  let roles = roleMapping || {};
-  if (!roles.photo_roles && concept.concept_description) {
-    try { roles = JSON.parse(concept.concept_description); } catch (_) {}
-  }
-  const photoRoles = roles.photo_roles || [];
-  const storyElements = roles.story_elements || {};
-
-  // imageOrder tells us the exact sequence: [{type, role, index, description}, ...]
-  // type = 'template' | 'character' | 'environment' | 'object'
-  const order = imageOrder || [];
-
-  if (order.length > 0) {
+  if (hasTemplate && hasPhotos) {
     // ═══════════════════════════════════════════════════════════════════
-    // STRUCTURED ELEMENT MAPPING — the new approach
-    // Each image is explicitly labeled by role
+    // TEMPLATE + PHOTOS: The most important case
+    // Image 1 = template layout, Images 2+ = character reference photos
     // ═══════════════════════════════════════════════════════════════════
-
-    let imageRolesBlock = 'IMAGE ROLES (each image has a SPECIFIC purpose):\n';
-    for (let i = 0; i < order.length; i++) {
-      const entry = order[i];
-      const imgNum = i + 1;
-      if (entry.type === 'template') {
-        imageRolesBlock += `- Image ${imgNum} = LAYOUT TEMPLATE — Copy this exact composition, layout, text zones, character positions, background style, color scheme, and decorative elements (arrows, icons, badges). This defines WHERE everything goes.\n`;
-      } else if (entry.type === 'character') {
-        imageRolesBlock += `- Image ${imgNum} = CHARACTER REFERENCE — This is the REAL PERSON who MUST appear in the thumbnail. Use their EXACT face, skin tone, hair, body type, ethnicity, gender, age. ${entry.description ? `Details: ${entry.description}` : ''}\n`;
-      } else if (entry.type === 'environment') {
-        imageRolesBlock += `- Image ${imgNum} = ENVIRONMENT REFERENCE — Use this as the BLURRED BACKGROUND. Apply gaussian blur (radius 8-12px) to create depth. Match the colors, lighting, and atmosphere. ${entry.description ? `Details: ${entry.description}` : ''}\n`;
-      } else if (entry.type === 'object') {
-        imageRolesBlock += `- Image ${imgNum} = OBJECT REFERENCE — Place this product/item PROMINENTLY in the thumbnail. It must be clearly visible, sharp, and recognizable. ${entry.description ? `Details: ${entry.description}` : ''}\n`;
-      }
+    const photoLabels = [];
+    for (let i = 0; i < photoCount; i++) {
+      photoLabels.push(`Image ${i + 2}`);
     }
 
-    const hasCharacterImages = order.some(o => o.type === 'character');
-    const hasEnvironmentImages = order.some(o => o.type === 'environment');
-    const hasObjectImages = order.some(o => o.type === 'object');
-    const hasTemplateImage = order.some(o => o.type === 'template');
+    return `You are a professional YouTube thumbnail compositor. You have been given ${1 + photoCount} images.
 
-    // Build the story elements block
-    let storyBlock = '';
-    if (storyElements.characters || storyElements.environment || storyElements.objects) {
-      storyBlock = `\nSTORY ELEMENTS (condensed from video summary):\n`;
-      if (storyElements.characters) storyBlock += `CHARACTER(S): ${storyElements.characters}\n`;
-      if (storyElements.environment) storyBlock += `ENVIRONMENT: ${storyElements.environment}\n`;
-      if (storyElements.objects) storyBlock += `OBJECT(S): ${storyElements.objects}\n`;
-    }
+⚠️ HIGHEST PRIORITY RULE — READ THIS FIRST ⚠️
+The CHARACTER REFERENCE PHOTOS (Images 2${photoCount > 1 ? `-${1 + photoCount}` : ''}) show the REAL PERSON(S) who MUST appear in the final thumbnail. The generated thumbnail MUST feature these EXACT people — their face, skin tone, hair, body type, clothing, and all distinguishing features. If you ignore the reference photos and generate a random/generic person instead, the output is a FAILURE. The person in the output must be IMMEDIATELY recognizable as the same person from the reference photos.
 
-    return `You are a professional YouTube thumbnail compositor. You have been given ${order.length} images, each with a SPECIFIC role.
-
-⚠️ CRITICAL: Each image serves a different purpose. Do NOT mix them up. Read the roles carefully.
-
-${imageRolesBlock}
-${storyBlock}
-═══════════════════════════════════════════════
-COMPOSITION RULES
-═══════════════════════════════════════════════
-
-${hasTemplateImage ? `LAYOUT: Recreate the EXACT layout from the TEMPLATE image — same composition, same zones, same framing, same decorative elements. The template defines WHERE everything goes.` : `LAYOUT: Create a professional YouTube thumbnail composition.`}
-
-${hasCharacterImages ? `CHARACTER: The person in the CHARACTER REFERENCE image(s) MUST appear in the thumbnail. This is non-negotiable.
-FACE RULES (VIOLATING ANY = FAILURE):
-1. Same skull shape, jawline, chin, forehead — do not reshape
-2. Same skin tone everywhere (face AND body) — do not lighten or darken
-3. Same nose, eyes, lips, hair — do not alter any feature
-4. Same age, gender, ethnicity — do not change
-5. The output person must be IMMEDIATELY RECOGNIZABLE as the reference person
-6. If the template shows a different person, REPLACE them with the CHARACTER REFERENCE person` : `CHARACTER: Create a person matching the story description.`}
-
-${hasEnvironmentImages ? `BACKGROUND: Use the ENVIRONMENT REFERENCE image as the background. Apply a GAUSSIAN BLUR (radius 8-12px) to create cinematic depth of field. The environment should feel real and grounded because it IS real.` : `BACKGROUND: Create a background matching the story context.`}
-
-${hasObjectImages ? `FOREGROUND OBJECT: The item from the OBJECT REFERENCE image must be PROMINENTLY placed in the thumbnail. It should be:
-- Clearly visible and sharp (NOT blurred)
-- Either held by the character, on a surface near them, or as a large visual element
-- Recognizable as the EXACT same item from the reference photo` : `OBJECTS: Include the key objects described in the story.`}
+IMAGE ROLES:
+- Image 1 is the LAYOUT TEMPLATE — a proven high-CTR YouTube thumbnail. This defines the EXACT composition you must recreate: same background, same colors, same lighting, same split/gradient, same decorative elements (arrows, icons, badges), same framing, same camera angles.
+- ${photoLabels.join(', ')} ${photoCount === 1 ? 'is a CHARACTER REFERENCE PHOTO' : 'are CHARACTER REFERENCE PHOTOS'} — ${photoCount === 1 ? 'this shows the REAL person whose EXACT face, hair, skin tone, and features' : 'these show the REAL people whose EXACT faces, hair, skin tones, and features'} MUST appear in the final thumbnail. Study ${photoCount === 1 ? 'this photo' : 'these photos'} carefully — the output person must be IDENTICAL to ${photoCount === 1 ? 'this reference' : 'these references'}.
 
 ═══════════════════════════════════════════════
-ADDITIONAL SCENE CONTEXT
+YOUR TASK — PRECISE FACE TRANSPLANT
 ═══════════════════════════════════════════════
+
+Recreate the EXACT layout and composition from Image 1 (the template), but replace the people in the template with the person(s) from the reference photo(s).
+
+PERSON PRESERVATION RULES (CRITICAL — DO NOT VIOLATE):
+
+FACE (highest priority — must be pixel-perfect):
+1. BONE STRUCTURE: Reproduce the exact skull shape, jawline, chin shape, and forehead proportions from the reference photo(s). Do not morph, slim, widen, or reshape any facial bones.
+2. SKIN: Match the exact skin tone, texture, and complexion across face AND body. If the reference person has dark skin, the result must have the same shade everywhere. Include freckles, moles, or scars.
+3. NOSE: Exact same nose — bridge width, nostril shape, tip shape. Do not narrow or reshape.
+4. EYES: Same eye shape, eye color, eyelid crease depth, eyebrow thickness and arch. Do not change eye size or shape.
+5. LIPS: Same lip thickness, shape, and color. Do not thin or reshape.
+6. HAIR: Exact same hair color, texture (straight/curly/coiled/braided), length, and style. Do not change the hairstyle.
+7. EARS: Same ear shape and size if visible.
+8. AGE: The person in the output must appear the SAME age as in the reference photo. Do not age up or age down.
+
+BODY (adapt based on what's visible in the reference photo):
+9. BODY BUILD: If the reference photo shows the person's body (full or partial), match their exact build — weight, shoulder width, torso length, arm thickness, body fat distribution. A heavy person must stay heavy. A slim person must stay slim.
+10. BODY COMPLETION: The reference photo may only show a face, head+shoulders, upper body, or full body. Follow these rules:
+    - If FULL BODY is visible: use the person's exact body proportions, build, and frame for the output.
+    - If only UPPER BODY/TORSO is visible: match the visible build, shoulder width, arm size, and skin tone. Complete the lower body proportionally — use the template's pose/stance as a guide, but keep proportions consistent with the visible upper body.
+    - If only HEAD/SHOULDERS or FACE is visible: match the neck width, shoulder hints, and skin tone. Infer a proportional body type from facial fullness and visible cues. Use the template character's pose, stance, and outfit as the body guide, but adjust proportions to look natural for the reference person's face.
+11. CLOTHING: Follow this priority order for each character's outfit:
+    a) If the USER PROVIDED a clothing description for this character, use EXACTLY that description (see CHARACTER CLOTHING NOTES below).
+    b) If no description was provided but the reference photo shows clothing, use the clothing visible in the reference photo.
+    c) If no description was provided and only a face/headshot is visible, dress the character in clothing that fits the video's story context and mood.
+12. HANDS & ARMS: If the reference shows hands/arms, match skin tone and proportions. If not visible, generate hands that match the person's skin tone and body build.
+
+WHAT TO KEEP FROM THE TEMPLATE (Image 1):
+- The overall composition and layout (where people are positioned, the background split, color zones)
+- The background elements, decorative graphics, arrows, icons, badges
+- The lighting style and color temperature
+- The general pose/framing of where people stand (but with the NEW person's body and face)
+- The emotional energy and thumbnail style
+
+WHAT TO CHANGE:
+- Replace ALL people in the template with the EXACT person(s) from the reference photo(s) — same face, same skin, same hair, same features
+- The expression should match what the template person was doing (shocked face → reference person with shocked face, etc.) but with the reference person's REAL facial features
+- If the template shows a woman but the reference photo is a man, use the MAN from the reference — the reference photos ALWAYS override the template's people
+- NEVER generate a generic/stock person — ALWAYS use the uploaded reference photos as the face source
+
+OBJECT DETECTION + REPLACEMENT (CRITICAL — 3 STEPS):
+
+STEP 1 — DETECT OBJECTS IN THE TEMPLATE (Image 1):
+Look at every distinct object in the template: vehicles, products, buildings, animals, food, tools, symbols, decorative props, background items. List them mentally.
+
+STEP 2 — IDENTIFY THE STORY'S REAL SUBJECT:
+Read the image_prompt below. It describes the SPECIFIC subject of this video. Extract the PRIMARY PRODUCT/SUBJECT and all supporting objects mentioned.
+
+STEP 3 — SWAP EACH TEMPLATE OBJECT:
+For EVERY object you detected in Step 1, decide:
+- Is this object related to the story subject? → KEEP IT
+- Is this object UNRELATED to the story? → REPLACE it with the closest story-relevant equivalent
+- Match the SAME size, position, quantity, and visual weight as the original
+- Example: 3 trucks in template + story about t-shirts → 3 stacks/displays of colorful t-shirts in the same positions
+- Example: a sports car + story about cooking → a beautifully plated dish or kitchen scene
+- The replacements must look photorealistic and naturally composited
+
+ALSO — USE OBJECTS FROM THE CHARACTER PHOTOS:
+If the character reference photos (Images 2+) show real objects (their products, tools, workspace, clothing items), USE those real objects as props. Real objects from photos are MORE authentic than imagined ones.
+
+NEVER keep generic unrelated objects. NEVER add objects not mentioned in the story. The viewer must instantly understand the video topic from the thumbnail.
+
+STORY CONTEXT (from image_prompt — this is the source of truth for what objects should appear):
 ${imagePrompt}
 
 ${(() => {
-      const descs = (charDescriptions || []).filter(d => d && d.trim());
+      const descs = (charDescriptions || []).filter((d, i) => d && d.trim());
       if (descs.length === 0) return '';
-      let block = `\nCHARACTER CLOTHING NOTES:\n`;
+      let block = `\n═══════════════════════════════════════════════\nCHARACTER CLOTHING NOTES (from user)\n═══════════════════════════════════════════════\n`;
       charDescriptions.forEach((d, i) => {
-        if (d && d.trim()) block += `- Character ${i + 1}: ${d.trim()}\n`;
+        if (d && d.trim()) block += `- Character ${i + 1} (Image ${hasTemplate ? i + 2 : i + 1}): ${d.trim()}\n`;
       });
+      block += `Use these descriptions for clothing/outfit. They override what is visible in the reference photo.\n`;
       return block;
     })()}
-
 ═══════════════════════════════════════════════
-TEXT HANDLING
+TEXT HANDLING — CRITICAL (DO NOT SKIP)
 ═══════════════════════════════════════════════
-${hasTemplateImage ? '- REMOVE every piece of text from the template image. Zero original text in output.' : ''}
-${overlayText ? `- Add ONLY this text: "${overlayText}"
+- REMOVE every single piece of text, title, watermark, channel name, cast name, studio name, logo text, badge text, and any other written words that exist in the template image. The output must have ZERO text from the original template.
+${overlayText ? `- After removing ALL original text, add ONLY this new text: "${overlayText}"
   • Font: ${font}, ultra-bold, condensed
   • Color: ${textColor} with thick black outline/stroke (6px+) and strong drop shadow
-  • Size: 15-20% of frame height — readable at mobile thumbnail size
-  • Position: ${textPosition}
-  • This must be the ONLY text in the entire image` : '- Output must contain NO text whatsoever.'}
+  • Size: Match the size of the LARGEST/MAIN title text that was in the original template
+  • Position: Place it in the SAME position where the main title text was in the template
+  • Style: Match the same 3D/gradient/embossed style of the original main title if it had one
+  • This must be the ONLY text in the entire image — nothing else` : '- The output must contain NO text whatsoever — completely clean image with no words'}
 
-OUTPUT: YouTube thumbnail 16:9, 1920×1080, photorealistic, cinematic DSLR quality. Razor-sharp faces. Professional compositing.`;
-  }
+OUTPUT REQUIREMENTS:
+- YouTube thumbnail aspect ratio 16:9, 1920×1080
+- Photorealistic quality — must look like a real photograph, not AI-generated
+- Faces must be razor-sharp and high-detail
+- The final image must look like the template but starring the reference person(s)
+- The ONLY text allowed is "${overlayText || 'NONE'}" — remove everything else
+- Professional studio-grade compositing quality`;
 
-  // ═══════════════════════════════════════════════════════════════════
-  // FALLBACK: No role mapping available — use legacy logic
-  // ═══════════════════════════════════════════════════════════════════
-  if (hasTemplate && hasPhotos) {
-    return `You have been given ${1 + photoCount} images. Image 1 = LAYOUT TEMPLATE. Images 2-${1 + photoCount} = CHARACTER REFERENCE PHOTOS.
+  } else if (hasTemplate && !hasPhotos) {
+    // Template only — swap text AND replace objects with story-relevant ones
+    return `You have been given 1 image — a YouTube thumbnail template.
 
-Recreate Image 1's exact layout but replace all people with the EXACT person(s) from the reference photos. Same face, skin, hair, features.
+Recreate this thumbnail with the same overall layout, composition, lighting, and energy.
 
+OBJECT DETECTION + REPLACEMENT (CRITICAL — DO THIS CAREFULLY):
+
+1. SCAN the template for every distinct object: vehicles, products, buildings, animals, food, tools, symbols, props, backgrounds
+2. READ the image_prompt below to learn the SPECIFIC SUBJECT of this video
+3. For EACH template object: if it's unrelated to the story → REPLACE it with a story-relevant equivalent of the same size and position
+4. If the template uses split-screen or before/after layout, keep that structure but fill each side with story-appropriate content
+5. People in the template can stay (with appropriate expressions) unless the story requires different characters
+6. NEVER keep generic unrelated objects — always swap them for the actual story subject
+
+STORY CONTEXT (source of truth for what objects belong):
 ${imagePrompt}
 
-${overlayText ? `TEXT: Remove all template text. Add ONLY: "${overlayText}" in ${font}, ${textColor}, bold with black outline.` : 'NO text in output.'}
+TEXT REPLACEMENT (CRITICAL):
+- REMOVE every single piece of text from the template: all titles, subtitles, channel names, cast names, studio names, watermarks, badges with text, and any other written words. The output must have ZERO original text.
+${overlayText ? `- Replace ALL removed text with ONLY this single new text: "${overlayText}"
+  • Font: ${font}, ultra-bold, condensed
+  • Color: ${textColor} with thick black outline/stroke (6px+) and strong drop shadow
+  • Size: Match the size of the LARGEST/MAIN title in the original
+  • Position: Place it where the main title was in the original template
+  • Style: Match the 3D/gradient/embossed style of the original title if applicable
+  • This must be the ONLY text in the entire output image` : '- Output must contain NO text at all — completely clean.'}
 
 Output: YouTube thumbnail 16:9, 1920×1080, photorealistic.`;
 
-  } else if (hasTemplate) {
-    return `You have been given 1 image — a YouTube thumbnail template. Recreate it with story-relevant objects.
+  } else if (!hasTemplate && hasPhotos) {
+    // No template — generate from prompt with face reference
+    const photoLabels = [];
+    for (let i = 0; i < photoCount; i++) {
+      photoLabels.push(`Image ${i + 1}`);
+    }
+
+    return `You have been given ${photoCount} CHARACTER REFERENCE PHOTO${photoCount > 1 ? 'S' : ''} (${photoLabels.join(', ')}).
+
+⚠️ HIGHEST PRIORITY RULE: The reference photo(s) show the REAL PERSON who MUST appear in the generated image. Do NOT create a generic or different person. The output must feature the EXACT same person from the reference — same face, same skin, same hair, same everything.
+
+Generate the following YouTube thumbnail scene using the EXACT person(s) from the reference photo(s):
 
 ${imagePrompt}
 
-${overlayText ? `TEXT: Remove all template text. Add ONLY: "${overlayText}" in ${font}, ${textColor}, bold with black outline.` : 'NO text in output.'}
+FACE PRESERVATION RULES (CRITICAL — VIOLATING ANY = FAILURE):
+1. BONE STRUCTURE: Reproduce the exact skull shape, jawline, chin, forehead from the reference.
+2. SKIN: Exact same skin tone, texture, complexion — no lightening or darkening.
+3. NOSE: Same bridge width, nostril shape, tip shape.
+4. EYES: Same eye shape, color, eyelid crease, eyebrow thickness.
+5. LIPS: Same thickness, shape, color.
+6. HAIR: Exact same color, texture, length, style.
+7. BODY: Match build and proportions from the reference.
+8. AGE: Same apparent age — do not age up or down.
+9. GENDER: Same gender as the reference. If reference is male, output MUST be male. Never swap genders.
+10. ETHNICITY: Same ethnicity and racial features. Never alter.
 
-Output: YouTube thumbnail 16:9, 1920×1080, photorealistic.`;
-
-  } else if (hasPhotos) {
-    return `You have been given ${photoCount} reference photo(s). The person(s) MUST appear in the output — same face, skin, hair, everything.
-
-${imagePrompt}
+The person in the output must be IMMEDIATELY recognizable as the same person from the reference photo. Anyone who knows this person should be able to identify them instantly. If the output person looks different from the reference, the generation has FAILED.
 
 Output: YouTube thumbnail 16:9, 1920×1080, photorealistic, cinematic quality.`;
 
   } else {
-    return `${imagePrompt}\n\nOutput: YouTube thumbnail 16:9, 1920×1080, photorealistic, cinematic DSLR quality.`;
+    // No template, no photos — pure generation
+    return `${imagePrompt}
+
+Output: YouTube thumbnail 16:9, 1920×1080, photorealistic, cinematic DSLR quality. Razor-sharp faces. Professional compositing.`;
   }
 }
 
@@ -320,35 +366,30 @@ Deno.serve(async (req) => {
     const hasTemplateRef = !!templateRef?.b64;
     console.log(`📸 Photos: ${charPhotos.length} | Template: ${hasTemplateRef ? templateRef.name : 'NONE'}`);
 
-    // ── STEP 4: Parse role mapping from concept ─────────────────
-    // concept_description now contains JSON with photo_roles and story_elements
-    let roleMapping = {};
-    try { roleMapping = JSON.parse(concept.concept_description || '{}'); } catch (_) {}
-    const photoRoles = roleMapping.photo_roles || [];
-    const storyElements = roleMapping.story_elements || {};
+    // ── STEP 4: Upload ALL images to KIE ──────────────────────────
+    // For nano-banana-2, everything goes into image_input[]
+    // Order matters: template FIRST (Image 1), then character photos (Image 2, 3, ...)
+    const imageUrls = [];
 
-    console.log(`Role mapping: ${photoRoles.length} photo roles, story_elements: ${Object.keys(storyElements).join(', ') || 'none'}`);
-    for (const pr of photoRoles) {
-      console.log(`  Photo ${pr.index}: ${pr.role} — ${(pr.description || '').substring(0, 60)}`);
+    if (hasTemplateRef) {
+      const url = await uploadToKIE(templateRef.b64, templateRef.mime || 'image/jpeg', 'template', KIE_API_KEY);
+      if (url) imageUrls.push(url);
     }
 
-    // ── STEP 5: Upload images in STRUCTURED ORDER ───────────────
-    // Order: TEMPLATE → CHARACTER(s) → ENVIRONMENT(s) → OBJECT(s)
-    // This way the prompt can reference "Image 1 = template, Image 2 = character" etc.
-    const imageUrls = [];
-    const imageOrder = []; // tracks what each uploaded image IS
-
-    // Helper to upload a photo (b64 or url)
-    async function uploadPhoto(photo, label) {
-      if (photo.b64) {
-        return await uploadToKIE(photo.b64, photo.mime || 'image/jpeg', label, KIE_API_KEY);
-      } else if (photo.url) {
-        console.log(`📥 Fetching remote: ${photo.url.substring(0, 80)}...`);
+    for (const [i, p] of charPhotos.entries()) {
+      if (p.b64) {
+        // Base64 photo — upload to KIE
+        const url = await uploadToKIE(p.b64, p.mime || 'image/jpeg', `char_${i + 1}`, KIE_API_KEY);
+        if (url) imageUrls.push(url);
+      } else if (p.url) {
+        // Remote URL photo — fetch server-side, then upload to KIE
+        console.log(`📥 Fetching remote photo ${i + 1}: ${p.url.substring(0, 80)}...`);
         try {
-          const resp = await fetch(photo.url);
+          const resp = await fetch(p.url);
           if (resp.ok) {
             const arrayBuf = await resp.arrayBuffer();
             const bytes = new Uint8Array(arrayBuf);
+            // Convert to base64 in chunks to avoid stack overflow
             let binaryStr = '';
             const chunkSize = 8192;
             for (let j = 0; j < bytes.length; j += chunkSize) {
@@ -356,67 +397,36 @@ Deno.serve(async (req) => {
               binaryStr += String.fromCharCode.apply(null, chunk);
             }
             const b64 = btoa(binaryStr);
-            console.log(`✅ Fetched ${label}: ${(bytes.length / 1024).toFixed(0)}KB`);
-            return await uploadToKIE(b64, 'image/jpeg', label, KIE_API_KEY);
+            console.log(`✅ Fetched & encoded char_${i + 1}: ${(bytes.length / 1024).toFixed(0)}KB`);
+            const url = await uploadToKIE(b64, 'image/jpeg', `char_${i + 1}`, KIE_API_KEY);
+            if (url) imageUrls.push(url);
+          } else {
+            console.warn(`⚠️ Remote fetch failed: HTTP ${resp.status}`);
           }
         } catch (e) {
-          console.warn(`⚠️ Fetch error for ${label}: ${e.message}`);
-        }
-      }
-      return null;
-    }
-
-    // 5a. Upload template FIRST
-    if (hasTemplateRef) {
-      const url = await uploadToKIE(templateRef.b64, templateRef.mime || 'image/jpeg', 'template', KIE_API_KEY);
-      if (url) {
-        imageUrls.push(url);
-        imageOrder.push({ type: 'template', role: 'TEMPLATE', description: `Layout template: ${templateRef.name}` });
-      }
-    }
-
-    // 5b. Upload photos grouped by role: CHARACTER first, then ENVIRONMENT, then OBJECT
-    if (hasCharPhotos && photoRoles.length > 0) {
-      // Sort by role priority: CHARACTER → ENVIRONMENT → OBJECT
-      const rolePriority = { CHARACTER: 1, ENVIRONMENT: 2, OBJECT: 3 };
-      const sortedRoles = [...photoRoles].sort((a, b) => (rolePriority[a.role] || 4) - (rolePriority[b.role] || 4));
-
-      for (const pr of sortedRoles) {
-        const photoIdx = pr.index - 1; // photo_roles uses 1-based index
-        const photo = charPhotos[photoIdx];
-        if (!photo) continue;
-
-        const label = `${pr.role.toLowerCase()}_${pr.index}`;
-        const url = await uploadPhoto(photo, label);
-        if (url) {
-          imageUrls.push(url);
-          imageOrder.push({
-            type: pr.role.toLowerCase(),
-            role: pr.role,
-            index: pr.index,
-            description: pr.description || '',
-          });
-        }
-      }
-    } else if (hasCharPhotos) {
-      // No role mapping — upload all as CHARACTER (legacy fallback)
-      for (const [i, p] of charPhotos.entries()) {
-        const url = await uploadPhoto(p, `char_${i + 1}`);
-        if (url) {
-          imageUrls.push(url);
-          imageOrder.push({ type: 'character', role: 'CHARACTER', index: i + 1, description: '' });
+          console.warn(`⚠️ Remote fetch error for char_${i + 1}: ${e.message}`);
         }
       }
     }
 
-    console.log(`Uploaded ${imageUrls.length} images to KIE`);
-    console.log('Image order:', imageOrder.map((o, i) => `Image ${i+1}=${o.type}`).join(', '));
+    console.log(`Uploaded ${imageUrls.length} images to KIE (expected: ${(hasTemplateRef ? 1 : 0) + charPhotos.length})`);
 
-    const templateUploaded = imageOrder.some(o => o.type === 'template');
-    const photosUploaded = imageOrder.some(o => o.type !== 'template');
-    const effectivePhotoCount = imageOrder.filter(o => o.type !== 'template').length;
+    // Log which images succeeded
+    if (hasTemplateRef && imageUrls.length === 0) {
+      console.warn('⚠️ Template upload FAILED — falling back to prompt-only generation');
+    }
+    if (hasCharPhotos && imageUrls.length <= (hasTemplateRef ? 1 : 0)) {
+      console.warn('⚠️ Character photo uploads FAILED — faces will not be preserved');
+    }
 
-    // ── STEP 6: Build the structured prompt ─────────────────────
+    // Determine effective state based on what actually uploaded
+    const templateUploaded = hasTemplateRef && imageUrls.length > 0;
+    const photosUploaded = imageUrls.length > (templateUploaded ? 1 : 0);
+    const effectivePhotoCount = templateUploaded ? imageUrls.length - 1 : imageUrls.length;
+
+    console.log(`Effective state: template=${templateUploaded}, photos=${photosUploaded} (${effectivePhotoCount} uploaded)`);
+
+    // ── STEP 5: Build the face-preservation prompt ──────────────
     const overlayText = (custom_overlay_text || concept.text_overlay || '').toUpperCase().trim();
     const rawStyle = concept.text_style || '';
     const fontMatch = rawStyle.match(/bebas neue|impact|montserrat|roboto|arial/i);
@@ -425,6 +435,7 @@ Deno.serve(async (req) => {
     const textColor = colorMatch ? colorMatch[0] : 'white';
     const textPosition = rawStyle.toLowerCase().includes('bottom') ? 'bottom-center' : 'upper-left';
 
+    // Resolve character descriptions
     const charDescriptions = Array.isArray(directCharDescriptions) ? directCharDescriptions : [];
 
     const prompt = buildFaceSwapPrompt({
@@ -437,13 +448,11 @@ Deno.serve(async (req) => {
       photoCount: effectivePhotoCount,
       concept,
       charDescriptions,
-      roleMapping,
-      imageOrder,
     });
 
     console.log(`Prompt length: ${prompt.length} chars`);
 
-    // ── STEP 7: Submit to nano-banana-2 ─────────────────────────
+    // ── STEP 6: Submit to nano-banana-2 ─────────────────────────
     const model = 'nano-banana-2';
     const kieHeaders = {
       'Content-Type': 'application/json',

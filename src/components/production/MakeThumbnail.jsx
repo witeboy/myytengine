@@ -202,8 +202,6 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
   const [selectedConcept, setSelectedConcept] = useState(null);
   const [templateMeta, setTemplateMeta]       = useState(null);
   const [detectedMood, setDetectedMood]       = useState(null);
-  const [photoRolesResult, setPhotoRolesResult] = useState([]);
-  const [storyElementsResult, setStoryElementsResult] = useState(null);
   const [customOverlay, setCustomOverlay]     = useState('');
   const [useCustomOverlay, setUseCustomOverlay] = useState(false);
 
@@ -303,7 +301,7 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
         template_mime:           templateMime,
       } : {};
 
-      setLoadingPhase('Step 1: Classifying photos → Character / Environment / Object…');
+      setLoadingPhase('Gemini is engineering your 5 high-CTR concepts…');
 
       let conceptsResult;
       try {
@@ -332,8 +330,6 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
       // Store metadata
       if (result?.template_selection) setTemplateMeta(result.template_selection);
       if (result?.detected_mood) setDetectedMood(result.detected_mood);
-      if (result?.photo_roles) { console.log('📸 Photo roles:', JSON.stringify(result.photo_roles)); setPhotoRolesResult(result.photo_roles); }
-      if (result?.story_elements) { console.log('📖 Story elements:', JSON.stringify(result.story_elements)); setStoryElementsResult(result.story_elements); }
 
       // Load saved concept records
       setLoadingPhase('Loading your 5 concepts…');
@@ -482,32 +478,23 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
     setStep(3);
   };
 
-  const [downloading, setDownloading] = useState(false);
   const handleDownload = async () => {
     const url = generatedUrl || selectedConcept?.image_url;
-    if (!url || downloading) return;
-    setDownloading(true);
+    if (!url) return;
     try {
-      const res = await base44.functions.invoke('proxyDownload', { url });
-      const { b64, contentType } = res?.data ?? res;
-      const ext = (contentType || '').includes('jpeg') ? 'jpg' : 'png';
-      const byteStr = atob(b64);
-      const bytes = new Uint8Array(byteStr.length);
-      for (let i = 0; i < byteStr.length; i++) bytes[i] = byteStr.charCodeAt(i);
-      const blob = new Blob([bytes], { type: contentType || 'image/png' });
+      const resp = await fetch(url);
+      const blob = await resp.blob();
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
-      a.download = `thumbnail-${title.replace(/\s+/g, '-').toLowerCase()}.${ext}`;
+      a.download = `thumbnail-${title.replace(/\s+/g, '-').toLowerCase()}.png`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(blobUrl);
     } catch (e) {
-      console.error('Download error:', e);
       window.open(url, '_blank');
     }
-    setDownloading(false);
   };
 
   // detectedMood from backend can be pipe-separated (e.g. "crime|drama") — take first segment
@@ -748,12 +735,12 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {[
-                'Classifying your photos → Character / Environment / Object',
-                'Condensing summary into 3 structured elements',
-                'Cross-matching photos to story roles',
+                'Analysing title tone and emotional signals',
+                'Detecting mood, niche and psychological triggers',
                 'Engineering 5 high-CTR overlay texts',
-                'Writing structured image prompts (Character + Background + Object)',
-                'Saving concepts with role mapping…',
+                'Applying Zero Overlap + Sentiment Pivot laws',
+                'Writing cinematic image prompts',
+                'Saving concepts to your library…',
               ].map((phase, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#0f172a', borderRadius: 8, padding: '9px 14px' }}>
                   <Loader2 size={13} style={{ flexShrink: 0, color: '#7c3aed', animation: `spin ${0.7 + i * 0.12}s linear infinite` }} />
@@ -786,51 +773,24 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
         <div style={{ maxWidth: 800, margin: '0 auto', padding: '22px 16px' }}>
           <StepDots current={1} total={4} />
 
-          {/* Mood + role mapping banner */}
+          {/* Mood + metadata banner */}
           {(templateMeta || detectedMood) && (
             <div style={{
               background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.25)',
               borderRadius: 12, padding: '12px 16px', marginBottom: 18,
+              display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center',
             }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: photoRolesResult.length > 0 ? 10 : 0 }}>
-                {detectedMood && (
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#a78bfa' }}>
-                    🎯 Mood: <span style={{ color: '#fff' }}>{detectedMood}</span>
-                  </span>
-                )}
-                <span style={{ fontSize: 11, color: '#f59e0b', background: 'rgba(245,158,11,0.1)', borderRadius: 6, padding: '2px 8px' }}>
-                  ✓ Template: {selectedUserTemplate?.name}
+              {detectedMood && (
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#a78bfa' }}>
+                  🎯 Mood: <span style={{ color: '#fff' }}>{detectedMood}</span>
                 </span>
-              </div>
-
-              {/* Show photo role assignments */}
-              {photoRolesResult.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: storyElementsResult ? 8 : 0 }}>
-                  {photoRolesResult.map((pr, i) => {
-                    const roleColors = { CHARACTER: '#22c55e', ENVIRONMENT: '#3b82f6', OBJECT: '#f59e0b' };
-                    const roleEmoji = { CHARACTER: '👤', ENVIRONMENT: '🏞️', OBJECT: '📦' };
-                    return (
-                      <span key={i} style={{
-                        fontSize: 10, fontWeight: 600,
-                        color: roleColors[pr.role] || '#9ca3af',
-                        background: `${roleColors[pr.role] || '#9ca3af'}15`,
-                        borderRadius: 6, padding: '3px 8px',
-                      }}>
-                        {roleEmoji[pr.role] || '📷'} Photo {pr.index}: {pr.role}
-                      </span>
-                    );
-                  })}
-                </div>
               )}
-
-              {/* Show condensed story elements */}
-              {storyElementsResult && (
-                <div style={{ fontSize: 10, color: '#6b7280', lineHeight: 1.5 }}>
-                  {storyElementsResult.characters && <div>👤 <strong style={{ color: '#22c55e' }}>Character:</strong> {storyElementsResult.characters.substring(0, 80)}…</div>}
-                  {storyElementsResult.environment && <div>🏞️ <strong style={{ color: '#3b82f6' }}>Background:</strong> {storyElementsResult.environment.substring(0, 80)}…</div>}
-                  {storyElementsResult.objects && <div>📦 <strong style={{ color: '#f59e0b' }}>Object:</strong> {storyElementsResult.objects.substring(0, 80)}…</div>}
-                </div>
-              )}
+              <span style={{ fontSize: 11, color: '#22c55e', background: 'rgba(34,197,94,0.1)', borderRadius: 6, padding: '2px 8px' }}>
+                ✓ {uploadedChars.length} photo{uploadedChars.length > 1 ? 's' : ''} ready
+              </span>
+              <span style={{ fontSize: 11, color: '#f59e0b', background: 'rgba(245,158,11,0.1)', borderRadius: 6, padding: '2px 8px' }}>
+                ✓ Template: {selectedUserTemplate?.name}
+              </span>
             </div>
           )}
 
@@ -965,17 +925,17 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
         )}
 
         <p style={{ color: '#6b7280', fontSize: 13, lineHeight: 1.6, marginBottom: 22 }}>
-          Structured element mapping → nano-banana-2 render → upscale → color grade. Takes 60–120 seconds…
+          Ideogram renders → auto-upscale 2× → mood-matched color grade, sharpness, saturation & vignette. Takes 60–120 seconds…
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
           {[
-            { icon: '👤', label: 'Uploading CHARACTER photo(s) → face reference' },
-            { icon: '🏞️', label: 'Uploading ENVIRONMENT photo → blurred background' },
-            { icon: '📦', label: 'Uploading OBJECT photo(s) → foreground props' },
-            { icon: '🎨', label: 'Rendering with structured element mapping at 1920×1080' },
+            { icon: '📸', label: 'Uploading reference photos to KIE' },
+            { icon: '🔒', label: 'Locking in real faces with Ideogram Character' },
+            { icon: '🎨', label: 'Rendering cinematic scene at 1920×1080' },
             { icon: '🔍', label: 'Upscaling to 2× resolution + sharpening' },
-            { icon: '🎬', label: 'Applying mood color grade + saving' },
+            { icon: '🎬', label: 'Applying mood color grade, saturation & vignette' },
+            { icon: '💾', label: 'Saving final enhanced thumbnail' },
           ].map((item, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#0f172a', borderRadius: 8, padding: '10px 14px' }}>
               <span style={{ fontSize: 15 }}>{item.icon}</span>
@@ -1027,9 +987,8 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
             <RefreshCw size={13} /> Re-render
           </button>
           {finalUrl && (
-            <button onClick={handleDownload} disabled={downloading} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: downloading ? '#374151' : '#7c3aed', color: '#fff', cursor: downloading ? 'wait' : 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
-              {downloading ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={13} />}
-              {downloading ? 'Downloading…' : 'Download'}
+            <button onClick={handleDownload} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: '#7c3aed', color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Download size={13} /> Download
             </button>
           )}
         </div>
