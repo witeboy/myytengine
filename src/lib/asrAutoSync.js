@@ -356,10 +356,27 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
 
     // Scene start = when first word is spoken
     // Scene end   = when last word finishes
-    const speechStart = firstMatch?.start ?? null;
-    const speechEnd   = lastMatch?.end ?? null;
+    let speechStart = firstMatch?.start ?? null;
+    let speechEnd   = lastMatch?.end ?? null;
 
-    console.log(`[ASR Scene ${scene.scene_number}] ${range.wordCount}w, ${matched} matched | speech: ${speechStart?.toFixed(2)}s → ${speechEnd?.toFixed(2)}s = ${speechStart != null && speechEnd != null ? (speechEnd - speechStart).toFixed(2) : '?'}s | match: ${(matchScore * 100).toFixed(0)}%`);
+    // ── Sanity check: if the ASR span is wildly too wide for the word count,
+    // the aligner matched to wrong positions. Mark as unreliable.
+    const SECS_PER_WORD = 0.38;
+    const wordEstimate = range.wordCount * SECS_PER_WORD;
+    let unreliable = false;
+
+    if (speechStart != null && speechEnd != null) {
+      const span = speechEnd - speechStart;
+      // If span > 3x word estimate OR match rate < 50%, don't trust it
+      if (span > wordEstimate * 3 && span > 10) {
+        console.warn(`[ASR Scene ${scene.scene_number}] ⚠️ UNRELIABLE: span ${span.toFixed(1)}s for ${range.wordCount}w (expected ~${wordEstimate.toFixed(1)}s), match ${(matchScore * 100).toFixed(0)}% — will anchor from neighbors`);
+        unreliable = true;
+        speechStart = null;
+        speechEnd = null;
+      }
+    }
+
+    console.log(`[ASR Scene ${scene.scene_number}] ${range.wordCount}w, ${matched} matched | speech: ${speechStart?.toFixed(2) ?? '?'}s → ${speechEnd?.toFixed(2) ?? '?'}s = ${speechStart != null && speechEnd != null ? (speechEnd - speechStart).toFixed(2) : '?'}s | match: ${(matchScore * 100).toFixed(0)}%${unreliable ? ' ⚠️ UNRELIABLE' : ''}`);
 
     return {
       sceneId: scene.id, sceneNumber: scene.scene_number,
@@ -369,6 +386,7 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
       matchScore, empty: false,
       wordCount: range.wordCount,
       speechStart, speechEnd,
+      unreliable,
     };
   });
 
