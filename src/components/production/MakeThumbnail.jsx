@@ -531,8 +531,8 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
         setGeneratedUrl(imageUrl);
       } else if (result?.pending && result?.task_id) {
         // Generation still in progress — poll for result
-        console.log('Generation pending, polling task:', result.task_id);
-        const pollResult = await pollForTaskResult(result.task_id, result.concept_id);
+        console.log('Generation pending, polling task:', result.task_id, 'type:', result.task_type);
+        const pollResult = await pollForTaskResult(result.task_id, result.concept_id, result.task_type);
         if (pollResult?.image_url) {
           setGeneratedUrl(pollResult.image_url);
         } else {
