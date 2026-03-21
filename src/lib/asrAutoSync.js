@@ -703,10 +703,9 @@ export function applyDriftFix(results, driftedIndices, wordRanges) {
     const info = r.driftInfo;
     if (!info) continue;
 
-    // Target duration: speech span + padding, or word estimate
-    const targetDur = Math.max(MIN_DUR,
-      info.speechSpan > 0 ? info.speechSpan + 1.5 : info.wordEstimate
-    );
+    // Target duration: word estimate + padding, capped at 10s
+    // Don't use speechSpan — it can be bloated from ASR misalignment
+    const targetDur = Math.max(MIN_DUR, Math.min(10, info.wordEstimate + 1.5));
 
     console.log(`[Drift Fix] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s → ${targetDur.toFixed(1)}s (speech ${info.speechSpan.toFixed(1)}s, ${info.wordCount} words)`);
 
