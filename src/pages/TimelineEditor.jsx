@@ -1014,6 +1014,7 @@ export default function TimelineEditor() {
             duration: dur,
             matchScore: 1,
             empty: wordCount === 0,
+            wordCount,
             speechStart: newStartTimes[idx],
             speechEnd: newStartTimes[idx] + wordEstimate,
             driftDetected: isBloated,
