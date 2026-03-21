@@ -44,7 +44,7 @@ async function generateThumbnailImage(apiKey, imagePrompt, negativePrompt, isSho
   try {
     console.log(`[Ideogram V3 QUALITY] Generating...`);
     const taskId = await kieCreateTask(apiKey, "ideogram/v3-text-to-image", {
-      prompt: `${imagePrompt}. Ultra high resolution, crisp sharp details, professional quality.`,
+      prompt: `${imagePrompt}. Ultra high resolution, crisp sharp details, professional quality.`, 
       image_size: imageSize, style: "DESIGN", rendering_speed: "QUALITY",
       expand_prompt: false,
        negative_prompt: "text, letters, numbers, typography, titles, labels, captions, watermark, signature, cluttered, text in bottom-right, flat lighting, stock photo expression"    });
