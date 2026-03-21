@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-import { create, getNumericDate } from 'npm:djwt@3.0.2';
+import { create, getNumericDate } from 'https://deno.land/x/djwt@v3.0.2/mod.ts';
 
 // ══════════════════════════════════════════════════════════════════
 // AVATAR VIDEO POLLER — KIE + Kling Direct support
