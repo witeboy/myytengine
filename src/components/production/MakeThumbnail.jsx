@@ -739,12 +739,12 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {[
-                'Analysing title tone and emotional signals',
-                'Detecting mood, niche and psychological triggers',
+                'Classifying your photos → Character / Environment / Object',
+                'Condensing summary into 3 structured elements',
+                'Cross-matching photos to story roles',
                 'Engineering 5 high-CTR overlay texts',
-                'Applying Zero Overlap + Sentiment Pivot laws',
-                'Writing cinematic image prompts',
-                'Saving concepts to your library…',
+                'Writing structured image prompts (Character + Background + Object)',
+                'Saving concepts with role mapping…',
               ].map((phase, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#0f172a', borderRadius: 8, padding: '9px 14px' }}>
                   <Loader2 size={13} style={{ flexShrink: 0, color: '#7c3aed', animation: `spin ${0.7 + i * 0.12}s linear infinite` }} />
