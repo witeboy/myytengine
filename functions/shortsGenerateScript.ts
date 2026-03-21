@@ -46,7 +46,7 @@ STRUCTURE — follow this EXACTLY:
 - Drop the viewer INTO the crime mid-action. Most shocking detail first.
 - Use present tense: "A woman walks into a bank..." / "He stole $400 million..."
 - Include a SPECIFIC detail that makes it REAL (date, city, dollar amount).
-- NEVER start with "Today we're going to talk about..." or ANY preamble.
+- NEVER start with "Today we're going to talk about..." or ANY preamble. 
 - This must feel like opening a movie 30 minutes in.
 Examples:
 - "On March 15th, 2019, a package arrived at a house in Detroit. Inside was $2.3 million. And a severed finger."
