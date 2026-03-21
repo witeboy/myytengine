@@ -979,6 +979,35 @@ export default function TimelineEditor() {
         let off = 0;
         newBeatDurations.forEach(dur => { newStartTimes.push(off); off += dur; });
         syncSource = 'words';
+
+        // Build syllable-based alignment results for drift detection
+        alignmentResults = scenes.map((scene, idx) => {
+          const text = (scene.narration_text || scene.voiceover_text || '').trim();
+          const wordCount = text.split(/\s+/).filter(Boolean).length;
+          const dur = newBeatDurations[idx];
+          const wordEstimate = Math.max(1.0, wordCount * 0.38);
+          const isBloated = dur > wordEstimate * 2.5 && dur > 12;
+          return {
+            sceneId: scene.id,
+            sceneNumber: scene.scene_number,
+            startTime: newStartTimes[idx],
+            endTime: newStartTimes[idx] + dur,
+            duration: dur,
+            matchScore: 1,
+            empty: wordCount === 0,
+            speechStart: newStartTimes[idx],
+            speechEnd: newStartTimes[idx] + wordEstimate,
+            driftDetected: isBloated,
+            driftInfo: isBloated ? {
+              currentDuration: dur,
+              speechSpan: Math.round(wordEstimate * 100) / 100,
+              wordCount,
+              wordEstimate: Math.round(wordEstimate * 100) / 100,
+              suggestedDuration: Math.round(Math.max(1.0, wordEstimate + 1.5) * 100) / 100,
+              deadAir: Math.round((dur - wordEstimate) * 100) / 100,
+            } : undefined,
+          };
+        });
       }
 
       // Step 3: Build synced video clips
