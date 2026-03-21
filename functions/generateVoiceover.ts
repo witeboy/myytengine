@@ -6,8 +6,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // separate TTS task to AI33, stores all task_ids for polling.
 // ══════════════════════════════════════════════════════════════════
 
-const MAX_WORDS_PER_CHUNK = 800;   // ~5 min of speech per chunk
-const MAX_CHARS_PER_CHUNK = 4500;  // MiniMax safe limit
+const MAX_WORDS_PER_CHUNK = 600;   // ~4 min of speech per chunk
+const MAX_CHARS_PER_CHUNK = 3500;  // MiniMax safe limit — conservative
 
 function cleanScript(text, isSleepMode = false) {
   let cleaned = text;
@@ -192,9 +192,9 @@ Deno.serve(async (req) => {
         });
       }
 
-      // Brief delay between submits to avoid rate limiting
+      // Longer delay between submits to avoid rate limiting
       if (i < chunks.length - 1) {
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 3000));
       }
     }
 
