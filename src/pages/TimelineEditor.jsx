@@ -922,11 +922,13 @@ export default function TimelineEditor() {
       let newBeatDurations;
       let newStartTimes;
       let syncSource;
+      let alignmentResults = null; // store for drift detection
 
       if (asrWords && asrWords.length > 0) {
         // ── ASR PATH: exact alignment via word matching ──────────
         const { alignScenesToASR } = await import('@/lib/asrAutoSync');
         const alignment = alignScenesToASR(asrWords, scenes, audioDuration);
+        alignmentResults = alignment;
 
         newBeatDurations = alignment.map(a => a.duration);
         newStartTimes = alignment.map(a => a.startTime);
