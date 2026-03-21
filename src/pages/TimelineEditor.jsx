@@ -1065,65 +1065,6 @@ export default function TimelineEditor() {
     setTimeout(() => setSyncStatus(null), 4000);
   };
 
-  // ── Drift Fix Handler ──────────────────────────────────────────
-  const handleApplyDriftFix = async (driftedIndices) => {
-    const { applyDriftFix } = await import('@/lib/asrAutoSync');
-
-    // Use stored ASR alignment results (with real speechStart/speechEnd)
-    // and update their startTime/endTime/duration from current clips
-    const currentAlignment = scenes.map((scene, idx) => {
-      const clip = videoClips.find(c => c.sceneId === scene.id);
-      const asrResult = lastAlignmentResults?.[idx];
-      const drift = driftedScenes.find(d => d.index === idx);
-
-      return {
-        sceneId: scene.id,
-        sceneNumber: scene.scene_number,
-        startTime: clip?.startTime ?? 0,
-        endTime: clip ? clip.startTime + clip.duration : 0,
-        duration: clip?.duration ?? 0,
-        matchScore: asrResult?.matchScore ?? 0.5,
-        empty: !(scene.narration_text || scene.voiceover_text)?.trim(),
-        // Use real ASR speech boundaries when available
-        speechStart: asrResult?.speechStart ?? clip?.startTime ?? 0,
-        speechEnd: asrResult?.speechEnd ?? (clip ? clip.startTime + clip.duration : 0),
-        ...(drift ? { driftDetected: true, driftInfo: drift.info } : {}),
-      };
-    });
-
-    // Apply the fix
-    const fixed = applyDriftFix(currentAlignment, driftedIndices);
-
-    // Update video clips with fixed timings
-    const newBeatDurations = fixed.map(r => r.duration);
-    const updatedClips = videoClips.map((clip) => {
-      const sceneIdx = scenes.findIndex(s => s.id === clip.sceneId);
-      if (sceneIdx === -1) return clip;
-      const fixedResult = fixed[sceneIdx];
-      if (!fixedResult) return clip;
-      return {
-        ...clip,
-        startTime: fixedResult.startTime,
-        duration: fixedResult.duration,
-        synced: true,
-      };
-    });
-
-    setVideoClips(updatedClips);
-    setOverrideBeatDurations(newBeatDurations);
-    setDriftedScenes([]);
-
-    // Persist
-    if (prodSettings?.id) {
-      try {
-        await base44.entities.ProductionSettings.update(prodSettings.id, {
-          beat_durations: JSON.stringify(newBeatDurations),
-          beat_start_times: JSON.stringify(fixed.map(r => r.startTime)),
-        });
-      } catch (e) { console.warn('Could not persist drift fix:', e.message); }
-    }
-  };
-
   // ── Cinematic zoom with intensity ───────────────────────────────
   const handleApplyCinematicZoom = (intensity) => {
     setIsApplyingZoom(true);
