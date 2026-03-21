@@ -16,7 +16,7 @@ const AI33_BASE = "https://api.ai33.pro";
 const MAX_CONCURRENT = 4;           // Parallel SUBMIT jobs (submits are fast ~1-2s each)
 const MAX_RETRIES = 2;              // Retries per provider submit
 const AI33_MAX_PROMPT_CHARS = 4000; // Seedream supports longer prompts
-const RETRY_BASE_MS = 2000;         // Base delay for exponential backoff
+const RETRY_BASE_MS = 2000;         // Base delay for exponential backoff 
 
 // ─────────────────────────────────────────────
 // KIE API — SUBMIT ONLY (no polling)
