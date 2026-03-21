@@ -319,12 +319,12 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
   const canSubmit = title.trim() && summary.trim() && uploadedChars.length >= 1 && selectedUserTemplate;
 
   // ── Poll helper for pending KIE tasks ─────────────────────────
-  const pollForTaskResult = async (taskId, conceptId, taskType) => {
+  const pollForTaskResult = async (taskId, conceptId) => {
     const maxAttempts = 40; // 40 × 5s = 200s max
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise(r => setTimeout(r, 5000));
       try {
-        const res = await base44.functions.invoke('pollThumbnailTask', { task_id: taskId, concept_id: conceptId, task_type: taskType || undefined });
+        const res = await base44.functions.invoke('pollThumbnailTask', { task_id: taskId, concept_id: conceptId });
         const data = res?.data ?? res;
         if (data?.completed) {
           if (data?.image_url) return { image_url: data.image_url };
@@ -531,8 +531,8 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
         setGeneratedUrl(imageUrl);
       } else if (result?.pending && result?.task_id) {
         // Generation still in progress — poll for result
-        console.log('Generation pending, polling task:', result.task_id, 'type:', result.task_type);
-        const pollResult = await pollForTaskResult(result.task_id, result.concept_id, result.task_type);
+        console.log('Generation pending, polling task:', result.task_id);
+        const pollResult = await pollForTaskResult(result.task_id, result.concept_id);
         if (pollResult?.image_url) {
           setGeneratedUrl(pollResult.image_url);
         } else {
@@ -546,8 +546,7 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
       }
     } catch (e) {
       console.error('handleGenerateImage error:', e);
-      const serverMsg = e?.response?.data?.error;
-      setError(serverMsg || e.message);
+      setError(e.message);
     }
 
     setGenerating(false);
