@@ -320,30 +320,35 @@ Deno.serve(async (req) => {
     const hasTemplateRef = !!templateRef?.b64;
     console.log(`📸 Photos: ${charPhotos.length} | Template: ${hasTemplateRef ? templateRef.name : 'NONE'}`);
 
-    // ── STEP 4: Upload ALL images to KIE ──────────────────────────
-    // For nano-banana-2, everything goes into image_input[]
-    // Order matters: template FIRST (Image 1), then character photos (Image 2, 3, ...)
-    const imageUrls = [];
+    // ── STEP 4: Parse role mapping from concept ─────────────────
+    // concept_description now contains JSON with photo_roles and story_elements
+    let roleMapping = {};
+    try { roleMapping = JSON.parse(concept.concept_description || '{}'); } catch (_) {}
+    const photoRoles = roleMapping.photo_roles || [];
+    const storyElements = roleMapping.story_elements || {};
 
-    if (hasTemplateRef) {
-      const url = await uploadToKIE(templateRef.b64, templateRef.mime || 'image/jpeg', 'template', KIE_API_KEY);
-      if (url) imageUrls.push(url);
+    console.log(`Role mapping: ${photoRoles.length} photo roles, story_elements: ${Object.keys(storyElements).join(', ') || 'none'}`);
+    for (const pr of photoRoles) {
+      console.log(`  Photo ${pr.index}: ${pr.role} — ${(pr.description || '').substring(0, 60)}`);
     }
 
-    for (const [i, p] of charPhotos.entries()) {
-      if (p.b64) {
-        // Base64 photo — upload to KIE
-        const url = await uploadToKIE(p.b64, p.mime || 'image/jpeg', `char_${i + 1}`, KIE_API_KEY);
-        if (url) imageUrls.push(url);
-      } else if (p.url) {
-        // Remote URL photo — fetch server-side, then upload to KIE
-        console.log(`📥 Fetching remote photo ${i + 1}: ${p.url.substring(0, 80)}...`);
+    // ── STEP 5: Upload images in STRUCTURED ORDER ───────────────
+    // Order: TEMPLATE → CHARACTER(s) → ENVIRONMENT(s) → OBJECT(s)
+    // This way the prompt can reference "Image 1 = template, Image 2 = character" etc.
+    const imageUrls = [];
+    const imageOrder = []; // tracks what each uploaded image IS
+
+    // Helper to upload a photo (b64 or url)
+    async function uploadPhoto(photo, label) {
+      if (photo.b64) {
+        return await uploadToKIE(photo.b64, photo.mime || 'image/jpeg', label, KIE_API_KEY);
+      } else if (photo.url) {
+        console.log(`📥 Fetching remote: ${photo.url.substring(0, 80)}...`);
         try {
-          const resp = await fetch(p.url);
+          const resp = await fetch(photo.url);
           if (resp.ok) {
             const arrayBuf = await resp.arrayBuffer();
             const bytes = new Uint8Array(arrayBuf);
-            // Convert to base64 in chunks to avoid stack overflow
             let binaryStr = '';
             const chunkSize = 8192;
             for (let j = 0; j < bytes.length; j += chunkSize) {
@@ -351,36 +356,67 @@ Deno.serve(async (req) => {
               binaryStr += String.fromCharCode.apply(null, chunk);
             }
             const b64 = btoa(binaryStr);
-            console.log(`✅ Fetched & encoded char_${i + 1}: ${(bytes.length / 1024).toFixed(0)}KB`);
-            const url = await uploadToKIE(b64, 'image/jpeg', `char_${i + 1}`, KIE_API_KEY);
-            if (url) imageUrls.push(url);
-          } else {
-            console.warn(`⚠️ Remote fetch failed: HTTP ${resp.status}`);
+            console.log(`✅ Fetched ${label}: ${(bytes.length / 1024).toFixed(0)}KB`);
+            return await uploadToKIE(b64, 'image/jpeg', label, KIE_API_KEY);
           }
         } catch (e) {
-          console.warn(`⚠️ Remote fetch error for char_${i + 1}: ${e.message}`);
+          console.warn(`⚠️ Fetch error for ${label}: ${e.message}`);
+        }
+      }
+      return null;
+    }
+
+    // 5a. Upload template FIRST
+    if (hasTemplateRef) {
+      const url = await uploadToKIE(templateRef.b64, templateRef.mime || 'image/jpeg', 'template', KIE_API_KEY);
+      if (url) {
+        imageUrls.push(url);
+        imageOrder.push({ type: 'template', role: 'TEMPLATE', description: `Layout template: ${templateRef.name}` });
+      }
+    }
+
+    // 5b. Upload photos grouped by role: CHARACTER first, then ENVIRONMENT, then OBJECT
+    if (hasCharPhotos && photoRoles.length > 0) {
+      // Sort by role priority: CHARACTER → ENVIRONMENT → OBJECT
+      const rolePriority = { CHARACTER: 1, ENVIRONMENT: 2, OBJECT: 3 };
+      const sortedRoles = [...photoRoles].sort((a, b) => (rolePriority[a.role] || 4) - (rolePriority[b.role] || 4));
+
+      for (const pr of sortedRoles) {
+        const photoIdx = pr.index - 1; // photo_roles uses 1-based index
+        const photo = charPhotos[photoIdx];
+        if (!photo) continue;
+
+        const label = `${pr.role.toLowerCase()}_${pr.index}`;
+        const url = await uploadPhoto(photo, label);
+        if (url) {
+          imageUrls.push(url);
+          imageOrder.push({
+            type: pr.role.toLowerCase(),
+            role: pr.role,
+            index: pr.index,
+            description: pr.description || '',
+          });
+        }
+      }
+    } else if (hasCharPhotos) {
+      // No role mapping — upload all as CHARACTER (legacy fallback)
+      for (const [i, p] of charPhotos.entries()) {
+        const url = await uploadPhoto(p, `char_${i + 1}`);
+        if (url) {
+          imageUrls.push(url);
+          imageOrder.push({ type: 'character', role: 'CHARACTER', index: i + 1, description: '' });
         }
       }
     }
 
-    console.log(`Uploaded ${imageUrls.length} images to KIE (expected: ${(hasTemplateRef ? 1 : 0) + charPhotos.length})`);
+    console.log(`Uploaded ${imageUrls.length} images to KIE`);
+    console.log('Image order:', imageOrder.map((o, i) => `Image ${i+1}=${o.type}`).join(', '));
 
-    // Log which images succeeded
-    if (hasTemplateRef && imageUrls.length === 0) {
-      console.warn('⚠️ Template upload FAILED — falling back to prompt-only generation');
-    }
-    if (hasCharPhotos && imageUrls.length <= (hasTemplateRef ? 1 : 0)) {
-      console.warn('⚠️ Character photo uploads FAILED — faces will not be preserved');
-    }
+    const templateUploaded = imageOrder.some(o => o.type === 'template');
+    const photosUploaded = imageOrder.some(o => o.type !== 'template');
+    const effectivePhotoCount = imageOrder.filter(o => o.type !== 'template').length;
 
-    // Determine effective state based on what actually uploaded
-    const templateUploaded = hasTemplateRef && imageUrls.length > 0;
-    const photosUploaded = imageUrls.length > (templateUploaded ? 1 : 0);
-    const effectivePhotoCount = templateUploaded ? imageUrls.length - 1 : imageUrls.length;
-
-    console.log(`Effective state: template=${templateUploaded}, photos=${photosUploaded} (${effectivePhotoCount} uploaded)`);
-
-    // ── STEP 5: Build the face-preservation prompt ──────────────
+    // ── STEP 6: Build the structured prompt ─────────────────────
     const overlayText = (custom_overlay_text || concept.text_overlay || '').toUpperCase().trim();
     const rawStyle = concept.text_style || '';
     const fontMatch = rawStyle.match(/bebas neue|impact|montserrat|roboto|arial/i);
@@ -389,7 +425,6 @@ Deno.serve(async (req) => {
     const textColor = colorMatch ? colorMatch[0] : 'white';
     const textPosition = rawStyle.toLowerCase().includes('bottom') ? 'bottom-center' : 'upper-left';
 
-    // Resolve character descriptions
     const charDescriptions = Array.isArray(directCharDescriptions) ? directCharDescriptions : [];
 
     const prompt = buildFaceSwapPrompt({
@@ -402,6 +437,8 @@ Deno.serve(async (req) => {
       photoCount: effectivePhotoCount,
       concept,
       charDescriptions,
+      roleMapping,
+      imageOrder,
     });
 
     console.log(`Prompt length: ${prompt.length} chars`);
