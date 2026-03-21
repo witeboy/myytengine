@@ -97,7 +97,7 @@ STORY CONTEXT (from image_prompt — this is the source of truth for what object
 ${imagePrompt}
 
 ${(() => {
-      const descs = (charDescriptions || []).filter((d, i) => d && d.trim());
+      const descs = (charDescriptions || []).filter((d, i) => d && d.trim()); 
       if (descs.length === 0) return '';
       let block = `\n═══════════════════════════════════════════════\nCHARACTER CLOTHING NOTES (from user)\n═══════════════════════════════════════════════\n`;
       charDescriptions.forEach((d, i) => {
