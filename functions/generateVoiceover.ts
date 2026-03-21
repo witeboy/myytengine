@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
         const parsed = JSON.parse(settings.voiceover_chunks);
         // Only resume if there are valid pending chunks with text
         const hasPending = parsed.some(c => c.status === 'pending' && c.text);
-        if (hasPending && !reset) {
+        if (false) {
           chunks = parsed;
           isResume = true;
           console.log(`🔄 Resuming: ${chunks.filter(c => c.status === 'pending').length} pending chunks`);
