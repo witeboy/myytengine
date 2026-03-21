@@ -856,7 +856,7 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
               )}
             </div>
             <div style={{ fontSize: 10, color: '#4b5563', marginTop: 6 }}>
-              MAX 3-4 WORDS · ALL CAPS · {customOverlay.length}/30 characters
+              3-5 WORDS · ALL CAPS · {customOverlay.length}/30 characters
             </div>
           </div>
 
