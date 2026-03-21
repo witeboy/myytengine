@@ -115,7 +115,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       return;
     }
 
-    console.log('TTS task submitted:', res.data?.task_id);
+    console.log('TTS task submitted:', res.data?.task_ids?.length, 'chunks');
 
     // Phase 2: Poll pollVoiceover until ready/failed (supports chunked)
     const pollInterval = setInterval(async () => {
