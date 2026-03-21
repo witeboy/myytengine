@@ -115,48 +115,35 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       return;
     }
 
-    console.log('TTS task submitted:', res.data?.task_ids?.length, 'chunks');
+    console.log('TTS task submitted:', res.data?.task_id);
 
-    // Phase 2: Poll pollVoiceover until ready/failed (supports chunked)
+    // Phase 2: Poll until ready/failed
     const pollInterval = setInterval(async () => {
       try {
         const pollRes = await base44.functions.invoke('pollVoiceover', { project_id: project.id });
         const data = pollRes.data;
-        console.log('Voiceover poll:', data?.status, data?.chunks_completed, '/', data?.chunks_total);
-
-        // Update chunk progress for UI
-        if (data?.chunks_total > 1) {
-          setChunkProgress({
-            completed: data.chunks_completed || 0,
-            total: data.chunks_total || 1,
-            failed: data.chunks_failed || 0,
-            generating: data.chunks_generating || 0,
-            percent: data.progress_percent || 0,
-          });
-        }
+        console.log('Voiceover poll:', data?.status);
 
         if (data?.status === 'ready' && data?.voiceover_url) {
           const settingsRes = await base44.entities.ProductionSettings.filter({ project_id: project.id });
           if (settingsRes[0]) setSettings({ ...settingsRes[0], voiceover_status: 'completed', voiceover_url: data.voiceover_url });
           setGenerating(false);
-          setChunkProgress(null);
           clearInterval(pollInterval);
           onUpdate?.();
         } else if (data?.status === 'failed') {
-          setError(data.error || 'Voiceover generation failed. Please try again.');
+          setError(data.error || 'Voiceover generation failed.');
           setGenerating(false);
-          setChunkProgress(null);
           clearInterval(pollInterval);
         }
       } catch (pollErr) {
         console.warn('Poll error:', pollErr.message);
       }
-    }, 8000);
+    }, 10000);
 
     setTimeout(() => {
       clearInterval(pollInterval);
       setGenerating(prev => {
-        if (prev) setError('Voiceover generation is taking longer than expected. Refresh the page to check.');
+        if (prev) setError('Still generating. Refresh to check status.');
         return false;
       });
     }, 3600000);
