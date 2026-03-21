@@ -777,24 +777,51 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
         <div style={{ maxWidth: 800, margin: '0 auto', padding: '22px 16px' }}>
           <StepDots current={1} total={4} />
 
-          {/* Mood + metadata banner */}
+          {/* Mood + role mapping banner */}
           {(templateMeta || detectedMood) && (
             <div style={{
               background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.25)',
               borderRadius: 12, padding: '12px 16px', marginBottom: 18,
-              display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center',
             }}>
-              {detectedMood && (
-                <span style={{ fontSize: 13, fontWeight: 700, color: '#a78bfa' }}>
-                  🎯 Mood: <span style={{ color: '#fff' }}>{detectedMood}</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: photoRolesResult.length > 0 ? 10 : 0 }}>
+                {detectedMood && (
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#a78bfa' }}>
+                    🎯 Mood: <span style={{ color: '#fff' }}>{detectedMood}</span>
+                  </span>
+                )}
+                <span style={{ fontSize: 11, color: '#f59e0b', background: 'rgba(245,158,11,0.1)', borderRadius: 6, padding: '2px 8px' }}>
+                  ✓ Template: {selectedUserTemplate?.name}
                 </span>
+              </div>
+
+              {/* Show photo role assignments */}
+              {photoRolesResult.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: storyElementsResult ? 8 : 0 }}>
+                  {photoRolesResult.map((pr, i) => {
+                    const roleColors = { CHARACTER: '#22c55e', ENVIRONMENT: '#3b82f6', OBJECT: '#f59e0b' };
+                    const roleEmoji = { CHARACTER: '👤', ENVIRONMENT: '🏞️', OBJECT: '📦' };
+                    return (
+                      <span key={i} style={{
+                        fontSize: 10, fontWeight: 600,
+                        color: roleColors[pr.role] || '#9ca3af',
+                        background: `${roleColors[pr.role] || '#9ca3af'}15`,
+                        borderRadius: 6, padding: '3px 8px',
+                      }}>
+                        {roleEmoji[pr.role] || '📷'} Photo {pr.index}: {pr.role}
+                      </span>
+                    );
+                  })}
+                </div>
               )}
-              <span style={{ fontSize: 11, color: '#22c55e', background: 'rgba(34,197,94,0.1)', borderRadius: 6, padding: '2px 8px' }}>
-                ✓ {uploadedChars.length} photo{uploadedChars.length > 1 ? 's' : ''} ready
-              </span>
-              <span style={{ fontSize: 11, color: '#f59e0b', background: 'rgba(245,158,11,0.1)', borderRadius: 6, padding: '2px 8px' }}>
-                ✓ Template: {selectedUserTemplate?.name}
-              </span>
+
+              {/* Show condensed story elements */}
+              {storyElementsResult && (
+                <div style={{ fontSize: 10, color: '#6b7280', lineHeight: 1.5 }}>
+                  {storyElementsResult.characters && <div>👤 <strong style={{ color: '#22c55e' }}>Character:</strong> {storyElementsResult.characters.substring(0, 80)}…</div>}
+                  {storyElementsResult.environment && <div>🏞️ <strong style={{ color: '#3b82f6' }}>Background:</strong> {storyElementsResult.environment.substring(0, 80)}…</div>}
+                  {storyElementsResult.objects && <div>📦 <strong style={{ color: '#f59e0b' }}>Object:</strong> {storyElementsResult.objects.substring(0, 80)}…</div>}
+                </div>
+              )}
             </div>
           )}
 
