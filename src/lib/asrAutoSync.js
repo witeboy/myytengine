@@ -582,67 +582,80 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     }
   }
 
-  // ── HARD CAP: No scene can exceed MAX_SCENE_DURATION ──────────
-  // This is the last safety net. If any scene is still absurdly long
-  // after all the alignment fixes, force-shrink it and redistribute
-  // the excess to its neighbors.
-  const MAX_SCENE_DURATION = 20.0;
-  let hardCapApplied = false;
-  for (let i = 0; i < results.length; i++) {
-    const r = results[i];
-    if (r.duration <= MAX_SCENE_DURATION) continue;
+  // ── HARD CAP: Absolute final pass — no scene exceeds MAX ────────
+  // Run multiple passes to ensure gap-closing doesn't re-inflate scenes.
+  const MAX_SCENE_DURATION = 15.0;
 
-    // Estimate reasonable duration from word count
-    const range = sceneWordRanges[i];
-    const wordCount = range?.wordCount || 0;
-    const reasonableDur = Math.max(MIN_DURATION, Math.min(MAX_SCENE_DURATION, wordCount * 0.38));
-    const excess = r.duration - reasonableDur;
-
-    console.warn(`[HARD CAP] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s → ${reasonableDur.toFixed(1)}s (${wordCount} words, trimming ${excess.toFixed(1)}s)`);
-
-    // Trim from the end — move endTime back, push next scene's start back
-    r.endTime = r.startTime + reasonableDur;
-    r.duration = reasonableDur;
-
-    // Redistribute: next scene gets the space
-    if (i < results.length - 1) {
-      const next = results[i + 1];
-      if (next.startTime > r.endTime) {
-        // Gap already exists, fine
-      } else {
-        next.startTime = r.endTime;
-        next.duration = Math.round((next.endTime - next.startTime) * 1000) / 1000;
+  const applyHardCap = () => {
+    let anyFixed = false;
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      // Recalculate duration fresh from times
+      if (r.startTime !== null && r.endTime !== null) {
+        r.duration = r.endTime - r.startTime;
       }
-    }
-    hardCapApplied = true;
-  }
+      if (r.duration <= MAX_SCENE_DURATION) continue;
 
-  // If hard cap was applied, re-close any gaps created
-  if (hardCapApplied) {
+      const range = sceneWordRanges[i];
+      const wordCount = range?.wordCount || 0;
+      // Clamp to word-count estimate, but never more than MAX_SCENE_DURATION
+      const reasonableDur = Math.max(MIN_DURATION, Math.min(MAX_SCENE_DURATION, wordCount * 0.38));
+
+      console.warn(`[HARD CAP] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s → ${reasonableDur.toFixed(1)}s (${wordCount} words)`);
+
+      r.endTime = r.startTime + reasonableDur;
+      r.duration = reasonableDur;
+      anyFixed = true;
+    }
+    return anyFixed;
+  };
+
+  const closeGapsAfterCap = () => {
     for (let i = 0; i < results.length - 1; i++) {
       const curr = results[i];
       const next = results[i + 1];
       if (curr.empty || next.empty) continue;
-      if (curr.endTime !== null && next.startTime !== null && next.startTime > curr.endTime) {
+      if (curr.endTime === null || next.startTime === null) continue;
+
+      if (next.startTime > curr.endTime) {
         const gap = next.startTime - curr.endTime;
-        if (gap <= MAX_ABSORB) {
+        // Only absorb gap if it won't push curr beyond the hard cap
+        const maxAbsorb = MAX_SCENE_DURATION - (curr.endTime - curr.startTime);
+        if (gap <= Math.min(MAX_ABSORB, maxAbsorb)) {
           curr.endTime = next.startTime;
         } else {
-          const mid = curr.endTime + gap / 2;
+          // Split gap but cap each side
+          const availCurr = Math.min(gap / 2, maxAbsorb);
+          const mid = curr.endTime + availCurr;
           curr.endTime = mid;
           next.startTime = mid;
         }
+      } else if (next.startTime < curr.endTime) {
+        // Overlap — prefer giving time to the shorter scene
+        if (curr.duration > next.duration) {
+          curr.endTime = next.startTime;
+        } else {
+          next.startTime = curr.endTime;
+        }
       }
     }
-    // Recalculate durations
-    results.forEach(r => {
-      if (r.startTime !== null && r.endTime !== null) {
-        r.startTime = Math.round(r.startTime * 1000) / 1000;
-        r.endTime = Math.round(r.endTime * 1000) / 1000;
-        r.duration = Math.round((r.endTime - r.startTime) * 1000) / 1000;
-      }
-    });
-  }
+  };
+
+  // Pass 1: hard cap
+  applyHardCap();
+  // Pass 2: close gaps (cap-aware)
+  closeGapsAfterCap();
+  // Pass 3: re-cap anything that got inflated by gap closing
+  applyHardCap();
+
+  // Final duration recalculation
+  results.forEach(r => {
+    if (r.startTime !== null && r.endTime !== null) {
+      r.startTime = Math.round(r.startTime * 1000) / 1000;
+      r.endTime = Math.round(r.endTime * 1000) / 1000;
+      r.duration = Math.round((r.endTime - r.startTime) * 1000) / 1000;
+    }
+  });
 
   return results;
 }
