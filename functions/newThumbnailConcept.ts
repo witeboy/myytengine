@@ -28,7 +28,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'video_title is required' }, { status: 400 });
     }
 
-    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY'); 
     if (!GEMINI_API_KEY) {
       return Response.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
     }
