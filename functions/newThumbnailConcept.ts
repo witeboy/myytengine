@@ -202,9 +202,13 @@ OUTPUT FORMAT — JSON ONLY
 Return ONLY a valid JSON object. No markdown. No explanation. No backticks.
 
 {
-  "detected_mood": "ONE of: crime, drama, nollywood, comedy, finance, inspirational, educational",
+  "detected_mood": "the single best emotional tone — deduce it from the title/summary, do not pick from a fixed list. Use lowercase single word like: crime, drama, comedy, finance, inspirational, educational, horror, romantic, mystery, entrepreneurial, sports, gaming, etc.",
   "mood_reasoning": "one sentence why",
-  "extracted_objects": ["list", "of", "key", "visual", "objects", "from", "the", "story"],
+  "primary_subject": "the ONE main thing this video is about — be ultra-specific (e.g. 'custom printed t-shirts' not 'business')",
+  "extracted_objects": ["list", "of", "every", "specific", "physical", "object", "mentioned", "in", "summary"],
+  "objects_from_photos": ["list of objects you can see in the uploaded character photos, if any"],
+  "objects_in_template": ["list of objects you can see in the uploaded template image, if any"],
+  "object_swap_map": {"template_object_1": "story_replacement_1", "template_object_2": "story_replacement_2"},
   "thumbnail_strategy": "split_screen | hero_shot | reaction | progression | versus | mystery",
   "strategy_reasoning": "why this strategy works for this content",
   "concepts": [
