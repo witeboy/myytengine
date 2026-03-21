@@ -168,9 +168,15 @@ LAW 1 — ZERO OVERLAP (HARD RULE):
 The overlay text MUST NOT repeat any word from the title OR the SEO titles listed above.
 Title words are banned: ${video_title.toLowerCase().replace(/[^a-z0-9\s]/g,'').split(/\s+/).filter(w=>w.length>2).join(', ')}
 
-LAW 2 — MAX 3 WORDS, ALL CAPS:
-Thumbnails are seen at 168x94px on mobile. 4+ words = unreadable blur.
-Font: Impact or Bebas Neue only.
+LAW 2 — WORD COUNT VARIETY (CRITICAL):
+Generate a MIX of overlay text lengths across the 5 concepts:
+- Concept 1: exactly 3 words
+- Concept 2: exactly 4 words
+- Concept 3: exactly 5 words
+- Concept 4: exactly 3 words
+- Concept 5: exactly 4 words
+ALL CAPS. Font: Impact or Bebas Neue only.
+Thumbnails are seen at 168x94px on mobile — keep words short and punchy even at 4-5 words.
 
 LAW 3 — TRIGGER ONE HIGH-AROUSAL EMOTION:
 Every text must trigger exactly one of: FEAR · GREED · SHOCK · CURIOSITY
