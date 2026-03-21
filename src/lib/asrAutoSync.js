@@ -116,9 +116,7 @@ function globalAlign(scriptWords, asrWords) {
 
   // Time-based guard: reject a candidate if it would jump more than
   // MAX_TIME_JUMP seconds ahead of where we expect to be.
-  // For continuous speech (no silence), keep this tight.
-  const avgSecsPerWord = totalAsrDur / Math.max(1, asrWords.length);
-  const MAX_TIME_JUMP = Math.max(8.0, avgSecsPerWord * 30); // ~30 words worth of jump max
+  const MAX_TIME_JUMP = 15.0; // seconds
 
   const isTimeReasonable = (ai, si) => {
     const asrTime = asrWords[ai]?.start ?? 0;
