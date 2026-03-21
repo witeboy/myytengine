@@ -1033,6 +1033,15 @@ export default function TimelineEditor() {
       setVideoClips(syncedWithRates);
       setOverrideBeatDurations(newBeatDurations);
 
+      // Step 4b: Detect drifted scenes from alignment results
+      const drifts = alignment
+        .map((a, idx) => (a.driftDetected ? { index: idx, sceneNumber: a.sceneNumber, info: a.driftInfo } : null))
+        .filter(Boolean);
+      setDriftedScenes(drifts);
+      if (drifts.length > 0) {
+        console.warn(`[AutoSync] ${drifts.length} scenes with alignment drift detected — user can apply targeted fix`);
+      }
+
       // Step 5: Persist
       if (prodSettings?.id) {
         try {
