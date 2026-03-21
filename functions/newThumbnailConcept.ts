@@ -112,13 +112,23 @@ STEP 0 — EXTRACT STORY OBJECTS (CRITICAL)
 Analyze the title and summary to identify the CENTRAL VISUAL OBJECTS that viewers must see to instantly understand the video:
 
 OBJECT EXTRACTION RULES:
+- Read the ENTIRE summary carefully. The PRIMARY VISUAL SUBJECT is the specific product, item, business, or activity that the story is actually about.
 - FINANCE videos (stocks, crypto, money): Extract the specific asset (Bitcoin logo, stock chart, gold bars, dollar bills, specific company logo)
 - CRIME/DRAMA videos: Extract the central person/victim/villain, the weapon/evidence, the location
 - FOOD/LIFESTYLE: Extract the specific food item, product, or transformation result
 - TECH: Extract the specific device, app, or gadget
+- E-COMMERCE / MERCH / PRODUCTS: Extract the EXACT product being sold (custom t-shirts, candles, jewelry, shoes, etc.) — show the actual merchandise, packaging, printing equipment, or storefront
+- REAL ESTATE: Extract buildings, houses, property types mentioned
 - BEFORE/AFTER stories: Extract both the "before" state object and the "after" state object
 - COMPARISON stories: Extract both sides of the comparison
 - TUTORIAL/HOW-TO: Extract the end result or the tool being taught
+- BUSINESS/ENTREPRENEURSHIP: Extract the SPECIFIC business type and its physical product or service — NOT generic "success" symbols like luxury cars or mansions unless the story is literally about those things
+
+ANTI-HALLUCINATION RULE (CRITICAL):
+- Do NOT add objects that are NOT mentioned in the title or summary. If the story is about selling t-shirts, show t-shirts — NOT trucks, NOT sports cars, NOT random luxury items.
+- If the summary mentions a specific product (t-shirts, candles, courses, etc.), that product MUST be the dominant visual element in the background/props.
+- Generic "wealth symbols" (supercars, mansions, yachts, stacks of gold) are BANNED unless the summary specifically mentions them.
+- The thumbnail must be INSTANTLY recognizable as being about the specific topic in the summary.
 
 These objects MUST appear prominently in EVERY image prompt. They are what make the viewer instantly connect the thumbnail to the video.
 
