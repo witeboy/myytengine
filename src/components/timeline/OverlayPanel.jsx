@@ -24,9 +24,66 @@ const STICKER_PRESETS = [
   { id: 'fire',      label: 'Fire',      emoji: '🔥', bg: '#F97316', text: 'HOT' },
 ];
 
-export default function OverlayPanel({ overlayClips, onAddOverlay, onRemoveOverlay, currentTime, totalDuration }) {
+export default function OverlayPanel({ overlayClips, onAddOverlay, onRemoveOverlay, currentTime, totalDuration, projectId }) {
   const [emojiSearch, setEmojiSearch] = useState('');
-  const [activeTab, setActiveTab] = useState('emoji'); // 'emoji' | 'sticker' | 'video'
+  const [activeTab, setActiveTab] = useState('emoji');
+  const [isUploading, setIsUploading] = useState(false);
+  const queryClient = useQueryClient();
+
+  const { data: uploadedAssets = [] } = useQuery({
+    queryKey: ['media-assets-overlay', projectId],
+    queryFn: async () => {
+      const all = await base44.entities.MediaAssets.filter({ project_id: projectId, file_type: 'image', category: 'overlay' });
+      return all.sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+    },
+    enabled: !!projectId,
+  });
+
+  const handleUploadImage = async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      setIsUploading(true);
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      await base44.entities.MediaAssets.create({
+        project_id: projectId,
+        file_url,
+        file_type: 'image',
+        filename: file.name,
+        category: 'overlay',
+        file_size_bytes: file.size,
+      });
+      queryClient.invalidateQueries({ queryKey: ['media-assets-overlay', projectId] });
+      setIsUploading(false);
+    };
+    input.click();
+  };
+
+  const addImageOverlay = (asset) => {
+    onAddOverlay({
+      id: `overlay-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      type: 'overlay',
+      overlayType: 'image',
+      imageUrl: asset.file_url,
+      content: '🖼',
+      startTime: currentTime,
+      duration: 5,
+      x: 50,
+      y: 50,
+      scale: 0.3,
+      opacity: 1.0,
+      animation: 'fade_in',
+      label: (asset.filename || 'Image').slice(0, 15),
+    });
+  };
+
+  const handleDeleteAsset = async (assetId) => {
+    await base44.entities.MediaAssets.delete(assetId);
+    queryClient.invalidateQueries({ queryKey: ['media-assets-overlay', projectId] });
+  };
 
   const filteredEmojis = emojiSearch
     ? EMOJI_LIBRARY.filter(() => true) // emoji search is visual, keep all
