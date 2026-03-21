@@ -367,8 +367,12 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
 
     if (speechStart != null && speechEnd != null) {
       const span = speechEnd - speechStart;
-      // If span > 3x word estimate OR match rate < 50%, don't trust it
-      if (span > wordEstimate * 3 && span > 10) {
+      // Unreliable if:
+      // 1. Span > 2.5x the word-count estimate AND span > 8s, OR
+      // 2. Match rate < 50% AND span > 8s
+      const spanTooWide = span > wordEstimate * 2.5 && span > 8;
+      const lowMatch = matchScore < 0.5 && span > 8;
+      if (spanTooWide || lowMatch) {
         console.warn(`[ASR Scene ${scene.scene_number}] ⚠️ UNRELIABLE: span ${span.toFixed(1)}s for ${range.wordCount}w (expected ~${wordEstimate.toFixed(1)}s), match ${(matchScore * 100).toFixed(0)}% — will anchor from neighbors`);
         unreliable = true;
         speechStart = null;
