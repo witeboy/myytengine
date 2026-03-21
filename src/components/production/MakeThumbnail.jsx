@@ -202,6 +202,8 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
   const [selectedConcept, setSelectedConcept] = useState(null);
   const [templateMeta, setTemplateMeta]       = useState(null);
   const [detectedMood, setDetectedMood]       = useState(null);
+  const [photoRolesResult, setPhotoRolesResult] = useState([]);
+  const [storyElementsResult, setStoryElementsResult] = useState(null);
   const [customOverlay, setCustomOverlay]     = useState('');
   const [useCustomOverlay, setUseCustomOverlay] = useState(false);
 
