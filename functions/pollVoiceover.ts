@@ -1,36 +1,15 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
-// POLL VOICEOVER — Chunked polling + MP3 concatenation
-// Polls all chunk task_ids, and when all are done, fetches each
-// audio file, concatenates the MP3 bytes, uploads the result.
+// POLL VOICEOVER — Handles all AI33 response formats
+//
+// AI33 can return:
+// 1. JSON with status + audio_url  (normal)
+// 2. Raw MP3 binary bytes          (some endpoints)
+// 3. 404 text                      (invalid task_id)
+//
+// When all chunks done: concatenates MP3s, uploads final file.
 // ══════════════════════════════════════════════════════════════════
-
-async function pollAI33Task(taskId, apiKey) {
-  const pollUrl = `https://api.ai33.pro/v1m/task/fetch?task_id=${taskId}`;
-  const res = await fetch(pollUrl, {
-    headers: { 'xi-api-key': apiKey },
-  });
-
-  const contentType = res.headers.get('content-type') || '';
-
-  // If AI33 returns audio directly (MP3/WAV bytes), the task is done
-  if (contentType.includes('audio/') || contentType.includes('octet-stream')) {
-    return { status: 'Success', audio_binary: true, raw_response: res };
-  }
-
-  // Try to parse as JSON
-  const text = await res.text();
-  try {
-    return JSON.parse(text);
-  } catch (e) {
-    // If it starts with ID3 or binary bytes, it's MP3 data
-    if (text.length > 100 && (text.charCodeAt(0) === 0x49 || text.charCodeAt(0) === 0xFF)) {
-      return { status: 'Success', audio_binary: true, raw_response: res, raw_text: text };
-    }
-    throw new Error(`Non-JSON response: ${text.substring(0, 100)}`);
-  }
-}
 
 Deno.serve(async (req) => {
   try {
@@ -44,23 +23,19 @@ Deno.serve(async (req) => {
     const AI33_KEY = Deno.env.get('AI33_API_KEY');
     if (!AI33_KEY) return Response.json({ error: 'AI33_API_KEY not configured' }, { status: 500 });
 
-    // Load settings
+    // ── Load settings ───────────────────────────────────────────
     const settingsList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
     const settings = settingsList[0];
-    if (!settings) return Response.json({ error: 'No production settings found' }, { status: 404 });
+    if (!settings) return Response.json({ error: 'No production settings' }, { status: 404 });
 
-    // ── Parse chunk metadata ────────────────────────────────────
+    // ── Parse chunks ────────────────────────────────────────────
     let chunks = [];
     try {
       chunks = JSON.parse(settings.voiceover_chunks || '[]');
     } catch (e) {
-      // Backwards compat: single task_id (non-chunked)
+      // Backwards compat: single task
       if (settings.generation_task_id) {
-        chunks = [{
-          index: 0,
-          task_id: settings.generation_task_id,
-          status: 'submitted',
-        }];
+        chunks = [{ index: 0, task_id: settings.generation_task_id, status: 'submitted' }];
       }
     }
 
@@ -68,51 +43,152 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'No voiceover tasks to poll' }, { status: 400 });
     }
 
-    // ── Poll each pending chunk ─────────────────────────────────
+    // ── Poll each submitted chunk (max 3 per call to avoid timeout) ─
     let completedCount = 0;
     let failedCount = 0;
     let stillGenerating = 0;
+    let pendingCount = 0;
     let updated = false;
+    let pollsThisCall = 0;
+    const MAX_POLLS_PER_CALL = 3;
 
     for (const chunk of chunks) {
-      if (!chunk.task_id) {
-        failedCount++;
+      // Count already-resolved chunks
+      if (chunk.status === 'done') { completedCount++; continue; }
+      if (chunk.status === 'pending') { pendingCount++; continue; }
+      if (chunk.status === 'failed') { failedCount++; continue; }
+
+      // Skip if no task_id
+      if (!chunk.task_id) { failedCount++; chunk.status = 'failed'; updated = true; continue; }
+
+      // Limit polls per call to avoid Deno timeout
+      if (pollsThisCall >= MAX_POLLS_PER_CALL) {
+        stillGenerating++;
         continue;
       }
+      pollsThisCall++;
 
-      if (chunk.status === 'done') {
-        completedCount++;
-        continue;
-      }
-
-      if (chunk.status === 'failed' && !chunk.task_id) {
-        failedCount++;
-        continue;
-      }
-
-      // Poll this chunk
+      // ── Poll AI33 ──────────────────────────────────────────
       try {
-        const pollResult = await pollAI33Task(chunk.task_id, AI33_KEY);
+        const pollUrl = `https://api.ai33.pro/v1m/task/fetch?task_id=${chunk.task_id}`;
+        const res = await fetch(pollUrl, {
+          headers: { 'xi-api-key': AI33_KEY },
+        });
 
-        // Handle binary audio response (AI33 returns MP3 directly)
-        if (pollResult.audio_binary && pollResult.raw_response) {
+        // Handle HTTP errors
+        if (res.status === 404) {
+          chunk.status = 'failed';
+          chunk.error = 'Task not found (404)';
+          failedCount++;
+          updated = true;
+          console.log(`  ❌ Chunk ${chunk.index + 1}: 404 — task not found`);
+          continue;
+        }
+
+        if (!res.ok && res.status >= 500) {
+          // Server error — don't mark as failed, retry next poll
+          console.warn(`  ⚠ Chunk ${chunk.index + 1}: server error ${res.status}`);
+          stillGenerating++;
+          continue;
+        }
+
+        const contentType = res.headers.get('content-type') || '';
+
+        // ── CASE 1: Binary audio response ────────────────────
+        if (contentType.includes('audio/') || contentType.includes('octet-stream')) {
           try {
-            const audioBuffer = await pollResult.raw_response.arrayBuffer();
-            const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
-            const uploadResult = await base44.asServiceRole.storage.upload(blob, `voiceover_chunk_${chunk.index}_${project_id}.mp3`);
+            const audioBytes = new Uint8Array(await res.arrayBuffer());
+            if (audioBytes.length < 1000) {
+              // Too small to be real audio — probably an error
+              console.warn(`  ⚠ Chunk ${chunk.index + 1}: audio response too small (${audioBytes.length} bytes)`);
+              stillGenerating++;
+              continue;
+            }
+            console.log(`  📥 Chunk ${chunk.index + 1}: ${(audioBytes.length / 1024).toFixed(0)} KB audio`);
+
+            const blob = new Blob([audioBytes], { type: 'audio/mpeg' });
+            const uploadResult = await base44.asServiceRole.storage.upload(blob, `vo_chunk_${chunk.index}_${project_id}.mp3`);
             const uploadedUrl = uploadResult?.url || uploadResult;
-            chunk.status = 'done';
-            chunk.audio_url = uploadedUrl;
-            completedCount++;
-            updated = true;
-            console.log(`  ✅ Chunk ${chunk.index + 1}: done (binary) → ${String(uploadedUrl).substring(0, 60)}`);
+
+            if (uploadedUrl && typeof uploadedUrl === 'string') {
+              chunk.status = 'done';
+              chunk.audio_url = uploadedUrl;
+              completedCount++;
+              updated = true;
+              console.log(`  ✅ Chunk ${chunk.index + 1}: uploaded → ${uploadedUrl.substring(0, 60)}`);
+            } else {
+              console.warn(`  ⚠ Chunk ${chunk.index + 1}: upload returned no URL`);
+              stillGenerating++;
+            }
           } catch (uploadErr) {
-            console.warn(`  ⚠ Chunk ${chunk.index + 1}: got audio but upload failed: ${uploadErr.message}`);
+            console.warn(`  ⚠ Chunk ${chunk.index + 1}: upload failed: ${uploadErr.message}`);
             stillGenerating++;
           }
-        } else if (pollResult.status === 'Success' || pollResult.status === 'success') {
-          // Task completed — extract audio URL
-          const audioUrl = pollResult.audio_url || pollResult.file?.url || pollResult.data?.audio_url || pollResult.url;
+          continue;
+        }
+
+        // ── CASE 2: Text/JSON response ───────────────────────
+        const rawText = await res.text();
+
+        // Check if it's binary disguised as text (MP3 starts with 0xFF 0xFB or "ID3")
+        if (rawText.length > 500 && (
+          rawText.charCodeAt(0) === 0xFF ||
+          rawText.charCodeAt(0) === 0x49 ||
+          rawText.startsWith('ID3')
+        )) {
+          // Re-fetch as binary
+          try {
+            const reFetch = await fetch(pollUrl, { headers: { 'xi-api-key': AI33_KEY } });
+            const audioBytes = new Uint8Array(await reFetch.arrayBuffer());
+            const blob = new Blob([audioBytes], { type: 'audio/mpeg' });
+            const uploadResult = await base44.asServiceRole.storage.upload(blob, `vo_chunk_${chunk.index}_${project_id}.mp3`);
+            const uploadedUrl = uploadResult?.url || uploadResult;
+            if (uploadedUrl && typeof uploadedUrl === 'string') {
+              chunk.status = 'done';
+              chunk.audio_url = uploadedUrl;
+              completedCount++;
+              updated = true;
+              console.log(`  ✅ Chunk ${chunk.index + 1}: binary-as-text → ${uploadedUrl.substring(0, 60)}`);
+            } else {
+              stillGenerating++;
+            }
+          } catch (e) {
+            console.warn(`  ⚠ Chunk ${chunk.index + 1}: binary re-fetch failed: ${e.message}`);
+            stillGenerating++;
+          }
+          continue;
+        }
+
+        // Parse as JSON
+        let pollResult;
+        try {
+          pollResult = JSON.parse(rawText);
+        } catch (e) {
+          // Not JSON, not binary — probably an error page
+          const preview = rawText.substring(0, 100).replace(/\n/g, ' ');
+          console.warn(`  ⚠ Chunk ${chunk.index + 1}: unparseable: "${preview}"`);
+          // If it says "not found" or "404", mark as failed
+          if (rawText.toLowerCase().includes('not found') || rawText.includes('404')) {
+            chunk.status = 'failed';
+            chunk.error = 'Task not found';
+            failedCount++;
+            updated = true;
+          } else {
+            stillGenerating++;
+          }
+          continue;
+        }
+
+        // ── Parse JSON status ────────────────────────────────
+        const status = (pollResult.status || '').toLowerCase();
+
+        if (status === 'success' || status === 'completed' || status === 'done') {
+          const audioUrl = pollResult.audio_url
+            || pollResult.file?.url
+            || pollResult.data?.audio_url
+            || pollResult.url
+            || pollResult.result?.url;
+
           if (audioUrl) {
             chunk.status = 'done';
             chunk.audio_url = audioUrl;
@@ -120,42 +196,43 @@ Deno.serve(async (req) => {
             updated = true;
             console.log(`  ✅ Chunk ${chunk.index + 1}: done → ${audioUrl.substring(0, 60)}`);
           } else {
-            // Success but no URL — try extracting from nested structures
+            // Search entire response for an MP3 URL
             const jsonStr = JSON.stringify(pollResult);
-            const urlMatch = jsonStr.match(/https?:\/\/[^"]+\.mp3[^"]*/);
+            const urlMatch = jsonStr.match(/https?:\/\/[^"]+\.(mp3|wav|ogg)[^"]*/);
             if (urlMatch) {
               chunk.status = 'done';
               chunk.audio_url = urlMatch[0];
               completedCount++;
               updated = true;
+              console.log(`  ✅ Chunk ${chunk.index + 1}: found URL → ${urlMatch[0].substring(0, 60)}`);
             } else {
-              console.warn(`  ⚠ Chunk ${chunk.index + 1}: Success but no audio URL in response`);
+              console.warn(`  ⚠ Chunk ${chunk.index + 1}: success but no audio URL in: ${jsonStr.substring(0, 200)}`);
               stillGenerating++;
             }
           }
-        } else if (pollResult.status === 'Failed' || pollResult.status === 'failed' || pollResult.error) {
+        } else if (status === 'failed' || status === 'error') {
           chunk.status = 'failed';
-          chunk.error = pollResult.error || pollResult.message || 'TTS generation failed';
+          chunk.error = pollResult.error || pollResult.message || 'TTS failed';
           failedCount++;
           updated = true;
-          console.log(`  ❌ Chunk ${chunk.index + 1}: failed — ${chunk.error}`);
+          console.log(`  ❌ Chunk ${chunk.index + 1}: ${chunk.error}`);
         } else {
           // Still processing
           stillGenerating++;
         }
+
       } catch (err) {
-        console.warn(`  ⚠ Chunk ${chunk.index + 1} poll error: ${err.message}`);
+        console.warn(`  ⚠ Chunk ${chunk.index + 1} error: ${err.message}`);
         stillGenerating++;
       }
     }
 
     const totalChunks = chunks.length;
-    const allDone = completedCount + failedCount >= totalChunks;
-    const allCompleted = completedCount === totalChunks;
+    const allResolved = completedCount + failedCount >= totalChunks && pendingCount === 0 && stillGenerating === 0;
 
-    console.log(`📊 Poll: ${completedCount}/${totalChunks} done, ${failedCount} failed, ${stillGenerating} generating`);
+    console.log(`📊 Poll: ${completedCount}/${totalChunks} done, ${failedCount} failed, ${stillGenerating} generating, ${pendingCount} pending`);
 
-    // ── Save updated chunk statuses ─────────────────────────────
+    // ── Save updated statuses ───────────────────────────────────
     if (updated) {
       await base44.asServiceRole.entities.ProductionSettings.update(settings.id, {
         voiceover_chunks: JSON.stringify(chunks),
@@ -163,27 +240,22 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── If all chunks are done, concatenate audio ───────────────
-    if (allDone && completedCount > 0) {
+    // ── All resolved → concatenate audio ────────────────────────
+    if (allResolved && completedCount > 0) {
       const doneChunks = chunks
         .filter(c => c.status === 'done' && c.audio_url)
         .sort((a, b) => a.index - b.index);
 
+      // Single chunk — no concatenation
       if (doneChunks.length === 1) {
-        // Single chunk — no concatenation needed
         const voiceoverUrl = doneChunks[0].audio_url;
         await base44.asServiceRole.entities.ProductionSettings.update(settings.id, {
           voiceover_url: voiceoverUrl,
           voiceover_status: 'completed',
         });
-
-        // Also update project
-        const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
-        if (projects[0]) {
-          await base44.asServiceRole.entities.Projects.update(project_id, {
-            voiceover_url: voiceoverUrl,
-          });
-        }
+        try {
+          await base44.asServiceRole.entities.Projects.update(project_id, { voiceover_url: voiceoverUrl });
+        } catch (e) {}
 
         return Response.json({
           status: 'ready',
@@ -191,29 +263,32 @@ Deno.serve(async (req) => {
           chunks_completed: completedCount,
           chunks_total: totalChunks,
         });
+      }
 
-      } else if (doneChunks.length > 1) {
-        // Multiple chunks — concatenate MP3 bytes
-        console.log(`🔗 Concatenating ${doneChunks.length} audio chunks...`);
+      // Multiple chunks — concatenate MP3s
+      if (doneChunks.length > 1) {
+        console.log(`🔗 Concatenating ${doneChunks.length} chunks...`);
 
         try {
           const audioBuffers = [];
           for (const chunk of doneChunks) {
-            const res = await fetch(chunk.audio_url);
-            if (!res.ok) {
-              console.warn(`  ⚠ Fetch chunk ${chunk.index} failed: ${res.status}`);
-              continue;
+            try {
+              const res = await fetch(chunk.audio_url);
+              if (res.ok) {
+                const buf = new Uint8Array(await res.arrayBuffer());
+                audioBuffers.push(buf);
+                console.log(`  📥 Chunk ${chunk.index + 1}: ${(buf.length / 1024).toFixed(0)} KB`);
+              } else {
+                console.warn(`  ⚠ Chunk ${chunk.index + 1}: fetch failed ${res.status}`);
+              }
+            } catch (e) {
+              console.warn(`  ⚠ Chunk ${chunk.index + 1}: ${e.message}`);
             }
-            const buf = await res.arrayBuffer();
-            audioBuffers.push(new Uint8Array(buf));
-            console.log(`  📥 Chunk ${chunk.index + 1}: ${(buf.byteLength / 1024).toFixed(0)} KB`);
           }
 
-          if (audioBuffers.length === 0) {
-            throw new Error('No audio chunks could be fetched');
-          }
+          if (audioBuffers.length === 0) throw new Error('No audio fetched');
 
-          // Concatenate all MP3 buffers
+          // Concatenate
           const totalSize = audioBuffers.reduce((sum, buf) => sum + buf.length, 0);
           const concatenated = new Uint8Array(totalSize);
           let offset = 0;
@@ -221,36 +296,26 @@ Deno.serve(async (req) => {
             concatenated.set(buf, offset);
             offset += buf.length;
           }
+          console.log(`  📦 Total: ${(totalSize / (1024 * 1024)).toFixed(1)} MB from ${audioBuffers.length} chunks`);
 
-          console.log(`  📦 Concatenated: ${(totalSize / (1024 * 1024)).toFixed(1)} MB total`);
-
-          // Upload concatenated audio to Base44 storage
+          // Upload final
           const blob = new Blob([concatenated], { type: 'audio/mpeg' });
-          const formData = new FormData();
-          formData.append('file', blob, `voiceover_${project_id}.mp3`);
-
-          // Use Base44's file upload
-          const uploadResult = await base44.asServiceRole.storage.upload(blob, `voiceover_${project_id}.mp3`);
+          const uploadResult = await base44.asServiceRole.storage.upload(blob, `voiceover_full_${project_id}.mp3`);
           const voiceoverUrl = uploadResult?.url || uploadResult;
 
           if (!voiceoverUrl || typeof voiceoverUrl !== 'string') {
             throw new Error('Upload returned no URL');
           }
 
-          console.log(`  ✅ Uploaded concatenated voiceover: ${voiceoverUrl.substring(0, 80)}`);
+          console.log(`  ✅ Final voiceover: ${voiceoverUrl.substring(0, 80)}`);
 
-          // Save final URL
           await base44.asServiceRole.entities.ProductionSettings.update(settings.id, {
             voiceover_url: voiceoverUrl,
             voiceover_status: 'completed',
           });
-
-          const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
-          if (projects[0]) {
-            await base44.asServiceRole.entities.Projects.update(project_id, {
-              voiceover_url: voiceoverUrl,
-            });
-          }
+          try {
+            await base44.asServiceRole.entities.Projects.update(project_id, { voiceover_url: voiceoverUrl });
+          } catch (e) {}
 
           return Response.json({
             status: 'ready',
@@ -262,45 +327,46 @@ Deno.serve(async (req) => {
           });
 
         } catch (concatErr) {
-          console.error(`❌ Concatenation failed: ${concatErr.message}`);
-
-          // Fallback: just return the first chunk's URL so user gets something
+          console.error(`❌ Concat failed: ${concatErr.message}`);
+          // Fallback: return first chunk
           const fallbackUrl = doneChunks[0].audio_url;
           await base44.asServiceRole.entities.ProductionSettings.update(settings.id, {
             voiceover_url: fallbackUrl,
             voiceover_status: 'completed',
           });
-
           return Response.json({
             status: 'ready',
             voiceover_url: fallbackUrl,
             chunks_completed: completedCount,
             chunks_total: totalChunks,
             concatenated: false,
-            concat_error: concatErr.message,
             chunk_urls: doneChunks.map(c => c.audio_url),
           });
         }
       }
     }
 
-    // ── Still generating ────────────────────────────────────────
-    if (failedCount > 0 && completedCount === 0 && stillGenerating === 0) {
+    // ── All failed ──────────────────────────────────────────────
+    if (allResolved && completedCount === 0) {
+      await base44.asServiceRole.entities.ProductionSettings.update(settings.id, {
+        voiceover_status: 'failed',
+      });
       return Response.json({
         status: 'failed',
-        error: 'All voiceover chunks failed to generate',
-        chunks_completed: 0,
+        error: 'All voiceover chunks failed',
         chunks_total: totalChunks,
       });
     }
 
+    // ── Still in progress ───────────────────────────────────────
     return Response.json({
-      status: 'generating',
+      status: pendingCount > 0 ? 'submitting' : 'generating',
       chunks_completed: completedCount,
       chunks_failed: failedCount,
       chunks_generating: stillGenerating,
+      chunks_pending: pendingCount,
       chunks_total: totalChunks,
-      progress_percent: Math.round((completedCount / totalChunks) * 100),
+      progress_percent: totalChunks > 0 ? Math.round((completedCount / totalChunks) * 100) : 0,
     });
 
   } catch (error) {
