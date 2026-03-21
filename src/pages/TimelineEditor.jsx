@@ -1405,7 +1405,18 @@ export default function TimelineEditor() {
   const handleApplyStyleToAllCaptions = () => {
     const cap = captionClips.find(c => c.id === selectedCaptionId);
     if (!cap) return;
-    setCaptionClips(captionClips.map(c => ({ ...c, fontSize: cap.fontSize, color: cap.color, bgColor: cap.bgColor, x: cap.x, y: cap.y })));
+    setCaptionClips(captionClips.map(c => ({
+      ...c,
+      fontSize: cap.fontSize,
+      color: cap.color,
+      bgColor: cap.bgColor,
+      x: cap.x,
+      y: cap.y,
+      strokeColor: cap.strokeColor,
+      strokeWidth: cap.strokeWidth,
+      fontFamily: cap.fontFamily,
+      animation: cap.animation,
+    })));
   };
 
   const handleOffsetCaptions = (newOffset) => {
