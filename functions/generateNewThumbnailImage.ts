@@ -103,7 +103,7 @@ ${(() => {
       charDescriptions.forEach((d, i) => {
         if (d && d.trim()) block += `- Character ${i + 1} (Image ${hasTemplate ? i + 2 : i + 1}): ${d.trim()}\n`;
       });
-      block += `Use these descriptions for clothing/outfit. They override what is visible in the reference photo.\n`;
+      block += `Use these descriptions for clothing/outfit. They override what is visible in the reference photo.\n`; 
       return block;
     })()}
 ═══════════════════════════════════════════════
