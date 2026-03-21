@@ -758,7 +758,7 @@ export default function TimelineEditor() {
         const saved = JSON.parse(prodSettings.beat_durations);
         if (Array.isArray(saved) && saved.length === scenes.length) {
           // Hard-cap loaded durations: no single scene > 25s
-          const MAX_SCENE_DUR = 25;
+          const MAX_SCENE_DUR = 10;
           const hasOverlong = saved.some(d => d > MAX_SCENE_DUR);
           if (hasOverlong) {
             const totalBefore = saved.reduce((s, d) => s + d, 0);
