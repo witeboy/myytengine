@@ -405,6 +405,12 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
   const totalScript = scriptWords.length;
   console.log(`[ASR Align] ${totalMatched}/${totalScript} words matched (${((totalMatched / totalScript) * 100).toFixed(0)}%), ${nonEmpty.length} scenes`);
 
+  // Log per-scene ASR anchors for verification
+  results.forEach(r => {
+    if (r.empty) return;
+    console.log(`[ASR Scene ${r.sceneNumber}] ${r.wordCount}w | ASR span: ${r.speechStart?.toFixed(2)}s → ${r.speechEnd?.toFixed(2)}s = ${r.duration.toFixed(2)}s | match: ${(r.matchScore * 100).toFixed(0)}%`);
+  });
+
   // ── Step 5: Post-processing — full coverage ────────────────────
   // Scene boundaries are now driven by ASR word positions.
   // Post-processing only: anchor edges, close seams, handle empties.
