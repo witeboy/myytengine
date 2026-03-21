@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 import { create, getNumericDate } from 'npm:djwt@3.0.2';
 
 // ══════════════════════════════════════════════════════════════════

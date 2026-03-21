@@ -291,36 +291,70 @@ Return ONLY the script text.`,
     setVoiceGenerating(true);
     setStatusMsg('Generating voiceover...');
 
-    // Create a temp project + script for the voiceover function
-    const project = await base44.entities.Projects.create({
-      name: `UGC: ${typeLabel}`,
-      niche: influencerType,
-      tone: 'conversational',
-      visual_style: 'photorealistic_4k',
-      orientation: 'portrait',
-      video_duration_minutes: 1,
-      status: 'script_complete',
-      current_step: 4,
-    });
+    try {
+      // Reuse existing project if we already created one, otherwise create new
+      let projectId = resumedProjectId;
+      if (!projectId) {
+        const project = await base44.entities.Projects.create({
+          name: `UGC: ${typeLabel}`,
+          niche: influencerType,
+          tone: 'conversational',
+          visual_style: 'photorealistic_4k',
+          orientation: 'portrait',
+          video_duration_minutes: 1,
+          status: 'script_complete',
+          current_step: 4,
+        });
+        projectId = project.id;
+        setResumedProjectId(projectId);
 
-    await base44.entities.Scripts.create({
-      project_id: project.id,
-      version: 'final_aggregated',
-      title: `UGC: ${typeLabel}`,
-      full_script: voiceScript,
-      word_count: voiceScript.split(/\s+/).filter(w => w).length,
-    });
+        await base44.entities.Scripts.create({
+          project_id: projectId,
+          version: 'final_aggregated',
+          title: `UGC: ${typeLabel}`,
+          full_script: voiceScript,
+          word_count: voiceScript.split(/\s+/).filter(w => w).length,
+        });
+      } else {
+        // Update existing script if project already exists
+        const scripts = await base44.entities.Scripts.filter({ project_id: projectId });
+        const existing = scripts.find(s => s.version === 'final_aggregated') || scripts[0];
+        if (existing) {
+          await base44.entities.Scripts.update(existing.id, {
+            full_script: voiceScript,
+            word_count: voiceScript.split(/\s+/).filter(w => w).length,
+          });
+        } else {
+          await base44.entities.Scripts.create({
+            project_id: projectId,
+            version: 'final_aggregated',
+            title: `UGC: ${typeLabel}`,
+            full_script: voiceScript,
+            word_count: voiceScript.split(/\s+/).filter(w => w).length,
+          });
+        }
+      }
 
-    const voResponse = await base44.functions.invoke('generateVoiceover', {
-      project_id: project.id,
-      voice_id: selectedVoiceId,
-    });
-    const voResult = voResponse.data || voResponse;
-    setVoiceUrl(voResult.voiceover_url || '');
-    setVoiceDuration(voResult.voiceover_duration_seconds || 0);
+      const voResponse = await base44.functions.invoke('generateVoiceover', {
+        project_id: projectId,
+        voice_id: selectedVoiceId,
+      });
+      const voResult = voResponse.data || voResponse;
+      setVoiceUrl(voResult.voiceover_url || '');
+      setVoiceDuration(voResult.voiceover_duration_seconds || 0);
+
+      // Save reference image to project if available
+      if (influencerImageUrl) {
+        await base44.entities.Projects.update(projectId, { reference_image_url: influencerImageUrl });
+      }
+    } catch (err) {
+      console.error('Voiceover generation error:', err);
+      setStatusMsg('❌ Voiceover failed: ' + (err.message || 'Unknown error'));
+      setTimeout(() => setStatusMsg(''), 5000);
+    }
 
     setVoiceGenerating(false);
-    setStatusMsg('');
+    if (!statusMsg.startsWith('❌')) setStatusMsg('');
   };
 
   // ── Step 5: Generate Kling lip-sync video ──────────────────────────
