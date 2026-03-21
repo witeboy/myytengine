@@ -582,27 +582,58 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     }
   }
 
+  // ── Final gap-closing pass ──────────────────────────────────────
+  // Close any remaining gaps BEFORE drift detection so durations are final.
+  for (let i = 0; i < results.length - 1; i++) {
+    const curr = results[i];
+    const next = results[i + 1];
+    if (curr.empty || next.empty) continue;
+    if (curr.endTime === null || next.startTime === null) continue;
+
+    const gap = next.startTime - curr.endTime;
+    if (gap > 0 && gap <= MAX_ABSORB) {
+      curr.endTime = next.startTime;
+    } else if (gap > MAX_ABSORB) {
+      const mid = curr.endTime + gap / 2;
+      curr.endTime = mid;
+      next.startTime = mid;
+    } else if (gap < 0) {
+      const mid = curr.endTime + gap / 2;
+      curr.endTime = mid;
+      next.startTime = mid;
+    }
+  }
+
+  // Recalculate durations after all gap-closing
+  results.forEach(r => {
+    if (r.startTime !== null && r.endTime !== null) {
+      r.startTime = Math.round(r.startTime * 1000) / 1000;
+      r.endTime = Math.round(r.endTime * 1000) / 1000;
+      r.duration = Math.round((r.endTime - r.startTime) * 1000) / 1000;
+    }
+  });
+
   // ── DRIFT DETECTION (detection only — no auto-fix) ───────────────
-  // Scan for scenes where duration is much longer than actual speech span.
-  // Tag them on the result so the UI can prompt the user to apply a fix.
+  // Now that all gap-closing is done, scan for scenes whose FINAL duration
+  // is much longer than their actual speech content. This catches scenes
+  // that got inflated by gap absorption.
   const SECS_PER_WORD = 0.38;
 
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
     if (r.empty || r.startTime === null || r.endTime === null) continue;
-    r.duration = r.endTime - r.startTime;
 
     const speechSpan = (r.speechEnd ?? r.endTime) - (r.speechStart ?? r.startTime);
     const range = sceneWordRanges[i];
     const wordCount = range?.wordCount || 0;
     const wordEstimate = Math.max(1.0, wordCount * SECS_PER_WORD);
 
-    // Bloated = duration is 2.5x+ the speech span AND has 8s+ of dead air,
-    // OR duration is 3x+ the word-count estimate AND exceeds 15s.
+    // Bloated = duration is 2x+ the speech span AND has 5s+ of dead air,
+    // OR duration is 2.5x+ the word-count estimate AND exceeds 12s.
     const deadAir = r.duration - speechSpan;
     const isBloated =
-      (speechSpan > 0 && r.duration > speechSpan * 2.5 && deadAir > 8) ||
-      (r.duration > wordEstimate * 3 && r.duration > 15);
+      (speechSpan > 0 && r.duration > speechSpan * 2.0 && deadAir > 5) ||
+      (r.duration > wordEstimate * 2.5 && r.duration > 12);
 
     if (isBloated) {
       r.driftDetected = true;
@@ -617,40 +648,6 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
       console.warn(`[Drift Detected] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s (speech: ${speechSpan.toFixed(1)}s, words: ${wordCount}, dead air: ${deadAir.toFixed(1)}s)`);
     }
   }
-
-  // ── Final gap-closing pass ──────────────────────────────────────
-  // Close any gaps left by the drift correction, without re-inflating.
-  for (let i = 0; i < results.length - 1; i++) {
-    const curr = results[i];
-    const next = results[i + 1];
-    if (curr.empty || next.empty) continue;
-    if (curr.endTime === null || next.startTime === null) continue;
-
-    const gap = next.startTime - curr.endTime;
-    if (gap > 0 && gap <= MAX_ABSORB) {
-      // Small gap — extend current scene to fill
-      curr.endTime = next.startTime;
-    } else if (gap > MAX_ABSORB) {
-      // Larger gap — split at midpoint
-      const mid = curr.endTime + gap / 2;
-      curr.endTime = mid;
-      next.startTime = mid;
-    } else if (gap < 0) {
-      // Overlap — trim the longer scene
-      const mid = curr.endTime + gap / 2;
-      curr.endTime = mid;
-      next.startTime = mid;
-    }
-  }
-
-  // Final duration recalculation
-  results.forEach(r => {
-    if (r.startTime !== null && r.endTime !== null) {
-      r.startTime = Math.round(r.startTime * 1000) / 1000;
-      r.endTime = Math.round(r.endTime * 1000) / 1000;
-      r.duration = Math.round((r.endTime - r.startTime) * 1000) / 1000;
-    }
-  });
 
   return results;
 }
