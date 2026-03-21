@@ -964,8 +964,22 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
   );
 
   // ════════════════════════════════════════════════════════════════
-  // STEP 3 — Result
+  // STEP 3 — Result (or Blend view)
   // ════════════════════════════════════════════════════════════════
+  if (showBlend) {
+    const finalUrlForBlend = generatedUrl || selectedConcept?.image_url;
+    return (
+      <ThumbnailBlend
+        onBack={() => setShowBlend(false)}
+        generatedThumbnailUrl={finalUrlForBlend}
+        videoTitle={title}
+        conceptId={selectedConcept?.id}
+        sceneImages={sceneImages || []}
+        uploadedCharPhotos={chars.filter(Boolean)}
+      />
+    );
+  }
+
   const finalUrl = generatedUrl || selectedConcept?.image_url;
   const ctrScore = selectedConcept?.ctr_score || 8;
   const ctrColor = ctrScore >= 9 ? '#22c55e' : ctrScore >= 7 ? '#f59e0b' : '#9ca3af';
