@@ -11,8 +11,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // 4. Then frontend switches to polling via pollVoiceover
 // ══════════════════════════════════════════════════════════════════
 
-const MAX_WORDS_PER_CHUNK = 600;
-const MAX_CHARS_PER_CHUNK = 3500;
+const MAX_WORDS_PER_CHUNK = 1200;
+const MAX_CHARS_PER_CHUNK = 7000;
 
 function cleanScript(text, isSleepMode = false) {
   let cleaned = text;
@@ -140,8 +140,10 @@ Deno.serve(async (req) => {
         word_count: text.split(/\s+/).filter(w => w.length > 0).length,
         char_count: text.length,
         status: 'pending',
-        text,
       }));
+
+      // Store texts separately in memory — NOT in DB
+      chunks._texts = textChunks;
 
       console.log(`🎙 Fresh start: ${totalWordCount} words → ${chunks.length} chunks, voice=${selectedVoiceId}`);
 
@@ -189,7 +191,7 @@ Deno.serve(async (req) => {
     if (provider === 'minimax') {
       submitUrl = 'https://api.ai33.pro/v1m/task/text-to-speech';
       submitBody = JSON.stringify({
-        text: nextChunk.text,
+        text: chunks._texts?.[nextChunk.index] || nextChunk.text,
         model: 'speech-2.6-hd',
         voice_setting: { voice_id: selectedVoiceId, vol: 1, pitch: 0, speed: 1 },
         language_boost: 'Auto',
@@ -197,7 +199,7 @@ Deno.serve(async (req) => {
     } else {
       submitUrl = `https://api.ai33.pro/v1/text-to-speech/${selectedVoiceId}?output_format=mp3_44100_128`;
       submitBody = JSON.stringify({
-        text: nextChunk.text,
+        text: chunks._texts?.[nextChunk.index] || nextChunk.text,
         model_id: 'eleven_multilingual_v2',
       });
     }
