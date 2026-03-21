@@ -312,6 +312,11 @@ export default function CanvasPreview({
                     <video src={ov.videoUrl} autoPlay muted loop playsInline
                       style={{ width: `${Math.round(200 * (ov.scale || 0.3))}px`, borderRadius: 8 }} />
                   )}
+                  {ov.overlayType === 'image' && ov.imageUrl && (
+                    <img src={ov.imageUrl} alt={ov.label || ''}
+                      style={{ width: `${Math.round(200 * (ov.scale || 0.3))}px`, objectFit: 'contain', borderRadius: 4 }}
+                      draggable={false} />
+                  )}
                 </div>
               );
             })}
