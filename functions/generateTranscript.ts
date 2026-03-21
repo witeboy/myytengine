@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     if (!API_KEY) return Response.json({ error: 'ASSEMBLYAI_API_KEY not configured' }, { status: 500 });
 
     // Get voiceover URL from production settings
-    const settings = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
+    const settings = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id }); 
     const voiceoverUrl = settings[0]?.voiceover_url;
     if (!voiceoverUrl) {
       return Response.json({ error: 'No voiceover found for this project' }, { status: 400 });
