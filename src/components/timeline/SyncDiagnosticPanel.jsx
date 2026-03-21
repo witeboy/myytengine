@@ -264,11 +264,15 @@ function runDiagnostics({ scenes, voiceoverUrl, audioDuration, audioLoading, aud
 
   // 6. Duration anomaly check on existing clips
   if (videoClips?.length > 0) {
-    const longClips = videoClips.filter(c => c.duration > 30);
+    const longClips = videoClips.filter(c => c.duration > 20);
+    const veryLongClips = videoClips.filter(c => c.duration > 30);
     const shortClips = videoClips.filter(c => c.duration < 1.0);
-    if (longClips.length > 0) {
+    if (veryLongClips.length > 0) {
+      const worst = veryLongClips.reduce((a, b) => a.duration > b.duration ? a : b);
+      warnings.push(`${veryLongClips.length} clip${veryLongClips.length > 1 ? 's are' : ' is'} over 30s (worst: Scene ${worst.sceneNumber} at ${worst.duration.toFixed(1)}s). AutoSync will hard-cap these to max 20s.`);
+    } else if (longClips.length > 0) {
       const worst = longClips.reduce((a, b) => a.duration > b.duration ? a : b);
-      warnings.push(`${longClips.length} clip${longClips.length > 1 ? 's are' : ' is'} over 30s (worst: Scene ${worst.sceneNumber} at ${worst.duration.toFixed(1)}s). AutoSync should fix this.`);
+      warnings.push(`${longClips.length} clip${longClips.length > 1 ? 's are' : ' is'} over 20s (worst: Scene ${worst.sceneNumber} at ${worst.duration.toFixed(1)}s). AutoSync should fix this.`);
     }
     if (shortClips.length > 0) {
       warnings.push(`${shortClips.length} clip${shortClips.length > 1 ? 's are' : ' is'} under 1s. AutoSync will enforce minimums.`);
