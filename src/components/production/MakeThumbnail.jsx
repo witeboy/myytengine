@@ -956,17 +956,17 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
         )}
 
         <p style={{ color: '#6b7280', fontSize: 13, lineHeight: 1.6, marginBottom: 22 }}>
-          Ideogram renders → auto-upscale 2× → mood-matched color grade, sharpness, saturation & vignette. Takes 60–120 seconds…
+          Structured element mapping → nano-banana-2 render → upscale → color grade. Takes 60–120 seconds…
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
           {[
-            { icon: '📸', label: 'Uploading reference photos to KIE' },
-            { icon: '🔒', label: 'Locking in real faces with Ideogram Character' },
-            { icon: '🎨', label: 'Rendering cinematic scene at 1920×1080' },
+            { icon: '👤', label: 'Uploading CHARACTER photo(s) → face reference' },
+            { icon: '🏞️', label: 'Uploading ENVIRONMENT photo → blurred background' },
+            { icon: '📦', label: 'Uploading OBJECT photo(s) → foreground props' },
+            { icon: '🎨', label: 'Rendering with structured element mapping at 1920×1080' },
             { icon: '🔍', label: 'Upscaling to 2× resolution + sharpening' },
-            { icon: '🎬', label: 'Applying mood color grade, saturation & vignette' },
-            { icon: '💾', label: 'Saving final enhanced thumbnail' },
+            { icon: '🎬', label: 'Applying mood color grade + saving' },
           ].map((item, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#0f172a', borderRadius: 8, padding: '10px 14px' }}>
               <span style={{ fontSize: 15 }}>{item.icon}</span>
