@@ -1004,7 +1004,7 @@ export default function TimelineEditor() {
           const wordCount = text.split(/\s+/).filter(Boolean).length;
           const dur = newBeatDurations[idx];
           const wordEstimate = Math.max(1.0, wordCount * 0.38);
-          const isBloated = dur > wordEstimate * 2.5 && dur > 12;
+          const isBloated = dur > wordEstimate * 2.5 && dur > 10;
           return {
             sceneId: scene.id,
             sceneNumber: scene.scene_number,

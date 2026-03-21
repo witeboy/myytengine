@@ -631,7 +631,7 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     const deadAir = r.duration - speechSpan;
     const isBloated =
       (speechSpan > 0 && r.duration > speechSpan * 2.0 && deadAir > 5) ||
-      (r.duration > wordEstimate * 2.5 && r.duration > 12);
+      (r.duration > wordEstimate * 2.5 && r.duration > 10);
 
     if (isBloated) {
       r.driftDetected = true;
