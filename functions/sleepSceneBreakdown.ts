@@ -6,7 +6,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // Generates 6-12 ambient environment image definitions.
 // Narration is split in code (not by AI) to avoid timeout.
 // AI only generates visual concepts + image prompts.
-// NO PEOPLE — pure environment/landscape scenes.
+// NO PEOPLE — pure environment/landscape scenes. 
 // ══════════════════════════════════════════════════════════════════
 
 async function callGemini(prompt, temperature = 0.5) {
