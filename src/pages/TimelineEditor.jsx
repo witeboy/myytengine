@@ -1772,6 +1772,7 @@ export default function TimelineEditor() {
             scenes={exportScenes} orientation={orientation}
             voiceoverUrl={voiceoverUrl} musicUrl={musicUrl} musicVolume={musicVol}
             projectName={project?.name || 'Untitled'} projectId={projectId} exportHook={exportHook}
+          captions={captionClips}
           />
         );
       })()}
