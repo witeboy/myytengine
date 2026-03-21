@@ -1537,6 +1537,13 @@ export default function TimelineEditor() {
         </div>
       )}
 
+      {/* Drift Fix Panel — shows when drifts are detected after sync */}
+      <DriftFixPanel
+        driftedScenes={driftedScenes}
+        onApplyFix={handleApplyDriftFix}
+        onDismiss={() => setDriftedScenes([])}
+      />
+
       {/* Bottom compact toolbar + cinematic intensity */}
       <div className="flex items-center justify-between px-2 py-1.5 bg-[#12121f] border-t border-gray-800">
         <div className="flex items-center gap-1">
