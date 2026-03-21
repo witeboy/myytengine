@@ -674,11 +674,15 @@ export function applyDriftFix(results, driftedIndices, wordRanges) {
   if (!driftedIndices?.length || !results?.length) return results;
 
   const MIN_DUR = 1.0;
-  const SECS_PER_WORD = 0.38;
-  const totalAudioDuration = results[results.length - 1]?.endTime || 0;
 
-  // Step 1: Shrink each bloated scene to its word-based estimate
-  let totalReclaimed = 0;
+  // Strategy: Shrink each bloated scene but keep its startTime anchored.
+  // The next scene's startTime stays where ASR placed it (audio-anchored).
+  // The gap between the shrunk scene's new endTime and the next scene's
+  // startTime is absorbed by extending the shrunk scene's *previous* neighbor
+  // backward, or simply left as a hold-frame on the shrunk scene.
+  //
+  // This preserves audio-to-video sync for ALL scenes after the bloated one.
+
   for (const i of driftedIndices) {
     if (i < 0 || i >= results.length) continue;
     const r = results[i];
@@ -687,81 +691,24 @@ export function applyDriftFix(results, driftedIndices, wordRanges) {
     if (!info) continue;
 
     const targetDur = Math.max(MIN_DUR, Math.min(10, info.wordEstimate + 1.5));
-    const reclaimed = r.duration - targetDur;
+    const oldDur = r.duration;
 
-    console.log(`[Drift Fix] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s → ${targetDur.toFixed(1)}s (reclaimed ${reclaimed.toFixed(1)}s)`);
+    console.log(`[Drift Fix] Scene ${r.sceneNumber}: ${oldDur.toFixed(1)}s → ${targetDur.toFixed(1)}s`);
 
+    // Shrink the scene but keep startTime anchored
     r.duration = targetDur;
     r.endTime = r.startTime + targetDur;
     r.driftFixed = true;
     r.driftDetected = false;
-    totalReclaimed += reclaimed;
-  }
 
-  if (totalReclaimed <= 0) return results;
-
-  // Step 2: Close gaps — shift every scene so it starts right after the previous one ends
-  for (let i = 1; i < results.length; i++) {
-    const prev = results[i - 1];
-    const curr = results[i];
-    if (prev.endTime === null || curr.startTime === null) continue;
-
-    if (curr.startTime !== prev.endTime) {
-      const shift = curr.startTime - prev.endTime;
-      curr.startTime = prev.endTime;
-      curr.endTime -= shift;
-      curr.duration = Math.max(MIN_DUR, curr.endTime - curr.startTime);
-      // Ensure endTime consistency
-      curr.endTime = curr.startTime + curr.duration;
-    }
-  }
-
-  // Step 3: The last scene now ends earlier than the audio — extend it to fill
-  const lastScene = results[results.length - 1];
-  if (lastScene && lastScene.endTime < totalAudioDuration) {
-    lastScene.endTime = totalAudioDuration;
-    lastScene.duration = lastScene.endTime - lastScene.startTime;
-  }
-
-  // Step 4: The reclaimed time created a surplus on the last scene.
-  // Redistribute it proportionally across ALL non-bloated scenes by word count.
-  const surplus = lastScene ? lastScene.duration - Math.max(MIN_DUR, (lastScene.driftInfo?.wordEstimate || lastScene.duration * 0.5) + 1.5) : 0;
-
-  if (surplus > 2) {
-    // Find non-fixed scenes to distribute surplus to
-    const fixedSet = new Set(driftedIndices);
-    const recipients = [];
-    for (let i = 0; i < results.length; i++) {
-      if (fixedSet.has(i)) continue;
-      const r = results[i];
-      if (r.empty) continue;
-      const wc = r.driftInfo?.wordCount || Math.max(1, Math.round(r.duration / SECS_PER_WORD));
-      recipients.push({ idx: i, wordCount: wc });
-    }
-
-    if (recipients.length > 0) {
-      const totalWords = recipients.reduce((s, r) => s + r.wordCount, 0);
-      // Give each recipient a fair share, capped so no scene exceeds 10s
-      for (const rec of recipients) {
-        const share = (rec.wordCount / totalWords) * surplus;
-        const r = results[rec.idx];
-        const newDur = Math.min(10, r.duration + share);
-        r.duration = newDur;
-      }
-
-      // Rebuild start/end times from durations
-      let cursor = results[0].startTime || 0;
-      for (const r of results) {
-        r.startTime = cursor;
-        r.endTime = cursor + r.duration;
-        cursor = r.endTime;
-      }
-
-      // Ensure last scene reaches total audio duration
-      const last = results[results.length - 1];
-      if (last.endTime < totalAudioDuration) {
-        last.endTime = totalAudioDuration;
-        last.duration = last.endTime - last.startTime;
+    // The gap between this scene's new endTime and the next scene's startTime:
+    // extend the NEXT scene backward to fill it (the gap is silence/dead-air
+    // in the audio, so showing the next scene's image earlier is fine).
+    if (i + 1 < results.length) {
+      const next = results[i + 1];
+      if (next.startTime > r.endTime) {
+        next.startTime = r.endTime;
+        next.duration = next.endTime - next.startTime;
       }
     }
   }
@@ -775,6 +722,5 @@ export function applyDriftFix(results, driftedIndices, wordRanges) {
     }
   });
 
-  console.log(`[Drift Fix] Reclaimed ${totalReclaimed.toFixed(1)}s total, redistributed across ${results.length} scenes`);
   return results;
 }
