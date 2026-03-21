@@ -1036,11 +1036,8 @@ export default function TimelineEditor() {
       setOverrideBeatDurations(newBeatDurations);
 
       // Step 4b: Detect drifted scenes from alignment results (ASR path only)
-      if (syncSource === 'asr') {
-        const { alignScenesToASR: _unused, ...rest } = await import('@/lib/asrAutoSync');
-        // Re-import alignment — it was already computed above, but we need the driftDetected flags
-        // The alignment variable from the ASR path holds the results
-        const drifts = alignment
+      if (alignmentResults) {
+        const drifts = alignmentResults
           .map((a, idx) => (a.driftDetected ? { index: idx, sceneNumber: a.sceneNumber, info: a.driftInfo } : null))
           .filter(Boolean);
         setDriftedScenes(drifts);
