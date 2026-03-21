@@ -21,9 +21,12 @@ function buildFaceSwapPrompt({ overlayText, font, textColor, textPosition, hasTe
 
     return `You are a professional YouTube thumbnail compositor. You have been given ${1 + photoCount} images.
 
+⚠️ HIGHEST PRIORITY RULE — READ THIS FIRST ⚠️
+The CHARACTER REFERENCE PHOTOS (Images 2${photoCount > 1 ? `-${1 + photoCount}` : ''}) show the REAL PERSON(S) who MUST appear in the final thumbnail. The generated thumbnail MUST feature these EXACT people — their face, skin tone, hair, body type, clothing, and all distinguishing features. If you ignore the reference photos and generate a random/generic person instead, the output is a FAILURE. The person in the output must be IMMEDIATELY recognizable as the same person from the reference photos.
+
 IMAGE ROLES:
 - Image 1 is the LAYOUT TEMPLATE — a proven high-CTR YouTube thumbnail. This defines the EXACT composition you must recreate: same background, same colors, same lighting, same split/gradient, same decorative elements (arrows, icons, badges), same framing, same camera angles.
-- ${photoLabels.join(', ')} ${photoCount === 1 ? 'is a CHARACTER REFERENCE PHOTO' : 'are CHARACTER REFERENCE PHOTOS'} — ${photoCount === 1 ? 'this shows the real person whose face' : 'these show the real people whose faces'} must appear in the final thumbnail.
+- ${photoLabels.join(', ')} ${photoCount === 1 ? 'is a CHARACTER REFERENCE PHOTO' : 'are CHARACTER REFERENCE PHOTOS'} — ${photoCount === 1 ? 'this shows the REAL person whose EXACT face, hair, skin tone, and features' : 'these show the REAL people whose EXACT faces, hair, skin tones, and features'} MUST appear in the final thumbnail. Study ${photoCount === 1 ? 'this photo' : 'these photos'} carefully — the output person must be IDENTICAL to ${photoCount === 1 ? 'this reference' : 'these references'}.
 
 ═══════════════════════════════════════════════
 YOUR TASK — PRECISE FACE TRANSPLANT
