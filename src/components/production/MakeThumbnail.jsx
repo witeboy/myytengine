@@ -777,7 +777,7 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
             }}>
               {detectedMood && (
                 <span style={{ fontSize: 13, fontWeight: 700, color: '#a78bfa' }}>
-                  {MOODS[detectedMood]?.emoji} Mood: <span style={{ color: '#fff' }}>{MOODS[detectedMood]?.label || detectedMood}</span>
+                  🎯 Mood: <span style={{ color: '#fff' }}>{detectedMood}</span>
                 </span>
               )}
               <span style={{ fontSize: 11, color: '#22c55e', background: 'rgba(34,197,94,0.1)', borderRadius: 6, padding: '2px 8px' }}>
