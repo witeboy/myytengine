@@ -185,17 +185,15 @@ STEP 3 — IMAGE PROMPT RULES
 ════════════════════════════
 Each concept needs a detailed image_prompt (300+ words) that:
 - Starts with: "1920x1080 YouTube thumbnail, photorealistic, cinematic DSLR quality"
-- MUST include the extracted story objects prominently in the scene — these are the PRIMARY visual elements
-- The SPECIFIC PRODUCT or SUBJECT from the summary must be the DOMINANT background/prop element (e.g., if the story is about selling custom t-shirts, the image MUST show colorful custom t-shirts, a heat press, merch displays — NOT generic wealth symbols)
-- NEVER substitute the actual story subject with generic "success" imagery (sports cars, mansions, gold chains) unless the summary literally mentions those items
-- For SPLIT SCREEN concepts: describe LEFT side and RIGHT side separately with contrasting mood/lighting
-- For BEFORE/AFTER: left side = dark, desaturated, struggling; right side = bright, saturated, successful
-- For FINANCE: include specific financial symbols (Bitcoin, stock charts going up/down, gold, cash stacks)
-- For CRIME: include evidence, shadows, red accents, police tape, mystery elements
-- For E-COMMERCE/MERCH: show the actual product being sold, the workspace/equipment, packaging, or displays
-- Describes character emotion/pose, lighting (rim lights, key light)
-- ${hasCharPhotos ? 'Describes the character(s) from the uploaded photos exactly — same face, skin tone, hair, features. Say "person matching reference photo exactly"' : 'Creates characters that match the video tone — if the summary describes a specific person (age, gender, setting), the character MUST match that description'}
-- ${hasUserTemplate ? `Recreates the layout from the uploaded template: "${template_name}" — same composition, positions, zones. REPLACE any objects in the template with the story-relevant objects extracted above. If the template shows objects unrelated to the story (e.g., cars when the story is about clothing), replace them with the actual story subject.` : 'Uses the chosen strategy layout (split-screen, hero, etc.)'}
+- MUST feature the PRIMARY SUBJECT and SECONDARY OBJECTS you extracted in Step 0 as the dominant visual elements
+- The PRIMARY SUBJECT from the summary must be physically visible and prominent — not symbolized or abstracted
+- NEVER substitute the actual story subject with unrelated objects — if it's about t-shirts, show t-shirts; if it's about cooking, show food
+- For SPLIT SCREEN concepts: describe LEFT side and RIGHT side separately with contrasting mood/lighting and the story objects on both sides
+- For BEFORE/AFTER: left side = struggling/before state; right side = successful/after state — both sides must show the actual subject
+- Describes character emotion/pose, lighting (rim lights, key light), and environment
+- ${hasCharPhotos ? `Describes the character(s) from the uploaded photos EXACTLY — same face, skin tone, hair, body type, features. Say "person matching reference photo exactly". Also INCORPORATE any real objects visible in the character photos (their clothing, tools, products, workspace) into the scene as props.` : 'Creates characters that match what the summary describes — if it mentions a specific person (age, gender, ethnicity, setting), the character MUST match that description exactly'}
+- ${hasUserTemplate ? `Recreates the layout from the uploaded template: "${template_name}" — same composition, character positions, background zones, lighting style.
+  CRITICAL TEMPLATE OBJECT SWAP: First IDENTIFY every distinct object in the template (vehicles, products, buildings, animals, symbols, props). Then REPLACE each one with the corresponding story-relevant object from your extraction. The replacement must occupy the same space and visual weight as the original. If the template shows 3 trucks, replace with 3 piles of the actual product. Match quantity, scale, and placement.` : 'Uses the chosen strategy layout (split-screen, hero, etc.)'}
 - Ends with: "NO text, letters, numbers, or watermarks anywhere in the image"
 
 ════════════════════════════
