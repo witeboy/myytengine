@@ -494,37 +494,6 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     }
   }
 
-  // ── Final gap-closing pass ──────────────────────────────────────
-  // Close any remaining gaps BEFORE drift detection so durations are final.
-  for (let i = 0; i < results.length - 1; i++) {
-    const curr = results[i];
-    const next = results[i + 1];
-    if (curr.empty || next.empty) continue;
-    if (curr.endTime === null || next.startTime === null) continue;
-
-    const gap = next.startTime - curr.endTime;
-    if (gap > 0 && gap <= MAX_ABSORB) {
-      curr.endTime = next.startTime;
-    } else if (gap > MAX_ABSORB) {
-      const mid = curr.endTime + gap / 2;
-      curr.endTime = mid;
-      next.startTime = mid;
-    } else if (gap < 0) {
-      const mid = curr.endTime + gap / 2;
-      curr.endTime = mid;
-      next.startTime = mid;
-    }
-  }
-
-  // Recalculate durations after all gap-closing
-  results.forEach(r => {
-    if (r.startTime !== null && r.endTime !== null) {
-      r.startTime = Math.round(r.startTime * 1000) / 1000;
-      r.endTime = Math.round(r.endTime * 1000) / 1000;
-      r.duration = Math.round((r.endTime - r.startTime) * 1000) / 1000;
-    }
-  });
-
   // ── DRIFT DETECTION (report only — user applies fix manually) ────
   // Scan for scenes whose FINAL duration is much longer than their
   // actual speech content. Flag them with driftDetected + driftInfo
