@@ -136,10 +136,12 @@ Deno.serve(async (req) => {
         }
 
         if (status === 'error' || status === 'failed') {
-          throw new Error(pollData.error_message || pollData.message || 'AI33 blend task failed');
+          const errMsg = pollData.error_message || pollData.message || 'AI33 blend task failed';
+          console.warn(`Poll ${pollAttempt}: AI33 error — ${errMsg}`);
+          throw new Error(errMsg);
         }
       } catch (e) {
-        if (e.message.includes('AI33')) throw e;
+        if (e.message.includes('AI33') || e.message.includes('invalid_generation') || e.message.includes('failed')) throw e;
         console.warn(`Poll ${pollAttempt} error: ${e.message}`);
       }
     }
