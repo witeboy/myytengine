@@ -493,8 +493,8 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
   };
 
   // detectedMood from backend can be pipe-separated (e.g. "crime|drama") — take first segment
-  const resolvedMood = (detectedMood || detectMood(title, summary) || 'drama').split('|')[0].trim();
-  const moodProfile = MOODS[resolvedMood] || MOODS.drama;
+  const resolvedMood = (detectedMood || 'default').split('|')[0].trim();
+  const moodProfile = MOODS[resolvedMood] || MOODS.default;
 
   // ── Validation helper for missing fields ───────────────────────
   const missingFields = [];
