@@ -306,7 +306,7 @@ Deno.serve(async (req) => {
 
     console.log('=== generateNewThumbnailImage (nano-banana-2) ===');
     const startTime = Date.now();
-    const MAX_RUNTIME_MS = 110000; // 110s safety limit
+    const MAX_RUNTIME_MS = 90000; // 90s safety limit (leave headroom for Deno timeout)
     const timeLeft = () => MAX_RUNTIME_MS - (Date.now() - startTime);
 
     // 1. Load concept
