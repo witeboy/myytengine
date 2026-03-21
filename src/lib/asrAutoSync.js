@@ -613,10 +613,10 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     }
   });
 
-  // ── DRIFT AUTO-FIX ────────────────────────────────────────────────
+  // ── DRIFT DETECTION + AUTO-FIX ────────────────────────────────────
   // Scan for scenes whose FINAL duration is much longer than their
-  // actual speech content, then automatically shrink them and
-  // redistribute the freed time to neighbors.
+  // actual speech content. Auto-fix them inline so the output never
+  // contains bloated durations.
   const SECS_PER_WORD = 0.38;
   const driftedIndices = [];
 
@@ -635,31 +635,29 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
       (r.duration > wordEstimate * 2.5 && r.duration > 12);
 
     if (isBloated) {
-      const suggestedDuration = Math.max(1.0, speechSpan > 0 ? speechSpan + 1.5 : wordEstimate);
       r.driftDetected = true;
       r.driftInfo = {
         currentDuration: r.duration,
         speechSpan: Math.round(speechSpan * 100) / 100,
         wordCount,
         wordEstimate: Math.round(wordEstimate * 100) / 100,
-        suggestedDuration: Math.round(suggestedDuration * 100) / 100,
+        suggestedDuration: Math.round(Math.max(1.0, speechSpan + 1.5) * 100) / 100,
         deadAir: Math.round(deadAir * 100) / 100,
       };
       driftedIndices.push(i);
-      console.warn(`[Drift Auto-Fix] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s → ~${suggestedDuration.toFixed(1)}s (speech: ${speechSpan.toFixed(1)}s, words: ${wordCount}, dead air: ${deadAir.toFixed(1)}s)`);
+      console.warn(`[Drift Detected] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s (speech: ${speechSpan.toFixed(1)}s, words: ${wordCount}, dead air: ${deadAir.toFixed(1)}s)`);
     }
   }
 
-  // Auto-apply fix to all drifted scenes
+  // Auto-fix all drifted scenes
   if (driftedIndices.length > 0) {
+    console.log(`[AutoFix] Auto-fixing ${driftedIndices.length} bloated scene(s)…`);
     applyDriftFix(results, driftedIndices);
-    console.log(`[Drift Auto-Fix] Fixed ${driftedIndices.length} bloated scene(s) automatically`);
 
-    // Final gap-closing pass after drift fix
+    // Final gap-closing after auto-fix to ensure seamless coverage
     for (let i = 0; i < results.length - 1; i++) {
       const curr = results[i];
       const next = results[i + 1];
-      if (curr.empty || next.empty) continue;
       if (curr.endTime === null || next.startTime === null) continue;
       const gap = next.startTime - curr.endTime;
       if (gap > 0 && gap <= MAX_ABSORB) {
@@ -675,7 +673,7 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
       }
     }
 
-    // Recalculate durations
+    // Recalculate final durations
     results.forEach(r => {
       if (r.startTime !== null && r.endTime !== null) {
         r.startTime = Math.round(r.startTime * 1000) / 1000;
