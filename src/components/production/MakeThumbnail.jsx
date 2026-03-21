@@ -390,14 +390,19 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
       for (const char of chars.filter(Boolean)) {
         if (char?.file) {
           try {
-            const b64 = await resizeToBase64(char.file, 512);
-            if (b64) directCharPhotos.push({ b64, mime: 'image/jpeg', description: char.description || '' });
+            const b64 = await resizeToBase64(char.file, 1024);
+            if (b64) {
+              console.log(`📸 Char photo prepared: ${(b64.length / 1024).toFixed(0)}KB`);
+              directCharPhotos.push({ b64, mime: 'image/jpeg', description: char.description || '' });
+            }
           } catch (_) {}
         } else if (char?.remoteUrl) {
           // Scene image — pass URL directly to backend (avoids CORS issues)
+          console.log(`📸 Scene photo URL: ${char.remoteUrl.substring(0, 60)}...`);
           directCharPhotos.push({ url: char.remoteUrl, description: char.description || '' });
         }
       }
+      console.log(`📸 Total char photos being sent: ${directCharPhotos.length} (b64: ${directCharPhotos.filter(p=>p.b64).length}, url: ${directCharPhotos.filter(p=>p.url).length})`);
 
       // Template reference — resize if too large, NEVER skip
       let directTemplate = null;
