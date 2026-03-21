@@ -11,7 +11,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // AUTO-FALLBACK: When AI33 fails (e.g. invalid_generation from content
 // moderation), this function automatically resubmits to Grok Imagine
 // as a fallback, keeping the scene in image_pending state so the poll
-// loop continues seamlessly without marking it as failed.
+// loop continues seamlessly without marking it as failed. 
 // ══════════════════════════════════════════════════════════════════
 
 const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
