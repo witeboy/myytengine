@@ -468,13 +468,7 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     if (next.startTime > curr.endTime) {
       const gap = next.startTime - curr.endTime;
 
-      // Guard: don't let a scene absorb so much it becomes over-stretched
-      const currWc = sceneWordRanges[i]?.wordCount || 1;
-      const currExpMax = Math.max(MIN_DURATION, currWc * 0.38) * 2;
-      const currDur = curr.endTime - curr.startTime;
-      const canAbsorb = Math.max(0, currExpMax - currDur);
-
-      if (gap <= Math.min(MAX_ABSORB, canAbsorb)) {
+      if (gap <= MAX_ABSORB) {
         // Small gap — current scene absorbs it
         curr.endTime = next.startTime;
       } else {
@@ -602,23 +596,17 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
   //      proportionally by word count across the intermediate scenes.
   //   4. Snap the anchor scene back to its ASR position.
 
+  const DRIFT_THRESHOLD = 12.0; // a scene over 12s is suspicious
   const LOOKAHEAD = 5;
   const SECS_PER_WORD = 0.38;
   const processed = new Set(); // avoid re-processing scenes in a correction window
 
-  // Run drift correction in multiple passes until no more fixes needed
-  let driftPassCount = 0;
-  let driftFixed = true;
-  while (driftFixed && driftPassCount < 3) {
-    driftFixed = false;
-    driftPassCount++;
-
-    for (let i = 0; i < results.length; i++) {
+  for (let i = 0; i < results.length; i++) {
     if (processed.has(i)) continue;
     const r = results[i];
     if (r.empty || r.startTime === null || r.endTime === null) continue;
 
-    // Recalculate fresh duration from actual times
+    // Recalculate fresh duration
     r.duration = r.endTime - r.startTime;
 
     const range = sceneWordRanges[i];
@@ -626,9 +614,7 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     const expectedDur = Math.max(MIN_DURATION, wordCount * SECS_PER_WORD);
 
     // Is this scene over-stretched?
-    // Trigger if duration > 10s AND duration > 2x expected word-count duration
-    const isOverStretched = r.duration > 10 && r.duration > expectedDur * 2;
-    if (!isOverStretched) continue;
+    if (r.duration <= Math.max(DRIFT_THRESHOLD, expectedDur * 2.5)) continue;
 
     console.log(`[Drift Fix] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s vs expected ${expectedDur.toFixed(1)}s (${wordCount} words) — initiating correction window`);
 
@@ -733,42 +719,31 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     processed.add(i);
 
     console.log(`[Drift Fix] Scene ${r.sceneNumber}: corrected to ${r.startTime.toFixed(1)}s–${r.endTime.toFixed(1)}s (${r.duration.toFixed(1)}s)`);
-    driftFixed = true;
+  }
+
+  // ── Final gap-closing pass ──────────────────────────────────────
+  // Close any gaps left by the drift correction, without re-inflating.
+  for (let i = 0; i < results.length - 1; i++) {
+    const curr = results[i];
+    const next = results[i + 1];
+    if (curr.empty || next.empty) continue;
+    if (curr.endTime === null || next.startTime === null) continue;
+
+    const gap = next.startTime - curr.endTime;
+    if (gap > 0 && gap <= MAX_ABSORB) {
+      // Small gap — extend current scene to fill
+      curr.endTime = next.startTime;
+    } else if (gap > MAX_ABSORB) {
+      // Larger gap — split at midpoint
+      const mid = curr.endTime + gap / 2;
+      curr.endTime = mid;
+      next.startTime = mid;
+    } else if (gap < 0) {
+      // Overlap — trim the longer scene
+      const mid = curr.endTime + gap / 2;
+      curr.endTime = mid;
+      next.startTime = mid;
     }
-
-    // ── Gap-closing pass inside the drift loop ────────────────────
-    // Close gaps but NEVER inflate a scene beyond 2x its word-count estimate
-    for (let gi = 0; gi < results.length - 1; gi++) {
-      const curr = results[gi];
-      const next = results[gi + 1];
-      if (curr.empty || next.empty) continue;
-      if (curr.endTime === null || next.startTime === null) continue;
-
-      const gap = next.startTime - curr.endTime;
-      if (gap > 0) {
-        const cwc = sceneWordRanges[gi]?.wordCount || 1;
-        const cExp = Math.max(MIN_DURATION, cwc * SECS_PER_WORD);
-        const cDur = curr.endTime - curr.startTime;
-        const maxExp = Math.max(0, cExp * 2 - cDur);
-
-        if (gap <= Math.min(MAX_ABSORB, maxExp)) {
-          curr.endTime = next.startTime;
-        } else {
-          var splitPt = curr.endTime + Math.min(gap * 0.5, maxExp);
-          curr.endTime = splitPt;
-          next.startTime = splitPt;
-        }
-      } else if (gap < 0) {
-        var overlapMid = curr.endTime + gap / 2;
-        curr.endTime = overlapMid;
-        next.startTime = overlapMid;
-      }
-    }
-
-  } // end while(driftFixed)
-
-  if (driftPassCount > 1) {
-    console.log(`[Drift Fix] Completed ${driftPassCount} passes`);
   }
 
   // Final duration recalculation
