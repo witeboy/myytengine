@@ -332,8 +332,8 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
       // Store metadata
       if (result?.template_selection) setTemplateMeta(result.template_selection);
       if (result?.detected_mood) setDetectedMood(result.detected_mood);
-      if (result?.photo_roles) console.log('📸 Photo roles:', JSON.stringify(result.photo_roles));
-      if (result?.story_elements) console.log('📖 Story elements:', JSON.stringify(result.story_elements));
+      if (result?.photo_roles) { console.log('📸 Photo roles:', JSON.stringify(result.photo_roles)); setPhotoRolesResult(result.photo_roles); }
+      if (result?.story_elements) { console.log('📖 Story elements:', JSON.stringify(result.story_elements)); setStoryElementsResult(result.story_elements); }
 
       // Load saved concept records
       setLoadingPhase('Loading your 5 concepts…');
