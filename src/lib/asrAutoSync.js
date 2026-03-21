@@ -455,11 +455,16 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     if (currEnd === null || nextStart === null) continue;
 
     // The silence gap between this scene's last word and next scene's first word
-    if (nextStart > currEnd) {
-      // Split silence at midpoint
-      const mid = currEnd + (nextStart - currEnd) / 2;
-      curr.endTime = mid;
-      next.startTime = mid;
+    const silenceGap = nextStart - currEnd;
+
+    if (silenceGap > 0) {
+      // Cap how much silence each scene absorbs.
+      // Each scene gets at most 1.5s of buffer after its last word.
+      // Any remaining silence is given to the next scene (visual starts early).
+      const MAX_BUFFER = 1.5;
+      const currBuffer = Math.min(MAX_BUFFER, silenceGap / 2);
+      curr.endTime = currEnd + currBuffer;
+      next.startTime = curr.endTime;
     } else {
       // Overlap or no gap — just butt them together
       const boundary = (currEnd + nextStart) / 2;
