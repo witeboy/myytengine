@@ -443,7 +443,7 @@ Deno.serve(async (req) => {
 
     console.log(`Prompt length: ${prompt.length} chars`);
 
-    // ── STEP 6: Submit to nano-banana-2 ─────────────────────────
+    // ── STEP 7: Submit to nano-banana-2 ─────────────────────────
     const model = 'nano-banana-2';
     const kieHeaders = {
       'Content-Type': 'application/json',
