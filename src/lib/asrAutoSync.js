@@ -318,6 +318,11 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
   const timestamps = interpolateUnmatched(alignment, asrWords);
 
   // ── Step 4: Derive scene boundaries ────────────────────────────
+  // CORE PRINCIPLE: scene startTime/endTime come DIRECTLY from the
+  // ASR timestamps of the first/last matched words in that scene.
+  // Interpolated timestamps are only used as fallback when a scene
+  // has zero direct ASR matches. This ensures each scene's duration
+  // is exactly the speech span of its narration.
   const results = scenes.map((scene, idx) => {
     const range = sceneWordRanges[idx];
 
@@ -325,57 +330,72 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
       return {
         sceneId: scene.id, sceneNumber: scene.scene_number,
         startTime: null, endTime: null, duration: 0,
-        matchScore: 0, empty: true,
+        matchScore: 0, empty: true, wordCount: 0,
       };
     }
 
-    // Find first and last words with timestamps for this scene.
-    // Track both interpolated timestamps (for scene boundaries) and
-    // direct ASR matches (for gap validation — more trustworthy).
-    let firstTs = null, lastTs = null;
+    // Collect ALL direct ASR match timestamps for this scene's words
     let firstDirectTs = null, lastDirectTs = null;
+    let firstInterp = null, lastInterp = null;
     let matched = 0;
+    const allMatchTimes = []; // all matched word timestamps for outlier detection
 
     for (let wi = range.firstWordIdx; wi <= range.lastWordIdx; wi++) {
       if (alignment[wi] >= 0) {
         matched++;
-        // Direct ASR match — trustworthy timestamp
-        const directTs = {
+        const ts = {
           start: asrWords[alignment[wi]].start,
           end: asrWords[alignment[wi]].end,
         };
-        if (!firstDirectTs) firstDirectTs = directTs;
-        lastDirectTs = directTs;
+        allMatchTimes.push(ts);
+        if (!firstDirectTs) firstDirectTs = ts;
+        lastDirectTs = ts;
       }
       if (timestamps[wi]) {
-        if (!firstTs) firstTs = timestamps[wi];
-        lastTs = timestamps[wi];
+        if (!firstInterp) firstInterp = timestamps[wi];
+        lastInterp = timestamps[wi];
       }
     }
 
     const matchScore = range.wordCount > 0 ? matched / range.wordCount : 0;
+    const wordCount = range.wordCount;
 
-    // Log scenes with suspiciously wide word spans (direct matches far apart)
-    if (firstDirectTs && lastDirectTs) {
-      const directSpan = lastDirectTs.end - firstDirectTs.start;
-      const wordCount = range.wordCount;
-      const expectedDur = wordCount * 0.35; // ~0.35s per word is normal speech
-      if (directSpan > expectedDur * 3 && directSpan > 15) {
-        console.warn(`[ASR Align] ⚠️ Scene ${scene.scene_number}: direct matches span ${directSpan.toFixed(1)}s for ${wordCount} words (expected ~${expectedDur.toFixed(1)}s) — possible misalignment`);
+    // ── Outlier detection: if the last ASR match is suspiciously far
+    // from the cluster of other matches, use a robust endpoint instead.
+    // This catches the case where one word got matched to a distant
+    // part of the audio (misalignment).
+    let robustStart = firstDirectTs?.start ?? firstInterp?.start ?? null;
+    let robustEnd = lastDirectTs?.end ?? lastInterp?.end ?? null;
+
+    if (allMatchTimes.length >= 3) {
+      const expectedSpan = wordCount * 0.4; // ~0.4s per word normal speech
+      const rawSpan = (lastDirectTs?.end ?? 0) - (firstDirectTs?.start ?? 0);
+
+      if (rawSpan > expectedSpan * 3 && rawSpan > 12) {
+        // The raw span is suspiciously wide — use percentile clamping
+        const sortedStarts = allMatchTimes.map(t => t.start).sort((a, b) => a - b);
+        const sortedEnds = allMatchTimes.map(t => t.end).sort((a, b) => a - b);
+        // Use 10th percentile for start and 90th for end to exclude outliers
+        const p10 = sortedStarts[Math.floor(sortedStarts.length * 0.1)];
+        const p90 = sortedEnds[Math.floor(sortedEnds.length * 0.9)];
+        console.warn(`[ASR Align] ⚠️ Scene ${scene.scene_number}: raw span ${rawSpan.toFixed(1)}s (expected ~${expectedSpan.toFixed(1)}s) — clamping to p10-p90: ${p10.toFixed(1)}s-${p90.toFixed(1)}s`);
+        robustStart = p10;
+        robustEnd = p90;
       }
     }
 
+    // Scene boundaries = direct ASR speech span (robust)
+    // speechStart/speechEnd also stored for drift detection
     return {
       sceneId: scene.id, sceneNumber: scene.scene_number,
-      startTime: firstTs?.start ?? null,
-      endTime: lastTs?.end ?? null,
-      duration: (lastTs?.end ?? 0) - (firstTs?.start ?? 0),
+      startTime: robustStart,
+      endTime: robustEnd,
+      duration: (robustEnd ?? 0) - (robustStart ?? 0),
       matchScore,
       empty: false,
-      wordCount: range.wordCount,
-      // Raw direct-match boundaries (from ASR, not interpolated)
-      speechStart: firstDirectTs?.start ?? firstTs?.start ?? null,
-      speechEnd: lastDirectTs?.end ?? lastTs?.end ?? null,
+      wordCount,
+      speechStart: robustStart,
+      speechEnd: robustEnd,
     };
   });
 
