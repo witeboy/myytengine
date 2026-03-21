@@ -46,7 +46,7 @@ async function callGemini(prompt, temperature = 0.7) {
     try {
       const parsed = JSON.parse(trimmed + suffix);
       if (parsed.scenes && Array.isArray(parsed.scenes)) {
-        console.log(`Recovered ${parsed.scenes.length} scenes from truncated JSON`);
+        console.log(`Recovered ${parsed.scenes.length} scenes from truncated JSON`); 
         return parsed;
       }
       if (parsed.story_analysis) return parsed;
