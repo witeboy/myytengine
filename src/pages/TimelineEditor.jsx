@@ -1036,18 +1036,13 @@ export default function TimelineEditor() {
       setVideoClips(syncedWithRates);
       setOverrideBeatDurations(newBeatDurations);
 
-      // Step 4b: Detect drifted scenes from alignment results (ASR path only)
+      // Step 4b: Log any drift fixes that were auto-applied
       if (alignmentResults) {
-        setLastAlignmentResults(alignmentResults);
-        const drifts = alignmentResults
-          .map((a, idx) => (a.driftDetected ? { index: idx, sceneNumber: a.sceneNumber, info: a.driftInfo } : null))
-          .filter(Boolean);
-        setDriftedScenes(drifts);
-        if (drifts.length > 0) {
-          console.warn(`[AutoSync] ${drifts.length} scenes with alignment drift detected — user can apply targeted fix`);
+        const fixedCount = alignmentResults.filter(a => a.driftFixed).length;
+        if (fixedCount > 0) {
+          console.log(`[AutoSync] ${fixedCount} bloated scene(s) were auto-fixed during alignment`);
         }
-      } else {
-        setDriftedScenes([]);
+        setDriftedScenes([]); // auto-fix handles it now
       }
 
       // Step 5: Persist
