@@ -582,143 +582,40 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     }
   }
 
-  // ── INTELLIGENT DRIFT CORRECTION ────────────────────────────────
-  // Instead of a hard cap, detect over-stretched scenes and use their
-  // word count to estimate correct duration, then re-anchor the next
-  // 5 scenes using ASR word positions to heal the drift chain.
-  //
-  // For each bloated scene:
-  //   1. Shrink it to its word-count estimate
-  //   2. Look ahead 5 scenes — find the first one that has strong ASR
-  //      matches (an "anchor" scene). That anchor's ASR-based start time
-  //      is trustworthy.
-  //   3. Distribute the time between the bloated scene and the anchor
-  //      proportionally by word count across the intermediate scenes.
-  //   4. Snap the anchor scene back to its ASR position.
-
-  const DRIFT_THRESHOLD = 12.0; // a scene over 12s is suspicious
-  const LOOKAHEAD = 5;
+  // ── DRIFT DETECTION (detection only — no auto-fix) ───────────────
+  // Scan for scenes where duration is much longer than actual speech span.
+  // Tag them on the result so the UI can prompt the user to apply a fix.
   const SECS_PER_WORD = 0.38;
-  const processed = new Set(); // avoid re-processing scenes in a correction window
 
   for (let i = 0; i < results.length; i++) {
-    if (processed.has(i)) continue;
     const r = results[i];
     if (r.empty || r.startTime === null || r.endTime === null) continue;
-
-    // Recalculate fresh duration
     r.duration = r.endTime - r.startTime;
 
+    const speechSpan = (r.speechEnd ?? r.endTime) - (r.speechStart ?? r.startTime);
     const range = sceneWordRanges[i];
     const wordCount = range?.wordCount || 0;
-    const expectedDur = Math.max(MIN_DURATION, wordCount * SECS_PER_WORD);
+    const wordEstimate = Math.max(1.0, wordCount * SECS_PER_WORD);
 
-    // Is this scene over-stretched?
-    if (r.duration <= Math.max(DRIFT_THRESHOLD, expectedDur * 2.5)) continue;
+    // Bloated = duration is 2.5x+ the speech span AND has 8s+ of dead air,
+    // OR duration is 3x+ the word-count estimate AND exceeds 15s.
+    const deadAir = r.duration - speechSpan;
+    const isBloated =
+      (speechSpan > 0 && r.duration > speechSpan * 2.5 && deadAir > 8) ||
+      (r.duration > wordEstimate * 3 && r.duration > 15);
 
-    console.log(`[Drift Fix] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s vs expected ${expectedDur.toFixed(1)}s (${wordCount} words) — initiating correction window`);
-
-    // ── Find an anchor scene within LOOKAHEAD ──────────────────
-    // An anchor is a scene with good ASR match score whose speechStart
-    // we can trust as a reliable time reference.
-    let anchorIdx = -1;
-    let anchorAsrStart = null;
-
-    for (let j = i + 1; j <= Math.min(i + LOOKAHEAD, results.length - 1); j++) {
-      const candidate = results[j];
-      if (candidate.empty) continue;
-      // A scene with matchScore >= 0.5 and a speechStart is trustworthy
-      if (candidate.matchScore >= 0.4 && candidate.speechStart !== null) {
-        anchorIdx = j;
-        anchorAsrStart = candidate.speechStart;
-        break;
-      }
+    if (isBloated) {
+      r.driftDetected = true;
+      r.driftInfo = {
+        currentDuration: r.duration,
+        speechSpan: Math.round(speechSpan * 100) / 100,
+        wordCount,
+        wordEstimate: Math.round(wordEstimate * 100) / 100,
+        suggestedDuration: Math.round(Math.max(1.0, speechSpan + 1.5) * 100) / 100,
+        deadAir: Math.round(deadAir * 100) / 100,
+      };
+      console.warn(`[Drift Detected] Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s (speech: ${speechSpan.toFixed(1)}s, words: ${wordCount}, dead air: ${deadAir.toFixed(1)}s)`);
     }
-
-    // If no anchor found, use the first non-empty scene ahead
-    if (anchorIdx === -1) {
-      for (let j = i + 1; j <= Math.min(i + LOOKAHEAD, results.length - 1); j++) {
-        if (!results[j].empty && results[j].speechStart !== null) {
-          anchorIdx = j;
-          anchorAsrStart = results[j].speechStart;
-          break;
-        }
-      }
-    }
-
-    // Shrink the bloated scene to its word-count estimate
-    const correctedStart = r.startTime;
-    const correctedEnd = correctedStart + expectedDur;
-
-    if (anchorIdx !== -1 && anchorAsrStart !== null) {
-      // ── Redistribute time between bloated scene and anchor ────
-      // The window is: [scene i correctedEnd] → [anchor scene ASR start]
-      const windowStart = correctedEnd;
-      const windowEnd = anchorAsrStart;
-      const windowDur = windowEnd - windowStart;
-
-      // Collect intermediate scenes (between bloated and anchor)
-      const intermediates = [];
-      for (let j = i + 1; j < anchorIdx; j++) {
-        const ir = results[j];
-        const irRange = sceneWordRanges[j];
-        intermediates.push({
-          idx: j,
-          wordCount: irRange?.wordCount || 0,
-          result: ir,
-        });
-      }
-
-      // Total word weight for proportional distribution
-      const totalIntWords = intermediates.reduce((s, m) => s + Math.max(1, m.wordCount), 0);
-
-      if (windowDur > 0 && totalIntWords > 0) {
-        // Distribute proportionally by word count
-        let cursor = windowStart;
-        for (const mid of intermediates) {
-          const proportion = Math.max(1, mid.wordCount) / totalIntWords;
-          const midDur = Math.max(MIN_DURATION, windowDur * proportion);
-          mid.result.startTime = cursor;
-          mid.result.endTime = cursor + midDur;
-          mid.result.duration = midDur;
-          processed.add(mid.idx);
-          cursor += midDur;
-        }
-        console.log(`[Drift Fix] Redistributed ${intermediates.length} intermediate scenes across ${windowDur.toFixed(1)}s window`);
-      } else if (windowDur <= 0 && intermediates.length > 0) {
-        // Window is negative — the anchor starts before our corrected end.
-        // Give each intermediate its word-count estimate, pushing forward.
-        let cursor = correctedEnd;
-        for (const mid of intermediates) {
-          const midDur = Math.max(MIN_DURATION, mid.wordCount * SECS_PER_WORD);
-          mid.result.startTime = cursor;
-          mid.result.endTime = cursor + midDur;
-          mid.result.duration = midDur;
-          processed.add(mid.idx);
-          cursor += midDur;
-        }
-        // Adjust anchor start to after the last intermediate
-        anchorAsrStart = Math.max(anchorAsrStart, cursor);
-      }
-
-      // Snap anchor scene to its ASR-based start
-      const anchor = results[anchorIdx];
-      anchor.startTime = anchorAsrStart;
-      if (anchor.endTime < anchor.startTime + MIN_DURATION) {
-        anchor.endTime = anchor.startTime + Math.max(MIN_DURATION, (sceneWordRanges[anchorIdx]?.wordCount || 3) * SECS_PER_WORD);
-      }
-      anchor.duration = anchor.endTime - anchor.startTime;
-      processed.add(anchorIdx);
-
-      console.log(`[Drift Fix] Anchor Scene ${anchor.sceneNumber} snapped to ${anchorAsrStart.toFixed(1)}s`);
-    }
-
-    // Apply the correction to the bloated scene itself
-    r.endTime = correctedEnd;
-    r.duration = expectedDur;
-    processed.add(i);
-
-    console.log(`[Drift Fix] Scene ${r.sceneNumber}: corrected to ${r.startTime.toFixed(1)}s–${r.endTime.toFixed(1)}s (${r.duration.toFixed(1)}s)`);
   }
 
   // ── Final gap-closing pass ──────────────────────────────────────
