@@ -703,8 +703,7 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     console.log(`[Drift Fix] Scene ${r.sceneNumber}: corrected to ${r.startTime.toFixed(1)}s–${r.endTime.toFixed(1)}s (${r.duration.toFixed(1)}s)`);
   }
 
-  // ── Final gap-closing pass ──────────────────────────────────────
-  // Close any gaps left by the drift correction, without re-inflating.
+  // ── Final gap-closing pass (word-count-aware) ─────────────────
   for (let i = 0; i < results.length - 1; i++) {
     const curr = results[i];
     const next = results[i + 1];
@@ -712,14 +711,31 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     if (curr.endTime === null || next.startTime === null) continue;
 
     const gap = next.startTime - curr.endTime;
-    if (gap > 0 && gap <= MAX_ABSORB) {
-      // Small gap — extend current scene to fill
-      curr.endTime = next.startTime;
-    } else if (gap > MAX_ABSORB) {
-      // Larger gap — split at midpoint
-      const mid = curr.endTime + gap / 2;
-      curr.endTime = mid;
-      next.startTime = mid;
+    if (gap > 0) {
+      const currDurNow = curr.endTime - curr.startTime;
+      const currCanAbsorb = Math.max(0, maxReasonableDur(i) - currDurNow);
+      const absorb = Math.min(gap, currCanAbsorb, MAX_ABSORB);
+
+      if (absorb >= gap * 0.9) {
+        // Current scene can absorb the whole gap
+        curr.endTime = next.startTime;
+      } else {
+        // Absorb what we can, then split the rest
+        curr.endTime += absorb;
+        const remaining = next.startTime - curr.endTime;
+        if (remaining > 0) {
+          const nextDurNow = next.endTime - next.startTime;
+          const nextCanAbsorb = Math.max(0, maxReasonableDur(i + 1) - nextDurNow);
+          const nextAbsorb = Math.min(remaining, nextCanAbsorb, MAX_ABSORB);
+          next.startTime -= nextAbsorb;
+          // If there's still a gap, split at midpoint
+          if (next.startTime > curr.endTime) {
+            const mid = (curr.endTime + next.startTime) / 2;
+            curr.endTime = mid;
+            next.startTime = mid;
+          }
+        }
+      }
     } else if (gap < 0) {
       // Overlap — trim the longer scene
       const mid = curr.endTime + gap / 2;
