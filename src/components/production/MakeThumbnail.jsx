@@ -8,6 +8,7 @@ import {
 import ThumbnailTemplatePicker from './ThumbnailTemplatePicker';
 import { buildTemplatePrompt } from './thumbnailTemplates';
 import { TEMPLATE_IMAGES } from './thumbnailReferenceImages';
+import ThumbnailBlend from './ThumbnailBlend';
 
 // ═══════════════════════════════════════════════════════════════════════
 // MOOD ENGINE — maps title+summary → visual DNA
