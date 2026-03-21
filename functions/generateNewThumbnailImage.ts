@@ -116,10 +116,12 @@ OUTPUT REQUIREMENTS:
 Recreate this thumbnail with the same overall layout, composition, lighting, and energy.
 
 OBJECT REPLACEMENT (CRITICAL FOR STORY RELEVANCE):
-Study the image_prompt carefully for the story context and extracted objects. Then:
-- IDENTIFY all major objects in the template (products, items, symbols, props)
+Study the image_prompt carefully for the SPECIFIC SUBJECT of this video. Then:
+- IDENTIFY all major objects in the template (products, items, symbols, props, vehicles, etc.)
 - REPLACE these objects with the STORY-RELEVANT objects described in the concept
-- Example: Template has generic product → replace with the specific subject of our video (crypto coin, stock chart, food item, etc.)
+- Example: Template shows trucks but the video is about custom t-shirts → replace trucks with colorful custom t-shirts, merch displays, clothing racks
+- Example: Template has generic product → replace with the specific subject of our video (crypto coin, stock chart, food item, custom clothing, etc.)
+- NEVER keep generic objects (luxury cars, trucks, mansions) if the story is about a specific product — always replace with THAT product
 - Keep the same SIZE, POSITION, and FRAMING — just change WHAT the object is
 - If the template uses split-screen or before/after layout, keep that structure but fill each side with story-appropriate imagery
 - People in the template can stay (with appropriate expressions) unless the story requires different characters
