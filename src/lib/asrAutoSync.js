@@ -524,14 +524,36 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     }
   }
 
-  // ── Step 5: Finalize — round and calculate durations ───────────
+  // ── Step 5: Finalize — hard cap, round, and calculate durations ─
+  // No scene should exceed MAX_SCENE_DURATION. If it does, trim it
+  // and push the reclaimed time to neighbors.
+  const nonEmptyCount = results.filter(r => !r.empty).length;
+  const avgDuration = nonEmptyCount > 0 ? totalAudioDuration / nonEmptyCount : 8;
+  const MAX_SCENE_DURATION = Math.max(12, avgDuration * 2.5);
   const MIN_DURATION = 1.0;
+
+  // Pass 1: Hard-cap bloated scenes
+  for (let i = 0; i < results.length; i++) {
+    const r = results[i];
+    if (r.empty || r.startTime === null || r.endTime === null) continue;
+    const dur = r.endTime - r.startTime;
+    if (dur > MAX_SCENE_DURATION) {
+      const excess = dur - MAX_SCENE_DURATION;
+      // Trim from the end — the speech content is at the start
+      r.endTime = r.startTime + MAX_SCENE_DURATION;
+      console.warn(`[ASR Scene ${r.sceneNumber}] ⚠️ HARD CAP: ${dur.toFixed(1)}s → ${MAX_SCENE_DURATION.toFixed(1)}s (trimmed ${excess.toFixed(1)}s)`);
+      // Push next scene's start back to fill the gap
+      if (i + 1 < results.length && results[i + 1].startTime !== null) {
+        results[i + 1].startTime = r.endTime;
+      }
+    }
+  }
+
+  // Pass 2: Enforce minimums and round
   results.forEach((r, i) => {
     if (r.startTime !== null && r.endTime !== null) {
-      // Enforce minimum duration
       if (r.endTime - r.startTime < MIN_DURATION && !r.empty) {
         r.endTime = r.startTime + MIN_DURATION;
-        // Push next scene if needed
         if (i + 1 < results.length && results[i + 1].startTime !== null) {
           if (results[i + 1].startTime < r.endTime) {
             results[i + 1].startTime = r.endTime;
