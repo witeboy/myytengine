@@ -654,3 +654,163 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
 
   return results;
 }
+
+
+// ══════════════════════════════════════════════════════════════════
+// DRIFT FIX — Apply targeted speech-density fix to drifted scenes
+// Called manually by the user after reviewing detected drifts.
+// Only touches the affected scenes + their neighbors. Everything
+// else stays exactly as the main aligner left it.
+// ══════════════════════════════════════════════════════════════════
+
+/**
+ * Fix drifted scenes in-place.
+ *
+ * @param {Array} results - alignment results from alignScenesToASR (will be mutated)
+ * @param {Array} driftedIndices - array of scene indices to fix (0-based into results)
+ * @returns {Array} - the mutated results array
+ */
+export function applyDriftFix(results, driftedIndices) {
+  if (!driftedIndices?.length || !results?.length) return results;
+
+  const LOOKAHEAD = 5;
+  const MIN_DUR = 1.0;
+  const SECS_PER_WORD = 0.38;
+  const processed = new Set();
+
+  for (const i of driftedIndices) {
+    if (processed.has(i) || i < 0 || i >= results.length) continue;
+    const r = results[i];
+    if (!r || r.empty || !r.driftDetected) continue;
+
+    const info = r.driftInfo;
+    // Target duration: speech span + small padding, or word estimate — whichever is more reasonable
+    const targetDur = Math.max(MIN_DUR,
+      info.speechSpan > 0 ? info.speechSpan + 1.5 : info.wordEstimate
+    );
+
+    console.log(`[Drift Fix] Fixing Scene ${r.sceneNumber}: ${r.duration.toFixed(1)}s → ${targetDur.toFixed(1)}s`);
+
+    const correctedEnd = r.startTime + targetDur;
+
+    // ── Find an anchor scene within LOOKAHEAD ──────────────────
+    let anchorIdx = -1;
+    let anchorAsrStart = null;
+
+    for (let j = i + 1; j <= Math.min(i + LOOKAHEAD, results.length - 1); j++) {
+      const c = results[j];
+      if (c.empty) continue;
+      if (c.matchScore >= 0.4 && c.speechStart !== null) {
+        anchorIdx = j;
+        anchorAsrStart = c.speechStart;
+        break;
+      }
+    }
+    if (anchorIdx === -1) {
+      for (let j = i + 1; j <= Math.min(i + LOOKAHEAD, results.length - 1); j++) {
+        if (!results[j].empty && results[j].speechStart !== null) {
+          anchorIdx = j;
+          anchorAsrStart = results[j].speechStart;
+          break;
+        }
+      }
+    }
+
+    if (anchorIdx !== -1 && anchorAsrStart !== null) {
+      const windowStart = correctedEnd;
+      const windowEnd = anchorAsrStart;
+      const windowDur = windowEnd - windowStart;
+
+      // Intermediate scenes between bloated and anchor
+      const intermediates = [];
+      for (let j = i + 1; j < anchorIdx; j++) {
+        intermediates.push({ idx: j, result: results[j], wordCount: results[j].driftInfo?.wordCount ?? 0 });
+        // Estimate word count from duration if driftInfo not present
+        if (!results[j].driftInfo) {
+          const speechS = results[j].speechEnd - results[j].speechStart;
+          intermediates[intermediates.length - 1].wordCount = Math.round(speechS / SECS_PER_WORD) || 5;
+        }
+      }
+
+      const totalIntWords = intermediates.reduce((s, m) => s + Math.max(1, m.wordCount), 0);
+
+      if (windowDur > 0 && totalIntWords > 0) {
+        let cursor = windowStart;
+        for (const mid of intermediates) {
+          const proportion = Math.max(1, mid.wordCount) / totalIntWords;
+          const midDur = Math.max(MIN_DUR, windowDur * proportion);
+          mid.result.startTime = cursor;
+          mid.result.endTime = cursor + midDur;
+          mid.result.duration = midDur;
+          mid.result.driftFixed = true;
+          processed.add(mid.idx);
+          cursor += midDur;
+        }
+        console.log(`[Drift Fix] Redistributed ${intermediates.length} scenes across ${windowDur.toFixed(1)}s`);
+      } else if (intermediates.length > 0) {
+        // Negative window — push forward with word estimates
+        let cursor = correctedEnd;
+        for (const mid of intermediates) {
+          const midDur = Math.max(MIN_DUR, mid.wordCount * SECS_PER_WORD);
+          mid.result.startTime = cursor;
+          mid.result.endTime = cursor + midDur;
+          mid.result.duration = midDur;
+          mid.result.driftFixed = true;
+          processed.add(mid.idx);
+          cursor += midDur;
+        }
+        anchorAsrStart = Math.max(anchorAsrStart, cursor);
+      }
+
+      // Snap anchor
+      const anchor = results[anchorIdx];
+      const oldAnchorStart = anchor.startTime;
+      anchor.startTime = anchorAsrStart;
+      if (anchor.endTime < anchor.startTime + MIN_DUR) {
+        anchor.endTime = anchor.startTime + MIN_DUR;
+      }
+      anchor.duration = anchor.endTime - anchor.startTime;
+      anchor.driftFixed = true;
+      processed.add(anchorIdx);
+      console.log(`[Drift Fix] Anchor Scene ${anchor.sceneNumber}: ${oldAnchorStart.toFixed(1)}s → ${anchor.startTime.toFixed(1)}s`);
+    } else {
+      // No anchor found — just shrink the scene, let next scene absorb the gap
+      if (i < results.length - 1) {
+        results[i + 1].startTime = correctedEnd;
+        results[i + 1].duration = results[i + 1].endTime - results[i + 1].startTime;
+        results[i + 1].driftFixed = true;
+      }
+    }
+
+    // Apply fix to bloated scene
+    r.endTime = correctedEnd;
+    r.duration = targetDur;
+    r.driftFixed = true;
+    r.driftDetected = false; // Clear the flag
+    processed.add(i);
+  }
+
+  // Close any small gaps left between fixed scenes and their neighbors
+  for (const i of [...processed]) {
+    if (i > 0 && !processed.has(i - 1)) {
+      const prev = results[i - 1];
+      const curr = results[i];
+      if (prev.endTime !== null && curr.startTime !== null && curr.startTime > prev.endTime) {
+        const gap = curr.startTime - prev.endTime;
+        if (gap <= 5.0) prev.endTime = curr.startTime;
+        else { const mid = prev.endTime + gap / 2; prev.endTime = mid; curr.startTime = mid; }
+      }
+    }
+  }
+
+  // Recalculate durations on fixed scenes
+  results.forEach(r => {
+    if (r.startTime !== null && r.endTime !== null) {
+      r.startTime = Math.round(r.startTime * 1000) / 1000;
+      r.endTime = Math.round(r.endTime * 1000) / 1000;
+      r.duration = Math.round((r.endTime - r.startTime) * 1000) / 1000;
+    }
+  });
+
+  return results;
+}
