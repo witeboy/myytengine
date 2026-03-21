@@ -152,6 +152,7 @@ export default function OverlayPanel({ overlayClips, onAddOverlay, onRemoveOverl
   };
 
   const tabs = [
+    { id: 'image',   label: 'Images',   icon: Image },
     { id: 'emoji',   label: 'Emoji',    icon: Smile },
     { id: 'sticker', label: 'Stickers', icon: Sticker },
     { id: 'video',   label: 'Video',    icon: Film },
