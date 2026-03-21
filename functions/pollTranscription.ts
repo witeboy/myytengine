@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
-// POLL TRANSCRIPTION — Check AssemblyAI job status, return words
+// POLL TRANSCRIPTION — Check AssemblyAI transcription job status, return words
 // ══════════════════════════════════════════════════════════════════
 
 Deno.serve(async (req) => {
