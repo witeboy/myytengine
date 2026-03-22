@@ -9,7 +9,7 @@ import ActiveProjectsStrip from '@/components/dashboard/ActiveProjectsStrip';
 import CloudExportsPanel from '@/components/dashboard/CloudExportsPanel';
 import { Loader2, LayoutDashboard, Cloud } from 'lucide-react';
 import HealthCheckButton from '@/components/HealthCheckButton';
-import YouTubePublishPanel from '@/components/postpro/YouTubePublishPanel';
+import YouTubePublishPanel from '@/components/postprod/YouTubePublishPanel';
 
 export default function Dashboard() {
   const queryClient = useQueryClient();
