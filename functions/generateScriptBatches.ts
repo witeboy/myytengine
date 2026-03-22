@@ -138,21 +138,147 @@ ${previousContent ? `**PREVIOUSLY WRITTEN** (maintain continuity, do NOT repeat)
 - Moon & Stars: gentle light, constant presence
 
 ${isMeditation ? `**MEDITATION SECTION STRUCTURE**:
-1. Gently introduce the theme through imagery (NOT by naming or defining it)
-2. State the core affirmation: "You are enough... you are enough..."
-3. Elaborate with nature scenes and sensory details
-4. Restate the affirmation in new words: "You are whole... complete... just as you are..."
-5. Ground in body awareness: breath, weight, warmth
-6. [BREATHE] cycle
-7. Gentle bridge deeper into relaxation
+1. Soft Opening (Indirect Theme Emergence)  
+- Begin with imagery that embodies the theme (never define it)  
+- Use slow, spacious language  
+- Example: drifting clouds, quiet water, warm light  
+
+2. Energetic Settling (Nervous System Downshift)  
+- Gently guide awareness inward without commands  
+- Use soft suggestions: "you may notice...", "perhaps you feel..."  
+- Introduce stillness, safety, and slowness  
+
+3. Core Affirmation Introduction (First Whisper)  
+- Introduce the affirmation softly, almost like a thought  
+- Keep it simple and spacious:  
+"you are enough..."  
+"just as you are..."  
+
+4. Affirmation Expansion (Layered Repetition)  
+- Repeat with slight variations, never identical rhythm  
+- Allow pauses to breathe between phrases  
+- No explanation, no logic — just presence  
+
+5. Imagery Weaving (Emotion Through Nature)  
+- Blend affirmation with calming imagery  
+- Nature reflects the truth of the affirmation  
+- Example:  
+"like the ocean… never needing to prove its depth…"  
+
+6. Embodied Awareness (Grounding Without Effort)  
+- Bring attention to breath, body, weight, warmth  
+- Avoid commands like “focus” — use invitations instead  
+- Make the body feel safe, heavy, supported  
+
+7. Breath Rhythm Integration ([BREATHE] Cycle)  
+- Introduce slow breathing cues  
+- Expand time between cues gradually  
+- Sync language with inhale/exhale flow  
+
+8. Affirmation Deepening (Subconscious Layer)  
+- Return to affirmation in softer, more abstract forms  
+- Almost like echoes or distant thoughts  
+- Shorter phrases, more space  
+
+9. Drift State (Thought Dissolution)  
+- Reduce language density  
+- Use longer pauses, softer imagery  
+- Allow listener to float rather than follow  
+
+10. Seamless Descent (Bridge to Silence or Sleep)  
+- No conclusion or closure  
+- Fade into calm imagery or breath  
+- Leave space for continuation or loop  
+11. [BREATHE] cycle
+12. Gentle bridge deeper into relaxation
+
+AFFIRMATION FLOW (ADVANCED RHYTHM):
+- Introduce → pause  
+- Repeat → longer pause  
+- Slight variation → pause  
+- Blend into imagery → pause  
+- Return as whisper → longer pause  
+
+STYLE RULES:
+- Use soft, flowing, hypnotic language  
+- Prefer suggestions over instructions ("you might notice..." vs "focus on...")  
+- Avoid explanations, reasoning, or teaching  
+- Avoid abrupt transitions or strong statements  
+- Let silence (pauses) do as much work as words  
+- Keep emotional tone: safe, accepting, weightless  
+
 
 AFFIRMATION FORMAT: State simply → pause → restate → pause → elaborate with imagery → pause → restate again. Do NOT explain WHY the affirmation matters. Just say it, softly, repeatedly.` :
 
 `**STORY SCENE STRUCTURE**:
-1. Set the atmosphere: rich sensory details, no action yet
-2. Peaceful activity: character does something calming (making tea, walking a path, watching rain) — describe every small detail lovingly
-3. Reflection: character's quiet contentment, simple observations
-4. Seamless transition to the next scene`}
+1. Soft Opening (Indirect Theme Emergence)  
+   - Begin with imagery that embodies the theme (never define it)  
+   - Use slow, spacious language  
+   - Example: drifting clouds, quiet water, warm light  
+
+2. Energetic Settling (Nervous System Downshift)  
+   - Gently guide awareness inward without commands  
+   - Use soft suggestions: "you may notice...", "perhaps you feel..."  
+   - Introduce stillness, safety, and slowness  
+
+3. Core Affirmation Introduction (First Whisper)  
+   - Introduce the affirmation softly, almost like a thought  
+   - Keep it simple and spacious:  
+     "you are enough..."  
+     "just as you are..."  
+
+4. Affirmation Expansion (Layered Repetition)  
+   - Repeat with slight variations, never identical rhythm  
+   - Allow pauses to breathe between phrases  
+   - No explanation, no logic — just presence  
+
+5. Imagery Weaving (Emotion Through Nature)  
+   - Blend affirmation with calming imagery  
+   - Nature reflects the truth of the affirmation  
+   - Example:  
+     "like the ocean… never needing to prove its depth…"  
+
+6. Embodied Awareness (Grounding Without Effort)  
+   - Bring attention to breath, body, weight, warmth  
+   - Avoid commands like “focus” — use invitations instead  
+   - Make the body feel safe, heavy, supported  
+
+7. Breath Rhythm Integration ([BREATHE] Cycle)  
+   - Introduce slow breathing cues  
+   - Expand time between cues gradually  
+   - Sync language with inhale/exhale flow  
+
+8. Affirmation Deepening (Subconscious Layer)  
+   - Return to affirmation in softer, more abstract forms  
+   - Almost like echoes or distant thoughts  
+   - Shorter phrases, more space  
+
+9. Drift State (Thought Dissolution)  
+   - Reduce language density  
+   - Use longer pauses, softer imagery  
+   - Allow listener to “float” rather than follow  
+
+10. Seamless Descent (Bridge to Silence or Sleep)  
+   - No conclusion or closure  
+   - Fade into calm imagery or breath  
+   - Leave space for continuation or loop  
+11. Seamless transition to the next scene`}
+
+AFFIRMATION FLOW (ADVANCED RHYTHM):
+- Introduce → pause  
+- Repeat → longer pause  
+- Slight variation → pause  
+- Blend into imagery → pause  
+- Return as whisper → longer pause  
+
+STYLE RULES:
+- Use soft, flowing, hypnotic language  
+- Prefer suggestions over instructions ("you might notice..." vs "focus on...")  
+- Avoid explanations, reasoning, or teaching  
+- Avoid abrupt transitions or strong statements  
+- Let silence (pauses) do as much work as words  
+- Keep emotional tone: safe, accepting, weightless 
+
 
 **PERMISSION & RELEASE PHRASES** (use liberally):
 "You don't have to...", "There's no need to...", "It's okay to...", "Let yourself...", "Allow...", "Release...", "Let go of..."
