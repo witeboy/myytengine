@@ -250,7 +250,7 @@ Deno.serve(async (req) => {
       console.log(`✓ Batch ${Math.floor(batchStart / BATCH_SIZE) + 1}: ${batchResults.filter(r => r.videos.length > 0).length}/${batch.length} scenes matched`);
 
       if (batchStart + BATCH_SIZE < scenes.length) {
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise(r => setTimeout(r, 1000)); 
       }
     }
 
