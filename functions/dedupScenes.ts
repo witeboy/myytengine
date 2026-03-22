@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
       if (seenHashes.has(normalized)) {
         const matched = seenHashes.get(normalized);
         duplicates.push({
-          scene_id: scene.id, scene_number: scene.scene_number,
+          scene_id: scene.id, scene_number: scene.scene_number, 
           narration_preview: narration.substring(0, 60) + '...',
           matched_scene_number: matched.scene_number,
           matched_preview: (matched.narration_text || '').substring(0, 60) + '...',
