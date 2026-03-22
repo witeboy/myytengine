@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
     const isFailed = status === 'CREATE_TASK_FAILED' || status === 'GENERATE_AUDIO_FAILED' || 
                      status === 'CALLBACK_EXCEPTION' || status === 'SENSITIVE_WORD_ERROR';
 
-    if (isSuccess || isFirstSuccess) {
+    if (isSuccess || isFirstSuccess) { 
       // Extract audio from sunoData array
       const sunoData = taskData?.response?.sunoData; 
       if (!sunoData || sunoData.length === 0) {
