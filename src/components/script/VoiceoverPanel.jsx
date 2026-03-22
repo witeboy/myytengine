@@ -233,11 +233,20 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
   // ══════════════════════════════════════════════════════════════
   // PLAYBACK + DOWNLOAD
   // ══════════════════════════════════════════════════════════════
-  const togglePlay = () => {
+  const togglePlay = async () => {
     if (!audioRef.current) return;
-    if (playing) audioRef.current.pause();
-    else audioRef.current.play();
-    setPlaying(!playing);
+    if (playing) {
+      audioRef.current.pause();
+      setPlaying(false);
+    } else {
+      try {
+        await audioRef.current.play();
+        setPlaying(true);
+      } catch (err) {
+        console.warn('Audio play failed:', err.message);
+        setError('Audio cannot be played. Try regenerating.');
+      }
+    }
   };
 
   const handleDownload = () => {
