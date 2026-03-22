@@ -35,7 +35,7 @@ Return ONLY this JSON:
   "music_prompt": "A rich 1-2 sentence prompt describing the exact sound (e.g. 'Slow-building orchestral score with deep cello undertones, rising strings, and subtle percussion that builds tension before resolving into a triumphant brass-led climax')",
   "title": "Short evocative track name under 80 chars",
   "reasoning": "Why this music fits this specific script"
-}`;
+}`; 
 
   try {
     const response = await fetch(
