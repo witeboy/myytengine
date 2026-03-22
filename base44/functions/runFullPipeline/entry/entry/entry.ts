@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
       const final_script_id = results.outro.final_script.id;
 
       // PHASE 3: Production (parallel where possible)
-      const voice_result = await base44.functions.invoke('generateVoiceProfile', {
+      const voice_result = await base44.functions.invoke(fn('generateVoiceProfile'), {
         project_id: project_id,
         tone: project.tone
       });
