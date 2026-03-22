@@ -10,11 +10,11 @@ import BulkUGCPipeline from './pages/BulkUGCPipeline';
 import LongViralPipeline from './pages/LongViralPipeline';
 import ShortsPipeline from './pages/ShortsPipeline';
 import AutoEditReview from './pages/AutoEditReview';
+import YouTubeCallback from './pages/YouTubeCallback';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
 const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
-
 const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
   : <>{children}</>;
@@ -22,7 +22,6 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
 
-  // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
       <div className="fixed inset-0 flex items-center justify-center">
@@ -31,18 +30,15 @@ const AuthenticatedApp = () => {
     );
   }
 
-  // Handle authentication errors
   if (authError) {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
     } else if (authError.type === 'auth_required') {
-      // Redirect to login automatically
       navigateToLogin();
       return null;
     }
   }
 
-  // Render the main app
   return (
     <Routes>
       <Route path="/" element={
@@ -62,33 +58,32 @@ const AuthenticatedApp = () => {
         />
       ))}
       <Route path="/BulkUGCPipeline" element={
-            <LayoutWrapper currentPageName="BulkUGCPipeline">
-              <BulkUGCPipeline />
-            </LayoutWrapper>
-          } />
+        <LayoutWrapper currentPageName="BulkUGCPipeline">
+          <BulkUGCPipeline />
+        </LayoutWrapper>
+      } />
       <Route path="/LongViralPipeline" element={
-            <LayoutWrapper currentPageName="LongViralPipeline">
-              <LongViralPipeline />
-            </LayoutWrapper>
-          } />
+        <LayoutWrapper currentPageName="LongViralPipeline">
+          <LongViralPipeline />
+        </LayoutWrapper>
+      } />
       <Route path="/ShortsPipeline" element={
-            <LayoutWrapper currentPageName="ShortsPipeline">
-              <ShortsPipeline />
-            </LayoutWrapper>
-          } />
+        <LayoutWrapper currentPageName="ShortsPipeline">
+          <ShortsPipeline />
+        </LayoutWrapper>
+      } />
       <Route path="/AutoEditReview" element={
-            <LayoutWrapper currentPageName="AutoEditReview">
-              <AutoEditReview />
-            </LayoutWrapper>
-          } />
+        <LayoutWrapper currentPageName="AutoEditReview">
+          <AutoEditReview />
+        </LayoutWrapper>
+      } />
+      <Route path="/YouTubeCallback" element={<YouTubeCallback />} />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
 };
 
-
 function App() {
-
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
