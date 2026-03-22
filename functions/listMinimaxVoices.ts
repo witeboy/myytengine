@@ -152,11 +152,52 @@ async function fetchAI33MinimaxVoices(ai33Key) {
 // ── AI33: ElevenLabs voices ─────────────────────────────────────
 async function fetchAI33ElevenlabsVoices(ai33Key) {
   const voices = [];
-  const res = await fetch('https://api.ai33.pro/v1/voices', {
-    method: 'GET',
-    headers: { 'xi-api-key': ai33Key },
-  });
-  const data = await res.json();
+  const headers = { 'Content-Type': 'application/json', 'xi-api-key': ai33Key };
+
+  try {
+    const [recRes, libRes] = await Promise.all([
+      fetch('https://api.ai33.pro/v2/voices', { headers }),
+      fetch('https://api.ai33.pro/v1/shared-voices?page_size=50&sort=usage_character_count_7d&page=0', { headers }),
+    ]);
+
+    if (recRes.ok) {
+      const data = await recRes.json();
+      for (const v of (data.voices || data || [])) {
+        voices.push({
+          voice_id: v.voice_id, name: v.name || 'Unknown',
+          provider: 'elevenlabs', category: 'elevenlabs',
+          preview_url: v.preview_url || null,
+          description: (v.description || '').substring(0, 100),
+          labels: v.labels || {},
+        });
+      }
+      console.log(`✓ ElevenLabs recommended: ${voices.length}`);
+    }
+
+    if (libRes.ok) {
+      const data = await libRes.json();
+      const before = voices.length;
+      for (const v of (data.voices || [])) {
+        voices.push({
+          voice_id: v.voice_id, name: v.name || 'Unknown',
+          provider: 'elevenlabs', category: 'elevenlabs_library',
+          preview_url: v.preview_url || null,
+          description: (v.description || '').substring(0, 100),
+          labels: { accent: v.accent, gender: v.gender, age: v.age, use_case: v.use_case },
+        });
+      }
+      console.log(`✓ ElevenLabs library: ${voices.length - before}`);
+    }
+  } catch (e) {
+    console.warn('ElevenLabs voice list error:', e.message);
+  }
+
+  return voices;
+}
+
+// Old function removed — replaced above
+function __removed() {
+  const data = null;
   for (const v of (data.voices || [])) {
     voices.push({
       voice_id: v.voice_id,
@@ -216,13 +257,34 @@ Deno.serve(async (req) => {
       console.log(`📋 MiniMax Direct: ${systemVoices.length} system voices`);
 
       // Cloned voices — fetch from your MiniMax account
+      let directCloneCount = 0;
       try {
         const directClones = await fetchMinimaxDirectClones(MINIMAX_KEY);
         allVoices.push(...directClones);
+        directCloneCount = directClones.length;
         console.log(`📋 MiniMax Direct: ${directClones.length} cloned voices`);
       } catch (err) {
         console.warn(`MiniMax Direct clones failed: ${err.message}`);
       }
+
+      // Hardcoded clones (always available even if API fails)
+      const manualClones = [
+        { voice_id: 'moss_audio_8c92a3c2-0e8e-11f1-b6f2-729162d0a8d2', name: 'My Clone 1' },
+        { voice_id: 'moss_audio_f2cf397e-0e8c-11f1-bfa6-763108879732', name: 'My Clone 2' },
+      ];
+      for (const c of manualClones) {
+        if (!allVoices.find(v => v.voice_id === c.voice_id)) {
+          allVoices.push({
+            voice_id: c.voice_id, name: c.name,
+            description: 'Cloned voice (MiniMax Direct)',
+            preview_url: null,
+            labels: { gender: '', age: '', accent: '', use_case: 'cloned' },
+            category: 'cloned', provider: 'minimax_direct',
+          });
+          directCloneCount++;
+        }
+      }
+      console.log(`📋 MiniMax Direct total clones: ${directCloneCount}`);
     }
 
     // ════════════════════════════════════════════════════════════
