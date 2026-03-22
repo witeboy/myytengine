@@ -70,17 +70,15 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
   // ══════════════════════════════════════════════════════════════
   // VOICE FILTERING
   // ══════════════════════════════════════════════════════════════
+  const minimaxAllVoices = useMemo(() => voices.filter(v => v.provider === 'minimax_direct'), [voices]);
+  const ai33AllVoices = useMemo(() => voices.filter(v => v.provider === 'minimax' || v.provider === 'elevenlabs' || v.category === 'minimax_cloned'), [voices]);
   const clonedVoices = useMemo(() => voices.filter(v => v.category === 'cloned' || v.category === 'minimax_cloned'), [voices]);
-  const minimaxDirectVoices = useMemo(() => voices.filter(v => v.provider === 'minimax_direct' && v.category !== 'cloned'), [voices]);
-  const minimaxVoices = useMemo(() => voices.filter(v => v.provider === 'minimax' && v.category !== 'cloned' && v.category !== 'minimax_cloned'), [voices]);
-  const elevenlabsVoices = useMemo(() => voices.filter(v => v.provider === 'elevenlabs'), [voices]);
 
   const filteredVoices = useMemo(() => {
     let source = voices;
     if (voiceTab === 'cloned') source = clonedVoices;
-    else if (voiceTab === 'minimax_direct') source = minimaxDirectVoices;
-    else if (voiceTab === 'minimax') source = minimaxVoices;
-    else if (voiceTab === 'elevenlabs') source = elevenlabsVoices;
+    else if (voiceTab === 'minimax_direct') source = minimaxAllVoices;
+    else if (voiceTab === 'ai33') source = ai33AllVoices;
 
     return source.filter(v => {
       const q = searchQuery.toLowerCase();
@@ -104,7 +102,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       }
       return true;
     });
-  }, [voices, searchQuery, genderFilter, ageFilter, voiceTab, clonedVoices, minimaxDirectVoices, minimaxVoices, elevenlabsVoices]);
+  }, [voices, searchQuery, genderFilter, ageFilter, voiceTab, clonedVoices, minimaxAllVoices, ai33AllVoices]);
 
   // ══════════════════════════════════════════════════════════════
   // GENERATE — MiniMax instant or AI33 async
@@ -309,8 +307,8 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
                 </div>
               )}
 
-              {/* Voice Tabs — all 5 sources */}
-              <div className="flex gap-1 mb-2 bg-gray-100 p-0.5 rounded-lg flex-wrap">
+              {/* Voice Tabs — MiniMax Direct vs AI33 */}
+              <div className="flex gap-1 mb-2 bg-gray-100 p-0.5 rounded-lg">
                 <button
                   onClick={() => setVoiceTab('all')}
                   className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'all' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
@@ -318,22 +316,16 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
                   All ({voices.length})
                 </button>
                 <button
-                  onClick={() => setVoiceTab('minimax_direct')}
+                  onClick={() => { setVoiceTab('minimax_direct'); setProvider('minimax_direct'); }}
                   className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'minimax_direct' ? 'bg-white shadow text-orange-700' : 'text-gray-500 hover:text-gray-700'}`}
                 >
-                  ⚡ MiniMax ({minimaxDirectVoices.length})
+                  ⚡ MiniMax ({minimaxAllVoices.length})
                 </button>
                 <button
-                  onClick={() => setVoiceTab('minimax')}
-                  className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'minimax' ? 'bg-white shadow text-amber-700' : 'text-gray-500 hover:text-gray-700'}`}
+                  onClick={() => { setVoiceTab('ai33'); setProvider('ai33'); }}
+                  className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'ai33' ? 'bg-white shadow text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}
                 >
-                  AI33 MM ({minimaxVoices.length})
-                </button>
-                <button
-                  onClick={() => setVoiceTab('elevenlabs')}
-                  className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'elevenlabs' ? 'bg-white shadow text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  AI33 EL ({elevenlabsVoices.length})
+                  🌐 AI33 ({ai33AllVoices.length})
                 </button>
                 <button
                   onClick={() => setVoiceTab('cloned')}
