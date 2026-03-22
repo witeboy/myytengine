@@ -50,7 +50,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: `Fetch failed: ${response.status}` }, { status: response.status });
     }
 
-    const contentType = response.headers.get('content-type') || 'application/octet-stream';
+    const contentType = response.headers.get('content-type') || 'application/octet-stream'; 
     const blob = await response.blob();
     const sizeKB = (blob.size / 1024).toFixed(1);
     console.log(`✓ Downloaded: ${sizeKB}KB (${contentType})`);
