@@ -88,9 +88,10 @@ Deno.serve(async (req) => {
       params.posts_per_week = project.posts_per_week;
     }
 
-    // Call the next function
+    // Call the next function (all functions use nested entry/entry paths)
+    const resolvedFunction = `${nextFunction}/entry/entry`;
     try {
-      const result = await base44.asServiceRole.functions.invoke(nextFunction, params);
+      const result = await base44.asServiceRole.functions.invoke(resolvedFunction, params);
       return Response.json({ success: true, step: nextStep, result: result });
     } catch (invokeError) {
       // Function invoke failed - log but don't crash
