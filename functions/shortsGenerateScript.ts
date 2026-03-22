@@ -27,7 +27,7 @@ async function callGemini(prompt, temperature = 0.75) {
   const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
   try { return JSON.parse(rawText); } catch (_) {
     const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-    return JSON.parse(cleaned);
+    return JSON.parse(cleaned); 
   }
 }
 
