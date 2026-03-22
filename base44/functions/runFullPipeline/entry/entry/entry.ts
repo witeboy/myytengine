@@ -112,7 +112,7 @@ Deno.serve(async (req) => {
 
       results.assets = assets_result.data;
 
-      const timing_result = await base44.functions.invoke('generateTimingSync', {
+      const timing_result = await base44.functions.invoke(fn('generateTimingSync'), {
         project_id: project_id,
         script_id: final_script_id
       });
