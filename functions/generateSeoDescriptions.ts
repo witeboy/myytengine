@@ -26,7 +26,7 @@ async function callGemini(apiKey, prompt, maxTokens = 6000) {
 }
 
 function parseJson(text) {
-  if (!text) return null; 
+  if (!text) return null;
   try { return JSON.parse(text); } catch (_) {}
   const m = text.match(/\{[\s\S]*\}/);
   if (m) {
@@ -145,7 +145,7 @@ RULES:
 - First 150 characters must be a compelling hook with primary keyword
 - Include natural keyword integration throughout
 - End each with a specific call-to-action
-- Return ONLY the JSON object`; 
+- Return ONLY the JSON object`;
 
     const responseText = await callGemini(GEMINI_API_KEY, prompt, 6000);
     const parsed = parseJson(responseText);
@@ -157,7 +157,7 @@ RULES:
 
     // Format for frontend
     const formattedDescriptions = parsed.descriptions.map((d, i) => ({
-      label: d.label || ['Hook-Heavy', 'SEO-Optimized', 'Storytelling'][i] || `Version ${i + 1}`,
+      label: d.label || ['Hook-Heavy', 'SEO-Optimized', 'Storytelling'][i] || `Version ${i + 1}`, 
       content: d.content,
       word_count: d.word_count || 0,
       primary_keywords: d.primary_keywords_used || allTags.slice(0, 3),
