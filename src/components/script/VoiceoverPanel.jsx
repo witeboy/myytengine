@@ -28,24 +28,38 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
   const [ageFilter, setAgeFilter] = useState('all');
   const [voiceTab, setVoiceTab] = useState('all');
 
+  // ══════════════════════════════════════════════════════════════
+  // LOAD VOICES + SETTINGS
+  // ══════════════════════════════════════════════════════════════
   useEffect(() => {
     const fetchData = async () => {
       setLoadingVoices(true);
 
+      // Load settings first (fast)
       const settingsRes = await base44.entities.ProductionSettings.filter({ project_id: project.id });
       if (settingsRes.length > 0) {
         setSettings(settingsRes[0]);
         if (settingsRes[0].selected_voice_id) setSelectedVoice(settingsRes[0].selected_voice_id);
       }
 
+      // Load voices from both services via listMinimaxVoices
       try {
-        const voiceRes = await base44.functions.invoke('listVoices', {});
+        const voiceRes = await base44.functions.invoke('listMinimaxVoices', {});
         const loadedVoices = voiceRes.data?.voices || [];
-        console.log('VoiceoverPanel loaded voices:', loadedVoices.length);
+        console.log('Loaded voices:', loadedVoices.length, 'sources:', voiceRes.data?.sources);
         setVoices(loadedVoices);
       } catch (err) {
-        console.warn('Failed to load voices:', err.message);
-        setError('Voice list temporarily unavailable. Refresh to retry.');
+        console.warn('listMinimaxVoices failed, trying listVoices:', err.message);
+        // Fallback to old listVoices
+        try {
+          const voiceRes = await base44.functions.invoke('listVoices', {});
+          const loadedVoices = voiceRes.data?.voices || [];
+          console.log('Fallback listVoices:', loadedVoices.length);
+          setVoices(loadedVoices);
+        } catch (err2) {
+          console.warn('All voice loading failed:', err2.message);
+          setError('Voice list temporarily unavailable. Refresh to retry.');
+        }
       }
 
       setLoadingVoices(false);
@@ -53,15 +67,21 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
     if (project?.id) fetchData();
   }, [project?.id]);
 
-  const clonedVoices = useMemo(() => voices.filter(v => v.category === 'minimax_cloned' || v.category === 'cloned'), [voices]);
-  const minimaxVoices = useMemo(() => voices.filter(v => v.provider === 'minimax' && v.category !== 'minimax_cloned' && v.category !== 'cloned'), [voices]);
+  // ══════════════════════════════════════════════════════════════
+  // VOICE FILTERING
+  // ══════════════════════════════════════════════════════════════
+  const clonedVoices = useMemo(() => voices.filter(v => v.category === 'cloned' || v.category === 'minimax_cloned'), [voices]);
+  const minimaxDirectVoices = useMemo(() => voices.filter(v => v.provider === 'minimax_direct' && v.category !== 'cloned'), [voices]);
+  const minimaxVoices = useMemo(() => voices.filter(v => v.provider === 'minimax' && v.category !== 'cloned' && v.category !== 'minimax_cloned'), [voices]);
   const elevenlabsVoices = useMemo(() => voices.filter(v => v.provider === 'elevenlabs'), [voices]);
 
   const filteredVoices = useMemo(() => {
     let source = voices;
     if (voiceTab === 'cloned') source = clonedVoices;
+    else if (voiceTab === 'minimax_direct') source = minimaxDirectVoices;
     else if (voiceTab === 'minimax') source = minimaxVoices;
     else if (voiceTab === 'elevenlabs') source = elevenlabsVoices;
+
     return source.filter(v => {
       const q = searchQuery.toLowerCase();
       if (q) {
@@ -84,10 +104,10 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       }
       return true;
     });
-  }, [voices, searchQuery, genderFilter, ageFilter, voiceTab, clonedVoices, minimaxVoices, elevenlabsVoices]);
+  }, [voices, searchQuery, genderFilter, ageFilter, voiceTab, clonedVoices, minimaxDirectVoices, minimaxVoices, elevenlabsVoices]);
 
   // ══════════════════════════════════════════════════════════════
-  // GENERATE — handles both MiniMax instant and AI33 async
+  // GENERATE — MiniMax instant or AI33 async
   // ══════════════════════════════════════════════════════════════
   const handleGenerate = async () => {
     if (!script?.id || !selectedVoice) return;
@@ -116,7 +136,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
 
     console.log('TTS submitted:', res.data?.provider, res.data?.instant ? 'instant' : res.data?.task_id);
 
-    // ── MiniMax direct returned instantly — done, no polling ────
+    // ── MiniMax direct returned instantly — done ────────────────
     if (res.data?.instant && res.data?.voiceover_url) {
       const settingsRes = await base44.entities.ProductionSettings.filter({ project_id: project.id });
       if (settingsRes[0]) setSettings({ ...settingsRes[0], voiceover_status: 'completed', voiceover_url: res.data.voiceover_url });
@@ -148,6 +168,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       }
     }, 10000);
 
+    // Safety: stop after 1 hour
     setTimeout(() => {
       clearInterval(pollInterval);
       setGenerating(prev => {
@@ -157,6 +178,9 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
     }, 3600000);
   };
 
+  // ══════════════════════════════════════════════════════════════
+  // VOICE PREVIEW
+  // ══════════════════════════════════════════════════════════════
   const handlePreviewVoice = async (voice) => {
     if (previewingVoice === voice.voice_id && previewAudioRef.current) {
       previewAudioRef.current.pause();
@@ -208,13 +232,13 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
     };
   }, []);
 
+  // ══════════════════════════════════════════════════════════════
+  // PLAYBACK + DOWNLOAD
+  // ══════════════════════════════════════════════════════════════
   const togglePlay = () => {
     if (!audioRef.current) return;
-    if (playing) {
-      audioRef.current.pause();
-    } else {
-      audioRef.current.play();
-    }
+    if (playing) audioRef.current.pause();
+    else audioRef.current.play();
     setPlaying(!playing);
   };
 
@@ -228,6 +252,9 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
 
   const selectedVoiceData = voices.find(v => v.voice_id === selectedVoice);
 
+  // ══════════════════════════════════════════════════════════════
+  // RENDER
+  // ══════════════════════════════════════════════════════════════
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -271,11 +298,18 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
                       {[selectedVoiceData.labels?.accent, selectedVoiceData.labels?.gender, selectedVoiceData.labels?.age, selectedVoiceData.labels?.use_case].filter(Boolean).join(' · ')}
                     </p>
                   </div>
-                  <Badge className="bg-purple-100 text-purple-700 text-[10px] flex-shrink-0">Selected</Badge>
+                  <Badge className={`text-[10px] flex-shrink-0 ${
+                    selectedVoiceData.provider === 'minimax_direct' ? 'bg-orange-100 text-orange-700' :
+                    selectedVoiceData.provider === 'elevenlabs' ? 'bg-indigo-100 text-indigo-700' :
+                    'bg-purple-100 text-purple-700'
+                  }`}>
+                    {selectedVoiceData.provider === 'minimax_direct' ? '⚡ MiniMax' :
+                     selectedVoiceData.provider === 'elevenlabs' ? 'AI33 EL' : 'AI33 MM'}
+                  </Badge>
                 </div>
               )}
 
-              {/* Voice Tabs */}
+              {/* Voice Tabs — all 5 sources */}
               <div className="flex gap-1 mb-2 bg-gray-100 p-0.5 rounded-lg flex-wrap">
                 <button
                   onClick={() => setVoiceTab('all')}
@@ -284,16 +318,22 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
                   All ({voices.length})
                 </button>
                 <button
-                  onClick={() => setVoiceTab('minimax')}
-                  className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'minimax' ? 'bg-white shadow text-orange-700' : 'text-gray-500 hover:text-gray-700'}`}
+                  onClick={() => setVoiceTab('minimax_direct')}
+                  className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'minimax_direct' ? 'bg-white shadow text-orange-700' : 'text-gray-500 hover:text-gray-700'}`}
                 >
-                  AI33 MiniMax ({minimaxVoices.length})
+                  ⚡ MiniMax ({minimaxDirectVoices.length})
+                </button>
+                <button
+                  onClick={() => setVoiceTab('minimax')}
+                  className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'minimax' ? 'bg-white shadow text-amber-700' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  AI33 MM ({minimaxVoices.length})
                 </button>
                 <button
                   onClick={() => setVoiceTab('elevenlabs')}
                   className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'elevenlabs' ? 'bg-white shadow text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}
                 >
-                  AI33 ElevenLabs ({elevenlabsVoices.length})
+                  AI33 EL ({elevenlabsVoices.length})
                 </button>
                 <button
                   onClick={() => setVoiceTab('cloned')}
@@ -354,11 +394,16 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
                   const isPreviewing = previewingVoice === v.voice_id;
                   return (
                     <div
-                      key={v.voice_id}
+                      key={`${v.provider}-${v.voice_id}`}
                       className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all text-sm ${
                         isSelected ? 'bg-purple-50 border-purple-300' : 'bg-white hover:bg-gray-50 border-gray-200'
                       }`}
-                      onClick={() => setSelectedVoice(v.voice_id)}
+                      onClick={() => {
+                        setSelectedVoice(v.voice_id);
+                        // Auto-set provider based on voice source
+                        if (v.provider === 'minimax_direct') setProvider('minimax_direct');
+                        else if (v.provider === 'minimax' || v.provider === 'elevenlabs') setProvider('ai33');
+                      }}
                     >
                       <button
                         onClick={(e) => { e.stopPropagation(); handlePreviewVoice(v); }}
@@ -380,15 +425,19 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
                         {v.provider && (
-                          <Badge variant="outline" className={`text-[9px] px-1.5 ${v.provider === 'elevenlabs' ? 'border-indigo-300 text-indigo-600' : 'border-orange-300 text-orange-600'}`}>
-                            {v.provider === 'minimax' ? 'AI33 MM' : 'AI33 EL'}
+                          <Badge variant="outline" className={`text-[9px] px-1.5 ${
+                            v.provider === 'minimax_direct' ? 'border-orange-400 text-orange-700' :
+                            v.provider === 'elevenlabs' ? 'border-indigo-300 text-indigo-600' :
+                            'border-amber-300 text-amber-600'
+                          }`}>
+                            {v.provider === 'minimax_direct' ? '⚡ MM' : v.provider === 'minimax' ? 'AI33 MM' : 'AI33 EL'}
                           </Badge>
                         )}
-                        {v.category === 'minimax_cloned' && (
+                        {(v.category === 'minimax_cloned' || v.category === 'cloned') && (
                           <Badge className="bg-amber-100 text-amber-700 text-[9px] px-1.5">Clone</Badge>
                         )}
                         {isSelected && (
-                          <Badge className="bg-purple-100 text-purple-700 text-[10px]">Selected</Badge>
+                          <Badge className="bg-purple-100 text-purple-700 text-[10px]">✓</Badge>
                         )}
                       </div>
                     </div>
