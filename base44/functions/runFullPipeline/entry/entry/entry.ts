@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
       results.voice = voice_result.data;
       results.visuals = visuals_result.data;
 
-      const assets_result = await base44.functions.invoke('generateAssetPlan', {
+      const assets_result = await base44.functions.invoke(fn('generateAssetPlan'), {
         project_id: project_id
       });
 
