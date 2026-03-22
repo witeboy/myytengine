@@ -132,7 +132,7 @@ Deno.serve(async (req) => {
       results.thumbnails = thumbnails_result.data;
       results.metadata = metadata_result.data;
 
-      const calendar_result = await base44.functions.invoke('generateContentCalendar', {
+      const calendar_result = await base44.functions.invoke(fn('generateContentCalendar'), {
         project_id: project_id,
         niche: project.niche,
         posts_per_week: project.posts_per_week
