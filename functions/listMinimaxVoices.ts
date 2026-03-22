@@ -269,7 +269,7 @@ Deno.serve(async (req) => {
 
       // Hardcoded clones (always available even if API fails)
       const manualClones = [
-        { voice_id: 'moss_audio_8c92a3c2-0e8e-11f1-b6f2-729162d0a8d2', name: 'My Clone 1' },
+        { voice_id: 'moss_audio_1f15f1bf-25a4-11f1-87f8-9ea92b5874a5', name: 'Baba Suwe' },
         { voice_id: 'moss_audio_f2cf397e-0e8c-11f1-bfa6-763108879732', name: 'My Clone 2' },
       ];
       for (const c of manualClones) {
