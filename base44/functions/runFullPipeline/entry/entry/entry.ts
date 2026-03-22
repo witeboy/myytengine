@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
 
       await base44.entities.Hooks.update(top_hook.id, { is_selected: true });
 
-      const script_result = await base44.functions.invoke('generateScript', {
+      const script_result = await base44.functions.invoke(fn('generateScript'), {
         project_id: project_id,
         topic_id: top_topic.id,
         topic_title: top_topic.title,
