@@ -83,7 +83,7 @@ Deno.serve(async (req) => {
 
       results.retention = retention_result.data;
 
-      const outro_result = await base44.functions.invoke('rewriteOutro', {
+      const outro_result = await base44.functions.invoke(fn('rewriteOutro'), {
         project_id: project_id,
         script_id: edited_id
       });
