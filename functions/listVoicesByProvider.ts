@@ -239,6 +239,21 @@ Deno.serve(async (req) => {
       } catch (e) {
         console.warn('Inworld voice list error:', e.message);
       }
+      // Your Inworld cloned voices
+      const myInworldClones = [
+        { voice_id: 'default-ab8r3bdxqxx-61-kw2c-jg__suwe2', name: 'My Inworld Clone' },
+      ];
+      for (const c of myInworldClones) {
+        if (!voices.find(v => v.voice_id === c.voice_id)) {
+          voices.push({
+            voice_id: c.voice_id, name: c.name, preview_url: null,
+            description: 'Cloned voice (Inworld)',
+            labels: { gender: '', age: '', accent: '', use_case: 'cloned' },
+            category: 'cloned',
+          });
+        }
+      }
+      
       return Response.json({ success: true, voices, count: voices.length });
     }
 
