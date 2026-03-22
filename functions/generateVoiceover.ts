@@ -2,11 +2,13 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 import { S3Client, PutObjectCommand } from 'npm:@aws-sdk/client-s3@3.600.0';
 
 // ══════════════════════════════════════════════════════════════════
-// VOICEOVER GENERATOR — Dual Provider
+// VOICEOVER GENERATOR — 3 Paths, No Fallback
 //
-// MiniMax Direct: Sync, instant audio, uploads to R2
-// AI33 Pro:       Async, submit + poll via pollVoiceover
+// Path A: MiniMax Direct SYNC  (short scripts ≤ 5000 chars)
+// Path B: MiniMax Direct ASYNC (long scripts, api.minimax.io/v1/t2a_async_v2)
+// Path C: AI33 Pro ASYNC       (submit + poll via api.ai33.pro)
 //
+// No fallback. If selected service fails → return error to user.
 // Frontend sends provider: 'minimax_direct' or 'ai33'
 // ══════════════════════════════════════════════════════════════════
 
@@ -56,6 +58,14 @@ function cleanScript(text, isSleepMode = false) {
   return cleaned;
 }
 
+async function saveSettings(base44, settings, project_id, payload) {
+  if (settings) {
+    await base44.asServiceRole.entities.ProductionSettings.update(settings.id, payload);
+  } else {
+    await base44.asServiceRole.entities.ProductionSettings.create(payload);
+  }
+}
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -67,10 +77,6 @@ Deno.serve(async (req) => {
 
     const MINIMAX_KEY = Deno.env.get('MINIMAX_API_KEY');
     const AI33_KEY = Deno.env.get('AI33_API_KEY');
-
-    if (!MINIMAX_KEY && !AI33_KEY) {
-      return Response.json({ error: 'No TTS API keys configured' }, { status: 500 });
-    }
 
     // ── Load project + script ───────────────────────────────────
     const [projects, allScripts] = await Promise.all([
@@ -89,33 +95,31 @@ Deno.serve(async (req) => {
     const cleanedText = cleanScript(script.full_script, isSleepMode);
     const wordCount = cleanedText.split(/\s+/).filter(w => w.length > 0).length;
 
-    const defaultVoice = isSleepMode ? 'English_calm_female' : 'English_expressive_narrator';
+    const defaultVoice = isSleepMode ? 'English_CalmWoman' : 'English_expressive_narrator';
     const selectedVoiceId = voice_id || defaultVoice;
     const isElevenlabs = /^[a-zA-Z0-9]{20,}$/.test(selectedVoiceId);
+    const useMinimax = requestedProvider === 'minimax_direct';
 
-    // Determine which provider to use
-    // MiniMax Direct sync only works for short scripts (< 5000 chars)
-    const tooLongForSync = cleanedText.length > 5000;
-    const useMinimax = requestedProvider === 'minimax_direct' && MINIMAX_KEY && !isElevenlabs && !tooLongForSync;
-    const useAI33 = !useMinimax;
-
-    if (tooLongForSync && requestedProvider === 'minimax_direct') {
-      console.log(`⚠ Script too long for MiniMax Direct sync (${cleanedText.length} chars) — using AI33 async`);
-    }
-
-    console.log(`🎙 Voiceover: ${wordCount} words, ${cleanedText.length} chars, voice=${selectedVoiceId}, provider=${useMinimax ? 'minimax_direct' : 'ai33'}`);
+    console.log(`🎙 Voiceover: ${wordCount} words, ${cleanedText.length} chars, voice=${selectedVoiceId}, provider=${requestedProvider}`);
 
     // ── Load settings ───────────────────────────────────────────
     const settingsList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
-    let settings = settingsList[0];
+    const settings = settingsList[0];
 
     // ════════════════════════════════════════════════════════════
-    // PATH A: MiniMax Direct (sync — instant audio)
+    // PATH A+B: MINIMAX DIRECT (sync or async based on length)
     // ════════════════════════════════════════════════════════════
     if (useMinimax) {
-      console.log(`📍 MiniMax Direct: ${cleanedText.length} chars`);
+      if (!MINIMAX_KEY) {
+        return Response.json({ error: 'MINIMAX_API_KEY not configured. Switch to AI33.' }, { status: 500 });
+      }
 
-      try {
+      const isShort = cleanedText.length <= 5000;
+
+      if (isShort) {
+        // ── PATH A: MiniMax Direct SYNC (instant) ───────────────
+        console.log(`📍 Path A: MiniMax SYNC — ${cleanedText.length} chars`);
+
         const response = await fetch('https://api.minimax.io/v1/t2a_v2', {
           method: 'POST',
           headers: {
@@ -126,98 +130,101 @@ Deno.serve(async (req) => {
             model: 'speech-2.8-hd',
             text: cleanedText,
             stream: false,
-            voice_setting: {
-              voice_id: selectedVoiceId,
-              speed: 1.0,
-              vol: 1.0,
-              pitch: 0,
-            },
-            audio_setting: {
-              sample_rate: 32000,
-              bitrate: 128000,
-              format: 'mp3',
-              channel: 1,
-            },
+            voice_setting: { voice_id: selectedVoiceId, speed: 1.0, vol: 1.0, pitch: 0 },
+            audio_setting: { sample_rate: 32000, bitrate: 128000, format: 'mp3', channel: 1 },
             output_format: 'hex',
           }),
         });
 
         const data = await response.json();
 
-        if (data.base_resp?.status_code === 0 && data.data?.audio) {
-          const audioHex = data.data.audio;
-          const bytes = new Uint8Array(audioHex.length / 2);
-          for (let i = 0; i < audioHex.length; i += 2) {
-            bytes[i / 2] = parseInt(audioHex.substr(i, 2), 16);
-          }
-          console.log(`✅ MiniMax audio: ${(bytes.length / 1024).toFixed(0)} KB`);
-
-          // Upload to R2
-          const fileName = `voiceover/${project_id}_${Date.now()}.mp3`;
-          const voiceoverUrl = await uploadToR2(bytes, fileName);
-          console.log(`✅ Uploaded: ${voiceoverUrl}`);
-
-          // Save to DB
-          const payload = {
-            project_id,
-            selected_voice_id: selectedVoiceId,
-            voiceover_status: 'completed',
-            voiceover_url: voiceoverUrl,
-            generation_task_id: '',
-            voiceover_chunks: '',
-            voiceover_total_chunks: 0,
-            voiceover_completed_chunks: 0,
-          };
-
-          if (settings) {
-            await base44.asServiceRole.entities.ProductionSettings.update(settings.id, payload);
-          } else {
-            await base44.asServiceRole.entities.ProductionSettings.create(payload);
-          }
-
-          try {
-            await base44.asServiceRole.entities.Projects.update(project_id, { voiceover_url: voiceoverUrl });
-          } catch (e) {}
-
-          return Response.json({
-            success: true,
-            provider: 'minimax_direct',
-            voiceover_url: voiceoverUrl,
-            word_count: wordCount,
-            status: 'completed',
-            instant: true,
-          });
+        if (data.base_resp?.status_code !== 0 || !data.data?.audio) {
+          const errMsg = data.base_resp?.status_msg || JSON.stringify(data).substring(0, 300);
+          return Response.json({ error: `MiniMax Direct failed: ${errMsg}` }, { status: 500 });
         }
 
-        const errMsg = data.base_resp?.status_msg || JSON.stringify(data).substring(0, 200);
-        throw new Error(`MiniMax: ${errMsg}`);
-
-      } catch (minimaxErr) {
-        console.warn(`⚠ MiniMax failed: ${minimaxErr.message}`);
-
-        // If AI33 key exists, fall back to it
-        if (AI33_KEY) {
-          console.log('Falling back to AI33...');
-          // Fall through to PATH B
-        } else {
-          return Response.json({ error: `MiniMax failed: ${minimaxErr.message}` }, { status: 500 });
+        // Convert hex → bytes → upload to R2
+        const audioHex = data.data.audio;
+        const bytes = new Uint8Array(audioHex.length / 2);
+        for (let i = 0; i < audioHex.length; i += 2) {
+          bytes[i / 2] = parseInt(audioHex.substr(i, 2), 16);
         }
+
+        const fileName = `voiceover/${project_id}_${Date.now()}.mp3`;
+        const voiceoverUrl = await uploadToR2(bytes, fileName);
+        console.log(`✅ MiniMax sync done: ${(bytes.length / 1024).toFixed(0)} KB → ${voiceoverUrl}`);
+
+        await saveSettings(base44, settings, project_id, {
+          project_id, selected_voice_id: selectedVoiceId,
+          voiceover_status: 'completed', voiceover_url: voiceoverUrl,
+          generation_task_id: '', voiceover_chunks: '',
+          voiceover_total_chunks: 0, voiceover_completed_chunks: 0,
+        });
+        try { await base44.asServiceRole.entities.Projects.update(project_id, { voiceover_url: voiceoverUrl }); } catch (e) {}
+
+        return Response.json({
+          success: true, provider: 'minimax_direct',
+          voiceover_url: voiceoverUrl, word_count: wordCount,
+          status: 'completed', instant: true,
+        });
+
+      } else {
+        // ── PATH B: MiniMax Direct ASYNC (long scripts) ─────────
+        console.log(`📍 Path B: MiniMax ASYNC — ${cleanedText.length} chars`);
+
+        const response = await fetch('https://api.minimax.io/v1/t2a_async_v2', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${MINIMAX_KEY}`,
+          },
+          body: JSON.stringify({
+            model: 'speech-2.8-hd',
+            text: cleanedText,
+            language_boost: 'auto',
+            voice_setting: { voice_id: selectedVoiceId, speed: 1, vol: 10, pitch: 1 },
+            audio_setting: { audio_sample_rate: 32000, bitrate: 128000, format: 'mp3', channel: 2 },
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.base_resp?.status_code !== 0 || !data.task_id) {
+          const errMsg = data.base_resp?.status_msg || JSON.stringify(data).substring(0, 300);
+          return Response.json({ error: `MiniMax async failed: ${errMsg}` }, { status: 500 });
+        }
+
+        const taskId = data.task_id;
+        console.log(`✅ MiniMax async task: ${taskId}`);
+
+        // Prefix task_id so pollVoiceover knows which API to poll
+        await saveSettings(base44, settings, project_id, {
+          project_id, selected_voice_id: selectedVoiceId,
+          voiceover_status: 'generating', generation_task_id: `minimax:${taskId}`,
+          voiceover_url: '', voiceover_chunks: '',
+          voiceover_total_chunks: 0, voiceover_completed_chunks: 0,
+        });
+
+        return Response.json({
+          success: true, provider: 'minimax_async',
+          task_id: taskId, word_count: wordCount,
+          status: 'generating', instant: false,
+        });
       }
     }
 
     // ════════════════════════════════════════════════════════════
-    // PATH B: AI33 Async (submit task → poll via pollVoiceover)
+    // PATH C: AI33 PRO ASYNC (submit → pollVoiceover polls)
     // ════════════════════════════════════════════════════════════
     if (!AI33_KEY) {
-      return Response.json({ error: 'AI33_API_KEY not configured' }, { status: 500 });
+      return Response.json({ error: 'AI33_API_KEY not configured. Switch to MiniMax Direct.' }, { status: 500 });
     }
 
-    console.log(`📍 AI33 Async: ${cleanedText.length} chars`);
+    console.log(`📍 Path C: AI33 Async — ${cleanedText.length} chars`);
 
-    const isEl = isElevenlabs;
     let submitUrl, submitBody;
 
-    if (isEl) {
+    if (isElevenlabs) {
       submitUrl = `https://api.ai33.pro/v1/text-to-speech/${selectedVoiceId}?output_format=mp3_44100_128`;
       submitBody = JSON.stringify({
         text: cleanedText,
@@ -242,38 +249,26 @@ Deno.serve(async (req) => {
     const submitData = await submitRes.json();
 
     if (!submitData.success || !submitData.task_id) {
-      throw new Error(`AI33 submit failed: ${JSON.stringify(submitData).substring(0, 300)}`);
+      const errMsg = JSON.stringify(submitData).substring(0, 300);
+      return Response.json({ error: `AI33 submit failed: ${errMsg}` }, { status: 500 });
     }
 
     const taskId = submitData.task_id;
     console.log(`✅ AI33 task: ${taskId}`);
 
-    // Save to DB
-    const payload = {
-      project_id,
-      selected_voice_id: selectedVoiceId,
-      voiceover_status: 'generating',
-      generation_task_id: taskId,
-      voiceover_url: '',
-      voiceover_chunks: '',
-      voiceover_total_chunks: 0,
-      voiceover_completed_chunks: 0,
-    };
-
-    if (settings) {
-      await base44.asServiceRole.entities.ProductionSettings.update(settings.id, payload);
-    } else {
-      await base44.asServiceRole.entities.ProductionSettings.create(payload);
-    }
+    // Prefix with ai33: so pollVoiceover knows which API to poll
+    await saveSettings(base44, settings, project_id, {
+      project_id, selected_voice_id: selectedVoiceId,
+      voiceover_status: 'generating', generation_task_id: `ai33:${taskId}`,
+      voiceover_url: '', voiceover_chunks: '',
+      voiceover_total_chunks: 0, voiceover_completed_chunks: 0,
+    });
 
     return Response.json({
-      success: true,
-      provider: 'ai33_async',
-      task_id: taskId,
-      word_count: wordCount,
+      success: true, provider: 'ai33_async',
+      task_id: taskId, word_count: wordCount,
       char_count: cleanedText.length,
-      status: 'generating',
-      instant: false,
+      status: 'generating', instant: false,
     });
 
   } catch (error) {
