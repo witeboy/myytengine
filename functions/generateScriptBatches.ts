@@ -28,7 +28,7 @@ async function callClaude(prompt, temperature = 0.85, retries = 2) {
 
     if (!response.ok) {
       const err = await response.json();
-      throw new Error(`Claude error ${response.status}: ${err.error?.message || JSON.stringify(err)}`);
+      throw new Error(`Claude error ${response.status}: ${err.error?.message || JSON.stringify(err)}`); 
     }
 
     const data = await response.json();
