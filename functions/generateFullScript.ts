@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
     const isSleep = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
 
     // Merge all batch content
-    let fullScript = batches.map(b => b.content).join("\n\n");
+    let fullScript = batches.map(b => b.content).join("\n\n"); 
 
     if (isSleep) {
       // ── SLEEP MODE: Minimal cleanup — preserve pauses, repetition, and flow ──
