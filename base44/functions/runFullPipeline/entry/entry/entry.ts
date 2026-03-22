@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
         niche: project.niche
       });
 
-      const brand_result = await base44.functions.invoke('generateBrandIdentity', {
+      const brand_result = await base44.functions.invoke(fn('generateBrandIdentity'), {
         project_id: project_id,
         niche: project.niche
       });
