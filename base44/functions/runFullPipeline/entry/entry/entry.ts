@@ -120,7 +120,7 @@ Deno.serve(async (req) => {
       results.timing = timing_result.data;
 
       // PHASE 4: Publish
-      const thumbnails_result = await base44.functions.invoke('generateThumbnails', {
+      const thumbnails_result = await base44.functions.invoke(fn('generateThumbnails'), {
         project_id: project_id,
         video_title: results.outro.final_script.title
       });
