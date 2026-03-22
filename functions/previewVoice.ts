@@ -22,6 +22,78 @@ Deno.serve(async (req) => {
 
     let submitUrl, submitBody;
 
+    // ── MiniMax Direct — sync TTS, instant preview ──────────────
+    if (provider === 'minimax_direct') {
+      const MINIMAX_KEY = Deno.env.get('MINIMAX_API_KEY');
+      if (!MINIMAX_KEY) return Response.json({ error: 'MINIMAX_API_KEY not configured' }, { status: 500 });
+
+      try {
+        const res = await fetch('https://api.minimax.io/v1/t2a_v2', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${MINIMAX_KEY}`,
+          },
+          body: JSON.stringify({
+            model: 'speech-2.8-hd',
+            text: previewText,
+            stream: false,
+            voice_setting: { voice_id, speed: 1.0, vol: 1.0, pitch: 0 },
+            audio_setting: { sample_rate: 32000, bitrate: 128000, format: 'mp3', channel: 1 },
+            output_format: 'url',
+          }),
+        });
+
+        const data = await res.json();
+
+        if (data.base_resp?.status_code === 0) {
+          const audioUrl = data.data?.audio_url || data.data?.audio;
+          if (audioUrl) {
+            return Response.json({ success: true, preview_url: audioUrl, voice_id });
+          }
+        }
+
+        // If url format didn't work, try hex format and upload
+        const res2 = await fetch('https://api.minimax.io/v1/t2a_v2', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${MINIMAX_KEY}`,
+          },
+          body: JSON.stringify({
+            model: 'speech-2.8-hd',
+            text: previewText,
+            stream: false,
+            voice_setting: { voice_id, speed: 1.0, vol: 1.0, pitch: 0 },
+            audio_setting: { sample_rate: 32000, bitrate: 128000, format: 'mp3', channel: 1 },
+            output_format: 'hex',
+          }),
+        });
+
+        const data2 = await res2.json();
+        if (data2.base_resp?.status_code === 0 && data2.data?.audio) {
+          const audioHex = data2.data.audio;
+          const bytes = new Uint8Array(audioHex.length / 2);
+          for (let i = 0; i < audioHex.length; i += 2) {
+            bytes[i / 2] = parseInt(audioHex.substr(i, 2), 16);
+          }
+          const blob = new Blob([bytes], { type: 'audio/mpeg' });
+          const base64 = btoa(String.fromCharCode(...bytes.slice(0, 500000)));
+          // Return as data URL for short preview
+          return Response.json({
+            success: true,
+            preview_url: `data:audio/mpeg;base64,${btoa(String.fromCharCode.apply(null, bytes))}`,
+            voice_id,
+          });
+        }
+
+        throw new Error(`MiniMax preview failed: ${data.base_resp?.status_msg || 'unknown'}`);
+      } catch (err) {
+        console.warn('MiniMax Direct preview failed, falling back to AI33:', err.message);
+        // Fall through to AI33 path below
+      }
+    }
+
     if (provider === 'minimax') {
       submitUrl = 'https://api.ai33.pro/v1m/task/text-to-speech';
       submitBody = JSON.stringify({
