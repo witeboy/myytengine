@@ -11,8 +11,9 @@ import SeoDescriptionsPanel from '@/components/postprod/SeoDescriptionsPanel';
 import MakeThumbnail from '@/components/production/MakeThumbnail';
 import {
   Loader2, Sparkles, Image as ImageIcon, FileText, CheckCircle2, ArrowLeft,
-  Type, ArrowRight, ClipboardCheck
+  Type, ArrowRight, ClipboardCheck, Youtube
 } from 'lucide-react';
+import YouTubePublishPanel from '@/components/youtube/YouTubePublishPanel';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 
@@ -288,7 +289,7 @@ export default function PostProduction() {
             summarizeScript(script.full_script);
           }
         }} className="space-y-6">
-          <TabsList className="grid w-full max-w-2xl grid-cols-3">
+          <TabsList className="grid w-full max-w-2xl grid-cols-4">
             <TabsTrigger value="titles" className="gap-2">
               <Type className="w-4 h-4" />
               1. SEO Titles
@@ -302,6 +303,10 @@ export default function PostProduction() {
               <FileText className="w-4 h-4" />
               3. Description & Tags
               {metadata && <CheckCircle2 className="w-3.5 h-3.5 text-green-500 ml-1" />}
+            </TabsTrigger>
+            <TabsTrigger value="publish" className="gap-2">
+              <Youtube className="w-4 h-4" />
+              4. Publish
             </TabsTrigger>
           </TabsList>
 
@@ -482,6 +487,14 @@ export default function PostProduction() {
                 onRefetch={refetchMeta}
               />
             )}
+          </TabsContent>
+        {/* ═══════════════ PUBLISH TAB ═══════════════ */}
+          <TabsContent value="publish" className="space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold">Publish to YouTube</h2>
+              <p className="text-sm text-gray-500">Select channel, pick your exported video, and publish with auto-populated SEO metadata</p>
+            </div>
+            <YouTubePublishPanel project={project} />
           </TabsContent>
         </Tabs>
       </div>
