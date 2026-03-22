@@ -31,11 +31,14 @@ Deno.serve(async (req) => {
     'uploadToR2',
   ];
 
+  // All functions use nested entry/entry paths
+  const resolveName = (name) => `${name}/entry/entry`;
+
   const results = await Promise.allSettled(
     functions.map(async (name) => {
       const start = Date.now();
       try {
-        const res = await base44.functions.invoke(name, { _healthCheck: true });
+        const res = await base44.functions.invoke(resolveName(name), { _healthCheck: true });
         return { name, status: 'ok', ms: Date.now() - start };
       } catch (e) {
         const status = e?.response?.status || 'error';
