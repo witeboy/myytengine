@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
     if (!KIE_API_KEY) {
       return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
-    }
+    } 
 
     // ── Extract task ID ─────────────────────────────────────────────
     const videoUrl = scene.video_url || '';
