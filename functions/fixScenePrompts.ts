@@ -28,7 +28,7 @@ function splitIdentity(rawDesc) {
   if (age) bodyParts.push(`${age}-year-old`);
   if (gender) bodyParts.push(gender);
   if (build) bodyParts.push(build);
-  if (height) bodyParts.push(height);
+  if (height) bodyParts.push(height); 
   const bodyStr = bodyParts.join(', ');
 
   let faceDesc = rawDesc;
