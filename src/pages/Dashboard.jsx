@@ -9,6 +9,7 @@ import ActiveProjectsStrip from '@/components/dashboard/ActiveProjectsStrip';
 import CloudExportsPanel from '@/components/dashboard/CloudExportsPanel';
 import { Loader2, LayoutDashboard, Cloud } from 'lucide-react';
 import HealthCheckButton from '@/components/HealthCheckButton';
+import YouTubePublishPanel from '@/components/postpro/YouTubePublishPanel';
 
 export default function Dashboard() {
   const queryClient = useQueryClient();
@@ -72,9 +73,47 @@ export default function Dashboard() {
             <Cloud className="w-4 h-4" />
             Cloud Exports
           </button>
+          <button
+            onClick={() => setActiveTab('publish')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              activeTab === 'publish'
+                ? 'bg-white text-red-600 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/><path d="m10 15 5-3-5-3z"/></svg>
+            Publish
+          </button>
         </div>
 
-        {activeTab === 'cloud' ? (
+        {activeTab === 'publish' ? (
+          <div className="max-w-2xl">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Quick Publish</h2>
+              <p className="text-sm text-gray-500">Select a project, pick your video file, and publish directly to YouTube</p>
+            </div>
+            <div className="mb-4">
+              <label className="text-sm font-medium text-gray-700 mb-1.5 block">Select Project</label>
+              <select
+                className="w-full h-10 px-3 rounded-lg border border-gray-200 text-sm bg-white"
+                onChange={(e) => {
+                  const p = projects.find(p => p.id === e.target.value);
+                  if (p) setActiveTab('publish');
+                  document.getElementById('yt-publish-project')?.setAttribute('data-project-id', e.target.value);
+                  document.getElementById('yt-publish-project')?.setAttribute('data-project-name', p?.name || '');
+                }}
+              >
+                <option value="">Choose a project...</option>
+                {projects.filter(p => !p.archived).map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            <div id="yt-publish-project">
+              <YouTubePublishPanel project={projects.find(p => !p.archived)} />
+            </div>
+          </div>
+        ) : activeTab === 'cloud' ? (
           <CloudExportsPanel />
         ) : (
         <>
