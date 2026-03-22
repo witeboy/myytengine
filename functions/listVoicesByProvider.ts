@@ -206,7 +206,43 @@ Deno.serve(async (req) => {
       return Response.json({ success: true, voices, count: voices.length });
     }
 
-    return Response.json({ error: 'Invalid source. Use "minimax_direct" or "ai33".' }, { status: 400 });
+    // ════════════════════════════════════════════════════════════
+    // INWORLD AI — fetched from Inworld API
+    // ════════════════════════════════════════════════════════════
+    if (source === 'inworld') {
+      const INWORLD_KEY = Deno.env.get('INWORLD_API_KEY');
+      if (!INWORLD_KEY) return Response.json({ error: 'INWORLD_API_KEY not configured' }, { status: 500 });
+
+      const voices = [];
+      try {
+        const res = await fetch('https://api.inworld.ai/tts/v1/voices?filter=language%3Den', {
+          headers: { 'Authorization': `Basic ${INWORLD_KEY}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          for (const v of (data.voices || [])) {
+            voices.push({
+              voice_id: v.voiceId,
+              name: v.displayName || v.voiceId,
+              preview_url: null,
+              description: v.description || '',
+              labels: {
+                gender: (v.tags || []).find(t => t === 'male' || t === 'female') || '',
+                age: (v.tags || []).find(t => /young|middle|old|aged/i.test(t)) || '',
+                accent: '',
+                use_case: (v.tags || []).filter(t => t !== 'male' && t !== 'female').join(', '),
+              },
+              category: v.isCustom ? 'cloned' : 'inworld',
+            });
+          }
+        }
+      } catch (e) {
+        console.warn('Inworld voice list error:', e.message);
+      }
+      return Response.json({ success: true, voices, count: voices.length });
+    }
+
+    return Response.json({ error: 'Invalid source. Use "minimax_direct", "ai33", or "inworld".' }, { status: 400 });
 
   } catch (error) {
     console.error(`❌ listVoicesByProvider: ${error.message}`);
