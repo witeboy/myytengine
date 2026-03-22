@@ -77,8 +77,8 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
   const filteredVoices = useMemo(() => {
     let source = voices;
     if (voiceTab === 'cloned') source = clonedVoices;
-    else if (voiceTab === 'minimax_direct') source = minimaxAllVoices;
-    else if (voiceTab === 'ai33') source = ai33AllVoices;
+    else if (provider === 'minimax_direct') source = minimaxAllVoices;
+    else if (provider === 'ai33') source = ai33AllVoices;
 
     return source.filter(v => {
       const q = searchQuery.toLowerCase();
@@ -102,7 +102,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
       }
       return true;
     });
-  }, [voices, searchQuery, genderFilter, ageFilter, voiceTab, clonedVoices, minimaxAllVoices, ai33AllVoices]);
+  }, [voices, searchQuery, genderFilter, ageFilter, voiceTab, provider, clonedVoices, minimaxAllVoices, ai33AllVoices]);
 
   // ══════════════════════════════════════════════════════════════
   // GENERATE — MiniMax instant or AI33 async
@@ -316,32 +316,19 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
                 </div>
               )}
 
-              {/* Voice Tabs — MiniMax Direct vs AI33 */}
-              <div className="flex gap-1 mb-2 bg-gray-100 p-0.5 rounded-lg">
-                <button
-                  onClick={() => setVoiceTab('all')}
-                  className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'all' ? 'bg-white shadow text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  All ({voices.length})
-                </button>
-                <button
-                  onClick={() => { setVoiceTab('minimax_direct'); setProvider('minimax_direct'); }}
-                  className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'minimax_direct' ? 'bg-white shadow text-orange-700' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  ⚡ MiniMax ({minimaxAllVoices.length})
-                </button>
-                <button
-                  onClick={() => { setVoiceTab('ai33'); setProvider('ai33'); }}
-                  className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'ai33' ? 'bg-white shadow text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  🌐 AI33 ({ai33AllVoices.length})
-                </button>
-                <button
-                  onClick={() => setVoiceTab('cloned')}
-                  className={`flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${voiceTab === 'cloned' ? 'bg-white shadow text-purple-700' : 'text-gray-500 hover:text-gray-700'}`}
-                >
-                  Cloned ({clonedVoices.length})
-                </button>
+              {/* Voice count for selected provider */}
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-gray-400">
+                  {provider === 'minimax_direct' ? `${minimaxAllVoices.length} MiniMax voices` : `${ai33AllVoices.length} AI33 voices`}
+                </p>
+                {clonedVoices.length > 0 && (
+                  <button
+                    onClick={() => setVoiceTab(voiceTab === 'cloned' ? (provider === 'minimax_direct' ? 'minimax_direct' : 'ai33') : 'cloned')}
+                    className={`text-[10px] px-2 py-0.5 rounded-full transition-colors ${voiceTab === 'cloned' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-500 hover:text-gray-700'}`}
+                  >
+                    {voiceTab === 'cloned' ? '← Back' : `Cloned (${clonedVoices.length})`}
+                  </button>
+                )}
               </div>
 
               {/* Search & Filters */}
@@ -457,14 +444,14 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
           <label className="text-sm font-medium mb-1.5 block">TTS Provider</label>
           <div className="flex gap-1 bg-gray-100 p-0.5 rounded-lg">
             <button
-              onClick={() => setProvider('minimax_direct')}
+              onClick={() => { setProvider('minimax_direct'); setVoiceTab('minimax_direct'); setSelectedVoice(''); }}
               className={`flex-1 px-3 py-2 rounded-md text-xs font-medium transition-colors ${provider === 'minimax_direct' ? 'bg-white shadow text-orange-700' : 'text-gray-500 hover:text-gray-700'}`}
             >
               ⚡ MiniMax Direct
               <span className="block text-[10px] mt-0.5 font-normal opacity-70">Instant · Your API key</span>
             </button>
             <button
-              onClick={() => setProvider('ai33')}
+              onClick={() => { setProvider('ai33'); setVoiceTab('ai33'); setSelectedVoice(''); }}
               className={`flex-1 px-3 py-2 rounded-md text-xs font-medium transition-colors ${provider === 'ai33' ? 'bg-white shadow text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}
             >
               🌐 AI33 Pro
