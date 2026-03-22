@@ -22,6 +22,7 @@ Deno.serve(async (req) => {
 
     let submitUrl, submitBody;
 
+
     // ── MiniMax Direct — sync TTS, instant preview ──────────────
     if (provider === 'minimax_direct') {
       const MINIMAX_KEY = Deno.env.get('MINIMAX_API_KEY');
