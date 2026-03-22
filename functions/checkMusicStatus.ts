@@ -42,7 +42,7 @@ Deno.serve(async (req) => {
 
     if (isSuccess || isFirstSuccess) {
       // Extract audio from sunoData array
-      const sunoData = taskData?.response?.sunoData;
+      const sunoData = taskData?.response?.sunoData; 
       if (!sunoData || sunoData.length === 0) {
         console.error('SUCCESS but no sunoData found');
         if (track_id) {
