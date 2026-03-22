@@ -125,7 +125,7 @@ Deno.serve(async (req) => {
         video_title: results.outro.final_script.title
       });
 
-      const metadata_result = await base44.functions.invoke('generateUploadMetadata', {
+      const metadata_result = await base44.functions.invoke(fn('generateUploadMetadata'), {
         project_id: project_id
       });
 
