@@ -100,7 +100,11 @@ Deno.serve(async (req) => {
     const isElevenlabs = /^[a-zA-Z0-9]{20,}$/.test(selectedVoiceId);
     const useMinimax = requestedProvider === 'minimax_direct';
 
-    console.log(`🎙 Voiceover: ${wordCount} words, ${cleanedText.length} chars, voice=${selectedVoiceId}, provider=${requestedProvider}`);
+    // Guard: MiniMax Direct voices can't be used with AI33 and vice versa
+    const isMiniMaxVoice = selectedVoiceId.startsWith('English_') || selectedVoiceId.startsWith('moss_audio_');
+    if (requestedProvider === 'ai33' && isMiniMaxVoice) {
+      return Response.json({ error: `Voice "${selectedVoiceId}" is a MiniMax Direct voice. Switch provider to ⚡ MiniMax Direct.` }, { status: 400 });
+    }
 
     // ── Load settings ───────────────────────────────────────────
     const settingsList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
