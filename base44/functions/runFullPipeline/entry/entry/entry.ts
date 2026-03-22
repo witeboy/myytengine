@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
 
       const edited_id = results.edited.edited_script.id;
 
-      const retention_result = await base44.functions.invoke('generateRetentionMap', {
+      const retention_result = await base44.functions.invoke(fn('generateRetentionMap'), {
         project_id: project_id,
         script_id: edited_id,
         category: project.category || project.niche
