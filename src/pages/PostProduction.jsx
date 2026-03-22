@@ -13,7 +13,7 @@ import {
   Loader2, Sparkles, Image as ImageIcon, FileText, CheckCircle2, ArrowLeft,
   Type, ArrowRight, ClipboardCheck, Youtube
 } from 'lucide-react';
-import YouTubePublishPanel from '@/components/youtube/YouTubePublishPanel';
+import YouTubePublishPanel from '@/components/postprod/YouTubePublishPanel';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 
