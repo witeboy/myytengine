@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
       'suno',
       'ideogram.ai',
       'image.pollinations.ai',
-      'oaidalleapiprodscus.blob.core.windows.net',
+      'oaidalleapiprodscus.blob.core.windows.net', 
     ];
 
     const hostname = new URL(url).hostname;
