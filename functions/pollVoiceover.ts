@@ -1,32 +1,14 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-import { S3Client, PutObjectCommand } from 'npm:@aws-sdk/client-s3@3.600.0';
 
 // ══════════════════════════════════════════════════════════════════
-// POLL VOICEOVER — Routes to correct API based on task_id prefix
+// POLL VOICEOVER — Lightweight, no S3
 //
-// minimax:{task_id} → poll api.minimax.io/v1/query/t2a_async_query_v2
-// ai33:{task_id}    → poll api.ai33.pro/v1/task/{task_id}
+// minimax:{task_id} → poll api.minimax.io, get download URL directly
+// ai33:{task_id}    → poll api.ai33.pro, get audio_url from metadata
 // {task_id}         → legacy, assume AI33
+//
+// MiniMax download URLs valid for 9 hours.
 // ══════════════════════════════════════════════════════════════════
-
-async function uploadToR2(audioBytes, fileName) {
-  const r2 = new S3Client({
-    region: 'auto',
-    endpoint: `https://${(Deno.env.get('CLOUDFLARE_ACCOUNT_ID') || '').trim()}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId: (Deno.env.get('CLOUDFLARE_R2_ACCESS_KEY_ID') || '').trim(),
-      secretAccessKey: (Deno.env.get('CLOUDFLARE_R2_SECRET_ACCESS_KEY') || '').trim(),
-    },
-  });
-  await r2.send(new PutObjectCommand({
-    Bucket: (Deno.env.get('CLOUDFLARE_R2_BUCKET_NAME') || '').trim(),
-    Key: fileName,
-    Body: audioBytes,
-    ContentType: 'audio/mpeg',
-  }));
-  const publicUrl = (Deno.env.get('CLOUDFLARE_R2_PUBLIC_URL') || '').trim().replace(/\/$/, '');
-  return `${publicUrl}/${fileName}`;
-}
 
 async function saveVoiceover(base44, settings, projectId, audioUrl) {
   await base44.asServiceRole.entities.ProductionSettings.update(settings.id, {
@@ -52,7 +34,6 @@ Deno.serve(async (req) => {
     const settings = settingsList[0];
     if (!settings) return Response.json({ error: 'No production settings' }, { status: 404 });
 
-    // Already completed?
     if (settings.voiceover_status === 'completed' && settings.voiceover_url) {
       return Response.json({ status: 'ready', voiceover_url: settings.voiceover_url });
     }
@@ -60,9 +41,7 @@ Deno.serve(async (req) => {
     const rawTaskId = settings.generation_task_id;
     if (!rawTaskId) return Response.json({ error: 'No task_id to poll' }, { status: 400 });
 
-    // ── Detect provider from prefix ─────────────────────────────
     const isMinimax = rawTaskId.startsWith('minimax:');
-    const isAI33 = rawTaskId.startsWith('ai33:');
     const taskId = rawTaskId.replace(/^(minimax|ai33):/, '');
 
     // ════════════════════════════════════════════════════════════
@@ -82,72 +61,77 @@ Deno.serve(async (req) => {
 
       if (!res.ok) {
         console.warn(`MiniMax poll HTTP ${res.status}`);
-        if (res.status === 404) return Response.json({ status: 'failed', error: 'MiniMax task not found (404)' });
+        if (res.status === 404) return Response.json({ status: 'failed', error: 'MiniMax task not found' });
         return Response.json({ status: 'generating', message: `MiniMax returned ${res.status}` });
       }
 
       const data = await res.json();
-      const mmStatus = data.status;
+      console.log(`📊 MiniMax: status=${data.status}, file_id=${data.file_id || 'none'}, base_resp=${data.base_resp?.status_code}`);
 
-      console.log(`📊 MiniMax: status=${mmStatus}, file_id=${data.file_id || 'none'}, base_resp=${data.base_resp?.status_code}`);
-
-      // Check for error
+      // Error check
       if (data.base_resp?.status_code !== 0 && data.base_resp?.status_code !== undefined) {
         const errMsg = data.base_resp?.status_msg || 'MiniMax task error';
-        console.log(`❌ MiniMax error: ${errMsg}`);
         await base44.asServiceRole.entities.ProductionSettings.update(settings.id, { voiceover_status: 'failed' });
         return Response.json({ status: 'failed', error: errMsg });
       }
 
-      // Status: done (status === 2 in MiniMax API)
-      if (mmStatus === 2 || mmStatus === 'done' || data.file_id) {
+      // Done (status === 2)
+      if (data.status === 2 || data.file_id) {
         const fileId = data.file_id;
         if (!fileId) {
-          return Response.json({ status: 'generating', message: 'Task done but no file_id yet' });
+          return Response.json({ status: 'generating', message: 'Done but no file_id yet' });
         }
 
-        console.log(`📥 Downloading file: ${fileId}`);
+        // Get download URL from MiniMax file API
+        console.log(`📥 Getting download URL for file: ${fileId}`);
 
-        // Get the audio file
-        const fileRes = await fetch(`https://api.minimax.io/v1/files/retrieve_content?file_id=${fileId}`, {
+        const fileRes = await fetch(`https://api.minimax.io/v1/files/retrieve?file_id=${fileId}`, {
           method: 'GET',
-          headers: { 'Authorization': `Bearer ${MINIMAX_KEY}` },
+          headers: { 'Authorization': `Bearer ${MINIMAX_KEY}`, 'Content-Type': 'application/json' },
         });
 
-        if (!fileRes.ok) {
-          console.warn(`File retrieve HTTP ${fileRes.status}`);
-          return Response.json({ status: 'generating', message: 'File not downloadable yet' });
+        if (fileRes.ok) {
+          const fileData = await fileRes.json();
+          const downloadUrl = fileData.file?.download_url || fileData.download_url;
+
+          if (downloadUrl) {
+            console.log(`✅ MiniMax done: ${downloadUrl.substring(0, 80)}`);
+            await saveVoiceover(base44, settings, project_id, downloadUrl);
+            return Response.json({
+              status: 'ready',
+              voiceover_url: downloadUrl,
+              duration: data.duration || null,
+            });
+          }
         }
 
-        // Upload audio to R2
-        const audioBytes = new Uint8Array(await fileRes.arrayBuffer());
-        const fileName = `voiceover/${project_id}_mm_${Date.now()}.mp3`;
-        const voiceoverUrl = await uploadToR2(audioBytes, fileName);
+        // Fallback: try retrieve_content which returns the actual audio
+        // Build a direct URL the user can access
+        const directUrl = `https://api.minimax.io/v1/files/retrieve_content?file_id=${fileId}`;
+        console.log(`⚠ No download_url, using direct file URL`);
 
-        console.log(`✅ MiniMax done: ${(audioBytes.length / 1024 / 1024).toFixed(1)} MB → ${voiceoverUrl}`);
+        // We can't use this directly (needs auth header), so try one more thing:
+        // Some MiniMax responses include audio_url or extra_info with URL
+        const extraUrl = data.extra_info?.audio_url || data.audio_url;
+        if (extraUrl) {
+          console.log(`✅ MiniMax done (extra_info): ${extraUrl.substring(0, 80)}`);
+          await saveVoiceover(base44, settings, project_id, extraUrl);
+          return Response.json({ status: 'ready', voiceover_url: extraUrl });
+        }
 
-        await saveVoiceover(base44, settings, project_id, voiceoverUrl);
-
-        return Response.json({
-          status: 'ready',
-          voiceover_url: voiceoverUrl,
-          duration: data.duration || null,
-        });
-      }
-
-      // Status: processing (status === 1)
-      if (mmStatus === 1 || mmStatus === 'processing' || mmStatus === 'running') {
+        // Last resort: mark as needing manual download
+        console.warn(`⚠ MiniMax file_id=${fileId} but cannot get public URL`);
         return Response.json({
           status: 'generating',
-          task_status: mmStatus,
-          progress: data.progress || null,
+          message: 'Audio ready but getting download URL...',
+          file_id: fileId,
         });
       }
 
-      // Status: queued (status === 0)
+      // Processing (status === 1)
       return Response.json({
         status: 'generating',
-        task_status: mmStatus,
+        task_status: data.status === 1 ? 'processing' : data.status === 0 ? 'queued' : data.status,
       });
     }
 
@@ -166,58 +150,43 @@ Deno.serve(async (req) => {
     });
 
     if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      console.warn(`AI33 poll HTTP ${res.status}: ${errText.substring(0, 200)}`);
+      console.warn(`AI33 poll HTTP ${res.status}`);
       if (res.status === 404) return Response.json({ status: 'failed', error: 'AI33 task not found (404)' });
       return Response.json({ status: 'generating', message: `AI33 returned ${res.status}` });
     }
 
     const data = await res.json();
     const status = (data.status || '').toLowerCase();
-
     console.log(`📊 AI33: status="${data.status}", has_metadata=${!!data.metadata}`);
 
-    // ── done ────────────────────────────────────────────────────
     if (status === 'done') {
       const audioUrl = data.metadata?.audio_url;
-
       if (!audioUrl) {
-        // Try to find URL anywhere in response
         const jsonStr = JSON.stringify(data);
         const urlMatch = jsonStr.match(/https?:\/\/[^"]+\.(mp3|wav|ogg)[^"]*/);
         if (urlMatch) {
           await saveVoiceover(base44, settings, project_id, urlMatch[0]);
           return Response.json({ status: 'ready', voiceover_url: urlMatch[0] });
         }
-        console.warn(`⚠ Done but no audio_url: ${jsonStr.substring(0, 300)}`);
         return Response.json({ status: 'generating', message: 'Done but no audio URL yet' });
       }
 
       console.log(`✅ AI33 done: ${audioUrl.substring(0, 80)}`);
       await saveVoiceover(base44, settings, project_id, audioUrl);
-
       return Response.json({
         status: 'ready',
         voiceover_url: audioUrl,
         srt_url: data.metadata?.srt_url || null,
-        credit_cost: data.credit_cost || null,
       });
     }
 
-    // ── error ───────────────────────────────────────────────────
     if (status === 'error' || status === 'failed') {
-      const errMsg = data.error_message || data.error || 'AI33 TTS generation failed';
-      console.log(`❌ AI33 failed: ${errMsg}`);
+      const errMsg = data.error_message || data.error || 'AI33 TTS failed';
       await base44.asServiceRole.entities.ProductionSettings.update(settings.id, { voiceover_status: 'failed' });
       return Response.json({ status: 'failed', error: errMsg });
     }
 
-    // ── doing / processing ──────────────────────────────────────
-    console.log(`⏳ AI33 still: "${data.status}"`);
-    return Response.json({
-      status: 'generating',
-      task_status: data.status,
-    });
+    return Response.json({ status: 'generating', task_status: data.status });
 
   } catch (error) {
     console.error(`❌ pollVoiceover error: ${error.message}`);
