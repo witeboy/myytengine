@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
 
       results.script = script_result.data;
 
-      const edited_result = await base44.functions.invoke('editScript', {
+      const edited_result = await base44.functions.invoke(fn('editScript'), {
         project_id: project_id,
         script_id: results.script.script.id,
         topic_title: top_topic.title,
