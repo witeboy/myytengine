@@ -76,7 +76,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
 
   const filteredVoices = useMemo(() => {
     let source = voices;
-    if (voiceTab === 'cloned') source = clonedVoices;
+    if (voiceTab === 'cloned') source = clonedVoices.filter(v => provider === 'minimax_direct' ? v.provider === 'minimax_direct' : v.provider !== 'minimax_direct');
     else if (provider === 'minimax_direct') source = minimaxAllVoices;
     else if (provider === 'ai33') source = ai33AllVoices;
 
