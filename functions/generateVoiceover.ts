@@ -100,11 +100,7 @@ Deno.serve(async (req) => {
     const isElevenlabs = /^[a-zA-Z0-9]{20,}$/.test(selectedVoiceId);
     const useMinimax = requestedProvider === 'minimax_direct';
 
-    // Guard: MiniMax Direct clones only work with MiniMax Direct
-    if (requestedProvider === 'ai33' && selectedVoiceId.startsWith('moss_audio_')) {
-      return Response.json({ error: `Cloned voice "${selectedVoiceId}" only works with ⚡ MiniMax Direct. Switch provider.` }, { status: 400 });
-    }
-
+    
     // ── Load settings ───────────────────────────────────────────
     const settingsList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
     const settings = settingsList[0];
