@@ -39,7 +39,7 @@ async function callGemini(prompt, temperature = 0.5) {
   );
   if (!response.ok) {
     const err = await response.json();
-    throw new Error(`Gemini error: ${err.error?.message || response.status}`);
+    throw new Error(`Gemini error: ${err.error?.message || response.status}`); 
   }
   const data = await response.json();
   if (!data.candidates?.length) throw new Error("No candidates from Gemini");
