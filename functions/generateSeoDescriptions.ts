@@ -145,7 +145,7 @@ RULES:
 - First 150 characters must be a compelling hook with primary keyword
 - Include natural keyword integration throughout
 - End each with a specific call-to-action
-- Return ONLY the JSON object`;
+- Return ONLY the JSON object`; 
 
     const responseText = await callGemini(GEMINI_API_KEY, prompt, 6000);
     const parsed = parseJson(responseText);
