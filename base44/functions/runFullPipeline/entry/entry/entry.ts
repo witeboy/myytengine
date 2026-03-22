@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
         tone: project.tone
       });
 
-      const visuals_result = await base44.functions.invoke('generateVisualPrompts', {
+      const visuals_result = await base44.functions.invoke(fn('generateVisualPrompts'), {
         project_id: project_id,
         script_id: final_script_id
       });
