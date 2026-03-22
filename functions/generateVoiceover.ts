@@ -94,8 +94,14 @@ Deno.serve(async (req) => {
     const isElevenlabs = /^[a-zA-Z0-9]{20,}$/.test(selectedVoiceId);
 
     // Determine which provider to use
-    const useMinimax = requestedProvider === 'minimax_direct' && MINIMAX_KEY && !isElevenlabs;
+    // MiniMax Direct sync only works for short scripts (< 5000 chars)
+    const tooLongForSync = cleanedText.length > 5000;
+    const useMinimax = requestedProvider === 'minimax_direct' && MINIMAX_KEY && !isElevenlabs && !tooLongForSync;
     const useAI33 = !useMinimax;
+
+    if (tooLongForSync && requestedProvider === 'minimax_direct') {
+      console.log(`⚠ Script too long for MiniMax Direct sync (${cleanedText.length} chars) — using AI33 async`);
+    }
 
     console.log(`🎙 Voiceover: ${wordCount} words, ${cleanedText.length} chars, voice=${selectedVoiceId}, provider=${useMinimax ? 'minimax_direct' : 'ai33'}`);
 
