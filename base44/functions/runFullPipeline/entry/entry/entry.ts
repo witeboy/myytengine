@@ -1,5 +1,8 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
+// Helper: all functions use nested entry/entry paths
+const fn = (name) => `${name}/entry/entry`;
+
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -18,7 +21,7 @@ Deno.serve(async (req) => {
 
     try {
       // PHASE 1: Foundation (parallel)
-      const topics_result = await base44.functions.invoke('generateTopics', {
+      const topics_result = await base44.functions.invoke(fn('generateTopics'), {
         project_id: project_id,
         niche: project.niche
       });
