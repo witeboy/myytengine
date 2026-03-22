@@ -27,7 +27,7 @@ Deno.serve(async (req) => {
     const data = await response.json();
     console.log('KIE task status:', JSON.stringify(data));
 
-    if (data.code !== 200) {
+    if (data.code !== 200) { 
       return Response.json({ status: 'PROCESSING', msg: data.msg });
     }
 
