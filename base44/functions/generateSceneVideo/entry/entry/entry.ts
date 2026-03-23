@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+// v2 — redeployed
 
 // ══════════════════════════════════════════════════════════════════
 // SCENE VIDEO GENERATOR — Grok Imagine image-to-video via Kie API

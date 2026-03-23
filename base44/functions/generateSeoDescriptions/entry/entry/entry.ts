@@ -1,4 +1,5 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+// v2 — redeployed
 
 // ══════════════════════════════════════════════════════════════════
 // generateSeoDescriptions — PHASE 2 (Descriptions)
