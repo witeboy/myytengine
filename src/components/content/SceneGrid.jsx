@@ -6,7 +6,7 @@ import ActGroupHeader from './ActGroupHeader';
 import { Button } from '@/components/ui/button';
 import { LayoutGrid, List } from 'lucide-react';
 
-export default function SceneGrid({ scenes, onRefetch }) {
+export default function SceneGrid({ scenes, onRefetch, orientation }) {
   const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'acts'
   const [collapsedActs, setCollapsedActs] = useState({});
 
@@ -57,6 +57,11 @@ export default function SceneGrid({ scenes, onRefetch }) {
   const toggleAct = (actName) => {
     setCollapsedActs(prev => ({ ...prev, [actName]: !prev[actName] }));
   };
+
+  const isPortrait = orientation === 'portrait';
+  const gridCols = isPortrait
+    ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'
+    : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
 
   const sceneCallbacks = (scene) => ({
     onRegenerateImage: async () => {
@@ -125,17 +130,17 @@ export default function SceneGrid({ scenes, onRefetch }) {
               <div
                 ref={provided.innerRef}
                 {...provided.droppableProps}
-                className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                className={`grid ${gridCols} gap-4`}
               >
                 {scenes.map((scene, index) => (
                  <DraggableSceneCard
-  key={scene.id}
-  scene={scene}
-  index={index}
-  existingActs={existingActs}
-  orientation={scene.orientation}
-  {...sceneCallbacks(scene)}
-/>
+                    key={scene.id}
+                    scene={scene}
+                    index={index}
+                    existingActs={existingActs}
+                    orientation={orientation}
+                    {...sceneCallbacks(scene)}
+                  />
                 ))}
                 {provided.placeholder}
               </div>
@@ -154,13 +159,14 @@ export default function SceneGrid({ scenes, onRefetch }) {
                 onToggle={() => toggleAct(actName)}
               />
               {!collapsedActs[actName] && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-3 ml-4 pl-3 border-l-2 border-blue-200">
+                <div className={`grid ${gridCols} gap-4 mt-3 ml-4 pl-3 border-l-2 border-blue-200`}>
                   {actScenes.map((scene) => (
                     <div key={scene.id}>
                       <DraggableSceneCard
                         scene={scene}
                         index={scenes.indexOf(scene)}
                         existingActs={existingActs}
+                        orientation={orientation}
                         {...sceneCallbacks(scene)}
                       />
                     </div>
@@ -180,13 +186,14 @@ export default function SceneGrid({ scenes, onRefetch }) {
                 onToggle={() => toggleAct('__ungrouped')}
               />
               {!collapsedActs['__ungrouped'] && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-3 ml-4 pl-3 border-l-2 border-gray-200">
+                <div className={`grid ${gridCols} gap-4 mt-3 ml-4 pl-3 border-l-2 border-gray-200`}>
                   {groupedByAct.ungrouped.map((scene) => (
                     <div key={scene.id}>
                       <DraggableSceneCard
                         scene={scene}
                         index={scenes.indexOf(scene)}
                         existingActs={existingActs}
+                        orientation={orientation}
                         {...sceneCallbacks(scene)}
                       />
                     </div>

@@ -1851,7 +1851,7 @@ export default function ContentGeneration() {
         {/* Scene Grid */}
         {scenes.length > 0 && (
           <div className="mb-8">
-            <SceneGrid scenes={scenes} onRefetch={refetchScenes} />
+            <SceneGrid scenes={scenes} onRefetch={refetchScenes} orientation={project?.orientation || 'landscape'} />
           </div>
         )}
 

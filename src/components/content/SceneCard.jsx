@@ -246,13 +246,13 @@ export default function SceneCard({ scene, onRegenerateImage, onAnimateScene, on
   return (
     <Card className="overflow-hidden">
       {/* Preview */}
-      <div className={`${orientation === 'portrait' || scene.orientation === 'portrait' ? 'aspect-[9/16]' : 'aspect-video'} bg-gray-100 relative`}>
+      <div className={`${orientation === 'portrait' || scene.orientation === 'portrait' ? 'aspect-[9/16]' : 'aspect-video'} bg-gray-950 relative`}>
         {scene.video_url && scene.video_url.startsWith('http') ? (
-          <video src={scene.video_url} controls className="w-full h-full object-cover" />
+          <video src={scene.video_url} controls className="w-full h-full object-contain" />
         ) : scene.image_url ? (
-          <img src={scene.image_url} alt={`Scene ${scene.scene_number}`} className="w-full h-full object-cover" />
+          <img src={scene.image_url} alt={`Scene ${scene.scene_number}`} className="w-full h-full object-contain" />
         ) : (
-          <div className="flex items-center justify-center h-full text-gray-400">
+          <div className="flex items-center justify-center h-full text-gray-400 bg-gray-100">
             <ImageIcon className="w-10 h-10" />
           </div>
         )}
