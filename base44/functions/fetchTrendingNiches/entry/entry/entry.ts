@@ -1,4 +1,5 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+// v2 — redeployed
 
 const YOUTUBE_API_KEY = Deno.env.get("YOUTUBE_API_KEY");
 const YOUTUBE_API = "https://www.googleapis.com/youtube/v3";

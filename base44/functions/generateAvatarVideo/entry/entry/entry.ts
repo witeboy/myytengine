@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+// v2 — redeployed
 import { create, getNumericDate } from 'https://deno.land/x/djwt@v3.0.2/mod.ts';
 
 /*
