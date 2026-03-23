@@ -8,6 +8,7 @@ import StageProgress from '@/components/StageProgress';
 import BatchCard from '@/components/script/BatchCard';
 import ScriptEditor from '@/components/script/ScriptEditor';
 import { Loader2, RefreshCw, Download, ArrowRight, FileText } from 'lucide-react';
+import { showErrorToast } from '@/lib/errorToast';
 
 export default function StoryScript() {
   const navigate = useNavigate();
@@ -102,7 +103,7 @@ export default function StoryScript() {
             await new Promise(r => setTimeout(r, 3000));
             continue;
           }
-          console.error('Shorts script generation failed after retries');
+          showErrorToast(err, "Shorts Script Generation");
         }
       }
       setGenerating(false);
@@ -164,6 +165,7 @@ export default function StoryScript() {
         await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
       } catch (err) {
         console.error('Script generation error:', err);
+        showErrorToast(err, "Script Generation");
       } finally {
         setGenerating(false);
       }
@@ -191,6 +193,9 @@ export default function StoryScript() {
           retries++;
           const status = err?.response?.status || err?.status;
           console.warn(`Batch generation attempt ${retries} failed (${status}):`, err.message);
+          if (retries >= MAX_RETRIES) {
+            showErrorToast(err, "Script Batch Generation");
+          }
 
           if (status === 504 || status === 500 || status === 502) {
             // Timeout/server error — the batch may have actually completed
@@ -237,6 +242,7 @@ export default function StoryScript() {
           await Promise.all([refetchProject(), refetchScripts()]);
         } catch (err) {
           console.error('Merge error:', err);
+          showErrorToast(err, "Script Merge");
         }
       };
 
@@ -303,6 +309,7 @@ export default function StoryScript() {
       await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
     } catch (err) {
       console.error('Regeneration error:', err);
+      showErrorToast(err, "Script Regeneration");
     } finally {
       setGenerating(false);
     }
@@ -418,6 +425,7 @@ export default function StoryScript() {
                           await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
                         } catch (err) {
                           console.error('Resume error:', err);
+                          showErrorToast(err, "Resume Generation");
                         } finally {
                           setGenerating(false);
                         }
