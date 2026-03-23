@@ -60,6 +60,85 @@ async function callClaude(prompt, temperature = 0.85, retries = 2) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// GEMINI FALLBACK — gemini-2.5-pro for best creative writing
+// ═══════════════════════════════════════════════════════════════════
+async function callGemini(prompt, temperature = 0.85, retries = 2) {
+  const model = 'gemini-2.5-pro-preview-06-05';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature,
+          maxOutputTokens: 16384,
+          responseMimeType: 'application/json',
+        },
+      }),
+    });
+
+    if (response.status === 429) {
+      const waitMs = Math.pow(2, attempt + 1) * 3000;
+      console.warn(`⏳ Gemini rate limited, waiting ${waitMs / 1000}s (attempt ${attempt + 1})`);
+      await new Promise(r => setTimeout(r, waitMs));
+      continue;
+    }
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(`Gemini error ${response.status}: ${err.error?.message || JSON.stringify(err)}`);
+    }
+
+    const data = await response.json();
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    // Parse JSON
+    try { return JSON.parse(rawText); } catch (_) {}
+
+    let jsonStr = rawText;
+    if (rawText.includes('```json')) {
+      jsonStr = rawText.split('```json')[1].split('```')[0].trim();
+    } else if (rawText.includes('```')) {
+      jsonStr = rawText.split('```')[1].split('```')[0].trim();
+    }
+    try { return JSON.parse(jsonStr); } catch (_) {}
+
+    const objMatch = rawText.match(/\{[\s\S]*\}/);
+    if (objMatch) {
+      try { return JSON.parse(objMatch[0]); } catch (_) {}
+    }
+
+    if (attempt === retries) throw new Error('Failed to parse Gemini JSON after all attempts');
+    console.log(`[Gemini] JSON parse failed (attempt ${attempt + 1}), retrying...`);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// UNIFIED LLM CALLER — Claude primary, Gemini fallback
+// ═══════════════════════════════════════════════════════════════════
+async function callLLM(prompt, temperature = 0.85) {
+  // Try Claude first
+  try {
+    const result = await callClaude(prompt, temperature);
+    return { result, provider: 'claude' };
+  } catch (claudeErr) {
+    const msg = claudeErr.message || '';
+    const isFatal = /credit balance|billing|purchase credits|api key|unauthorized/i.test(msg);
+    console.warn(`[LLM] Claude failed${isFatal ? ' (fatal — switching to Gemini)' : ''}: ${msg.substring(0, 120)}`);
+
+    if (!GEMINI_KEY) throw claudeErr; // No fallback available
+
+    // Fall back to Gemini
+    console.log('[LLM] Falling back to Gemini 2.5 Pro...');
+    const result = await callGemini(prompt, temperature);
+    return { result, provider: 'gemini' };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // SLEEP SCRIPT WRITING PROMPT
 // ═══════════════════════════════════════════════════════════════════
 function buildSleepWritingPrompt({ scriptMode, batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock }) {
