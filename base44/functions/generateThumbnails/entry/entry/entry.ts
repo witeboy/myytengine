@@ -274,7 +274,7 @@ Deno.serve(async (req) => {
     }
 
     let thumbTone = 'cinematic documentary', brandColors = '', brandStyle = '';
-    if (brandResult.status === 'fulfilled') {
+    if (brandResult.status === 'fulfilled' && Array.isArray(brandResult.value)) {
       const brand = brandResult.value.find(b => b.project_id === project_id);
       if (brand) { thumbTone = brand.thumbnail_tone || thumbTone; brandColors = brand.color_palette || ''; }
     }
