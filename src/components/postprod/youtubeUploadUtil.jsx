@@ -13,9 +13,12 @@ export async function uploadToYouTube({ accessToken, file, metadata, thumbnailBl
       snippet: {
         title: (metadata.title || 'Untitled').slice(0, 100),
         description: (metadata.description || '').slice(0, 5000),
-        ...(Array.isArray(metadata.tags) && metadata.tags.filter(Boolean).length > 0
-          ? { tags: metadata.tags.filter(Boolean) }
-          : {}),
+        ...((() => {
+          const cleaned = (Array.isArray(metadata.tags) ? metadata.tags : [])
+            .map(t => String(t).replace(/[<>"#&\\{}|^~`\[\]]/g, '').replace(/\s+/g, ' ').trim())
+            .filter(t => t && t.length >= 2 && t.length <= 100);
+          return cleaned.length > 0 ? { tags: cleaned } : {};
+        })()),
         categoryId: metadata.categoryId || '22',
         defaultLanguage: 'en',
       },
