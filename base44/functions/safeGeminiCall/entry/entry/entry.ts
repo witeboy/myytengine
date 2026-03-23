@@ -47,4 +47,18 @@ async function safeGeminiCall(prompt, temperature = 0.8) {
   }
 }
 
-export { safeGeminiCall };
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const { prompt, temperature } = await req.json();
+    if (!prompt) return Response.json({ error: 'prompt required' }, { status: 400 });
+
+    const result = await safeGeminiCall(prompt, temperature || 0.8);
+    return Response.json(result);
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+});
