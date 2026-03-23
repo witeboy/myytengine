@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-// v2 — redeployed
+// v3 — redeployed
 
 // ══════════════════════════════════════════════════════════════════
 // FIX SCENE PROMPTS — Post-generation sanitizer
