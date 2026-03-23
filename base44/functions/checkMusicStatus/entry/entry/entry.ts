@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get('KIE_API_KEY');
     if (!apiKey) return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
 
-    // Check task status via KIE Suno get-music-details endpoint
+    // Check task status via KIE Suno get-music-details endpoint (v2)
     const response = await fetch(`https://api.kie.ai/api/v1/generate/record-info?taskId=${task_id}`, {
       method: 'GET',
       headers: { 'Authorization': `Bearer ${apiKey}` },
