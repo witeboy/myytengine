@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import PlatformAdaptCard from './PlatformAdaptCard';
 import YouTubeUploadSection from './YouTubeUploadSection';
+import { PLATFORM_META as _PM } from './PlatformIcon';
 
 const PLATFORMS = ['youtube', 'tiktok', 'x', 'instagram'];
 
@@ -327,8 +328,7 @@ export default function CrossPlatformPublisher({ projects = [] }) {
 
 function CopyPublishCard({ platform, data }) {
   const [copied, setCopied] = useState(false);
-  const { PLATFORM_META } = require('./PlatformIcon');
-  const meta = PLATFORM_META[platform];
+  const meta = _PM[platform];
 
   const fullText = [
     data.adapted_title,
@@ -390,6 +390,3 @@ function CopyPublishCard({ platform, data }) {
     </Card>
   );
 }
-
-// Re-import for CopyPublishCard since require doesn't work in ESM
-import { PLATFORM_META as _PM } from './PlatformIcon';
