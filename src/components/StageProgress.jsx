@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 
 export default function StageProgress({ currentStage = 1, projectStatus }) {
   const navigate = useNavigate();
-  const projectId = new URLSearchParams(window.location.search).get('project_id');
+  const rawProjectId = new URLSearchParams(window.location.search).get('project_id');
+  const projectId = rawProjectId && rawProjectId !== 'null' ? rawProjectId : null;
 
   const { data: project } = useQuery({
     queryKey: ['project-nav', projectId],
