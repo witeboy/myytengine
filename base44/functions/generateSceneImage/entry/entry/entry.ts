@@ -305,10 +305,10 @@ async function processScene(base44, scene, project, kieApiKey, ai33ApiKey, aspec
   let providers;
 
   if (providerPref === 'auto') {
-    // Default cascade: AI33 → Grok → Nano (skip AI33 on retry)
+    // Default cascade: AI33 → Grok → Nano (always include AI33 — transient failures shouldn't permanently skip it)
     providers = isSleepProject
-      ? [(!wasFailedBefore && ai33ApiKey) ? 'ai33_seedream' : null, 'nano_banana', 'grok'].filter(Boolean)
-      : [(!wasFailedBefore && ai33ApiKey) ? 'ai33_seedream' : null, 'grok', 'nano_banana'].filter(Boolean);
+      ? [ai33ApiKey ? 'ai33_seedream' : null, 'nano_banana', 'grok'].filter(Boolean)
+      : [ai33ApiKey ? 'ai33_seedream' : null, 'grok', 'nano_banana'].filter(Boolean);
   } else {
     // User explicitly picked a provider — use it FIRST, then fallback to others
     const allProviders = ['ai33_seedream', 'grok', 'nano_banana'];

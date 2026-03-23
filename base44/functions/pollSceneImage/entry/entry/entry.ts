@@ -18,6 +18,33 @@ const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
 const AI33_BASE = "https://api.ai33.pro";
 const RETRY_BASE_MS = 2000;
 
+// ── Retry submit to AI33 Seedream ──────────────────────────
+async function submitSeedreamRetry(ai33ApiKey, scene, aspectRatio) {
+  if (!ai33ApiKey) return null;
+  const AI33_MAX_PROMPT_CHARS = 4000;
+  let prompt = (scene.image_prompt || '').substring(0, AI33_MAX_PROMPT_CHARS);
+  if (prompt.startsWith('DIRECTOR_NOTES:')) return null;
+
+  const ai33Aspect = aspectRatio === '9:16' ? '9:16' : '16:9';
+  const formData = new FormData();
+  formData.append('prompt', prompt);
+  formData.append('model_id', 'bytedance-seedream-4.5');
+  formData.append('generations_count', '1');
+  formData.append('model_parameters', JSON.stringify({ aspect_ratio: ai33Aspect, resolution: '2K' }));
+
+  const submitRes = await fetch(`${AI33_BASE}/v1i/task/generate-image`, {
+    method: 'POST',
+    headers: { 'xi-api-key': ai33ApiKey },
+    body: formData
+  });
+  const submitData = await submitRes.json();
+  if (!submitData.success || !submitData.task_id) {
+    console.warn(`⚠️ Seedream retry failed: ${submitData.message || JSON.stringify(submitData)}`);
+    return null;
+  }
+  return submitData.task_id;
+}
+
 // ── Fallback submit to Grok via KIE when AI33 fails ──────────
 async function submitGrokFallback(kieApiKey, scene, aspectRatio, referenceImageUrl) {
   if (!kieApiKey) return null;
@@ -140,20 +167,32 @@ Deno.serve(async (req) => {
       const isStale = updatedAt > 0 && age > STALE_THRESHOLD_MS;
 
       if (isStale && !imageUrl.startsWith('http')) {
-        console.warn(`⏰ Scene ${sceneNum}: STALE (${Math.round(age / 1000)}s old) — auto-resubmitting via Grok`);
+        console.warn(`⏰ Scene ${sceneNum}: STALE (${Math.round(age / 1000)}s old) — retrying Seedream first`);
         const aspectRatio = projectForRef?.orientation === 'portrait' ? '9:16' : '16:9';
         const refUrl = projectForRef?.reference_image_url || null;
-        const grokTaskId = await submitGrokFallback(KIE_API_KEY, scene, aspectRatio, refUrl);
-        if (grokTaskId) {
+
+        // Try Seedream first, then Grok fallback
+        const seedreamTaskId = await submitSeedreamRetry(AI33_API_KEY, scene, aspectRatio);
+        if (seedreamTaskId) {
           await base44.asServiceRole.entities.Scenes.update(scene.id, {
-            image_url: `grok_img_task:${grokTaskId}`,
+            image_url: `ai33_task:${seedreamTaskId}`,
             status: 'image_pending'
           });
-          console.log(`🔄 Scene ${sceneNum}: stale → resubmitted to Grok (${grokTaskId})`);
-          results.push({ scene_number: sceneNum, status: 'processing', fallback: 'grok_stale_recovery' });
+          console.log(`🔄 Scene ${sceneNum}: stale → resubmitted to Seedream (${seedreamTaskId})`);
+          results.push({ scene_number: sceneNum, status: 'processing', fallback: 'seedream_stale_recovery' });
         } else {
-          await base44.asServiceRole.entities.Scenes.update(scene.id, { status: 'image_failed', image_url: '' });
-          results.push({ scene_number: sceneNum, status: 'failed', error: 'Stale task, Grok fallback failed' });
+          const grokTaskId = await submitGrokFallback(KIE_API_KEY, scene, aspectRatio, refUrl);
+          if (grokTaskId) {
+            await base44.asServiceRole.entities.Scenes.update(scene.id, {
+              image_url: `grok_img_task:${grokTaskId}`,
+              status: 'image_pending'
+            });
+            console.log(`🔄 Scene ${sceneNum}: stale → Seedream failed, resubmitted to Grok (${grokTaskId})`);
+            results.push({ scene_number: sceneNum, status: 'processing', fallback: 'grok_stale_recovery' });
+          } else {
+            await base44.asServiceRole.entities.Scenes.update(scene.id, { status: 'image_failed', image_url: '' });
+            results.push({ scene_number: sceneNum, status: 'failed', error: 'Stale task, all providers failed' });
+          }
         }
         continue;
       }
@@ -244,18 +283,33 @@ Deno.serve(async (req) => {
             }
           }
 
-          // ── FAILED — auto-fallback to Grok ──
+          // ── FAILED — retry Seedream first, then Grok fallback ──
           if (pollData.status === 'error' || pollData.status === 'failed') {
             const errMsg = pollData.error_message || pollData.message || 'AI33 task failed';
-            console.warn(`❌ Scene ${sceneNum}: AI33 failed — ${errMsg} → trying Grok fallback`);
+            const isContentBlock = /content|moderat|nsfw|safety|blocked|invalid_generation/i.test(errMsg);
+            console.warn(`❌ Scene ${sceneNum}: AI33 failed — ${errMsg}${isContentBlock ? ' (content block)' : ''} → retrying`);
 
-            // Try Grok as automatic fallback
+            // If NOT a content moderation block, retry Seedream (transient error)
+            if (!isContentBlock) {
+              const aspectRatio = projectForRef?.orientation === 'portrait' ? '9:16' : '16:9';
+              const retryTaskId = await submitSeedreamRetry(AI33_API_KEY, scene, aspectRatio);
+              if (retryTaskId) {
+                await base44.asServiceRole.entities.Scenes.update(scene.id, {
+                  image_url: `ai33_task:${retryTaskId}`,
+                  status: 'image_pending'
+                });
+                console.log(`🔄 Scene ${sceneNum}: Seedream retry submitted (${retryTaskId})`);
+                results.push({ scene_number: sceneNum, status: 'processing', fallback: 'seedream_retry' });
+                continue;
+              }
+            }
+
+            // Seedream retry failed or content block → try Grok fallback
             const aspectRatio = projectForRef?.orientation === 'portrait' ? '9:16' : '16:9';
             const refUrl = projectForRef?.reference_image_url || null;
             const grokTaskId = await submitGrokFallback(KIE_API_KEY, scene, aspectRatio, refUrl);
 
             if (grokTaskId) {
-              // Switch to Grok task — scene stays image_pending, next poll picks it up
               await base44.asServiceRole.entities.Scenes.update(scene.id, {
                 image_url: `grok_img_task:${grokTaskId}`,
                 status: 'image_pending'
