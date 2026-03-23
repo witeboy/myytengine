@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-// v2 — redeployed
+// v3 — redeployed
 
 const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
