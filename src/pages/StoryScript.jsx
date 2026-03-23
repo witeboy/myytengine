@@ -193,8 +193,12 @@ export default function StoryScript() {
           retries++;
           const status = err?.response?.status || err?.status;
           console.warn(`Batch generation attempt ${retries} failed (${status}):`, err.message);
-          if (retries >= MAX_RETRIES) {
-            showErrorToast(err, "Script Batch Generation");
+          // Show toast immediately so user knows what's happening
+          showErrorToast(err, `Script Batch (attempt ${retries}/${MAX_RETRIES})`);
+
+          // Don't retry on billing/auth errors — they won't self-resolve
+          if (status === 402 || status === 401 || status === 429) {
+            break;
           }
 
           if (status === 504 || status === 500 || status === 502) {
