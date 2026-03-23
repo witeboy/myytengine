@@ -564,7 +564,8 @@ Return JSON:
 {"content": "The additional continuation text only...", "word_count": ${wordsNeeded}}`;
         }
 
-        const result = await callClaude(currentPrompt, baseTemp);
+        const { result, provider } = await callLLM(currentPrompt, baseTemp);
+        if (attempt === 1) console.log(`[Batch ${batch.batch_number}] Using ${provider}`);
         const newContent = result.content || '';
 
         if (attempt > 1 && content) {
