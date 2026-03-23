@@ -1,7 +1,8 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-// v3 — redeployed
+// v4 — Claude primary + Gemini fallback
 
 const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
 
 async function callClaude(prompt, temperature = 0.85, retries = 2) {
   for (let attempt = 0; attempt <= retries; attempt++) {
