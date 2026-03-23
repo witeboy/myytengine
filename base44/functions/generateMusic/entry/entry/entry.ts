@@ -123,13 +123,15 @@ Deno.serve(async (req) => {
       title = (prompt || 'Background Track').substring(0, 80);
     }
 
-    // Append 432Hz tuning for sleep projects
+    // Override with dedicated sleep music style for sleep projects
     if (isSleepProject) {
-      musicPrompt += '. Tuned to 432Hz frequency for deep relaxation and sleep optimization, warm healing tones';
-      if (!style.toLowerCase().includes('ambient')) {
-        style = 'Ambient ' + style;
+      musicPrompt = 'Deep ambient sleep music, 432Hz healing frequency, consistent low-end drone, Delta wave binaural beats (2Hz), warm synthesizer pads, minimal variation, extremely slow tempo, no percussion, no melodies, seamless loop, spatially immersive, dark calming atmosphere.';
+      style = 'Dark Ambient Sleep';
+      if (!title.toLowerCase().includes('sleep')) {
+        title = 'Deep Sleep Ambient — ' + title.substring(0, 55);
       }
-      console.log(`🌙 Sleep mode: 432Hz tuning appended to music prompt`);
+      analysisUsed = false; // Force override regardless of script analysis
+      console.log(`🌙 Sleep mode: Dedicated sleep music style applied (432Hz + Delta wave)`);
     }
 
     // Enforce prompt length limit
