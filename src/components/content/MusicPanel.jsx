@@ -8,6 +8,7 @@ import { Slider } from '@/components/ui/slider';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Music, Play, Pause, Check, RefreshCw, Volume2, Wand2, Pencil, Save, X } from 'lucide-react';
+import { toast } from '@/components/ui/use-toast';
 
 export default function MusicPanel({ project }) {
   const [generating, setGenerating] = useState(false);
@@ -106,7 +107,7 @@ Return JSON:
       await base44.entities.MusicTracks.update(track.id, { status: 'failed' });
       setGeneratingTrackId(null);
       refetch();
-      alert(msg);
+      toast({ title: 'Music Generation Failed', description: msg, variant: 'destructive', duration: 3000 });
       return;
     }
     const taskId = res.data?.task_id;
