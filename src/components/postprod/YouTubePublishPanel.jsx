@@ -245,8 +245,15 @@ export default function YouTubePublishPanel({ project }) {
         } catch (_) {}
       }
 
-      // Upload to YouTube
-      const tagArray = tags.split(',').map(t => t.trim()).filter(Boolean);
+      // Upload to YouTube — sanitize tags (YouTube rejects tags with < > or single tags over 100 chars, total over 500 chars)
+      const rawTags = tags.split(',').map(t => t.trim().replace(/[<>]/g, '')).filter(t => t && t.length <= 100);
+      const tagArray = [];
+      let totalLen = 0;
+      for (const t of rawTags) {
+        if (totalLen + t.length + 2 > 500) break; // +2 for comma separator
+        tagArray.push(t);
+        totalLen += t.length + 2;
+      }
       const result = await uploadToYouTube({
         accessToken: tokenRes.data.access_token,
         file: videoFile,
