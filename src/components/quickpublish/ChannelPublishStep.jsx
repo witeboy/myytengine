@@ -109,7 +109,7 @@ export default function ChannelPublishStep({ videoFile, title, description, tags
       let thumbnailBlob = null;
       if (thumbnailUrl) { try { const r = await fetch(thumbnailUrl); if (r.ok) thumbnailBlob = await r.blob(); } catch (_) {} }
 
-      const tagArray = tags.split(',').map(t => t.trim()).filter(Boolean);
+      const tagArray = tags.split(',').map(t => t.trim().replace(/[<>"#&\\{}|^~`\[\]]/g, '').trim()).filter(t => t && t.length >= 2);
       const result = await uploadToYouTube({
         accessToken: tokenRes.data.access_token,
         file: videoFile,
