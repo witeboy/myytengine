@@ -92,12 +92,23 @@ Return JSON:
 
   const handleGenerateAudio = async (track) => {
     setGeneratingTrackId(track.id);
-    const res = await base44.functions.invoke('generateMusic', {
-      track_id: track.id,
-      prompt: track.prompt,
-      genre: track.genre,
-      mood: track.mood,
-    });
+    let res;
+    try {
+      res = await base44.functions.invoke('generateMusic', {
+        track_id: track.id,
+        prompt: track.prompt,
+        genre: track.genre,
+        mood: track.mood,
+      });
+    } catch (err) {
+      console.error('generateMusic failed:', err);
+      const msg = err?.response?.data?.error || err.message || 'Music generation failed';
+      await base44.entities.MusicTracks.update(track.id, { status: 'failed' });
+      setGeneratingTrackId(null);
+      refetch();
+      alert(msg);
+      return;
+    }
     const taskId = res.data?.task_id;
     const status = res.data?.status;
 
