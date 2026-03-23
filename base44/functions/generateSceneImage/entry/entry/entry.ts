@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
-// IMAGE GENERATION — SUBMIT-ONLY
+// IMAGE GENERATION — SUBMIT-ONLY (v2)
 // Pipeline: Script → Breakdown → Prompts → [THIS] → pollSceneImage → Animation
 // ══════════════════════════════════════════════════════════════════
 // This function SUBMITS image tasks and returns immediately.

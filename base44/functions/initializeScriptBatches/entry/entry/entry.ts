@@ -28,7 +28,7 @@ async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Detect sleep script mode from channel or project
+// Detect sleep script mode from channel or project (v2)
 // ═══════════════════════════════════════════════════════════════════
 function detectScriptMode(channel, project) {
   // Explicit mode from channel
