@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // generateSeoTitlesDescriptions — PHASE 1 (AI-Powered Title Generator)
 // Uses Gemini for high-CTR clickbait-style titles with keyword optimization
