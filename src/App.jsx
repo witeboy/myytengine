@@ -11,6 +11,7 @@ import LongViralPipeline from './pages/LongViralPipeline';
 import ShortsPipeline from './pages/ShortsPipeline';
 import AutoEditReview from './pages/AutoEditReview';
 import YouTubeCallback from './pages/YouTubeCallback';
+import QuickPublish from './pages/QuickPublish';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -78,6 +79,11 @@ const AuthenticatedApp = () => {
         </LayoutWrapper>
       } />
       <Route path="/YouTubeCallback" element={<YouTubeCallback />} />
+      <Route path="/QuickPublish" element={
+        <LayoutWrapper currentPageName="QuickPublish">
+          <QuickPublish />
+        </LayoutWrapper>
+      } />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
