@@ -13,7 +13,8 @@ import {
   Loader2, Sparkles, Image as ImageIcon, FileText, CheckCircle2, ArrowLeft,
   Type, ArrowRight, ClipboardCheck, Youtube
 } from 'lucide-react';
-import YouTubePublishPanel from '@/components/postprod/YouTubePublishPanel';
+import ProjectPublishPanel from '@/components/postprod/ProjectPublishPanel';
+import StandalonePublishPanel from '@/components/postprod/StandalonePublishPanel';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 
@@ -492,9 +493,12 @@ export default function PostProduction() {
           <TabsContent value="publish" className="space-y-4">
             <div>
               <h2 className="text-lg font-semibold">Publish to YouTube</h2>
-              <p className="text-sm text-gray-500">Select channel, pick your exported video, and publish with auto-populated SEO metadata</p>
+              <p className="text-sm text-gray-500">Publish a completed project or upload a standalone video</p>
             </div>
-            <YouTubePublishPanel project={project} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <ProjectPublishPanel preselectedProjectId={projectId} />
+              <StandalonePublishPanel />
+            </div>
           </TabsContent>
         </Tabs>
       </div>
