@@ -11,9 +11,11 @@ export async function uploadToYouTube({ accessToken, file, metadata, thumbnailBl
     },
     body: JSON.stringify({
       snippet: {
-        title: metadata.title,
-        description: metadata.description,
-        tags: metadata.tags,
+        title: (metadata.title || 'Untitled').slice(0, 100),
+        description: (metadata.description || '').slice(0, 5000),
+        ...(Array.isArray(metadata.tags) && metadata.tags.filter(Boolean).length > 0
+          ? { tags: metadata.tags.filter(Boolean) }
+          : {}),
         categoryId: metadata.categoryId || '22',
         defaultLanguage: 'en',
       },
