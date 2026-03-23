@@ -6,9 +6,13 @@ import { toast } from "@/components/ui/use-toast";
  */
 export function showErrorToast(err, context = "Operation") {
   const status = err?.response?.status || err?.status;
+  // Extract the actual error message from various response shapes
+  const responseData = err?.response?.data;
   const serverMsg =
-    err?.response?.data?.error ||
-    err?.response?.data?.message ||
+    (typeof responseData === 'string' ? responseData : null) ||
+    responseData?.error ||
+    responseData?.message ||
+    responseData?.detail ||
     err?.message ||
     "";
 
