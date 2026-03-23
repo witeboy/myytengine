@@ -184,6 +184,7 @@ export default function PostProduction() {
   };
 
   const handleGenerateSeo = async () => {
+  if (!projectId) { setSeoError('No project selected'); return; }
   setGeneratingSeo(true);
   setSeoError(null);
   
