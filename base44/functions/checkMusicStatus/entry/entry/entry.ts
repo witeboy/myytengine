@@ -12,19 +12,32 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get('KIE_API_KEY');
     if (!apiKey) return Response.json({ error: 'KIE_API_KEY not configured' }, { status: 500 });
 
-    // Check task status via KIE Suno get-music-details endpoint (v2)
-    const response = await fetch(`https://api.kie.ai/api/v1/generate/record-info?taskId=${task_id}`, {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${apiKey}` },
-    });
+    // Check task status via KIE Suno get-music-details endpoint (v3 — with retry)
+    let data;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const response = await fetch(`https://api.kie.ai/api/v1/generate/record-info?taskId=${task_id}`, {
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${apiKey}` },
+        });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error(`KIE status check failed (${response.status}):`, errText);
-      return Response.json({ status: 'PROCESSING', error: errText });
+        if (!response.ok) {
+          const errText = await response.text();
+          console.error(`KIE status check failed (${response.status}):`, errText);
+          return Response.json({ status: 'PROCESSING', error: errText });
+        }
+
+        data = await response.json();
+        break;
+      } catch (fetchErr) {
+        console.warn(`KIE fetch attempt ${attempt + 1} failed: ${fetchErr.message}`);
+        if (attempt === 2) {
+          // All retries exhausted — return PROCESSING so frontend keeps polling
+          return Response.json({ status: 'PROCESSING', error: fetchErr.message });
+        }
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+      }
     }
-
-    const data = await response.json();
     console.log('KIE task status:', JSON.stringify(data));
 
     if (data.code !== 200) { 
