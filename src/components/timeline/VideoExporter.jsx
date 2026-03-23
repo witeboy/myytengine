@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { saveExportedVideo } from '@/utils/videoStorage';
 import { useExport } from '@/lib/ExportContext';
+import { makeFileBase } from '@/lib/fileNaming';
 
 const PHASE_LABELS = {
   checking: 'Checking browser support...',
@@ -27,7 +28,8 @@ export default function VideoExporter({
   voiceoverUrl,
   musicUrl,
   musicVolume,
- projectName,
+  projectName,
+  projectNiche,
   projectId,
   exportHook,
   captions,
@@ -94,7 +96,8 @@ export default function VideoExporter({
     });
 
     if (blob) {
-      const exportFilename = `${projectName || 'video'}-${quality}-export.mp4`;
+      const fileBase = makeFileBase(projectName, projectNiche);
+      const exportFilename = `${fileBase}-${quality}-export.mp4`;
       const url = URL.createObjectURL(blob);
       setDownloadUrl(url);
       setFileSize((blob.size / (1024 * 1024)).toFixed(1));
@@ -127,7 +130,7 @@ export default function VideoExporter({
     if (!downloadUrl) return;
     const a = document.createElement('a');
     a.href = downloadUrl;
-    a.download = `${projectName || 'video'}-${quality}-export.mp4`;
+    a.download = `${makeFileBase(projectName, projectNiche)}-${quality}-export.mp4`;
     a.click();
   };
 

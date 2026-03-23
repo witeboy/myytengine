@@ -641,7 +641,8 @@ export default function ThumbnailWithTextOverlay({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const link = document.createElement('a');
-    link.download = `thumbnail-${concept.rank || 1}.png`;
+    const base = concept._fileBase || `thumbnail`;
+    link.download = `${base}-thumb-${concept.rank || 1}.png`;
     link.href = canvas.toDataURL('image/png', 1.0);
     link.click();
     if (onDownload) onDownload();
@@ -736,7 +737,7 @@ export default function ThumbnailWithTextOverlay({
 // BATCH DOWNLOAD
 // ══════════════════════════════════════════════════════════════════
 
-export async function downloadAllThumbnails(concepts, prefix = 'thumbnail') {
+export async function downloadAllThumbnails(concepts, prefix = 'thumbnails') {
   for (let i = 0; i < concepts.length; i++) {
     const concept = concepts[i];
     if (!concept.image_url) continue;
@@ -778,7 +779,7 @@ export async function downloadAllThumbnails(concepts, prefix = 'thumbnail') {
         });
 
         const link = document.createElement('a');
-        link.download = `${prefix}-${concept.rank || i + 1}.png`;
+        link.download = `${concept._fileBase || prefix}-thumb-${concept.rank || i + 1}.png`;
         link.href = canvas.toDataURL('image/png', 1.0);
         link.click();
         resolve();

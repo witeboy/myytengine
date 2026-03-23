@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Download, Loader2, Package, CheckCircle2 } from 'lucide-react';
+import { makeFileBase } from '@/lib/fileNaming';
 
-export default function DownloadAllMedia({ scenes, voiceoverUrl, musicUrl, projectName }) {
+export default function DownloadAllMedia({ scenes, voiceoverUrl, musicUrl, projectName, projectNiche }) {
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, label: '' });
 
@@ -52,7 +53,7 @@ export default function DownloadAllMedia({ scenes, voiceoverUrl, musicUrl, proje
     setProgress({ current: 0, total: items.length, label: 'Starting downloads...' });
 
     // Download each file with staggered timing to avoid browser blocking
-    const safeName = (projectName || 'project').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeName = makeFileBase(projectName, projectNiche);
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];

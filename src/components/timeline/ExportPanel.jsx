@@ -8,6 +8,7 @@ import {
   Download, X, Film, Music, FileText, Package,
   CheckCircle, AlertCircle, Loader2, Image, Volume2
 } from 'lucide-react';
+import { makeFileBase } from '@/lib/fileNaming';
 
 function downloadUrl(url, filename) {
   const a = document.createElement('a');
@@ -43,7 +44,7 @@ export default function ExportPanel({
   const [completed, setCompleted] = useState([]);
   const [errors, setErrors] = useState([]);
 
-  const projectName = (project?.name || 'video').replace(/[^a-zA-Z0-9_-]/g, '_');
+  const projectName = makeFileBase(project?.name, project?.niche);
   const orientation = project?.orientation || 'landscape';
   const resolution = orientation === 'portrait' ? { w: 1080, h: 1920 } : { w: 1920, h: 1080 };
 
