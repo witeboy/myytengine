@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Wrench, FolderOpen, Search, Tv } from 'lucide-react';
+import { Plus, Wrench, FolderOpen, Search, Tv, Home } from 'lucide-react';
 import NicheCard from '@/components/channels/NicheCard';
 import CreateChannelDialog from '@/components/channels/CreateChannelDialog';
 
@@ -25,6 +25,9 @@ export default function ChannelsHub() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
           <div>
             <div className="flex items-center gap-3">
+              <Link to="/" className="p-2 rounded-lg hover:bg-white/80 text-gray-500 hover:text-gray-900 transition-colors" title="Back to Dashboard">
+                <Home className="w-5 h-5" />
+              </Link>
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-purple-600 flex items-center justify-center">
                 <Tv className="w-5 h-5 text-white" />
               </div>
