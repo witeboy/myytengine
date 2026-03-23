@@ -538,6 +538,12 @@ Return JSON:
     });
   } catch (error) {
     console.error('generateScriptBatches error:', error.message);
-    return Response.json({ error: error.message }, { status: 500 });
+    // Return error details in a way the frontend can parse
+    const msg = error.message || 'Unknown error';
+    let code = 500;
+    if (/credit balance|billing|purchase credits/i.test(msg)) code = 402;
+    else if (/rate limit|too many requests/i.test(msg)) code = 429;
+    else if (/api key|unauthorized|authentication/i.test(msg)) code = 401;
+    return Response.json({ error: msg }, { status: code });
   }
 });
