@@ -18,10 +18,11 @@ import AudioMixerPanel from '@/components/content/AudioMixerPanel';
 import ProcessingNotifier from '@/components/content/ProcessingNotifier';
 import DedupButton from '@/components/content/DedupButton';
 import AutoBrollButton from '@/components/content/AutoBrollButton';
+import { Link } from 'react-router-dom';
 import {
   Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film,
   Palette, Sparkles, Monitor, Clapperboard, Wand2, CheckCircle2,
-  XCircle, Clock, Zap, Video, FolderDown, Mic, Music, Volume2
+  XCircle, Clock, Zap, Video, FolderDown, Mic, Music, Volume2, Home
 } from 'lucide-react';
 
 
@@ -1505,7 +1506,10 @@ export default function ContentGeneration() {
       <StageProgress currentStage={2} />
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-2">
-          <div>
+          <div className="flex items-center gap-3">
+            <Link to="/" className="p-2 rounded-lg hover:bg-white/80 text-gray-500 hover:text-gray-900 transition-colors" title="Back to Dashboard">
+              <Home className="w-5 h-5" />
+            </Link>
             <h1 className="text-3xl font-bold">Content Generation</h1>
             {project?.name && (
               <p className="text-lg text-purple-700 font-semibold mt-1 truncate max-w-xl">{project.name}</p>
