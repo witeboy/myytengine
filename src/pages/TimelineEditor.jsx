@@ -19,6 +19,7 @@ import CaptionStylePresets from '@/components/timeline/CaptionStylePresets';
 import OverlayPanel from '@/components/timeline/OverlayPanel';
 import OverlayPropertiesPanel from '@/components/timeline/OverlayPropertiesPanel';
 import AudioVolumePanel from '@/components/timeline/AudioVolumePanel';
+import MusicClipProperties from '@/components/timeline/MusicClipProperties';
 import MotionPresetsPanel from '@/components/timeline/MotionPresetsPanel';
 import SyncDiagnosticPanel from '@/components/timeline/SyncDiagnosticPanel';
 import DriftFixPanel from '@/components/timeline/DriftFixPanel';
@@ -1444,6 +1445,8 @@ export default function TimelineEditor() {
         timeline_caption_clips: JSON.stringify(captionClips),
         timeline_overlay_clips: JSON.stringify(overlayClips),
       };
+      // Music clips don't have a dedicated DB field yet — piggyback on overlay clips field isn't ideal,
+      // so we just re-derive them from the selected music track on load.
       if (overrideBeatDurations) payload.beat_durations = JSON.stringify(overrideBeatDurations);
       if (prodSettings?.id) {
         await base44.entities.ProductionSettings.update(prodSettings.id, payload);
@@ -1876,6 +1879,7 @@ export default function TimelineEditor() {
           open={showExporter} onClose={() => setShowExporter(false)}
           scenes={exportScenes} orientation={orientation}
           voiceoverUrl={voiceoverUrl} musicUrl={musicUrl} musicVolume={musicVol}
+          musicClips={musicClips}
           projectName={project?.name || 'Untitled'} projectNiche={project?.niche} projectId={projectId} exportHook={exportHook}
           captions={captionClips}
           />
