@@ -109,11 +109,21 @@ Return JSON:
       });
     } catch (err) {
       console.error('generateMusic failed:', err);
-      const msg = err?.response?.data?.error || err.message || 'Music generation failed';
+      const errData = err?.response?.data;
+      const provider = errData?.provider || 'KIE (Suno)';
+      const msg = errData?.error || err.message || 'Music generation failed';
+      const isCredits = err?.response?.status === 402 || /credit|balance|top.?up|insufficient/i.test(msg);
       await base44.entities.MusicTracks.update(track.id, { status: 'failed' });
       setGeneratingTrackId(null);
       refetch();
-      toast({ title: 'Music Generation Failed', description: msg, variant: 'destructive', duration: 3000 });
+      toast({
+        title: isCredits ? `${provider} — Credits Exhausted` : 'Music Generation Failed',
+        description: isCredits
+          ? `Your ${provider} account has insufficient credits. Please top up your ${provider} balance to continue generating music.`
+          : `[${provider}] ${msg}`,
+        variant: 'destructive',
+        duration: 6000,
+      });
       return;
     }
     const taskId = res.data?.task_id;

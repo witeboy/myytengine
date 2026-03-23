@@ -184,7 +184,8 @@ Deno.serve(async (req) => {
     if (track_id) {
       await base44.asServiceRole.entities.MusicTracks.update(track_id, { status: 'failed' });
     }
-    return Response.json({ error: `Music generation failed: ${errMsg}` }, { status: 500 });
+    const statusCode = data.code === 402 ? 402 : 500;
+    return Response.json({ error: `Music generation failed: ${errMsg}`, provider: 'KIE (Suno)', provider_code: data.code }, { status: statusCode });
 
   } catch (error) {
     console.error('generateMusic error:', error.message);
