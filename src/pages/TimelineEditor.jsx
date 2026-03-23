@@ -800,17 +800,26 @@ export default function TimelineEditor() {
     };
   }), [scenes, audioBeatDurations, audioStartTimes]);
 
-  // ── Music timeline clip ──────────────────────────────────────────
-  const musicClips = useMemo(() => {
-    if (!musicUrl || !selectedMusic) return [];
-    return [{
-      id: `music-${selectedMusic.id}`,
+  // ── Music clips — editable history-tracked state ─────────────────
+  const musicHistory = useHistory([]);
+  const musicClips = musicHistory.state;
+  const setMusicClips = musicHistory.setState;
+  const [selectedMusicId, setSelectedMusicId] = useState(null);
+
+  // Auto-initialize music clip when a music track is selected
+  useEffect(() => {
+    if (!musicUrl || !selectedMusic || musicClips.length > 0) return;
+    setMusicClips([{
+      id: `music-${selectedMusic.id}-${Date.now()}`,
       type: 'music',
       startTime: 0,
       duration: totalDuration,
+      audioUrl: musicUrl,
+      sourceOffset: 0, // offset into the source audio file
       label: selectedMusic.title || 'Background Music',
-    }];
-  }, [musicUrl, selectedMusic, totalDuration]);
+      volume: musicVol,
+    }]);
+  }, [musicUrl, selectedMusic]);
 
   // ── Initialize video clips once ────────────────────────────────
   useEffect(() => {
@@ -1373,8 +1382,8 @@ export default function TimelineEditor() {
   };
 
   // ── Misc handlers ───────────────────────────────────────────────
-  const handleUndo   = () => { videoHistory.undo(); captionHistory.undo(); overlayHistory.undo(); };
-  const handleRedo   = () => { videoHistory.redo(); captionHistory.redo(); overlayHistory.redo(); };
+  const handleUndo   = () => { videoHistory.undo(); captionHistory.undo(); overlayHistory.undo(); musicHistory.undo(); };
+  const handleRedo   = () => { videoHistory.redo(); captionHistory.redo(); overlayHistory.redo(); musicHistory.redo(); };
   const handleDelete = () => {
     if (selectedVideoId) {
       let remaining = videoClips.filter(c => c.id !== selectedVideoId);
@@ -1384,6 +1393,33 @@ export default function TimelineEditor() {
     }
     if (selectedCaptionId) { setCaptionClips(captionClips.filter(c => c.id !== selectedCaptionId)); setSelectedCaptionId(null); }
     if (selectedOverlayId) { setOverlayClips(overlayClips.filter(c => c.id !== selectedOverlayId)); setSelectedOverlayId(null); }
+    if (selectedMusicId) { setMusicClips(musicClips.filter(c => c.id !== selectedMusicId)); setSelectedMusicId(null); }
+  };
+
+  // ── Music: split at playhead ─────────────────────────────────────
+  const handleSplitMusicAtPlayhead = () => {
+    const clip = musicClips.find(c => currentTime > c.startTime && currentTime < c.startTime + c.duration);
+    if (!clip) return;
+    const splitPoint = currentTime - clip.startTime;
+    const sourceOffsetBase = clip.sourceOffset || 0;
+    const left = { ...clip, duration: splitPoint };
+    const right = {
+      ...clip,
+      id: `music-split-${Date.now()}`,
+      startTime: currentTime,
+      duration: clip.duration - splitPoint,
+      sourceOffset: sourceOffsetBase + splitPoint,
+    };
+    setMusicClips(musicClips.map(c => c.id === clip.id ? left : c).concat(right));
+  };
+
+  // ── Music: duplicate selected ────────────────────────────────────
+  const handleDuplicateMusic = () => {
+    const clip = musicClips.find(c => c.id === selectedMusicId);
+    if (!clip) return;
+    const dup = { ...clip, id: `music-dup-${Date.now()}`, startTime: clip.startTime + clip.duration + 0.5 };
+    setMusicClips([...musicClips, dup]);
+    setSelectedMusicId(dup.id);
   };
   const handleBack           = () => navigate(createPageUrl('ContentGeneration') + `?project_id=${projectId}`);
   const handleExport         = () => alert('Export MP4 coming soon!');
@@ -1466,8 +1502,9 @@ export default function TimelineEditor() {
   const selectedCaption  = captionClips.find(c => c.id === selectedCaptionId);
   const selectedVideoIdx = videoClips.findIndex(c => c.id === selectedVideoId);
   const selectedOverlay = overlayClips.find(c => c.id === selectedOverlayId);
-  const canUndo = videoHistory.canUndo || captionHistory.canUndo || overlayHistory.canUndo;
-  const canRedo = videoHistory.canRedo || captionHistory.canRedo || overlayHistory.canRedo;
+  const selectedMusicClip = musicClips.find(c => c.id === selectedMusicId);
+  const canUndo = videoHistory.canUndo || captionHistory.canUndo || overlayHistory.canUndo || musicHistory.canUndo;
+  const canRedo = videoHistory.canRedo || captionHistory.canRedo || overlayHistory.canRedo || musicHistory.canRedo;
 
   return (
     <div className="h-screen flex flex-col bg-[#0a0a14] text-white overflow-hidden">
@@ -1650,8 +1687,8 @@ export default function TimelineEditor() {
           <div className="w-px h-3 bg-gray-700 mx-0.5" />
           <button className="p-1 rounded text-gray-400 hover:text-white hover:bg-white/10" title="Split"><Scissors size={14} /></button>
           <button className="p-1 rounded text-gray-400 hover:text-white hover:bg-white/10" title="Duplicate"><Copy size={14} /></button>
-          <button onClick={handleDelete} disabled={!selectedVideoId && !selectedCaptionId && !selectedOverlayId}
-            className={`p-1 rounded ${(selectedVideoId || selectedCaptionId || selectedOverlayId) ? 'text-red-400 hover:text-red-300' : 'text-gray-600'}`} title="Delete"><Trash2 size={14} /></button>
+          <button onClick={handleDelete} disabled={!selectedVideoId && !selectedCaptionId && !selectedOverlayId && !selectedMusicId}
+            className={`p-1 rounded ${(selectedVideoId || selectedCaptionId || selectedOverlayId || selectedMusicId) ? 'text-red-400 hover:text-red-300' : 'text-gray-600'}`} title="Delete"><Trash2 size={14} /></button>
           <div className="w-px h-3 bg-gray-700 mx-0.5" />
           <button onClick={() => setSnappingEnabled(!snappingEnabled)}
             className={`p-1 rounded flex items-center gap-0.5 text-[9px] ${snappingEnabled ? 'text-cyan-400 bg-cyan-500/15' : 'text-gray-600'}`} title="Snap">
@@ -1774,8 +1811,10 @@ export default function TimelineEditor() {
                   <SnapTimelineTrack type="audio" clips={audioClips} allClips={[]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={null}
                     onSelect={() => {}} onUpdate={() => {}} editable={false} snappingEnabled={false} />
                   {musicClips.length > 0 && (
-                    <SnapTimelineTrack type="music" clips={musicClips} allClips={[]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={null}
-                      onSelect={() => {}} onUpdate={() => {}} editable={false} snappingEnabled={false} />
+                    <SnapTimelineTrack type="music" clips={musicClips} allClips={[...musicClips, ...videoClips]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={selectedMusicId}
+                      onSelect={id => { setSelectedMusicId(id); setSelectedVideoId(null); setSelectedCaptionId(null); setSelectedOverlayId(null); }}
+                      onUpdate={c => setMusicClips(musicClips.map(x => x.id === c.id ? c : x))}
+                      editable snappingEnabled={snappingEnabled} onSnapLine={setSnapLinePx} />
                   )}
                   <SnapTimelineTrack type="caption" clips={captionClips} allClips={[...videoClips, ...overlayClips, ...captionClips]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={selectedCaptionId}
                     onSelect={id => { setSelectedCaptionId(id); setSelectedVideoId(null); setSelectedOverlayId(null); }}
