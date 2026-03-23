@@ -8,6 +8,7 @@ import { Loader2, Wand2, CheckCircle2, FileText, Copy } from 'lucide-react';
 export default function LongViralScriptStage({ projectId, project, scripts, onRefetch }) {
   const [generating, setGenerating] = useState(false);
   const [phase, setPhase] = useState('');
+  const [batchProgress, setBatchProgress] = useState(null);
 
   const hasFinalScript = scripts.some(s => s.version === 'final_aggregated');
   const finalScript = scripts.find(s => s.version === 'final_aggregated');
@@ -15,14 +16,28 @@ export default function LongViralScriptStage({ projectId, project, scripts, onRe
 
   const handleGenerate = async () => {
     setGenerating(true);
-    setPhase(`Generating ${dur}-minute Long Viral script...`);
+    setBatchProgress(null);
+    setPhase(`Initializing ${dur}-minute script...`);
     try {
-      await base44.functions.invoke('longViralGenerateScript', { project_id: projectId });
-      setPhase('Script generated!');
+      let done = false;
+      let batchNum = 0;
+      while (!done) {
+        const res = await base44.functions.invoke('longViralGenerateScript', { project_id: projectId });
+        const data = res.data || res;
+        done = data.done;
+        if (data.completed_batch) {
+          batchNum = data.completed_batch;
+          setBatchProgress({ current: batchNum, total: data.total_batches, remaining: data.remaining });
+          setPhase(`Writing section ${batchNum}/${data.total_batches}... (${data.batch_word_count || '?'} words)`);
+        }
+        if (done) {
+          setPhase(`Script complete! ${data.word_count} words (~${Math.round((data.estimated_duration_sec || 0) / 60)}min)`);
+        }
+      }
       await onRefetch();
     } catch (err) {
       console.error('Long Viral script generation failed:', err);
-      setPhase('Failed: ' + (err.message || 'Unknown error'));
+      setPhase('Failed: ' + (err?.response?.data?.error || err.message || 'Unknown error'));
     }
     setGenerating(false);
   };
@@ -49,13 +64,28 @@ export default function LongViralScriptStage({ projectId, project, scripts, onRe
       </CardHeader>
       <CardContent>
         <p className="text-sm text-gray-500 mb-4">
-          AI generates a ~{dur * 160} word script using the same viral niche structure, expanded for {dur}-minute long-form depth.
+          AI generates a ~{dur * 160} word script using batch-by-batch writing for reliable duration targeting.
         </p>
 
         {generating && !hasFinalScript && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center gap-3">
-            <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-            <p className="text-sm text-blue-700">{phase}</p>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+            <div className="flex items-center gap-3">
+              <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+              <p className="text-sm text-blue-700 font-medium">{phase}</p>
+            </div>
+            {batchProgress && batchProgress.total > 0 && (
+              <div className="space-y-1">
+                <div className="w-full bg-blue-200 rounded-full h-2">
+                  <div
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                    style={{ width: `${Math.round((batchProgress.current / batchProgress.total) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-xs text-blue-500">
+                  {batchProgress.current} of {batchProgress.total} sections complete • {batchProgress.remaining} remaining
+                </p>
+              </div>
+            )}
           </div>
         )}
 
