@@ -491,7 +491,9 @@ export default function MakeThumbnail({ onBack, initialTitle, initialSummary, sc
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
-      a.download = `thumbnail-${title.replace(/\s+/g, '-').toLowerCase()}.png`;
+      const { makeFileBase } = await import('@/lib/fileNaming');
+      const base = makeFileBase(title, '');
+      a.download = `${base}-thumbnail.png`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

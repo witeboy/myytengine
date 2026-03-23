@@ -395,7 +395,8 @@ function AudioAssetsPanel({ project }) {
   const handleDownload = async (asset) => {
     setDownloading(asset.key);
 
-    const projectName = (project.name || 'project').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 30);
+    const { makeFileBase } = await import('@/lib/fileNaming');
+    const projectName = makeFileBase(project?.name, project?.niche);
     let ext = 'mp3';
     if (asset.url.includes('.wav')) ext = 'wav';
     else if (asset.url.includes('.ogg')) ext = 'ogg';
@@ -1297,7 +1298,8 @@ export default function ContentGeneration() {
 
   const handleExport = async () => {
     setExporting(true);
-    const projectName = (project?.name || 'project').replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 40);
+    const { makeFileBase } = await import('@/lib/fileNaming');
+    const projectName = makeFileBase(project?.name, project?.niche);
 
     try {
       const JSZip = await loadJSZip();
