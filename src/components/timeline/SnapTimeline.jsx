@@ -77,7 +77,12 @@ export default function SnapTimelineTrack({
       } else if (drag.action === 'resize-left') {
         const newStart = Math.max(0, drag.is + rawDelta);
         const delta = newStart - drag.is;
-        onUpdate({ ...clip, startTime: newStart, duration: Math.max(0.3, drag.id2 - delta) });
+        const updated = { ...clip, startTime: newStart, duration: Math.max(0.3, drag.id2 - delta) };
+        // For music clips, adjust sourceOffset when trimming from left
+        if (type === 'music' && clip.sourceOffset !== undefined) {
+          updated.sourceOffset = Math.max(0, (drag.extra ?? clip.sourceOffset ?? 0) + delta);
+        }
+        onUpdate(updated);
       }
     };
     const up = () => {
@@ -93,7 +98,7 @@ export default function SnapTimelineTrack({
     if (!editable) return;
     e.stopPropagation();
     onSelect(clip.id);
-    setDrag({ id: clip.id, action, sx: e.clientX, is: clip.startTime, id2: clip.duration });
+    setDrag({ id: clip.id, action, sx: e.clientX, is: clip.startTime, id2: clip.duration, extra: clip.sourceOffset });
   };
 
   return (
