@@ -125,7 +125,7 @@ Deno.serve(async (req) => {
 
     // Override with dedicated sleep music style for sleep projects
     if (isSleepProject) {
-      musicPrompt = 'Deep ambient sleep music, 432Hz healing frequency, consistent low-end drone, Delta wave binaural beats (2Hz), warm synthesizer pads, minimal variation, extremely slow tempo, no percussion, no melodies, seamless loop, spatially immersive, dark calming atmosphere.';
+      musicPrompt = 'Deep ambient sleep music, 432Hz healing frequency, consistent low-end drone, warm synthesizer pads, minimal variation, extremely slow tempo, no percussion, no melodies, seamless loop, spatially immersive, dark calming atmosphere.';
       style = 'Dark Ambient Sleep';
       if (!title.toLowerCase().includes('sleep')) {
         title = 'Deep Sleep Ambient — ' + title.substring(0, 55);

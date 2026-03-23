@@ -44,7 +44,7 @@ export default function MusicPanel({ project }) {
 
   const isSleepProject = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
 
-  const SLEEP_MUSIC_PROMPT = 'Deep ambient sleep music, 432Hz healing frequency, consistent low-end drone, Delta wave binaural beats (2Hz), warm synthesizer pads, minimal variation, extremely slow tempo, no percussion, no melodies, seamless loop, spatially immersive, dark calming atmosphere.';
+  const SLEEP_MUSIC_PROMPT = 'Deep ambient sleep music, 432Hz healing frequency, consistent low-end drone, warm synthesizer pads, minimal variation, extremely slow tempo, no percussion, no melodies, seamless loop, spatially immersive, dark calming atmosphere.';
 
   const handleGenerateConcepts = async () => {
     setGenerating(true);
