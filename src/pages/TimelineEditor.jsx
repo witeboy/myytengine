@@ -18,6 +18,7 @@ import SilenceDetector from '@/components/timeline/SilenceDetector';
 import CaptionStylePresets from '@/components/timeline/CaptionStylePresets';
 import OverlayPanel from '@/components/timeline/OverlayPanel';
 import OverlayPropertiesPanel from '@/components/timeline/OverlayPropertiesPanel';
+import AudioVolumePanel from '@/components/timeline/AudioVolumePanel';
 import MotionPresetsPanel from '@/components/timeline/MotionPresetsPanel';
 import SyncDiagnosticPanel from '@/components/timeline/SyncDiagnosticPanel';
 import DriftFixPanel from '@/components/timeline/DriftFixPanel';
