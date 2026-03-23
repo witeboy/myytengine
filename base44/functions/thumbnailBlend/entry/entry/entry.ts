@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-
+// v2 — redeployed
 // thumbnailBlend — AI33 SeedDream image editing/compositing
 // Takes a generated thumbnail as reference + character/object images → blends them
 

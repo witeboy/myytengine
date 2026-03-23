@@ -1,4 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+// v2 — redeployed
 import { S3Client, CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand, PutObjectCommand } from 'npm:@aws-sdk/client-s3@3.600.0';
 
 // ══════════════════════════════════════════════════════════════════

@@ -1,4 +1,5 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+// v2 — redeployed
 
 const GEMINI_KEY = Deno.env.get('GEMINI_API_KEY');
 const YT_API_KEY = Deno.env.get('YOUTUBE_API_KEY');

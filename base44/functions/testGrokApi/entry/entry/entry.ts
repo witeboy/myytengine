@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-
+// v2 — redeployed
 // Simple test to check if Grok Imagine API is working at all
 Deno.serve(async (req) => {
   const base44 = createClientFromRequest(req);
