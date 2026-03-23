@@ -1697,8 +1697,8 @@ export default function TimelineEditor() {
           <button onClick={handleUndo} disabled={!canUndo} className={`p-1 rounded ${canUndo ? 'text-gray-400 hover:text-white hover:bg-white/10' : 'text-gray-600'}`} title="Undo"><Undo2 size={14} /></button>
           <button onClick={handleRedo} disabled={!canRedo} className={`p-1 rounded ${canRedo ? 'text-gray-400 hover:text-white hover:bg-white/10' : 'text-gray-600'}`} title="Redo"><Redo2 size={14} /></button>
           <div className="w-px h-3 bg-gray-700 mx-0.5" />
-          <button className="p-1 rounded text-gray-400 hover:text-white hover:bg-white/10" title="Split"><Scissors size={14} /></button>
-          <button className="p-1 rounded text-gray-400 hover:text-white hover:bg-white/10" title="Duplicate"><Copy size={14} /></button>
+          <button onClick={() => { if (selectedMusicId) handleSplitMusicAtPlayhead(); }} className="p-1 rounded text-gray-400 hover:text-white hover:bg-white/10" title="Split at Playhead"><Scissors size={14} /></button>
+          <button onClick={() => { if (selectedMusicId) handleDuplicateMusic(); }} className="p-1 rounded text-gray-400 hover:text-white hover:bg-white/10" title="Duplicate"><Copy size={14} /></button>
           <button onClick={handleDelete} disabled={!selectedVideoId && !selectedCaptionId && !selectedOverlayId && !selectedMusicId}
             className={`p-1 rounded ${(selectedVideoId || selectedCaptionId || selectedOverlayId || selectedMusicId) ? 'text-red-400 hover:text-red-300' : 'text-gray-600'}`} title="Delete"><Trash2 size={14} /></button>
           <div className="w-px h-3 bg-gray-700 mx-0.5" />
