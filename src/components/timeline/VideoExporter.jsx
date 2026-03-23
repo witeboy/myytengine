@@ -33,6 +33,7 @@ export default function VideoExporter({
   projectId,
   exportHook,
   captions,
+  musicClips,
 }) {
   const [quality, setQuality] = useState('1080p');
   const [fps, setFps] = useState(30);
@@ -91,6 +92,7 @@ export default function VideoExporter({
       voiceoverUrl,
       musicUrl,
       musicVolume,
+      musicClips: musicClips || [],
       watermark,
       captions: captions || [],
     });
