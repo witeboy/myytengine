@@ -1393,6 +1393,7 @@ export default function TimelineEditor() {
     setCurrentTime(ct);
     playbackEngine.seek(ct);
     if (audioRef.current) audioRef.current.currentTime = ct;
+    if (musicRef.current) musicRef.current.currentTime = ct;
   };
   const handleNext           = () => navigate(createPageUrl('PostProduction') + `?project_id=${projectId}`);
   const [isSaving, setIsSaving] = useState(false);
@@ -1704,6 +1705,23 @@ export default function TimelineEditor() {
           <span className="w-4 text-center">{Math.round(pps)}</span>
           <button onClick={() => setPps(p => Math.min(50, p * 1.25))} className="p-0.5 text-gray-400 hover:text-white"><ZoomIn size={12} /></button>
           <button onClick={() => setIsMuted(!isMuted)} className="p-0.5 text-gray-400 hover:text-white">{isMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}</button>
+          {/* Inline volume controls */}
+          {voiceoverUrl && (
+            <div className="flex items-center gap-1" title="Voiceover volume">
+              <Mic size={10} className="text-indigo-400" />
+              <input type="range" min={0} max={1} step={0.05} value={voiceoverVol}
+                onChange={e => setVoiceoverVol(parseFloat(e.target.value))}
+                className="w-12 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-500" />
+            </div>
+          )}
+          {musicUrl && (
+            <div className="flex items-center gap-1" title="Music volume">
+              <Music size={10} className="text-purple-400" />
+              <input type="range" min={0} max={1} step={0.05} value={musicVol}
+                onChange={e => setMusicVol(parseFloat(e.target.value))}
+                className="w-12 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-purple-500" />
+            </div>
+          )}
         </div>
       </div>
 
