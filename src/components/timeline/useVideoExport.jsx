@@ -392,6 +392,7 @@ export default function useVideoExport() {
     const {
       quality='720p', orientation='landscape', fps=30,
       voiceoverUrl, musicUrl, musicVolume=0.3,
+      musicClips: editedMusicClips = [],
       captions = [],
     } = opts||{};
 
@@ -584,18 +585,51 @@ export default function useVideoExport() {
         const totalSamples = Math.ceil(totalDuration * sampleRate);
         const mixedL = new Float32Array(totalSamples);
         const mixedR = new Float32Array(totalSamples);
-        const sources = [];
-        if (voiceoverUrl) try { sources.push({ buf: await decodeAudio(voiceoverUrl), vol:1.0, loop:false }); } catch(e) { console.warn('VO failed:', e); }
-        if (musicUrl)     try { sources.push({ buf: await decodeAudio(musicUrl), vol:musicVolume, loop:true }); } catch(e) { console.warn('Music failed:', e); }
-        for (const { buf, vol, loop } of sources) {
-          const chN = Math.min(buf.numberOfChannels, 2);
-          const ch  = Array.from({length:chN}, (_,i) => buf.getChannelData(i));
-          for (let i = 0; i < totalSamples; i++) {
-            const si = loop ? (i % buf.length) : i;
-            if (si >= buf.length) break;
-            mixedL[i] += ch[0][si] * vol;
-            mixedR[i] += ch[Math.min(1,chN-1)][si] * vol;
-          }
+        // Mix voiceover — full timeline, no loop
+        if (voiceoverUrl) {
+          try {
+            const voBuf = await decodeAudio(voiceoverUrl);
+            const chN = Math.min(voBuf.numberOfChannels, 2);
+            const ch = Array.from({length:chN}, (_,i) => voBuf.getChannelData(i));
+            for (let i = 0; i < Math.min(totalSamples, voBuf.length); i++) {
+              mixedL[i] += ch[0][i];
+              mixedR[i] += ch[Math.min(1,chN-1)][i];
+            }
+          } catch(e) { console.warn('VO decode failed:', e); }
+        }
+
+        // Mix music — respect edited music clips (position, trim, volume per clip)
+        if (musicUrl) {
+          try {
+            const musicBuf = await decodeAudio(musicUrl);
+            const chN = Math.min(musicBuf.numberOfChannels, 2);
+            const ch = Array.from({length:chN}, (_,i) => musicBuf.getChannelData(i));
+
+            if (editedMusicClips.length > 0) {
+              // Use edited clip positions for precise placement
+              for (const mc of editedMusicClips) {
+                const clipVol = mc.volume ?? musicVolume;
+                const srcOffset = Math.round((mc.sourceOffset || 0) * sampleRate);
+                const destStart = Math.round(mc.startTime * sampleRate);
+                const clipSamples = Math.round(mc.duration * sampleRate);
+                for (let i = 0; i < clipSamples; i++) {
+                  const di = destStart + i;
+                  if (di >= totalSamples) break;
+                  const si = srcOffset + i;
+                  const srcIdx = si < musicBuf.length ? si : (si % musicBuf.length); // loop within clip if needed
+                  mixedL[di] += ch[0][srcIdx] * clipVol;
+                  mixedR[di] += ch[Math.min(1,chN-1)][srcIdx] * clipVol;
+                }
+              }
+            } else {
+              // Fallback: loop music across full timeline at musicVolume
+              for (let i = 0; i < totalSamples; i++) {
+                const si = i % musicBuf.length;
+                mixedL[i] += ch[0][si] * musicVolume;
+                mixedR[i] += ch[Math.min(1,chN-1)][si] * musicVolume;
+              }
+            }
+          } catch(e) { console.warn('Music decode failed:', e); }
         }
         for (let i = 0; i < totalSamples; i++) {
           mixedL[i] = Math.max(-1, Math.min(1, mixedL[i]));
