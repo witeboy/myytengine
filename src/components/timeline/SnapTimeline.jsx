@@ -3,7 +3,7 @@
  * Virtual Scrolling, Multi-track Layering, and Snap Guides
  */
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { Image, Mic, Type, Film, Camera, Blend, Clapperboard, Smile, Sticker } from 'lucide-react';
+import { Image, Mic, Type, Film, Camera, Blend, Clapperboard, Smile, Sticker, Music } from 'lucide-react';
 import { findSnapPoint } from '@/hooks/useSnapEngine';
 
 const TRACK_HEIGHT = 56;
@@ -14,8 +14,8 @@ export default function SnapTimelineTrack({
   selectedId, onSelect, onUpdate, editable = true,
   snappingEnabled = true, onSnapLine
 }) {
-  const colors = { video: '#059669', audio: '#4f46e5', caption: '#d97706', overlay: '#db2777' };
-  const icons = { video: Image, audio: Mic, caption: Type, overlay: Smile };
+  const colors = { video: '#059669', audio: '#4f46e5', caption: '#d97706', overlay: '#db2777', music: '#7c3aed' };
+  const icons = { video: Image, audio: Mic, caption: Type, overlay: Smile, music: Music };
   const Icon = icons[type];
   const color = colors[type];
   const [drag, setDrag] = useState(null);
