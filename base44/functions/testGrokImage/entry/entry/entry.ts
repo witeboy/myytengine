@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-
+// v2 — redeployed
 const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
 
 Deno.serve(async (req) => {
