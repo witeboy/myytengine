@@ -7,9 +7,10 @@ import NicheStatsGrid from '@/components/dashboard/NicheStatsGrid';
 import ViralTrendsPanel from '@/components/dashboard/ViralTrendsPanel';
 import ActiveProjectsStrip from '@/components/dashboard/ActiveProjectsStrip';
 import CloudExportsPanel from '@/components/dashboard/CloudExportsPanel';
-import { Loader2, LayoutDashboard, Cloud } from 'lucide-react';
+import { Loader2, LayoutDashboard, Cloud, Globe } from 'lucide-react';
 import HealthCheckButton from '@/components/HealthCheckButton';
 import YouTubePublishPanel from '@/components/postprod/YouTubePublishPanel';
+import CrossPlatformPublisher from '@/components/crossplatform/CrossPlatformPublisher';
 
 export default function Dashboard() {
   const queryClient = useQueryClient();
@@ -82,11 +83,26 @@ export default function Dashboard() {
             }`}
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/><path d="m10 15 5-3-5-3z"/></svg>
-            Publish
+            YT Publish
+          </button>
+          <button
+            onClick={() => setActiveTab('crossplatform')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              activeTab === 'crossplatform'
+                ? 'bg-white text-purple-600 shadow-sm'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <Globe className="w-4 h-4" />
+            Multi-Platform
           </button>
         </div>
 
-        {activeTab === 'publish' ? (
+        {activeTab === 'crossplatform' ? (
+          <div className="max-w-3xl">
+            <CrossPlatformPublisher projects={projects} />
+          </div>
+        ) : activeTab === 'publish' ? (
           <div className="max-w-2xl">
             <div className="mb-4">
               <h2 className="text-lg font-semibold text-gray-900">Quick Publish</h2>
