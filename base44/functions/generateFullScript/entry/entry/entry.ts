@@ -1,7 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
-// This function MERGES already-generated batch content into a full script.
-// It does NOT call Gemini. No tokens consumed.
+// Merges completed script batches into a single final script record.
 
 Deno.serve(async (req) => {
   try {
@@ -11,19 +10,16 @@ Deno.serve(async (req) => {
 
     const { project_id } = await req.json();
 
-    // Fetch project
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-    // Fetch topic
     let topic = null;
     if (project.selected_topic_id) {
       const topics = await base44.asServiceRole.entities.Topics.filter({ id: project.selected_topic_id });
       topic = topics[0];
     }
 
-    // Fetch completed batches
     const allBatches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
     const batches = allBatches
       .sort((a, b) => a.batch_number - b.batch_number)
@@ -33,70 +29,31 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'No completed batches found to merge.' }, { status: 400 });
     }
 
-    // Detect if this is a sleep project
     const isSleep = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
 
-    // Merge all batch content
-    let fullScript = batches.map(b => b.content).join("\n\n"); 
+    let fullScript = batches.map(b => b.content).join("\n\n");
 
     if (isSleep) {
-      // ── SLEEP MODE: Minimal cleanup — preserve pauses, repetition, and flow ──
-
-      // Keep [PAUSE X SEC] and [BREATHE] markers — they are part of the script
-      // Only remove production directions like [SCENE:], [VISUAL:], [CUT TO:]
       fullScript = fullScript.replace(/\[(VISUAL|SCENE|CUT TO|CAMERA|B-ROLL|MONTAGE|SHOT|EFFECT|SFX|MUSIC|AUDIO|TRANSITION)[^\]]*\]/gi, '');
-
-      // Remove "Narrator:", "VO:" labels
       fullScript = fullScript.replace(/^(Narrator|VO|Voiceover)\s*:\s*/gim, '');
-
-      // Remove bold markdown headers like **Section 1:** but keep inline bold
       fullScript = fullScript.replace(/^\*\*[^*]+\*\*:?\s*$/gim, '');
-
-      // Remove any remaining markdown bold/italic markers
       fullScript = fullScript.replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1');
-
-      // Clean up extra spaces and blank lines
       fullScript = fullScript.replace(/  +/g, ' ');
       fullScript = fullScript.replace(/\n{3,}/g, '\n\n').trim();
-
-      // NO DEDUPLICATION for sleep scripts — repetition is intentional and therapeutic
-      console.log('[generateFullScript] Sleep mode — skipping deduplication, preserving pause markers');
-
+      console.log('[generateFullScript] Sleep mode — preserving pause markers, no dedup');
     } else {
-      // ── STANDARD MODE: Aggressive cleanup for documentary scripts ──
-
-      // Remove all bracketed tags [anything in brackets]
       fullScript = fullScript.replace(/\[[^\]]*\]/gi, '');
-
-      // Remove ALL parenthetical directions
       fullScript = fullScript.replace(/\([^)]*\)/g, '');
-
-      // Remove **VISUAL:** / **AUDIO:** / **MUSIC:** etc. lines (bold markdown)
       fullScript = fullScript.replace(/\*\*(VISUAL|AUDIO|MUSIC|SOUND|SFX|TRANSITION|CUT TO|FADE|NOTE|DIRECTION|CAMERA|IMAGE|B-ROLL|MONTAGE|SCENE|SHOT|EFFECT)[:\s]?\*\*[^\n]*/gi, '');
-
-      // Remove standalone direction lines without bold markers
       fullScript = fullScript.replace(/^(VISUAL|AUDIO|MUSIC|SOUND|SFX|TRANSITION|CUT TO|FADE|CAMERA|B-ROLL|MONTAGE|SCENE|SHOT|EFFECT)\s*:.*$/gim, '');
-
-      // Remove lines that are purely stage directions
       fullScript = fullScript.replace(/^(Cut to|Fade to|Fade in|Fade out|Dissolve to|Smash cut|Jump cut|Transition to|Pan to|Zoom in|Zoom out|Close[- ]up|Wide shot|Medium shot)\b.*$/gim, '');
-
-      // Remove timestamp patterns
       fullScript = fullScript.replace(/\(?\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2}\)?/g, '');
-
-      // Remove "Narrator:", "VO:", "Voiceover:" labels
       fullScript = fullScript.replace(/^(Narrator|VO|Voiceover)\s*:\s*/gim, '');
-
-      // Remove bold markdown headers
       fullScript = fullScript.replace(/^\*\*[^*]+\*\*:?\s*$/gim, '');
-
-      // Remove any remaining markdown bold/italic markers
       fullScript = fullScript.replace(/\*{1,3}([^*]+)\*{1,3}/g, '$1');
-
-      // Clean up extra spaces and blank lines
       fullScript = fullScript.replace(/  +/g, ' ');
       fullScript = fullScript.replace(/\n{3,}/g, '\n\n').trim();
 
-      // ── DEDUPLICATION: Only for standard scripts ──
       const sentences = fullScript.match(/[^.!?]+[.!?]+/g) || [];
       const seen = new Set();
       const uniqueSentences = [];
@@ -109,59 +66,54 @@ Deno.serve(async (req) => {
         if (!seen.has(normalized)) {
           seen.add(normalized);
           uniqueSentences.push(sentence);
-        } else {
-          console.log('Removed duplicate sentence:', normalized.substring(0, 60) + '...');
         }
       }
       fullScript = uniqueSentences.join(' ').replace(/\n{3,}/g, '\n\n').trim();
     }
+
     const totalWords = fullScript.split(/\s+/).filter(w => w.length > 0).length;
     const estimatedDuration = Math.round((totalWords / 150) * 60);
 
-        // 1. Find if we already made a "Final" version before (to avoid duplicates)
     const oldScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
     const existingFinal = oldScripts.find(s => s.version === 'final_aggregated');
 
     let script;
     if (existingFinal) {
-      // 2. If it exists, update it with the new merged content
       await base44.asServiceRole.entities.Scripts.update(existingFinal.id, {
         full_script: fullScript.trim(),
         word_count: totalWords,
         estimated_duration_sec: estimatedDuration,
         title: topic?.title || project.name,
-        
       });
       script = { ...existingFinal, id: existingFinal.id };
     } else {
-      // 3. If it doesn't exist, create it for the first time
       script = await base44.asServiceRole.entities.Scripts.create({
         project_id,
         topic_id: project.selected_topic_id,
-        version: "final_aggregated", // <--- THE SECRET CODE FOR THE FRONTEND
+        version: "final_aggregated",
         title: topic?.title || project.name,
         full_script: fullScript.trim(),
         word_count: totalWords,
-        estimated_duration_sec: estimatedDuration
+        estimated_duration_sec: estimatedDuration,
       });
     }
 
-    // 4. Tell the project it is officially ready
     await base44.asServiceRole.entities.Projects.update(project_id, {
       script_id: script.id,
       status: "script_complete",
-      current_step: 4
+      current_step: 4,
     });
 
+    console.log(`[generateFullScript] Merged ${batches.length} batches → ${totalWords} words`);
 
     return Response.json({
       success: true,
       script_id: script.id,
       total_words: totalWords,
-      estimated_duration_sec: estimatedDuration
+      estimated_duration_sec: estimatedDuration,
     });
   } catch (error) {
-    console.error("generateFullScript (merge) error:", error.message);
+    console.error("generateFullScript error:", error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
