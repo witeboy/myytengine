@@ -642,6 +642,7 @@ export default function TimelineEditor() {
   const [pps,            setPps]            = useState(15);
   const [isMuted,        setIsMuted]        = useState(false);
   const [musicVol,       setMusicVol]       = useState(0.3);
+  const [voiceoverVol,   setVoiceoverVol]   = useState(1.0);
   const [previewOrientation, setPreviewOrientation] = useState(null);
   const [snappingEnabled, setSnappingEnabled] = useState(true);
   const [magneticMode,    setMagneticMode]    = useState(true);
@@ -687,6 +688,7 @@ export default function TimelineEditor() {
 
   const exportHook = useVideoExport();
   const audioRef   = useRef(null);
+  const musicRef   = useRef(null);
 
   // ── Data queries ────────────────────────────────────────────────
   const { data: project } = useQuery({
@@ -797,6 +799,18 @@ export default function TimelineEditor() {
     };
   }), [scenes, audioBeatDurations, audioStartTimes]);
 
+  // ── Music timeline clip ──────────────────────────────────────────
+  const musicClips = useMemo(() => {
+    if (!musicUrl || !selectedMusic) return [];
+    return [{
+      id: `music-${selectedMusic.id}`,
+      type: 'music',
+      startTime: 0,
+      duration: totalDuration,
+      label: selectedMusic.title || 'Background Music',
+    }];
+  }, [musicUrl, selectedMusic, totalDuration]);
+
   // ── Initialize video clips once ────────────────────────────────
   useEffect(() => {
     if (scenes.length === 0 || initializedRef.current) return;
@@ -870,10 +884,22 @@ export default function TimelineEditor() {
     if (voiceoverUrl && audioRef.current) {
       if (Math.abs(audioRef.current.currentTime - currentTime) > 0.3) audioRef.current.currentTime = currentTime;
       audioRef.current.muted = isMuted;
+      audioRef.current.volume = voiceoverVol;
       if (isPlaying) audioRef.current.play().catch(() => {});
       else audioRef.current.pause();
     }
-  }, [isPlaying, currentTime, voiceoverUrl, isMuted]);
+  }, [isPlaying, currentTime, voiceoverUrl, isMuted, voiceoverVol]);
+
+  // ── Music sync ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (musicUrl && musicRef.current) {
+      if (Math.abs(musicRef.current.currentTime - currentTime) > 0.3) musicRef.current.currentTime = currentTime;
+      musicRef.current.muted = isMuted;
+      musicRef.current.volume = musicVol;
+      if (isPlaying) musicRef.current.play().catch(() => {});
+      else musicRef.current.pause();
+    }
+  }, [isPlaying, currentTime, musicUrl, isMuted, musicVol]);
 
   const currentClip = useMemo(() =>
     videoClips.find(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration)
