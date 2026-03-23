@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-import OpenAI from 'npm:openai@4.58.1';
+import OpenAI from 'npm:openai@4.77.0';
 
 const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
 
