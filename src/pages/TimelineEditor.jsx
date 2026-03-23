@@ -1470,6 +1470,7 @@ export default function TimelineEditor() {
   return (
     <div className="h-screen flex flex-col bg-[#0a0a14] text-white overflow-hidden">
       {voiceoverUrl && <audio ref={audioRef} src={voiceoverUrl} preload="auto" />}
+      {musicUrl && <audio ref={musicRef} src={musicUrl} preload="auto" loop />}
 
       <TopToolbar
         activePanel={activePanel} onPanelChange={setActivePanel}
@@ -1482,6 +1483,13 @@ export default function TimelineEditor() {
       <div className="flex-1 flex min-h-0">
         {/* Left panel */}
         <div className="w-52 flex-shrink-0 border-r border-gray-800 bg-[#12121f]">
+          {activePanel === 'audio'       && (
+            <AudioVolumePanel
+              voiceoverUrl={voiceoverUrl} voiceoverVol={voiceoverVol} onVoiceoverVolChange={setVoiceoverVol}
+              musicUrl={musicUrl} musicVol={musicVol} onMusicVolChange={setMusicVol}
+              musicTitle={selectedMusic?.title}
+            />
+          )}
           {activePanel === 'media'       && <MediaPanel
             scenes={scenes} audioBeatDurations={audioBeatDurations} videoClips={videoClips}
             onSelectScene={idx => handleSeek(audioStartTimes[idx] ?? 0)}
@@ -1525,7 +1533,7 @@ export default function TimelineEditor() {
               onSeek={handleSeek} totalDuration={totalDuration}
             />
           )}
-          {!['media','effects','transitions','captions','overlays','motion','jumpcuts'].includes(activePanel) && <div className="flex items-center justify-center h-full text-xs text-gray-500">Coming soon</div>}
+          {!['media','audio','effects','transitions','captions','overlays','motion','jumpcuts'].includes(activePanel) && <div className="flex items-center justify-center h-full text-xs text-gray-500">Coming soon</div>}
         </div>
 
         {/* Center — Preview (expands to fill remaining space) */}
@@ -1746,6 +1754,10 @@ export default function TimelineEditor() {
                     editable snappingEnabled={snappingEnabled} onSnapLine={setSnapLinePx} />
                   <SnapTimelineTrack type="audio" clips={audioClips} allClips={[]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={null}
                     onSelect={() => {}} onUpdate={() => {}} editable={false} snappingEnabled={false} />
+                  {musicClips.length > 0 && (
+                    <SnapTimelineTrack type="music" clips={musicClips} allClips={[]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={null}
+                      onSelect={() => {}} onUpdate={() => {}} editable={false} snappingEnabled={false} />
+                  )}
                   <SnapTimelineTrack type="caption" clips={captionClips} allClips={[...videoClips, ...overlayClips, ...captionClips]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={selectedCaptionId}
                     onSelect={id => { setSelectedCaptionId(id); setSelectedVideoId(null); setSelectedOverlayId(null); }}
                     onUpdate={c => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))}
