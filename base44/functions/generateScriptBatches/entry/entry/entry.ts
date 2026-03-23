@@ -63,7 +63,7 @@ async function callClaude(prompt, temperature = 0.85, retries = 2) {
 // GEMINI FALLBACK — gemini-2.5-pro for best creative writing
 // ═══════════════════════════════════════════════════════════════════
 async function callGemini(prompt, temperature = 0.85, retries = 2) {
-  const model = 'gemini-2.5-pro-preview-06-05';
+  const model = 'gemini-2.5-pro-preview-05-06';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
