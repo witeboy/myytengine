@@ -2,7 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 import { S3Client, PutObjectCommand } from 'npm:@aws-sdk/client-s3@3.600.0';
 
 // ══════════════════════════════════════════════════════════════════
-// VOICEOVER GENERATOR — 3 Paths, No Fallback
+// VOICEOVER GENERATOR — 3 Paths, No Fallback (v2)
 //
 // Path A: MiniMax Direct SYNC  (short scripts ≤ 5000 chars)
 // Path B: MiniMax Direct ASYNC (long scripts, api.minimax.io/v1/t2a_async_v2)

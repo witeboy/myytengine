@@ -2,7 +2,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 import { S3Client, PutObjectCommand, GetObjectCommand } from 'npm:@aws-sdk/client-s3@3.600.0';
 
 // ══════════════════════════════════════════════════════════════════
-// INWORLD AI TTS — Chunked voiceover generation
+// INWORLD AI TTS — Chunked voiceover generation (v2)
 //
 // Inworld API: POST https://api.inworld.ai/tts/v1/voice
 // Auth: Basic <INWORLD_API_KEY>
