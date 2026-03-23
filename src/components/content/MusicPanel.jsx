@@ -140,7 +140,9 @@ Return JSON:
           if (failCount >= 5) {
             clearInterval(poll);
             setGeneratingTrackId(null);
+            await base44.entities.MusicTracks.update(track.id, { status: 'failed' });
             refetch();
+            toast({ title: 'Music Status Check Failed', description: 'Could not verify music generation status after multiple attempts.', variant: 'destructive', duration: 3000 });
           }
         }
       }, 15000);
