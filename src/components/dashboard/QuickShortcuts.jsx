@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import {
   Tv, Plus, Search, Film,
-  Users, Wrench, FolderOpen, Sparkles
+  Users, Wrench, FolderOpen, Sparkles, Youtube
 } from 'lucide-react';
 
 const shortcuts = [
@@ -13,6 +13,7 @@ const shortcuts = [
   { label: 'Repurpose Video', icon: Film, path: '/ContentRepurpose', color: 'from-amber-500 to-orange-600' },
   { label: 'UGC Pipeline', icon: Sparkles, path: '/UGCPipeline', color: 'from-pink-500 to-fuchsia-600' },
   { label: 'Media Library', icon: FolderOpen, path: '/MediaLibrary', color: 'from-teal-500 to-cyan-600' },
+  { label: 'Quick Publish', icon: Youtube, path: '/QuickPublish', color: 'from-red-500 to-red-700' },
   { label: 'Tools Hub', icon: Wrench, path: '/ToolsHub', color: 'from-slate-500 to-gray-600' },
 ];
 
