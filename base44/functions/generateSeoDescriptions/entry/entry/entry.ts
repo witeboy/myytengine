@@ -14,7 +14,7 @@ async function callGemini(apiKey, prompt, maxTokens = 6000) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.7, maxOutputTokens: maxTokens },
+        generationConfig: { temperature: 0.7, maxOutputTokens: maxTokens, responseMimeType: 'application/json' },
       }),
     }
   );
@@ -28,8 +28,11 @@ async function callGemini(apiKey, prompt, maxTokens = 6000) {
 
 function parseJson(text) {
   if (!text) return null;
-  try { return JSON.parse(text); } catch (_) {}
-  const m = text.match(/\{[\s\S]*\}/);
+  // Strip markdown code fences if present
+  let cleaned = text.replace(/```(?:json)?\s*/gi, '').replace(/```\s*$/gi, '').trim();
+  try { return JSON.parse(cleaned); } catch (_) {}
+  // Try extracting the outermost JSON object
+  const m = cleaned.match(/\{[\s\S]*\}/);
   if (m) {
     let s = m[0].replace(/[\x00-\x1F\x7F]/g, ' ').replace(/,\s*([}\]])/g, '$1');
     try { return JSON.parse(s); } catch (_) {}
