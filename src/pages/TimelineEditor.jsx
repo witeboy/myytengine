@@ -901,16 +901,21 @@ export default function TimelineEditor() {
     }
   }, [isPlaying, currentTime, voiceoverUrl, isMuted, voiceoverVol]);
 
-  // ── Music sync ──────────────────────────────────────────────────
+  // ── Music sync — respect edited clip positions ──────────────────
   useEffect(() => {
-    if (musicUrl && musicRef.current) {
-      if (Math.abs(musicRef.current.currentTime - currentTime) > 0.3) musicRef.current.currentTime = currentTime;
+    if (!musicUrl || !musicRef.current) return;
+    const activeClip = musicClips.find(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration);
+    if (activeClip && isPlaying) {
+      const elapsed = currentTime - activeClip.startTime;
+      const srcTime = (activeClip.sourceOffset || 0) + elapsed;
+      if (Math.abs(musicRef.current.currentTime - srcTime) > 0.3) musicRef.current.currentTime = srcTime;
       musicRef.current.muted = isMuted;
-      musicRef.current.volume = musicVol;
-      if (isPlaying) musicRef.current.play().catch(() => {});
-      else musicRef.current.pause();
+      musicRef.current.volume = activeClip.volume ?? musicVol;
+      musicRef.current.play().catch(() => {});
+    } else {
+      musicRef.current.pause();
     }
-  }, [isPlaying, currentTime, musicUrl, isMuted, musicVol]);
+  }, [isPlaying, currentTime, musicUrl, isMuted, musicVol, musicClips]);
 
   const currentClip = useMemo(() =>
     videoClips.find(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration)
