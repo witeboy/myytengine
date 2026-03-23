@@ -280,13 +280,13 @@ Deno.serve(async (req) => {
     }
 
     let topicContext = '';
-    if (topicResult.status === 'fulfilled') {
+    if (topicResult.status === 'fulfilled' && Array.isArray(topicResult.value)) {
       const topic = topicResult.value.find(t => t.is_selected === true);
       topicContext = topic?.description || '';
     }
 
     let scriptContext = '';
-    if (scriptResult.status === 'fulfilled' && scriptResult.value.length > 0) {
+    if (scriptResult.status === 'fulfilled' && Array.isArray(scriptResult.value) && scriptResult.value.length > 0) {
       const script = scriptResult.value.find(s => s.version === 'final_aggregated') || scriptResult.value[0];
       const content = script.full_script || [script.cold_open, script.act_1, script.act_2, script.act_3, script.outro].filter(Boolean).join('\n\n');
       scriptContext = content.substring(0, 3000);
