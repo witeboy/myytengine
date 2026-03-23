@@ -31,7 +31,8 @@ import { createPageUrl } from '@/utils';
 // ══════════════════════════════════════════════════════════════════
 export default function PostProduction() {
   const navigate = useNavigate();
-  const projectId = new URLSearchParams(window.location.search).get('project_id');
+  const rawProjectId = new URLSearchParams(window.location.search).get('project_id');
+  const projectId = rawProjectId && rawProjectId !== 'null' ? rawProjectId : null;
 
   const [generatingSeo, setGeneratingSeo] = useState(false);
   const [seoError, setSeoError] = useState(null);
