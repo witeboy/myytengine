@@ -19,7 +19,8 @@ import {
 
 export default function LongViralPipeline() {
   const navigate = useNavigate();
-  const projectId = new URLSearchParams(window.location.search).get('project_id');
+  const rawProjectId = new URLSearchParams(window.location.search).get('project_id');
+  const projectId = rawProjectId && rawProjectId !== 'null' ? rawProjectId : null;
   const [selectedNiche, setSelectedNiche] = useState('finance');
   const [durationMin, setDurationMin] = useState(10);
   const [userAdvanced, setUserAdvanced] = useState(false);
