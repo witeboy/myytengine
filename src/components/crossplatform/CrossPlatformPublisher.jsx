@@ -9,8 +9,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Loader2, Upload, FileVideo, X, Wand2, Send, ChevronRight,
-  CheckCircle2, ArrowLeft, Globe, Sparkles, Tag
+  CheckCircle2, ArrowLeft, Globe, Sparkles, Tag, Copy
 } from 'lucide-react';
+import PlatformIcon from './PlatformIcon';
 import PlatformAdaptCard from './PlatformAdaptCard';
 import YouTubeUploadSection from './YouTubeUploadSection';
 import { PLATFORM_META as _PM } from './PlatformIcon';
