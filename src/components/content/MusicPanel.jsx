@@ -42,10 +42,16 @@ export default function MusicPanel({ project }) {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [tracks]);
 
+  const isSleepProject = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
+
+  const SLEEP_MUSIC_PROMPT = 'Deep ambient sleep music, 432Hz healing frequency, consistent low-end drone, Delta wave binaural beats (2Hz), warm synthesizer pads, minimal variation, extremely slow tempo, no percussion, no melodies, seamless loop, spatially immersive, dark calming atmosphere.';
+
   const handleGenerateConcepts = async () => {
     setGenerating(true);
     const prompt = customPrompt ||
-      `Create background music for a ${project.niche || 'general'} YouTube video with a ${project.tone || 'dramatic'} tone. Cinematic, suitable for storytelling narration.`;
+      (isSleepProject
+        ? SLEEP_MUSIC_PROMPT
+        : `Create background music for a ${project.niche || 'general'} YouTube video with a ${project.tone || 'dramatic'} tone. Cinematic, suitable for storytelling narration.`);
 
     const result = await base44.integrations.Core.InvokeLLM({
       prompt: `Based on this request: "${prompt}"
