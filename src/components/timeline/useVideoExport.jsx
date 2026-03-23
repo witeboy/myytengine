@@ -461,7 +461,9 @@ export default function useVideoExport() {
       const canvas = new OffscreenCanvas(W, H);
       const ctx    = canvas.getContext('2d');
 
-      // ─── Load media ──────────────────────────────────────────
+      // ─── Load ALL media BEFORE creating encoder ─────────────────
+      // CRITICAL: Load media first so the encoder doesn't sit idle during
+      // slow network fetches (which causes "Codec reclaimed due to inactivity")
       setPhase('loading');
       const clipMedia = [];
       for (let i = 0; i < clips.length; i++) {
@@ -485,6 +487,8 @@ export default function useVideoExport() {
         if (!media) console.warn(`[Export] ⚠️ Clip ${i} — no media`);
         clipMedia.push({ media, mediaType, measuredVideoDur });
       }
+
+      console.log(`[Export] All ${clipMedia.length} media loaded, creating encoder...`);
 
       setPhase('encoding');
 
@@ -517,8 +521,13 @@ export default function useVideoExport() {
       };
 
       // ─── Encode frames ────────────────────────────────────────
+      // Flush frequently to prevent "Codec reclaimed due to inactivity"
+      // For long videos (15min+), the browser may reclaim the codec if
+      // the encoder queue gets too deep without being flushed.
       let framesSinceFlush = 0;
-      const FLUSH_EVERY    = fps * 3;
+      const FLUSH_EVERY    = fps * 2; // flush every 2 seconds of video
+      let lastFlushWallTime = Date.now();
+      const MAX_WALL_GAP_MS = 8000; // force flush if 8s wall time passes without one
 
       for (let f = 0; f < totalFrames; f++) {
         if (cancelledRef.current) throw new Error('cancelled');
@@ -560,9 +569,13 @@ export default function useVideoExport() {
         vframe.close();
         framesSinceFlush++;
 
-        if (framesSinceFlush >= FLUSH_EVERY) {
+        // Flush based on frame count OR wall-clock gap (whichever comes first)
+        const wallNow = Date.now();
+        const wallGap = wallNow - lastFlushWallTime;
+        if (framesSinceFlush >= FLUSH_EVERY || wallGap >= MAX_WALL_GAP_MS) {
           await videoEncoder.flush();
           framesSinceFlush = 0;
+          lastFlushWallTime = Date.now();
         }
         if (f % 8 === 0) {
           setProgress(15 + Math.round((f / totalFrames) * 60));
