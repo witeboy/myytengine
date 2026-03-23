@@ -8,7 +8,14 @@ import {
   Youtube, Loader2, Plus, Check, ExternalLink, AlertCircle, Star
 } from 'lucide-react';
 
+function cleanYouTubeTags(tags) {
+  return (Array.isArray(tags) ? tags : [])
+    .map(t => String(t).replace(/[<>"#&\\{}|^~`\[\]]/g, '').replace(/\s+/g, ' ').trim())
+    .filter(t => t && t.length >= 2 && t.length <= 100);
+}
+
 async function uploadToYouTube({ accessToken, file, metadata, thumbnailBlob, onProgress }) {
+  const cleanedTags = cleanYouTubeTags(metadata.tags);
   const initRes = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
     method: 'POST',
     headers: {
@@ -18,7 +25,13 @@ async function uploadToYouTube({ accessToken, file, metadata, thumbnailBlob, onP
       'X-Upload-Content-Type': file.type || 'video/mp4',
     },
     body: JSON.stringify({
-      snippet: { title: metadata.title, description: metadata.description, tags: metadata.tags, categoryId: metadata.categoryId || '22', defaultLanguage: 'en' },
+      snippet: {
+        title: (metadata.title || 'Untitled').slice(0, 100),
+        description: (metadata.description || '').slice(0, 5000),
+        ...(cleanedTags.length > 0 ? { tags: cleanedTags } : {}),
+        categoryId: metadata.categoryId || '22',
+        defaultLanguage: 'en',
+      },
       status: { privacyStatus: metadata.privacy || 'private', selfDeclaredMadeForKids: false },
     }),
   });
