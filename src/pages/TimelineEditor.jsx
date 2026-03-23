@@ -1615,6 +1615,15 @@ export default function TimelineEditor() {
               onApplyStyleToAll={handleApplyStyleToAllCaptions}
               onUpdateStyleToAll={(k, v) => setCaptionClips(captionClips.map(c => ({ ...c, [k]: v })))}
             />
+          ) : selectedMusicClip ? (
+            <MusicClipProperties
+              clip={selectedMusicClip}
+              onUpdate={c => setMusicClips(musicClips.map(x => x.id === c.id ? c : x))}
+              onDelete={() => { setMusicClips(musicClips.filter(c => c.id !== selectedMusicId)); setSelectedMusicId(null); }}
+              onDuplicate={handleDuplicateMusic}
+              onSplit={handleSplitMusicAtPlayhead}
+              currentTime={currentTime}
+            />
           ) : selectedVideo ? (
             <ClipPropertiesPanel clip={selectedVideo} audioBeatDuration={audioBeatDurations[selectedVideoIdx]} onUpdate={c => setVideoClips(videoClips.map(x => x.id === c.id ? c : x))} onApplyToAll={handleApplyToAll} />
           ) : (

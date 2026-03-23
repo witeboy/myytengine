@@ -126,7 +126,7 @@ export default function SnapTimelineTrack({
               {type === 'overlay' && clip.content && (
                 <div className="absolute inset-0 flex items-center justify-center text-lg opacity-80">{clip.content}</div>
               )}
-              {editable && type === 'caption' && (
+              {editable && (type === 'caption' || type === 'music') && (
                 <div className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 z-10" onMouseDown={e => down(e, clip, 'resize-left')} />
               )}
               <div className="absolute inset-0 flex items-center px-2"
