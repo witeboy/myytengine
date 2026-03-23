@@ -1768,10 +1768,10 @@ export default function TimelineEditor() {
         });
         return (
           <VideoExporter
-            open={showExporter} onClose={() => setShowExporter(false)}
-            scenes={exportScenes} orientation={orientation}
-            voiceoverUrl={voiceoverUrl} musicUrl={musicUrl} musicVolume={musicVol}
-            projectName={project?.name || 'Untitled'} projectId={projectId} exportHook={exportHook}
+          open={showExporter} onClose={() => setShowExporter(false)}
+          scenes={exportScenes} orientation={orientation}
+          voiceoverUrl={voiceoverUrl} musicUrl={musicUrl} musicVolume={musicVol}
+          projectName={project?.name || 'Untitled'} projectNiche={project?.niche} projectId={projectId} exportHook={exportHook}
           captions={captionClips}
           />
         );

@@ -303,7 +303,7 @@ function ThumbnailCard({ concept, projectId, onRefetch, onSelect }) {
 // MAIN GRID COMPONENT
 // ══════════════════════════════════════════════════════════════════
 
-export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
+export default function ThumbnailGrid({ thumbnails, projectId, onRefetch, fileBase }) {
   const [downloading, setDownloading] = useState(false);
 
   const sortedThumbnails = [...thumbnails].sort((a, b) => (a.rank || 0) - (b.rank || 0));
@@ -315,7 +315,8 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
     
     setDownloading(true);
     try {
-      await downloadAllThumbnails(withImages, `project-${projectId}-thumb`);
+      const conceptsWithBase = withImages.map(c => ({ ...c, _fileBase: fileBase || `project-${projectId}` }));
+      await downloadAllThumbnails(conceptsWithBase, fileBase || `project-${projectId}`);
     } catch (e) {
       console.error('Download failed:', e);
     }
@@ -382,7 +383,7 @@ export default function ThumbnailGrid({ thumbnails, projectId, onRefetch }) {
         {sortedThumbnails.map(concept => (
           <ThumbnailCard
             key={concept.id}
-            concept={concept}
+            concept={{ ...concept, _fileBase: fileBase }}
             projectId={projectId}
             onRefetch={onRefetch}
           />
