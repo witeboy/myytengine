@@ -93,7 +93,10 @@ export async function uploadToYouTube({ accessToken, file, metadata, thumbnailBl
 
 // Sanitize tags for YouTube API
 export function sanitizeTags(rawTagString) {
-  const rawTags = rawTagString.split(',').map(t => t.trim().replace(/[<>]/g, '')).filter(t => t && t.length <= 100);
+  const rawTags = rawTagString
+    .split(',')
+    .map(t => t.trim().replace(/[<>"#&\\{}|^~`\[\]]/g, '').replace(/\s+/g, ' ').trim())
+    .filter(t => t && t.length >= 2 && t.length <= 100);
   const tagArray = [];
   let totalLen = 0;
   for (const t of rawTags) {
