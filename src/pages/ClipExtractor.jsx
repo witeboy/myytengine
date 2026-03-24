@@ -211,14 +211,71 @@ export default function ClipExtractor() {
     setCompletedStages([]);
 
     try {
-      // Stage 1: Upload video to Base44 storage
+      // Stage 1: Upload video via chunked R2 multipart (handles 500MB+)
       setCurrentStage('upload');
-      setStatusMessage('Uploading video…');
+      setStatusMessage('Preparing upload…');
 
-      const { file_url } = await base44.integrations.Core.UploadFile({ file: videoFile });
-      const uploadedUrl = file_url;
+      let uploadedUrl;
+      const CHUNK_SIZE = 4 * 1024 * 1024; // 4MB chunks
+      const totalChunks = Math.ceil(videoFile.size / CHUNK_SIZE);
+      const fileSizeMB = (videoFile.size / 1048576).toFixed(1);
 
-      // Keep local URL for preview playback, but use uploaded URL for ASR
+      // Init multipart
+      const initRes = await base44.functions.invoke('uploadToR2', {
+        action: 'init',
+        filename: videoFile.name,
+        content_type: videoFile.type || 'video/mp4',
+        project_id: 'clip-extractor',
+        project_name: 'Clip Extractor',
+        total_chunks: totalChunks,
+        total_size: videoFile.size,
+      });
+      const initData = initRes.data || initRes;
+      if (!initData?.upload_id) throw new Error('R2 upload init failed');
+
+      const { upload_id, r2_key } = initData;
+      const parts = [];
+
+      // Upload chunks
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = Math.min(start + CHUNK_SIZE, videoFile.size);
+        const chunk = videoFile.slice(start, end);
+
+        // Convert chunk to base64
+        const buffer = await chunk.arrayBuffer();
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let b = 0; b < bytes.length; b++) binary += String.fromCharCode(bytes[b]);
+        const chunk_base64 = btoa(binary);
+
+        const pct = Math.round(((i + 1) / totalChunks) * 100);
+        setStatusMessage(`Uploading… ${pct}% (${i + 1}/${totalChunks} chunks, ${fileSizeMB}MB)`);
+
+        const chunkRes = await base44.functions.invoke('uploadToR2', {
+          action: 'chunk',
+          upload_id,
+          r2_key,
+          part_number: i + 1,
+          chunk_base64,
+        });
+        const chunkData = chunkRes.data || chunkRes;
+        if (!chunkData?.etag) throw new Error(`Chunk ${i + 1} upload failed`);
+        parts.push({ part_number: i + 1, etag: chunkData.etag });
+      }
+
+      // Complete multipart
+      setStatusMessage('Finalizing upload…');
+      const completeRes = await base44.functions.invoke('uploadToR2', {
+        action: 'complete',
+        upload_id,
+        r2_key,
+        parts,
+      });
+      const completeData = completeRes.data || completeRes;
+      if (!completeData?.url) throw new Error('R2 upload finalize failed');
+
+      uploadedUrl = completeData.url;
       markComplete('upload');
 
       // Stage 2: Transcribe
