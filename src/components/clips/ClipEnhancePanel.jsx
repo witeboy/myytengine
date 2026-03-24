@@ -1,632 +1,606 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
+import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Slider } from '@/components/ui/slider';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import CaptionPreview, { CAPTION_PRESETS, drawCaptions } from './CaptionPreview';
+import { transcribeVoiceover } from '@/lib/transcribeASR';
+import { initFFmpeg, isFFmpegSupported } from '@/lib/clipWithFFmpeg';
+import ClipCard from '@/components/clips/ClipCard';
+import ClipScheduler from '@/components/clips/ClipScheduler';
+import YouTubeUrlInput from '@/components/clips/YouTubeUrlInput';
 import {
-  Wand2, Loader2, CheckCircle, Type, Crop, Volume2,
-  Zap, Search, Play, Pause, Download, Copy, Hash,
-  Music, Sparkles, Clock, ChevronDown, ChevronUp,
-  BarChart3, Smartphone, Monitor,
+  Upload, FileVideo, Mic, Brain, Scissors, ArrowLeft,
+  Loader2, CheckCircle, AlertCircle, Sparkles, Flame,
+  TrendingUp, Clock, ChevronRight, RotateCcw, Zap,
+  Settings2,
 } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════════
-// SECTION WRAPPER — collapsible section for each layer
+// PIPELINE STAGES
 // ══════════════════════════════════════════════════════════════════
-function Section({ title, icon: Icon, badge, defaultOpen = true, children }) {
-  const [open, setOpen] = useState(defaultOpen);
+const STAGES = [
+  { id: 'upload',     label: 'Upload',      icon: Upload,   description: 'Drop your long-form video' },
+  { id: 'transcribe', label: 'Transcribe',   icon: Mic,      description: 'ASR speech recognition' },
+  { id: 'analyze',    label: 'Find Clips',   icon: Brain,    description: 'Claude viral detection' },
+  { id: 'results',    label: 'Viral Clips',  icon: Scissors, description: 'Preview, rank & download' },
+];
+
+function StageIndicator({ stages, currentStage, completedStages }) {
   return (
-    <div className="border border-gray-200 rounded-lg overflow-hidden">
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors"
-      >
-        <div className="flex items-center gap-2">
-          <Icon className="w-4 h-4 text-gray-500" />
-          <span className="text-sm font-medium text-gray-900">{title}</span>
-          {badge && (
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0">{badge}</Badge>
-          )}
-        </div>
-        {open ? <ChevronUp className="w-3.5 h-3.5 text-gray-400" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-400" />}
-      </button>
-      {open && <div className="p-4 space-y-3">{children}</div>}
+    <div className="flex items-center gap-1">
+      {stages.map((stage, i) => {
+        const isComplete = completedStages.includes(stage.id);
+        const isCurrent = currentStage === stage.id;
+        const Icon = stage.icon;
+
+        return (
+          <div key={stage.id} className="contents">
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              isComplete
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                : isCurrent
+                  ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-sm'
+                  : 'bg-gray-50 text-gray-400 border border-gray-100'
+            }`}>
+              {isComplete ? (
+                <CheckCircle className="w-3.5 h-3.5" />
+              ) : isCurrent ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Icon className="w-3.5 h-3.5" />
+              )}
+              <span className="hidden sm:inline">{stage.label}</span>
+            </div>
+            {i < stages.length - 1 && (
+              <ChevronRight className={`w-3.5 h-3.5 ${isComplete ? 'text-emerald-400' : 'text-gray-200'}`} />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-// ══════════════════════════════════════════════════════════════════
-// INLINE TAG — small display tag
-// ══════════════════════════════════════════════════════════════════
-function Tag({ color = 'gray', children }) {
-  const colors = {
-    red: 'bg-red-50 text-red-700 border-red-200',
-    blue: 'bg-blue-50 text-blue-700 border-blue-200',
-    green: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    amber: 'bg-amber-50 text-amber-700 border-amber-200',
-    purple: 'bg-purple-50 text-purple-700 border-purple-200',
-    gray: 'bg-gray-50 text-gray-600 border-gray-200',
-  };
-  return (
-    <span className={`inline-flex items-center text-[10px] px-1.5 py-0.5 rounded border font-medium ${colors[color]}`}>
-      {children}
-    </span>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════════
-// MAIN COMPONENT
-// ══════════════════════════════════════════════════════════════════
-export default function ClipEnhancePanel({ clip, clipIndex, words, videoUrl, onClose }) {
-  // Enhancement data from Claude
-  const [enhancement, setEnhancement] = useState(null);
-  const [loading, setLoading] = useState(false);
+export default function ClipExtractor() {
+  // ── Pipeline state ──────────────────────────────────────────
+  const [currentStage, setCurrentStage] = useState(null);
+  const [completedStages, setCompletedStages] = useState([]);
   const [error, setError] = useState('');
+  const [statusMessage, setStatusMessage] = useState('');
 
-  // User overrides
-  const [captionPreset, setCaptionPreset] = useState('hormozi_bold');
-  const [hookText, setHookText] = useState('');
-  const [hookEnabled, setHookEnabled] = useState(true);
-  const [progressBarEnabled, setProgressBarEnabled] = useState(true);
-  const [musicVolume, setMusicVolume] = useState(20);
-  const [voiceBoost, setVoiceBoost] = useState(3);
-  const [selectedTitle, setSelectedTitle] = useState(0);
-  const [reframeMode, setReframeMode] = useState('center_lock');
-  const [cropX, setCropX] = useState(50);
+  // ── Input mode ──────────────────────────────────────────────
+  const [inputMode, setInputMode] = useState('file'); // 'file' | 'url'
 
-  // Preview
-  const canvasRef = useRef(null);
-  const videoRef = useRef(null);
-  const [playing, setPlaying] = useState(false);
-  const [previewMode, setPreviewMode] = useState('vertical'); // vertical | horizontal
-  const animFrameRef = useRef(null);
+  // ── Upload state ────────────────────────────────────────────
+  const [videoFile, setVideoFile] = useState(null);
+  const [videoUrl, setVideoUrl] = useState('');
+  const [audioUrl, setAudioUrl] = useState('');
+  const [videoDuration, setVideoDuration] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
 
-  // ── Fetch enhancement from Claude ─────────────────────────
-  const fetchEnhancement = async () => {
-    setLoading(true);
+  // ── Transcription state ─────────────────────────────────────
+  const [transcript, setTranscript] = useState('');
+  const [asrWords, setAsrWords] = useState([]);
+  const [wordCount, setWordCount] = useState(0);
+
+  // ── Analysis state ──────────────────────────────────────────
+  const [clips, setClips] = useState([]);
+  const [analyzing, setAnalyzing] = useState(false);
+
+  // ── Settings ────────────────────────────────────────────────
+  const [maxClips, setMaxClips] = useState('8');
+  const [minClipLen, setMinClipLen] = useState('15');
+  const [maxClipLen, setMaxClipLen] = useState('90');
+  const [videoContext, setVideoContext] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
+
+  // ── FFmpeg state ────────────────────────────────────────────
+  const [ffmpegReady, setFfmpegReady] = useState(false);
+  const [ffmpegLoading, setFfmpegLoading] = useState(false);
+
+  const markComplete = (stage) => {
+    setCompletedStages(prev => prev.includes(stage) ? prev : [...prev, stage]);
+    setCurrentStage(null);
+  };
+
+  // ════════════════════════════════════════════════════════════
+  // STAGE 1: Video file select
+  // ════════════════════════════════════════════════════════════
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setVideoFile(file);
     setError('');
+
+    const url = URL.createObjectURL(file);
+    setVideoUrl(url);
+
+    // Separate blob URL just for reading duration (won't revoke the preview one)
+    const durationUrl = URL.createObjectURL(file);
+    const vid = document.createElement('video');
+    vid.preload = 'metadata';
+    vid.onloadedmetadata = () => {
+      setVideoDuration(vid.duration);
+      URL.revokeObjectURL(durationUrl);
+    };
+    vid.src = durationUrl;
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    const file = e.dataTransfer?.files?.[0];
+    if (file && file.type.startsWith('video/')) {
+      const fakeEvent = { target: { files: [file] } };
+      handleFileSelect(fakeEvent);
+    }
+  };
+
+  // ════════════════════════════════════════════════════════════
+  // STAGE 2: Transcription (reuses existing ASR)
+  // ════════════════════════════════════════════════════════════
+  const runTranscription = async (uploadedUrl) => {
+    setCurrentStage('transcribe');
+    setStatusMessage('Submitting audio for speech recognition…');
+
     try {
-      const res = await base44.functions.invoke('enhanceClipForFYP', {
-        clip,
+      const result = await transcribeVoiceover(uploadedUrl, ({ phase, message }) => {
+        setStatusMessage(message);
+      });
+
+      if (!result.success || !result.words?.length) {
+        throw new Error('Transcription returned no words');
+      }
+
+      setAsrWords(result.words);
+      setWordCount(result.word_count);
+      setTranscript(result.words.map(w => w.word).join(' '));
+
+      markComplete('transcribe');
+      return result;
+
+    } catch (err) {
+      throw new Error(`Transcription failed: ${err.message}`);
+    }
+  };
+
+  // ════════════════════════════════════════════════════════════
+  // STAGE 3: Claude Viral Analysis
+  // ════════════════════════════════════════════════════════════
+  const runViralAnalysis = async (words, duration) => {
+    setCurrentStage('analyze');
+    setStatusMessage('Claude is analyzing for viral moments…');
+    setAnalyzing(true);
+
+    try {
+      const res = await base44.functions.invoke('analyzeViralMoments', {
+        transcript: words.map(w => w.word).join(' '),
         words,
-        video_duration: clip.end,
+        duration,
+        max_clips: parseInt(maxClips) || 8,
+        min_clip_seconds: parseInt(minClipLen) || 15,
+        max_clip_seconds: parseInt(maxClipLen) || 90,
+        context: videoContext,
       });
 
       const data = res.data || res;
-      if (!data?.enhancement) throw new Error('No enhancement data returned');
 
-      const e = data.enhancement;
-      setEnhancement(e);
+      if (!data?.clips?.length) {
+        setClips([]);
+        setStatusMessage('No strong viral moments found — try a different video');
+      } else {
+        setClips(data.clips);
+        setStatusMessage(`Found ${data.clips.length} viral clips!`);
+      }
 
-      // Apply Claude's recommendations as defaults
-      if (e.hook?.text) setHookText(e.hook.text);
-      if (e.captions?.recommended_preset) setCaptionPreset(e.captions.recommended_preset);
-      if (e.reframe?.strategy) setReframeMode(e.reframe.strategy);
-      if (e.reframe?.crop_focus_x_percent) setCropX(e.reframe.crop_focus_x_percent);
-      if (e.audio?.voice_boost_db) setVoiceBoost(e.audio.voice_boost_db);
-      if (e.progress_bar) setProgressBarEnabled(e.progress_bar.enabled !== false);
+      markComplete('analyze');
+      setCurrentStage('results');
+
+    } catch (err) {
+      throw new Error(`Claude analysis failed: ${err.message}`);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  // ════════════════════════════════════════════════════════════
+  // FULL PIPELINE: Upload → Transcribe → Analyze
+  // ════════════════════════════════════════════════════════════
+  const runFullPipeline = async () => {
+    if (!videoFile) return;
+    setError('');
+    setClips([]);
+    setCompletedStages([]);
+
+    try {
+      // Stage 1: Upload / resolve
+      setCurrentStage('upload');
+      setStatusMessage('Uploading video…');
+
+      let uploadedUrl;
+      if (videoFile._isUrl) {
+        // YouTube URL mode — use pre-resolved audio URL directly for ASR
+        uploadedUrl = videoFile._audioUrl || videoFile._streamUrl;
+      } else {
+        const { file_url } = await base44.integrations.Core.UploadFile({ file: videoFile });
+        uploadedUrl = file_url;
+      }
+      markComplete('upload');
+
+      // Stage 2: Transcribe
+      const asrResult = await runTranscription(uploadedUrl);
+
+      // Stage 3: Analyze
+      await runViralAnalysis(asrResult.words, asrResult.duration || videoDuration);
+
+      // Optionally pre-load FFmpeg for clipping
+      if (isFFmpegSupported() && !ffmpegReady) {
+        setFfmpegLoading(true);
+        try {
+          await initFFmpeg(({ message }) => setStatusMessage(message));
+          setFfmpegReady(true);
+        } catch {
+          // FFmpeg optional — fallback to canvas capture
+        }
+        setFfmpegLoading(false);
+      }
 
     } catch (err) {
       setError(err.message);
-    } finally {
-      setLoading(false);
+      setCurrentStage(null);
     }
   };
 
-  useEffect(() => {
-    fetchEnhancement();
-  }, []);
-
-  // ── Canvas preview rendering ──────────────────────────────
-  const clipWords = words?.filter(w => w.start >= clip.start && w.end <= clip.end) || [];
-
-  const renderFrame = useCallback(() => {
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    if (!canvas || !video) return;
-
-    const ctx = canvas.getContext('2d');
-    const cw = canvas.width;
-    const ch = canvas.height;
-    ctx.clearRect(0, 0, cw, ch);
-
-    // Black background
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, cw, ch);
-
-    // Draw video frame with crop
-    if (video.readyState >= 2) {
-      const vw = video.videoWidth;
-      const vh = video.videoHeight;
-
-      if (previewMode === 'vertical') {
-        // 9:16 crop from 16:9 source
-        const targetAspect = 9 / 16;
-        const sourceAspect = vw / vh;
-        let sx, sy, sw, sh;
-
-        if (sourceAspect > targetAspect) {
-          // Source is wider — crop sides
-          sh = vh;
-          sw = vh * targetAspect;
-          sx = ((cropX / 100) * (vw - sw));
-          sy = 0;
-        } else {
-          sw = vw;
-          sh = vw / targetAspect;
-          sx = 0;
-          sy = (vh - sh) / 2;
-        }
-
-        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch);
-      } else {
-        // Full 16:9
-        const scale = Math.min(cw / vw, ch / vh);
-        const dx = (cw - vw * scale) / 2;
-        const dy = (ch - vh * scale) / 2;
-        ctx.drawImage(video, 0, 0, vw, vh, dx, dy, vw * scale, vh * scale);
-      }
-    }
-
-    const currentTime = video.currentTime;
-    const clipProgress = (currentTime - clip.start) / clip.duration;
-
-    // Hook overlay (first 2.5 seconds)
-    if (hookEnabled && hookText && (currentTime - clip.start) < (enhancement?.hook?.display_duration || 2.5)) {
-      const hookFontSize = previewMode === 'vertical' ? 28 : 22;
-      ctx.save();
-      ctx.font = `900 ${hookFontSize}px "Arial Black", sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-
-      const hookY = previewMode === 'vertical' ? ch * 0.2 : ch * 0.15;
-      const hookMaxW = cw * 0.85;
-
-      // Hook background
-      const metrics = ctx.measureText(hookText);
-      const bgPad = 12;
-      ctx.fillStyle = 'rgba(0,0,0,0.7)';
-      ctx.beginPath();
-      ctx.roundRect(
-        (cw - Math.min(metrics.width, hookMaxW)) / 2 - bgPad,
-        hookY - hookFontSize / 2 - bgPad / 2,
-        Math.min(metrics.width, hookMaxW) + bgPad * 2,
-        hookFontSize + bgPad,
-        8
-      );
-      ctx.fill();
-
-      // Hook text
-      ctx.fillStyle = '#FFFFFF';
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 3;
-      ctx.lineJoin = 'round';
-      ctx.strokeText(hookText, cw / 2, hookY, hookMaxW);
-      ctx.fillText(hookText, cw / 2, hookY, hookMaxW);
-      ctx.restore();
-    }
-
-    // Progress bar
-    if (progressBarEnabled && clipProgress >= 0) {
-      const barColor = enhancement?.progress_bar?.color || '#FF3B30';
-      const barH = 4;
-      ctx.fillStyle = 'rgba(255,255,255,0.2)';
-      ctx.fillRect(0, 0, cw, barH);
-      ctx.fillStyle = barColor;
-      ctx.fillRect(0, 0, cw * Math.min(1, Math.max(0, clipProgress)), barH);
-    }
-
-    // Captions
-    if (clipWords.length > 0) {
-      const highlightWords = enhancement?.captions?.highlight_words || [];
-      drawCaptions(ctx, cw, ch, clipWords, currentTime, captionPreset, highlightWords);
-    }
-
-    if (playing) {
-      animFrameRef.current = requestAnimationFrame(renderFrame);
-    }
-  }, [playing, previewMode, captionPreset, hookText, hookEnabled, progressBarEnabled, cropX, clip, clipWords, enhancement]);
-
-  useEffect(() => {
-    if (playing) {
-      animFrameRef.current = requestAnimationFrame(renderFrame);
-    }
-    return () => {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    };
-  }, [playing, renderFrame]);
-
-  const togglePlay = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    if (playing) {
-      video.pause();
-      setPlaying(false);
-    } else {
-      video.currentTime = clip.start;
-      video.play();
-      setPlaying(true);
-
-      const checkEnd = () => {
-        if (video.currentTime >= clip.end) {
-          video.pause();
-          setPlaying(false);
-        } else if (!video.paused) {
-          requestAnimationFrame(checkEnd);
-        }
-      };
-      requestAnimationFrame(checkEnd);
-    }
+  const resetPipeline = () => {
+    setCurrentStage(null);
+    setCompletedStages([]);
+    setVideoFile(null);
+    setVideoUrl('');
+    setAudioUrl('');
+    setVideoDuration(0);
+    setTranscript('');
+    setAsrWords([]);
+    setWordCount(0);
+    setClips([]);
+    setError('');
+    setStatusMessage('');
+    setInputMode('file');
   };
 
-  // Draw initial frame on load
-  useEffect(() => {
-    const video = videoRef.current;
-    if (video) {
-      video.currentTime = clip.start;
-      video.addEventListener('seeked', () => renderFrame(), { once: true });
-    }
-  }, [clip.start]);
+  const isRunning = currentStage && currentStage !== 'results';
+  const hasVideoReady = videoFile || (inputMode === 'url' && videoUrl);
 
-  // ── Copy SEO to clipboard ─────────────────────────────────
-  const copySeo = () => {
-    if (!enhancement?.seo) return;
-    const seo = enhancement.seo;
-    const allTitles = [seo.title, ...(seo.ab_titles || [])];
-    const text = `Title: ${allTitles[selectedTitle] || seo.title}\n\nDescription:\n${seo.description}\n\nHashtags: ${(seo.hashtags || []).map(h => '#' + h).join(' ')}`;
-    navigator.clipboard.writeText(text);
-  };
-
-  // ══════════════════════════════════════════════════════════
+  // ════════════════════════════════════════════════════════════
   // RENDER
-  // ══════════════════════════════════════════════════════════
-  const canvasW = previewMode === 'vertical' ? 270 : 480;
-  const canvasH = previewMode === 'vertical' ? 480 : 270;
-
+  // ════════════════════════════════════════════════════════════
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center p-4 pt-8 overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl max-h-[90vh] overflow-y-auto">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 sticky top-0 bg-white z-10">
-          <div className="flex items-center gap-3">
-            <Wand2 className="w-5 h-5 text-purple-600" />
-            <div>
-              <h2 className="text-base font-semibold text-gray-900">FYP Enhancement Studio</h2>
-              <p className="text-xs text-gray-500">Clip #{clipIndex + 1}: {clip.title}</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="flex items-center gap-3">
+              <Link to="/Dashboard" className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                <ArrowLeft className="w-3 h-3" /> Dashboard
+              </Link>
             </div>
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight mt-2 flex items-center gap-2">
+              <Scissors className="w-6 h-6 text-gray-700" />
+              Viral Clip Extractor
+            </h1>
+            <p className="text-gray-500 text-sm mt-1">
+              Upload or paste a YouTube link → AI finds the most viral moments → Download FYP-ready clips
+            </p>
           </div>
-          <div className="flex items-center gap-2">
-            {enhancement && <Tag color="green">AI Enhanced</Tag>}
-            <Button variant="outline" size="sm" onClick={onClose} className="text-xs">Close</Button>
-          </div>
+          {clips.length > 0 && (
+            <Button variant="outline" size="sm" onClick={resetPipeline} className="gap-1">
+              <RotateCcw className="w-3.5 h-3.5" /> New Video
+            </Button>
+          )}
         </div>
 
-        {/* Loading state */}
-        {loading && (
-          <div className="p-8 text-center space-y-3">
-            <Loader2 className="w-8 h-8 animate-spin text-purple-500 mx-auto" />
-            <p className="text-sm text-gray-600">Claude is analyzing your clip for maximum FYP impact…</p>
-            <p className="text-xs text-gray-400">Generating hooks, captions, audio design, SEO & more</p>
-          </div>
-        )}
+        {/* Stage Progress */}
+        <StageIndicator stages={STAGES} currentStage={currentStage} completedStages={completedStages} />
 
+        {/* Error */}
         {error && (
-          <div className="p-4 m-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
-            {error}
-            <Button variant="outline" size="sm" onClick={fetchEnhancement} className="ml-3 text-xs">
-              Retry
-            </Button>
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+            <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-medium">Pipeline error</p>
+              <p className="text-red-600 mt-0.5">{error}</p>
+            </div>
           </div>
         )}
 
-        {/* Main content */}
-        {enhancement && !loading && (
-          <div className="flex flex-col lg:flex-row">
-            {/* Left: Preview */}
-            <div className="lg:w-[320px] p-4 border-r border-gray-100 space-y-3 flex-shrink-0">
-              {/* Preview mode toggle */}
-              <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5">
-                <button
-                  onClick={() => setPreviewMode('vertical')}
-                  className={`flex-1 flex items-center justify-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    previewMode === 'vertical' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'
-                  }`}
-                >
-                  <Smartphone className="w-3 h-3" /> 9:16
-                </button>
-                <button
-                  onClick={() => setPreviewMode('horizontal')}
-                  className={`flex-1 flex items-center justify-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    previewMode === 'horizontal' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'
-                  }`}
-                >
-                  <Monitor className="w-3 h-3" /> 16:9
-                </button>
-              </div>
+        {/* Status Message */}
+        {statusMessage && isRunning && (
+          <div className="flex items-center gap-2 text-sm text-blue-600">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            {statusMessage}
+          </div>
+        )}
 
-              {/* Canvas */}
-              <div className="relative flex justify-center bg-black rounded-lg overflow-hidden">
-                <canvas
-                  ref={canvasRef}
-                  width={canvasW}
-                  height={canvasH}
-                  className="max-w-full"
-                  style={{ imageRendering: 'auto' }}
-                />
-                <button
-                  onClick={togglePlay}
-                  className="absolute inset-0 flex items-center justify-center bg-black/10 hover:bg-black/20 transition-colors"
-                >
-                  {!playing && (
-                    <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
-                      <Play className="w-5 h-5 text-gray-900 ml-0.5" />
-                    </div>
-                  )}
-                </button>
-              </div>
+        {/* ══════════════════════════════════════════════════════ */}
+        {/* UPLOAD STAGE                                          */}
+        {/* ══════════════════════════════════════════════════════ */}
+        {!completedStages.includes('upload') && currentStage !== 'upload' && clips.length === 0 && (
+          <div className="space-y-4">
 
-              {/* Hidden video element */}
-              <video ref={videoRef} src={videoUrl} className="hidden" preload="auto" crossOrigin="anonymous" playsInline />
-
-              <p className="text-[10px] text-gray-400 text-center">
-                Live preview — all layers composite in real time
-              </p>
+            {/* Source toggle: File vs YouTube URL */}
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5 w-fit">
+              <button
+                onClick={() => setInputMode('file')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  inputMode === 'file' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'
+                }`}
+              >
+                <Upload className="w-3.5 h-3.5" /> Upload File
+              </button>
+              <button
+                onClick={() => setInputMode('url')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  inputMode === 'url' ? 'bg-white shadow-sm text-red-600' : 'text-gray-500'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/><path d="m10 15 5-3-5-3z"/></svg>
+                YouTube URL
+              </button>
             </div>
 
-            {/* Right: Enhancement layers */}
-            <div className="flex-1 p-4 space-y-3 overflow-y-auto">
+            {/* YouTube URL Input */}
+            {inputMode === 'url' && (
+              <YouTubeUrlInput
+                onResolved={({ videoUrl: streamUrl, audioUrl: aUrl, title, duration, thumbnail }) => {
+                  setVideoUrl(streamUrl);
+                  setAudioUrl(aUrl);
+                  setVideoDuration(duration);
+                  setVideoContext(title);
+                  setVideoFile({ name: title, size: 0, type: 'video/mp4', _isUrl: true, _streamUrl: streamUrl, _audioUrl: aUrl });
+                }}
+              />
+            )}
 
-              {/* LAYER 1: Captions */}
-              <Section title="Auto-captions" icon={Type} badge="Layer 1" defaultOpen={true}>
-                <CaptionPreview
-                  selectedPreset={captionPreset}
-                  onSelectPreset={(key) => {
-                    setCaptionPreset(key);
-                    renderFrame();
+            {/* File Upload Zone */}
+            {inputMode === 'file' && (
+              <div
+                onDrop={handleDrop}
+                onDragOver={(e) => e.preventDefault()}
+                onClick={() => fileInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
+                  videoFile
+                    ? 'border-emerald-300 bg-emerald-50/50'
+                    : 'border-gray-200 bg-gray-50/50 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
+
+                {videoFile ? (
+                  <div className="space-y-3">
+                    <div className="w-14 h-14 rounded-xl bg-emerald-100 flex items-center justify-center mx-auto">
+                      <FileVideo className="w-7 h-7 text-emerald-600" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">{videoFile.name}</p>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {(videoFile.size / 1048576).toFixed(1)} MB
+                        {videoDuration > 0 && ` · ${Math.floor(videoDuration / 60)}m ${Math.floor(videoDuration % 60)}s`}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center mx-auto">
+                      <Upload className="w-7 h-7 text-gray-400" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-700">Drop your video here</p>
+                      <p className="text-sm text-gray-400 mt-1">
+                        MP4, MOV, WebM — podcasts, interviews, streams, lectures
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Settings Toggle */}
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => setShowSettings(!showSettings)}
+                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <Settings2 className="w-3.5 h-3.5" />
+                {showSettings ? 'Hide settings' : 'Clip settings'}
+              </button>
+
+              {!isFFmpegSupported() && (
+                <span className="text-[10px] text-amber-500 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  FFmpeg unavailable — using browser capture fallback
+                </span>
+              )}
+            </div>
+
+            {/* Settings Panel */}
+            {showSettings && (
+              <Card className="border-gray-200">
+                <CardContent className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Max clips</label>
+                    <Select value={maxClips} onValueChange={setMaxClips}>
+                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {['3','5','8','10','15'].map(v => (
+                          <SelectItem key={v} value={v}>{v} clips</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Min length</label>
+                    <Select value={minClipLen} onValueChange={setMinClipLen}>
+                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {['10','15','20','30'].map(v => (
+                          <SelectItem key={v} value={v}>{v}s</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Max length</label>
+                    <Select value={maxClipLen} onValueChange={setMaxClipLen}>
+                      <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {['30','60','90','120','180'].map(v => (
+                          <SelectItem key={v} value={v}>{v}s</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Video context</label>
+                    <Input
+                      className="h-8 text-xs mt-1"
+                      placeholder="e.g. tech podcast, interview…"
+                      value={videoContext}
+                      onChange={(e) => setVideoContext(e.target.value)}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Start Button */}
+            {hasVideoReady && (
+              <Button
+                onClick={runFullPipeline}
+                disabled={isRunning}
+                className="w-full h-12 text-sm bg-gray-900 hover:bg-gray-800 text-white gap-2"
+              >
+                <Zap className="w-4 h-4" />
+                Extract Viral Clips
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════ */}
+        {/* PROCESSING INDICATOR                                  */}
+        {/* ══════════════════════════════════════════════════════ */}
+        {isRunning && (
+          <Card className="border-blue-200 bg-blue-50/30">
+            <CardContent className="p-6 text-center space-y-4">
+              <div className="w-16 h-16 rounded-xl bg-blue-100 flex items-center justify-center mx-auto">
+                {currentStage === 'upload' && <Upload className="w-8 h-8 text-blue-500 animate-pulse" />}
+                {currentStage === 'transcribe' && <Mic className="w-8 h-8 text-blue-500 animate-pulse" />}
+                {currentStage === 'analyze' && <Brain className="w-8 h-8 text-blue-500 animate-pulse" />}
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900">
+                  {currentStage === 'upload' && 'Uploading video…'}
+                  {currentStage === 'transcribe' && 'Transcribing audio…'}
+                  {currentStage === 'analyze' && 'Claude is finding viral moments…'}
+                </p>
+                <p className="text-sm text-gray-500 mt-1">{statusMessage}</p>
+              </div>
+              <div className="max-w-xs mx-auto">
+                <div className="w-full h-1 bg-blue-100 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-500 rounded-full animate-pulse" style={{ width: '60%' }} />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ══════════════════════════════════════════════════════ */}
+        {/* RESULTS STAGE — Viral Clips Grid                      */}
+        {/* ══════════════════════════════════════════════════════ */}
+        {clips.length > 0 && (
+          <div className="space-y-4">
+            {/* Results Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <Flame className="w-5 h-5 text-red-500" />
+                  <h2 className="text-lg font-semibold text-gray-900">{clips.length} Viral Clips Found</h2>
+                </div>
+                <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+                  Ranked by virality
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <Clock className="w-3.5 h-3.5" />
+                Source: {Math.floor(videoDuration / 60)}m {Math.floor(videoDuration % 60)}s
+                {wordCount > 0 && ` · ${wordCount.toLocaleString()} words`}
+              </div>
+            </div>
+
+            {/* Stats Bar */}
+            <div className="flex gap-3">
+              {[
+                { label: 'Avg virality', value: Math.round(clips.reduce((s, c) => s + c.virality_score, 0) / clips.length), icon: TrendingUp, color: 'text-red-500' },
+                { label: 'Total clip time', value: `${Math.round(clips.reduce((s, c) => s + c.duration, 0))}s`, icon: Clock, color: 'text-blue-500' },
+                { label: 'Top category', value: (clips[0]?.category || '').replace('_', ' '), icon: Sparkles, color: 'text-purple-500' },
+              ].map((stat) => (
+                <div key={stat.label} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-100">
+                  <stat.icon className={`w-3.5 h-3.5 ${stat.color}`} />
+                  <span className="text-xs text-gray-500">{stat.label}:</span>
+                  <span className="text-xs font-semibold text-gray-900">{stat.value}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Clips Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {clips.map((clip, i) => (
+                <ClipCard
+                  key={i}
+                  clip={clip}
+                  index={i}
+                  videoUrl={videoUrl}
+                  allWords={asrWords}
+                  onClipReady={(idx, blob) => {
+                    console.log(`Clip #${idx + 1} ready: ${(blob.size / 1048576).toFixed(1)}MB`);
                   }}
                 />
-                {enhancement.captions?.highlight_words?.length > 0 && (
-                  <div>
-                    <span className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">AI-detected emphasis words</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {enhancement.captions.highlight_words.map((w, i) => (
-                        <Tag key={i} color="amber">{w}</Tag>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </Section>
-
-              {/* LAYER 2: Vertical Reframe */}
-              <Section title="9:16 Vertical reframe" icon={Crop} badge="Layer 2" defaultOpen={false}>
-                <div className="space-y-3">
-                  <div className="flex gap-2 flex-wrap">
-                    {['center_lock', 'face_track', 'rule_of_thirds_left', 'rule_of_thirds_right', 'split_screen_top'].map(mode => (
-                      <button
-                        key={mode}
-                        onClick={() => {
-                          setReframeMode(mode);
-                          const xMap = { center_lock: 50, face_track: 50, rule_of_thirds_left: 33, rule_of_thirds_right: 67, split_screen_top: 50 };
-                          setCropX(xMap[mode] || 50);
-                        }}
-                        className={`px-2.5 py-1 rounded text-xs font-medium border transition-all ${
-                          reframeMode === mode
-                            ? 'border-blue-400 bg-blue-50 text-blue-700'
-                            : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                        }`}
-                      >
-                        {mode.replace(/_/g, ' ')}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-gray-500 mb-1 block">Horizontal crop position</label>
-                    <Slider
-                      value={[cropX]}
-                      onValueChange={([v]) => setCropX(v)}
-                      min={0} max={100} step={1}
-                      className="w-full"
-                    />
-                    <div className="flex justify-between text-[10px] text-gray-400 mt-0.5">
-                      <span>Left</span><span>Center</span><span>Right</span>
-                    </div>
-                  </div>
-
-                  {enhancement.reframe?.reasoning && (
-                    <p className="text-xs text-gray-500 bg-gray-50 rounded p-2 border-l-2 border-gray-300">
-                      {enhancement.reframe.reasoning}
-                    </p>
-                  )}
-                </div>
-              </Section>
-
-              {/* LAYER 3: Hook + Progress Bar */}
-              <Section title="Hook & retention" icon={Zap} badge="Layer 3" defaultOpen={false}>
-                <div className="space-y-3">
-                  {/* Hook text */}
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs text-gray-500">Hook overlay text</label>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-gray-400">Enabled</span>
-                        <Switch checked={hookEnabled} onCheckedChange={setHookEnabled} />
-                      </div>
-                    </div>
-                    <Input
-                      value={hookText}
-                      onChange={(e) => setHookText(e.target.value)}
-                      placeholder="BOLD SCROLL-STOPPING TEXT"
-                      className="h-8 text-xs font-bold"
-                      maxLength={50}
-                    />
-                    {enhancement.hook && (
-                      <div className="flex gap-1.5 mt-1.5">
-                        <Tag color="purple">{enhancement.hook.style}</Tag>
-                        <Tag color="blue">{enhancement.hook.animation} animation</Tag>
-                        <Tag color="gray">{enhancement.hook.display_duration}s duration</Tag>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-gray-50 border border-gray-100">
-                    <div>
-                      <p className="text-xs font-medium text-gray-900">Progress bar</p>
-                      <p className="text-[10px] text-gray-400">Viewers stay when they see how long is left</p>
-                    </div>
-                    <Switch checked={progressBarEnabled} onCheckedChange={setProgressBarEnabled} />
-                  </div>
-
-                  {/* Cover frame */}
-                  {enhancement.cover_frame && (
-                    <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-100">
-                      <p className="text-xs font-medium text-gray-900">
-                        Best cover frame: {Math.floor(enhancement.cover_frame.timestamp / 60)}:{Math.floor(enhancement.cover_frame.timestamp % 60).toString().padStart(2, '0')} into clip
-                      </p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">{enhancement.cover_frame.reason}</p>
-                    </div>
-                  )}
-                </div>
-              </Section>
-
-              {/* LAYER 4: Audio */}
-              <Section title="Audio engineering" icon={Volume2} badge="Layer 4" defaultOpen={false}>
-                <div className="space-y-3">
-                  {/* Mood + music */}
-                  {enhancement.audio && (
-                    <div className="flex flex-wrap gap-1.5">
-                      <Tag color="purple">{enhancement.audio.mood} mood</Tag>
-                      <Tag color="blue">{enhancement.audio.music_energy} energy</Tag>
-                      <Tag color="amber">{enhancement.audio.music_genre_hint}</Tag>
-                      <Tag color="green">-{enhancement.audio.normalize_lufs} LUFS</Tag>
-                    </div>
-                  )}
-
-                  {/* Voice boost */}
-                  <div>
-                    <label className="text-xs text-gray-500 mb-1 block">Voice clarity boost (+{voiceBoost}dB)</label>
-                    <Slider
-                      value={[voiceBoost]}
-                      onValueChange={([v]) => setVoiceBoost(v)}
-                      min={0} max={10} step={1}
-                      className="w-full"
-                    />
-                  </div>
-
-                  {/* Music volume */}
-                  <div>
-                    <label className="text-xs text-gray-500 mb-1 block">Background music volume ({musicVolume}%)</label>
-                    <Slider
-                      value={[musicVolume]}
-                      onValueChange={([v]) => setMusicVolume(v)}
-                      min={0} max={50} step={5}
-                      className="w-full"
-                    />
-                  </div>
-
-                  {/* SFX cues */}
-                  {enhancement.audio?.sfx_cues?.length > 0 && (
-                    <div>
-                      <span className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">AI-placed sound effects</span>
-                      <div className="space-y-1 mt-1">
-                        {enhancement.audio.sfx_cues.map((sfx, i) => (
-                          <div key={i} className="flex items-center gap-2 text-xs p-1.5 rounded bg-gray-50">
-                            <Tag color="red">{sfx.type}</Tag>
-                            <span className="text-gray-400 font-mono text-[10px]">
-                              {Math.floor(sfx.timestamp / 60)}:{Math.floor(sfx.timestamp % 60).toString().padStart(2, '0')}
-                            </span>
-                            <span className="text-gray-500">{sfx.reason}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </Section>
-
-              {/* LAYER 5: SEO + Distribution */}
-              <Section title="SEO & distribution" icon={Search} badge="Layer 5" defaultOpen={false}>
-                {enhancement.seo && (
-                  <div className="space-y-3">
-                    {/* Title picker */}
-                    <div>
-                      <span className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Title (pick your favorite)</span>
-                      <div className="space-y-1.5 mt-1">
-                        {[enhancement.seo.title, ...(enhancement.seo.ab_titles || [])].map((t, i) => (
-                          <button
-                            key={i}
-                            onClick={() => setSelectedTitle(i)}
-                            className={`w-full text-left p-2 rounded-lg border text-xs transition-all ${
-                              selectedTitle === i
-                                ? 'border-blue-400 bg-blue-50 text-gray-900'
-                                : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              {i === 0 ? <Tag color="green">Primary</Tag> : <Tag color="gray">A/B #{i}</Tag>}
-                              <span>{t}</span>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Description */}
-                    <div>
-                      <span className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Description</span>
-                      <p className="text-xs text-gray-600 mt-1 bg-gray-50 rounded p-2 whitespace-pre-line">
-                        {enhancement.seo.description}
-                      </p>
-                    </div>
-
-                    {/* Hashtags */}
-                    <div>
-                      <span className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Hashtags</span>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {(enhancement.seo.hashtags || []).map((h, i) => (
-                          <Tag key={i} color="blue">#{h}</Tag>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Platform notes */}
-                    {enhancement.seo.platform_notes && (
-                      <div className="grid grid-cols-3 gap-2">
-                        {Object.entries(enhancement.seo.platform_notes).map(([platform, note]) => (
-                          <div key={platform} className="p-2 rounded bg-gray-50 border border-gray-100">
-                            <span className="text-[10px] font-medium text-gray-700 capitalize">{platform.replace('_', ' ')}</span>
-                            <p className="text-[10px] text-gray-500 mt-0.5">{note}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Best post time */}
-                    {enhancement.seo.best_post_time && (
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-3.5 h-3.5 text-gray-400" />
-                        <span className="text-xs text-gray-500">Best time to post:</span>
-                        <Tag color="amber">{enhancement.seo.best_post_time}</Tag>
-                      </div>
-                    )}
-
-                    {/* Copy button */}
-                    <Button variant="outline" size="sm" className="w-full text-xs gap-1" onClick={copySeo}>
-                      <Copy className="w-3 h-3" />
-                      Copy title + description + hashtags
-                    </Button>
-                  </div>
-                )}
-              </Section>
-
+              ))}
             </div>
+
+            {/* Drip Scheduler */}
+            <ClipScheduler clips={clips} />
           </div>
+        )}
+
+        {/* Empty state after analysis found nothing */}
+        {completedStages.includes('analyze') && clips.length === 0 && !isRunning && (
+          <Card className="border-gray-200">
+            <CardContent className="p-8 text-center space-y-3">
+              <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center mx-auto">
+                <Scissors className="w-7 h-7 text-gray-400" />
+              </div>
+              <p className="font-semibold text-gray-700">No viral moments detected</p>
+              <p className="text-sm text-gray-400">
+                The content may be too uniform or quiet. Try a video with more emotional variety.
+              </p>
+              <Button variant="outline" size="sm" onClick={resetPipeline} className="gap-1">
+                <RotateCcw className="w-3.5 h-3.5" />
+                Try another video
+              </Button>
+            </CardContent>
+          </Card>
         )}
       </div>
     </div>
