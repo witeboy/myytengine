@@ -116,13 +116,14 @@ export default function ClipExtractor() {
     const url = URL.createObjectURL(file);
     setVideoUrl(url);
 
+    const durationUrl = URL.createObjectURL(file);
     const vid = document.createElement('video');
     vid.preload = 'metadata';
     vid.onloadedmetadata = () => {
       setVideoDuration(vid.duration);
-      URL.revokeObjectURL(vid.src);
+      URL.revokeObjectURL(durationUrl);
     };
-    vid.src = url;
+    vid.src = durationUrl;
   };
 
   const handleDrop = (e) => {
