@@ -85,6 +85,11 @@ const AuthenticatedApp = () => {
           <QuickPublish />
         </LayoutWrapper>
       } />
+      <Route path="/ClipExtractor" element={
+        <LayoutWrapper currentPageName="ClipExtractor">
+          <ClipExtractor />
+        </LayoutWrapper>
+      } />
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
