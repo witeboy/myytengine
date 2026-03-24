@@ -100,11 +100,11 @@ DESCRIPTION ENGINEERING RULES
 2. KEYWORD INTEGRATION:
    - Primary keyword in first sentence, naturally
    - Secondary keywords spread through first paragraph
-   - Long-tail keywords in the body (at least 5 different ones)
+   - Long-tail keywords in the body (at most 3 different ones)
    - Do NOT keyword-stuff — it must read naturally
 
 3. STRUCTURE:
-   - Opening hook (150 chars) → Story/value summary → Timestamps placeholder → CTAs → Links section
+   - Opening hook (150 chars) → Story/value summary → Timestamps → CTAs
    - Use line breaks generously — descriptions are scanned, not read
    - Include 2-3 CTAs (subscribe, comment question, related video)
 
