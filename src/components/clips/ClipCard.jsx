@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Play, Pause, Download, Loader2, Scissors, Clock,
-  Flame, TrendingUp, ChevronDown, ChevronUp,
+  Flame, TrendingUp, ChevronDown, ChevronUp, Wand2,
 } from 'lucide-react';
 import { formatTimestamp, clipVideo, clipFilename } from '@/lib/clipWithFFmpeg';
+import ClipEnhancePanel from './ClipEnhancePanel';
 
 const CATEGORY_COLORS = {
   hot_take:       'bg-red-100 text-red-700 border-red-200',
@@ -50,13 +51,14 @@ function ViralityMeter({ score }) {
   );
 }
 
-export default function ClipCard({ clip, index, videoUrl, onClipReady }) {
+export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords = [] }) {
   const videoRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [clipping, setClipping] = useState(false);
   const [clipProgress, setClipProgress] = useState('');
   const [clipBlob, setClipBlob] = useState(null);
+  const [showEnhance, setShowEnhance] = useState(false);
 
   const handlePlayPause = () => {
     const vid = videoRef.current;
@@ -232,6 +234,25 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady }) {
               )}
             </Button>
           </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="w-full h-8 text-xs mt-1 border-purple-200 text-purple-700 hover:bg-purple-50"
+            onClick={() => setShowEnhance(true)}
+          >
+            <Wand2 className="w-3 h-3 mr-1" />
+            Enhance for FYP
+          </Button>
+
+          {showEnhance && (
+            <ClipEnhancePanel
+              clip={clip}
+              clipIndex={index}
+              words={allWords}
+              videoUrl={videoUrl}
+              onClose={() => setShowEnhance(false)}
+            />
+          )}
         </div>
       </CardContent>
     </Card>
