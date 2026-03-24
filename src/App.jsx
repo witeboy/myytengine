@@ -12,6 +12,7 @@ import ShortsPipeline from './pages/ShortsPipeline';
 import AutoEditReview from './pages/AutoEditReview';
 import YouTubeCallback from './pages/YouTubeCallback';
 import QuickPublish from './pages/QuickPublish';
+import ClipExtractor from './pages/ClipExtractor';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
