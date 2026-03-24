@@ -356,12 +356,18 @@ export default function ClipExtractor() {
             {/* YouTube URL Input */}
             {inputMode === 'url' && (
               <YouTubeUrlInput
-                onResolved={({ videoUrl: streamUrl, audioUrl: aUrl, title, duration, thumbnail }) => {
-                  setVideoUrl(streamUrl);
-                  setAudioUrl(aUrl);
-                  setVideoDuration(duration);
-                  setVideoContext(title);
-                  setVideoFile({ name: title, size: 0, type: 'video/mp4', _isUrl: true, _streamUrl: streamUrl, _audioUrl: aUrl });
+                onResolved={({ videoUrl: streamUrl, audioUrl: aUrl, title, duration, thumbnail, hasStreams }) => {
+                  if (hasStreams && streamUrl) {
+                    setVideoUrl(streamUrl);
+                    setAudioUrl(aUrl);
+                    setVideoDuration(duration);
+                    setVideoContext(title);
+                    setVideoFile({ name: title, size: 0, type: 'video/mp4', _isUrl: true, _streamUrl: streamUrl, _audioUrl: aUrl });
+                  } else {
+                    setVideoContext(title);
+                    setVideoDuration(duration);
+                    setInputMode('file');
+                  }
                 }}
               />
             )}
