@@ -72,7 +72,6 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
       vid.play();
       setPlaying(true);
 
-      // Auto-stop at clip end
       const checkEnd = () => {
         if (vid.currentTime >= clip.end) {
           vid.pause();
@@ -87,7 +86,6 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
 
   const handleClip = async () => {
     if (clipBlob) {
-      // Already clipped — download
       downloadBlob(clipBlob);
       return;
     }
@@ -135,7 +133,6 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
             onEnded={() => setPlaying(false)}
           />
 
-          {/* Play/Pause Overlay */}
           <div className={`absolute inset-0 flex items-center justify-center bg-black/20 transition-opacity ${playing ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'}`}>
             <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
               {playing
@@ -145,12 +142,10 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
             </div>
           </div>
 
-          {/* Rank Badge */}
           <div className="absolute top-2 left-2 w-7 h-7 rounded-full bg-black/70 text-white flex items-center justify-center text-xs font-bold">
             #{index + 1}
           </div>
 
-          {/* Duration Badge */}
           <div className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-black/70 text-white text-xs font-mono flex items-center gap-1">
             <Clock className="w-3 h-3" />
             {formatTimestamp(clip.start)} → {formatTimestamp(clip.end)}
@@ -159,7 +154,6 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
 
         {/* Info Section */}
         <div className="p-4 space-y-3">
-          {/* Title + Score Row */}
           <div className="flex items-start justify-between gap-3">
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-sm text-gray-900 leading-tight line-clamp-2">
@@ -177,12 +171,10 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
             <ViralityMeter score={clip.virality_score} />
           </div>
 
-          {/* Hook Preview */}
           <p className="text-xs text-gray-500 italic leading-relaxed">
             "{clip.hook}"
           </p>
 
-          {/* Expandable Details */}
           <button
             onClick={() => setExpanded(!expanded)}
             className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
@@ -234,6 +226,8 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
               )}
             </Button>
           </div>
+
+          {/* Enhance for FYP */}
           <Button
             size="sm"
             variant="outline"
