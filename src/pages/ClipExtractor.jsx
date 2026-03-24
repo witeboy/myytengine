@@ -11,6 +11,7 @@ import { transcribeVoiceover } from '@/lib/transcribeASR';
 import { initFFmpeg, isFFmpegSupported } from '@/lib/clipWithFFmpeg';
 import ClipCard from '@/components/clips/ClipCard';
 import ClipScheduler from '@/components/clips/ClipScheduler';
+import YouTubeUrlInput from '@/components/clips/YouTubeUrlInput';
 import {
   Upload, FileVideo, Mic, Brain, Scissors, ArrowLeft,
   Loader2, CheckCircle, AlertCircle, Sparkles, Flame,
@@ -71,13 +72,16 @@ export default function ClipExtractor() {
   const [error, setError] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
 
+  // ── Input mode ──────────────────────────────────────────────
+  const [inputMode, setInputMode] = useState('file'); // 'file' | 'url'
+
   // ── Upload state ────────────────────────────────────────────
   const [videoFile, setVideoFile] = useState(null);
   const [videoUrl, setVideoUrl] = useState('');
+  const [audioUrl, setAudioUrl] = useState('');
   const [videoDuration, setVideoDuration] = useState(0);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
-  const previewVideoRef = useRef(null);
 
   // ── Transcription state ─────────────────────────────────────
   const [transcript, setTranscript] = useState('');
@@ -105,7 +109,7 @@ export default function ClipExtractor() {
   };
 
   // ════════════════════════════════════════════════════════════
-  // STAGE 1: Video Upload
+  // STAGE 1: Video file select
   // ════════════════════════════════════════════════════════════
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
@@ -113,10 +117,10 @@ export default function ClipExtractor() {
     setVideoFile(file);
     setError('');
 
-    // Create preview URL and get duration
     const url = URL.createObjectURL(file);
     setVideoUrl(url);
 
+    // Separate blob URL just for reading duration (won't revoke the preview one)
     const durationUrl = URL.createObjectURL(file);
     const vid = document.createElement('video');
     vid.preload = 'metadata';
@@ -213,12 +217,18 @@ export default function ClipExtractor() {
     setCompletedStages([]);
 
     try {
-      // Stage 1: Upload video to Base44 storage
+      // Stage 1: Upload / resolve
       setCurrentStage('upload');
       setStatusMessage('Uploading video…');
 
-      const { file_url } = await base44.integrations.Core.UploadFile({ file: videoFile });
-      const uploadedUrl = file_url;
+      let uploadedUrl;
+      if (videoFile._isUrl) {
+        // YouTube URL mode — use pre-resolved audio URL directly for ASR
+        uploadedUrl = videoFile._audioUrl || videoFile._streamUrl;
+      } else {
+        const { file_url } = await base44.integrations.Core.UploadFile({ file: videoFile });
+        uploadedUrl = file_url;
+      }
       markComplete('upload');
 
       // Stage 2: Transcribe
@@ -250,6 +260,7 @@ export default function ClipExtractor() {
     setCompletedStages([]);
     setVideoFile(null);
     setVideoUrl('');
+    setAudioUrl('');
     setVideoDuration(0);
     setTranscript('');
     setAsrWords([]);
@@ -257,9 +268,11 @@ export default function ClipExtractor() {
     setClips([]);
     setError('');
     setStatusMessage('');
+    setInputMode('file');
   };
 
   const isRunning = currentStage && currentStage !== 'results';
+  const hasVideoReady = videoFile || (inputMode === 'url' && videoUrl);
 
   // ════════════════════════════════════════════════════════════
   // RENDER
@@ -272,12 +285,8 @@ export default function ClipExtractor() {
         <div className="flex items-start justify-between">
           <div>
             <div className="flex items-center gap-3">
-              <Link
-                to="/Dashboard"
-                className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <ArrowLeft className="w-3 h-3" />
-                Dashboard
+              <Link to="/Dashboard" className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                <ArrowLeft className="w-3 h-3" /> Dashboard
               </Link>
             </div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight mt-2 flex items-center gap-2">
@@ -285,24 +294,18 @@ export default function ClipExtractor() {
               Viral Clip Extractor
             </h1>
             <p className="text-gray-500 text-sm mt-1">
-              Upload a long video → AI finds the most viral moments → Download clips ranked by virality
+              Upload or paste a YouTube link → AI finds the most viral moments → Download FYP-ready clips
             </p>
           </div>
-
           {clips.length > 0 && (
             <Button variant="outline" size="sm" onClick={resetPipeline} className="gap-1">
-              <RotateCcw className="w-3.5 h-3.5" />
-              New Video
+              <RotateCcw className="w-3.5 h-3.5" /> New Video
             </Button>
           )}
         </div>
 
         {/* Stage Progress */}
-        <StageIndicator
-          stages={STAGES}
-          currentStage={currentStage}
-          completedStages={completedStages}
-        />
+        <StageIndicator stages={STAGES} currentStage={currentStage} completedStages={completedStages} />
 
         {/* Error */}
         {error && (
@@ -328,52 +331,89 @@ export default function ClipExtractor() {
         {/* ══════════════════════════════════════════════════════ */}
         {!completedStages.includes('upload') && currentStage !== 'upload' && clips.length === 0 && (
           <div className="space-y-4">
-            {/* Upload Zone */}
-            <div
-              onDrop={handleDrop}
-              onDragOver={(e) => e.preventDefault()}
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
-                videoFile
-                  ? 'border-emerald-300 bg-emerald-50/50'
-                  : 'border-gray-200 bg-gray-50/50 hover:border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="video/*"
-                className="hidden"
-                onChange={handleFileSelect}
-              />
 
-              {videoFile ? (
-                <div className="space-y-3">
-                  <div className="w-14 h-14 rounded-xl bg-emerald-100 flex items-center justify-center mx-auto">
-                    <FileVideo className="w-7 h-7 text-emerald-600" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-900">{videoFile.name}</p>
-                    <p className="text-sm text-gray-500 mt-1">
-                      {(videoFile.size / 1048576).toFixed(1)} MB
-                      {videoDuration > 0 && ` · ${Math.floor(videoDuration / 60)}m ${Math.floor(videoDuration % 60)}s`}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center mx-auto">
-                    <Upload className="w-7 h-7 text-gray-400" />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-gray-700">Drop your video here</p>
-                    <p className="text-sm text-gray-400 mt-1">
-                      MP4, MOV, WebM — podcasts, interviews, streams, lectures
-                    </p>
-                  </div>
-                </div>
-              )}
+            {/* Source toggle: File vs YouTube URL */}
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5 w-fit">
+              <button
+                onClick={() => setInputMode('file')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  inputMode === 'file' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500'
+                }`}
+              >
+                <Upload className="w-3.5 h-3.5" /> Upload File
+              </button>
+              <button
+                onClick={() => setInputMode('url')}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  inputMode === 'url' ? 'bg-white shadow-sm text-red-600' : 'text-gray-500'
+                }`}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"/><path d="m10 15 5-3-5-3z"/></svg>
+                YouTube URL
+              </button>
             </div>
+
+            {/* YouTube URL Input */}
+            {inputMode === 'url' && (
+              <YouTubeUrlInput
+                onResolved={({ videoUrl: streamUrl, audioUrl: aUrl, title, duration, thumbnail }) => {
+                  setVideoUrl(streamUrl);
+                  setAudioUrl(aUrl);
+                  setVideoDuration(duration);
+                  setVideoContext(title);
+                  setVideoFile({ name: title, size: 0, type: 'video/mp4', _isUrl: true, _streamUrl: streamUrl, _audioUrl: aUrl });
+                }}
+              />
+            )}
+
+            {/* File Upload Zone */}
+            {inputMode === 'file' && (
+              <div
+                onDrop={handleDrop}
+                onDragOver={(e) => e.preventDefault()}
+                onClick={() => fileInputRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all ${
+                  videoFile
+                    ? 'border-emerald-300 bg-emerald-50/50'
+                    : 'border-gray-200 bg-gray-50/50 hover:border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
+
+                {videoFile ? (
+                  <div className="space-y-3">
+                    <div className="w-14 h-14 rounded-xl bg-emerald-100 flex items-center justify-center mx-auto">
+                      <FileVideo className="w-7 h-7 text-emerald-600" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-900">{videoFile.name}</p>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {(videoFile.size / 1048576).toFixed(1)} MB
+                        {videoDuration > 0 && ` · ${Math.floor(videoDuration / 60)}m ${Math.floor(videoDuration % 60)}s`}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center mx-auto">
+                      <Upload className="w-7 h-7 text-gray-400" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-700">Drop your video here</p>
+                      <p className="text-sm text-gray-400 mt-1">
+                        MP4, MOV, WebM — podcasts, interviews, streams, lectures
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Settings Toggle */}
             <div className="flex items-center justify-between">
@@ -444,7 +484,7 @@ export default function ClipExtractor() {
             )}
 
             {/* Start Button */}
-            {videoFile && (
+            {hasVideoReady && (
               <Button
                 onClick={runFullPipeline}
                 disabled={isRunning}
@@ -458,7 +498,7 @@ export default function ClipExtractor() {
         )}
 
         {/* ══════════════════════════════════════════════════════ */}
-        {/* PROCESSING INDICATOR (during upload/transcribe/analyze) */}
+        {/* PROCESSING INDICATOR                                  */}
         {/* ══════════════════════════════════════════════════════ */}
         {isRunning && (
           <Card className="border-blue-200 bg-blue-50/30">
