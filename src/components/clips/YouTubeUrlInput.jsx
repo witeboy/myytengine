@@ -139,8 +139,17 @@ export default function YouTubeUrlInput({ onResolved }) {
               </Badge>
             </div>
             <div className="flex items-center gap-1 mt-1.5">
-              <CheckCircle className="w-3 h-3 text-emerald-500" />
-              <span className="text-[10px] text-emerald-600 font-medium">Stream URL resolved — ready to clip</span>
+              {resolved.has_streams ? (
+                <>
+                  <CheckCircle className="w-3 h-3 text-emerald-500" />
+                  <span className="text-[10px] text-emerald-600 font-medium">Stream URL resolved — ready to clip</span>
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="w-3 h-3 text-amber-500" />
+                  <span className="text-[10px] text-amber-600 font-medium">Metadata loaded — upload the file for clipping</span>
+                </>
+              )}
             </div>
           </div>
         </div>
