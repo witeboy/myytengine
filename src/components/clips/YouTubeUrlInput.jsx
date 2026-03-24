@@ -31,7 +31,7 @@ export default function YouTubeUrlInput({ onResolved }) {
       const res = await base44.functions.invoke('resolveVideoUrl', { url: url.trim() });
       const data = res.data || res;
 
-      if (!data?.stream_url) {
+      if (!data?.success) {
         throw new Error(data?.error || 'Failed to resolve video URL');
       }
 
