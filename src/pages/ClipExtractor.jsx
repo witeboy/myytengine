@@ -36,7 +36,7 @@ function StageIndicator({ stages, currentStage, completedStages }) {
         const Icon = stage.icon;
 
         return (
-          <React.Fragment key={stage.id}>
+          <div key={stage.id} className="contents">
             <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
               isComplete
                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
@@ -56,7 +56,7 @@ function StageIndicator({ stages, currentStage, completedStages }) {
             {i < stages.length - 1 && (
               <ChevronRight className={`w-3.5 h-3.5 ${isComplete ? 'text-emerald-400' : 'text-gray-200'}`} />
             )}
-          </React.Fragment>
+          </div>
         );
       })}
     </div>
