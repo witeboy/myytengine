@@ -37,14 +37,15 @@ export default function YouTubeUrlInput({ onResolved }) {
 
       setResolved(data);
       onResolved?.({
-        videoUrl: data.stream_url,
-        audioUrl: data.audio_url,
+        videoUrl: data.stream_url || '',
+        audioUrl: data.audio_url || '',
         title: data.title,
         duration: data.duration,
         thumbnail: data.thumbnail,
         channel: data.channel,
         videoId: data.video_id,
         quality: data.quality,
+        hasStreams: data.has_streams,
       });
 
     } catch (err) {
