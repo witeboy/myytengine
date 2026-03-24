@@ -61,15 +61,15 @@ REQUIREMENTS — Follow these EXACTLY:
 
 1. PRIMARY TAG: Start with the single most important, specific keyword for this exact video. This is the #1 search term a viewer would type.
 
-2. LONG-TAIL KEYWORDS: Include at least 8 long-tail keyword phrases (3-6 words) that real people would actually type into YouTube's search bar when looking for this content. Think like a viewer, not a marketer.
+2. LONG-TAIL KEYWORDS: Include at most 3 long-tail keyword phrases (3-6 words) that real people would actually type into YouTube's search bar when looking for this content. Think like a viewer, not a marketer.
 
-3. BROAD CATEGORY TAGS: Include 3-4 broad niche/category tags that place this video in the right ecosystem (e.g., "true crime documentary", "personal finance", "history explained").
+3. BROAD CATEGORY TAGS: Include 2 broad niche/category tags that place this video in the right ecosystem (e.g., "true crime documentary", "personal finance", "history explained").
 
-4. MISSPELLINGS & ALTERNATES: Add 3-5 common misspellings, alternate names, or colloquial versions of the topic. Real viewers misspell things — capture that traffic.
+4. MISSPELLINGS & ALTERNATES: Add 1 common misspellings, alternate names, or colloquial versions of the topic. Real viewers misspell things — capture that traffic.
 
-5. CONTENT GAP TAGS: Include 5 tags that specifically target "content gaps" — topics people are searching for but don't find enough good videos on. These are low-competition, high-intent keywords related to this script.
+5. CONTENT GAP TAGS: Include 2 tags that specifically target "content gaps" — topics people are searching for but don't find enough good videos on. These are low-competition, high-intent keywords related to this script.
 
-6. VIEWER-INTENT TAGS: Include 3-4 tags based on the language and tone used in the script — are viewers beginners, hobbyists, or professionals? Tag accordingly.
+6. VIEWER-INTENT TAGS: Include 2 tags based on the language and tone used in the script — are viewers beginners, hobbyists, or professionals? Tag accordingly.
 
 7. FORMAT: Output as comma-separated lists organized by category so tags can be copy-pasted directly into YouTube Studio.
 
@@ -78,7 +78,7 @@ REQUIREMENTS — Follow these EXACTLY:
    - Total combined character count of ALL tags must be under 500 characters (YouTube limit)
    - No special characters except spaces and hyphens
    - No hashtags in tags (those are separate)
-   - Aim for 20-25 total tags
+   - Aim for 10 total tags
 
 ═══════════════════════════════════════════════
 OUTPUT — RETURN ONLY VALID JSON, NO MARKDOWN:
@@ -87,9 +87,9 @@ OUTPUT — RETURN ONLY VALID JSON, NO MARKDOWN:
 {
   "primary_tag": "the single most important keyword",
   "tags_breakdown": {
-    "short": ["5 broad 1-2 word tags from the niche"],
-    "medium": ["8-10 medium 2-3 word specific tags"],
-    "long": ["8 long-tail 3-6 word search phrases viewers would type"]
+    "short": ["3 broad 1-2 word tags from the niche"],
+    "medium": ["3 medium 2-3 word specific tags"],
+    "long": ["3 long-tail 3-6 word search phrases viewers would type"]
   },
   "misspelling_tags": ["3-5 common misspellings or alternate names"],
   "content_gap_tags": ["5 low-competition high-intent tags"],
@@ -132,7 +132,7 @@ HASHTAG STRATEGY:
 3. TWO NICHE-SPECIFIC TAGS: Hyper-relevant to THIS specific video's content based on the script
 
 BANNED HASHTAGS — DO NOT USE ANY OF THESE:
-#viral, #trending, #explore, #fyp, #foryou, #foryoupage, #viralvideo, #trend, #popular, #blowup, #algorithm
+#viral, #trending, #explore, #foryou, #foryoupage, #viralvideo, #trend, #popular, #blowup, #algorithm
 These are too broad and actively HURT your discoverability.
 
 PLACEMENT RULES:
