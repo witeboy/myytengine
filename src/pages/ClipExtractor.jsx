@@ -10,6 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { transcribeVoiceover } from '@/lib/transcribeASR';
 import { initFFmpeg, isFFmpegSupported } from '@/lib/clipWithFFmpeg';
 import ClipCard from '@/components/clips/ClipCard';
+import ClipScheduler from '@/components/clips/ClipScheduler';
 import {
   Upload, FileVideo, Mic, Brain, Scissors, ArrowLeft,
   Loader2, CheckCircle, AlertCircle, Sparkles, Flame,
@@ -530,12 +531,16 @@ export default function ClipExtractor() {
                   clip={clip}
                   index={i}
                   videoUrl={videoUrl}
+                  allWords={asrWords}
                   onClipReady={(idx, blob) => {
                     console.log(`Clip #${idx + 1} ready: ${(blob.size / 1048576).toFixed(1)}MB`);
                   }}
                 />
               ))}
             </div>
+
+            {/* Drip Scheduler */}
+            <ClipScheduler clips={clips} />
           </div>
         )}
 
