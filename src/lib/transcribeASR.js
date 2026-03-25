@@ -8,7 +8,7 @@ import { base44 } from '@/api/base44Client';
 // ══════════════════════════════════════════════════════════════════
 
 const POLL_INTERVAL = 3000;  // 3s between polls
-const POLL_TIMEOUT = 180000; // 3 min max
+const POLL_TIMEOUT = 600000; // 10 min max
 
 /**
  * Transcribe a voiceover URL using AssemblyAI via submit/poll backend functions.
