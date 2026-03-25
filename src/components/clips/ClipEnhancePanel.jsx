@@ -57,7 +57,7 @@ export default function ClipEnhancePanel({ clip, clipIndex, words, videoUrl, onC
   var [error, setError] = useState('');
   var [captionPreset, setCaptionPreset] = useState('hormozi_bold');
   var [reframeMode, setReframeMode] = useState('center_lock');
-  var [cropX, setCropX] = useState(50);
+  var [cropX, setCropX] = useState(clip.faceCropX || 50);
   var [hookText, setHookText] = useState('');
   var [hookEnabled, setHookEnabled] = useState(true);
   var [progressBarEnabled, setProgressBarEnabled] = useState(true);
