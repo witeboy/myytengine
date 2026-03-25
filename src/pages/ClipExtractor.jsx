@@ -191,8 +191,59 @@ export default function ClipExtractor() {
       });
       const data = res.data || res;
       if (data?.clips?.length) {
-        setClips(data.clips);
-        setStatusMessage('Found ' + data.clips.length + ' viral clips!');
+        let enrichedClips = data.clips;
+
+        // Face detection — run on each clip if face_track mode
+        if (cropMode === 'face_track' && videoUrl) {
+          setStatusMessage('Detecting faces for smart crop...');
+          try {
+            const faceVideo = document.createElement('video');
+            faceVideo.crossOrigin = 'anonymous';
+            faceVideo.preload = 'auto';
+            faceVideo.src = videoUrl;
+            faceVideo.muted = true;
+            await new Promise(function(resolve, reject) {
+              faceVideo.onloadeddata = resolve;
+              faceVideo.onerror = function() { reject(new Error('video load failed')); };
+              setTimeout(function() { resolve(); }, 10000);
+            });
+
+            var tempCanvas = document.createElement('canvas');
+            tempCanvas.width = faceVideo.videoWidth || 640;
+            tempCanvas.height = faceVideo.videoHeight || 360;
+            var tempCtx = tempCanvas.getContext('2d');
+
+            for (var ci = 0; ci < enrichedClips.length; ci++) {
+              var c = enrichedClips[ci];
+              try {
+                var midpoint = c.start + c.duration / 3;
+                faceVideo.currentTime = midpoint;
+                await new Promise(function(r) { faceVideo.onseeked = r; });
+                tempCtx.drawImage(faceVideo, 0, 0);
+                var b64 = tempCanvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+
+                var faceRes = await base44.functions.invoke('detectFaceRegion', {
+                  image_base64: b64,
+                  frame_width: tempCanvas.width,
+                  frame_height: tempCanvas.height,
+                });
+                var faceData = faceRes.data || faceRes;
+                if (faceData && faceData.primary_face && faceData.primary_face.x_center_percent) {
+                  enrichedClips[ci] = Object.assign({}, c, { faceCropX: faceData.primary_face.x_center_percent });
+                  console.log('Face detected for clip #' + (ci + 1) + ' at x=' + faceData.primary_face.x_center_percent + '%');
+                }
+                setStatusMessage('Face detection: ' + (ci + 1) + '/' + enrichedClips.length);
+              } catch (fErr) {
+                console.warn('Face detection failed for clip #' + (ci + 1) + ':', fErr.message);
+              }
+            }
+          } catch (faceErr) {
+            console.warn('Face detection setup failed:', faceErr.message);
+          }
+        }
+
+        setClips(enrichedClips);
+        setStatusMessage('Found ' + enrichedClips.length + ' viral clips!');
       } else {
         setClips([]);
         setStatusMessage('No strong viral moments found');
