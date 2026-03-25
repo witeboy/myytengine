@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -6,7 +6,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { transcribeVoiceover } from '@/lib/transcribeASR';
 import { initFFmpeg, isFFmpegSupported } from '@/lib/clipWithFFmpeg';
 import ClipCard from '@/components/clips/ClipCard';
@@ -19,14 +18,11 @@ import {
   Settings2,
 } from 'lucide-react';
 
-// ══════════════════════════════════════════════════════════════════
-// PIPELINE STAGES
-// ══════════════════════════════════════════════════════════════════
 const STAGES = [
-  { id: 'upload',     label: 'Upload',      icon: Upload,   description: 'Drop your long-form video' },
-  { id: 'transcribe', label: 'Transcribe',   icon: Mic,      description: 'ASR speech recognition' },
-  { id: 'analyze',    label: 'Find Clips',   icon: Brain,    description: 'Claude viral detection' },
-  { id: 'results',    label: 'Viral Clips',  icon: Scissors, description: 'Preview, rank & download' },
+  { id: 'upload',     label: 'Upload',      icon: Upload },
+  { id: 'transcribe', label: 'Transcribe',   icon: Mic },
+  { id: 'analyze',    label: 'Find Clips',   icon: Brain },
+  { id: 'results',    label: 'Viral Clips',  icon: Scissors },
 ];
 
 function StageIndicator({ stages, currentStage, completedStages }) {
@@ -36,7 +32,6 @@ function StageIndicator({ stages, currentStage, completedStages }) {
         const isComplete = completedStages.includes(stage.id);
         const isCurrent = currentStage === stage.id;
         const Icon = stage.icon;
-
         return (
           <div key={stage.id} className="contents">
             <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
@@ -66,61 +61,41 @@ function StageIndicator({ stages, currentStage, completedStages }) {
 }
 
 export default function ClipExtractor() {
-  // ── Pipeline state ──────────────────────────────────────────
   const [currentStage, setCurrentStage] = useState(null);
   const [completedStages, setCompletedStages] = useState([]);
   const [error, setError] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
-
-  // ── Input mode ──────────────────────────────────────────────
-  const [inputMode, setInputMode] = useState('file'); // 'file' | 'url'
-
-  // ── Upload state ────────────────────────────────────────────
+  const [inputMode, setInputMode] = useState('file');
   const [videoFile, setVideoFile] = useState(null);
   const [videoUrl, setVideoUrl] = useState('');
   const [audioUrl, setAudioUrl] = useState('');
   const [videoDuration, setVideoDuration] = useState(0);
-  const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
-
-  // ── Transcription state ─────────────────────────────────────
   const [transcript, setTranscript] = useState('');
   const [asrWords, setAsrWords] = useState([]);
   const [wordCount, setWordCount] = useState(0);
-
-  // ── Analysis state ──────────────────────────────────────────
   const [clips, setClips] = useState([]);
   const [analyzing, setAnalyzing] = useState(false);
-
-  // ── Settings ────────────────────────────────────────────────
   const [maxClips, setMaxClips] = useState('8');
   const [minClipLen, setMinClipLen] = useState('15');
   const [maxClipLen, setMaxClipLen] = useState('90');
   const [videoContext, setVideoContext] = useState('');
   const [showSettings, setShowSettings] = useState(false);
-
-  // ── FFmpeg state ────────────────────────────────────────────
   const [ffmpegReady, setFfmpegReady] = useState(false);
-  const [ffmpegLoading, setFfmpegLoading] = useState(false);
 
   const markComplete = (stage) => {
     setCompletedStages(prev => prev.includes(stage) ? prev : [...prev, stage]);
     setCurrentStage(null);
   };
 
-  // ════════════════════════════════════════════════════════════
-  // STAGE 1: Video file select
-  // ════════════════════════════════════════════════════════════
+  // ── File select ─────────────────────────────────────────────
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setVideoFile(file);
     setError('');
-
     const url = URL.createObjectURL(file);
     setVideoUrl(url);
-
-    // Separate blob URL just for reading duration (won't revoke the preview one)
     const durationUrl = URL.createObjectURL(file);
     const vid = document.createElement('video');
     vid.preload = 'metadata';
@@ -135,47 +110,36 @@ export default function ClipExtractor() {
     e.preventDefault();
     const file = e.dataTransfer?.files?.[0];
     if (file && file.type.startsWith('video/')) {
-      const fakeEvent = { target: { files: [file] } };
-      handleFileSelect(fakeEvent);
+      handleFileSelect({ target: { files: [file] } });
     }
   };
 
-  // ════════════════════════════════════════════════════════════
-  // STAGE 2: Transcription (reuses existing ASR)
-  // ════════════════════════════════════════════════════════════
+  // ── Transcription ───────────────────────────────────────────
   const runTranscription = async (uploadedUrl) => {
     setCurrentStage('transcribe');
     setStatusMessage('Submitting audio for speech recognition…');
-
     try {
-      const result = await transcribeVoiceover(uploadedUrl, ({ phase, message }) => {
+      const result = await transcribeVoiceover(uploadedUrl, ({ message }) => {
         setStatusMessage(message);
       });
-
       if (!result.success || !result.words?.length) {
         throw new Error('Transcription returned no words');
       }
-
       setAsrWords(result.words);
       setWordCount(result.word_count);
       setTranscript(result.words.map(w => w.word).join(' '));
-
       markComplete('transcribe');
       return result;
-
     } catch (err) {
-      throw new Error(`Transcription failed: ${err.message}`);
+      throw new Error('Transcription failed: ' + err.message);
     }
   };
 
-  // ════════════════════════════════════════════════════════════
-  // STAGE 3: Claude Viral Analysis
-  // ════════════════════════════════════════════════════════════
+  // ── Claude analysis ─────────────────────────────────────────
   const runViralAnalysis = async (words, duration) => {
     setCurrentStage('analyze');
     setStatusMessage('Claude is analyzing for viral moments…');
     setAnalyzing(true);
-
     try {
       const res = await base44.functions.invoke('analyzeViralMoments', {
         transcript: words.map(w => w.word).join(' '),
@@ -186,69 +150,48 @@ export default function ClipExtractor() {
         max_clip_seconds: parseInt(maxClipLen) || 90,
         context: videoContext,
       });
-
       const data = res.data || res;
-
       if (!data?.clips?.length) {
         setClips([]);
-        setStatusMessage('No strong viral moments found — try a different video');
+        setStatusMessage('No strong viral moments found');
       } else {
         setClips(data.clips);
-        setStatusMessage(`Found ${data.clips.length} viral clips!`);
+        setStatusMessage('Found ' + data.clips.length + ' viral clips!');
       }
-
       markComplete('analyze');
       setCurrentStage('results');
-
     } catch (err) {
-      throw new Error(`Claude analysis failed: ${err.message}`);
+      throw new Error('Claude analysis failed: ' + err.message);
     } finally {
       setAnalyzing(false);
     }
   };
 
-  // ════════════════════════════════════════════════════════════
-  // FULL PIPELINE: Upload → Transcribe → Analyze
-  // ════════════════════════════════════════════════════════════
+  // ── Full pipeline ───────────────────────────────────────────
   const runFullPipeline = async () => {
     if (!videoFile) return;
     setError('');
     setClips([]);
     setCompletedStages([]);
-
     try {
-      // Stage 1: Upload / resolve
       setCurrentStage('upload');
       setStatusMessage('Uploading video…');
-
       let uploadedUrl;
       if (videoFile._isUrl) {
-        // YouTube URL mode — use pre-resolved audio URL directly for ASR
         uploadedUrl = videoFile._audioUrl || videoFile._streamUrl;
       } else {
         const { file_url } = await base44.integrations.Core.UploadFile({ file: videoFile });
         uploadedUrl = file_url;
       }
       markComplete('upload');
-
-      // Stage 2: Transcribe
       const asrResult = await runTranscription(uploadedUrl);
-
-      // Stage 3: Analyze
       await runViralAnalysis(asrResult.words, asrResult.duration || videoDuration);
-
-      // Optionally pre-load FFmpeg for clipping
       if (isFFmpegSupported() && !ffmpegReady) {
-        setFfmpegLoading(true);
         try {
           await initFFmpeg(({ message }) => setStatusMessage(message));
           setFfmpegReady(true);
-        } catch {
-          // FFmpeg optional — fallback to canvas capture
-        }
-        setFfmpegLoading(false);
+        } catch (_e) { /* fallback to canvas */ }
       }
-
     } catch (err) {
       setError(err.message);
       setCurrentStage(null);
@@ -272,11 +215,8 @@ export default function ClipExtractor() {
   };
 
   const isRunning = currentStage && currentStage !== 'results';
-  const hasVideoReady = videoFile || (inputMode === 'url' && videoUrl);
+  const hasVideoReady = !!videoFile;
 
-  // ════════════════════════════════════════════════════════════
-  // RENDER
-  // ════════════════════════════════════════════════════════════
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-6">
@@ -284,11 +224,9 @@ export default function ClipExtractor() {
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <div className="flex items-center gap-3">
-              <Link to="/Dashboard" className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
-                <ArrowLeft className="w-3 h-3" /> Dashboard
-              </Link>
-            </div>
+            <Link to="/Dashboard" className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+              <ArrowLeft className="w-3 h-3" /> Dashboard
+            </Link>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight mt-2 flex items-center gap-2">
               <Scissors className="w-6 h-6 text-gray-700" />
               Viral Clip Extractor
@@ -304,10 +242,8 @@ export default function ClipExtractor() {
           )}
         </div>
 
-        {/* Stage Progress */}
         <StageIndicator stages={STAGES} currentStage={currentStage} completedStages={completedStages} />
 
-        {/* Error */}
         {error && (
           <div className="flex items-start gap-2 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
             <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
@@ -318,7 +254,6 @@ export default function ClipExtractor() {
           </div>
         )}
 
-        {/* Status Message */}
         {statusMessage && isRunning && (
           <div className="flex items-center gap-2 text-sm text-blue-600">
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -326,13 +261,11 @@ export default function ClipExtractor() {
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════════ */}
-        {/* UPLOAD STAGE                                          */}
-        {/* ══════════════════════════════════════════════════════ */}
+        {/* ── UPLOAD STAGE ──────────────────────────────────── */}
         {!completedStages.includes('upload') && currentStage !== 'upload' && clips.length === 0 && (
           <div className="space-y-4">
 
-            {/* Source toggle: File vs YouTube URL */}
+            {/* Source toggle */}
             <div className="flex gap-1 bg-gray-100 rounded-lg p-0.5 w-fit">
               <button
                 onClick={() => setInputMode('file')}
@@ -353,16 +286,19 @@ export default function ClipExtractor() {
               </button>
             </div>
 
-            {/* YouTube URL Input */}
+            {/* YouTube URL — uses Cobalt to get playable video + stable audio */}
             {inputMode === 'url' && (
               <YouTubeUrlInput
-                onResolved={({ title }) => {
-                  setVideoContext(title);
+                onVideoReady={({ videoUrl: vUrl, audioUrl: aUrl, title, channel }) => {
+                  setVideoUrl(vUrl);
+                  setAudioUrl(aUrl);
+                  setVideoContext(title + (channel ? ' by ' + channel : ''));
+                  setVideoFile({ name: title || 'YouTube Video', size: 0, type: 'video/mp4', _isUrl: true, _streamUrl: vUrl, _audioUrl: aUrl });
                 }}
               />
             )}
 
-            {/* File Upload Zone */}
+            {/* File upload */}
             {inputMode === 'file' && (
               <div
                 onDrop={handleDrop}
@@ -381,7 +317,6 @@ export default function ClipExtractor() {
                   className="hidden"
                   onChange={handleFileSelect}
                 />
-
                 {videoFile ? (
                   <div className="space-y-3">
                     <div className="w-14 h-14 rounded-xl bg-emerald-100 flex items-center justify-center mx-auto">
@@ -390,8 +325,8 @@ export default function ClipExtractor() {
                     <div>
                       <p className="font-semibold text-gray-900">{videoFile.name}</p>
                       <p className="text-sm text-gray-500 mt-1">
-                        {(videoFile.size / 1048576).toFixed(1)} MB
-                        {videoDuration > 0 && ` · ${Math.floor(videoDuration / 60)}m ${Math.floor(videoDuration % 60)}s`}
+                        {videoFile.size > 0 ? (videoFile.size / 1048576).toFixed(1) + ' MB' : ''}
+                        {videoDuration > 0 ? (videoFile.size > 0 ? ' · ' : '') + Math.floor(videoDuration / 60) + 'm ' + Math.floor(videoDuration % 60) + 's' : ''}
                       </p>
                     </div>
                   </div>
@@ -402,16 +337,14 @@ export default function ClipExtractor() {
                     </div>
                     <div>
                       <p className="font-semibold text-gray-700">Drop your video here</p>
-                      <p className="text-sm text-gray-400 mt-1">
-                        MP4, MOV, WebM — podcasts, interviews, streams, lectures
-                      </p>
+                      <p className="text-sm text-gray-400 mt-1">MP4, MOV, WebM — podcasts, interviews, streams, lectures</p>
                     </div>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Settings Toggle */}
+            {/* Settings */}
             <div className="flex items-center justify-between">
               <button
                 onClick={() => setShowSettings(!showSettings)}
@@ -420,16 +353,14 @@ export default function ClipExtractor() {
                 <Settings2 className="w-3.5 h-3.5" />
                 {showSettings ? 'Hide settings' : 'Clip settings'}
               </button>
-
               {!isFFmpegSupported() && (
                 <span className="text-[10px] text-amber-500 flex items-center gap-1">
                   <AlertCircle className="w-3 h-3" />
-                  FFmpeg unavailable — using browser capture fallback
+                  Using browser capture mode
                 </span>
               )}
             </div>
 
-            {/* Settings Panel */}
             {showSettings && (
               <Card className="border-gray-200">
                 <CardContent className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -479,7 +410,6 @@ export default function ClipExtractor() {
               </Card>
             )}
 
-            {/* Start Button */}
             {hasVideoReady && (
               <Button
                 onClick={runFullPipeline}
@@ -493,9 +423,7 @@ export default function ClipExtractor() {
           </div>
         )}
 
-        {/* ══════════════════════════════════════════════════════ */}
-        {/* PROCESSING INDICATOR                                  */}
-        {/* ══════════════════════════════════════════════════════ */}
+        {/* ── PROCESSING ───────────────────────────────────── */}
         {isRunning && (
           <Card className="border-blue-200 bg-blue-50/30">
             <CardContent className="p-6 text-center space-y-4">
@@ -512,21 +440,13 @@ export default function ClipExtractor() {
                 </p>
                 <p className="text-sm text-gray-500 mt-1">{statusMessage}</p>
               </div>
-              <div className="max-w-xs mx-auto">
-                <div className="w-full h-1 bg-blue-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-blue-500 rounded-full animate-pulse" style={{ width: '60%' }} />
-                </div>
-              </div>
             </CardContent>
           </Card>
         )}
 
-        {/* ══════════════════════════════════════════════════════ */}
-        {/* RESULTS STAGE — Viral Clips Grid                      */}
-        {/* ══════════════════════════════════════════════════════ */}
+        {/* ── RESULTS ──────────────────────────────────────── */}
         {clips.length > 0 && (
           <div className="space-y-4">
-            {/* Results Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
@@ -540,26 +460,24 @@ export default function ClipExtractor() {
               <div className="flex items-center gap-2 text-xs text-gray-400">
                 <Clock className="w-3.5 h-3.5" />
                 Source: {Math.floor(videoDuration / 60)}m {Math.floor(videoDuration % 60)}s
-                {wordCount > 0 && ` · ${wordCount.toLocaleString()} words`}
+                {wordCount > 0 && ' · ' + wordCount.toLocaleString() + ' words'}
               </div>
             </div>
 
-            {/* Stats Bar */}
-            <div className="flex gap-3">
+            <div className="flex gap-3 flex-wrap">
               {[
                 { label: 'Avg virality', value: Math.round(clips.reduce((s, c) => s + c.virality_score, 0) / clips.length), icon: TrendingUp, color: 'text-red-500' },
-                { label: 'Total clip time', value: `${Math.round(clips.reduce((s, c) => s + c.duration, 0))}s`, icon: Clock, color: 'text-blue-500' },
+                { label: 'Total clip time', value: Math.round(clips.reduce((s, c) => s + c.duration, 0)) + 's', icon: Clock, color: 'text-blue-500' },
                 { label: 'Top category', value: (clips[0]?.category || '').replace('_', ' '), icon: Sparkles, color: 'text-purple-500' },
               ].map((stat) => (
                 <div key={stat.label} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-100">
-                  <stat.icon className={`w-3.5 h-3.5 ${stat.color}`} />
+                  <stat.icon className={'w-3.5 h-3.5 ' + stat.color} />
                   <span className="text-xs text-gray-500">{stat.label}:</span>
                   <span className="text-xs font-semibold text-gray-900">{stat.value}</span>
                 </div>
               ))}
             </div>
 
-            {/* Clips Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {clips.map((clip, i) => (
                 <ClipCard
@@ -569,18 +487,16 @@ export default function ClipExtractor() {
                   videoUrl={videoUrl}
                   allWords={asrWords}
                   onClipReady={(idx, blob) => {
-                    console.log(`Clip #${idx + 1} ready: ${(blob.size / 1048576).toFixed(1)}MB`);
+                    console.log('Clip #' + (idx + 1) + ' ready: ' + (blob.size / 1048576).toFixed(1) + 'MB');
                   }}
                 />
               ))}
             </div>
 
-            {/* Drip Scheduler */}
-            <ClipScheduler clips={clips} />
+            <ClipScheduler clips={clips} videoUrl={videoUrl} />
           </div>
         )}
 
-        {/* Empty state after analysis found nothing */}
         {completedStages.includes('analyze') && clips.length === 0 && !isRunning && (
           <Card className="border-gray-200">
             <CardContent className="p-8 text-center space-y-3">
@@ -592,8 +508,7 @@ export default function ClipExtractor() {
                 The content may be too uniform or quiet. Try a video with more emotional variety.
               </p>
               <Button variant="outline" size="sm" onClick={resetPipeline} className="gap-1">
-                <RotateCcw className="w-3.5 h-3.5" />
-                Try another video
+                <RotateCcw className="w-3.5 h-3.5" /> Try another video
               </Button>
             </CardContent>
           </Card>
