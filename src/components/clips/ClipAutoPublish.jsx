@@ -72,7 +72,7 @@ export default function ClipAutoPublish({ clip, clipIndex, enhancement, clipBlob
     setConnecting(true);
     setError('');
     try {
-      const res = await base44.functions.invoke('youtubeAuth', { action: 'getAuthUrl' });
+      const res = await base44.functions.invoke('youtubeAuth', { action: 'get_auth_url' });
       const data = res.data || res;
       if (data?.auth_url) {
         // Open OAuth window
