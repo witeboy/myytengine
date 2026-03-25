@@ -77,7 +77,7 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
   // ── Load channels on mount ──────────────────────────────────
   useEffect(() => {
     loadChannels();
-    loadScheduledPosts();
+    // loadScheduledPosts(); // disabled until backend redeploys
     return () => {
       if (pollerRef.current) clearInterval(pollerRef.current);
     };
