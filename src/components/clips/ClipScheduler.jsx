@@ -86,17 +86,18 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
   const loadChannels = async () => {
     setLoadingChannels(true);
     try {
-      const stored = await base44.entities.ProductionSettings.list('-created_date', 20);
-      const ytSettings = (stored || []).filter(s => s.setting_type === 'youtube_channel' && s.is_active);
-      if (ytSettings.length > 0) {
-        setChannels(ytSettings.map(s => ({
-          id: s.id,
-          name: s.channel_name || s.name || 'YouTube Channel',
+      const res = await base44.functions.invoke('youtubeAuth', { action: 'list_channels' });
+      const data = res.data || res;
+      if (data && data.channels && data.channels.length > 0) {
+        setChannels(data.channels.map(c => ({
+          id: c.channel_id,
+          name: c.channel_name || 'YouTube Channel',
         })));
-        setSelectedChannel(ytSettings[0].id);
+        const defaultCh = data.channels.find(c => c.is_default) || data.channels[0];
+        setSelectedChannel(defaultCh.channel_id);
       }
     } catch (err) {
-      console.error('Failed to load channels:', err);
+      // YouTube not connected yet — that's fine
     } finally {
       setLoadingChannels(false);
     }
