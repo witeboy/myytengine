@@ -37,7 +37,7 @@ export async function transcribeVoiceover(voiceoverUrl, onProgress) {
 
   while (true) {
     if (Date.now() - startTime > POLL_TIMEOUT) {
-      throw new Error('Transcription timed out after 3 minutes');
+      throw new Error('Transcription timed out after 10 minutes');
     }
 
     await new Promise(r => setTimeout(r, POLL_INTERVAL));
