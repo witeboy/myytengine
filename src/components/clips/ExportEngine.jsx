@@ -29,6 +29,25 @@ import { drawCaptions } from './CaptionPreview';
 // Output: 9:16 MP4/WebM with everything baked in
 // ══════════════════════════════════════════════════════════════════
 
+// roundRect polyfill for Safari < 16
+function safeRoundRect(ctx, x, y, w, h, r) {
+  if (ctx.roundRect) {
+    ctx.roundRect(x, y, w, h, r);
+  } else {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+  }
+}
+
 // Canvas CSS filter equivalents for visual presets
 const CANVAS_FILTERS = {
   none:       'none',
@@ -465,7 +484,7 @@ export default function ExportEngine({
 
           ctx.fillStyle = 'rgba(0,0,0,0.7)';
           ctx.beginPath();
-          ctx.roundRect(
+          safeRoundRect(ctx, 
             (CANVAS_W - Math.min(metrics.width, maxW)) / 2 - pad,
             hookY - fontSize / 2 - pad / 2,
             Math.min(metrics.width, maxW) + pad * 2,
