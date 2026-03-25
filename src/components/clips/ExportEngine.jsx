@@ -60,11 +60,13 @@ const CANVAS_FILTERS = {
 };
 
 // Built-in SFX as short oscillator-generated sounds
-function generateSFX(audioCtx, type, time) {
+function generateSFX(audioCtx, type, time, recordDest) {
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
   osc.connect(gain);
-  gain.connect(audioCtx.destination);
+  // Connect to recording destination so SFX is captured
+  if (recordDest) gain.connect(recordDest);
+  else gain.connect(audioCtx.destination);
 
   switch (type) {
     case 'whoosh':
@@ -261,6 +263,7 @@ export default function ExportEngine({
       // Setup audio pipeline
       setStatusMsg('Setting up audio...');
       const audioCtx = new AudioContext();
+      if (audioCtx.state === 'suspended') await audioCtx.resume();
       const source = audioCtx.createMediaElementSource(video);
 
       // Voice EQ boost
@@ -305,15 +308,15 @@ export default function ExportEngine({
       // Create destination for recording
       const dest = audioCtx.createMediaStreamDestination();
       masterGain.connect(dest);
-      masterGain.connect(audioCtx.destination); // So we can hear during export
+      // Audio routes through Web Audio API — element is silent by default
 
-      // Schedule SFX
+      // Schedule SFX — connect to recording destination
       if (sfxCues && sfxCues.length > 0) {
         const clipStartTime = audioCtx.currentTime;
         sfxCues.forEach(sfx => {
           const sfxTime = clipStartTime + (sfx.timestamp - clip.start) / speed;
           if (sfxTime > clipStartTime) {
-            generateSFX(audioCtx, sfx.type, sfxTime);
+            generateSFX(audioCtx, sfx.type, sfxTime, dest);
           }
         });
       }
@@ -358,8 +361,7 @@ export default function ExportEngine({
 
       setStatusMsg('Exporting enhanced clip...');
 
-      // Mute video element audio (we capture through Web Audio)
-      video.volume = 0;
+      // createMediaElementSource already routes audio through Web Audio
       await video.play();
 
       // Render loop — composites ALL visual layers
