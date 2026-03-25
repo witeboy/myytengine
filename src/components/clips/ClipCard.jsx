@@ -51,7 +51,7 @@ function ViralityMeter({ score }) {
   );
 }
 
-export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords = [] }) {
+export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords = [], enhancementSettings = {} }) {
   const videoRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -127,7 +127,7 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
             ref={videoRef}
             src={videoUrl}
             className="w-full h-full object-contain"
-            preload="metadata"
+            preload="auto"
             playsInline
             onPause={() => setPlaying(false)}
             onEnded={() => setPlaying(false)}
