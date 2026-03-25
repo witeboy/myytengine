@@ -10,6 +10,8 @@ import { Switch } from '@/components/ui/switch';
 import { transcribeVoiceover } from '@/lib/transcribeASR';
 import { initFFmpeg, isFFmpegSupported } from '@/lib/clipWithFFmpeg';
 import ClipCard from '@/components/clips/ClipCard';
+import CopyrightShield from '@/components/clips/CopyrightShield';
+import ExportEngine from '@/components/clips/ExportEngine';
 import ClipScheduler from '@/components/clips/ClipScheduler';
 import YouTubeUrlInput from '@/components/clips/YouTubeUrlInput';
 import {
