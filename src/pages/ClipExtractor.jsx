@@ -137,29 +137,47 @@ function SchedulerPanel({ clips, selectedClips, videoUrl }) {
     if (!selectedChannel || selectedClipData.length === 0) return;
     setScheduling(true);
     try {
-      var clipPayloads = selectedClipData.map(function(clip, i) {
-        return {
-          clip_data: clip,
-          seo: { title: clip.title || 'Clip ' + (i + 1), description: '', tags: [], hashtags: [] },
+      var TIME_HOURS = { morning: 9, afternoon: 13, evening: 19, night: 21 };
+      var hour = TIME_HOURS[timeSlot] || 19;
+      var baseDate = new Date(startDate);
+      baseDate.setDate(baseDate.getDate() + 1);
+      var results = [];
+
+      for (var i = 0; i < selectedClipData.length; i++) {
+        var clip = selectedClipData[i];
+        var dayOffset = strategy === 'spread' ? i : Math.floor(i / 3);
+        var inDayOffset = strategy === 'burst' ? (i % 3) * 2 : 0;
+        var postDate = new Date(baseDate);
+        postDate.setDate(postDate.getDate() + dayOffset);
+        postDate.setHours(hour + inDayOffset, 0, 0, 0);
+        var scheduledAt = postDate.toISOString();
+
+        var post = await base44.entities.UploadMetadata.create({
+          record_type: 'scheduled_post',
+          project_id: 'clip-extractor',
+          title_primary: clip.title || 'Clip ' + (i + 1),
+          description_template: '',
+          tags: '',
+          hashtags: '',
           platform: 'youtube_shorts',
+          selected_channel_id: selectedChannel,
+          scheduled_at: scheduledAt,
+          status: 'scheduled',
+          privacy: privacy,
+          video_url: videoUrl,
           clip_url: clip.clip_url || '',
-        };
-      });
-      var res = await base44.functions.invoke('scheduleClipPost', {
-        action: 'bulk',
-        clips: clipPayloads,
-        channel_setting_id: selectedChannel,
-        strategy: strategy,
-        start_date: startDate,
-        time_slot: timeSlot,
-        privacy: privacy,
-        video_url: videoUrl,
-      });
-      var data = res.data || res;
-      if (data && data.success) {
-        setScheduled(true);
-        setScheduledPosts(data.posts || []);
+          clip_data: JSON.stringify(clip),
+          published_url: '',
+          error_message: '',
+          virality_score: clip.virality_score || 0,
+        });
+
+        results.push({ post_id: post.id, title: clip.title || 'Clip ' + (i + 1), scheduled_at: scheduledAt });
       }
+
+      setScheduled(true);
+      setScheduledPosts(results);
+      console.log('Scheduled ' + results.length + ' clips directly');
     } catch (err) {
       console.error('Schedule failed:', err);
     } finally {
