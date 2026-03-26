@@ -73,7 +73,7 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
       setPlaying(false);
     } else {
       vid.currentTime = clip.start;
-      vid.play();
+      vid.play().catch(function() {});
       setPlaying(true);
 
       const checkEnd = () => {
