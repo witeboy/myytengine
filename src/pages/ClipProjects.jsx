@@ -54,8 +54,8 @@ export default function ClipProjects() {
     }
   };
 
+  
   var deleteProject = async function(projectId) {
-    if (!confirm('Delete this project and all its clips?')) return;
     setDeleting(projectId);
     try {
       await base44.entities.UploadMetadata.delete(projectId);
@@ -167,9 +167,8 @@ export default function ClipProjects() {
                   <CardContent className="p-0">
                     {/* Thumbnail area */}
                     <div className="relative h-36 bg-gray-900 flex items-center justify-center">
-                      {project.video_url ? (
-                        <video src={project.video_url} className="w-full h-full object-cover opacity-70" preload="metadata" muted />
-                      ) : (
+                      {project.video_url && !project.video_url.startsWith('blob:') ? (
+                        <video src={project.video_url} className="w-full h-full object-cover opacity-70" preload="metadata" muted />                      ) : (
                         <FileVideo className="w-10 h-10 text-gray-600" />
                       )}
                       {/* Status badge */}
