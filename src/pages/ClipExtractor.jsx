@@ -460,10 +460,12 @@ export default function ClipExtractor() {
       if (videoFile._isUrl) {
         uploadedUrl = videoFile._audioUrl || videoFile._streamUrl;
         setAudioUrl(uploadedUrl);
+        setVideoUrl(videoFile._streamUrl || uploadedUrl);
       } else {
         var uploadResult = await base44.integrations.Core.UploadFile({ file: videoFile });
         uploadedUrl = uploadResult.file_url;
         setAudioUrl(uploadedUrl);
+        setVideoUrl(uploadedUrl);
       }
       markComplete('upload');
 
