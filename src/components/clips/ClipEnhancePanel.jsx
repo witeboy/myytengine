@@ -172,7 +172,7 @@ export default function ClipEnhancePanel({ clip, clipIndex, words, videoUrl, onC
     if (playing) { video.pause(); setPlaying(false); }
     else {
       video.currentTime = clip.start;
-      video.play(); setPlaying(true);
+      video.play().catch(function() {}); setPlaying(true);
       var checkEnd = function() {
         if (video.currentTime >= clip.end) { video.pause(); setPlaying(false); }
         else if (!video.paused) requestAnimationFrame(checkEnd);
