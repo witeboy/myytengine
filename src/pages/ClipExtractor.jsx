@@ -372,8 +372,13 @@ export default function ClipExtractor() {
       if (!project) { setError('Project not found'); return; }
 
       setVideoContext(project.title_primary || '');
-      setVideoUrl(project.video_url || '');
-      setAudioUrl(project.audio_url || '');
+      var vUrl = project.video_url || '';
+      if (vUrl.startsWith('blob:')) vUrl = '';
+      setVideoUrl(vUrl);
+      var aUrl = project.audio_url || '';
+      if (aUrl.startsWith('blob:')) aUrl = '';
+      setAudioUrl(aUrl);
+      if (!vUrl) setError('Video file expired — delete this project and re-upload to get playable clips');
       setSavedProjectId(project.id);
 
       if (project.settings_json) {
