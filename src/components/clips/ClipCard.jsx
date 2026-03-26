@@ -62,7 +62,11 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
 
   const handlePlayPause = () => {
     const vid = videoRef.current;
-    if (!vid) return;
+    if (!vid || !videoUrl) return;
+    if (videoUrl.startsWith('blob:') || !vid.src) {
+      console.warn('Video source unavailable — re-extract or re-upload');
+      return;
+    }
 
     if (playing) {
       vid.pause();
@@ -131,6 +135,7 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
             playsInline
             onPause={() => setPlaying(false)}
             onEnded={() => setPlaying(false)}
+            onError={() => setPlaying(false)}
           />
 
           <div className={`absolute inset-0 flex items-center justify-center bg-black/20 transition-opacity ${playing ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'}`}>
