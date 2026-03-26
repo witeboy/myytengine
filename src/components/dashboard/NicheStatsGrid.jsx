@@ -128,8 +128,16 @@ export default function NicheStatsGrid({ channels, topics, projects, onDelete })
               <span>{ch.longform_per_week || 3} long/week</span>
             </div>
 
-            {/* Open button */}
-            <div className="mt-3 flex justify-end">
+            {/* Open + Delete */}
+            <div className="mt-3 flex items-center justify-between">
+              {onDelete && (
+                <button
+                  onClick={function(e) { e.preventDefault(); e.stopPropagation(); onDelete(ch.id); }}
+                  className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50"
+                >
+                  <Trash2 className="w-3 h-3" /> Delete
+                </button>
+              )}
               <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-blue-500 transition-colors" />
             </div>
           </CardContent>
