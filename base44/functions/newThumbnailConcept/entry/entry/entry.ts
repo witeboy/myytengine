@@ -1,6 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // newThumbnailConcept — Lean & intelligent thumbnail concept generator
+// v2 — redeployed
 
 Deno.serve(async (req) => {
   try {
