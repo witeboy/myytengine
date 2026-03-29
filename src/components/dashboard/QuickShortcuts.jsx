@@ -15,7 +15,6 @@ const shortcuts = [
   { label: 'Media Library', icon: FolderOpen, path: '/MediaLibrary', color: 'from-teal-500 to-cyan-600' },
   { label: 'Quick Publish', icon: Youtube, path: '/QuickPublish', color: 'from-red-500 to-red-700' },
   { label: 'Clip Extractor', icon: Scissors, path: '/ClipExtractor', color: 'from-rose-500 to-red-600' },
-  { label: 'Clip Projects', icon: FolderOpen, path: '/ClipProjects', color: 'from-blue-500 to-indigo-600' },
   { label: 'Tools Hub', icon: Wrench, path: '/ToolsHub', color: 'from-slate-500 to-gray-600' },
 ];
 

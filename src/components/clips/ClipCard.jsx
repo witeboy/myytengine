@@ -51,7 +51,7 @@ function ViralityMeter({ score }) {
   );
 }
 
-export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords = [], enhancementSettings = {} }) {
+export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords = [] }) {
   const videoRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -62,18 +62,14 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
 
   const handlePlayPause = () => {
     const vid = videoRef.current;
-    if (!vid || !videoUrl) return;
-    if (videoUrl.startsWith('blob:') || !vid.src) {
-      console.warn('Video source unavailable — re-extract or re-upload');
-      return;
-    }
+    if (!vid) return;
 
     if (playing) {
       vid.pause();
       setPlaying(false);
     } else {
       vid.currentTime = clip.start;
-      vid.play().catch(function() {});
+      vid.play();
       setPlaying(true);
 
       const checkEnd = () => {
@@ -131,11 +127,10 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
             ref={videoRef}
             src={videoUrl}
             className="w-full h-full object-contain"
-            preload="auto"
+            preload="metadata"
             playsInline
             onPause={() => setPlaying(false)}
             onEnded={() => setPlaying(false)}
-            onError={() => setPlaying(false)}
           />
 
           <div className={`absolute inset-0 flex items-center justify-center bg-black/20 transition-opacity ${playing ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'}`}>

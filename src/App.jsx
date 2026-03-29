@@ -13,7 +13,6 @@ import AutoEditReview from './pages/AutoEditReview';
 import YouTubeCallback from './pages/YouTubeCallback';
 import QuickPublish from './pages/QuickPublish';
 import ClipExtractor from './pages/ClipExtractor';
-import ClipProjects from './pages/ClipProjects';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -89,11 +88,6 @@ const AuthenticatedApp = () => {
       <Route path="/ClipExtractor" element={
         <LayoutWrapper currentPageName="ClipExtractor">
           <ClipExtractor />
-        </LayoutWrapper>
-      } />
-      <Route path="/ClipProjects" element={
-        <LayoutWrapper currentPageName="ClipProjects">
-          <ClipProjects />
         </LayoutWrapper>
       } />
       <Route path="*" element={<PageNotFound />} />

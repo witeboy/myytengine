@@ -77,7 +77,7 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
   // ── Load channels on mount ──────────────────────────────────
   useEffect(() => {
     loadChannels();
-    // loadScheduledPosts(); // disabled until backend redeploys
+    loadScheduledPosts();
     return () => {
       if (pollerRef.current) clearInterval(pollerRef.current);
     };
@@ -86,18 +86,17 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
   const loadChannels = async () => {
     setLoadingChannels(true);
     try {
-      const res = await base44.functions.invoke('youtubeAuth', { action: 'list_channels' });
-      const data = res.data || res;
-      if (data && data.channels && data.channels.length > 0) {
-        setChannels(data.channels.map(c => ({
-          id: c.channel_id,
-          name: c.channel_name || 'YouTube Channel',
+      const stored = await base44.entities.ProductionSettings.list('-created_date', 20);
+      const ytSettings = (stored || []).filter(s => s.setting_type === 'youtube_channel' && s.is_active);
+      if (ytSettings.length > 0) {
+        setChannels(ytSettings.map(s => ({
+          id: s.id,
+          name: s.channel_name || s.name || 'YouTube Channel',
         })));
-        const defaultCh = data.channels.find(c => c.is_default) || data.channels[0];
-        setSelectedChannel(defaultCh.channel_id);
+        setSelectedChannel(ytSettings[0].id);
       }
     } catch (err) {
-      // YouTube not connected yet — that's fine
+      console.error('Failed to load channels:', err);
     } finally {
       setLoadingChannels(false);
     }
@@ -119,7 +118,7 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
   const connectChannel = async () => {
     setConnecting(true);
     try {
-      const res = await base44.functions.invoke('youtubeAuth', { action: 'get_auth_url' });
+      const res = await base44.functions.invoke('youtubeAuth', { action: 'getAuthUrl' });
       const data = res.data || res;
       if (data?.auth_url) {
         const authWindow = window.open(data.auth_url, 'youtube-auth', 'width=600,height=700');

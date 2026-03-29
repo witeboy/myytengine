@@ -29,25 +29,6 @@ import { drawCaptions } from './CaptionPreview';
 // Output: 9:16 MP4/WebM with everything baked in
 // ══════════════════════════════════════════════════════════════════
 
-// roundRect polyfill for Safari < 16
-function safeRoundRect(ctx, x, y, w, h, r) {
-  if (ctx.roundRect) {
-    ctx.roundRect(x, y, w, h, r);
-  } else {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
-  }
-}
-
 // Canvas CSS filter equivalents for visual presets
 const CANVAS_FILTERS = {
   none:       'none',
@@ -60,13 +41,11 @@ const CANVAS_FILTERS = {
 };
 
 // Built-in SFX as short oscillator-generated sounds
-function generateSFX(audioCtx, type, time, recordDest) {
+function generateSFX(audioCtx, type, time) {
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
   osc.connect(gain);
-  // Connect to recording destination so SFX is captured
-  if (recordDest) gain.connect(recordDest);
-  else gain.connect(audioCtx.destination);
+  gain.connect(audioCtx.destination);
 
   switch (type) {
     case 'whoosh':
@@ -263,7 +242,6 @@ export default function ExportEngine({
       // Setup audio pipeline
       setStatusMsg('Setting up audio...');
       const audioCtx = new AudioContext();
-      if (audioCtx.state === 'suspended') await audioCtx.resume();
       const source = audioCtx.createMediaElementSource(video);
 
       // Voice EQ boost
@@ -308,15 +286,15 @@ export default function ExportEngine({
       // Create destination for recording
       const dest = audioCtx.createMediaStreamDestination();
       masterGain.connect(dest);
-      // Audio routes through Web Audio API — element is silent by default
+      masterGain.connect(audioCtx.destination); // So we can hear during export
 
-      // Schedule SFX — connect to recording destination
+      // Schedule SFX
       if (sfxCues && sfxCues.length > 0) {
         const clipStartTime = audioCtx.currentTime;
         sfxCues.forEach(sfx => {
           const sfxTime = clipStartTime + (sfx.timestamp - clip.start) / speed;
           if (sfxTime > clipStartTime) {
-            generateSFX(audioCtx, sfx.type, sfxTime, dest);
+            generateSFX(audioCtx, sfx.type, sfxTime);
           }
         });
       }
@@ -361,7 +339,8 @@ export default function ExportEngine({
 
       setStatusMsg('Exporting enhanced clip...');
 
-      // createMediaElementSource already routes audio through Web Audio
+      // Mute video element audio (we capture through Web Audio)
+      video.volume = 0;
       await video.play();
 
       // Render loop — composites ALL visual layers
@@ -486,7 +465,7 @@ export default function ExportEngine({
 
           ctx.fillStyle = 'rgba(0,0,0,0.7)';
           ctx.beginPath();
-          safeRoundRect(ctx, 
+          ctx.roundRect(
             (CANVAS_W - Math.min(metrics.width, maxW)) / 2 - pad,
             hookY - fontSize / 2 - pad / 2,
             Math.min(metrics.width, maxW) + pad * 2,

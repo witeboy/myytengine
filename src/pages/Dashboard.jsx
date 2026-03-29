@@ -154,13 +154,7 @@ export default function Dashboard() {
             {channels.length > 0 && (
               <section>
                 <h2 className="text-lg font-semibold text-gray-900 mb-4">Your Niches</h2>
-                <NicheStatsGrid channels={channels} topics={topics} projects={projects}
-                  onDelete={function(id) {
-                    base44.entities.Channels.delete(id).then(function() {
-                      queryClient.invalidateQueries({ queryKey: ['dashboard-channels'] });
-                    });
-                  }}
-                />
+                <NicheStatsGrid channels={channels} topics={topics} projects={projects} />
               </section>
             )}
 

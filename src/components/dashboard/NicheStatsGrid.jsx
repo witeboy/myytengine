@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   TrendingUp, Clock, CheckCircle2, PlayCircle, FileText,
-  ArrowRight, Pause, BarChart3, Trash2, Loader2
+  ArrowRight, Pause, BarChart3
 } from 'lucide-react';
 
 const nicheColors = {
@@ -28,7 +28,7 @@ function getColors(niche) {
   return nicheColors.default;
 }
 
-export default function NicheStatsGrid({ channels, topics, projects, onDelete }) {
+export default function NicheStatsGrid({ channels, topics, projects }) {
   const channelStats = channels.map(ch => {
     const chTopics = topics.filter(t => t.channel_id === ch.id);
     const chProjects = projects.filter(p => p.channel_id === ch.id && !p.archived);
@@ -69,14 +69,6 @@ export default function NicheStatsGrid({ channels, topics, projects, onDelete })
                   <p className="text-xs text-gray-500">{ch.niche_label || ch.niche}</p>
                 </div>
               </div>
-
-              <button
-                onClick={function(e) { e.preventDefault(); e.stopPropagation(); onDelete && onDelete(ch.id); }}
-                className="text-gray-300 hover:text-red-500 transition-colors p-1 rounded"
-                title="Delete niche"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
               <Badge className={`text-[10px] ${
                 ch.status === 'active' ? 'bg-green-100 text-green-700' :
                 ch.status === 'paused' ? 'bg-yellow-100 text-yellow-700' :
@@ -128,16 +120,8 @@ export default function NicheStatsGrid({ channels, topics, projects, onDelete })
               <span>{ch.longform_per_week || 3} long/week</span>
             </div>
 
-            {/* Open + Delete */}
-            <div className="mt-3 flex items-center justify-between">
-              {onDelete && (
-                <button
-                  onClick={function(e) { e.preventDefault(); e.stopPropagation(); onDelete(ch.id); }}
-                  className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-red-500 transition-colors px-2 py-1 rounded hover:bg-red-50"
-                >
-                  <Trash2 className="w-3 h-3" /> Delete
-                </button>
-              )}
+            {/* Open button */}
+            <div className="mt-3 flex justify-end">
               <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-blue-500 transition-colors" />
             </div>
           </CardContent>
