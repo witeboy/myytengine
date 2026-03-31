@@ -1,0 +1,1335 @@
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+// v2 — redeployed
+
+// ══════════════════════════════════════════════════════════════════
+// SCENE PROMPT GENERATOR — DIRECTOR NOTES → PRODUCTION PROMPTS
+// Pipeline: Script → Breakdown → [THIS] → Image Gen → Animation
+// ══════════════════════════════════════════════════════════════════
+
+
+const BASE_BATCH_SIZE = 12;
+const PARALLEL_PROMPT_BATCHES = 3; // Run 3 Gemini prompt calls concurrently
+
+
+function repairJSON(str) {
+  return str
+    .replace(/[\x00-\x1F\x7F]/g, c => c === '\n' || c === '\r' || c === '\t' ? c : ' ')
+    .replace(/,\s*([}\]])/g, '$1')
+    .replace(/(["\w\d])\s*\n\s*"/g, '$1, "');
+}
+
+
+async function callGemini(prompt, temperature = 0.7, maxTokens = 16384, retries = 3) {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+
+
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature, maxOutputTokens: maxTokens, responseMimeType: "application/json" }
+          })
+        }
+      );
+
+
+      if (response.status === 429) {
+        const waitMs = Math.pow(2, attempt + 1) * 5000;
+        console.log(`Rate limited, waiting ${waitMs / 1000}s...`);
+        await new Promise(r => setTimeout(r, waitMs));
+        continue;
+      }
+
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(`Gemini ${response.status}: ${err.error?.message || "Unknown"}`);
+      }
+
+
+      const data = await response.json();
+      if (!data.candidates?.length) throw new Error("No candidates from Gemini");
+      const rawText = data.candidates[0].content.parts[0].text;
+
+
+      try { return JSON.parse(rawText); } catch (_) {}
+      try { return JSON.parse(repairJSON(rawText)); } catch (_) {}
+
+
+      let jsonStr = rawText;
+      if (rawText.includes("```json")) jsonStr = rawText.split("```json")[1].split("```")[0].trim();
+      else if (rawText.includes("```")) jsonStr = rawText.split("```")[1].split("```")[0].trim();
+      try { return JSON.parse(repairJSON(jsonStr)); } catch (_) {}
+
+
+      const objMatch = jsonStr.match(/\{[\s\S]*\}/);
+      if (objMatch) { try { return JSON.parse(objMatch[0]); } catch (_) {} }
+
+
+      const lastBrace = rawText.lastIndexOf('}');
+      if (lastBrace > 0) {
+        const trimmed = rawText.substring(0, lastBrace + 1);
+        for (const suffix of [']}', '}]}', '']) {
+          try {
+            const parsed = JSON.parse(trimmed + suffix);
+            if (parsed.prompts && Array.isArray(parsed.prompts)) return parsed;
+          } catch (_) {}
+        }
+      }
+
+
+      throw new Error("Failed to parse Gemini JSON after recovery");
+    } catch (error) {
+      if (attempt === retries - 1) throw error;
+      console.warn(`Attempt ${attempt + 1} failed: ${error.message}, retrying...`);
+      await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// EXTRACT DIRECTOR NOTES FROM image_prompt
+// ══════════════════════════════════════════════════════════════════
+
+
+function extractDirectorNotes(imagePrompt) {
+  if (!imagePrompt) return null;
+  if (imagePrompt.startsWith('DIRECTOR_NOTES:')) {
+    try {
+      return JSON.parse(imagePrompt.substring('DIRECTOR_NOTES:'.length));
+    } catch (_) {
+      console.warn('Failed to parse director notes from image_prompt');
+      return null;
+    }
+  }
+  return null;
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// STYLE NORMALIZER — handles "Skeleton Protagonist" → "skeleton_protagonist"
+// ══════════════════════════════════════════════════════════════════
+
+
+function normalizeStyleKey(raw) {
+  if (!raw) return 'cinematic_realistic';
+  console.log(`🔍 RAW visual_style value: "${raw}" (type: ${typeof raw}, length: ${raw.length}, charCodes: ${[...raw].slice(0,30).map(c=>c.charCodeAt(0)).join(',')})`);
+  const normalized = raw.trim().toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+  console.log(`🔍 Normalized to: "${normalized}"`);
+  if (styleMap[normalized]) { console.log(`✅ Direct match: ${normalized}`); return normalized; }
+  for (const key of Object.keys(styleMap)) {
+    if (normalized.includes(key) || key.includes(normalized)) { console.log(`✅ Fuzzy match: ${key}`); return key; }
+  }
+  if (normalized.includes('skeleton')) { console.log(`✅ Keyword match: skeleton_protagonist`); return 'skeleton_protagonist'; }
+  console.warn(`❌ No match for "${raw}" → "${normalized}"`);
+  return 'cinematic_realistic';
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// VISUAL STYLE MAP
+// ══════════════════════════════════════════════════════════════════
+
+
+const styleMap = {
+  cinematic_realistic: {
+    positive: "Cinematic film still shot on ARRI Alexa 65 with anamorphic Panavision lenses, beautiful lens flare and chromatic aberration, shallow depth of field f/1.4 with creamy bokeh, dramatic three-point lighting with hard key light and soft fill, strong rim light separation, color graded with professional teal and orange LUT, subtle Kodak Vision3 film grain texture, volumetric god rays through atmosphere, Hollywood blockbuster cinematography, photorealistic rendering, 8K resolution",
+    negative: "cartoon, anime, illustration, painting, drawing, sketch, 3D render, CGI, video game, cel shaded, flat colors, clipart, comic book, manga, stylized, amateur, low quality, blurry, distorted, deformed, oversaturated"
+  },
+  photorealistic_4k: {
+    positive: "Ultra-photorealistic DSLR photograph shot on Canon EOS R5 with RF 85mm f/1.2 L lens, razor-sharp focus, natural ambient lighting, professional color grading, editorial photography for National Geographic, visible skin texture and pores, accurate shadows and highlights, real-world proportions, zero AI artifacts, 8K RAW quality",
+    negative: "cartoon, anime, CGI, 3D render, painting, digital art, stylized, unrealistic, soft focus, beauty filter, over-processed, HDR overdone"
+  },
+  anime: {
+    positive: "High-quality anime illustration, Studio Ghibli meets modern anime, vibrant saturated colors, clean linework, cel-shaded with soft gradients, expressive detailed eyes, detailed hair with natural flow, colorful background art with atmospheric perspective, professional anime production quality",
+    negative: "photorealistic, live action, photograph, 3D render, western cartoon, rough sketch, inconsistent style, off-model, chibi, super deformed"
+  },
+  cinematic_anime: {
+    positive: "Cinematic anime key visual, Makoto Shinkai and Ufotable production quality, dramatic volumetric lighting with god rays, ultra-detailed background art with atmospheric depth, sharp character linework with subtle cel shading, rich color grading with vibrant highlights and deep shadows, anamorphic lens effects, film grain overlay, widescreen cinematic composition, professional anime feature film quality",
+    negative: "photorealistic, live action, photograph, chibi, super deformed, rough sketch, flat colors, low budget, inconsistent proportions, western cartoon"
+  },
+  cartoon_2d: {
+    positive: "High-quality 2D cartoon illustration, bold clean outlines, vibrant flat colors with subtle gradients, expressive character design, dynamic poses, professional vector-quality artwork, Cartoon Network and Disney Channel production quality, smooth color fills, playful proportions, appealing character design, clean composition",
+    negative: "photorealistic, photograph, 3D render, anime, sketch, rough, painterly, dark, gritty, horror, complex textures, film grain, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature"
+  },
+  picstory_cocomelon: {
+    positive: "Adorable 3D rendered children's animation style, CoComelon and Pixar Junior quality, soft rounded characters with big expressive eyes, pastel color palette with bright accents, smooth plastic-like textures, warm studio lighting, cheerful and friendly atmosphere, child-safe wholesome imagery, gentle soft shadows, nursery rhyme aesthetic",
+   negative: "photorealistic, scary, dark, horror, sharp edges, complex, adult themes, violence, anime, sketch, painterly, gritty, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature"
+  },
+  cinematic_picstory: {
+    positive: "Cinematic 3D animated feature film quality, Pixar and DreamWorks level rendering, dramatic studio lighting with rim lights, rich color grading, detailed textures with subsurface scattering on skin, expressive stylized characters with realistic proportions, depth of field with bokeh, volumetric atmosphere, professional animated feature film composition, emotional cinematography",
+    negative: "flat 2D, sketch, anime linework, rough, low quality, uncanny valley, photorealistic human, cheap 3D, mobile game quality, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature"
+  },
+  oil_painting: {
+    positive: "Masterful oil painting on canvas, visible thick impasto brushstrokes, rich pigment texture, classical fine art composition, Rembrandt and Vermeer lighting with chiaroscuro, warm varnish glow, gallery-quality artwork, traditional glazing technique with luminous depth, painterly color mixing on canvas, museum masterpiece quality, art historical significance",
+    negative: "photorealistic, digital, smooth, flat, cartoon, anime, 3D render, CGI, vector, clean lines, modern"
+  },
+  watercolor: {
+    positive: "Beautiful traditional watercolor painting on textured cold-press paper, soft translucent color washes with visible paper grain, delicate wet-on-wet blending, controlled bleeding edges, subtle granulation, luminous transparency where white paper shows through, gentle color harmonies, professional fine art watercolor technique, botanical illustration quality",
+    negative: "photorealistic, digital, oil painting, acrylic, cartoon, anime, 3D render, sharp edges, flat colors, bold outlines, heavy saturation"
+  },
+  comic_book: {
+    positive: "Professional comic book art, bold black ink outlines, dynamic panel composition, halftone dot shading, vibrant saturated colors with dramatic shadows, superhero and graphic novel aesthetic, Marvel and DC Comics quality artwork, strong action lines, dramatic foreshortening, professional sequential art, Ben-Day dots and cross-hatching",
+    negative: "photorealistic, photograph, soft, watercolor, painterly, anime, 3D render, pastel, muted colors, blurry, sketchy"
+  },
+  humpty_dumpty: {
+    positive: "Charming storybook illustration style, whimsical hand-drawn quality with gentle watercolor washes, rounded friendly character designs, fairy tale aesthetic, warm nostalgic nursery rhyme atmosphere, soft golden lighting, vintage children's book illustration quality, Maurice Sendak and Beatrix Potter inspired, delicate cross-hatching with pastel tones, enchanted storybook world",
+   negative: "photorealistic, modern, dark, scary, anime, 3D render, flat vector, bold colors, adult themes, sharp geometric, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature"
+  },
+  harry_potter: {
+    positive: "Magical fantasy world with warm candlelight and mysterious atmosphere, gothic castle interiors with stone textures and floating candles, rich jewel-tone color palette of deep burgundy gold and emerald, magical golden particles and ethereal glow effects, dramatic chiaroscuro lighting, weathered leather and parchment textures, enchanted artifacts with luminous properties, cozy yet mysterious British boarding school aesthetic, professional fantasy concept art quality",
+    negative: "modern, contemporary, bright fluorescent, cartoon, anime, flat colors, minimalist, sci-fi, futuristic, clinical, sterile"
+  },
+  "3d_whiteboard_cartoon": {
+    positive: "Clean 3D whiteboard cartoon, bold consistent black ink outlines, bright cheerful flat color fills with single-tone cel shading. All objects with bold outlines and flat color. Warm color palette with peach and brown tones. Even ambient lighting, no harsh shadows, YouTube explainer style, approachable professional",    negative: "photorealistic, photograph, 3D render, CGI, anime, painterly, watercolor, oil painting, sketch, dark, gritty, horror, film grain, lens flare, bokeh, dramatic shadows, neon, cyberpunk, fantasy, abstract, pixel art, low poly, voxel, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature"
+  },
+  low_poly_3d_cartoon: {
+    positive: "Stylized low-poly 3D cartoon, all geometry from visible flat-shaded polygons and triangular facets. Realistic human proportions with geometric stylization. Angular facial features, expressive eyes, defined eyebrows. Geometric hair, warm peach-tan skin with polygon-edge shading. Clothing with visible folds and flat polygon faces. All environments built from flat-shaded polygons. Vibrant saturated colors, clean polygon edges, no smoothing, matte clay-toy quality, soft ambient occlusion, sharp focused background with all elements in focus, deep depth of field, Pixar expressiveness with geometric stylization",
+   negative: "photorealistic, photograph, smooth high-poly, hyperrealistic, film grain, lens flare, bokeh, blurred background, shallow depth of field, out of focus background, anime, cel-shaded, 2D flat, hand-drawn, sketch, watercolor, oil painting, dark horror, neon cyberpunk, abstract, pixel art, voxel art, wireframe, monochrome, desaturated, ray-traced, photogrammetry, chibi, bobblehead, oversized head, big head small body, exaggerated proportions, caricature, funko pop"  },
+  skeleton_protagonist: {
+   positive: "wide shot showing complete scene, photorealistic detailed environment with sharp focused background, multiple people in frame, cinematic establishing shot composition, golden hour volumetric lighting, HDR cinematic lens, warm amber grading, masterpiece quality",
+   negative: "cartoon skeleton, halloween decoration, flat 2D, anime, comic, x-ray medical, horror gore, neon, plastic toy, low quality, blurry, abstract, minimalist, sketch, painting, chibi, dia de los muertos, empty dark eye sockets, bare bones without transparent body, scary horror skeleton, torso only, bust shot, head and shoulders only, cropped at waist, isolated character on blank background, portrait crop, close-up, macro, extreme close-up, chest detail, upper body only, dark background, black background"
+  }
+};
+
+
+// Universal anti-crop negative (appended to ALL styles)
+const UNIVERSAL_NEGATIVE_SUFFIX = ", torso only, bust shot, cropped at waist, isolated character on blank background, portrait crop, blurred empty background";
+
+
+// ══════════════════════════════════════════════════════════════════
+// STYLE-SPECIFIC INSTRUCTIONS FOR LLM
+// ══════════════════════════════════════════════════════════════════
+
+
+function getStyleSceneBodyRules(styleName) {
+  const rules = {
+    cinematic_realistic: {
+      characters: "Describe characters with photorealistic detail — skin texture, real clothing fabrics, natural hair, realistic body proportions.",
+      environments: "Real-world locations with architectural accuracy, natural materials (wood, stone, glass), weather and atmospheric effects.",
+      objects: "Props with realistic material properties — metal reflections, fabric weave, glass transparency, leather grain.",
+      rendering: "Use cinematic camera language freely — ARRI, anamorphic, bokeh, f-stops, film grain, color LUT."
+    },
+    photorealistic_4k: {
+      characters: "Photograph-quality humans with visible pores, real fabric textures, natural hair strands, authentic expressions.",
+      environments: "Real locations as a photographer would capture them — natural light, real architecture, genuine materials.",
+      objects: "Objects with photographic material accuracy — reflections, textures, wear and patina.",
+      rendering: "DSLR photography language — Canon/Sony, real lens specs, natural lighting, RAW quality."
+    },
+    anime: {
+      characters: "Anime-style characters with large expressive eyes, cel-shaded skin, stylized colorful hair, clean linework, exaggerated expressions.",
+      environments: "Anime background art — painted skies with dramatic clouds, stylized architecture, atmospheric perspective with soft color gradients.",
+      objects: "Objects drawn with clean anime linework, flat color fills with subtle highlight/shadow cel-shading.",
+      rendering: "Describe as anime illustration. Use terms: cel-shaded, linework, color fills, anime eyes, Studio Ghibli style."
+    },
+    cinematic_anime: {
+      characters: "Cinematic anime characters — sharp detailed linework, subtle cel-shading, dramatic lighting on faces, flowing hair with light interaction.",
+      environments: "Makoto Shinkai quality backgrounds — ultra-detailed painted environments, dramatic god rays, atmospheric depth, rich color grading.",
+      objects: "Anime-rendered objects with cinematic lighting — dramatic rim lights, volumetric atmosphere, sharp detail.",
+      rendering: "Cinematic anime language — god rays, volumetric lighting, dramatic color grading, but with anime linework and cel-shading."
+    },
+    cartoon_2d: {
+      characters: "2D cartoon characters with bold black outlines, flat vibrant color fills, correct proportions, big expressive faces, dynamic poses.",
+      environments: "Cartoon backgrounds with bold outlines, flat color fills, playful simplified architecture, bright cheerful colors.",
+      objects: "Cartoon-style objects with clean outlines, flat colors, slightly correct proportions, playful design.",
+      rendering: "Cartoon Network / Disney Channel quality. Bold outlines, flat colors, no photorealistic terms."
+    },
+    picstory_cocomelon: {
+     characters: "Soft rounded 3D characters with plastic-smooth skin, pastel clothing, cheerful expressions. Character proportions defined per-character inline.",
+      environments: "Bright pastel 3D environments — soft rounded architecture, gentle lighting, toy-like world, child-safe wholesome settings.",
+      objects: "Smooth plastic-textured 3D objects, rounded edges, bright pastel colors, toy-like quality.",
+      rendering: "CoComelon/Pixar Junior 3D rendering — soft shadows, warm studio lighting, smooth plastic textures."
+    },
+    cinematic_picstory: {
+      characters: "Pixar/DreamWorks quality 3D characters — expressive stylized faces, realistic proportions, subsurface scattering on skin, detailed clothing.",
+      environments: "Cinematic 3D environments — dramatic studio lighting, rich color grading, volumetric atmosphere, detailed textures.",
+      objects: "High-quality 3D rendered objects with detailed materials, dramatic lighting, depth of field.",
+      rendering: "Pixar/DreamWorks animated feature film quality — dramatic lighting, subsurface scattering, cinematic composition."
+    },
+    oil_painting: {
+      characters: "Characters rendered with visible impasto brushstrokes, rich pigment skin tones, classical portrait technique, painterly soft edges.",
+      environments: "Landscapes and interiors with thick oil paint texture, classical composition, chiaroscuro lighting, canvas grain visible.",
+      objects: "Objects painted with rich pigment layers, visible brush texture, warm varnish glow, classical still-life technique.",
+      rendering: "Fine art oil painting language — impasto, glazing, chiaroscuro, Rembrandt lighting, canvas texture."
+    },
+    watercolor: {
+      characters: "Characters rendered in soft watercolor washes — translucent skin tones, gentle bleeding edges, paper grain showing through.",
+      environments: "Watercolor landscapes — soft color washes, wet-on-wet blending, visible paper texture, delicate atmospheric effects.",
+      objects: "Objects painted with translucent watercolor layers, controlled bleeding edges, subtle granulation.",
+      rendering: "Traditional watercolor technique — translucent washes, paper grain, wet-on-wet blending, luminous transparency."
+    },
+    comic_book: {
+      characters: "Comic book characters with bold black ink outlines, halftone dot shading on skin, vibrant flat colors, dramatic foreshortening, dynamic action poses.",
+      environments: "Comic panel backgrounds — bold outlines, halftone shading, dramatic perspective, vibrant saturated colors.",
+      objects: "Objects with bold ink outlines, halftone dots, Ben-Day dot patterns, dramatic shadows.",
+      rendering: "Marvel/DC Comics quality — bold ink, halftone dots, action lines, dramatic foreshortening."
+    },
+    humpty_dumpty: {
+      characters: "Whimsical storybook characters — rounded friendly shapes, gentle watercolor washes, warm nostalgic feel, fairy tale proportions.",
+      environments: "Enchanted storybook world — hand-drawn quality, soft golden lighting, pastel tones, fairy tale architecture, cozy warmth.",
+      objects: "Storybook objects with delicate cross-hatching, gentle watercolor fills, vintage children's book charm.",
+      rendering: "Maurice Sendak / Beatrix Potter inspired — hand-drawn, watercolor washes, warm nostalgic nursery rhyme feel."
+    },
+    harry_potter: {
+      characters: "Fantasy characters in robes and wizard attire, warm candlelit skin tones, weathered textures, magical glow effects on faces.",
+      environments: "Gothic castle interiors — stone walls, floating candles, jewel-tone stained glass, magical golden particles, mysterious corridors.",
+      objects: "Enchanted artifacts with luminous properties, weathered leather, parchment textures, magical golden glow.",
+      rendering: "Fantasy concept art — warm candlelight, gothic textures, magical particles, jewel-tone color palette."
+    },
+    "3d_whiteboard_cartoon": {
+     characters: "Characters with bold consistent black ink outlines, flat color fills with single-tone cel-shading. Clothing rendered as flat color with subtle darker-tone fold shading. Character proportions defined per-character inline.",
+      environments: "Clean isometric/oblique perspective environments — simplified but recognizable settings. Environments match the scene description — . All surfaces rendered with bold outlines and flat color fills. Sharp focus on all background elements..",
+      objects: "ALL objects rendered with bold black outlines and flat color fills — vending machines, storage units, vehicles, furniture. Clearly identifiable with labeled visual metaphors. Information callout bubbles and thought bubbles as part of the visual language.",
+      rendering: "YouTube explainer / business education cartoon style — approachable, friendly, professional, visually clean. Even ambient lighting, no harsh shadows, only subtle ground shadows and single-tone darker shading."
+    },
+    low_poly_3d_cartoon: {
+     characters: "Low-poly 3D characters from visible flat-shaded polygon facets with realistic human proportions. Geometric facial features, expressive eyes. Geometric hair. Warm peach-tan skin with polygon-edge shading. Clothing with visible folds and flat polygon faces.",
+      environments: "All surfaces from visible flat-shaded triangular polygons. All environments built from flat-shaded polygons. Vibrant saturated colors, clean polygon edges, no smoothing, matte clay-toy quality, soft ambient occlusion, sharp focused background with all elements in focus, deep depth of field, Pixar expressiveness with geometric stylization",
+
+      objects: "All objects as low-poly geometric forms — boxy cars, yellow disc headlights, chrome bumpers, mailboxes, fire hydrants, street lamps. Every surface shows polygon edges and flat-shaded faces. Matte plastic quality like clay toys.",
+      rendering: "Clean polygon edges on all surfaces, flat-shaded with no smoothing (signature faceted look). Soft ambient occlusion, gentle directional shadows, no outlines or cel-shading. Bright gradient sky, geometric cloud clusters. Vibrant saturated colors, warm and inviting."
+    },
+    skeleton_protagonist: {
+      characters: "Protagonist in EVERY scene: photorealistic transparent skeleton with clear glass-like body shell, glossy ivory bones visible through translucent torso, big round expressive brown/amber EYEBALLS in skull sockets. MUST be shown according to director's notes — standing, sitting, kneeling, walking, running. Wears context-appropriate clothing. Must be DOING an action (holding objects, gesturing, interacting with people). Other characters are photorealistic normal humans shown alongside or interacting with the skeleton.",
+      environments: "Photorealistic DETAILED real-world environments shown in SHARP FOCUS — NOT blurred bokeh backgrounds. Every scene has a specific location with visible architecture, landscape features, props, furniture, tools, weather effects. The skeleton exists INSIDE this world, not floating in front of it. Include foreground elements for depth.",
+      objects: "Photorealistic props the skeleton is actively interacting with — tools in hand, objects being held or carried, furniture being used, vehicles, food, weapons, documents. Props tell the story and connect scenes together.",
+      rendering: "Cinematic wide-to-medium framing showing within environment. HDR cinematic lens, warm amber grading, dramatic volumetric golden hour lighting, strong rim light separating skeleton from background. Sharp detailed backgrounds. Favor 9:16 vertical framing with character visible."
+    }
+  };
+
+
+  // ═══ UNIVERSAL FRAMING — appended to ALL styles ═══
+  const base = rules[styleName] || null;
+  if (base) {
+    base.rendering = (base.rendering || '') + ' Frame characters shown. Show detailed sharp environments with visible props and architecture, not empty blurred backgrounds. Characters should be mid-action interacting with environment and other people.';
+  }
+  return base;
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// STYLE-SPECIFIC LLM REINFORCEMENT
+// ══════════════════════════════════════════════════════════════════
+
+
+function getStyleReinforcementInstruction(visualStyle) {
+  // ═══ UNIVERSAL — every style gets this ═══
+  const universalReinforcement = `
+**🎬 MANDATORY PRODUCTION RULES (ALL STYLES):**
+
+
+ENVIRONMENT-FIRST: Every image_prompt must describe the LOCATION and SETTING in the first 1-2 sentences BEFORE mentioning any character. Include: specific place, architecture/landscape, weather/time of day, foreground props, atmospheric details.
+
+
+FULL-BODY ACTION: Characters shown. They must be DOING an action — walking, sitting, reaching, holding, kneeling, gesturing. NEVER static standing portrait facing camera. Close-ups allowed for max 2 scenes.
+
+
+CAMERA DIRECTION: Each image_prompt must specify a SHOT TYPE (wide, medium, low angle, overhead, OTS, tracking, dutch angle, POV) and it must DIFFER from adjacent scenes.
+
+
+POPULATED WORLD: Include other people, objects, vehicles, animals in MOST scenes. The character lives in a busy, living world — not alone in empty space.
+
+
+THREE-LAYER DEPTH: Every scene has foreground (edge objects, blurred props), midground (character + action), background (environment stretching into distance).
+
+
+EMOTIONAL LIGHTING: Specify light SOURCE (sun, lamp, fire, neon, window), DIRECTION (from left, backlit, overhead, rim), and MOOD (warm golden, cold blue, harsh white, dramatic chiaroscuro).
+
+
+BODY LANGUAGE: Characters express emotion through POSTURE — slumped, wide stance, hunched, arms spread, hands clasped, leaning forward, stepping back. NOT just facial expression.
+
+
+CONTINUITY: Each scene must contain a visual element that connects to the next scene — shared prop, color shift, gesture echo, location transform.
+`;
+
+
+  const instructions = {
+    skeleton_protagonist: universalReinforcement + `
+**🦴 SKELETON PROTAGONIST STYLE — ADDITIONAL RULES:**
+The protagonist in EVERY image prompt must be described as: "a photorealistic transparent skeleton with a clear glass-like semi-transparent humanoid body shell, glossy ivory bones visible through the translucent torso, big round expressive brown amber eyeballs in the skull sockets"
+
+
+MANDATORY FRAMING:
+- Show the skeleton  — NOT torso-only, NOT bust shots
+- Describe the ENVIRONMENT in detail FIRST (location, props, weather, textures) THEN place the skeleton within it
+- The skeleton must be DOING an action — holding, reaching, kneeling, walking — NOT standing static
+- Include other photorealistic humans in most scenes — crowds, companions, onlookers
+- Backgrounds must be SHARP and DETAILED — NOT blurred bokeh
+- Each scene must contain a visual CONTINUITY element connecting to the next scene
+- The skeleton wears context-appropriate clothing per scene
+- Lighting: golden hour, volumetric rays, warm amber grading, rim light on bone edges
+- NEVER empty dark eye sockets — always BIG ROUND EXPRESSIVE BROWN/AMBER EYEBALLS
+- NEVER torso-only portrait against blurred background`
+  };
+  return instructions[visualStyle] || universalReinforcement;
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// PROMPT VALIDATION
+// ══════════════════════════════════════════════════════════════════
+
+
+function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, sceneNumber, visualStyle) {
+  let enhanced = imagePrompt;
+  enhanced = enhanced.replace(/\b\d{3,4}\s*[x×]\s*\d{3,4}\s*(pixels?|px)?\s*\.?\s*/gi, '');
+
+
+  // Ensure style quality suffix is present — APPEND at END, never prepend
+  // The first 200 chars of the prompt must be FRAMING + ENVIRONMENT, not style language
+  const styleCheck = styleConfig.positive.substring(0, 30).toLowerCase();
+  if (!enhanced.toLowerCase().includes(styleCheck.substring(0, 20))) {
+    enhanced = `${enhanced}. ${styleConfig.positive}`;
+  }
+
+
+  // For non-photorealistic styles, strip any photorealistic camera language that may have leaked in
+  const isPhotoStyle = ['cinematic_realistic', 'photorealistic_4k', 'skeleton_protagonist'].includes(visualStyle);
+  if (!isPhotoStyle) {
+    enhanced = enhanced.replace(/\b(shot on|ARRI|Alexa|Canon|Sony|Nikon|Panavision|anamorphic|DSLR|RAW)\b/gi, '');
+    enhanced = enhanced.replace(/\b(Kodak|Vision3|film grain texture|chromatic aberration)\b/gi, '');
+    enhanced = enhanced.replace(/\bf\/\d+\.?\d*\b/g, '');
+    enhanced = enhanced.replace(/\b(bokeh|lens flare)\b/gi, '');
+    enhanced = enhanced.replace(/\s{2,}/g, ' ').replace(/,\s*,/g, ',');
+  }
+
+
+ // Strip any orientation words the LLM may have included (orientation is handled by API aspect_ratio param)
+  enhanced = enhanced
+    .replace(/\b(LANDSCAPE|PORTRAIT)\s+(HORIZONTAL|VERTICAL)\b/gi, '')
+    .replace(/\bvertical\s+\d+:\d+\s*(frame|format)?\b/gi, '')
+    .replace(/\bwidescreen\s+\d+:\d+\s*(frame|format)?\b/gi, '')
+    .replace(/\b\d{1,2}:\d{1,2}\s*(widescreen|vertical|horizontal|frame|format|ratio)\b/gi, '')
+    .replace(/\b(wide|tall)\s+(cinematic|vertical|horizontal)\s+(framing|composition)\b/gi, '');
+
+
+  // DO NOT add anti-text instruction — Grok renders it as visible text
+  // The LLM prompt already instructs physical metaphors for abstract concepts
+
+
+  // Quality suffix — style-appropriate (no resolution numbers — Grok renders them)
+  if (!/masterpiece|professional|high quality/i.test(enhanced)) {
+    enhanced += ', masterpiece quality, highly detailed, professional composition';
+  }
+
+
+  return enhanced;
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// ARC-AWARE ANIMATION DYNAMICS
+// ══════════════════════════════════════════════════════════════════
+
+
+function getArcAnimationGuidance(arcPosition) {
+  const map = {
+    setup: "SLOW, RESTRAINED. Gentle drift or creeping pan. Camera discovers the world — parallax depth as foreground drifts past background. Settling motion like arriving somewhere.",
+    rising: "BUILDING energy. Gradual push-ins with purpose. Handheld micro-shake emerging. Parallax intensifying. Elements in frame start responding — curtains shift, papers flutter, light quickens.",
+    climax: "PEAK intensity but CONTROLLED. Deliberate slow push-in to subject's eyes or hands. Everything else stills. Rack focus snaps. Single dramatic light shift. Hold the moment — let it land.",
+    resolution: "EXHALE. Slow pull-back revealing wider context. Settling dust, calming light, softening focus. Motion decelerates like a heartbeat returning to rest. Warmth enters the frame.",
+    cold_open: "IMMEDIATE and ASSERTIVE. Camera already moving when scene starts — mid-track or mid-push. No easing in. Foreground whips past. Light cuts sharp. Grab the eye in the first frame.",
+    rising_tension: "ESCALATING rhythm. Each motion slightly faster or tighter than the last. Push-ins grow bolder, tracking grows more urgent. Environmental motion picks up — wind, flickering light, shifting shadows. Building toward something.",
+    emotional_core: "DELIBERATE POWER. Camera slows to meaningful crawl. Every inch of movement earns its place. Subject micro-expressions amplified — a swallow, a blink, fingers tightening. Shallow DOF breathes. Light pools and shifts like it's alive. This is the frame viewers remember.",
+  };
+  return map[arcPosition] || map.rising;
+}
+
+
+// ══════════════════════════════════════════════════════════════════
+// MAIN — PROMPT GENERATION (no compression — breakdown is authority)
+// ══════════════════════════════════════════════════════════════════
+
+
+Deno.serve(async (req) => {
+  try {
+    const base44 = createClientFromRequest(req);
+    const user = await base44.auth.me();
+    if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
+
+
+    const { project_id } = await req.json();
+
+
+    const [projects, allScenes] = await Promise.all([
+      base44.asServiceRole.entities.Projects.filter({ id: project_id }),
+      base44.asServiceRole.entities.Scenes.filter({ project_id })
+    ]);
+
+
+    const project = projects[0];
+    if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
+
+
+    let pendingScenes = allScenes
+      .filter(s => s.status === 'breakdown_ready')
+      .sort((a, b) => a.scene_number - b.scene_number);
+
+
+    if (pendingScenes.length === 0) {
+      return Response.json({
+        success: true, done: true,
+        message: 'All scenes already have prompts.',
+        total_scenes: allScenes.length
+      });
+    }
+
+
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`🎨 PROMPT GENERATION`);
+    console.log(`📊 ${pendingScenes.length} scenes from deterministic breakdown — converting to production prompts`);
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+
+
+    const rawStyle = project.visual_style || 'cinematic_realistic';
+    const visualStyle = normalizeStyleKey(rawStyle);
+    const styleConfig = styleMap[visualStyle];
+    console.log(`🎨 Style: raw="${rawStyle}" → resolved="${visualStyle}"`);
+
+
+    // ═══ UNIVERSAL: Append anti-crop negatives to ALL styles ═══
+    const effectiveNegative = (styleConfig.negative || '') + UNIVERSAL_NEGATIVE_SUFFIX;
+
+
+    const orientation = project.orientation || 'landscape';
+
+
+    // ── Style-specific LLM reinforcement (e.g. skeleton protagonist) ──
+    const styleReinforcement = getStyleReinforcementInstruction(visualStyle);
+    if (styleReinforcement) {
+      console.log(`🦴 Style reinforcement active: ${visualStyle}`);
+    }
+
+
+    let orientationConfig;
+    if (orientation === 'portrait') {
+      orientationConfig = {
+        format: 'portrait',
+        directive: "PORTRAIT VERTICAL 9:16 format, tall vertical framing",
+        composition: "Compose for VERTICAL 9:16 mobile frame: tall compositions, characters visible , vertical depth stacking, environment visible above and below character",
+        animation: "vertical 9:16 — tilt up/down, vertical reveals, close-up push-ins, portrait motion"
+      };
+    } else {
+      orientationConfig = {
+        format: 'landscape',
+        directive: "LANDSCAPE HORIZONTAL 16:9 widescreen, wide cinematic framing",
+        composition: "Compose for WIDESCREEN 16:9: wide establishing shots, rule of thirds, horizontal leading lines, foreground/midground/background depth, characters within environment",
+        animation: "widescreen 16:9 — horizontal pans, dolly forward/back, crane shots, lateral parallax"
+      };
+    }
+
+
+    const framingPrefix = "Full body wide shot showing complete scene with detailed sharp environment, visible architecture and props, character shown head to feet mid-action in a populated world";
+    const promptPrefix = `${framingPrefix}. `;
+
+
+    let characters = [];
+    if (project.character_descriptions) {
+      try { characters = JSON.parse(project.character_descriptions); } catch (_) {}
+    }
+
+    // ═══ CHARACTER IDENTITY SYSTEM ═══
+    // Split character data into IMMUTABLE identity (face, body, hair, skin, eyes, marks)
+    // and MUTABLE appearance (clothing, accessories, pose).
+    // Only identity_core gets force-injected into every prompt.
+    // Clothing is left to the LLM per-scene.
+
+    const characterBlock = characters.length > 0
+      ? `**CHARACTERS — IDENTITY DNA (these features are PERMANENT and NEVER change between scenes):**\n${characters.map(c => {
+          const identity = c.identity_core || c.visual_description || c.description || '';
+          const clothing = c.default_clothing || '';
+          return `• ${c.name}:\n  IDENTITY (permanent): ${identity}${clothing ? `\n  DEFAULT CLOTHING (can change per scene): ${clothing}` : ''}`;
+        }).join('\n')}\n\n**RULE: You MUST embed the FULL identity description for EVERY character in EVERY image_prompt. The image generator has ZERO memory — each prompt is a fresh start. Name alone means NOTHING to the renderer.**`
+      : '';
+
+
+    // ═══ CHARACTER IDENTITY TAGS — style-aware, force-injected into EVERY prompt post-LLM ═══
+    // CRITICAL: Tags are structured BODY-FIRST to prevent Grok from rendering portraits.
+    // The identity_core from breakdown is a face-first casting sheet (great for consistency)
+    // but when injected verbatim, Grok reads "oval face, almond eyes, upturned nose..."
+    // and commits to rendering a portrait. We restructure it here:
+    //   → body/build/height/posture FIRST (sets "this is a person in a scene" framing)
+    //   → face/hair as a COMPACT trailing clause (maintains identity without triggering portrait mode)
+
+
+    // Split identity_core into body traits vs face traits
+    function splitIdentity(rawDesc) {
+      // Body keywords: anything about build, height, body shape, posture
+      const bodyPatterns = /\b(\d+\s*ft\s*\d+|\d+\s*cm|\d+'?\d*"?|tall|short|petite|average build|athletic build|slim build|heavy build|lean|stocky|slender|muscular|broad shoulders|narrow shoulders|long neck|long legs|curvy|hourglass|lanky|heavyset|medium build|thin build|stout|wide hips|narrow hips|prominent collarbones|small frame|large frame)\b/gi;
+      // Age keywords
+      const agePatterns = /\b(\d{1,2}\s*years?\s*old|\d{1,2}-year-old|in\s+(?:her|his|their)\s+(?:early|mid|late)\s+\d{2}s|young\s+(?:woman|man)|middle[\s-]aged|elderly|teenage)\b/gi;
+      // Gender
+      const genderPatterns = /\b(female|male|woman|man|non[\s-]binary)\b/gi;
+
+      const bodyTraits = [];
+      const ageMatches = rawDesc.match(agePatterns) || [];
+      const genderMatches = rawDesc.match(genderPatterns) || [];
+      const bodyMatches = rawDesc.match(bodyPatterns) || [];
+
+      bodyTraits.push(...ageMatches.slice(0, 1), ...genderMatches.slice(0, 1), ...bodyMatches);
+
+      // Everything else is face/hair (the identifying features)
+      let faceDesc = rawDesc;
+      for (const trait of bodyTraits) {
+        faceDesc = faceDesc.replace(trait, '');
+      }
+      // Clean up leftover commas and spaces
+      faceDesc = faceDesc.replace(/,\s*,/g, ',').replace(/^\s*,\s*/, '').replace(/\s*,\s*$/, '').replace(/\s{2,}/g, ' ').trim();
+
+      return {
+        body: bodyTraits.join(', ').trim(),
+        face: faceDesc
+      };
+    }
+
+    // Style transforms — now structured BODY-FIRST
+    // Pattern: "[style] [body build + action framing], [compressed face/hair clause]"
+    const styleCharacterRules = {
+      cinematic_realistic: (bodyDesc, faceDesc) =>
+        `photorealistic ${bodyDesc} shown full body in the scene, ${faceDesc}, natural skin texture, cinematic lighting`,
+      photorealistic_4k: (bodyDesc, faceDesc) =>
+        `DSLR-quality photorealistic ${bodyDesc} shown full body, ${faceDesc}, razor-sharp detail, editorial photography`,
+      anime: (bodyDesc, faceDesc) =>
+        `anime-style ${bodyDesc} shown full figure, ${faceDesc}, large expressive eyes with highlight reflections, clean linework, cel-shaded`,
+      cinematic_anime: (bodyDesc, faceDesc) =>
+        `cinematic anime ${bodyDesc} shown full body, ${faceDesc}, Makoto Shinkai quality, dramatic volumetric lighting, flowing hair`,
+     cartoon_2d: (bodyDesc, faceDesc) =>
+        `2D cartoon ${bodyDesc} shown full body with bold outlines, ${faceDesc}, flat vibrant colors, dynamic pose, normal proportions`,
+     picstory_cocomelon: (bodyDesc, faceDesc) =>
+        `3D rendered ${bodyDesc} shown full body, ${faceDesc}, soft rounded plastic-smooth features, pastel colors, Pixar Junior quality`,
+      cinematic_picstory: (bodyDesc, faceDesc) =>
+        `Pixar-quality 3D animated ${bodyDesc} shown full body in the scene, ${faceDesc}, subsurface scattering on skin, expressive features, dramatic studio rim lighting`,
+      oil_painting: (bodyDesc, faceDesc) =>
+        `oil-painted ${bodyDesc} shown full figure, ${faceDesc}, visible impasto brushstrokes, Rembrandt chiaroscuro lighting`,
+      watercolor: (bodyDesc, faceDesc) =>
+        `watercolor-rendered ${bodyDesc} shown full figure, ${faceDesc}, soft translucent washes, paper grain showing through`,
+      comic_book: (bodyDesc, faceDesc) =>
+        `comic book ${bodyDesc} shown full body in dynamic pose, ${faceDesc}, bold black ink outlines, halftone shading, Marvel/DC quality`,
+      humpty_dumpty: (bodyDesc, faceDesc) =>
+        `storybook ${bodyDesc} shown full figure, ${faceDesc}, rounded friendly shapes, gentle watercolor washes, fairy tale warmth`,
+      harry_potter: (bodyDesc, faceDesc) =>
+        `fantasy ${bodyDesc} shown full body, ${faceDesc}, warm candlelit tones, magical golden particles, gothic atmosphere`,
+      "3d_whiteboard_cartoon": (bodyDesc, faceDesc) =>
+        `3D whiteboard cartoon ${bodyDesc} shown full body with bold outlines, ${faceDesc}, flat color fills, normal proportions, warm peach-brown skin`,
+     low_poly_3d_cartoon: (bodyDesc, faceDesc) =>
+        `low-poly 3D ${bodyDesc} shown full body from flat-shaded polygons, ${faceDesc}, angular geometric features, matte clay-toy quality`,
+      skeleton_protagonist: (bodyDesc, faceDesc) =>
+        `photorealistic transparent skeleton with clear glass-like body shell shown full body in the scene, glossy ivory bones visible through translucent torso, big round expressive brown amber eyeballs in skull sockets, ${faceDesc}`
+    };
+
+
+    const defaultStyleTransform = (bodyDesc, faceDesc) => `${bodyDesc} shown full body in the scene, ${faceDesc}`;
+
+
+    // ══════════════════════════════════════════════════════════════
+    // IDENTITY TIER SYSTEM — shot-type-aware character depth
+    // ══════════════════════════════════════════════════════════════
+    // Not every scene needs a 500-char character description.
+    // A wide city street shot where the character is tiny needs just
+    // "a woman with a dark-brown bob in a lavender jacket."
+    // A close-up emotional beat needs the full casting-sheet identity.
+    //
+    // MINIMAL: Wide/environmental shots — silhouette identifiers only
+    // MODERATE: Medium/action shots — add skin tone, key features
+    // FULL: Close-up/emotional — complete identity for face consistency
+    // ══════════════════════════════════════════════════════════════
+
+    function getIdentityTier(shotType) {
+      if (!shotType) return 'moderate'; // safe default
+      const st = shotType.toLowerCase();
+      // FULL: close-ups where face matters
+      if (/\b(ecu|extreme\s*close|mcu|medium\s*close|cu\b|close[\s-]*up|insert|detail|pov)\b/.test(st)) return 'full';
+      // MINIMAL: wide shots where character is small in frame
+      if (/\b(ews|extreme\s*wide|ws\b|wide\s*shot|mws|medium\s*wide|high\s*angle|overhead|god.?s?\s*eye|establishing|aerial|drone|bird.?s?\s*eye)\b/.test(st)) return 'minimal';
+      // MODERATE: everything else (MS, low angle, OTS, tracking, dutch)
+      return 'moderate';
+    }
+
+    const characterTieredTags = {};  // name → { minimal, moderate, full }
+    const characterReferencePrompts = {};
+    const styleTransform = styleCharacterRules[visualStyle] || defaultStyleTransform;
+
+
+    for (const c of characters) {
+      const name = (c.name || '').toLowerCase().trim();
+      const identityDesc = c.identity_core || c.visual_description || c.description || '';
+      const clothing = c.default_clothing || '';
+      if (name && identityDesc) {
+        const { body, face } = splitIdentity(identityDesc);
+        const bodyDesc = body || 'adult character';
+
+        // Extract just hair color+length for minimal tier
+        const hairMatch = face.match(/\b([\w-]+\s+)?(hair|bob|ponytail|bun|braids?|curls?|locs|afro)\b[^,]*/i);
+        const hairShort = hairMatch ? hairMatch[0].trim() : '';
+        // Extract just skin tone for moderate tier
+        const skinMatch = face.match(/\b[\w-]+\s+skin\b[^,]*/i);
+        const skinShort = skinMatch ? skinMatch[0].trim() : '';
+
+        // ── MINIMAL: silhouette only (wide shots — character is small in frame)
+        // Just enough to recognize "that's our character" at a distance
+        const minimalDesc = `a ${bodyDesc}${hairShort ? ', ' + hairShort : ''}${clothing ? ', wearing ' + clothing.substring(0, 60) : ''}`;
+
+        // ── MODERATE: action-level (medium shots — body visible, face not dominant)
+        // Body + hair + skin + clothing — no detailed facial features
+        let compactFaceMod = face;
+        if (compactFaceMod.length > 100) {
+          const cut = compactFaceMod.lastIndexOf(',', 100);
+          compactFaceMod = cut > 50 ? compactFaceMod.substring(0, cut).trim() : compactFaceMod.substring(0, 100).trim();
+        }
+        const moderateDesc = styleTransform(bodyDesc, compactFaceMod);
+
+        // ── FULL: portrait-level (close-ups — face is the subject)
+        let compactFaceFull = face;
+        if (compactFaceFull.length > 200) {
+          const cut = compactFaceFull.lastIndexOf(',', 200);
+          compactFaceFull = cut > 100 ? compactFaceFull.substring(0, cut).trim() : compactFaceFull.substring(0, 200).trim();
+        }
+        const fullDesc = styleTransform(bodyDesc, compactFaceFull);
+
+        // Sanitize gender — never "individual", "any gender", "person of any gender"
+        function sanitizeGender(desc) {
+          return desc
+            .replace(/\bany gender\b/gi, 'female')
+            .replace(/\bindividual\b/gi, 'woman')
+            .replace(/\bperson of any gender\b/gi, 'woman')
+            .replace(/\bgender[- ]neutral\b/gi, 'female')
+            .replace(/\ba person\b/gi, 'a woman')
+            .replace(/\bthe person\b/gi, 'the woman')
+            .replace(/\ban adult\b/gi, 'a woman');
+        }
+
+        characterTieredTags[name] = {
+          minimal: sanitizeGender(minimalDesc.length > 150 ? minimalDesc.substring(0, 150).trim() : minimalDesc),
+          moderate: sanitizeGender(moderateDesc.length > 300 ? moderateDesc.substring(0, 300).trim() : moderateDesc),
+          full: sanitizeGender(fullDesc.length > 500 ? fullDesc.substring(0, 500).trim() : fullDesc)
+        };
+
+        if (c.reference_prompt) {
+          characterReferencePrompts[name] = c.reference_prompt;
+        }
+      }
+    }
+
+    // Backward-compat: keep characterIdentityTags pointing to moderate tier
+    const characterIdentityTags = {};
+    for (const [name, tiers] of Object.entries(characterTieredTags)) {
+      characterIdentityTags[name] = tiers.moderate;
+    }
+
+    console.log(`👤 Character identity tiers (${visualStyle}) built for: ${Object.keys(characterTieredTags).join(', ') || 'none'}`);
+    for (const [name, tiers] of Object.entries(characterTieredTags)) {
+      console.log(`   ${name}: minimal=${tiers.minimal.length}ch | moderate=${tiers.moderate.length}ch | full=${tiers.full.length}ch`);
+    }
+    if (Object.keys(characterReferencePrompts).length > 0) {
+      console.log(`📸 Reference prompts available for: ${Object.keys(characterReferencePrompts).join(', ')}`);
+    }
+
+
+    // ══════════════════════════════════════════════════════════════
+    // PROP EXTRACTOR — named objects from narration
+    // ══════════════════════════════════════════════════════════════
+    // The narration says "iPhone" but the LLM might write "phone" or
+    // even "laptop." We extract specific nouns from narration and
+    // inject them into the scene directions so Gemini uses them.
+    // Props are PART of the scene — never the SUBJECT.
+    // ══════════════════════════════════════════════════════════════
+
+    function extractNamedProps(narrationText) {
+      if (!narrationText) return [];
+      const props = [];
+      // Devices (specific beats generic)
+      const deviceMap = [
+        [/\biphone\b/i, 'an iPhone'],
+        [/\bipad\b/i, 'an iPad'],
+        [/\bmacbook\b/i, 'a MacBook'],
+        [/\bandroid\s*(phone|device)?\b/i, 'an Android phone'],
+        [/\bsamsung\b/i, 'a Samsung phone'],
+        [/\bgalaxy\b/i, 'a Samsung Galaxy'],
+        [/\blaptop\b/i, 'a laptop'],
+        [/\bcomputer\b/i, 'a computer'],
+        [/\btablet\b/i, 'a tablet'],
+        [/\bkindle\b/i, 'a Kindle'],
+      ];
+      // Vehicles
+      const vehicleMap = [
+        [/\btesla\b/i, 'a Tesla'],
+        [/\bporsche\b/i, 'a Porsche'],
+        [/\bbmw\b/i, 'a BMW'],
+        [/\buber\b/i, 'an Uber car'],
+      ];
+      // Brands/places
+      const brandMap = [
+        [/\bstarbucks\b/i, 'a Starbucks cup'],
+        [/\bamazon\s*package\b/i, 'an Amazon package'],
+        [/\bnetflix\b/i, 'a screen'],
+      ];
+      
+      for (const mapList of [deviceMap, vehicleMap, brandMap]) {
+        for (const [pattern, replacement] of mapList) {
+          if (pattern.test(narrationText)) {
+            props.push(replacement);
+            break; // one per category
+          }
+        }
+      }
+      return props;
+    }
+
+
+    let storyContext = '';
+    let blueprintSceneMap = {}; // scene_number → director data (now read from Scene records, not blueprint)
+    try {
+      // Story analysis is stored in ProductionSettings (scene_blueprint has a size limit)
+      const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
+      const ps = psList[0];
+      if (ps?.story_analysis) {
+        const sa = JSON.parse(ps.story_analysis);
+        storyContext = `**STORY:** Theme: ${sa.central_theme || ''} | Visual World: ${sa.visual_world || ''} | Color Arc: ${sa.color_arc || ''} | Motifs: ${JSON.stringify(sa.recurring_visual_motifs || [])}`;
+        console.log(`📋 Story analysis loaded from ProductionSettings`);
+      } else {
+        // Fallback: try scene_blueprint (backward compat with older projects)
+        const blueprint = JSON.parse(project.scene_blueprint || '{}');
+        const sa = blueprint.story_analysis || blueprint.sa;
+        if (sa) {
+          storyContext = `**STORY:** Theme: ${sa.central_theme || sa.t || ''} | Visual World: ${sa.visual_world || sa.v || ''} | Color Arc: ${sa.color_arc || sa.c || ''} | Motifs: ${JSON.stringify(sa.recurring_visual_motifs || sa.m || [])}`;
+        }
+      }
+      // Director notes are now stored on each Scene record (DIRECTOR_NOTES: prefix)
+      // extractDirectorNotes() handles this — blueprintSceneMap stays empty
+    } catch (_) {
+      storyContext = `**STORY:** Topic: "${project.name}" | Niche: ${project.niche || 'general'}`;
+    }
+
+
+    console.log(`🎨 Generating prompts for ${pendingScenes.length} scenes`);
+    console.log(`🖼️ Style: ${visualStyle} | 📐 ${orientation}`);
+
+
+    let totalPrompts = 0;
+    let totalWarnings = 0;
+    const totalBatches = Math.ceil(pendingScenes.length / BASE_BATCH_SIZE);
+
+
+    // ═══ QUALITY ANCHORS — best prompts from completed scenes ═══
+    // Inject 2-3 examples of GOOD prompts into every batch so the LLM
+    // knows the expected quality bar, not just the instructions
+    let qualityAnchors = '';
+    try {
+      const completedScenes = allScenes
+        .filter(s => s.status === 'prompts_ready' && s.image_prompt && !s.image_prompt.startsWith('DIRECTOR_NOTES:'))
+        .sort((a, b) => a.scene_number - b.scene_number);
+
+
+      if (completedScenes.length >= 2) {
+        // Pick the longest/richest prompts as quality examples
+        const ranked = [...completedScenes]
+          .sort((a, b) => (b.image_prompt?.length || 0) - (a.image_prompt?.length || 0))
+          .slice(0, 3);
+
+
+        qualityAnchors = `
+**═══════════════════════════════════════════════════════════════**
+**QUALITY REFERENCE — your output MUST match or exceed this detail level:**
+**═══════════════════════════════════════════════════════════════**
+${ranked.map((s, i) => `
+EXAMPLE ${i + 1} (Scene ${s.scene_number} — ${s.image_prompt.length} chars):
+image_prompt: "${s.image_prompt.substring(0, 500)}"
+animation_prompt: "${(s.animation_prompt || '').substring(0, 200)}"
+`).join('\n')}
+**Every prompt you write MUST be at least this detailed. Prompts shorter than 150 characters will be REJECTED.**
+**═══════════════════════════════════════════════════════════════**`;
+
+
+        console.log(`📋 Quality anchors loaded from ${ranked.length} existing scenes (${ranked.map(s => `S${s.scene_number}: ${s.image_prompt.length}ch`).join(', ')})`);
+      }
+    } catch (_) {
+      console.log('No quality anchors available — first batch');
+    }
+    // Process 1 batch per call to avoid platform timeout
+    // Adaptive batch size: 12 for first 60 scenes, 8 for 60-200, 6 for 200+
+    const totalPendingScenes = pendingScenes.length;
+    const completedSoFar = allScenes.filter(s => s.status === 'prompts_ready').length;
+    const BATCH_SIZE = completedSoFar > 200 ? 6 : completedSoFar > 60 ? 8 : BASE_BATCH_SIZE;
+    console.log(`📦 Batch size: ${BATCH_SIZE} (${completedSoFar} scenes already completed)`);
+
+
+    const startBIdx = 0;
+    const maxBatchesPerCall = 1;
+    for (let bIdx = startBIdx; bIdx < Math.min(startBIdx + maxBatchesPerCall, totalBatches); bIdx++) {
+      const batchScenes = pendingScenes.slice(bIdx * BATCH_SIZE, (bIdx + 1) * BATCH_SIZE);
+      if (batchScenes.length === 0) break;
+
+
+      if (bIdx > 0) await new Promise(r => setTimeout(r, 2000));
+
+
+      const scenesWithNotes = batchScenes.map(scene => {
+        // Priority 1: Blueprint scenes (where phase-based breakdown stores director data)
+        // Priority 2: DIRECTOR_NOTES: prefix in image_prompt (deterministic breakdown format)
+        // Priority 3: null (generate from narration only)
+        let director = blueprintSceneMap[scene.scene_number] || null;
+        if (!director) {
+          director = extractDirectorNotes(scene.image_prompt);
+        }
+        return {
+          scene_number: scene.scene_number,
+          scene_id: scene.id,
+          narration_text: scene.narration_text,
+          duration_seconds: scene.duration_seconds || 5,
+          director
+        };
+      });
+
+
+      const sceneDirections = scenesWithNotes.map(s => {
+        // Resolve arc position: prefer director.phase (from breakdown), fall back to arc_position, then 'rising'
+        const arcPosition = s.director?.phase || s.director?.arc_position || 'rising';
+        const arcAnim = getArcAnimationGuidance(arcPosition);
+        const sceneDuration = s.duration_seconds;
+        
+        // Extract named props from narration for prop fidelity
+        const namedProps = extractNamedProps(s.narration_text);
+        const propsLine = namedProps.length > 0
+          ? `\n  Named Props (use these EXACT names, as background props NOT subjects): ${namedProps.join(', ')}`
+          : '';
+
+        // Determine character description depth from shot type
+        const shotType = s.director?.shot_type || 'MS — Medium Shot';
+        const identityTier = getIdentityTier(shotType);
+
+        if (!s.director) {
+          return `Scene ${s.scene_number}: (No director notes — generate from narration)\n  Narration: "${s.narration_text}"\n  Duration: ${sceneDuration}s\n  Character Detail Level: ${identityTier.toUpperCase()} (match description depth to this)\n  Arc Phase: ${arcPosition}\n  Arc Animation: ${arcAnim}${propsLine}`;
+        }
+        return `Scene ${s.scene_number}:
+  Narration: "${s.narration_text}"
+  Duration: ${sceneDuration}s
+  Visual Concept: ${s.director.visual_concept}
+  Shot Type: ${s.director.shot_type}
+  Character Detail Level: ${identityTier.toUpperCase()} (${identityTier === 'minimal' ? 'wide shot — silhouette only, NO face details' : identityTier === 'moderate' ? 'medium shot — body + hair + skin, brief features' : 'close-up — full identity for face consistency'})
+  Camera Angle: ${s.director.camera_angle}
+  Camera Movement: ${s.director.camera_movement}
+  Lighting: ${s.director.lighting}
+  Color Palette: ${s.director.color_palette}
+  Mood: ${s.director.mood}
+  DOF: ${s.director.depth_of_field}
+  Niche Element: ${s.director.niche_visual_element || 'N/A'}
+  Continuity: ${s.director.continuity_bridge || 'N/A'}
+  Intensity: ${s.director.emotional_intensity || 0.5}
+  Arc Phase: ${arcPosition}
+  Arc Animation: ${arcAnim}${propsLine}`;
+      }).join('\n\n');
+
+
+      const styleBodyRules = getStyleSceneBodyRules(visualStyle);
+      const styleBodyBlock = styleBodyRules ? `
+**═══════════════════════════════════════════════════════════════**
+**HOW TO DESCRIBE SCENE CONTENT IN "${visualStyle}" STYLE:**
+**Characters:** ${styleBodyRules.characters}
+**Environments:** ${styleBodyRules.environments}
+**Objects & Props:** ${styleBodyRules.objects}
+**Rendering Language:** ${styleBodyRules.rendering}
+**═══════════════════════════════════════════════════════════════**` : '';
+
+
+     const prompt = `**MISSION: Convert Director's Notes → Production-Ready Image & Animation Prompts**
+
+
+${storyContext}
+
+
+${characterBlock}
+${styleReinforcement}
+${qualityAnchors}
+
+
+**VISUAL STYLE: "${visualStyle}"**
+**ORIENTATION:** ${orientationConfig.format}
+
+
+**STYLE QUALITY SUFFIX (append at the END of each image_prompt, NOT the beginning):**
+"${styleConfig.positive}"
+${styleBodyBlock}
+
+
+**UNIVERSAL FRAMING RULES (apply to ALL visual styles):**
+- Show characters FULL where needed — NOT torso-only or bust crops unless specifically an ECU emotional beat
+- Describe the ENVIRONMENT in detail FIRST (location, architecture, props, weather, textures) THEN place characters within it doing an ACTION
+- Characters must be DOING something — holding, reaching, walking, gesturing, interacting — NOT standing static facing camera
+- Backgrounds must be SHARP and DETAILED with visible props and architecture, not blurred to nothing
+- Include foreground elements for depth and scene richness (objects on tables, plants, tools, fences, etc.)
+- Each scene must contain a visual CONTINUITY element connecting to adjacent scenes (shared prop, color shift, gesture echo, location transform)
+- NEVER generate an isolated character portrait against a blank or blurred background — always place them IN a detailed world
+- Include other people in scenes where the story calls for it — the character lives in a populated world
+
+
+**DIRECTOR'S SCENE NOTES:**
+${sceneDirections}
+
+
+**YOUR TASK — for EACH scene produce:**
+
+
+1. **image_prompt** — Production-ready AI image generation prompt. The image generator renders whatever it reads FIRST as the dominant element. STRUCTURE MATTERS:
+
+   **STEP A — SHOT FRAMING (first sentence, most important):**
+   Start EVERY prompt with the shot type and composition: "Full body wide shot showing..." or "Medium shot from waist up showing..." or "Low angle shot looking up at..."
+   This MUST be the very first thing in the prompt. The image generator commits to this framing before reading anything else.
+
+   **STEP B — ENVIRONMENT (next 1-2 sentences):**
+   Describe the COMPLETE environment: location, architecture, weather, time of day, foreground props, background depth.
+   Example: "...a rain-slicked Tokyo street at dusk, neon signs reflecting in puddles between parked cars, steam rising from a ramen cart in the foreground, office towers vanishing into low clouds behind."
+
+   **STEP C — CHARACTER (depth depends on shot type):**
+   The amount of character detail must match the shot framing. Over-describing a character in a wide shot causes the image generator to zoom into their face.
+
+   **WIDE/ENVIRONMENTAL shots (WS, EWS, MWS, HIGH ANGLE, OVERHEAD, ESTABLISHING):**
+   Character is SMALL in frame. Use MINIMAL description — just silhouette identifiers:
+   "A woman with a dark-brown bob in a lavender jacket walks through the crosswalk, phone in hand."
+   NO face details, NO eye color, NO skin texture. The character is a figure in a landscape.
+
+   **MEDIUM/ACTION shots (MS, LOW ANGLE, OTS, TRACKING, DUTCH):**
+   Character is visible but environment shares the frame. Use MODERATE description — body, hair, skin tone, action:
+   "A 5ft4 woman with dark-brown hair strides through the crowd, light-beige skin catching the neon glow, clutching her phone mid-step."
+   Brief identifying features WOVEN INTO ACTION — not a feature catalog.
+
+   **CLOSE-UP shots (CU, MCU, ECU, POV, INSERT):**
+   Character's face IS the subject. Use FULL description for consistency:
+   "Extreme close-up of a woman's face — light-beige skin with warm undertones, wide-set light-brown eyes glistening with unshed tears, her dark-brown hair falling across her forehead."
+
+   **PROP FIDELITY:**
+   When the narration mentions a specific device or object (iPhone, MacBook, Tesla, Starbucks cup), use that EXACT name in the prompt — NOT a generic replacement. But the prop is part of the scene, never the subject. The character and environment dominate; the prop is in their hand or nearby.
+   GOOD: "...clutching her iPhone as she crosses the street"
+   BAD: "...a close-up of an iPhone screen showing settings" ← prop became the subject
+
+   **STEP D — ATMOSPHERE + STYLE (final sentence):**
+   End with mood, lighting, and the style quality suffix.
+   Example: "...warm golden hour backlight casting long shadows, volumetric dust in the air. ${styleConfig.positive.substring(0, 80)}."
+
+   **THE GOLDEN RULE:** If the image generator only renders the first 200 characters of your prompt, would it produce a SCENE or a PORTRAIT? It MUST produce a scene. That means FRAMING + ENVIRONMENT must come first, ALWAYS.
+
+   Additional rules:
+     • Character description depth MUST match shot type — wide shots get minimal, medium gets moderate, close-ups get full. NEVER dump a full casting-sheet description into a wide shot.
+     • If the narration mentions a specific prop (iPhone, MacBook, Tesla, etc.), use that exact name — but keep it as a prop in the character's hand or environment, NOT the visual subject.
+     • ${orientationConfig.composition}
+   - FORBIDDEN: text, words, letters, numbers, charts, graphs, signs in the image
+   - FORBIDDEN: Describing what's ON a screen, phone, laptop, book, receipt, bill, letter, contract, or any document. The image generator WILL try to render it as garbled text. Instead, show the character's emotional reaction to the object from a wider angle. Example: "crumpled bill clutched in trembling hands, face pale under harsh light" NOT "medical bill showing $45,000 in charges"
+   - FORBIDDEN: Dollar amounts ($X), percentages, dates, names, or any specific text that would appear on a prop. These render as random garbled characters.
+   - When a character holds or uses an object (phone, document, tool, weapon, cup), describe it from a MEDIUM or WIDER shot. Close-ups of hand-object interaction produce broken physics (fingers clipping through objects, impossible grips). Let the object be PART of the scene, not the SUBJECT of it.
+   - Abstract concepts → PHYSICAL METAPHORS
+   - End with: "ABSOLUTELY NO text, words, letters, numbers, captions, or writing of any kind in the image"
+
+
+2. **animation_prompt** — RICH, CINEMATIC motion direction for the EXACT duration of each scene (see Duration field per scene):
+   - NOT a simple camera instruction — a FULL MOTION POEM describing everything that moves over the scene's duration.
+   - **IMPORTANT: Each scene has its own duration.** A 3.5s scene needs TIGHT, PUNCHY motion. A 7s scene can BREATHE. Match the motion density to the seconds available.
+   - **Include ALL layers:**
+     a) **CAMERA MOTION**: Specific movement with speed, direction, framing change
+     b) **ATMOSPHERIC MOTION**: Dust motes, fog, light shifting, rain, leaves, fabric rippling, steam
+     c) **SUBJECT MOTION**: Breathing, hair shifting, fingers tightening, eyes darting, fabric settling
+     d) **LIGHT DYNAMICS**: Rays creeping across surfaces, firelight dancing, shadows drifting
+     e) **DEPTH SHIFTS**: Rack focus, DOF breathing, focus pulls revealing detail
+     f) **EMOTIONAL QUALITY**: "heavy and reluctant" vs "urgent and searching" vs "tender and hesitant"
+   - **ARC POSITION**: ${orientationConfig.animation}
+     • COLD_OPEN / SETUP: Sharp, immediate. Camera grabs attention — quick cuts, assertive angles.
+     • RISING_TENSION / RISING: Building momentum. Camera grows bolder. Push-ins, tracking.
+     • EMOTIONAL_CORE / CLIMAX: Peak intensity but DELIBERATE. Camera lingers. Meaningful holds. Let moments breathe.
+     • RESOLUTION: Exhale. Camera pulls back gently. Peace settles.
+   - **MINIMUM 3-4 rich sentences** — NEVER generic "slow pan right"
+
+
+**RESPONSE:**
+{
+  "prompts": [
+    {
+      "scene_number": 1,
+      "image_prompt": "[SHOT FRAMING first]. [ENVIRONMENT]. [CHARACTER body-first in action with compact identity]. [ATMOSPHERE + style quality suffix]",
+      "animation_prompt": "[motion direction for this scene's specific duration]"
+    }
+  ]
+}`;
+
+
+      console.log(`🎨 Batch ${bIdx + 1}/${totalBatches}: scenes ${batchScenes[0].scene_number}-${batchScenes[batchScenes.length - 1].scene_number}...`);
+
+
+      const result = await callGemini(prompt, 0.7, 16384);
+
+
+      if (!result.prompts || !Array.isArray(result.prompts)) {
+        console.error(`Batch ${bIdx + 1} returned no prompts array`);
+        continue;
+      }
+
+
+      const updatePromises = scenesWithNotes.map(async (s) => {
+        const generated = result.prompts.find(p => p.scene_number === s.scene_number);
+
+
+        let imagePrompt, animationPrompt;
+
+
+        if (generated) {
+          let rawPrompt = generated.image_prompt || '';
+
+          // Use per-scene duration from breakdown, not the old hardcoded CLIP_DURATION
+          const sceneDuration = s.duration_seconds;
+
+          // ═══ QUALITY GATE — catch lazy/thin prompts ═══
+          const promptWords = rawPrompt.split(/\s+/).filter(w => w.length > 0).length;
+
+
+          if (promptWords < 30) {
+            // Critically thin — LLM got lazy on this scene. Regenerate solo.
+            console.warn(`⚠️ Scene ${s.scene_number}: only ${promptWords} words — regenerating...`);
+            try {
+              const bodyRules = getStyleSceneBodyRules(visualStyle);
+              const soloPrompt = `Generate ONE detailed image prompt for this scene.
+
+${bodyRules ? `**STYLE RENDERING RULES:**\n**Characters:** ${bodyRules.characters}\n**Environments:** ${bodyRules.environments}` : ''}
+
+**SCENE ${s.scene_number}:**
+Narration: "${s.narration_text}"
+${s.director ? `Visual Concept: ${s.director.visual_concept}\nShot: ${s.director.shot_type} | Angle: ${s.director.camera_angle} | Lighting: ${s.director.lighting} | Mood: ${s.director.mood}` : ''}
+
+**STRUCTURE (follow this order EXACTLY):**
+1. FIRST sentence: Shot framing — "Full body wide shot showing..." or "Medium shot of..."
+2. NEXT 1-2 sentences: Environment — location, architecture, weather, props, atmosphere
+3. NEXT 1-2 sentences: Character BODY-FIRST (build, height, posture, action), then face features as compact clause
+4. FINAL sentence: Mood, lighting, then style quality: "${styleConfig.positive.substring(0, 100)}"
+
+**FORBIDDEN:** text/words/numbers on any surface, screen content descriptions, dollar amounts, close-ups of hands holding objects.
+If the scene mentions a phone/document/receipt, describe the CHARACTER'S REACTION to it, not the content on it.
+
+Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
+
+
+              const soloResult = await callGemini(soloPrompt, 0.8, 4096);
+              const soloText = typeof soloResult === 'string' ? soloResult : (soloResult.image_prompt || soloResult.prompt || JSON.stringify(soloResult));
+              if (soloText && soloText.split(/\s+/).length > 30) {
+                rawPrompt = soloText;
+                console.log(`✓ Scene ${s.scene_number}: regenerated — now ${soloText.split(/\s+/).length} words`);
+              }
+            } catch (regenErr) {
+              console.warn(`Scene ${s.scene_number} regen failed: ${regenErr.message}`);
+            }
+          }
+
+
+          // ═══ SHOT-TYPE-AWARE CHARACTER IDENTITY INJECTION ═══
+          // The amount of character detail injected depends on the shot type.
+          // Wide shots: minimal (silhouette). Medium: moderate. Close-ups: full.
+          // This prevents the floating-head problem where detailed face descriptions
+          // in wide shots cause Grok to zoom into the face.
+
+          const shotType = s.director?.shot_type || 'MS — Medium Shot';
+          const identityTier = getIdentityTier(shotType);
+
+          // Step 1: Find which known characters appear in this scene
+          const sceneCast = [];
+          for (const [charName] of Object.entries(characterTieredTags)) {
+            const namePattern = new RegExp(`\\b${charName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+            if (namePattern.test(rawPrompt)) {
+              sceneCast.push({ name: charName, tiers: characterTieredTags[charName] });
+            }
+          }
+
+          // Step 2: Check for generic references → map to primary character
+          const genericRefs = /\b(the protagonist|the main character|the character|the figure|the hero|the narrator)\b/gi;
+          if (genericRefs.test(rawPrompt) && characters.length > 0) {
+            const primaryName = (characters[0].name || '').toLowerCase().trim();
+            if (primaryName && characterTieredTags[primaryName] && !sceneCast.find(c => c.name === primaryName)) {
+              sceneCast.unshift({ name: primaryName, tiers: characterTieredTags[primaryName] });
+            }
+          }
+
+          if (sceneCast.length > 0) {
+            let modifiedPrompt = rawPrompt;
+
+            for (const c of sceneCast) {
+              // Pick the right tier based on shot type
+              const desc = c.tiers[identityTier] || c.tiers.moderate;
+              if (!desc) continue;
+
+              const escapedName = c.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+              // Strip any LLM-generated descriptions (parentheticals + inline)
+              modifiedPrompt = modifiedPrompt.replace(
+                new RegExp(`\\b${escapedName}\\b\\s*\\([^)]{5,}\\)`, 'gi'), c.name
+              );
+              modifiedPrompt = modifiedPrompt.replace(
+                new RegExp(`\\b${escapedName}\\b,\\s*a\\s[^,]{10,}(?:,\\s*[^,]{5,}){0,4},\\s*`, 'gi'), `${c.name}, `
+              );
+
+              // Inject the tier-appropriate description WOVEN with the action
+              // "The User is sitting" → "The User, a 30-year-old woman with brown eyes, is sitting"
+              const firstOcc = modifiedPrompt.match(new RegExp(`\\b${escapedName}\\b`, 'i'));
+              if (firstOcc) {
+                const idx = modifiedPrompt.indexOf(firstOcc[0]);
+                const before = modifiedPrompt.substring(0, idx);
+                const after = modifiedPrompt.substring(idx + firstOcc[0].length);
+                // Check if the next word is a verb/action — if so, weave as appositive
+                const afterTrimmed = after.trimStart();
+                const startsWithVerb = /^(is|was|sits|stands|walks|runs|holds|stares|looks|leans|clutch|grip|reach|kneel|crouch|watch|gaze|turn|step|press|scroll|tap|delet|swip)/i.test(afterTrimmed);
+                if (startsWithVerb) {
+                  // Weave: "The User, a 30-year-old woman with brown eyes, is sitting..."
+                  modifiedPrompt = `${before}${firstOcc[0]}, ${desc},${after}`;
+                } else {
+                  // No verb follows — just replace name with description
+                  modifiedPrompt = `${before}${desc}${after}`;
+                }
+                console.log(`👤 Scene ${s.scene_number}: ${identityTier.toUpperCase()} identity for "${c.name}" (${desc.length} chars, woven=${startsWithVerb})`);
+              }
+            }
+
+            // Replace generic "the protagonist" etc with primary character's tiered description
+            if (characters.length > 0) {
+              const primaryName = (characters[0].name || '').toLowerCase().trim();
+              const primaryTiers = characterTieredTags[primaryName];
+              if (primaryTiers) {
+                const primaryDesc = primaryTiers[identityTier] || primaryTiers.moderate;
+                modifiedPrompt = modifiedPrompt.replace(genericRefs, primaryDesc);
+
+                // "the man"/"the woman" → minimal desc only (these are always background references)
+                if (sceneCast.length === 1) {
+                  modifiedPrompt = modifiedPrompt.replace(
+                    /\bthe (man|woman|boy|girl|person)\b/gi,
+                    primaryTiers.minimal
+                  );
+                }
+              }
+            }
+
+            rawPrompt = modifiedPrompt;
+          }
+
+          // ═══ PROP FIDELITY — inject named props from narration ═══
+          // If narration says "iPhone" but LLM wrote "phone", fix it
+          const namedProps = extractNamedProps(s.narration_text);
+          if (namedProps.length > 0) {
+            for (const prop of namedProps) {
+              const genericProp = prop.replace(/^an?\s+/i, ''); // "an iPhone" → "iPhone"
+              // Only inject if a generic version exists in the prompt
+              const genericPatterns = {
+                'iPhone': /\b(her|his|the|a)\s+phone\b/i,
+                'iPad': /\b(her|his|the|a)\s+tablet\b/i,
+                'MacBook': /\b(her|his|the|a)\s+laptop\b/i,
+                'Android phone': /\b(her|his|the|a)\s+phone\b/i,
+                'Samsung phone': /\b(her|his|the|a)\s+phone\b/i,
+                'Samsung Galaxy': /\b(her|his|the|a)\s+phone\b/i,
+                'Tesla': /\b(her|his|the|a)\s+(car|vehicle)\b/i,
+                'Porsche': /\b(her|his|the|a)\s+(car|vehicle|sports\s+car)\b/i,
+                'BMW': /\b(her|his|the|a)\s+(car|vehicle)\b/i,
+              };
+              const pattern = genericPatterns[genericProp];
+              if (pattern && pattern.test(rawPrompt)) {
+                rawPrompt = rawPrompt.replace(pattern, `$1 ${genericProp}`);
+                console.log(`📱 Scene ${s.scene_number}: prop "${genericProp}" injected (replaced generic)`);
+              }
+            }
+          }
+
+
+
+
+          imagePrompt = validateAndEnhancePrompt(
+            rawPrompt, styleConfig, orientationConfig, s.scene_number, visualStyle
+          );
+          animationPrompt = generated.animation_prompt || '';
+          if (animationPrompt.length < 80) {
+            const arcPosition = s.director?.phase || s.director?.arc_position || 'rising';
+            const mood = s.director?.mood || 'contemplative';
+            const movement = s.director?.camera_movement || 'slow drift forward';
+            const vc = s.director?.visual_concept || s.narration_text || '';
+            animationPrompt = `${movement} over ${sceneDuration} seconds. ${getArcAnimationGuidance(arcPosition)} Foreground elements shift with parallax depth against the background. Subject's body language carries the emotion — micro-movements in hands, shoulders, breathing rhythm. Environmental details respond: ${vc.includes('rain') ? 'rain streaks down surfaces, pooling light reflections ripple' : vc.includes('wind') ? 'fabric and hair catch the wind, leaves scatter across frame' : vc.includes('night') ? 'shadows crawl across walls, distant lights pulse faintly' : 'ambient textures shift — dust motes, fabric settling, light evolving across surfaces'}. The emotional quality is ${mood} — motion weight and speed match this energy. Shallow depth of field breathes subtly between foreground and subject.`;
+          }
+        } else {
+          console.warn(`⚠️ Scene ${s.scene_number} missing from response — building fallback`);
+          totalWarnings++;
+
+          const sceneDuration = s.duration_seconds;
+
+          let fallback = `${promptPrefix}. `;
+          if (s.director) {
+            fallback += `${s.director.shot_type}. ${s.director.visual_concept}. `;
+            fallback += `${s.director.lighting}. Color palette: ${s.director.color_palette}. `;
+            fallback += `${s.director.depth_of_field}. Mood: ${s.director.mood}. `;
+          } else {
+            fallback += `Cinematic scene depicting: ${s.narration_text}. Professional composition. `;
+          }
+
+
+          imagePrompt = validateAndEnhancePrompt(fallback, styleConfig, orientationConfig, s.scene_number, visualStyle);
+          const arcPosition = s.director?.phase || s.director?.arc_position || 'rising';
+          const mood = s.director?.mood || 'contemplative';
+          const movement = s.director?.camera_movement || 'slow drift forward';
+          const vc = s.director?.visual_concept || s.narration_text || '';
+          animationPrompt = `${movement} over ${sceneDuration} seconds. ${getArcAnimationGuidance(arcPosition)} Camera reveals the scene through parallax — foreground elements drift at different speed than background, creating cinematic depth. Subject exhibits natural micro-motion: breathing rhythm visible in chest and shoulders, weight shifts, small involuntary gestures. Environmental physics respond to the world: ${vc.includes('rain') ? 'water streaks surfaces, reflections ripple in puddles, droplets catch light' : vc.includes('wind') ? 'fabric ripples, hair lifts and settles, loose objects shift' : vc.includes('crowd') ? 'background figures move at varied speeds, creating depth layers' : 'ambient textures evolve — light creeps across surfaces, shadows rotate, particles drift through beams'}. Light is alive — ${mood.includes('tense') || mood.includes('anxiety') ? 'flickering, unstable, casting nervous shadows' : mood.includes('warm') || mood.includes('hope') ? 'gradually warming, golden rays expanding across frame' : 'shifting slowly, painting the scene with evolving tones'}. Shallow DOF breathes between planes, drawing focus where emotion lives.`;        }
+
+
+        try {
+          await base44.asServiceRole.entities.Scenes.update(s.scene_id, {
+            image_prompt: imagePrompt,
+            animation_prompt: animationPrompt,
+            status: "prompts_ready"
+          });
+          return true;
+        } catch (err) {
+          console.error(`Failed to update scene ${s.scene_number}:`, err.message);
+          return false;
+        }
+      });
+
+
+      const results = await Promise.all(updatePromises);
+      const batchApplied = results.filter(Boolean).length;
+      totalPrompts += batchApplied;
+      console.log(`✓ Batch ${bIdx + 1}: ${batchApplied} prompts applied`);
+    }
+
+
+    try {
+      await base44.asServiceRole.entities.Projects.update(project_id, {
+        status: "content_generation", current_step: 5
+      });
+    } catch (_) {}
+
+
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+    console.log(`🎉 ALL PROMPTS GENERATED — ${totalPrompts} scenes ready for image gen`);
+    if (totalWarnings > 0) console.log(`⚠️ ${totalWarnings} fallback prompts used`);
+    console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+
+
+    const remainingScenes = (await base44.asServiceRole.entities.Scenes.filter({ project_id }))
+      .filter(s => s.status === 'breakdown_ready').length;
+    const allDone = remainingScenes === 0;
+
+
+    return Response.json({
+      success: true,
+      done: allDone,
+      prompts_applied: totalPrompts,
+      quality_warnings: totalWarnings,
+      total_batches: totalBatches,
+      remaining_scenes: remainingScenes,
+      total_scenes: pendingScenes.length,
+      // Character reference prompts for hero image generation
+      // The image gen pipeline should generate ONE reference image per character
+      // BEFORE generating scene images, and pass it as character_reference/cref
+      character_reference_prompts: Object.keys(characterReferencePrompts).length > 0
+        ? characterReferencePrompts
+        : undefined
+    });
+
+
+  } catch (error) {
+    console.error("❌ generateScenePrompts error:", error.message);
+    return Response.json({ error: error.message }, { status: 500 });
+  }
+});
