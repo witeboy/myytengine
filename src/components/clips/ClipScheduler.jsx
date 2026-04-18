@@ -7,35 +7,55 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   Calendar, Youtube, Loader2, CheckCircle,
   Link2, Unlink2, Send, RefreshCw, Globe,
-  Lock, Eye, Play, Pause, LayoutList, LayoutGrid,
+  Lock, Eye, Play, Pause, LayoutList, LayoutGrid, Clock, Timer,
 } from 'lucide-react';
 import { useYouTubeChannels } from './useYouTubeChannels';
 import SchedulerStats from './scheduler/SchedulerStats';
 import SchedulerCalendar from './scheduler/SchedulerCalendar';
 import ClipPreviewModal from './scheduler/ClipPreviewModal';
 import DayPostsList from './scheduler/DayPostsList';
-
-const TIME_SLOTS = [
-  { id: 'morning', label: 'Morning', time: '9:00 AM' },
-  { id: 'afternoon', label: 'Afternoon', time: '1:00 PM' },
-  { id: 'evening', label: 'Evening', time: '7:00 PM' },
-  { id: 'night', label: 'Night', time: '9:00 PM' },
-];
+import ClipSelectionList from './scheduler/ClipSelectionList';
 
 function formatDate(date) {
   return new Date(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
+function formatTime12h(hhmm) {
+  if (!hhmm) return '';
+  const [h, m] = hhmm.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const hr = h % 12 || 12;
+  return `${hr}:${String(m).padStart(2, '0')} ${period}`;
+}
+
 export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' }) {
   // ── Schedule config ─────────────────────────────────────────
   const [strategy, setStrategy] = useState('spread');
-  const [timeSlot, setTimeSlot] = useState('evening');
+  const [startTime, setStartTime] = useState('19:00'); // any time of day HH:MM
+  const [intervalMinutes, setIntervalMinutes] = useState(120); // min 45
+  const [postsPerDay, setPostsPerDay] = useState(3); // only used in burst
   const [privacy, setPrivacy] = useState('public');
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
     return d.toISOString().split('T')[0];
   });
+
+  // ── Clip selection — which clips the user wants to schedule ──
+  const [selectedIndices, setSelectedIndices] = useState([]);
+  useEffect(() => {
+    // Default: select all clips initially
+    setSelectedIndices(clips.map((_, i) => i));
+  }, [clips.length]);
+
+  const toggleClip = (i) => {
+    setSelectedIndices((prev) =>
+      prev.includes(i) ? prev.filter((x) => x !== i) : [...prev, i].sort((a, b) => a - b)
+    );
+  };
+  const toggleAllClips = () => {
+    setSelectedIndices((prev) => (prev.length === clips.length ? [] : clips.map((_, i) => i)));
+  };
 
   // ── YouTube channels ────────────────────────────────────────
   const {
@@ -87,13 +107,19 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
     }
   };
 
-  // ── BULK SCHEDULE ALL CLIPS ─────────────────────────────────
+  // ── BULK SCHEDULE SELECTED CLIPS ────────────────────────────
   const scheduleAllClips = async () => {
     if (!selectedChannel) return;
+    if (selectedIndices.length === 0) return;
     setScheduling(true);
 
     try {
-      const clipPayloads = clips.map((clip, i) => {
+      // Only build payloads for selected clips, sorted by virality desc
+      const chosen = selectedIndices
+        .map((i) => ({ i, clip: clips[i] }))
+        .sort((a, b) => (b.clip.virality_score || 0) - (a.clip.virality_score || 0));
+
+      const clipPayloads = chosen.map(({ i, clip }) => {
         const enh = enhancements[i];
         const seo = enh?.seo || {};
         return {
@@ -116,7 +142,9 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
         channel_setting_id: selectedChannel,
         strategy,
         start_date: startDate,
-        time_slot: timeSlot,
+        start_time: startTime,
+        interval_minutes: Math.max(45, intervalMinutes),
+        posts_per_day: postsPerDay,
         privacy,
         video_url: videoUrl,
       });
@@ -131,6 +159,33 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
       console.error('Bulk schedule failed:', err);
     } finally {
       setScheduling(false);
+    }
+  };
+
+  // ── RESCHEDULE — moves a post to a new day, preserves time ──
+  const reschedulePost = async (postId, newDate) => {
+    const existing = scheduledPosts.find((p) => p.id === postId);
+    if (!existing) return;
+
+    const oldAt = new Date(existing.scheduled_at);
+    const newAt = new Date(newDate);
+    newAt.setHours(oldAt.getHours(), oldAt.getMinutes(), 0, 0);
+
+    // Optimistic update
+    setScheduledPosts((prev) =>
+      prev.map((p) => (p.id === postId ? { ...p, scheduled_at: newAt.toISOString() } : p))
+    );
+
+    try {
+      await base44.functions.invoke('scheduleClipPost', {
+        action: 'reschedule',
+        post_id: postId,
+        scheduled_at: newAt.toISOString(),
+      });
+      await loadScheduledPosts();
+    } catch (err) {
+      console.error('Reschedule failed:', err);
+      await loadScheduledPosts();
     }
   };
 
@@ -287,25 +342,15 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
       {/* SCHEDULING CONFIG (pre-schedule) */}
       {!isScheduled && (
         <div className="space-y-3">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* Row 1: Strategy + Start date + Privacy */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <div>
               <label className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Strategy</label>
               <Select value={strategy} onValueChange={setStrategy}>
                 <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="spread">1 clip/day</SelectItem>
-                  <SelectItem value="burst">3 clips/day</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Post time</label>
-              <Select value={timeSlot} onValueChange={setTimeSlot}>
-                <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {TIME_SLOTS.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>{t.label} ({t.time})</SelectItem>
-                  ))}
+                  <SelectItem value="burst">Multiple clips/day</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -326,24 +371,93 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
             </div>
           </div>
 
+          {/* Row 2: Start time + Interval + (optional) posts per day */}
+          <div className={`grid gap-3 ${strategy === 'burst' ? 'grid-cols-3' : 'grid-cols-2'}`}>
+            <div>
+              <label className="text-[10px] uppercase tracking-wider text-gray-400 font-medium flex items-center gap-1">
+                <Clock className="w-3 h-3" /> First post time
+              </label>
+              <Input
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className="h-8 text-xs mt-1"
+                step="300"
+              />
+              <p className="text-[10px] text-gray-400 mt-0.5">{formatTime12h(startTime)}</p>
+            </div>
+
+            {strategy === 'burst' && (
+              <div>
+                <label className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Clips per day</label>
+                <Select value={String(postsPerDay)} onValueChange={(v) => setPostsPerDay(Number(v))}>
+                  <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[2, 3, 4, 5, 6, 8].map((n) => (
+                      <SelectItem key={n} value={String(n)}>{n} per day</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className={strategy === 'burst' ? '' : ''}>
+              <label className="text-[10px] uppercase tracking-wider text-gray-400 font-medium flex items-center gap-1">
+                <Timer className="w-3 h-3" /> Interval between posts
+              </label>
+              <Select
+                value={String(intervalMinutes)}
+                onValueChange={(v) => setIntervalMinutes(Number(v))}
+                disabled={strategy !== 'burst'}
+              >
+                <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="45">45 minutes (min)</SelectItem>
+                  <SelectItem value="60">1 hour</SelectItem>
+                  <SelectItem value="90">1h 30m</SelectItem>
+                  <SelectItem value="120">2 hours</SelectItem>
+                  <SelectItem value="180">3 hours</SelectItem>
+                  <SelectItem value="240">4 hours</SelectItem>
+                  <SelectItem value="360">6 hours</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-gray-400 mt-0.5">
+                {strategy === 'burst' ? 'Minimum 45 minutes apart' : 'Only used for multi-post days'}
+              </p>
+            </div>
+          </div>
+
+          {/* Clip selection */}
+          {clips.length > 0 && (
+            <ClipSelectionList
+              clips={clips}
+              selectedIndices={selectedIndices}
+              onToggle={toggleClip}
+              onToggleAll={toggleAllClips}
+            />
+          )}
+
+          {/* Summary */}
           <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-700">
             <p className="font-medium">
-              {clips.length} clips will be posted {strategy === 'spread' ? 'one per day' : '3 per day'} starting {formatDate(startDate)} at {TIME_SLOTS.find((t) => t.id === timeSlot)?.time}
+              {selectedIndices.length} selected clip{selectedIndices.length !== 1 ? 's' : ''} will start posting {formatDate(startDate)} at {formatTime12h(startTime)}
+              {strategy === 'burst' && `, ${postsPerDay}/day at ${intervalMinutes}min intervals`}
+              {strategy === 'spread' && ', one per day'}
             </p>
             <p className="text-blue-500 mt-0.5">
-              Highest virality clips post first. Total: {strategy === 'spread' ? clips.length : Math.ceil(clips.length / 3)} days of content.
+              Highest virality first · Total: {strategy === 'spread' ? selectedIndices.length : Math.ceil(selectedIndices.length / postsPerDay)} day{Math.ceil(selectedIndices.length / (strategy === 'spread' ? 1 : postsPerDay)) !== 1 ? 's' : ''} of content
             </p>
           </div>
 
           <Button
             onClick={scheduleAllClips}
-            disabled={scheduling || !selectedChannel || clips.length === 0}
+            disabled={scheduling || !selectedChannel || selectedIndices.length === 0}
             className="w-full h-11 text-sm bg-gray-900 hover:bg-gray-800 text-white gap-2"
           >
             {scheduling ? (
-              <><Loader2 className="w-4 h-4 animate-spin" />Scheduling {clips.length} clips…</>
+              <><Loader2 className="w-4 h-4 animate-spin" />Scheduling {selectedIndices.length} clips…</>
             ) : (
-              <><Send className="w-4 h-4" />Schedule all {clips.length} clips for auto-posting</>
+              <><Send className="w-4 h-4" />Schedule {selectedIndices.length} clip{selectedIndices.length !== 1 ? 's' : ''} for auto-posting</>
             )}
           </Button>
         </div>
@@ -355,12 +469,18 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
       <>
           {viewMode === 'calendar' ? (
             <div className="grid md:grid-cols-5 gap-4">
-              <div className="md:col-span-3">
+              <div className="md:col-span-3 space-y-2">
                 <SchedulerCalendar
                   posts={scheduledPosts}
                   onDayClick={setSelectedDate}
                   selectedDate={selectedDate}
+                  onPostDrop={reschedulePost}
                 />
+                {scheduledPosts.length > 0 && (
+                  <p className="text-[10px] text-gray-400 text-center">
+                    💡 Tip: Drag any scheduled clip from the side panel to a different day to reschedule it
+                  </p>
+                )}
               </div>
               <div className="md:col-span-2">
                 {selectedDate && selectedDayPosts.length > 0 ? (

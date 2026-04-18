@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, Flame, Loader2, CheckCircle, AlertCircle, ChevronRight, Trash2 } from 'lucide-react';
+import { Clock, Flame, Loader2, CheckCircle, AlertCircle, ChevronRight, Trash2, GripVertical } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 const STATUS_STYLES = {
@@ -34,12 +34,22 @@ export default function DayPostsList({ date, posts, onPostClick, onCancel }) {
       <div className="divide-y divide-gray-100">
         {sorted.map((post) => {
           const style = STATUS_STYLES[post.status] || STATUS_STYLES.scheduled;
+          const canDrag = post.status === 'scheduled';
           return (
-            <button
+            <div
               key={post.id}
+              draggable={canDrag}
+              onDragStart={(e) => {
+                if (!canDrag) return;
+                e.dataTransfer.setData('text/post-id', post.id);
+                e.dataTransfer.effectAllowed = 'move';
+              }}
               onClick={() => onPostClick(post)}
-              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left group"
+              className={`w-full flex items-center gap-2 px-4 py-3 hover:bg-gray-50 transition-colors text-left group ${canDrag ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
             >
+              {canDrag && (
+                <GripVertical className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-500 flex-shrink-0" />
+              )}
               {/* Time */}
               <div className="flex flex-col items-center text-[10px] text-gray-400 w-14 flex-shrink-0 font-mono">
                 <Clock className="w-3 h-3" />
@@ -90,7 +100,7 @@ export default function DayPostsList({ date, posts, onPostClick, onCancel }) {
                 </button>
               )}
               <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-600 flex-shrink-0" />
-            </button>
+            </div>
           );
         })}
       </div>

@@ -12,7 +12,9 @@ const STATUS_COLORS = {
   ready_to_post: 'bg-purple-500',
 };
 
-export default function SchedulerCalendar({ posts, onDayClick, selectedDate }) {
+export default function SchedulerCalendar({ posts, onDayClick, selectedDate, onPostDrop }) {
+  const [dragOverKey, setDragOverKey] = useState(null);
+
   const [viewDate, setViewDate] = useState(() => {
     if (posts.length > 0) return new Date(posts[0].scheduled_at);
     return new Date();
@@ -103,20 +105,36 @@ export default function SchedulerCalendar({ posts, onDayClick, selectedDate }) {
           const hasClips = cell.posts.length > 0;
           const topClip = cell.posts[0];
 
+          const isDragOver = dragOverKey === cell.key;
+          const isPast = cell.date < new Date(new Date().setHours(0, 0, 0, 0));
           return (
             <button
               key={cell.key}
               onClick={() => hasClips && onDayClick(cell.date)}
-              disabled={!hasClips}
+              onDragOver={(e) => {
+                if (isPast) return;
+                e.preventDefault();
+                setDragOverKey(cell.key);
+              }}
+              onDragLeave={() => setDragOverKey(null)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOverKey(null);
+                if (isPast) return;
+                const postId = e.dataTransfer.getData('text/post-id');
+                if (postId && onPostDrop) onPostDrop(postId, cell.date);
+              }}
               className={`
                 aspect-square rounded-lg relative flex flex-col items-center justify-start p-1.5 transition-all
-                ${cell.isSelected
-                  ? 'bg-gray-900 text-white ring-2 ring-gray-900 ring-offset-1'
-                  : cell.isToday
-                    ? 'bg-blue-50 border border-blue-300'
-                    : hasClips
-                      ? 'hover:bg-gray-100 border border-gray-100 cursor-pointer'
-                      : 'border border-transparent cursor-default'}
+                ${isDragOver
+                  ? 'bg-blue-100 ring-2 ring-blue-500 ring-offset-1 scale-105'
+                  : cell.isSelected
+                    ? 'bg-gray-900 text-white ring-2 ring-gray-900 ring-offset-1'
+                    : cell.isToday
+                      ? 'bg-blue-50 border border-blue-300'
+                      : hasClips
+                        ? 'hover:bg-gray-100 border border-gray-100 cursor-pointer'
+                        : 'border border-transparent cursor-default'}
               `}
             >
               <span className={`text-xs font-medium ${cell.isSelected ? 'text-white' : cell.isToday ? 'text-blue-700 font-bold' : 'text-gray-700'}`}>
