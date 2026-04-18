@@ -449,7 +449,7 @@ export default function QuickPublish() {
         )}
 
         {/* Step 3: Thumbnails */}
-        {completedSteps.includes('thumbnails') && (
+        {seoDone && (
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -463,6 +463,11 @@ export default function QuickPublish() {
                 onRefetch={refetchThumbs}
                 selectedThumbnailUrl={thumbnailUrl}
                 onSelect={setThumbnailUrl}
+                videoFile={videoFile}
+                videoUrl={fileUrl}
+                transcript={transcript}
+                title={title}
+                niche={niche}
               />
             </CardContent>
           </Card>

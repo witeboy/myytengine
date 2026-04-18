@@ -2,7 +2,8 @@ import React, { useState, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Sparkles, CheckCircle2, Image, Upload, X, Wand2, Download, RefreshCw } from 'lucide-react';
+import { Loader2, Sparkles, CheckCircle2, Image, Upload, X, Wand2, Download, RefreshCw, Flame } from 'lucide-react';
+import ViralThumbnailBuilder from './viral/ViralThumbnailBuilder';
 
 function ReferencePhotoSlot({ photo, index, onUpload, onRemove }) {
   const ref = useRef(null);
@@ -36,7 +37,8 @@ function ReferencePhotoSlot({ photo, index, onUpload, onRemove }) {
   );
 }
 
-export default function ThumbnailStep({ projectId, thumbnails, onRefetch, selectedThumbnailUrl, onSelect }) {
+export default function ThumbnailStep({ projectId, thumbnails, onRefetch, selectedThumbnailUrl, onSelect, videoFile, videoUrl, transcript, title, niche }) {
+  const [activeTab, setActiveTab] = useState('viral'); // 'viral' | 'ai'
   const [generatingImageId, setGeneratingImageId] = useState(null);
   // Reference photo upload state for advanced rendering
   const [refPhotos, setRefPhotos] = useState([null, null, null]);
@@ -169,17 +171,48 @@ export default function ThumbnailStep({ projectId, thumbnails, onRefetch, select
     }
   };
 
-  if (thumbnails.length === 0) {
-    return (
-      <div className="text-center py-8 text-gray-400">
-        <Image className="w-10 h-10 mx-auto mb-2 opacity-50" />
-        <p className="text-sm">Thumbnails will appear here after generation</p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
+      {/* Tabs */}
+      <div className="flex items-center gap-1 border-b border-gray-200">
+        <button
+          onClick={() => setActiveTab('viral')}
+          className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors ${
+            activeTab === 'viral' ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Flame className="w-3.5 h-3.5" /> Viral Style <Badge className="bg-orange-100 text-orange-700 text-[9px] ml-1">NEW</Badge>
+        </button>
+        <button
+          onClick={() => setActiveTab('ai')}
+          className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors ${
+            activeTab === 'ai' ? 'border-purple-500 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Sparkles className="w-3.5 h-3.5" /> AI Concepts {thumbnails.length > 0 && <span className="text-[10px] text-gray-400">({thumbnails.length})</span>}
+        </button>
+      </div>
+
+      {activeTab === 'viral' && (
+        <ViralThumbnailBuilder
+          videoFile={videoFile}
+          videoUrl={videoUrl}
+          transcript={transcript}
+          title={title}
+          niche={niche}
+          onThumbnailReady={onSelect}
+        />
+      )}
+
+      {activeTab === 'ai' && thumbnails.length === 0 && (
+        <div className="text-center py-8 text-gray-400">
+          <Image className="w-10 h-10 mx-auto mb-2 opacity-50" />
+          <p className="text-sm">AI concepts will appear here after generation</p>
+        </div>
+      )}
+
+      {activeTab === 'ai' && thumbnails.length > 0 && (
+      <>
       <div className="flex items-center gap-2">
         <span className="text-sm font-medium">{thumbnails.length} concepts</span>
         {selectedThumb && (
@@ -304,6 +337,8 @@ export default function ThumbnailStep({ projectId, thumbnails, onRefetch, select
           </div>
         ))}
       </div>
+      </>
+      )}
     </div>
   );
 }
