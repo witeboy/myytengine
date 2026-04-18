@@ -1,286 +1,141 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import OpenAI from 'npm:openai@4.58.1';
+
+const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
 
 // ══════════════════════════════════════════════════════════════════
-// initializeScriptBatches v5 — Claude-powered with diversity seed +
-// narrative shape. Replaces OpenAI gpt-4o. Outline is now grounded in
-// a project-specific creative seed so every script feels distinct.
+// DIVERSITY SEED — inlined (Base44 functions can't share modules)
+// Source of truth for protagonist identity across the pipeline.
 // ══════════════════════════════════════════════════════════════════
-
-async function callClaude(prompt, temperature = 0.85, maxTokens = 8000) {
-  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01"
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-5-20250929",
-      max_tokens: maxTokens,
-      temperature,
-      messages: [{ role: "user", content: prompt + "\n\nRespond with ONLY valid JSON. No markdown fences, no commentary." }]
-    })
-  });
-
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Claude ${response.status}: ${err.substring(0, 300)}`);
+const SEED_NAMING_POOLS = {
+  eastern_european: ['Katya','Dimitri','Anya','Mikhail','Nadia','Viktor','Elena','Yuri','Sasha','Irina'],
+  west_african: ['Kwame','Amara','Tunde','Nneka','Kofi','Adaeze','Femi','Zainab','Chibuzo','Oluchi'],
+  south_asian: ['Priya','Arjun','Divya','Rohan','Meera','Vikram','Ananya','Karan','Ishita','Raj'],
+  east_asian: ['Mei','Jun','Hana','Ren','Yuki','Wei','Akira','Lin','Takeshi','Xiaolin'],
+  latin_american: ['Mateo','Sofia','Diego','Camila','Ezequiel','Valentina','Rafael','Lucia','Joaquin','Isabela'],
+  middle_eastern: ['Layla','Omar','Yasmin','Karim','Farah','Sami','Noor','Hassan','Zahra','Tariq'],
+  anglo_american: ['Sarah','James','Emily','Michael','Rachel','David','Jessica','Daniel','Hannah','Benjamin'],
+  celtic: ['Siobhan','Declan','Aoife','Cian','Niamh','Eamon','Saoirse','Finn','Caoimhe','Lorcan'],
+  scandinavian: ['Astrid','Mikkel','Freja','Lars','Ingrid','Soren','Maja','Anders','Linnea','Bjorn'],
+  mediterranean: ['Giulia','Matteo','Francesca','Alessandro','Chiara','Stefano','Elena','Luca','Sofia','Marco']
+};
+const SEED_ARCHETYPES = [
+  { name: 'solo_hustler', desc: 'Self-employed, grinding, balancing ambition with burnout' },
+  { name: 'single_parent', desc: 'Carrying a household alone, every dollar accounted for' },
+  { name: 'immigrant_striver', desc: 'First-generation, carrying family expectations, building from nothing' },
+  { name: 'recovering_failure', desc: 'Crashed once, rebuilding smarter, humility earned the hard way' },
+  { name: 'quiet_professional', desc: 'Senior employee, competent, under-recognized, late-career pivot' },
+  { name: 'young_optimist', desc: 'Early 20s, still forming identity, mentor-hungry' },
+  { name: 'skeptical_veteran', desc: 'Has seen every fad, trusts evidence only, hard to impress' },
+  { name: 'blue_collar_builder', desc: 'Trades, hands-on, practical wisdom, distrusts office thinking' },
+  { name: 'creative_outsider', desc: 'Artist, writer, musician — unconventional path, financial anxiety' },
+  { name: 'late_bloomer', desc: '40+, starting over, wisdom without the scars of youthful overconfidence' }
+];
+const SEED_SHAPES = [
+  { name: 'three_act', rhythm: 'setup → confrontation → resolution (classical)' },
+  { name: 'spiral_descent', rhythm: 'each act worse than the last, hope thinner each time' },
+  { name: 'rising_revelation', rhythm: 'each act uncovers a deeper truth hidden under the last' },
+  { name: 'circular_return', rhythm: 'start at the end, unpack how we got here, return changed' },
+  { name: 'parallel_threads', rhythm: 'two timelines braiding, meeting at the climax' },
+  { name: 'kintsugi_arc', rhythm: 'breaking point first, then the slow gold-filled repair' }
+];
+const SEED_VOICES = [
+  { name: 'fireside', desc: 'Warm, measured, storyteller — like NPR at night' },
+  { name: 'urgent_confidant', desc: 'Leaning in, low volume, "you need to hear this"' },
+  { name: 'amused_skeptic', desc: 'Dry wit, slightly above the chaos, Last Week Tonight energy' },
+  { name: 'documentary_weight', desc: 'Restrained gravitas, letting facts land — Ken Burns' },
+  { name: 'empathetic_coach', desc: 'Direct but kind, Brené Brown cadence, no condescension' },
+  { name: 'poetic_observer', desc: 'Metaphor-rich, rhythmic, Alan Watts meets a novelist' }
+];
+const SEED_SCHEMES = [
+  { name: 'triadic', desc: 'Rule of three in nearly every key claim (X, Y, and Z)' },
+  { name: 'anaphora', desc: 'Sentences starting with the same phrase for emphasis' },
+  { name: 'antithesis', desc: 'Pairing opposites — "not X, but Y" constructions' },
+  { name: 'chiasmus', desc: '"Ask not what A can do for B; ask what B can do for A" mirror structure' },
+  { name: 'polysyndeton', desc: 'Deliberate "and ... and ... and" for cumulative weight' },
+  { name: 'epistrophe', desc: 'Sentences ending with the same phrase for percussive landing' }
+];
+const SEED_NICHE_BIAS = {
+  true_crime: ['anglo_american','eastern_european','celtic','mediterranean'],
+  finance: ['anglo_american','south_asian','east_asian'],
+  history: ['anglo_american','mediterranean','east_asian','eastern_european','middle_eastern'],
+  motivation: ['west_african','latin_american','south_asian','anglo_american'],
+  technology: ['east_asian','south_asian','anglo_american','scandinavian'],
+  health: ['anglo_american','mediterranean','scandinavian'],
+  education: ['south_asian','east_asian','west_african','anglo_american'],
+  travel: ['latin_american','mediterranean','east_asian','middle_eastern'],
+  relationship: ['anglo_american','mediterranean','latin_american','south_asian'],
+  horror: ['anglo_american','eastern_european','celtic'],
+  retirement: ['anglo_american','mediterranean','scandinavian']
+};
+function seededRng(seedStr) {
+  let h = 2166136261;
+  for (let i = 0; i < seedStr.length; i++) {
+    h ^= seedStr.charCodeAt(i);
+    h = Math.imul(h, 16777619);
   }
-
-  const data = await response.json();
-  const rawText = data.content?.[0]?.text || '';
-  let clean = rawText.trim();
-  if (clean.startsWith('```json')) clean = clean.substring(7);
-  else if (clean.startsWith('```')) clean = clean.substring(3);
-  if (clean.endsWith('```')) clean = clean.substring(0, clean.length - 3);
-  clean = clean.trim();
-
-  try { return JSON.parse(clean); } catch (_) {}
-  const firstBrace = clean.indexOf('{');
-  const lastBrace = clean.lastIndexOf('}');
-  if (firstBrace >= 0 && lastBrace > firstBrace) {
-    try { return JSON.parse(clean.substring(firstBrace, lastBrace + 1)); } catch (_) {}
-  }
-  throw new Error("Failed to parse Claude JSON");
-}
-
-// ══════════════════════════════════════════════════════════════════
-// 🎲 DIVERSITY SEED
-// ══════════════════════════════════════════════════════════════════
-function mulberry32(a) {
-  return function() {
-    a |= 0; a = a + 0x6D2B79F5 | 0;
-    let t = Math.imul(a ^ a >>> 15, 1 | a);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  return () => {
+    h = Math.imul(h ^ (h >>> 15), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
   };
 }
-function hashStr(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
-  return h >>> 0;
-}
-function pickFromArr(rng, arr) { return arr[Math.floor(rng() * arr.length)]; }
-
-const ARCHETYPES = [
-  "retired factory worker in his late 60s, widowed",
-  "single father in his 40s driving rideshare at night",
-  "middle-aged nurse pulling double shifts",
-  "young teacher at an underfunded public school",
-  "grandmother in her 70s raising her grandchildren",
-  "teenage high-school student working weekends at a gas station",
-  "college freshman navigating her first year far from home",
-  "man in his 50s recently laid off from a 25-year corporate job",
-  "woman in her mid-30s rebuilding after a long relationship ended",
-  "first-generation immigrant shopkeeper running a bodega",
-  "Nigerian software engineer who moved to a new city six months ago",
-  "Korean-American mechanic who took over his father's auto shop",
-  "Mexican-American chef opening her first restaurant",
-  "Indian graduate student doing her PhD on a tight budget",
-  "Filipina caregiver working 12-hour shifts to send money home",
-  "Ethiopian taxi driver who used to be a doctor back home",
-  "Vietnamese nail salon owner who arrived 20 years ago",
-  "long-haul trucker in her mid-40s crossing the country weekly",
-  "tattoo artist whose studio just opened in a gentrifying neighborhood",
-  "farmer in his 60s facing a bad harvest season",
-  "freelance graphic designer chasing unpaid invoices",
-  "small-town pastor struggling to keep his congregation together",
-  "city bus driver who's seen the same route for 18 years",
-  "firefighter recovering from a bad call last month",
-  "former college athlete working retail after an injury",
-  "hairdresser who knows every secret in her small town",
-  "veteran running a small landscaping business",
-  "widow in her 80s still running her late husband's bookstore",
-  "social worker stretched thin across 40 cases",
-  "freelance journalist chasing a story no one else will touch"
-];
-const NAMES = {
-  west_african: ["Adaeze","Chike","Obi","Amara","Kwame","Nneka","Emeka","Ayo"],
-  east_asian: ["Hiroshi","Mei-Lin","Jun","Sora","Kenji","Xiuying","Takeshi","Yuna"],
-  south_asian: ["Priya","Arjun","Kavita","Raj","Deepika","Vikram","Farhan","Zara"],
-  latin: ["Mateo","Sofía","Diego","Camila","Luis","Valeria","Javier","Isabela"],
-  arabic: ["Omar","Layla","Khaled","Yasmin","Tariq","Noor","Hassan","Amina"],
-  eastern_european: ["Dmitri","Katya","Marek","Agnieszka","Stefan","Ana","Ivan","Olena"],
-  anglo: ["Walter","Margaret","Harold","Beatrice","Samuel","Josephine","Arthur","Eleanor"],
-  african_american: ["Darnell","Keisha","Malik","Tanya","Jerome","Shanice","Marcus","Aaliyah"],
-  mixed_modern: ["Quinn","Rowan","Asha","Kai","Sage","Zion","River","Nia"]
-};
-const VOICE_REGISTERS = [
-  { name: "investigative",  desc: "Journalistic, methodical, citing evidence, skeptical but fair." },
-  { name: "fireside",       desc: "Warm storyteller, anecdotal, meandering details, conversational." },
-  { name: "professorial",   desc: "Authoritative, expository, confident teacher unpacking complexity." },
-  { name: "confessional",   desc: "Personal, vulnerable, first-person inflection, emotionally close." },
-  { name: "deadpan",        desc: "Dry, understated, ironic — humor through restraint, never raising voice." },
-  { name: "urgent_present", desc: "Present-tense, immediate, breath-quickening — makes the listener lean in." }
-];
-const RHETORICAL_SCHEMES = [
-  { name: "triadic",     desc: "Power of three. Group ideas in threes. Rule of three in examples, warnings, and payoffs." },
-  { name: "anaphora",    desc: "Repetition of the opening words of clauses. 'They were tired. They were broke. They were done.'" },
-  { name: "contrast",    desc: "Juxtaposition. Constant then/now, before/after, them/us framing." },
-  { name: "cumulative",  desc: "Short sentences that stack, building momentum. Each adds weight. Each tightens the spring." },
-  { name: "epistrophe",  desc: "Repetition at end of clauses. 'No choice. No warning. No way out.'" }
-];
-
-const SHAPES = {
-  three_act: {
-    name: "three_act",
-    rhythm: "Classical Western structure — setup, confrontation, resolution. Clear escalation + catharsis.",
-    phases: [
-      { name: "cold_open",      weight: 0.10, purpose: "Visceral hook — immediate, specific, intriguing." },
-      { name: "rising_tension", weight: 0.25, purpose: "Build the world and the problem. Escalate stakes." },
-      { name: "emotional_core", weight: 0.40, purpose: "Heart of the story — maximum impact, deepest complexity." },
-      { name: "resolution",     weight: 0.25, purpose: "Deliver the payoff — resolution, transformation, lingering insight." }
-    ]
-  },
-  kishotenketsu: {
-    name: "kishotenketsu",
-    rhythm: "Japanese 4-act. No villain needed — tension comes from juxtaposition. Contemplative pacing.",
-    phases: [
-      { name: "ki_introduction", weight: 0.22, purpose: "Introduce calmly — establish the scene." },
-      { name: "sho_development", weight: 0.28, purpose: "Develop naturally — no conflict yet." },
-      { name: "ten_twist",       weight: 0.28, purpose: "Unexpected element reframes everything." },
-      { name: "ketsu_conclusion",weight: 0.22, purpose: "Reconcile twist with original — new understanding." }
-    ]
-  },
-  hero_journey_compact: {
-    name: "hero_journey_compact",
-    rhythm: "Campbellian monomyth compressed into 6 beats. Archetypal transformation.",
-    phases: [
-      { name: "ordinary_world",   weight: 0.12, purpose: "Establish protagonist's normal." },
-      { name: "call_and_refusal", weight: 0.13, purpose: "Disruption appears — they hesitate." },
-      { name: "crossing",         weight: 0.15, purpose: "They commit, enter a new world." },
-      { name: "trials",           weight: 0.30, purpose: "Tests, allies, enemies, challenges." },
-      { name: "ordeal_reward",    weight: 0.18, purpose: "Central crisis and the prize." },
-      { name: "return_changed",   weight: 0.12, purpose: "Back home but transformed." }
-    ]
-  },
-  fireside_tale: {
-    name: "fireside_tale",
-    rhythm: "Oral tradition — rambling, anecdotal, authority through detail not urgency.",
-    phases: [
-      { name: "invitation",       weight: 0.15, purpose: "Pull the listener in — 'you won't believe what happened.'" },
-      { name: "meandering_setup", weight: 0.35, purpose: "Anecdotal details, tangents, atmosphere over plot." },
-      { name: "the_turn",         weight: 0.25, purpose: "The moment the story actually happened." },
-      { name: "reflection",       weight: 0.25, purpose: "What it meant — lingered-on, philosophical." }
-    ]
-  },
-  case_study: {
-    name: "case_study",
-    rhythm: "Investigative / journalistic. Non-linear — start at the end, then walk back.",
-    phases: [
-      { name: "the_aftermath",  weight: 0.15, purpose: "Start with the outcome." },
-      { name: "the_setup",      weight: 0.20, purpose: "Rewind — who was this before?" },
-      { name: "the_decisions",  weight: 0.35, purpose: "Walk through key choices chronologically." },
-      { name: "the_mechanism",  weight: 0.15, purpose: "Explain WHY it worked / failed." },
-      { name: "the_lesson",     weight: 0.15, purpose: "What the viewer can take from this." }
-    ]
-  },
-  contrast_pairs: {
-    name: "contrast_pairs",
-    rhythm: "Dual-timeline. Constant intercutting. Pair identical scene-types with opposite outcomes.",
-    phases: [
-      { name: "side_a_intro", weight: 0.15, purpose: "Introduce Person/Path A." },
-      { name: "side_b_intro", weight: 0.15, purpose: "Introduce Person/Path B — similar start." },
-      { name: "divergence_1", weight: 0.20, purpose: "First divergence — intercut choices." },
-      { name: "divergence_2", weight: 0.25, purpose: "Consequences compound — intercut paths." },
-      { name: "outcomes",     weight: 0.15, purpose: "Where each ended up." },
-      { name: "takeaway",     weight: 0.10, purpose: "What separated them." }
-    ]
-  },
-  tutorial_build: {
-    name: "tutorial_build",
-    rhythm: "Progressive revelation — each scene stacks on the last.",
-    phases: [
-      { name: "the_promise", weight: 0.10, purpose: "What you'll learn / be able to do." },
-      { name: "foundation",  weight: 0.20, purpose: "The prerequisite concept." },
-      { name: "layer_1",     weight: 0.20, purpose: "First skill built on foundation." },
-      { name: "layer_2",     weight: 0.20, purpose: "Second skill stacking on first." },
-      { name: "synthesis",   weight: 0.20, purpose: "Combining into one working example." },
-      { name: "launch",      weight: 0.10, purpose: "Challenge the viewer to apply it." }
-    ]
-  },
-  ensemble_mosaic: {
-    name: "ensemble_mosaic",
-    rhythm: "Multiple protagonists — each gets a self-contained vignette.",
-    phases: [
-      { name: "chorus_intro", weight: 0.15, purpose: "Introduce shared world / event." },
-      { name: "voice_one",    weight: 0.20, purpose: "First character's perspective." },
-      { name: "voice_two",    weight: 0.20, purpose: "Second character's perspective." },
-      { name: "voice_three",  weight: 0.20, purpose: "Third character's perspective." },
-      { name: "collision",    weight: 0.15, purpose: "Their lives briefly intersect." },
-      { name: "chorus_close", weight: 0.10, purpose: "The shared world carries on." }
-    ]
+function ensureSeedInline(project) {
+  // Return existing seed if already persisted
+  if (project.script_strategy_override) {
+    try {
+      const strat = typeof project.script_strategy_override === 'string'
+        ? JSON.parse(project.script_strategy_override)
+        : project.script_strategy_override;
+      if (strat?._script_seed) return { data: strat._script_seed, isNew: false };
+    } catch (_) {}
   }
-};
-const NICHE_SHAPE_BIAS = {
-  finance:     ["case_study","contrast_pairs","tutorial_build","three_act"],
-  retirement:  ["fireside_tale","case_study","three_act"],
-  motivation:  ["hero_journey_compact","three_act","contrast_pairs"],
-  horror:      ["three_act","kishotenketsu","fireside_tale"],
-  technology:  ["tutorial_build","case_study","three_act"],
-  health:      ["case_study","tutorial_build","three_act"],
-  crime:       ["case_study","three_act","ensemble_mosaic"],
-  true_crime:  ["case_study","three_act","ensemble_mosaic"],
-  history:     ["fireside_tale","hero_journey_compact","ensemble_mosaic"],
-  education:   ["tutorial_build","case_study","three_act"],
-  travel:      ["fireside_tale","kishotenketsu","ensemble_mosaic"],
-  relationship:["kishotenketsu","contrast_pairs","fireside_tale"],
-  general:     ["three_act","fireside_tale","kishotenketsu","case_study"]
-};
-
-function generateScriptSeed(projectId, niche, topic) {
-  const seedInt = hashStr(`${projectId}|${niche}|${topic}|${Date.now() % 100000}`);
-  const rng = mulberry32(seedInt);
-  const archetype = pickFromArr(rng, ARCHETYPES);
-  const cultureKey = pickFromArr(rng, Object.keys(NAMES));
-  const firstName = pickFromArr(rng, NAMES[cultureKey]);
-  const voiceRegister = pickFromArr(rng, VOICE_REGISTERS);
-  const rhetoricalScheme = pickFromArr(rng, RHETORICAL_SCHEMES);
-
-  const nicheLower = (niche || 'general').toLowerCase();
-  const pool = NICHE_SHAPE_BIAS[nicheLower] || NICHE_SHAPE_BIAS.general;
-  const shapeName = pool[Math.floor(rng() * pool.length)];
-  const shape = SHAPES[shapeName];
-
-  return { seedInt, firstName, namingCulture: cultureKey, archetype, voiceRegister, rhetoricalScheme, shape };
+  // Generate a new deterministic seed
+  const rng = seededRng(project.id || String(Date.now()));
+  const pick = (arr) => arr[Math.floor(rng() * arr.length)];
+  const nicheKey = (project.niche || 'general').toLowerCase();
+  const culturePool = SEED_NICHE_BIAS[nicheKey] || Object.keys(SEED_NAMING_POOLS);
+  const namingCulture = pick(culturePool.filter(c => SEED_NAMING_POOLS[c]));
+  const firstName = pick(SEED_NAMING_POOLS[namingCulture] || SEED_NAMING_POOLS.anglo_american);
+  const archetype = pick(SEED_ARCHETYPES);
+  const shape = pick(SEED_SHAPES);
+  const voiceRegister = pick(SEED_VOICES);
+  const rhetoricalScheme = pick(SEED_SCHEMES);
+  return {
+    data: {
+      firstName, namingCulture,
+      archetype: archetype.desc,
+      archetypeName: archetype.name,
+      shape, voiceRegister, rhetoricalScheme,
+      generated_at: new Date().toISOString()
+    },
+    isNew: true
+  };
 }
 
-function seedToPromptBlock(seed) {
-  return `
-**🎲 PROJECT DIVERSITY SEED (NON-NEGOTIABLE):**
-This is the creative DNA for this specific script. Do NOT default to generic protagonists or settings.
-- Optional central character name (if the topic calls for one): **${seed.firstName}** (${seed.namingCulture.replace(/_/g, ' ')} tradition — NEVER default to Sarah/John/Emma/Mike)
-- Archetype context: ${seed.archetype}
-- Narrator voice register: **${seed.voiceRegister.name}** — ${seed.voiceRegister.desc}
-- Rhetorical scheme quota: **${seed.rhetoricalScheme.name}** — ${seed.rhetoricalScheme.desc}
+async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        temperature,
+        max_tokens: 16384,
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: 'You are a YouTube content strategist. Always respond with valid JSON.' },
+          { role: 'user', content: prompt },
+        ],
+      });
 
-**📐 NARRATIVE SHAPE: ${seed.shape.name.toUpperCase()}**
-Rhythm: ${seed.shape.rhythm}
-
-Phases (in order, with weight % of total runtime):
-${seed.shape.phases.map((p, i) => `  ${i + 1}. ${p.name} (${Math.round(p.weight * 100)}%) — ${p.purpose}`).join('\n')}
-
-**CRITICAL:** Your outline MUST follow this shape. Do NOT collapse into a default 3-act structure. Do NOT rename phases. Use exactly these phase names as batch story_segments.
-`;
-}
-
-// ══════════════════════════════════════════════════════════════════
-// Duration estimator — kills crude 150 wpm with real punctuation math
-// ══════════════════════════════════════════════════════════════════
-function estimateSecondsForWords(wordCount, niche) {
-  // Baseline 150 wpm for standard, 100 wpm for sleep (slower delivery)
-  const isSleepy = /sleep|meditation|asmr|bedtime/i.test(niche || '');
-  const wpm = isSleepy ? 110 : 155;
-  return Math.round((wordCount / wpm) * 60);
-}
-
-function wordsForDurationMinutes(durationMinutes, niche) {
-  const isSleepy = /sleep|meditation|asmr|bedtime/i.test(niche || '');
-  const wpm = isSleepy ? 110 : 155;
-  return Math.round(durationMinutes * wpm);
+      const rawText = response.choices[0].message.content;
+      return JSON.parse(rawText);
+    } catch (error) {
+      if (attempt === retries - 1) throw error;
+      console.warn(`⚠️ OpenAI attempt ${attempt + 1} failed: ${error.message}, retrying...`);
+      await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -421,7 +276,7 @@ Return JSON:
 // ═══════════════════════════════════════════════════════════════════
 // STANDARD TVF OUTLINE PROMPT (existing logic)
 // ═══════════════════════════════════════════════════════════════════
-function buildStandardOutlinePrompt({ topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock, seedBlock, seed }) {
+function buildStandardOutlinePrompt({ topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock }) {
   const TVF_PHASES = [
     { phase: 'HOOK', purpose: 'Open with a powerful attention trigger — shocking statement, contrarian truth, bold question, dramatic result, or hidden secret.' },
     { phase: 'RELATABLE SITUATION', purpose: 'Describe a moment the audience recognizes from real life — a mistake, frustration, confusing situation, or hidden problem.' },
@@ -444,19 +299,13 @@ function buildStandardOutlinePrompt({ topic, project, selectedHook, numBatches, 
   const formatFlavor = formatFlavors[project.storytelling_format] || formatFlavors['default'];
   const phasesText = TVF_PHASES.map((p, i) => `  ${i + 1}. ${p.phase}: ${p.purpose}`).join('\n');
 
-  // Use diversity seed's narrative shape if present, otherwise fall back to TVF
-  const useShape = !!seed?.shape;
-  const shapePhasesText = useShape
-    ? seed.shape.phases.map((p, i) => `  ${i + 1}. ${p.name.toUpperCase()}: ${p.purpose}`).join('\n')
-    : phasesText;
+  return `You are an elite viral content strategist and YouTube scriptwriter using the TL VIRAL FORMULA (TVF).
 
-  return `You are an elite YouTube scriptwriter and narrative director.
-${seedBlock || ''}
+**THE 8 TVF PHASES** (every script MUST hit all 8 in order):
+${phasesText}
 
-**PRIMARY NARRATIVE STRUCTURE** (follow EXACTLY — use these as story_segment names):
-${shapePhasesText}
-
-${useShape ? '' : `**STORYTELLING FLAVOR**: ${formatFlavor}\n`}${strategyBlock}
+**STORYTELLING FLAVOR**: ${formatFlavor}
+${strategyBlock}
 **PROJECT**:
 - Topic: ${topic?.title || project.name}
 - Topic Description: ${topic?.description || 'No description available'}
@@ -557,16 +406,57 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.ScriptBatches.delete(batch.id);
     }
 
+    // ═══ ENSURE DIVERSITY SEED EXISTS (inlined — functions can't share modules) ═══
+    // The seed is the single source of truth for protagonist identity,
+    // narrative shape, and voice register across the entire pipeline.
+    // It's persisted into project.script_strategy_override._script_seed
+    // and read verbatim by extractCharacterDNA + generateSceneBreakdown.
+    let seed = ensureSeedInline(project);
+    if (seed.isNew) {
+      // Persist the newly generated seed back to the project
+      let stratObj = {};
+      if (project.script_strategy_override) {
+        try {
+          stratObj = typeof project.script_strategy_override === 'string'
+            ? JSON.parse(project.script_strategy_override)
+            : project.script_strategy_override;
+        } catch (_) {}
+      }
+      stratObj._script_seed = seed.data;
+      await base44.asServiceRole.entities.Projects.update(project_id, {
+        script_strategy_override: JSON.stringify(stratObj)
+      });
+      scriptStrategy = JSON.stringify(stratObj);
+      console.log(`🎲 Seed created: ${seed.data.firstName} (${seed.data.namingCulture}) | ${seed.data.archetypeName} | ${seed.data.shape.name} | ${seed.data.voiceRegister.name} | ${seed.data.rhetoricalScheme.name}`);
+    } else {
+      console.log(`🎲 Seed already exists: ${seed.data.firstName} (${seed.data.namingCulture})`);
+    }
+
+    // Build seed block to inject into the outline prompt
+    const seedData = seed.data;
+    const seedBlock = `
+**🎲 PROJECT DIVERSITY SEED — honor these choices when planning the outline:**
+- Protagonist first name: **${seedData.firstName}** (${seedData.namingCulture.replace(/_/g, ' ')})
+- Archetype: ${seedData.archetype}
+- Narrative shape: ${seedData.shape.name} — ${seedData.shape.rhythm}
+- Voice register: ${seedData.voiceRegister.name} — ${seedData.voiceRegister.desc}
+- Rhetorical scheme (use at least twice per section): ${seedData.rhetoricalScheme.name} — ${seedData.rhetoricalScheme.desc}
+`;
+    strategyBlock = seedBlock + strategyBlock;
+
     // ── DETECT SCRIPT MODE ──
     const scriptMode = detectScriptMode(channel, project);
     const isSleepMode = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
 
     console.log(`[initializeScriptBatches] Script mode: ${scriptMode} (channel: ${channel?.name || 'none'})`);
 
-    // ── CALCULATE DURATION-AWARE BATCH COUNT ──
+    // ── CALCULATE BATCH COUNT ──
     const durationMinutes = project.video_duration_minutes || 10;
-    const totalTargetWords = wordsForDurationMinutes(durationMinutes, project.niche);
-    // Sleep scripts use smaller batches for granularity, standard ~800 words
+    // Sleep content uses 150 wpm (deliberately slow speaking pace)
+    const wordsPerMinute = 150;
+    const totalTargetWords = Math.round(durationMinutes * wordsPerMinute);
+    // Sleep scripts: ~1100 words per batch (~7 min each) for more granular sections
+    // Standard: ~800 words per batch (~5 min each) for quality and granularity
     const WORDS_PER_BATCH = isSleepMode ? 1100 : 800;
     const numBatches = Math.max(2, Math.ceil(totalTargetWords / WORDS_PER_BATCH));
 
@@ -581,25 +471,16 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── 🎲 GENERATE DIVERSITY SEED (skip for sleep — different tonal needs) ──
-    let seed = null;
-    let seedBlock = '';
-    if (!isSleepMode) {
-      seed = generateScriptSeed(project_id, project.niche, topic?.title || project.name);
-      seedBlock = seedToPromptBlock(seed);
-      console.log(`🎲 Script seed: ${seed.firstName} (${seed.namingCulture}) | Voice: ${seed.voiceRegister.name} | Shape: ${seed.shape.name} | Scheme: ${seed.rhetoricalScheme.name}`);
-    }
-
     console.log(`Project: ${durationMinutes} min → ${totalTargetWords} words → ${numBatches} batches (${scriptMode})`);
 
     // ── BUILD OUTLINE PROMPT ──
-    const promptArgs = { topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock, seedBlock, seed };
+    const promptArgs = { topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock };
     const outlinePrompt = isSleepMode
       ? buildSleepOutlinePrompt({ ...promptArgs, scriptMode, channel })
       : buildStandardOutlinePrompt(promptArgs);
 
-    console.log("Generating outline with Claude...");
-    const outlineResult = await callClaude(outlinePrompt, isSleepMode ? 0.65 : 0.9, 6000);
+    console.log("Generating detailed outline...");
+    const outlineResult = await callOpenAI(outlinePrompt, isSleepMode ? 0.6 : 0.7);
 
     if (!outlineResult.batches || outlineResult.batches.length === 0) {
       throw new Error("AI failed to generate outline batches");
@@ -623,28 +504,12 @@ Deno.serve(async (req) => {
       createdBatches.push(batch);
     }
 
-    // Update project status — also store the detected script_mode for downstream use.
-    // Persist seed inside script_strategy_override (merged into existing strat) so
-    // generateScriptBatches can read it on every batch call without re-randomizing.
-    const projectPatch = {
+    // Update project status — also store the detected script_mode for downstream use
+    await base44.asServiceRole.entities.Projects.update(project_id, {
       status: 'scripting',
       current_step: 3,
       project_mode: isSleepMode ? scriptMode : ''
-    };
-    if (seed) {
-      // Embed seed into script_strategy_override under a reserved key
-      let stratObj = {};
-      try {
-        if (project.script_strategy_override) {
-          stratObj = typeof project.script_strategy_override === 'string'
-            ? JSON.parse(project.script_strategy_override)
-            : project.script_strategy_override;
-        }
-      } catch (_) {}
-      stratObj._script_seed = seed;
-      projectPatch.script_strategy_override = JSON.stringify(stratObj);
-    }
-    await base44.asServiceRole.entities.Projects.update(project_id, projectPatch);
+    });
 
     console.log(`Created ${createdBatches.length} batches with detailed outlines (${scriptMode})`);
 

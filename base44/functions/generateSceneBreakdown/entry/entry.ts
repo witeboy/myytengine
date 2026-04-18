@@ -1,368 +1,58 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
-// CINEMATIC SCENE BREAKDOWN ENGINE — CLAUDE POWERED
+// CINEMATIC SCENE BREAKDOWN ENGINE
 // ══════════════════════════════════════════════════════════════════
-// Upgraded with:
-// - Diversity seed (breaks "always Sarah / kitchen table" convergence)
-// - Narrative shape picker (breaks hardcoded 3-act template)
-// - Shot distribution randomizer (breaks visual monotony)
-// - Plot-native visual world (no more static niche buckets)
-// - Claude Sonnet as the director LLM (better creative diversity than Gemini)
+// Single-call architecture from the original, upgraded with:
+// - Duration-aware scene density & beat pacing
+// - DIRECTOR_NOTES stored on each Scene record
+// - Story analysis → ProductionSettings (no scene_blueprint size limit)
+// - Sub-batching for phases > 20 scenes
+// - Immersion & object naming rules
+// - Timeout safety valve for long videos
 // ══════════════════════════════════════════════════════════════════
 
-// ── CLAUDE API WRAPPER ──
-// Uses Anthropic Messages API. Returns parsed JSON from the response.
-async function callClaude(prompt, temperature = 0.9, maxTokens = 16000) {
-  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01"
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-5-20250929",
-      max_tokens: maxTokens,
-      temperature,
-      messages: [{ role: "user", content: prompt + "\n\nRespond with ONLY valid JSON. No markdown fences, no commentary." }]
-    })
-  });
+async function callGemini(prompt, temperature = 0.7) {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature, maxOutputTokens: 16384, responseMimeType: "application/json" }
+      })
+    }
+  );
 
   if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Claude error ${response.status}: ${err.substring(0, 300)}`);
+    const err = await response.json();
+    throw new Error(`Gemini error: ${err.error?.message || response.status}`);
   }
 
   const data = await response.json();
-  const rawText = data.content?.[0]?.text || '';
-  if (!rawText) throw new Error("No text from Claude");
+  if (!data.candidates?.length) throw new Error("No candidates from Gemini");
+  const rawText = data.candidates[0].content.parts[0].text;
 
-  // Strip markdown fences if present
-  let clean = rawText.trim();
-  if (clean.startsWith('```json')) clean = clean.substring(7);
-  else if (clean.startsWith('```')) clean = clean.substring(3);
-  if (clean.endsWith('```')) clean = clean.substring(0, clean.length - 3);
-  clean = clean.trim();
+  try { return JSON.parse(rawText); } catch (_) {}
 
-  try { return JSON.parse(clean); } catch (_) {}
-
-  // Recovery: find the first { and the matching last }
-  const firstBrace = clean.indexOf('{');
-  const lastBrace = clean.lastIndexOf('}');
-  if (firstBrace >= 0 && lastBrace > firstBrace) {
-    const candidate = clean.substring(firstBrace, lastBrace + 1);
-    try { return JSON.parse(candidate); } catch (_) {}
-    for (const suffix of [']}', '}]}', '']) {
-      try {
-        const parsed = JSON.parse(candidate + suffix);
-        if (parsed.scenes && Array.isArray(parsed.scenes)) return parsed;
-        if (parsed.story_analysis) return parsed;
-      } catch (_) {}
-    }
+  // Recovery: try closing truncated JSON
+  console.log("JSON parse failed, attempting recovery...");
+  const lastBrace = rawText.lastIndexOf('}');
+  if (lastBrace === -1) throw new Error("Cannot recover JSON from Gemini response");
+  const trimmed = rawText.substring(0, lastBrace + 1);
+  for (const suffix of [']}', '}]}', '']) {
+    try {
+      const parsed = JSON.parse(trimmed + suffix);
+      if (parsed.scenes && Array.isArray(parsed.scenes)) {
+        console.log(`Recovered ${parsed.scenes.length} scenes from truncated JSON`); 
+        return parsed;
+      }
+      if (parsed.story_analysis) return parsed;
+    } catch (_) {}
   }
-  throw new Error("Failed to parse Claude JSON");
-}
-
-// ══════════════════════════════════════════════════════════════════
-// 🎲 DIVERSITY SEED — breaks the "always Sarah / kitchen table" rut
-// ══════════════════════════════════════════════════════════════════
-function mulberry32(a) {
-  return function() {
-    a |= 0; a = a + 0x6D2B79F5 | 0;
-    let t = Math.imul(a ^ a >>> 15, 1 | a);
-    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-    return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  };
-}
-function hashStr(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
-  return h >>> 0;
-}
-function pickFromArr(rng, arr) { return arr[Math.floor(rng() * arr.length)]; }
-
-const ARCHETYPES = [
-  "retired factory worker in his late 60s, widowed, lives alone in a small apartment",
-  "single father in his early 40s driving a rideshare at night while his kids sleep",
-  "middle-aged nurse pulling double shifts at a county hospital",
-  "young teacher in her late 20s at an underfunded public school",
-  "grandmother in her 70s raising her grandchildren after a family tragedy",
-  "teenage high-school student working weekends at a gas station",
-  "college freshman navigating her first year far from home",
-  "man in his 50s recently laid off from a 25-year corporate job",
-  "woman in her mid-30s who just left a long relationship",
-  "first-generation immigrant shopkeeper running a small bodega",
-  "Nigerian software engineer who moved to a new city six months ago",
-  "Korean-American mechanic who took over his father's auto shop",
-  "Mexican-American chef opening her first restaurant",
-  "Indian graduate student doing her PhD on a tight budget",
-  "Filipina caregiver working 12-hour shifts to send money home",
-  "Ethiopian taxi driver who used to be a doctor back home",
-  "Vietnamese nail salon owner who arrived in the country 20 years ago",
-  "Brazilian construction foreman building a house for his own family",
-  "Haitian immigrant mother juggling three jobs",
-  "Pakistani convenience-store owner who works 16-hour days",
-  "long-haul trucker in her mid-40s crossing the country every week",
-  "tattoo artist whose studio just opened in a gentrifying neighborhood",
-  "farmer in his 60s facing a bad harvest season",
-  "fisherman whose small boat is falling apart",
-  "freelance graphic designer chasing unpaid invoices",
-  "emergency-room nurse running on three hours of sleep",
-  "small-town pastor struggling to keep his congregation together",
-  "traveling salesman who hates his job but can't quit",
-  "city bus driver who's seen the same route for 18 years",
-  "firefighter recovering from a bad call last month",
-  "former college athlete working retail after an injury ended her career",
-  "warehouse worker saving up to go back to school",
-  "hairdresser who knows every secret in her small town",
-  "courthouse janitor who overhears more than anyone realizes",
-  "veteran running a small landscaping business",
-  "widow in her 80s still running her late husband's bookstore",
-  "social worker stretched thin across 40 cases",
-  "trauma therapist quietly burning out",
-  "freelance journalist chasing a story no one else will touch",
-  "auto-body painter with dreams of opening his own shop"
-];
-
-const NAMES = {
-  west_african: ["Adaeze","Chike","Obi","Amara","Kwame","Nneka","Emeka","Ayo","Fatou","Kojo"],
-  east_asian: ["Hiroshi","Mei-Lin","Jun","Sora","Kenji","Xiuying","Daiyu","Takeshi","Yuna","Min-jun"],
-  south_asian: ["Priya","Arjun","Kavita","Raj","Deepika","Vikram","Anita","Farhan","Zara","Ishaan"],
-  latin: ["Mateo","Sofía","Diego","Camila","Luis","Valeria","Javier","Isabela","Rafael","Lucía"],
-  arabic: ["Omar","Layla","Khaled","Yasmin","Tariq","Noor","Hassan","Amina","Faisal","Salma"],
-  eastern_european: ["Dmitri","Katya","Marek","Agnieszka","Stefan","Ana","Ivan","Olena","Viktor","Lena"],
-  anglo: ["Walter","Margaret","Harold","Beatrice","Samuel","Josephine","Arthur","Eleanor","Frank","Ruth"],
-  african_american: ["Darnell","Keisha","Malik","Tanya","Jerome","Shanice","Marcus","Aaliyah","Terrence","Monique"],
-  mixed_modern: ["Quinn","Rowan","Asha","Kai","Sage","Zion","River","Nia","Finn","Imani"]
-};
-
-const SETTINGS = [
-  "a cramped city bus at 6am with condensation on the windows",
-  "a late-night diner booth under flickering fluorescent lights",
-  "a subway platform during rush hour, echoing with announcements",
-  "the back of a taxi cab stuck in traffic on a rainy night",
-  "a mechanic's garage with oil-stained concrete and open hood lamps",
-  "a hospital break room with vending machine light and linoleum floor",
-  "a laundromat at midnight with one dryer running and a TV on mute",
-  "a construction site trailer at dawn, coffee cups and blueprints",
-  "a motel room on the edge of a highway, neon sign bleeding through blinds",
-  "a church basement with folding chairs and a single floor lamp",
-  "a barbershop with vinyl chairs and a cracked mirror",
-  "a corner store behind bulletproof glass in a quiet neighborhood",
-  "a small-town library after hours, green desk lamps still on",
-  "a farmhouse kitchen with a screen door that won't close properly",
-  "a corner office tower at 2am with only the protagonist's desk lit",
-  "a crowded street market with vendors packing up at dusk",
-  "a riverbank under a highway overpass, graffiti on the concrete",
-  "a desert road with a broken-down truck and a distant gas station",
-  "a courthouse hallway with marble floors and echoing footsteps",
-  "a cargo ship's engine room, industrial blues and clanging metal",
-  "a radio station studio at 3am with red 'ON AIR' light glowing",
-  "a classroom after school, sunlight slanting through Venetian blinds",
-  "a suburban driveway at golden hour, sprinklers hissing softly",
-  "a temple courtyard with incense smoke curling in still air",
-  "a rooftop at twilight overlooking sodium-orange street lights",
-  "a fishing pier in fog, ropes and tackle boxes scattered",
-  "a rural roadside produce stand with hand-painted signs",
-  "an urgent-care waiting room at 11pm with CNN on mute",
-  "a corner of a coffee shop at closing time, chairs upside down on tables",
-  "a university lecture hall being mopped after the last class"
-];
-
-const POV_MODES = [
-  { name: "single_protagonist", desc: "One central character — we follow their journey start to finish." },
-  { name: "observer_narrator", desc: "An unseen witness narrates events that happen to a different central character." },
-  { name: "dual_character", desc: "Two characters whose arcs interweave — intercut between them." },
-  { name: "ensemble_mosaic", desc: "3-5 characters whose separate moments build a collective picture." },
-  { name: "second_person", desc: "Narrated as 'you' — the viewer IS the character." },
-  { name: "epistolary", desc: "Told through fragments — letters, voicemails, diary entries, text messages." }
-];
-
-const SHOT_PROFILES = [
-  { name: "verité_handheld",    desc: "70% medium/close, mostly handheld, intimate observational feel. Minimal wides. Eye-level mostly." },
-  { name: "epic_scope",         desc: "60% wide/aerial/establishing, dwarf-the-character framing. Few close-ups. Low angles common." },
-  { name: "claustrophobic",     desc: "50% close-ups and extreme close-ups. Frame-within-frame. Tight spaces. Off-center compositions." },
-  { name: "observational",      desc: "Static eye-level + OTS dominant. Camera doesn't move much. Lets life happen in the frame." },
-  { name: "kinetic_dynamic",    desc: "Heavy tracking, Dutch angles, push-ins. Camera is a character. No static shots." },
-  { name: "balanced_classical", desc: "Traditional Hollywood coverage — wide / medium / close rotation. 30% wide, 40% medium, 30% close." }
-];
-
-function generateDiversitySeed(projectId, niche, topic) {
-  const seedInt = hashStr(`${projectId}|${niche}|${topic}|${Date.now() % 100000}`);
-  const rng = mulberry32(seedInt);
-  const archetype = pickFromArr(rng, ARCHETYPES);
-  const cultureKey = pickFromArr(rng, Object.keys(NAMES));
-  const firstName = pickFromArr(rng, NAMES[cultureKey]);
-  const setting = pickFromArr(rng, SETTINGS);
-  const secondarySetting = pickFromArr(rng, SETTINGS.filter(s => s !== setting));
-  const pov = pickFromArr(rng, POV_MODES);
-  const shotProfile = pickFromArr(rng, SHOT_PROFILES);
-  const genderHint =
-    /\bher\b|\bshe\b|\bmother\b|\bwidow\b|\bgrandmother\b|\bwoman\b|\bfilipina\b/i.test(archetype) ? "female"
-    : /\bhis\b|\bhe\b|\bfather\b|\bwidower\b|\bgrandfather\b|\bman\b|\bfisherman\b|\bsalesman\b|\bpastor\b|\bforeman\b|\btrucker\b|\bveteran\b/i.test(archetype) ? "male"
-    : (rng() > 0.5 ? "male" : "female");
-  return { seedInt, firstName, namingCulture: cultureKey, archetype, genderHint, primarySetting: setting, secondarySetting, povMode: pov, shotProfile };
-}
-
-function seedToPromptBlock(seed) {
-  return `
-**🎲 DIVERSITY SEED (HIGHEST PRIORITY — NON-NEGOTIABLE):**
-Ground the ENTIRE story in this creative seed. Do NOT invent a different character. Do NOT default to a different setting. These override your instincts.
-
-**PROTAGONIST:**
-- Name: **${seed.firstName}** (${seed.namingCulture.replace(/_/g, ' ')} naming tradition — DO NOT rename to Sarah, Emma, John, or any other default)
-- Archetype: ${seed.archetype}
-- Gender: ${seed.genderHint} (use pronouns consistent with this)
-
-**PRIMARY SETTING:** ${seed.primarySetting}
-**SECONDARY SETTING (appears in 2-3 scenes):** ${seed.secondarySetting}
-
-**POV MODE:** ${seed.povMode.name} — ${seed.povMode.desc}
-
-**SHOT DISTRIBUTION PROFILE:** ${seed.shotProfile.name} — ${seed.shotProfile.desc}
-(Override the default "50% wide" rule — follow THIS profile's shot distribution.)
-
-**ABSOLUTE RULES:**
-- Protagonist's name is "${seed.firstName}". Must appear exactly as given in character block and narration_text.
-- The world must reflect the PRIMARY SETTING above. No falling back to generic "kitchen table with bills" or "coffee shop with laptop".
-- Follow the POV mode — it dictates how the story is told.
-- Follow the shot profile — it dictates visual rhythm.
-`;
-}
-
-// ══════════════════════════════════════════════════════════════════
-// 📐 NARRATIVE SHAPES — replaces hardcoded 3-act template
-// ══════════════════════════════════════════════════════════════════
-const SHAPES = {
-  three_act: {
-    name: "three_act",
-    phases: [
-      { name: "cold_open",      weight: 0.10, purpose: "Hook — visceral, immediate, intriguing." },
-      { name: "rising_tension", weight: 0.25, purpose: "Build the world and problem — escalate stakes." },
-      { name: "emotional_core", weight: 0.40, purpose: "Heart of the story — maximum emotional impact." },
-      { name: "resolution",     weight: 0.25, purpose: "Deliver the payoff — resolution, transformation." }
-    ],
-    rhythm: "Classical Western structure. Clear conflict escalation. Cathartic release."
-  },
-  kishotenketsu: {
-    name: "kishotenketsu",
-    phases: [
-      { name: "ki_introduction", weight: 0.22, purpose: "Ki (起) — introduce the world and protagonist calmly." },
-      { name: "sho_development", weight: 0.28, purpose: "Shō (承) — develop the situation naturally, no conflict." },
-      { name: "ten_twist",       weight: 0.28, purpose: "Ten (転) — unexpected element enters that re-frames everything." },
-      { name: "ketsu_conclusion",weight: 0.22, purpose: "Ketsu (結) — reconcile the twist with the original scene." }
-    ],
-    rhythm: "Japanese 4-act. No villain or conflict needed. Tension from juxtaposition. Contemplative pacing."
-  },
-  hero_journey_compact: {
-    name: "hero_journey_compact",
-    phases: [
-      { name: "ordinary_world",   weight: 0.12, purpose: "Establish the protagonist's normal." },
-      { name: "call_and_refusal", weight: 0.13, purpose: "A disruption appears — they hesitate." },
-      { name: "crossing",         weight: 0.15, purpose: "They commit and enter a new world." },
-      { name: "trials",           weight: 0.30, purpose: "Tests, allies, enemies, escalating challenges." },
-      { name: "ordeal_reward",    weight: 0.18, purpose: "The central crisis and the prize." },
-      { name: "return_changed",   weight: 0.12, purpose: "Back to the ordinary world but transformed." }
-    ],
-    rhythm: "Campbellian monomyth compressed. 6 beats. Archetypal."
-  },
-  fireside_tale: {
-    name: "fireside_tale",
-    phases: [
-      { name: "invitation",       weight: 0.15, purpose: "Pull the listener in — 'you won't believe what happened.'" },
-      { name: "meandering_setup", weight: 0.35, purpose: "Anecdotal details, tangents, color. Atmosphere over plot." },
-      { name: "the_turn",         weight: 0.25, purpose: "The moment the story actually happened." },
-      { name: "reflection",       weight: 0.25, purpose: "What it meant — lingered-on, philosophical." }
-    ],
-    rhythm: "Oral tradition. Rambling, anecdotal, authority through detail not urgency."
-  },
-  case_study: {
-    name: "case_study",
-    phases: [
-      { name: "the_aftermath",  weight: 0.15, purpose: "Start with the outcome — end state first." },
-      { name: "the_setup",      weight: 0.20, purpose: "Rewind — who was this person before?" },
-      { name: "the_decisions",  weight: 0.35, purpose: "Walk through the key choices chronologically." },
-      { name: "the_mechanism",  weight: 0.15, purpose: "Explain WHY this worked / failed." },
-      { name: "the_lesson",     weight: 0.15, purpose: "What can the viewer take from this." }
-    ],
-    rhythm: "Investigative / journalistic. Non-linear — start at the end."
-  },
-  contrast_pairs: {
-    name: "contrast_pairs",
-    phases: [
-      { name: "side_a_intro", weight: 0.15, purpose: "Introduce Person/Path A." },
-      { name: "side_b_intro", weight: 0.15, purpose: "Introduce Person/Path B — similar start." },
-      { name: "divergence_1", weight: 0.20, purpose: "First divergence — intercut their choices." },
-      { name: "divergence_2", weight: 0.25, purpose: "Consequences compound — intercut their paths." },
-      { name: "outcomes",     weight: 0.15, purpose: "Where each ended up." },
-      { name: "the_takeaway", weight: 0.10, purpose: "What separated them." }
-    ],
-    rhythm: "Dual-timeline. Constant intercutting. Pairing identical scene types with opposite outcomes."
-  },
-  tutorial_build: {
-    name: "tutorial_build",
-    phases: [
-      { name: "the_promise", weight: 0.10, purpose: "What you'll learn / be able to do." },
-      { name: "foundation",  weight: 0.20, purpose: "The prerequisite concept." },
-      { name: "layer_1",     weight: 0.20, purpose: "First skill/idea built on the foundation." },
-      { name: "layer_2",     weight: 0.20, purpose: "Second skill stacking on the first." },
-      { name: "synthesis",   weight: 0.20, purpose: "Combining everything into one working example." },
-      { name: "the_launch",  weight: 0.10, purpose: "Challenge the viewer to apply it." }
-    ],
-    rhythm: "Progressive revelation. Each scene builds on the last."
-  },
-  ensemble_mosaic: {
-    name: "ensemble_mosaic",
-    phases: [
-      { name: "chorus_intro", weight: 0.15, purpose: "Introduce the shared world / event." },
-      { name: "voice_one",    weight: 0.20, purpose: "First character's perspective / moment." },
-      { name: "voice_two",    weight: 0.20, purpose: "Second character's perspective / moment." },
-      { name: "voice_three",  weight: 0.20, purpose: "Third character's perspective / moment." },
-      { name: "collision",    weight: 0.15, purpose: "Their lives briefly intersect." },
-      { name: "chorus_close", weight: 0.10, purpose: "The shared world carries on." }
-    ],
-    rhythm: "Multiple protagonists. Each gets a self-contained vignette."
-  }
-};
-
-const NICHE_SHAPE_BIAS = {
-  finance:     ["case_study","contrast_pairs","tutorial_build","three_act"],
-  retirement:  ["fireside_tale","case_study","three_act"],
-  motivation:  ["hero_journey_compact","three_act","contrast_pairs"],
-  horror:      ["three_act","kishotenketsu","fireside_tale"],
-  technology:  ["tutorial_build","case_study","three_act"],
-  health:      ["case_study","tutorial_build","three_act"],
-  crime:       ["case_study","three_act","ensemble_mosaic"],
-  history:     ["fireside_tale","hero_journey_compact","ensemble_mosaic"],
-  education:   ["tutorial_build","case_study","three_act"],
-  travel:      ["fireside_tale","kishotenketsu","ensemble_mosaic"],
-  relationship:["kishotenketsu","contrast_pairs","fireside_tale"],
-  general:     ["three_act","fireside_tale","kishotenketsu","case_study"]
-};
-
-function pickNarrativeShape(projectId, niche, topic, povMode) {
-  if (povMode?.name === "ensemble_mosaic") return SHAPES.ensemble_mosaic;
-  if (povMode?.name === "dual_character") return SHAPES.contrast_pairs;
-  const pool = NICHE_SHAPE_BIAS[niche?.toLowerCase()] || NICHE_SHAPE_BIAS.general;
-  const rng = mulberry32(hashStr(`shape|${projectId}|${niche}|${topic}|${Date.now() % 10000}`));
-  const shapeName = pool[Math.floor(rng() * pool.length)];
-  return SHAPES[shapeName] || SHAPES.three_act;
-}
-
-function shapeToPromptBlock(shape) {
-  return `
-**📐 NARRATIVE SHAPE: ${shape.name.toUpperCase()}**
-Rhythm: ${shape.rhythm}
-
-Phases (in order):
-${shape.phases.map((p, i) => `  ${i + 1}. ${p.name} (${Math.round(p.weight * 100)}% of runtime) — ${p.purpose}`).join('\n')}
-
-**CRITICAL:** Your story MUST follow this shape. Do not default to a different structure.
-`;
+  throw new Error("Failed to parse Gemini JSON after recovery");
 }
 
 function cleanScriptText(text) {
@@ -616,13 +306,12 @@ function getNicheDirectorProfile(niche) {
 // PHASE STRUCTURE
 // ══════════════════════════════════════════════════════════════════
 
-function calculatePhaseAllocation(totalTargetScenes, shape) {
-  // Uses the picked narrative shape's phases instead of hardcoded 4-act
-  const phaseWeights = shape?.phases || [
-    { name: "cold_open",      weight: 0.10, purpose: "Hook — visceral, immediate, intriguing." },
+function calculatePhaseAllocation(totalTargetScenes) {
+  const phaseWeights = [
+    { name: "cold_open", weight: 0.10, purpose: "Hook — visceral, immediate, intriguing." },
     { name: "rising_tension", weight: 0.25, purpose: "Build the world and problem — escalate stakes." },
     { name: "emotional_core", weight: 0.40, purpose: "Heart of the story — maximum emotional impact." },
-    { name: "resolution",     weight: 0.25, purpose: "Deliver the payoff — resolution, transformation." }
+    { name: "resolution", weight: 0.25, purpose: "Deliver the payoff — resolution, transformation." }
   ];
 
   let remaining = totalTargetScenes;
@@ -671,7 +360,7 @@ function splitScriptByPhase(script, phases) {
 function buildBreakdownPrompt({
   styleDirective, storyAnalysis, characterBlock, continuityContext,
   phaseName, phasePurpose, sceneCount, sceneStart, scriptText,
-  beatDurationsSlice, nicheProfile, diversitySeedBlock, shapeBlock
+  beatDurationsSlice, nicheProfile
 }) {
   const durLine = beatDurationsSlice.length > 0
     ? `\n**DURATION TARGETS (seconds per scene):** [${beatDurationsSlice.map(d => d.toFixed(1)).join(', ')}]`
@@ -679,8 +368,6 @@ function buildBreakdownPrompt({
 
   return `You are a world-class film director blocking out scenes for a visual narrative.
 ${styleDirective}
-${diversitySeedBlock || ''}
-${shapeBlock || ''}
 
 **YOUR STORY ANALYSIS:**
 - Central Theme: ${storyAnalysis.central_theme}
@@ -708,7 +395,7 @@ ${scriptText}
 2. **STORY CONTEXT OVER SENTENCE LITERAL:** Each scene exists within the FULL story arc. A scene for "Rule #3: Automate your savings" in a finance story should show the CHARACTER performing that action in THEIR world (e.g., setting up auto-transfer on their phone at their desk) — not a generic savings concept. The CHARACTER, their ENVIRONMENT, and their JOURNEY inform every visual.
 3. Scenes are VISUAL BEATS, not sentences. Change scene when the visual changes.
 4. visual_concept: 2-4 sentences. Environment FIRST, then character ACTION, then atmosphere. The visual concept must clearly connect to what is HAPPENING in the plot at this moment.
-5. **CINEMATIC SHOT DISTRIBUTION:** Follow the SHOT DISTRIBUTION PROFILE from the Diversity Seed (above). NEVER use the same shot type consecutively. Vary angles at least 30° between cuts.
+5. **CINEMATIC SHOT DISTRIBUTION (MANDATORY):** At least 50% of scenes must use WIDE or WIDER framing (WS, EWS, MWS, HIGH ANGLE, ESTABLISHING). Mix in MS, LOW, OTS, MCU, CU for variety. NEVER same shot type consecutively. Close-ups (CU/ECU) max 15% of total scenes.
 6. ALWAYS name specific objects from the narration (cellphone, laptop, bill, receipt, etc.) as PROPS — "clutching her cellphone", "staring at the overdue bill". But NEVER describe what's ON the screen/paper — no text, UI, dollar amounts, app names.
 7. **NO ABSTRACT METAPHORS.** Do NOT create symbolic or metaphorical visuals. If the narration talks about "leaving money on the table," show the CHARACTER in their actual life situation where they're missing that opportunity — NOT a surreal image of floating money or someone dangling from a building. Every visual must be a PLAUSIBLE SCENE from the character's life that illustrates the narrative point.
 8. **POPULATED WORLD:** Most scenes should include MULTIPLE PEOPLE — passersby, crowds, coworkers, family members, bystanders. The world feels alive and busy.
@@ -815,36 +502,12 @@ Deno.serve(async (req) => {
     const avgSceneDuration = getAvgSceneDuration(durationMinutes);
     const totalTargetScenes = Math.max(isSleep ? 4 : 8, Math.round((durationMinutes * 60) / avgSceneDuration));
 
-    // ═══ 🎲 DIVERSITY SEED + 📐 NARRATIVE SHAPE ═══
-    // Generated once per project (at batch 0), saved to ProductionSettings for resume batches.
-    let diversitySeed, narrativeShape;
-    if (startBatch === 0) {
-      diversitySeed = generateDiversitySeed(project_id, niche, project.name || '');
-      narrativeShape = pickNarrativeShape(project_id, niche, project.name || '', diversitySeed.povMode);
-      console.log(`🎲 Diversity seed: ${diversitySeed.firstName} (${diversitySeed.namingCulture}) | ${diversitySeed.povMode.name} | Shots: ${diversitySeed.shotProfile.name}`);
-      console.log(`📐 Narrative shape: ${narrativeShape.name} (${narrativeShape.phases.length} phases)`);
-    } else {
-      // Load seed+shape from ProductionSettings on resume batches
-      const psListForSeed = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
-      const psRow = psListForSeed[0];
-      try {
-        diversitySeed = psRow?.story_analysis ? (JSON.parse(psRow.story_analysis)._diversity_seed || null) : null;
-        narrativeShape = psRow?.story_analysis ? (JSON.parse(psRow.story_analysis)._narrative_shape || null) : null;
-      } catch (_) {}
-      if (!diversitySeed) {
-        diversitySeed = generateDiversitySeed(project_id, niche, project.name || '');
-        narrativeShape = pickNarrativeShape(project_id, niche, project.name || '', diversitySeed.povMode);
-      }
-    }
-    const diversitySeedBlock = seedToPromptBlock(diversitySeed);
-    const shapeBlock = shapeToPromptBlock(narrativeShape);
-
-    const phases = calculatePhaseAllocation(totalTargetScenes, narrativeShape);
+    const phases = calculatePhaseAllocation(totalTargetScenes);
     const scriptChunks = splitScriptByPhase(finalScript, phases);
     const numBatches = scriptChunks.length;
     const nicheProfile = getNicheDirectorProfile(niche);
 
-    console.log(`🎯 ${durationMinutes}min → ${totalTargetScenes} scenes (avg ${avgSceneDuration.toFixed(1)}s) | ${numBatches} phases [${narrativeShape.name}] | Style: ${visualStyle || 'default'}`);
+    console.log(`🎯 ${durationMinutes}min → ${totalTargetScenes} scenes (avg ${avgSceneDuration.toFixed(1)}s) | ${numBatches} phases | Style: ${visualStyle || 'default'}`);
 
     // ══════════════════════════════════════════════════════════════
     // BATCH 0: Story analysis + all phases in one call
@@ -870,11 +533,47 @@ Deno.serve(async (req) => {
         console.log(`🗑️ Deleted ${oldScenes.length} old scenes`);
       }
 
-      // ── Story Analysis (Claude-powered, with diversity seed + shape) ──
+      // ═══ READ EXISTING CHARACTER DNA — single source of truth ═══
+      // extractCharacterDNA (run before this step) owns character identity.
+      // We CONSUME it here, never regenerate.
+      let existingCharacters = [];
+      if (project.character_descriptions) {
+        try {
+          existingCharacters = JSON.parse(project.character_descriptions);
+        } catch (_) {}
+      }
+      const hasPreExtractedChars = existingCharacters.length > 0;
+      if (hasPreExtractedChars) {
+        console.log(`🧬 Using ${existingCharacters.length} pre-extracted characters from extractCharacterDNA: [${existingCharacters.map(c => c.name).join(', ')}]`);
+      }
+
+      // ═══ READ DIVERSITY SEED ═══
+      let seed = null;
+      if (project.script_strategy_override) {
+        try {
+          const strat = typeof project.script_strategy_override === 'string'
+            ? JSON.parse(project.script_strategy_override)
+            : project.script_strategy_override;
+          seed = strat?._script_seed || null;
+        } catch (_) {}
+      }
+      const seedBlock = seed ? `
+**🎲 PROJECT SEED (honor these):**
+- Protagonist name: **${seed.firstName}** (${seed.namingCulture?.replace(/_/g, ' ')})
+- Narrative shape: ${seed.shape?.name} — ${seed.shape?.rhythm}
+- Voice register: ${seed.voiceRegister?.name} — ${seed.voiceRegister?.desc}
+` : '';
+
+      // ── Story Analysis ──
+      // If characters already extracted, tell Gemini NOT to regenerate them.
+      const characterDirective = hasPreExtractedChars
+        ? `\n**CHARACTERS ALREADY DEFINED** — do NOT regenerate the "characters" array. These are frozen:\n${existingCharacters.map(c => `  • ${c.name}: ${(c.identity_core || '').substring(0, 150)}`).join('\n')}\nReturn characters: [] (empty) — we will reuse the existing ones.\n`
+        : '';
+
       const analysisPrompt = `You are a world-class film director. Study this script and respond with JSON.
+${seedBlock}
+${characterDirective}
 ${styleDirective}
-${diversitySeedBlock}
-${shapeBlock}
 
 **SCRIPT:**
 ${finalScript}
@@ -906,9 +605,17 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
 **PLOT SUMMARY (use this to ground EVERY scene in the story):**
 Analyze the script above and identify: WHO is the main character? WHAT is their situation? WHAT journey do they go through? Every scene must show a moment from THIS character's journey — not a disconnected visual metaphor.`;
 
-      console.log(`🎬 Story analysis (Claude)...`);
-      const analysis = await callClaude(analysisPrompt, 0.9, 8000);
+      console.log(`🎬 Story analysis...`);
+      const analysis = await callGemini(analysisPrompt, 0.6);
       storyAnalysis = analysis.story_analysis || analysis;
+
+      // ═══ PRESERVE PRE-EXTRACTED CHARACTERS ═══
+      // If extractCharacterDNA already populated character_descriptions,
+      // override whatever the breakdown LLM returned with the authoritative data.
+      if (hasPreExtractedChars) {
+        storyAnalysis.characters = existingCharacters;
+        console.log(`🔒 Preserved ${existingCharacters.length} pre-extracted characters (breakdown did not regenerate)`);
+      }
 
       // ── Beat durations ──
       beatDurations = calculateBeatDurations(phases, durationMinutes, isSleep);
@@ -916,12 +623,9 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
 
       console.log(`📊 Beats: ${beatDurations.length} scenes | Range: ${Math.min(...beatDurations).toFixed(1)}s – ${Math.max(...beatDurations).toFixed(1)}s | Total: ${beatDurations.reduce((a,b)=>a+b,0).toFixed(1)}s`);
 
-      // ── Save story analysis + beats + seed/shape to ProductionSettings ──
+      // ── Save story analysis + beats to ProductionSettings ──
       const saForSave = { ...storyAnalysis };
       delete saForSave.characters; // saved separately on Project
-      // Embed the seed+shape inside story_analysis so resume batches can read them
-      saForSave._diversity_seed = diversitySeed;
-      saForSave._narrative_shape = narrativeShape;
       const psPayload = {
         beat_durations: JSON.stringify(beatDurations),
         beat_start_times: JSON.stringify(beatStartTimes),
@@ -1100,9 +804,7 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
           sceneStart: sub.offset + 1,
           scriptText: subText,
           beatDurationsSlice: subBeats,
-          nicheProfile,
-          diversitySeedBlock,
-          shapeBlock
+          nicheProfile
         });
 
         const subLabel = subBatches.length > 1 ? ` (sub ${si+1}/${subBatches.length})` : '';
@@ -1110,7 +812,7 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
 
         let result;
         try {
-          result = await callClaude(prompt, 0.9, 14000);
+          result = await callGemini(prompt, 0.7);
         } catch (err) {
           console.error(`❌ Scenes ${sub.offset+1}-${sub.offset+sub.count} FAILED: ${err.message}`);
           // Retry with half the scenes
@@ -1124,11 +826,9 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
                 sceneStart: sub.offset + 1,
                 scriptText: subText,
                 beatDurationsSlice: subBeats.slice(0, Math.ceil(sub.count / 2)),
-                nicheProfile,
-                diversitySeedBlock,
-                shapeBlock
+                nicheProfile
               });
-              result = await callClaude(halfPrompt, 0.9, 14000);
+              result = await callGemini(halfPrompt, 0.7);
             } catch (retryErr) {
               console.error(`❌ Retry also failed: ${retryErr.message} — skipping`);
               continue;
