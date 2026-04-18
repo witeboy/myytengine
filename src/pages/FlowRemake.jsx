@@ -11,8 +11,9 @@ import OrientationSelector from '@/components/content/OrientationSelector';
 import {
  Loader2, ArrowRight, ArrowLeft, Film, ImageIcon, Music, Download,
   CheckCircle, XCircle, Pencil, Sparkles, Building2, Wrench,
-  Car, TreePine, Home, Warehouse, MapPin, Plus
+  Car, TreePine, Home, Warehouse, MapPin, Plus, AlertCircle, Wand2
 } from 'lucide-react';
+import { concatTimelapseVideos } from '@/lib/concatTimelapse';
 
 const CATEGORIES = [
   { key: 'construction', label: 'Construction', icon: Building2, desc: 'Empty land → complete building', color: 'amber' },
@@ -42,7 +43,11 @@ export default function FlowRemake() {
   const [generatingVideos, setGeneratingVideos] = useState(false);
   const [imageProgress, setImageProgress] = useState({ current: 0, total: 7 });
   const [videoProgress, setVideoProgress] = useState({ current: 0, total: 6 });
+  const [sceneErrors, setSceneErrors] = useState({}); // {sceneNumber: errorMessage}
   const [error, setError] = useState(null);
+  const [compiling, setCompiling] = useState(false);
+  const [compileProgress, setCompileProgress] = useState(null);
+  const [finalVideoUrl, setFinalVideoUrl] = useState(null);
 
   const { data: scenes = [], refetch: refetchScenes } = useQuery({
     queryKey: ['flow-scenes', currentProjectId],
@@ -105,72 +110,165 @@ export default function FlowRemake() {
 
   // ═══ STEP 2: Generate images SEQUENTIALLY with reference chaining ═══
   const handleGenerateImages = async () => {
+    if (scenes.length === 0) {
+      setError('No scenes loaded yet. Go back and generate prompts first.');
+      return;
+    }
+
     setGeneratingImages(true);
-    setImageProgress({ current: 0, total: 7 });
+    setSceneErrors({});
+    setImageProgress({ current: 0, total: scenes.length });
 
     let previousImageUrl = null;
+    const errors = {};
 
     for (let i = 0; i < scenes.length; i++) {
-      const refLabel = previousImageUrl ? ' (with reference)' : ' (first scene)';
+      const refLabel = previousImageUrl ? ' (chaining)' : ' (first)';
       setImageProgress({
-        current: i,
+        current: i + 1,
         total: scenes.length,
-        label: `Scene ${i + 1}: ${scenes[i].narration_text}${refLabel}`
+        label: `Scene ${i + 1}/${scenes.length}: ${scenes[i].narration_text}${refLabel}`,
       });
 
       try {
-        // Call progression-specific image gen with reference chaining
         const res = await base44.functions.invoke('generateProgressionImage', {
           scene_id: scenes[i].id,
           reference_image_url: previousImageUrl,
         });
-
         const data = res.data || res;
-        if (data?.image_url) {
+        if (data?.image_url?.startsWith('http')) {
           previousImageUrl = data.image_url;
-          console.log(`✓ Scene ${i + 1} generated${data.used_reference ? ' (referenced prev)' : ''}: ${data.image_url.substring(0, 60)}`);
+          console.log(`✓ Scene ${i + 1}${data.used_reference ? ' (ref)' : ''}: ${data.image_url.substring(0, 60)}`);
+        } else {
+          errors[scenes[i].scene_number] = data?.error || 'No image URL returned';
+          console.warn(`✗ Scene ${i + 1}: no image returned`);
         }
       } catch (err) {
-        console.warn(`Scene ${i + 1} image failed:`, err.message);
-        // Don't break chain — try next scene without reference
+        errors[scenes[i].scene_number] = err.message;
+        console.warn(`✗ Scene ${i + 1} failed:`, err.message);
       }
 
       await refetchScenes();
-
-      // Delay between sequential calls
-      if (i < scenes.length - 1) await new Promise(r => setTimeout(r, 2000));
+      if (i < scenes.length - 1) await new Promise(r => setTimeout(r, 1500));
     }
 
-    setImageProgress({ current: scenes.length, total: scenes.length, label: 'Complete!' });
+    setSceneErrors(errors);
+    setImageProgress({
+      current: scenes.length,
+      total: scenes.length,
+      label: Object.keys(errors).length ? `Done — ${Object.keys(errors).length} failed` : 'All images ready!',
+    });
     setGeneratingImages(false);
   };
 
-  // ═══ STEP 3: Generate transition videos ═══
+  // Retry a single failed image
+  const retryImage = async (sceneIdx) => {
+    const scene = scenes[sceneIdx];
+    if (!scene) return;
+    const prev = sceneIdx > 0 ? scenes[sceneIdx - 1]?.image_url : null;
+    setSceneErrors(prev2 => { const n = { ...prev2 }; delete n[scene.scene_number]; return n; });
+    try {
+      await base44.functions.invoke('generateProgressionImage', {
+        scene_id: scene.id,
+        reference_image_url: prev?.startsWith('http') ? prev : null,
+      });
+      await refetchScenes();
+    } catch (err) {
+      setSceneErrors(prev2 => ({ ...prev2, [scene.scene_number]: err.message }));
+    }
+  };
+
+  // ═══ STEP 3: Generate transition videos (parallel submission + poll) ═══
   const handleGenerateVideos = async () => {
     setGeneratingVideos(true);
+    setSceneErrors({});
+
     const freshScenes = await base44.entities.Scenes.filter({ project_id: currentProjectId });
     const sorted = freshScenes.sort((a, b) => a.scene_number - b.scene_number);
     const transitions = sorted.length - 1;
-    setVideoProgress({ current: 0, total: transitions });
 
+    // Only process transitions that don't already have a completed video
+    const pending = [];
     for (let i = 0; i < transitions; i++) {
-      setVideoProgress({ current: i, total: transitions, label: `Transition ${i + 1}→${i + 2}` });
+      const v = sorted[i].video_url;
+      if (!v?.startsWith('http')) pending.push(i);
+    }
 
+    setVideoProgress({
+      current: 0,
+      total: transitions,
+      label: `Rendering ${pending.length} transitions in parallel — Kling 2.1 Master, 10s clips…`,
+    });
+
+    let completed = transitions - pending.length;
+    const errors = {};
+
+    // Submit all pending transitions in parallel — each one blocks server-side
+    // until Kling completes (up to ~7 min), but they run concurrently so total
+    // wall time ≈ max(single transition) instead of sum.
+    await Promise.all(pending.map(async (i) => {
       try {
         await base44.functions.invoke('generateProgressionVideo', {
           start_scene_id: sorted[i].id,
           end_scene_id: sorted[i + 1].id,
+          poll: true,
         });
       } catch (err) {
-        console.warn(`Transition ${i + 1}→${i + 2} failed:`, err.message);
+        errors[sorted[i].scene_number] = err.message;
+        console.warn(`✗ Transition ${i + 1}→${i + 2}:`, err.message);
       }
+      completed += 1;
+      const fresh = await base44.entities.Scenes.filter({ project_id: currentProjectId });
+      setVideoProgress({
+        current: completed,
+        total: transitions,
+        label: `${completed}/${transitions} transitions ready`,
+      });
+      queryClient.setQueryData(['flow-scenes', currentProjectId], fresh.sort((a, b) => a.scene_number - b.scene_number));
+    }));
 
-      if (i < transitions - 1) await new Promise(r => setTimeout(r, 3000));
-    }
-
-    setVideoProgress({ current: transitions, total: transitions, label: 'All submitted!' });
+    setSceneErrors(errors);
+    setVideoProgress({
+      current: transitions,
+      total: transitions,
+      label: Object.keys(errors).length ? `Done — ${Object.keys(errors).length} failed` : 'All transitions ready!',
+    });
     await refetchScenes();
     setGeneratingVideos(false);
+  };
+
+  // ═══ STEP 5: Compile final time-lapse (browser-side ffmpeg concat) ═══
+  const handleCompileFinal = async () => {
+    setCompiling(true);
+    setCompileProgress({ phase: 'starting', message: 'Loading video engine…', percent: 0 });
+    setFinalVideoUrl(null);
+
+    try {
+      const sorted = [...scenes].sort((a, b) => a.scene_number - b.scene_number);
+      const videoUrls = sorted
+        .slice(0, -1) // last scene has no outgoing transition
+        .map(s => s.video_url)
+        .filter(u => u?.startsWith('http'));
+
+      if (videoUrls.length === 0) {
+        throw new Error('No completed transition videos to compile');
+      }
+
+      const blob = await concatTimelapseVideos(videoUrls, setCompileProgress);
+      const url = URL.createObjectURL(blob);
+      setFinalVideoUrl(url);
+
+      // Auto-download
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${title || 'timelapse'}_final.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (err) {
+      setCompileProgress({ phase: 'error', message: err.message, percent: 0 });
+    }
+    setCompiling(false);
   };
 
   const imageCount = scenes.filter(s => s.image_url?.startsWith('http')).length;
@@ -350,23 +448,39 @@ export default function FlowRemake() {
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {scenes.map(s => (
-                <div key={s.id} className="bg-white rounded-lg border overflow-hidden">
-                  {s.image_url?.startsWith('http') ? (
-                    <img src={s.image_url} alt={`S${s.scene_number}`} className="w-full aspect-video object-cover" />
-                  ) : (
-                    <div className="w-full aspect-video bg-gray-100 flex items-center justify-center text-gray-400 text-xs">
-                      S{s.scene_number} — pending
+              {scenes.map((s, idx) => {
+                const hasImg = s.image_url?.startsWith('http');
+                const errMsg = sceneErrors[s.scene_number];
+                return (
+                  <div key={s.id} className={`bg-white rounded-lg border overflow-hidden ${errMsg ? 'border-red-300' : ''}`}>
+                    {hasImg ? (
+                      <img src={s.image_url} alt={`S${s.scene_number}`} className="w-full aspect-video object-cover" />
+                    ) : (
+                      <div className={`w-full aspect-video flex flex-col items-center justify-center text-xs ${errMsg ? 'bg-red-50 text-red-500' : 'bg-gray-100 text-gray-400'}`}>
+                        {errMsg ? <AlertCircle className="w-5 h-5 mb-1" /> : null}
+                        S{s.scene_number} — {errMsg ? 'Failed' : 'Pending'}
+                      </div>
+                    )}
+                    <div className="p-2">
+                      <p className="text-xs font-medium">{s.narration_text}</p>
+                      <div className="flex items-center justify-between mt-1">
+                        <Badge className={`text-[9px] ${hasImg ? 'bg-green-100 text-green-700' : errMsg ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-500'}`}>
+                          {hasImg ? '✓ Generated' : errMsg ? '✗ Error' : 'Pending'}
+                        </Badge>
+                        {!hasImg && !generatingImages && (
+                          <button
+                            onClick={() => retryImage(idx)}
+                            className="text-[9px] text-blue-600 hover:text-blue-700 underline"
+                          >
+                            Retry
+                          </button>
+                        )}
+                      </div>
+                      {errMsg && <p className="text-[9px] text-red-500 mt-1 line-clamp-2" title={errMsg}>{errMsg}</p>}
                     </div>
-                  )}
-                  <div className="p-2">
-                    <p className="text-xs font-medium">{s.narration_text}</p>
-                    <Badge className={`text-[9px] mt-1 ${s.image_url?.startsWith('http') ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                      {s.image_url?.startsWith('http') ? '✓ Generated' : 'Pending'}
-                    </Badge>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -396,23 +510,30 @@ export default function FlowRemake() {
             </div>
 
             <div className="space-y-2">
-              {scenes.slice(0, -1).map((s, i) => (
-                <div key={s.id} className="bg-white rounded-lg border p-3 flex items-center gap-3">
-                  <div className="flex items-center gap-2 flex-1">
-                    <Badge>S{s.scene_number}</Badge>
-                    <ArrowRight className="w-4 h-4 text-gray-400" />
-                    <Badge>S{s.scene_number + 1}</Badge>
-                    <span className="text-xs text-gray-500 ml-2">{s.narration_text} → {scenes[i + 1]?.narration_text}</span>
+              {scenes.slice(0, -1).map((s, i) => {
+                const errMsg = sceneErrors[s.scene_number];
+                const isReady = s.video_url?.startsWith('http');
+                const isRendering = s.video_url?.startsWith('grok_vid_task:');
+                return (
+                  <div key={s.id} className={`bg-white rounded-lg border p-3 flex items-center gap-3 ${errMsg ? 'border-red-300' : ''}`}>
+                    <div className="flex items-center gap-2 flex-1">
+                      <Badge>S{s.scene_number}</Badge>
+                      <ArrowRight className="w-4 h-4 text-gray-400" />
+                      <Badge>S{s.scene_number + 1}</Badge>
+                      <span className="text-xs text-gray-500 ml-2 truncate">{s.narration_text} → {scenes[i + 1]?.narration_text}</span>
+                    </div>
+                    {isReady ? (
+                      <Badge className="bg-green-100 text-green-700">✓ Ready</Badge>
+                    ) : isRendering ? (
+                      <Badge className="bg-amber-100 text-amber-700">⏳ Rendering</Badge>
+                    ) : errMsg ? (
+                      <Badge className="bg-red-100 text-red-700" title={errMsg}>✗ Failed</Badge>
+                    ) : (
+                      <Badge className="bg-gray-100 text-gray-500">Pending</Badge>
+                    )}
                   </div>
-                  {s.video_url?.startsWith('http') ? (
-                    <Badge className="bg-green-100 text-green-700">✓ Ready</Badge>
-                  ) : s.video_url?.startsWith('grok_vid_task:') ? (
-                    <Badge className="bg-amber-100 text-amber-700">⏳ Rendering</Badge>
-                  ) : (
-                    <Badge className="bg-gray-100 text-gray-500">Pending</Badge>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -456,6 +577,62 @@ export default function FlowRemake() {
                 </div>
               ))}
             </div>
+
+            {/* ═══ FINAL TIME-LAPSE COMPILATION ═══ */}
+            {videoCount > 0 && (
+              <div className="max-w-2xl mx-auto mb-6 bg-gradient-to-br from-amber-100 to-orange-100 border-2 border-amber-300 rounded-xl p-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <Wand2 className="w-5 h-5 text-amber-700" />
+                  <h3 className="text-lg font-bold text-amber-900">Compile Final Time-lapse</h3>
+                </div>
+                <p className="text-xs text-amber-800 mb-3">
+                  Stitch all {videoCount} transitions into one seamless MP4 — ready to upload.
+                </p>
+
+                {!finalVideoUrl && (
+                  <Button
+                    onClick={handleCompileFinal}
+                    disabled={compiling || videoCount < 1}
+                    className="w-full bg-amber-600 hover:bg-amber-700 h-11"
+                  >
+                    {compiling ? (
+                      <><Loader2 className="w-4 h-4 animate-spin mr-2" /> {compileProgress?.message || 'Compiling…'}</>
+                    ) : (
+                      <><Film className="w-4 h-4 mr-2" /> Compile & Download Final MP4</>
+                    )}
+                  </Button>
+                )}
+
+                {compiling && compileProgress?.percent > 0 && (
+                  <div className="mt-3">
+                    <div className="h-2 bg-amber-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-amber-600 transition-all" style={{ width: `${compileProgress.percent}%` }} />
+                    </div>
+                    <p className="text-[10px] text-amber-700 mt-1">{compileProgress.message}</p>
+                  </div>
+                )}
+
+                {compileProgress?.phase === 'error' && (
+                  <div className="mt-3 bg-red-50 border border-red-200 rounded p-2 text-xs text-red-700 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <span>{compileProgress.message}</span>
+                  </div>
+                )}
+
+                {finalVideoUrl && (
+                  <div className="mt-3 space-y-2">
+                    <video src={finalVideoUrl} controls className="w-full rounded-lg bg-black" />
+                    <a
+                      href={finalVideoUrl}
+                      download={`${title || 'timelapse'}_final.mp4`}
+                      className="flex items-center justify-center gap-2 w-full h-10 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium"
+                    >
+                      <Download className="w-4 h-4" /> Download Final Time-lapse
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Action buttons */}
             <div className="flex gap-3 justify-center flex-wrap">
