@@ -16,7 +16,7 @@ import { useVideoFrames } from './useVideoFrames';
 import ThumbnailPreview, { STYLE_PRESETS, POSITIONS } from './ThumbnailPreview';
 
 const DIRECTOR_MODES = [
-  { value: '', label: 'Auto (AI picks best)' },
+  { value: 'auto', label: 'Auto (AI picks best)' },
   { value: 'mrbeast_viral', label: '🔥 MrBeast Viral' },
   { value: 'hormozi_business', label: '💼 Hormozi Business' },
   { value: 'documentary_mystery', label: '🎬 Documentary Mystery' },
@@ -55,7 +55,7 @@ export default function ViralThumbnailBuilder({
   const previewRef = useRef(null);
 
   // AI Director
-  const [directorMode, setDirectorMode] = useState('');
+  const [directorMode, setDirectorMode] = useState('auto');
   const [directing, setDirecting] = useState(false);
   const [directorAnalysis, setDirectorAnalysis] = useState(null);
   const [directorError, setDirectorError] = useState('');
@@ -117,7 +117,7 @@ export default function ViralThumbnailBuilder({
         story: transcript,
         hook_text: customText,
         niche,
-        mode: directorMode,
+        mode: directorMode === 'auto' ? '' : directorMode,
       });
 
       const data = submitRes?.data || {};
@@ -327,7 +327,7 @@ export default function ViralThumbnailBuilder({
             <Select value={directorMode} onValueChange={setDirectorMode}>
               <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {DIRECTOR_MODES.map(m => <SelectItem key={m.value || 'auto'} value={m.value}>{m.label}</SelectItem>)}
+                {DIRECTOR_MODES.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
