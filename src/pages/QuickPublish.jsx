@@ -304,6 +304,30 @@ export default function QuickPublish() {
     await runPipeline();
   };
 
+  // ── Retry thumbnails only (wipe existing concepts + regenerate) ──
+  const retryThumbnails = async () => {
+    if (!projectId) { setError('No project to regenerate thumbnails for.'); return; }
+    if (currentStep) return;
+    setError('');
+    try {
+      // Delete existing concepts so we get a fresh batch
+      const existing = await base44.entities.ThumbnailConcepts.filter({ project_id: projectId });
+      await Promise.all(existing.map(c => base44.entities.ThumbnailConcepts.delete(c.id)));
+      await refetchThumbs();
+
+      // Remove 'thumbnails' from completed so runThumbnails can re-run
+      setCompletedSteps(prev => prev.filter(s => s !== 'thumbnails'));
+
+      await runThumbnails(projectId, title || titles[0]?.title);
+      setStatusMessage('');
+      setCurrentStep(null);
+    } catch (e) {
+      setError(e.message || 'Thumbnail regeneration failed');
+      setCurrentStep(null);
+      setStatusMessage('');
+    }
+  };
+
   // ── Derived state ──────────────────────────────────────────
   const titleOptions = titles.map(t => t.title).filter(Boolean);
   const pipelineStarted = completedSteps.length > 0 || !!currentStep;
@@ -452,9 +476,25 @@ export default function QuickPublish() {
         {seoDone && (
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Image className="w-4 h-4 text-purple-600" /> Thumbnails
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Image className="w-4 h-4 text-purple-600" /> Thumbnails
+                </CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={retryThumbnails}
+                  disabled={!!currentStep || !projectId}
+                  className="h-7 text-xs gap-1.5"
+                  title="Regenerate AI thumbnail concepts"
+                >
+                  {currentStep === 'thumbnails' ? (
+                    <><Loader2 className="w-3 h-3 animate-spin" /> Regenerating...</>
+                  ) : (
+                    <><RotateCcw className="w-3 h-3" /> Retry Thumbnails</>
+                  )}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <ThumbnailStep
