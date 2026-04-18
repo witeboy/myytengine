@@ -64,6 +64,7 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
     loading: loadingChannels,
     connecting,
     connect: connectChannel,
+    disconnect: disconnectChannel,
   } = useYouTubeChannels();
 
   // ── Scheduled posts ─────────────────────────────────────────
@@ -250,8 +251,11 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
             <Youtube className="w-4 h-4 text-red-500" />
             Connected channel
           </span>
-          {channels.length > 0 && (
-            <button onClick={() => {}} className="text-[10px] text-gray-400 hover:text-red-500 flex items-center gap-1">
+          {channels.length > 0 && selectedChannel && (
+            <button
+              onClick={() => disconnectChannel(selectedChannel)}
+              className="text-[10px] text-gray-400 hover:text-red-500 flex items-center gap-1"
+            >
               <Unlink2 className="w-3 h-3" /> Disconnect
             </button>
           )}
