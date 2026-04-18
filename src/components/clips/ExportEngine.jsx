@@ -6,6 +6,7 @@ import {
   Download, Loader2, CheckCircle, AlertCircle, Sparkles,
 } from 'lucide-react';
 import { drawCaptions } from './CaptionPreview';
+import { buildFaceTrack } from '@/lib/faceTracker';
 
 // ══════════════════════════════════════════════════════════════════
 // EXPORT ENGINE — Wires ALL 8 enhancement layers into real output
@@ -159,42 +160,23 @@ export default function ExportEngine({
   const CANVAS_H = portrait ? 960 : 540;
   const FPS = 30;
 
-  // ── FACE DETECTION ────────────────────────────────────────
-  const detectFace = async (videoEl) => {
-    if (faceCropX !== null) return faceCropX;
+  // ── FACE TRACKING (multi-frame, interpolated) ────────────
+  const buildTracker = async (videoEl) => {
+    // Manual override — user dragged the crop slider, skip tracking
+    if (faceCropX !== null) {
+      return { getCropAt: () => ({ x: faceCropX, y: 50 }) };
+    }
 
-    setStatusMsg('Detecting face position...');
     try {
-      // Capture a frame at 1/3 into the clip
-      const captureTime = clip.start + clip.duration / 3;
-      videoEl.currentTime = captureTime;
-      await new Promise(r => { videoEl.onseeked = r; });
-
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = videoEl.videoWidth;
-      tempCanvas.height = videoEl.videoHeight;
-      const tempCtx = tempCanvas.getContext('2d');
-      tempCtx.drawImage(videoEl, 0, 0);
-
-      // Convert to base64 for Gemini
-      const dataUrl = tempCanvas.toDataURL('image/jpeg', 0.7);
-      const b64 = dataUrl.split(',')[1];
-
-      const res = await base44.functions.invoke('detectFaceRegion', {
-        image_base64: b64,
-        frame_width: videoEl.videoWidth,
-        frame_height: videoEl.videoHeight,
-      });
-
-      const data = res.data || res;
-      if (data?.primary_face?.x_center_percent) {
-        console.log('Face detected at x=' + data.primary_face.x_center_percent + '%');
-        return data.primary_face.x_center_percent;
+      const tracker = await buildFaceTrack(videoEl, clip, (msg) => setStatusMsg(msg));
+      if (tracker.keyframes.length > 0) {
+        return tracker;
       }
     } catch (err) {
-      console.warn('Face detection failed, using manual crop:', err.message);
+      console.warn('Face tracking failed, using manual crop:', err.message);
     }
-    return cropFocusX;
+    // Fallback: stationary center
+    return { getCropAt: () => ({ x: cropFocusX, y: 50 }) };
   };
 
   // ── MAIN EXPORT ───────────────────────────────────────────
@@ -219,8 +201,10 @@ export default function ExportEngine({
         setTimeout(() => reject(new Error('Video load timeout')), 30000);
       });
 
-      // Face detection for smart crop
-      const finalCropX = portrait ? await detectFace(video) : 50;
+      // Multi-frame face tracking for smart crop
+      const faceTracker = portrait
+        ? await buildTracker(video)
+        : { getCropAt: () => ({ x: 50, y: 50 }) };
 
       // Load gameplay video if enabled
       let gameplayVideo = null;
@@ -393,20 +377,25 @@ export default function ExportEngine({
 
         if (portrait) {
           const drawH = gameplaySplit ? CANVAS_H * (splitRatio / 100) : CANVAS_H;
-          const targetAspect = 9 / 16;
+          const targetAspect = (9 / 16) * (drawH / CANVAS_H); // adjust for split-screen
           const sourceAspect = vw / vh;
+          // Per-frame crop position from the face tracker (both axes)
+          const { x: cropX, y: cropY } = faceTracker.getCropAt(currentTime);
           let sx, sy, sw, sh;
 
           if (sourceAspect > targetAspect) {
+            // Source wider than target — crop horizontally, follow face X
             sh = vh;
             sw = vh * targetAspect;
-            sx = (finalCropX / 100) * (vw - sw);
+            // Center the crop window on the face X position, clamped to frame edges
+            sx = Math.max(0, Math.min(vw - sw, (cropX / 100) * vw - sw / 2));
             sy = 0;
           } else {
+            // Source taller than target — crop vertically, follow face Y
             sw = vw;
             sh = vw / targetAspect;
             sx = 0;
-            sy = (vh - sh) / 2;
+            sy = Math.max(0, Math.min(vh - sh, (cropY / 100) * vh - sh / 2));
           }
 
           ctx.drawImage(video, sx, sy, sw, sh, 0, 0, CANVAS_W, drawH);

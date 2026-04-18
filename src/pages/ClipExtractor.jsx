@@ -77,8 +77,8 @@ export default function ClipExtractor() {
   const [clips, setClips] = useState([]);
   const [analyzing, setAnalyzing] = useState(false);
   const [maxClips, setMaxClips] = useState('8');
-  const [minClipLen, setMinClipLen] = useState('15');
-  const [maxClipLen, setMaxClipLen] = useState('90');
+  const [minClipLen, setMinClipLen] = useState('50');
+  const [maxClipLen, setMaxClipLen] = useState('120');
   const [videoContext, setVideoContext] = useState('');
   const [showSettings, setShowSettings] = useState(false);
   const [ffmpegReady, setFfmpegReady] = useState(false);
@@ -387,7 +387,7 @@ export default function ClipExtractor() {
                     <Select value={minClipLen} onValueChange={setMinClipLen}>
                       <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {['10','15','20','30'].map(v => (
+                        {['30','45','50','60','75','90'].map(v => (
                           <SelectItem key={v} value={v}>{v}s</SelectItem>
                         ))}
                       </SelectContent>
@@ -398,7 +398,7 @@ export default function ClipExtractor() {
                     <Select value={maxClipLen} onValueChange={setMaxClipLen}>
                       <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {['30','60','90','120','180'].map(v => (
+                        {['60','90','120','150','180'].map(v => (
                           <SelectItem key={v} value={v}>{v}s</SelectItem>
                         ))}
                       </SelectContent>
