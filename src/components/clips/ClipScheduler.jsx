@@ -5,45 +5,25 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Calendar, Clock, Flame, Youtube, Instagram, Music2,
-  Loader2, CheckCircle, AlertCircle,
-  Link2, Unlink2, Send, Trash2, RefreshCw, Globe,
-  Lock, Eye, Play,
+  Calendar, Youtube, Loader2, CheckCircle,
+  Link2, Unlink2, Send, RefreshCw, Globe,
+  Lock, Eye, Play, Pause, LayoutList, LayoutGrid,
 } from 'lucide-react';
 import { useYouTubeChannels } from './useYouTubeChannels';
-
-const PLATFORMS = [
-  { id: 'youtube_shorts', label: 'YT Shorts', icon: Youtube, color: 'text-red-500', bgColor: 'bg-red-50' },
-  { id: 'tiktok', label: 'TikTok', icon: Music2, color: 'text-gray-900', bgColor: 'bg-gray-50' },
-  { id: 'instagram_reels', label: 'Reels', icon: Instagram, color: 'text-pink-500', bgColor: 'bg-pink-50' },
-];
+import SchedulerStats from './scheduler/SchedulerStats';
+import SchedulerCalendar from './scheduler/SchedulerCalendar';
+import ClipPreviewModal from './scheduler/ClipPreviewModal';
+import DayPostsList from './scheduler/DayPostsList';
 
 const TIME_SLOTS = [
-  { id: 'morning', label: 'Morning', time: '9:00 AM', hour: 9 },
-  { id: 'afternoon', label: 'Afternoon', time: '1:00 PM', hour: 13 },
-  { id: 'evening', label: 'Evening', time: '7:00 PM', hour: 19 },
-  { id: 'night', label: 'Night', time: '9:00 PM', hour: 21 },
+  { id: 'morning', label: 'Morning', time: '9:00 AM' },
+  { id: 'afternoon', label: 'Afternoon', time: '1:00 PM' },
+  { id: 'evening', label: 'Evening', time: '7:00 PM' },
+  { id: 'night', label: 'Night', time: '9:00 PM' },
 ];
-
-const STATUS_STYLES = {
-  scheduled:    { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', label: 'Scheduled' },
-  publishing:   { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200', label: 'Publishing…' },
-  published:    { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', label: 'Published' },
-  failed:       { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', label: 'Failed' },
-  cancelled:    { bg: 'bg-gray-50', text: 'text-gray-500', border: 'border-gray-200', label: 'Cancelled' },
-  ready_to_post:{ bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200', label: 'Ready' },
-};
 
 function formatDate(date) {
   return new Date(date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-}
-
-function formatTime(date) {
-  return new Date(date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-}
-
-function isOverdue(scheduledAt) {
-  return new Date(scheduledAt) <= new Date();
 }
 
 export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' }) {
@@ -57,7 +37,7 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
     return d.toISOString().split('T')[0];
   });
 
-  // ── YouTube channels (shared hook) ──────────────────────────
+  // ── YouTube channels ────────────────────────────────────────
   const {
     channels,
     selectedChannelId: selectedChannel,
@@ -72,17 +52,19 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
   const [scheduling, setScheduling] = useState(false);
   const [isScheduled, setIsScheduled] = useState(false);
 
+  // ── View mode + selection ──────────────────────────────────
+  const [viewMode, setViewMode] = useState('calendar'); // 'calendar' | 'list'
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [previewPost, setPreviewPost] = useState(null);
+
   // ── Poller state ────────────────────────────────────────────
   const [pollerActive, setPollerActive] = useState(false);
-  const [lastPollResult, setLastPollResult] = useState(null);
   const pollerRef = useRef(null);
 
-  // ── Load scheduled posts on mount ───────────────────────────
+  // ── Load on mount ───────────────────────────────────────────
   useEffect(() => {
     loadScheduledPosts();
-    return () => {
-      if (pollerRef.current) clearInterval(pollerRef.current);
-    };
+    return () => { if (pollerRef.current) clearInterval(pollerRef.current); };
   }, []);
 
   const loadScheduledPosts = async () => {
@@ -92,6 +74,13 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
       if (data?.posts?.length > 0) {
         setScheduledPosts(data.posts);
         setIsScheduled(true);
+        // Auto-select earliest date with posts
+        if (!selectedDate) {
+          const earliest = data.posts
+            .filter((p) => p.scheduled_at)
+            .sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at))[0];
+          if (earliest) setSelectedDate(new Date(earliest.scheduled_at));
+        }
       }
     } catch (err) {
       console.error('Failed to load scheduled posts:', err);
@@ -107,7 +96,6 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
       const clipPayloads = clips.map((clip, i) => {
         const enh = enhancements[i];
         const seo = enh?.seo || {};
-
         return {
           clip_data: clip,
           seo: {
@@ -134,11 +122,9 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
       });
 
       const data = res.data || res;
-
       if (data?.success) {
         setIsScheduled(true);
         await loadScheduledPosts();
-        // Auto-start poller
         startPoller();
       }
     } catch (err) {
@@ -148,18 +134,15 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
     }
   };
 
-  // ── POLLER — checks every 60s for due posts ─────────────────
+  // ── POLLER ──────────────────────────────────────────────────
   const startPoller = () => {
     if (pollerRef.current) clearInterval(pollerRef.current);
-
     setPollerActive(true);
 
     const poll = async () => {
       try {
         const res = await base44.functions.invoke('scheduleClipPost', { action: 'process' });
         const data = res.data || res;
-        setLastPollResult(data);
-
         if (data?.processed > 0) {
           console.log(`⏰ Auto-published ${data.processed} clips`);
           await loadScheduledPosts();
@@ -168,8 +151,6 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
         console.error('Poller error:', err);
       }
     };
-
-    // Poll immediately, then every 60 seconds
     poll();
     pollerRef.current = setInterval(poll, 60000);
   };
@@ -189,32 +170,34 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
     }
   };
 
-  // ── Group scheduled posts by day ────────────────────────────
-  const dayGroups = useMemo(() => {
+  // ── Derived: posts for selected day ─────────────────────────
+  const selectedDayPosts = useMemo(() => {
+    if (!selectedDate) return [];
+    const key = `${selectedDate.getFullYear()}-${selectedDate.getMonth()}-${selectedDate.getDate()}`;
+    return scheduledPosts.filter((p) => {
+      if (!p.scheduled_at) return false;
+      const d = new Date(p.scheduled_at);
+      return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` === key;
+    });
+  }, [selectedDate, scheduledPosts]);
+
+  // ── Derived: all days with posts (for list view) ────────────
+  const allDayGroups = useMemo(() => {
     const groups = {};
-    scheduledPosts.forEach(post => {
+    scheduledPosts.forEach((post) => {
       if (!post.scheduled_at) return;
-      const key = new Date(post.scheduled_at).toDateString();
-      if (!groups[key]) groups[key] = { date: new Date(post.scheduled_at), items: [] };
+      const d = new Date(post.scheduled_at);
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      if (!groups[key]) groups[key] = { date: new Date(d.getFullYear(), d.getMonth(), d.getDate()), items: [] };
       groups[key].items.push(post);
     });
     return Object.values(groups).sort((a, b) => a.date - b.date);
   }, [scheduledPosts]);
 
-  // Count by status
-  const statusCounts = useMemo(() => {
-    const counts = { scheduled: 0, publishing: 0, published: 0, failed: 0 };
-    scheduledPosts.forEach(p => { if (counts[p.status] !== undefined) counts[p.status]++; });
-    return counts;
-  }, [scheduledPosts]);
-
-  // ══════════════════════════════════════════════════════════════
-  // RENDER
-  // ══════════════════════════════════════════════════════════════
   return (
     <div className="space-y-4 border border-gray-200 rounded-xl p-5 bg-white">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      {/* HEADER */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Calendar className="w-5 h-5 text-gray-700" />
           <h3 className="text-base font-semibold text-gray-900">Auto-post scheduler</h3>
@@ -225,26 +208,44 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
           )}
         </div>
 
-        {/* Poller status */}
-        {isScheduled && (
-          <div className="flex items-center gap-2">
-            <div className={`flex items-center gap-1.5 text-xs ${pollerActive ? 'text-emerald-600' : 'text-gray-400'}`}>
-              <div className={`w-2 h-2 rounded-full ${pollerActive ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'}`} />
-              {pollerActive ? 'Auto-posting active' : 'Paused'}
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 text-[10px] gap-1"
-              onClick={pollerActive ? stopPoller : startPoller}
-            >
-              {pollerActive ? <><Loader2 className="w-3 h-3 animate-spin" />Pause</> : <><Play className="w-3 h-3" />Resume</>}
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {isScheduled && (
+            <>
+              {/* View toggle */}
+              <div className="flex items-center border border-gray-200 rounded-md overflow-hidden">
+                <button
+                  onClick={() => setViewMode('calendar')}
+                  className={`px-2 py-1 text-[10px] flex items-center gap-1 ${viewMode === 'calendar' ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                >
+                  <LayoutGrid className="w-3 h-3" /> Calendar
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`px-2 py-1 text-[10px] flex items-center gap-1 ${viewMode === 'list' ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+                >
+                  <LayoutList className="w-3 h-3" /> List
+                </button>
+              </div>
+
+              {/* Poller status */}
+              <div className={`flex items-center gap-1.5 text-xs ${pollerActive ? 'text-emerald-600' : 'text-gray-400'}`}>
+                <div className={`w-2 h-2 rounded-full ${pollerActive ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'}`} />
+                {pollerActive ? 'Auto-posting active' : 'Paused'}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-[10px] gap-1"
+                onClick={pollerActive ? stopPoller : startPoller}
+              >
+                {pollerActive ? <><Pause className="w-3 h-3" />Pause</> : <><Play className="w-3 h-3" />Resume</>}
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* YouTube Channel Connection */}
+      {/* YouTube channel connection */}
       <div className="p-3 rounded-lg bg-gray-50 border border-gray-100">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-gray-700 flex items-center gap-1.5">
@@ -268,7 +269,7 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
         ) : channels.length > 0 ? (
           <div className="flex items-center gap-2 mt-2">
             <CheckCircle className="w-4 h-4 text-emerald-500" />
-            <span className="text-xs font-medium text-emerald-700">{channels.find(c => c.id === selectedChannel)?.name}</span>
+            <span className="text-xs font-medium text-emerald-700">{channels.find((c) => c.id === selectedChannel)?.name}</span>
             <span className="text-[10px] text-gray-400">— stays connected until you disconnect</span>
           </div>
         ) : (
@@ -284,10 +285,9 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
         )}
       </div>
 
-      {/* ── SCHEDULING CONTROLS (before scheduling) ─────────── */}
+      {/* SCHEDULING CONFIG (pre-schedule) */}
       {!isScheduled && (
         <div className="space-y-3">
-          {/* Config row */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
               <label className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Strategy</label>
@@ -304,7 +304,7 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
               <Select value={timeSlot} onValueChange={setTimeSlot}>
                 <SelectTrigger className="h-8 text-xs mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {TIME_SLOTS.map(t => (
+                  {TIME_SLOTS.map((t) => (
                     <SelectItem key={t.id} value={t.id}>{t.label} ({t.time})</SelectItem>
                   ))}
                 </SelectContent>
@@ -312,7 +312,7 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
             </div>
             <div>
               <label className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Start date</label>
-              <Input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="h-8 text-xs mt-1" />
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="h-8 text-xs mt-1" />
             </div>
             <div>
               <label className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Privacy</label>
@@ -327,17 +327,15 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
             </div>
           </div>
 
-          {/* Preview of schedule */}
           <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-700">
             <p className="font-medium">
-              {clips.length} clips will be posted {strategy === 'spread' ? 'one per day' : '3 per day'} starting {formatDate(startDate)} at {TIME_SLOTS.find(t => t.id === timeSlot)?.time}
+              {clips.length} clips will be posted {strategy === 'spread' ? 'one per day' : '3 per day'} starting {formatDate(startDate)} at {TIME_SLOTS.find((t) => t.id === timeSlot)?.time}
             </p>
             <p className="text-blue-500 mt-0.5">
               Highest virality clips post first. Total: {strategy === 'spread' ? clips.length : Math.ceil(clips.length / 3)} days of content.
             </p>
           </div>
 
-          {/* Schedule button */}
           <Button
             onClick={scheduleAllClips}
             disabled={scheduling || !selectedChannel || clips.length === 0}
@@ -352,91 +350,67 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
         </div>
       )}
 
-      {/* ── SCHEDULED POSTS LIST (after scheduling) ───────────── */}
-      {isScheduled && dayGroups.length > 0 && (
-        <div className="space-y-3">
-          {/* Status summary */}
-          <div className="flex gap-2">
-            {Object.entries(statusCounts).filter(([_, c]) => c > 0).map(([status, count]) => {
-              const style = STATUS_STYLES[status] || STATUS_STYLES.scheduled;
-              return (
-                <div key={status} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium border ${style.bg} ${style.text} ${style.border}`}>
-                  {status === 'publishing' && <Loader2 className="w-3 h-3 animate-spin" />}
-                  {status === 'published' && <CheckCircle className="w-3 h-3" />}
-                  {status === 'failed' && <AlertCircle className="w-3 h-3" />}
-                  {count} {style.label}
-                </div>
-              );
-            })}
-          </div>
+      {/* POST-SCHEDULE VIEW */}
+      {isScheduled && scheduledPosts.length > 0 && (
+        <>
+          <SchedulerStats posts={scheduledPosts} />
 
-          {/* Day-by-day timeline */}
-          {dayGroups.map((group, gi) => (
-            <div key={gi} className="border border-gray-200 rounded-lg overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-2 bg-gray-50">
-                <span className="text-xs font-semibold text-gray-900">{formatDate(group.date)}</span>
-                <span className="text-[10px] text-gray-400">{group.items.length} clip{group.items.length > 1 ? 's' : ''}</span>
+          {viewMode === 'calendar' ? (
+            <div className="grid md:grid-cols-5 gap-4">
+              <div className="md:col-span-3">
+                <SchedulerCalendar
+                  posts={scheduledPosts}
+                  onDayClick={setSelectedDate}
+                  selectedDate={selectedDate}
+                />
               </div>
-
-              <div className="divide-y divide-gray-100">
-                {group.items.map((post, ii) => {
-                  const statusStyle = STATUS_STYLES[post.status] || STATUS_STYLES.scheduled;
-
-                  return (
-                    <div key={ii} className="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition-colors">
-                      {/* Time */}
-                      <div className="flex items-center gap-1 text-[10px] text-gray-400 w-16 flex-shrink-0 font-mono">
-                        <Clock className="w-3 h-3" />
-                        {formatTime(post.scheduled_at)}
-                      </div>
-
-                      {/* Title */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-gray-900 truncate">{post.seo_title}</p>
-                        {post.published_url && (
-                          <a href={post.published_url} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-500 hover:underline">
-                            {post.published_url}
-                          </a>
-                        )}
-                        {post.error_message && post.status === 'failed' && (
-                          <p className="text-[10px] text-red-500 mt-0.5">{post.error_message}</p>
-                        )}
-                      </div>
-
-                      {/* Virality */}
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <Flame className={`w-3 h-3 ${post.virality_score >= 80 ? 'text-red-500' : 'text-amber-500'}`} />
-                        <span className="text-xs font-bold text-gray-700">{post.virality_score}</span>
-                      </div>
-
-                      {/* Status badge */}
-                      <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${statusStyle.bg} ${statusStyle.text} ${statusStyle.border}`}>
-                        {post.status === 'publishing' && <Loader2 className="w-2.5 h-2.5 mr-0.5 animate-spin" />}
-                        {statusStyle.label}
-                      </Badge>
-
-                      {/* Cancel button (only for scheduled) */}
-                      {post.status === 'scheduled' && (
-                        <button
-                          onClick={() => cancelPost(post.id)}
-                          className="text-gray-300 hover:text-red-500 transition-colors"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+              <div className="md:col-span-2">
+                {selectedDate && selectedDayPosts.length > 0 ? (
+                  <DayPostsList
+                    date={selectedDate}
+                    posts={selectedDayPosts}
+                    onPostClick={setPreviewPost}
+                    onCancel={cancelPost}
+                  />
+                ) : (
+                  <div className="h-full flex items-center justify-center border border-dashed border-gray-200 rounded-lg p-6 text-center">
+                    <div>
+                      <Calendar className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                      <p className="text-xs text-gray-400">
+                        {selectedDate ? 'No clips on this day' : 'Click a day to see scheduled clips'}
+                      </p>
                     </div>
-                  );
-                })}
+                  </div>
+                )}
               </div>
             </div>
-          ))}
+          ) : (
+            <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+              {allDayGroups.map((group) => (
+                <DayPostsList
+                  key={group.date.toISOString()}
+                  date={group.date}
+                  posts={group.items}
+                  onPostClick={setPreviewPost}
+                  onCancel={cancelPost}
+                />
+              ))}
+            </div>
+          )}
 
-          {/* Refresh button */}
           <Button variant="outline" size="sm" className="w-full text-xs gap-1" onClick={loadScheduledPosts}>
             <RefreshCw className="w-3 h-3" /> Refresh status
           </Button>
-        </div>
+        </>
       )}
+
+      {/* Preview modal */}
+      <ClipPreviewModal
+        post={previewPost}
+        open={!!previewPost}
+        onClose={() => setPreviewPost(null)}
+        onCancel={cancelPost}
+      />
     </div>
   );
 }
