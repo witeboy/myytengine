@@ -13,11 +13,13 @@ export const base44 = createClient({
   appBaseUrl
 });
 
-// Patch functions.invoke to auto-append /entry/entry for nested functions
-// The youtubeAuth function is flat (no entry/entry), all others use nested paths
+// Patch functions.invoke to auto-append /entry for nested functions
+// Flat functions (deployed at their root path) bypass the suffix
 const FLAT_FUNCTIONS = new Set(['youtubeAuth']);
 const _originalInvoke = base44.functions.invoke.bind(base44.functions);
 base44.functions.invoke = (name, ...args) => {
-  const resolvedName = FLAT_FUNCTIONS.has(name) ? name : `${name}/entry/entry`;
-  return _originalInvoke(resolvedName, ...args);
+  if (FLAT_FUNCTIONS.has(name) || name.endsWith('/entry')) {
+    return _originalInvoke(name, ...args);
+  }
+  return _originalInvoke(`${name}/entry`, ...args);
 };
