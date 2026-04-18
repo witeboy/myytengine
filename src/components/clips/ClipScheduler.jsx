@@ -86,14 +86,17 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
   const loadChannels = async () => {
     setLoadingChannels(true);
     try {
-      const stored = await base44.entities.ProductionSettings.list('-created_date', 20);
-      const ytSettings = (stored || []).filter(s => s.setting_type === 'youtube_channel' && s.is_active);
-      if (ytSettings.length > 0) {
-        setChannels(ytSettings.map(s => ({
-          id: s.id,
-          name: s.channel_name || s.name || 'YouTube Channel',
+      const res = await base44.functions.invoke('youtubeAuth', { action: 'list_channels' });
+      const ch = res.data?.channels || [];
+      if (ch.length > 0) {
+        setChannels(ch.map(c => ({
+          id: c.channel_id,
+          name: c.channel_name || 'YouTube Channel',
+          thumbnail: c.channel_thumbnail,
+          tokenValid: c.token_valid,
         })));
-        setSelectedChannel(ytSettings[0].id);
+        const def = ch.find(c => c.is_default) || ch[0];
+        if (def) setSelectedChannel(def.channel_id);
       }
     } catch (err) {
       console.error('Failed to load channels:', err);
@@ -118,18 +121,11 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
   const connectChannel = async () => {
     setConnecting(true);
     try {
-      const res = await base44.functions.invoke('youtubeAuth', { action: 'getAuthUrl' });
+      const res = await base44.functions.invoke('youtubeAuth', { action: 'get_auth_url' });
       const data = res.data || res;
       if (data?.auth_url) {
-        const authWindow = window.open(data.auth_url, 'youtube-auth', 'width=600,height=700');
-        const poll = setInterval(async () => {
-          if (authWindow?.closed) {
-            clearInterval(poll);
-            await loadChannels();
-            setConnecting(false);
-          }
-        }, 1000);
-        setTimeout(() => { clearInterval(poll); setConnecting(false); }, 120000);
+        // Full-page redirect (same pattern as Dashboard's YouTubePublishPanel)
+        window.location.href = data.auth_url;
       }
     } catch (err) {
       console.error('Auth failed:', err);

@@ -149,6 +149,7 @@ export default function ExportEngine({
   const [exportedBlob, setExportedBlob] = useState(null);
   const [error, setError] = useState('');
   const cancelRef = useRef(false);
+  const audioCtxRef = useRef(null);
 
   const clipWords = words.filter(w => w.start >= clip.start && w.end <= clip.end);
   const OUTPUT_W = portrait ? 1080 : 1920;
@@ -240,8 +241,11 @@ export default function ExportEngine({
       const ctx = canvas.getContext('2d');
 
       // Setup audio pipeline
+      // NOTE: a <video> element can only be connected to ONE AudioContext in its lifetime.
+      // We create a fresh <video> per export (above) so this is safe. We close the ctx in finally.
       setStatusMsg('Setting up audio...');
       const audioCtx = new AudioContext();
+      audioCtxRef.current = audioCtx;
       const source = audioCtx.createMediaElementSource(video);
 
       // Voice EQ boost
@@ -510,6 +514,9 @@ export default function ExportEngine({
       setError(err.message);
     } finally {
       setExporting(false);
+      // Close AudioContext to free resources — prevents leak on repeated exports
+      try { await audioCtxRef.current?.close(); } catch (_) {}
+      audioCtxRef.current = null;
     }
   };
 

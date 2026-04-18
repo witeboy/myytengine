@@ -112,7 +112,15 @@ export default function ClipEnhancePanel({ clip, clipIndex, words, videoUrl, onC
     }
   };
 
-  useEffect(() => { fetchEnhancement(); }, []);
+  // Fetch Claude analysis ONCE per clip — guard against re-fetch on re-render
+  const fetchedForClipRef = useRef(null);
+  useEffect(() => {
+    const clipKey = (clip?.start ?? 0) + '-' + (clip?.end ?? 0);
+    if (fetchedForClipRef.current === clipKey) return;
+    fetchedForClipRef.current = clipKey;
+    fetchEnhancement();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clip?.start, clip?.end]);
 
   const clipWords = words?.filter(w => w.start >= clip.start && w.end <= clip.end) || [];
 
@@ -203,7 +211,12 @@ export default function ClipEnhancePanel({ clip, clipIndex, words, videoUrl, onC
   }, [playing, previewMode, captionPreset, hookText, hookEnabled, progressBarEnabled, cropX, clip, clipWords, enhancement, gameplaySplit, splitRatio, selectedGameplay]);
 
   useEffect(() => {
-    if (playing) { animFrameRef.current = requestAnimationFrame(renderFrame); }
+    if (playing) {
+      animFrameRef.current = requestAnimationFrame(renderFrame);
+    } else {
+      // Re-render once on any setting change even when paused — so user sees updates without hitting play
+      renderFrame();
+    }
     return () => { if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current); };
   }, [playing, renderFrame]);
 

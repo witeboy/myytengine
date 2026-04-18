@@ -47,18 +47,18 @@ export default function ClipAutoPublish({ clip, clipIndex, enhancement, clipBlob
   const loadChannels = async () => {
     setLoadingChannels(true);
     try {
-      // Check for stored YouTube auth tokens
-      const stored = await base44.entities.ProductionSettings.list('-created_date', 10);
-      const ytSettings = stored?.filter(s => s.setting_type === 'youtube_channel' && s.is_active);
-
-      if (ytSettings?.length > 0) {
-        setChannels(ytSettings.map(s => ({
-          id: s.id,
-          name: s.channel_name || s.name || 'YouTube Channel',
-          channelId: s.channel_id,
-          thumbnail: s.thumbnail_url,
+      const res = await base44.functions.invoke('youtubeAuth', { action: 'list_channels' });
+      const ch = res.data?.channels || [];
+      if (ch.length > 0) {
+        setChannels(ch.map(c => ({
+          id: c.channel_id,
+          name: c.channel_name || 'YouTube Channel',
+          channelId: c.channel_id,
+          thumbnail: c.channel_thumbnail,
+          tokenValid: c.token_valid,
         })));
-        setSelectedChannel(ytSettings[0].id);
+        const def = ch.find(c => c.is_default) || ch[0];
+        if (def) setSelectedChannel(def.channel_id);
       }
     } catch (err) {
       console.error('Failed to load channels:', err);
@@ -72,26 +72,11 @@ export default function ClipAutoPublish({ clip, clipIndex, enhancement, clipBlob
     setConnecting(true);
     setError('');
     try {
-      const res = await base44.functions.invoke('youtubeAuth', { action: 'getAuthUrl' });
+      const res = await base44.functions.invoke('youtubeAuth', { action: 'get_auth_url' });
       const data = res.data || res;
       if (data?.auth_url) {
-        // Open OAuth window
-        const authWindow = window.open(data.auth_url, 'youtube-auth', 'width=600,height=700');
-
-        // Poll for completion
-        const pollInterval = setInterval(async () => {
-          if (authWindow?.closed) {
-            clearInterval(pollInterval);
-            await loadChannels();
-            setConnecting(false);
-          }
-        }, 1000);
-
-        // Timeout after 2 minutes
-        setTimeout(() => {
-          clearInterval(pollInterval);
-          setConnecting(false);
-        }, 120000);
+        // Full-page redirect (same pattern as Dashboard's YouTubePublishPanel)
+        window.location.href = data.auth_url;
       }
     } catch (err) {
       setError('Failed to start YouTube auth: ' + err.message);
@@ -100,9 +85,9 @@ export default function ClipAutoPublish({ clip, clipIndex, enhancement, clipBlob
   };
 
   // ── Disconnect Channel ──────────────────────────────────────
-  const disconnectChannel = async (channelSettingId) => {
+  const disconnectChannel = async (channelId) => {
     try {
-      await base44.entities.ProductionSettings.update(channelSettingId, { is_active: false });
+      await base44.functions.invoke('youtubeAuth', { action: 'disconnect', channel_id: channelId });
       await loadChannels();
     } catch (err) {
       console.error('Disconnect failed:', err);
@@ -145,26 +130,57 @@ export default function ClipAutoPublish({ clip, clipIndex, enhancement, clipBlob
 
       const fullDescription = `${description}\n\n${hashtagStr}`.trim();
 
-      // Publish via YouTube API
-      const publishRes = await base44.functions.invoke('youtubeAuth', {
-        action: 'uploadVideo',
-        channel_setting_id: selectedChannel,
-        video_url: videoUrl,
-        title: title.substring(0, 100),
-        description: fullDescription.substring(0, 5000),
-        tags: tags.split(',').map(t => t.trim()).filter(Boolean),
-        privacy_status: privacy,
-        category_id: '22', // People & Blogs (best for Shorts)
-        is_short: true,
+      // Get fresh access token, then upload directly to YouTube (resumable)
+      const tokenRes = await base44.functions.invoke('youtubeAuth', {
+        action: 'get_token',
+        channel_id: selectedChannel,
       });
+      const accessToken = tokenRes.data?.access_token;
+      if (!accessToken) throw new Error(tokenRes.data?.error || 'Failed to get YouTube token — reconnect channel');
 
-      const publishData = publishRes.data || publishRes;
+      // Fetch the clip blob if we only have a URL
+      let fileToUpload = clipBlob ? new File([clipBlob], 'clip.mp4', { type: 'video/mp4' }) : null;
+      if (!fileToUpload && videoUrl) {
+        const r = await fetch(videoUrl);
+        fileToUpload = new File([await r.blob()], 'clip.mp4', { type: 'video/mp4' });
+      }
+      if (!fileToUpload) throw new Error('No clip file to upload');
 
-      if (publishData?.video_id) {
+      // Direct resumable upload to YouTube
+      const initRes = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + accessToken,
+          'Content-Type': 'application/json; charset=UTF-8',
+          'X-Upload-Content-Length': fileToUpload.size,
+          'X-Upload-Content-Type': 'video/mp4',
+        },
+        body: JSON.stringify({
+          snippet: {
+            title: title.substring(0, 100),
+            description: fullDescription.substring(0, 5000),
+            tags: tags.split(',').map(t => t.trim()).filter(Boolean).slice(0, 20),
+            categoryId: '22',
+          },
+          status: { privacyStatus: privacy, selfDeclaredMadeForKids: false },
+        }),
+      });
+      if (!initRes.ok) throw new Error('YouTube init failed: ' + await initRes.text());
+      const uploadUrl = initRes.headers.get('Location');
+
+      const putRes = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Length': fileToUpload.size, 'Content-Type': 'video/mp4' },
+        body: fileToUpload,
+      });
+      if (!putRes.ok) throw new Error('YouTube upload failed: ' + await putRes.text());
+      const uploadData = await putRes.json();
+
+      if (uploadData?.id) {
         setPublished(true);
-        setPublishUrl(`https://youtube.com/shorts/${publishData.video_id}`);
+        setPublishUrl('https://youtube.com/shorts/' + uploadData.id);
       } else {
-        throw new Error(publishData?.error || 'Upload failed');
+        throw new Error('Upload completed but no video ID returned');
       }
 
     } catch (err) {

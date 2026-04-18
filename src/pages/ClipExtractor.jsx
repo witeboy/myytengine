@@ -94,16 +94,15 @@ export default function ClipExtractor() {
     if (!file) return;
     setVideoFile(file);
     setError('');
+    // Single object URL — reuse for preview AND duration probe (no leak)
     const url = URL.createObjectURL(file);
     setVideoUrl(url);
-    const durationUrl = URL.createObjectURL(file);
     const vid = document.createElement('video');
     vid.preload = 'metadata';
     vid.onloadedmetadata = () => {
       setVideoDuration(vid.duration);
-      URL.revokeObjectURL(durationUrl);
     };
-    vid.src = durationUrl;
+    vid.src = url;
   };
 
   const handleDrop = (e) => {
@@ -294,6 +293,14 @@ export default function ClipExtractor() {
                   setAudioUrl(aUrl);
                   setVideoContext(title + (channel ? ' by ' + channel : ''));
                   setVideoFile({ name: title || 'YouTube Video', size: 0, type: 'video/mp4', _isUrl: true, _streamUrl: vUrl, _audioUrl: aUrl });
+                  // Measure duration from the resolved URL so results show real source length
+                  const probe = document.createElement('video');
+                  probe.preload = 'metadata';
+                  probe.crossOrigin = 'anonymous';
+                  probe.onloadedmetadata = () => {
+                    if (isFinite(probe.duration)) setVideoDuration(probe.duration);
+                  };
+                  probe.src = vUrl;
                 }}
               />
             )}
@@ -493,7 +500,7 @@ export default function ClipExtractor() {
               ))}
             </div>
 
-            <ClipScheduler clips={clips} videoUrl={videoUrl} />
+            <ClipScheduler clips={clips} videoUrl={videoUrl} enhancements={{}} />
           </div>
         )}
 

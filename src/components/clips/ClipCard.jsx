@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -53,34 +53,60 @@ function ViralityMeter({ score }) {
 
 export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords = [] }) {
   const videoRef = useRef(null);
+  const rafRef = useRef(null);
   const [playing, setPlaying] = useState(false);
+  const [videoMounted, setVideoMounted] = useState(false); // lazy-mount: only load when user clicks
   const [expanded, setExpanded] = useState(false);
   const [clipping, setClipping] = useState(false);
   const [clipProgress, setClipProgress] = useState('');
   const [clipBlob, setClipBlob] = useState(null);
   const [showEnhance, setShowEnhance] = useState(false);
 
+  // Cleanup raf on unmount
+  useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
+
   const handlePlayPause = () => {
+    // First click → mount video, wait for it to load, then play
+    if (!videoMounted) {
+      setVideoMounted(true);
+      // Delay play until <video> is rendered and ready
+      setTimeout(() => {
+        const v = videoRef.current;
+        if (!v) return;
+        const startPlay = () => {
+          v.currentTime = clip.start;
+          v.play();
+          setPlaying(true);
+          const checkEnd = () => {
+            if (!v || v.paused) return;
+            if (v.currentTime >= clip.end) { v.pause(); setPlaying(false); return; }
+            rafRef.current = requestAnimationFrame(checkEnd);
+          };
+          rafRef.current = requestAnimationFrame(checkEnd);
+        };
+        if (v.readyState >= 2) startPlay();
+        else v.addEventListener('loadeddata', startPlay, { once: true });
+      }, 50);
+      return;
+    }
+
     const vid = videoRef.current;
     if (!vid) return;
 
     if (playing) {
       vid.pause();
       setPlaying(false);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
     } else {
       vid.currentTime = clip.start;
       vid.play();
       setPlaying(true);
-
       const checkEnd = () => {
-        if (vid.currentTime >= clip.end) {
-          vid.pause();
-          setPlaying(false);
-        } else if (!vid.paused) {
-          requestAnimationFrame(checkEnd);
-        }
+        if (!vid || vid.paused) return;
+        if (vid.currentTime >= clip.end) { vid.pause(); setPlaying(false); return; }
+        rafRef.current = requestAnimationFrame(checkEnd);
       };
-      requestAnimationFrame(checkEnd);
+      rafRef.current = requestAnimationFrame(checkEnd);
     }
   };
 
@@ -121,17 +147,26 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
   return (
     <Card className="overflow-hidden border border-gray-200 hover:border-gray-300 transition-colors">
       <CardContent className="p-0">
-        {/* Video Preview */}
+        {/* Video Preview — lazy-mount: video only loads when user clicks play */}
         <div className="relative bg-black aspect-video cursor-pointer group" onClick={handlePlayPause}>
-          <video
-            ref={videoRef}
-            src={videoUrl}
-            className="w-full h-full object-contain"
-            preload="metadata"
-            playsInline
-            onPause={() => setPlaying(false)}
-            onEnded={() => setPlaying(false)}
-          />
+          {videoMounted ? (
+            <video
+              ref={videoRef}
+              src={videoUrl}
+              className="w-full h-full object-contain"
+              preload="auto"
+              playsInline
+              onPause={() => setPlaying(false)}
+              onEnded={() => setPlaying(false)}
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
+              <div className="text-center">
+                <Scissors className="w-8 h-8 text-white/30 mx-auto mb-1" />
+                <p className="text-[10px] text-white/40">Click to preview</p>
+              </div>
+            </div>
+          )}
 
           <div className={`absolute inset-0 flex items-center justify-center bg-black/20 transition-opacity ${playing ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'}`}>
             <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
