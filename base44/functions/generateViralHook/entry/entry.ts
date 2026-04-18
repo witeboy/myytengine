@@ -1,8 +1,47 @@
-// Generate punchy 2-5 word viral thumbnail hook text variants (MrBeast / Nollywood style)
-// Input: transcript (optional), title (optional), niche (optional)
-// Output: { hooks: [{ text, style_tip }] }
+// Generate 6 high-CTR 2-5 word viral thumbnail hooks via Gemini
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+const MODEL = 'gemini-2.5-flash';
+
+const STYLE_TIPS = ['yellow_bold', 'red_shock', 'white_stroke', 'black_box', 'green_money', 'neon'];
+
+function extractJson(text) {
+  if (!text) return null;
+  // Strip markdown fences
+  const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+  // Try to find the first { ... } or [ ... ] block
+  const match = cleaned.match(/(\{[\s\S]*\}|\[[\s\S]*\])/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[0]);
+  } catch (_) {
+    return null;
+  }
+}
+
+async function callGemini(prompt) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.95,
+        topP: 0.95,
+        maxOutputTokens: 2048,
+      },
+    }),
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Gemini ${res.status}: ${errText.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return text;
+}
 
 Deno.serve(async (req) => {
   try {
@@ -10,118 +49,51 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const GEMINI_KEY = Deno.env.get('GEMINI_API_KEY');
-    if (!GEMINI_KEY) return Response.json({ error: 'GEMINI_API_KEY missing' }, { status: 500 });
+    const { transcript = '', title = '', niche = 'general' } = await req.json();
 
-    const body = await req.json();
-    const transcript = (body.transcript || '').substring(0, 4000);
-    const title = body.title || '';
-    const niche = body.niche || 'general';
+    const transcriptSnippet = (transcript || '').slice(0, 3000);
 
-    const prompt = `You are a world-class YouTube thumbnail copywriter specialized in HIGH-CTR overlay text.
+    const prompt = `You are a YouTube thumbnail copywriter who has worked on channels with 100M+ views.
 
-Your job: generate 5 thumbnail overlay hooks in the style of Nollywood / MrBeast / viral shorts.
+Generate 6 PUNCHY viral thumbnail overlay hooks for this video. These are the BIG TEXT burned onto the thumbnail — the hook that makes people click.
 
-RULES:
-- 2 to 5 WORDS MAX. Absolutely no more than 5.
-- ALL CAPS only.
-- Emotionally loaded — shock, betrayal, money, secret, caught, exposed, trapped, revealed, battle, war, truth.
-- Can include one of: ! ? "" or a single emoji indicator like 💔 🔥 💰 — optional, sparingly.
-- Must feel like a punchy accusation, reveal, or cliffhanger.
-- NO generic phrases like "Amazing story" / "Must watch" / "You won't believe".
-- NO hashtags. NO sentences. NO explanations.
+CONTEXT:
+- Title: ${title || '(unknown)'}
+- Niche: ${niche}
+- Transcript snippet: "${transcriptSnippet || '(no transcript)'}"
 
-STYLE EXAMPLES (the level of punch we want):
-- "INHERITANCE BATTLE!"
-- "CAUGHT RED HANDED"
-- "SECRET EXPOSED!"
-- "TRAPPED BY LIES?"
-- "NEXT OF KIN"
-- "GOD PUNISH POVERTY"
-- "DOMESTIC WAR"
-- "HIDDEN FEES REVEALED"
-- "GRANDMA EXPLODES!"
-- "$130K BROKE?"
+HARD RULES:
+- 2 to 5 words MAX per hook (shorter is better)
+- ALL CAPS
+- Use curiosity gaps, shock, stakes, or raw emotion
+- No generic phrases like "AMAZING" or "YOU WON'T BELIEVE"
+- Pick ONE accent word per hook (the emotional trigger word — often a number, name, or power word) that should be colored differently
+- Pick a style_tip from: ${STYLE_TIPS.join(', ')}
 
-CONTENT CONTEXT:
-Niche: ${niche}
-Title: ${title}
-Transcript excerpt: ${transcript.substring(0, 2000) || '(none)'}
-
-Return STRICT JSON only, no markdown:
+Return ONLY valid JSON in this exact shape (no markdown, no explanation):
 {
   "hooks": [
-    { "text": "HOOK ONE", "accent_word": "ONE", "style_tip": "yellow_bold" },
-    { "text": "HOOK TWO!", "accent_word": "TWO", "style_tip": "red_alert" },
-    { "text": "HOOK THREE?", "accent_word": "THREE", "style_tip": "white_quote" },
-    { "text": "HOOK FOUR", "accent_word": "FOUR", "style_tip": "yellow_bold" },
-    { "text": "HOOK FIVE", "accent_word": "FIVE", "style_tip": "nollywood" }
+    { "text": "HE LIED TO US", "accent_word": "LIED", "style_tip": "red_shock" },
+    { "text": "$10K IN 30 DAYS", "accent_word": "$10K", "style_tip": "green_money" }
   ]
-}
+}`;
 
-style_tip values must be one of: yellow_bold | white_quote | red_alert | nollywood
-accent_word = the single most punchy word in the hook (for 2-line layouts where we color it differently)`;
+    const raw = await callGemini(prompt);
+    const parsed = extractJson(raw);
 
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.9, maxOutputTokens: 1500 },
-        }),
-      }
-    );
-
-    const data = await r.json();
-    if (!r.ok) return Response.json({ error: 'Gemini error: ' + JSON.stringify(data).substring(0, 300) }, { status: 500 });
-
-    console.log('Gemini response keys:', Object.keys(data || {}));
-    console.log('Candidates count:', (data?.candidates || []).length);
-    console.log('Finish reason:', data?.candidates?.[0]?.finishReason);
-    console.log('Full response (first 500):', JSON.stringify(data).substring(0, 500));
-
-    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-    console.log('Gemini raw text (first 400):', raw.substring(0, 400));
-    let parsed = {};
-    try {
-      parsed = JSON.parse(raw);
-    } catch (_) {
-      const match = raw.match(/\{[\s\S]*\}/);
-      if (match) { try { parsed = JSON.parse(match[0]); } catch (_) {} }
+    if (!parsed?.hooks || !Array.isArray(parsed.hooks) || parsed.hooks.length === 0) {
+      return Response.json({ error: 'Could not parse hooks', raw: raw.slice(0, 500) }, { status: 500 });
     }
 
-    let hooks = Array.isArray(parsed?.hooks) ? parsed.hooks : [];
-    console.log('Parsed hooks count:', hooks.length);
-    hooks = hooks
-      .map((h) => ({
-        text: String(h.text || '').toUpperCase().trim().slice(0, 40),
-        accent_word: String(h.accent_word || '').toUpperCase().trim(),
-        style_tip: ['yellow_bold', 'white_quote', 'red_alert', 'nollywood'].includes(h.style_tip)
-          ? h.style_tip
-          : 'yellow_bold',
-      }))
-      .filter((h) => {
-        if (!h.text) return false;
-        // Count alphanumeric "words" only — ignore stray punctuation
-        const wordCount = h.text.split(/\s+/).filter((w) => /[A-Z0-9]/.test(w)).length;
-        return wordCount >= 1 && wordCount <= 6;
-      })
-      .slice(0, 5);
+    // Normalize
+    const hooks = parsed.hooks.slice(0, 6).map((h) => ({
+      text: String(h.text || '').toUpperCase().trim(),
+      accent_word: String(h.accent_word || '').toUpperCase().trim(),
+      style_tip: STYLE_TIPS.includes(h.style_tip) ? h.style_tip : 'yellow_bold',
+    })).filter(h => h.text);
 
-    const usedFallback = hooks.length === 0;
-    if (usedFallback) {
-      hooks = [
-        { text: 'SHOCKING TRUTH!', accent_word: 'TRUTH', style_tip: 'yellow_bold' },
-        { text: 'CAUGHT!', accent_word: 'CAUGHT', style_tip: 'red_alert' },
-        { text: '"SECRET EXPOSED"', accent_word: 'EXPOSED', style_tip: 'white_quote' },
-      ];
-    }
-
-    return Response.json({ success: true, hooks, used_fallback: usedFallback });
+    return Response.json({ hooks });
   } catch (error) {
-    console.error('generateViralHook error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
