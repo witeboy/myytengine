@@ -55,17 +55,16 @@ export default function RealtimeCaptions({
   position = 'bottom', // 'bottom' | 'top' | 'center'
   maxWidth = '80%'
 }) {
-  if (!caption) return null;
-
   const styles = CAPTION_STYLES[style] || CAPTION_STYLES.default;
 
   // Calculate which word is active
-  const { words, text, startTime, duration } = caption;
-  
+  const { words, text, startTime, duration } = caption || {};
+
   const wordData = useMemo(() => {
+    if (!caption) return [];
     if (!words || words.length === 0) {
       // Fallback: split text and calculate timing
-      const splitWords = text.split(/\s+/);
+      const splitWords = (text || '').split(/\s+/);
       const wordDuration = duration / splitWords.length;
       return splitWords.map((word, idx) => ({
         word,
@@ -74,7 +73,9 @@ export default function RealtimeCaptions({
       }));
     }
     return words;
-  }, [words, text, startTime, duration]);
+  }, [caption, words, text, startTime, duration]);
+
+  if (!caption) return null;
 
   // Find active word index
   const activeIndex = wordData.findIndex(
@@ -189,11 +190,11 @@ export function CaptionEditor({
   onUpdate,
   onClose
 }) {
-  if (!caption) return null;
+  const [text, setText] = React.useState(caption?.text || '');
+  const [startTime, setStartTime] = React.useState(caption?.startTime || 0);
+  const [duration, setDuration] = React.useState(caption?.duration || 0);
 
-  const [text, setText] = React.useState(caption.text);
-  const [startTime, setStartTime] = React.useState(caption.startTime);
-  const [duration, setDuration] = React.useState(caption.duration);
+  if (!caption) return null;
 
   const handleSave = () => {
     onUpdate?.({

@@ -8,14 +8,13 @@ import { ExpandableAssets } from './TopicAssetsPanel';
 import AutoEditButton from './AutoEditButton';
 
 export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose, channel, onTopicUpdated }) {
-  if (!date) return null;
-
   const [projectData, setProjectData] = useState({});
   const [actionLoading, setActionLoading] = useState(null);
   const [expandedTopic, setExpandedTopic] = useState(null);
 
   // Fetch project data for topics that have projects
   useEffect(() => {
+    if (!date) return;
     const fetchProjects = async () => {
       const withProject = topics.filter(t => t.project_id);
       if (withProject.length === 0) return;
@@ -28,7 +27,9 @@ export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose,
       setProjectData(results);
     };
     fetchProjects();
-  }, [topics]);
+  }, [topics, date]);
+
+  if (!date) return null;
 
   const handleRestart = async (topic) => {
     setActionLoading(topic.id);
