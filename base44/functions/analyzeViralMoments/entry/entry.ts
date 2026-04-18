@@ -120,9 +120,7 @@ CRITICAL RULES:
 - The clip's END should feel complete (punchline, conclusion, revelation) — no mid-sentence cuts
 - Use the [M:SS] timestamp markers in the transcript to determine accurate start/end times
 - Timestamps are in SECONDS in your output (convert from M:SS format)
-- Clips MUST be between ${min_clip_seconds}s and ${max_clip_seconds}s — THIS IS A HARD REQUIREMENT
-- If a great moment is shorter than ${min_clip_seconds}s, EXTEND the clip to include the lead-up/setup BEFORE the hook AND the reaction/payoff AFTER. Do NOT trim down to just the punchline — viewers need context and emotional build-up.
-- A ${min_clip_seconds}s+ clip gives room for: hook (0-3s) → setup (3-15s) → payoff (15-40s) → reaction/conclusion (40s+).
+- Clips must be between ${min_clip_seconds}s and ${max_clip_seconds}s
 - Return at most ${max_clips} clips
 - Rank by virality_score (0-100) based on likely engagement
 
@@ -189,24 +187,19 @@ Sort clips by virality_score descending (best first).`;
       };
     });
 
-    // Enforce minimum length — drop clips that are too short after snapping
-    // (5s safety buffer below requested min to allow for word-boundary snapping)
-    const hardMinLen = Math.max(10, min_clip_seconds - 5);
+    // Enforce hard minimum — drop clips shorter than 30s
+    const HARD_MIN = 30;
     const beforeFilter = snappedClips.length;
-    const filteredClips = snappedClips.filter((c: any) => {
-      if (c.duration < hardMinLen) {
-        console.warn(`⚠️  Dropping clip "${c.title}" — ${c.duration}s is below min ${hardMinLen}s`);
-        return false;
-      }
-      if (c.duration > max_clip_seconds + 5) {
-        console.warn(`⚠️  Dropping clip "${c.title}" — ${c.duration}s exceeds max ${max_clip_seconds}s`);
+    const filtered = snappedClips.filter((c: any) => {
+      if (c.duration < HARD_MIN) {
+        console.warn(`⚠️  Dropping clip "${c.title}" — ${c.duration}s is below ${HARD_MIN}s hard minimum`);
         return false;
       }
       return true;
     });
-    console.log(`🔍 Length filter: ${beforeFilter} → ${filteredClips.length} clips (min ${hardMinLen}s, max ${max_clip_seconds}s)`);
     snappedClips.length = 0;
-    snappedClips.push(...filteredClips);
+    snappedClips.push(...filtered);
+    console.log(`🔍 Length filter: ${beforeFilter} → ${snappedClips.length} clips (min ${HARD_MIN}s)`);
 
     // Sort by virality score descending
     snappedClips.sort((a: any, b: any) => (b.virality_score || 0) - (a.virality_score || 0));
