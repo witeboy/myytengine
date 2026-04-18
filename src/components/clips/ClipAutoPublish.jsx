@@ -3,19 +3,24 @@ import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Youtube, Upload, Loader2, CheckCircle, AlertCircle, Link2,
-  Unlink2, Copy, Hash, Clock, Globe, Lock, Eye,
+  Unlink2, Copy, Globe, Lock, Eye,
 } from 'lucide-react';
+import { useYouTubeChannels } from './useYouTubeChannels';
 
 export default function ClipAutoPublish({ clip, clipIndex, enhancement, clipBlob }) {
-  // ── YouTube Auth State ──────────────────────────────────────
-  const [channels, setChannels] = useState([]);
-  const [selectedChannel, setSelectedChannel] = useState('');
-  const [connecting, setConnecting] = useState(false);
-  const [loadingChannels, setLoadingChannels] = useState(true);
+  // ── YouTube channels (shared hook) ──────────────────────────
+  const {
+    channels,
+    selectedChannelId: selectedChannel,
+    loading: loadingChannels,
+    connecting,
+    connect: connectChannel,
+    disconnect: disconnectChannel,
+    getAccessToken,
+  } = useYouTubeChannels();
 
   // ── Publish State ───────────────────────────────────────────
   const [title, setTitle] = useState('');
@@ -26,11 +31,6 @@ export default function ClipAutoPublish({ clip, clipIndex, enhancement, clipBlob
   const [published, setPublished] = useState(false);
   const [publishUrl, setPublishUrl] = useState('');
   const [error, setError] = useState('');
-
-  // ── Load connected channels ─────────────────────────────────
-  useEffect(() => {
-    loadChannels();
-  }, []);
 
   // ── Pre-fill from enhancement SEO data ──────────────────────
   useEffect(() => {
@@ -43,56 +43,6 @@ export default function ClipAutoPublish({ clip, clipIndex, enhancement, clipBlob
       setTitle(clip?.title || '');
     }
   }, [enhancement, clip]);
-
-  const loadChannels = async () => {
-    setLoadingChannels(true);
-    try {
-      const res = await base44.functions.invoke('youtubeAuth', { action: 'list_channels' });
-      const ch = res.data?.channels || [];
-      if (ch.length > 0) {
-        setChannels(ch.map(c => ({
-          id: c.channel_id,
-          name: c.channel_name || 'YouTube Channel',
-          channelId: c.channel_id,
-          thumbnail: c.channel_thumbnail,
-          tokenValid: c.token_valid,
-        })));
-        const def = ch.find(c => c.is_default) || ch[0];
-        if (def) setSelectedChannel(def.channel_id);
-      }
-    } catch (err) {
-      console.error('Failed to load channels:', err);
-    } finally {
-      setLoadingChannels(false);
-    }
-  };
-
-  // ── Connect YouTube Channel ─────────────────────────────────
-  const connectChannel = async () => {
-    setConnecting(true);
-    setError('');
-    try {
-      const res = await base44.functions.invoke('youtubeAuth', { action: 'get_auth_url' });
-      const data = res.data || res;
-      if (data?.auth_url) {
-        // Full-page redirect (same pattern as Dashboard's YouTubePublishPanel)
-        window.location.href = data.auth_url;
-      }
-    } catch (err) {
-      setError('Failed to start YouTube auth: ' + err.message);
-      setConnecting(false);
-    }
-  };
-
-  // ── Disconnect Channel ──────────────────────────────────────
-  const disconnectChannel = async (channelId) => {
-    try {
-      await base44.functions.invoke('youtubeAuth', { action: 'disconnect', channel_id: channelId });
-      await loadChannels();
-    } catch (err) {
-      console.error('Disconnect failed:', err);
-    }
-  };
 
   // ── Publish to YouTube Shorts ───────────────────────────────
   const handlePublish = async () => {
@@ -130,13 +80,8 @@ export default function ClipAutoPublish({ clip, clipIndex, enhancement, clipBlob
 
       const fullDescription = `${description}\n\n${hashtagStr}`.trim();
 
-      // Get fresh access token, then upload directly to YouTube (resumable)
-      const tokenRes = await base44.functions.invoke('youtubeAuth', {
-        action: 'get_token',
-        channel_id: selectedChannel,
-      });
-      const accessToken = tokenRes.data?.access_token;
-      if (!accessToken) throw new Error(tokenRes.data?.error || 'Failed to get YouTube token — reconnect channel');
+      // Get fresh access token via shared hook
+      const accessToken = await getAccessToken(selectedChannel);
 
       // Fetch the clip blob if we only have a URL
       let fileToUpload = clipBlob ? new File([clipBlob], 'clip.mp4', { type: 'video/mp4' }) : null;

@@ -4,14 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import {
-  Calendar, Clock, ChevronLeft, ChevronRight,
-  Flame, GripVertical, Youtube, Instagram, Music2,
-  Shuffle, Copy, Loader2, CheckCircle, AlertCircle,
-  Link2, Unlink2, Zap, Send, Trash2, RefreshCw, Globe,
+  Calendar, Clock, Flame, Youtube, Instagram, Music2,
+  Loader2, CheckCircle, AlertCircle,
+  Link2, Unlink2, Send, Trash2, RefreshCw, Globe,
   Lock, Eye, Play,
 } from 'lucide-react';
+import { useYouTubeChannels } from './useYouTubeChannels';
 
 const PLATFORMS = [
   { id: 'youtube_shorts', label: 'YT Shorts', icon: Youtube, color: 'text-red-500', bgColor: 'bg-red-50' },
@@ -58,11 +57,14 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
     return d.toISOString().split('T')[0];
   });
 
-  // ── YouTube channel ─────────────────────────────────────────
-  const [channels, setChannels] = useState([]);
-  const [selectedChannel, setSelectedChannel] = useState('');
-  const [loadingChannels, setLoadingChannels] = useState(true);
-  const [connecting, setConnecting] = useState(false);
+  // ── YouTube channels (shared hook) ──────────────────────────
+  const {
+    channels,
+    selectedChannelId: selectedChannel,
+    loading: loadingChannels,
+    connecting,
+    connect: connectChannel,
+  } = useYouTubeChannels();
 
   // ── Scheduled posts ─────────────────────────────────────────
   const [scheduledPosts, setScheduledPosts] = useState([]);
@@ -74,36 +76,13 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
   const [lastPollResult, setLastPollResult] = useState(null);
   const pollerRef = useRef(null);
 
-  // ── Load channels on mount ──────────────────────────────────
+  // ── Load scheduled posts on mount ───────────────────────────
   useEffect(() => {
-    loadChannels();
     loadScheduledPosts();
     return () => {
       if (pollerRef.current) clearInterval(pollerRef.current);
     };
   }, []);
-
-  const loadChannels = async () => {
-    setLoadingChannels(true);
-    try {
-      const res = await base44.functions.invoke('youtubeAuth', { action: 'list_channels' });
-      const ch = res.data?.channels || [];
-      if (ch.length > 0) {
-        setChannels(ch.map(c => ({
-          id: c.channel_id,
-          name: c.channel_name || 'YouTube Channel',
-          thumbnail: c.channel_thumbnail,
-          tokenValid: c.token_valid,
-        })));
-        const def = ch.find(c => c.is_default) || ch[0];
-        if (def) setSelectedChannel(def.channel_id);
-      }
-    } catch (err) {
-      console.error('Failed to load channels:', err);
-    } finally {
-      setLoadingChannels(false);
-    }
-  };
 
   const loadScheduledPosts = async () => {
     try {
@@ -115,21 +94,6 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
       }
     } catch (err) {
       console.error('Failed to load scheduled posts:', err);
-    }
-  };
-
-  const connectChannel = async () => {
-    setConnecting(true);
-    try {
-      const res = await base44.functions.invoke('youtubeAuth', { action: 'get_auth_url' });
-      const data = res.data || res;
-      if (data?.auth_url) {
-        // Full-page redirect (same pattern as Dashboard's YouTubePublishPanel)
-        window.location.href = data.auth_url;
-      }
-    } catch (err) {
-      console.error('Auth failed:', err);
-      setConnecting(false);
     }
   };
 
