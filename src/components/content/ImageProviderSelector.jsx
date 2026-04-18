@@ -5,9 +5,17 @@ const PROVIDERS = [
     id: 'auto',
     label: 'Auto (Best Available)',
     emoji: '🤖',
-    desc: 'Tries Seedream → Grok → Nano. Auto-fallback on failure.',
+    desc: 'Tries Z-Image → Seedream → Grok → Nano. Auto-fallback on failure.',
     color: 'border-gray-300 bg-gray-50',
     activeColor: 'border-blue-500 bg-blue-50 ring-2 ring-blue-200',
+  },
+  {
+    id: 'z_image',
+    label: 'Z-Image',
+    emoji: '⚡',
+    desc: 'Fast, photorealistic, strong bilingual text. Primary — no reference support.',
+    color: 'border-gray-300 bg-gray-50',
+    activeColor: 'border-purple-500 bg-purple-50 ring-2 ring-purple-200',
   },
   {
     id: 'ai33_seedream',
@@ -20,8 +28,8 @@ const PROVIDERS = [
   {
     id: 'grok',
     label: 'Grok Imagine',
-    emoji: '⚡',
-    desc: 'Fast & reliable. Supports image-to-image for character reference. Less strict.',
+    emoji: '🔥',
+    desc: 'Reliable. Supports image-to-image for character reference. Less strict.',
     color: 'border-gray-300 bg-gray-50',
     activeColor: 'border-orange-500 bg-orange-50 ring-2 ring-orange-200',
   },
@@ -43,7 +51,7 @@ export default function ImageProviderSelector({ selected, onSelect }) {
       <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
         🖼️ Image Generator
       </h3>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {PROVIDERS.map(p => {
           const isActive = current === p.id;
           return (

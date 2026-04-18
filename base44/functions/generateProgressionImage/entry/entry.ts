@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // ══════════════════════════════════════════════════════════════════
 // FLOW/RE-MAKE — Sequential Image Generation with Reference Chain
@@ -30,23 +30,20 @@ async function kieCreateTask(apiKey, model, input) {
 }
 
 async function kiePollResult(apiKey, taskId, maxPolls = 60) {
-  // First poll after 2s (most image gen finishes in 10-30s), then 3s intervals
-  await new Promise(r => setTimeout(r, 2000));
   for (let i = 0; i < maxPolls; i++) {
+    await new Promise(r => setTimeout(r, 4000));
     const res = await fetch(`${KIE_BASE}/recordInfo?taskId=${taskId}`, {
       headers: { "Authorization": `Bearer ${apiKey}` }
     });
     const poll = await res.json();
-    if (poll.code === 200) {
-      if (poll.data?.state === "success") {
-        const resultJson = JSON.parse(poll.data.resultJson || "{}");
-        return resultJson.resultUrls?.[0];
-      }
-      if (poll.data?.state === "fail") {
-        throw new Error(poll.data?.failMsg || "Generation failed");
-      }
+    if (poll.code !== 200) continue;
+    if (poll.data?.state === "success") {
+      const resultJson = JSON.parse(poll.data.resultJson || "{}");
+      return resultJson.resultUrls?.[0];
     }
-    await new Promise(r => setTimeout(r, 3000));
+    if (poll.data?.state === "fail") {
+      throw new Error(poll.data?.failMsg || "Generation failed");
+    }
   }
   throw new Error("Polling timed out");
 }
@@ -148,22 +145,60 @@ Deno.serve(async (req) => {
         }
       }
 
-      // (Removed 3rd/4th fallbacks — Grok img2img + text2img-with-ref cover 95% of cases.
-      // Slower fallbacks were adding 4+ minutes per scene with poor quality anyway.)
+      // ═══ TRY 3: Kling image-to-image with reference ═══
+      if (!imageUrl) {
+        try {
+          const taskId = await kieCreateTask(KIE_API_KEY, "kling/v2.1/standard/image-to-image", {
+            image_urls: [reference_image_url],
+            prompt: finalPrompt,
+            aspect_ratio: aspectRatio
+          });
+          console.log(`✓ Kling img2img task: ${taskId}`);
+          imageUrl = await kiePollResult(KIE_API_KEY, taskId);
+          console.log(`✓ Kling img2img complete: ${imageUrl?.substring(0, 60)}`);
+        } catch (err) {
+          console.warn(`⚠ Kling img2img failed: ${err.message}`);
+        }
+      }
+
+      // ═══ TRY 4: Flux img2img with reference ═══
+      if (!imageUrl) {
+        try {
+          const taskId = await kieCreateTask(KIE_API_KEY, "flux/image-to-image", {
+            image_urls: [reference_image_url],
+            prompt: finalPrompt,
+            aspect_ratio: aspectRatio
+          });
+          console.log(`✓ Flux img2img task: ${taskId}`);
+          imageUrl = await kiePollResult(KIE_API_KEY, taskId);
+          console.log(`✓ Flux img2img complete: ${imageUrl?.substring(0, 60)}`);
+        } catch (err) {
+          console.warn(`⚠ Flux img2img failed: ${err.message}`);
+        }
+      }
     }
 
-    // ═══ FALLBACK: Standard text-to-image (no reference) ═══
+    // ═══ FALLBACK: Standard text-to-image via Z-Image (primary) ═══
     if (!imageUrl) {
       if (hasReference) {
-        console.log(`⚠ All reference methods failed — falling back to text-only`);
+        console.log(`⚠ All reference methods failed — falling back to text-only Z-Image`);
       }
-      const taskId = await kieCreateTask(KIE_API_KEY, "grok-imagine/text-to-image", {
-        prompt: finalPrompt,
-        aspect_ratio: aspectRatio
-      });
-      console.log(`✓ Text-to-image task: ${taskId}`);
-      imageUrl = await kiePollResult(KIE_API_KEY, taskId);
-      console.log(`✓ Text-to-image complete: ${imageUrl?.substring(0, 60)}`);
+      try {
+        const taskId = await kieCreateTask(KIE_API_KEY, "z-image", {
+          prompt: finalPrompt,
+          aspect_ratio: aspectRatio
+        });
+        console.log(`✓ Z-Image task: ${taskId}`);
+        imageUrl = await kiePollResult(KIE_API_KEY, taskId);
+        console.log(`✓ Z-Image complete: ${imageUrl?.substring(0, 60)}`);
+      } catch (err) {
+        console.warn(`⚠ Z-Image failed: ${err.message} — falling back to Grok`);
+        const taskId = await kieCreateTask(KIE_API_KEY, "grok-imagine/text-to-image", {
+          prompt: finalPrompt,
+          aspect_ratio: aspectRatio
+        });
+        imageUrl = await kiePollResult(KIE_API_KEY, taskId);
+      }
     }
 
     // Save to scene

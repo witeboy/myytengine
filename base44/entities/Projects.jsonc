@@ -1,0 +1,163 @@
+{
+  "name": "Projects",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Project name"
+    },
+    "niche": {
+      "type": "string",
+      "description": "Content niche (e.g. true crime, tech, history)"
+    },
+    "tone": {
+      "type": "string",
+      "enum": [
+        "dramatic",
+        "educational",
+        "humorous",
+        "conversational",
+        "inspirational",
+        "suspenseful",
+        "sarcastic",
+        "soothing"
+      ],
+      "default": "dramatic",
+      "description": "Tone preference for the video"
+    },
+    "target_audience": {
+      "type": "string",
+      "description": "Target audience description"
+    },
+    "video_duration_minutes": {
+      "type": "number",
+      "description": "Target video duration in minutes"
+    },
+    "storytelling_format": {
+      "type": "string",
+      "description": "Selected storytelling format"
+    },
+    "outline": {
+      "type": "string",
+      "description": "JSON array of outline batches"
+    },
+    "orientation": {
+      "type": "string",
+      "enum": [
+        "landscape",
+        "portrait"
+      ],
+      "default": "landscape",
+      "description": "Video orientation"
+    },
+    "visual_style": {
+      "type": "string",
+      "enum": [
+        "broll_only",
+        "cinematic_realistic",
+        "photorealistic_4k",
+        "cinematic_anime",
+        "anime",
+        "cartoon_2d",
+        "picstory_cocomelon",
+        "cinematic_picstory",
+        "oil_painting",
+        "watercolor",
+        "comic_book",
+        "humpty_dumpty",
+        "harry_potter",
+        "3d_whiteboard_cartoon",
+        "low_poly_3d_cartoon",
+        "roblox",
+        "skeleton_protagonist",
+        "afro_nolly_global"
+      ],
+      "description": "Visual style for all generated images"
+    },
+    "image_provider": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "z_image",
+        "ai33_seedream",
+        "grok",
+        "nano_banana"
+      ],
+      "default": "auto",
+      "description": "Preferred image generation provider"
+    },
+    "reference_image_url": {
+      "type": "string",
+      "description": "URL of the first scene image used as character/style reference"
+    },
+    "character_descriptions": {
+      "type": "string",
+      "description": "JSON string of key character descriptions"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "created",
+        "topics_ready",
+        "topic_selected",
+        "outline_ready",
+        "hooks_ready",
+        "scripting",
+        "script_complete",
+        "voiceover_ready",
+        "scene_breakdown",
+        "breakdown_complete",
+        "content_generation",
+        "scenes_ready",
+        "timeline_editing",
+        "compiled",
+        "post_production",
+        "published"
+      ],
+      "default": "created",
+      "description": "Current pipeline status"
+    },
+    "current_step": {
+      "type": "number",
+      "description": "Current step number",
+      "default": 0
+    },
+    "selected_topic_id": {
+      "type": "string",
+      "description": "ID of the selected topic"
+    },
+    "selected_hook_id": {
+      "type": "string",
+      "description": "ID of the selected hook"
+    },
+    "script_id": {
+      "type": "string",
+      "description": "ID of the current script"
+    },
+    "archived": {
+      "type": "boolean",
+      "description": "Whether this project is archived",
+      "default": false
+    },
+    "channel_id": {
+      "type": "string",
+      "description": "Reference to the channel this project belongs to"
+    },
+    "channel_topic_id": {
+      "type": "string",
+      "description": "Reference to the ChannelTopic that spawned this project"
+    },
+    "script_strategy_override": {
+      "type": "string",
+      "description": "JSON override of niche-specific script strategy from the channel"
+    },
+    "project_mode": {
+      "type": "string",
+      "description": "Special project mode \u2014 sleep_meditation, sleep_story, progression, or empty for standard"
+    }
+  },
+  "required": [
+    "name",
+    "niche"
+  ]
+}
