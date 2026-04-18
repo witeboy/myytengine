@@ -11,7 +11,7 @@ import OrientationSelector from '@/components/content/OrientationSelector';
 import {
  Loader2, ArrowRight, ArrowLeft, Film, ImageIcon, Music, Download,
   CheckCircle, XCircle, Pencil, Sparkles, Building2, Wrench,
-  Car, TreePine, Home, Warehouse, MapPin, Plus, AlertCircle, Wand2
+  Car, TreePine, Home, Warehouse, MapPin, Plus, AlertCircle, Wand2, HomeIcon
 } from 'lucide-react';
 import { concatTimelapseVideos } from '@/lib/concatTimelapse';
 
@@ -286,11 +286,16 @@ export default function FlowRemake() {
             </h1>
             <p className="text-gray-500 mt-1">Camera-locked visual progression — 7 scenes, no voiceover</p>
           </div>
-          {step > 1 && (
-            <Button variant="outline" onClick={() => navigate(createPageUrl(`TimelineEditor?project_id=${currentProjectId}`))}>
-              Open Timeline <ArrowRight className="w-4 h-4 ml-1" />
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => navigate(createPageUrl('Dashboard'))}>
+              <Home className="w-4 h-4 mr-1" /> Home
             </Button>
-          )}
+            {step > 1 && (
+              <Button variant="outline" onClick={() => navigate(createPageUrl(`TimelineEditor?project_id=${currentProjectId}`))}>
+                Open Timeline <ArrowRight className="w-4 h-4 ml-1" />
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Step indicator */}
