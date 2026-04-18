@@ -139,7 +139,7 @@ export default function QuickPublish() {
   const runTranscribe = async (uploadedUrl) => {
     setCurrentStep('transcribe');
     setStatusMessage('Submitting to transcription service...');
-    const submitRes = await base44.functions.invoke('quickPublishTranscribe', {
+    const submitRes = await base44.functions.invoke('quickPublishTranscribe/entry', {
       action: 'submit', file_url: uploadedUrl,
     });
     const transcriptId = submitRes.data?.transcript_id;
@@ -152,7 +152,7 @@ export default function QuickPublish() {
       const elapsed = Math.round((Date.now() - startedAt) / 1000);
       setStatusMessage(`Transcribing... (${elapsed}s elapsed)`);
 
-      const pollRes = await base44.functions.invoke('quickPublishTranscribe', {
+      const pollRes = await base44.functions.invoke('quickPublishTranscribe/entry', {
         action: 'poll', transcript_id: transcriptId,
       });
       if (pollRes.data?.status === 'completed') {
@@ -171,7 +171,7 @@ export default function QuickPublish() {
   const runSeo = async (transcriptText, pid, channelName = '') => {
     setCurrentStep('seo');
     setStatusMessage('Generating SEO titles, descriptions, tags & hashtags...');
-    const seoRes = await base44.functions.invoke('quickPublishSeo', {
+    const seoRes = await base44.functions.invoke('quickPublishSeo/entry', {
       project_id: pid, transcript: transcriptText, niche: niche,
       channel_name: channelName,
     });
@@ -202,7 +202,7 @@ export default function QuickPublish() {
   const runThumbnails = async (pid, firstTitle) => {
     setCurrentStep('thumbnails');
     setStatusMessage('Generating thumbnail concepts...');
-    const thumbRes = await base44.functions.invoke('generateThumbnails', {
+    const thumbRes = await base44.functions.invoke('generateThumbnails/entry', {
       project_id: pid,
       video_title: firstTitle || videoFile?.name || 'Untitled',
     });
@@ -216,7 +216,7 @@ export default function QuickPublish() {
       const cid = topIds[idx];
       setStatusMessage(`Rendering thumbnail ${idx + 1}/${topIds.length}...`);
       try {
-        const imgRes = await base44.functions.invoke('generateThumbnailImage', { concept_id: cid });
+        const imgRes = await base44.functions.invoke('generateThumbnailImage/entry', { concept_id: cid });
         const data = imgRes.data || {};
         if (data.image_url) continue; // Already done
         if (data.pending && data.task_id) {
@@ -224,7 +224,7 @@ export default function QuickPublish() {
           for (let i = 0; i < 18; i++) {
             await new Promise(r => setTimeout(r, 5000));
             try {
-              const pollRes = await base44.functions.invoke('pollThumbnailTask', {
+              const pollRes = await base44.functions.invoke('pollThumbnailTask/entry', {
                 task_id: data.task_id, concept_id: cid, task_type: data.task_type || 'kie',
               });
               if (pollRes.data?.completed) break;

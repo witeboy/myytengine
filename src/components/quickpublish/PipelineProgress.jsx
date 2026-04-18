@@ -1,4 +1,3 @@
-import React from 'react';
 import { Check, Loader2, Circle } from 'lucide-react';
 
 const STEPS = [
@@ -16,9 +15,9 @@ export default function PipelineProgress({ currentStep, completedSteps }) {
         const isCompleted = completedSteps.includes(step.key);
         const isCurrent = currentStep === step.key;
         return (
-          <React.Fragment key={step.key}>
+          <div key={step.key} className="flex items-center gap-1 flex-shrink-0">
             {i > 0 && (
-              <div className={`h-px flex-1 min-w-4 ${isCompleted ? 'bg-green-400' : 'bg-gray-200'}`} />
+              <div className={`h-px w-4 md:w-8 ${isCompleted ? 'bg-green-400' : 'bg-gray-200'}`} />
             )}
             <div className="flex items-center gap-1.5 flex-shrink-0">
               {isCompleted ? (
@@ -40,7 +39,7 @@ export default function PipelineProgress({ currentStep, completedSteps }) {
                 {step.label}
               </span>
             </div>
-          </React.Fragment>
+          </div>
         );
       })}
     </div>
