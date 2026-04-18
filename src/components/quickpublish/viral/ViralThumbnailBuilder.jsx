@@ -11,9 +11,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Sparkles, Download, RefreshCw, Wand2, Film, Type, Flame } from 'lucide-react';
+import { Loader2, Sparkles, Download, RefreshCw, Wand2, Film, Type, Flame, Clapperboard } from 'lucide-react';
 import { useVideoFrames } from './useVideoFrames';
 import ThumbnailPreview, { STYLE_PRESETS, POSITIONS } from './ThumbnailPreview';
+
+const DIRECTOR_MODES = [
+  { value: '', label: 'Auto (AI picks best)' },
+  { value: 'mrbeast_viral', label: '🔥 MrBeast Viral' },
+  { value: 'hormozi_business', label: '💼 Hormozi Business' },
+  { value: 'documentary_mystery', label: '🎬 Documentary Mystery' },
+  { value: 'finance_viral', label: '💰 Finance Viral' },
+  { value: 'dating_viral', label: '💔 Dating Viral' },
+];
 
 export default function ViralThumbnailBuilder({
   videoFile,
@@ -44,6 +53,13 @@ export default function ViralThumbnailBuilder({
   const [exporting, setExporting] = useState(false);
   const [exportedUrl, setExportedUrl] = useState('');
   const previewRef = useRef(null);
+
+  // AI Director
+  const [directorMode, setDirectorMode] = useState('');
+  const [directing, setDirecting] = useState(false);
+  const [directorAnalysis, setDirectorAnalysis] = useState(null);
+  const [directorError, setDirectorError] = useState('');
+  const [directedBackgroundUrl, setDirectedBackgroundUrl] = useState('');
 
   // ── Auto-select best frame when frames arrive ───────────────
   useEffect(() => {
@@ -84,6 +100,64 @@ export default function ViralThumbnailBuilder({
     setAccentWord(h.accent_word || '');
     setPreset(h.style_tip || 'yellow_bold');
   };
+
+  // ── AI Director: redesign background using reference frame + story ──
+  const handleDirect = async () => {
+    if (!selectedFrameUrl) { setDirectorError('Select a reference frame first'); return; }
+    if (!customText) { setDirectorError('Add hook text first (or Generate Hooks)'); return; }
+
+    setDirecting(true);
+    setDirectorError('');
+    setDirectorAnalysis(null);
+
+    try {
+      const submitRes = await base44.functions.invoke('viralThumbnailDirector', {
+        reference_image_url: selectedFrameUrl,
+        title,
+        story: transcript,
+        hook_text: customText,
+        niche,
+        mode: directorMode,
+      });
+
+      const data = submitRes?.data || {};
+      if (data.error) throw new Error(data.error);
+      if (data.director_analysis) setDirectorAnalysis(data.director_analysis);
+
+      if (!data.pending || !data.task_id || !data.concept_id) {
+        throw new Error('Director did not return a task');
+      }
+
+      // Poll up to ~2.5 min
+      for (let i = 0; i < 30; i++) {
+        await new Promise(r => setTimeout(r, 5000));
+        try {
+          const pollRes = await base44.functions.invoke('pollThumbnailTask', {
+            task_id: data.task_id,
+            concept_id: data.concept_id,
+            task_type: data.task_type || 'ai33',
+          });
+          const p = pollRes?.data || {};
+          if (p.completed && p.image_url) {
+            setDirectedBackgroundUrl(p.image_url);
+            break;
+          }
+          if (p.failed) throw new Error(p.error || 'Generation failed');
+        } catch (_) { /* keep polling on transient */ }
+      }
+      if (!directedBackgroundUrl) {
+        // Final check from concept
+        // (simple approach: user will see loading disappear; they can re-run if nothing came back)
+      }
+    } catch (err) {
+      console.error('Director failed:', err.message);
+      setDirectorError(err.message);
+    }
+    setDirecting(false);
+  };
+
+  // The actual background fed to the preview — directed image if we have it, else raw frame
+  const previewBackgroundUrl = directedBackgroundUrl || selectedFrameUrl;
 
   const handleExport = async () => {
     if (!previewRef.current) return;
@@ -237,6 +311,53 @@ export default function ViralThumbnailBuilder({
         </div>
       </div>
 
+      {/* STEP 2.5: AI Director — redesign background */}
+      <div className="p-3 rounded-lg border-2 border-dashed border-purple-300 bg-gradient-to-br from-purple-50 to-pink-50 space-y-2">
+        <div className="flex items-center gap-2">
+          <Clapperboard className="w-4 h-4 text-purple-700" />
+          <span className="text-xs font-semibold uppercase tracking-wide text-purple-900">AI Growth Director</span>
+          <Badge className="bg-purple-600 text-white text-[9px]">Pro</Badge>
+        </div>
+        <p className="text-[11px] text-purple-800">
+          Uses your selected frame as a <strong>reference</strong> (character, style) — AI rewrites the background using elite thumbnail formulas (MrBeast, Hormozi, etc.) based on your story's emotion.
+        </p>
+        <div className="grid grid-cols-3 gap-2">
+          <div className="col-span-2">
+            <label className="text-[10px] text-gray-500 block mb-0.5">Director Mode</label>
+            <Select value={directorMode} onValueChange={setDirectorMode}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {DIRECTOR_MODES.map(m => <SelectItem key={m.value || 'auto'} value={m.value}>{m.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-end">
+            <Button
+              onClick={handleDirect}
+              disabled={directing || !selectedFrameUrl || !customText}
+              className="w-full h-8 text-[11px] gap-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
+            >
+              {directing ? <><Loader2 className="w-3 h-3 animate-spin" /> Directing…</>
+                : <><Clapperboard className="w-3 h-3" /> Direct & Generate</>}
+            </Button>
+          </div>
+        </div>
+        {directorError && <p className="text-[11px] text-red-600">{directorError}</p>}
+        {directedBackgroundUrl && (
+          <div className="flex items-center justify-between p-1.5 rounded bg-white border border-purple-200">
+            <span className="text-[10px] text-purple-700 font-medium">✓ Director background active</span>
+            <button onClick={() => setDirectedBackgroundUrl('')} className="text-[10px] text-gray-500 underline">Use raw frame instead</button>
+          </div>
+        )}
+        {directorAnalysis && (
+          <div className="grid grid-cols-2 gap-1.5 text-[10px] bg-white p-2 rounded border border-purple-100">
+            <div><span className="text-gray-500">Mode:</span> <span className="font-semibold capitalize">{directorAnalysis.mode?.replace(/_/g, ' ')}</span></div>
+            <div><span className="text-gray-500">Emotion:</span> <span className="font-semibold capitalize">{directorAnalysis.emotion_trigger}</span></div>
+            <div className="col-span-2"><span className="text-gray-500">Why it clicks:</span> {directorAnalysis.why_clicks}</div>
+          </div>
+        )}
+      </div>
+
       {/* STEP 3: Style */}
       <div className="space-y-2">
         <span className="text-xs font-semibold uppercase tracking-wide text-gray-700">3. Style</span>
@@ -288,7 +409,7 @@ export default function ViralThumbnailBuilder({
         <div className="rounded-lg overflow-hidden border border-gray-200 shadow-sm">
           <ThumbnailPreview
             ref={previewRef}
-            backgroundUrl={selectedFrameUrl}
+            backgroundUrl={previewBackgroundUrl}
             text={customText}
             accentWord={accentWord}
             accentColor={accentColor}
