@@ -3,27 +3,36 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // ══════════════════════════════════════════════════════════════════
 // QUICK PUBLISH SEO — Generate titles, descriptions, tags, hashtags
 // Uses dedicated SEO Expert prompts for tags & strategic hashtag logic
-// v2 — redeploy trigger
 // ══════════════════════════════════════════════════════════════════
 
-async function callGemini(apiKey, prompt, maxTokens = 8192) {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.85, maxOutputTokens: maxTokens },
-      }),
+async function callGemini(apiKey, prompt, maxTokens = 8192, retries = 3) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.85, maxOutputTokens: maxTokens },
+        }),
+      }
+    );
+    if (res.ok) {
+      const data = await res.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     }
-  );
-  if (!res.ok) {
+    // Handle rate limits with exponential backoff
+    if (res.status === 429 && attempt < retries) {
+      const waitMs = Math.pow(2, attempt + 1) * 2000; // 4s, 8s, 16s
+      console.warn(`⏳ Gemini 429 — backing off ${waitMs / 1000}s (attempt ${attempt + 1}/${retries})`);
+      await new Promise(r => setTimeout(r, waitMs));
+      continue;
+    }
     const err = await res.text();
     throw new Error(`Gemini ${res.status}: ${err.substring(0, 300)}`);
   }
-  const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  throw new Error('Gemini: retries exhausted');
 }
 
 function parseJson(text) {
