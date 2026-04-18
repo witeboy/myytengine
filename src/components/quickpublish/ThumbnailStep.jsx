@@ -270,20 +270,35 @@ export default function ThumbnailStep({ projectId, thumbnails, onRefetch, select
           >
             {concept.image_url ? (
               <div>
-                <div className="cursor-pointer" onClick={() => handleSelect(concept)}>
+                <div className="relative cursor-pointer" onClick={() => handleSelect(concept)} style={{ containerType: 'inline-size' }}>
                   <img src={concept.image_url} className="w-full aspect-video object-cover" alt={`Thumb #${concept.rank}`} />
+                  {concept.text_overlay && (
+                    <div className="absolute inset-0 flex items-end justify-center pb-2 px-2 pointer-events-none">
+                      <span
+                        className="font-black uppercase text-white text-center leading-tight"
+                        style={{
+                          fontSize: 'clamp(11px, 4.5cqw, 22px)',
+                          textShadow: '2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000, 0 3px 6px rgba(0,0,0,0.8)',
+                          WebkitTextStroke: '0.5px #000',
+                          letterSpacing: '0.02em',
+                        }}
+                      >
+                        {concept.text_overlay}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <div className="p-2 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-gray-500">#{concept.rank}</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] text-gray-500 flex-shrink-0">#{concept.rank}</span>
                     {concept.is_selected ? (
                       <Badge className="bg-green-100 text-green-700 text-[10px]">Selected</Badge>
                     ) : (
-                      <span className="text-[10px] text-blue-600 font-medium cursor-pointer" onClick={() => handleSelect(concept)}>Click to select</span>
+                      <span className="text-[10px] text-blue-600 font-medium cursor-pointer truncate" onClick={() => handleSelect(concept)}>Click to select</span>
                     )}
                   </div>
                   {concept.text_overlay && (
-                    <p className="text-[10px] font-bold text-gray-700 truncate">{concept.text_overlay}</p>
+                    <p className="text-[10px] font-bold text-gray-700 line-clamp-2 break-words">{concept.text_overlay}</p>
                   )}
                   <div className="flex gap-1">
                     {uploadedPhotos.length > 0 && (
@@ -315,9 +330,9 @@ export default function ThumbnailStep({ projectId, thumbnails, onRefetch, select
                     </p>
                   </>
                 ) : (
-                  <div className="flex flex-col items-center gap-2">
+                  <div className="flex flex-col items-center gap-2 w-full">
                     {concept.text_overlay && (
-                      <p className="text-[10px] font-bold text-gray-600 text-center px-2">{concept.text_overlay}</p>
+                      <p className="text-[10px] font-bold text-gray-600 text-center px-2 line-clamp-3 break-words w-full">{concept.text_overlay}</p>
                     )}
                     <div className="flex gap-1.5">
                       <Button size="sm" variant="outline" onClick={() => handleGenerateImage(concept)} className="text-xs gap-1">
