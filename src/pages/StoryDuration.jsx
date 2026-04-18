@@ -100,19 +100,9 @@ export default function StoryDuration() {
       return;
     }
 
-    const res = await base44.functions.invoke('generateOutline', {
-      project_id: projectId,
-      topic_id: project.selected_topic_id,
-      topic_title: topic?.title || project.name,
-      niche: project.niche,
-      duration_minutes: finalDuration,
-    });
-
-    if (res.data?.error) {
-      setLoading(false);
-      return;
-    }
-
+    // Outline + batches are now created by initializeScriptBatches on StoryScript
+    // auto-trigger. We just set status and navigate.
+    await base44.entities.Projects.update(projectId, { status: 'hooks_ready' });
     navigate(createPageUrl(`StoryScript?project_id=${projectId}`));
   };
 
@@ -126,15 +116,7 @@ export default function StoryDuration() {
         project_mode: scriptMode || '',
         orientation: isShorts ? 'portrait' : (project?.orientation || 'landscape'),
       });
-      if (!isShorts && !isLongViral) {
-        await base44.functions.invoke('generateOutline', {
-          project_id: projectId,
-          topic_id: project.selected_topic_id,
-          topic_title: topic?.title || project.name,
-          niche: project.niche,
-          duration_minutes: finalDuration,
-        });
-      }
+      // No explicit outline call — initializeScriptBatches handles it on StoryScript page
       setLoading(false);
     }
     if (isLongViral) {
