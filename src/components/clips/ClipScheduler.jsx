@@ -209,25 +209,24 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
         </div>
 
         <div className="flex items-center gap-2">
+          {/* View toggle — always visible */}
+          <div className="flex items-center border border-gray-200 rounded-md overflow-hidden">
+            <button
+              onClick={() => setViewMode('calendar')}
+              className={`px-2 py-1 text-[10px] flex items-center gap-1 ${viewMode === 'calendar' ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+            >
+              <LayoutGrid className="w-3 h-3" /> Calendar
+            </button>
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-2 py-1 text-[10px] flex items-center gap-1 ${viewMode === 'list' ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+            >
+              <LayoutList className="w-3 h-3" /> List
+            </button>
+          </div>
+
           {isScheduled && (
             <>
-              {/* View toggle */}
-              <div className="flex items-center border border-gray-200 rounded-md overflow-hidden">
-                <button
-                  onClick={() => setViewMode('calendar')}
-                  className={`px-2 py-1 text-[10px] flex items-center gap-1 ${viewMode === 'calendar' ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
-                >
-                  <LayoutGrid className="w-3 h-3" /> Calendar
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`px-2 py-1 text-[10px] flex items-center gap-1 ${viewMode === 'list' ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
-                >
-                  <LayoutList className="w-3 h-3" /> List
-                </button>
-              </div>
-
-              {/* Poller status */}
               <div className={`flex items-center gap-1.5 text-xs ${pollerActive ? 'text-emerald-600' : 'text-gray-400'}`}>
                 <div className={`w-2 h-2 rounded-full ${pollerActive ? 'bg-emerald-500 animate-pulse' : 'bg-gray-300'}`} />
                 {pollerActive ? 'Auto-posting active' : 'Paused'}
@@ -350,11 +349,10 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
         </div>
       )}
 
-      {/* POST-SCHEDULE VIEW */}
-      {isScheduled && scheduledPosts.length > 0 && (
-        <>
-          <SchedulerStats posts={scheduledPosts} />
+      {/* CALENDAR + STATS — always visible */}
+      {scheduledPosts.length > 0 && <SchedulerStats posts={scheduledPosts} />}
 
+      <>
           {viewMode === 'calendar' ? (
             <div className="grid md:grid-cols-5 gap-4">
               <div className="md:col-span-3">
@@ -373,11 +371,15 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
                     onCancel={cancelPost}
                   />
                 ) : (
-                  <div className="h-full flex items-center justify-center border border-dashed border-gray-200 rounded-lg p-6 text-center">
+                  <div className="h-full flex items-center justify-center border border-dashed border-gray-200 rounded-lg p-6 text-center min-h-[300px]">
                     <div>
                       <Calendar className="w-8 h-8 text-gray-300 mx-auto mb-2" />
                       <p className="text-xs text-gray-400">
-                        {selectedDate ? 'No clips on this day' : 'Click a day to see scheduled clips'}
+                        {scheduledPosts.length === 0
+                          ? 'No clips scheduled yet'
+                          : selectedDate
+                            ? 'No clips on this day'
+                            : 'Click a day with clips to preview'}
                       </p>
                     </div>
                   </div>
@@ -402,7 +404,6 @@ export default function ClipScheduler({ clips, enhancements = {}, videoUrl = '' 
             <RefreshCw className="w-3 h-3" /> Refresh status
           </Button>
         </>
-      )}
 
       {/* Preview modal */}
       <ClipPreviewModal
