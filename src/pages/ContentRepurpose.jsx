@@ -528,7 +528,7 @@ OUTPUT: ${deficit} words of continuation.`,
             const isCurrent = step === stepNum;
             const isClickable = isCompleted && stepNum < 5; // can't go back to pipeline redirect
             return (
-              <React.Fragment key={i}>
+              <div key={i} className="flex items-center gap-2">
                 <button
                   onClick={() => isClickable && setStep(stepNum)}
                   disabled={!isClickable && !isCurrent}
@@ -542,7 +542,7 @@ OUTPUT: ${deficit} words of continuation.`,
                   <span className="hidden sm:inline">{label}</span>
                 </button>
                 {i < stepLabels.length - 1 && <div className={`w-6 h-0.5 ${step > stepNum ? 'bg-green-300' : 'bg-gray-200'}`} />}
-              </React.Fragment>
+              </div>
             );
           })}
         </div>
