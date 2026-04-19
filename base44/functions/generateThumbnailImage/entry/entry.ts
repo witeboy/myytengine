@@ -1,13 +1,44 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 // ══════════════════════════════════════════════════════════════════
-// THUMBNAIL IMAGE GENERATION
-// Primary: AI33 SeedDream 4.5 (async submit → poll via pollThumbnailTask)
+// THUMBNAIL IMAGE GENERATION v2 — Channel DNA face-lock
+// Primary: AI33 SeedDream 4.5 (with DNA face refs when present)
 // Fallback: Ideogram V3 via KIE (sync poll in-function)
 // ══════════════════════════════════════════════════════════════════
 
 const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
 const AI33_BASE = "https://api.ai33.pro";
+
+// ── Inline Channel DNA loader ────────────────────────────────────
+function _safeArr(s) {
+  if (!s) return [];
+  try { const v = JSON.parse(s); return Array.isArray(v) ? v : []; }
+  catch (_) { return []; }
+}
+
+async function loadChannelDNAForConcept(base44, concept) {
+  try {
+    const project_id = concept?.project_id;
+    if (!project_id) return null;
+    const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
+    const channel_id = projects[0]?.channel_id;
+    if (!channel_id) return null;
+    const dnaList = await base44.asServiceRole.entities.ChannelThumbnailDNA.filter({ channel_id });
+    const d = dnaList[0];
+    if (!d || d.is_active === false) return null;
+    return {
+      face_reference_urls: _safeArr(d.face_reference_urls),
+      face_descriptions: _safeArr(d.face_descriptions),
+      primary_color: d.primary_color || '',
+      secondary_color: d.secondary_color || '',
+      mood_bias: d.mood_bias || 'drama',
+      style_notes: d.style_notes || '',
+    };
+  } catch (e) {
+    console.warn('DNA load failed (non-fatal):', e.message);
+    return null;
+  }
+}
 
 // ── KIE helpers (for Ideogram fallback) ─────────────────────────
 
@@ -39,10 +70,11 @@ async function kiePoll(apiKey, taskId) {
 }
 
 // ── AI33 SeedDream submit (async, returns task_id) ──────────────
+// Supports face reference URLs from Channel DNA for consistency.
 
-async function submitAI33Thumbnail(apiKey, prompt, aspectRatio) {
+async function submitAI33Thumbnail(apiKey, prompt, aspectRatio, referenceUrls = []) {
   const ai33Aspect = aspectRatio === "9:16" ? "9:16" : "16:9";
-  console.log(`🌱 AI33 Seedream thumbnail: submitting (${prompt.length} chars, ratio=${ai33Aspect})...`);
+  console.log(`🌱 AI33 Seedream thumbnail: submitting (${prompt.length} chars, ratio=${ai33Aspect}, refs=${referenceUrls.length})...`);
 
   const formData = new FormData();
   formData.append('prompt', prompt.substring(0, 4000));
@@ -52,6 +84,19 @@ async function submitAI33Thumbnail(apiKey, prompt, aspectRatio) {
     aspect_ratio: ai33Aspect,
     resolution: "2K"
   }));
+
+  // Attach DNA face refs as blobs (AI33 requires multipart image uploads)
+  for (const [i, url] of referenceUrls.entries()) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) { console.warn(`DNA ref ${i + 1} fetch failed: HTTP ${r.status}`); continue; }
+      const blob = await r.blob();
+      formData.append('reference_images', blob, `dna_ref_${i + 1}.jpg`);
+      console.log(`  ✓ Attached DNA face ref ${i + 1}`);
+    } catch (e) {
+      console.warn(`DNA ref ${i + 1} error: ${e.message}`);
+    }
+  }
 
   const submitRes = await fetch(`${AI33_BASE}/v1i/task/generate-image`, {
     method: 'POST',
@@ -115,38 +160,36 @@ Deno.serve(async (req) => {
     const aspectRatio = isShorts ? "9:16" : "16:9";
     const imageSize = isShorts ? "portrait_9_16" : "landscape_16_9";
 
-    const cleanPrompt = prepareThumbnailPrompt(prompt);
+    let cleanPrompt = prepareThumbnailPrompt(prompt);
+
+    // ── Load Channel DNA and augment the prompt + reference images ──
+    const dna = await loadChannelDNAForConcept(base44, concept);
+    const dnaRefs = dna?.face_reference_urls || [];
+
+    if (dna) {
+      const dnaLines = [];
+      if (dnaRefs.length > 0) {
+        dnaLines.push(`The reference image${dnaRefs.length > 1 ? 's' : ''} provided MUST be used as the character's face — preserve exact facial features, skin tone, and hair from the reference${dnaRefs.length > 1 ? 's' : ''}. Do NOT generate a generic or different person.`);
+        dna.face_descriptions.forEach((d, i) => { if (d?.trim()) dnaLines.push(`Character ${i + 1}: ${d.trim()}.`); });
+      }
+      if (dna.primary_color) dnaLines.push(`Brand primary color: ${dna.primary_color}.`);
+      if (dna.secondary_color) dnaLines.push(`Brand secondary color: ${dna.secondary_color}.`);
+      if (dna.style_notes) dnaLines.push(dna.style_notes);
+      if (dnaLines.length > 0) {
+        cleanPrompt = `${cleanPrompt}\n\nCHANNEL BRAND LOCK: ${dnaLines.join(' ')}`;
+        console.log(`🔒 Applied Channel DNA: ${dnaRefs.length} face refs, palette=${!!dna.primary_color}`);
+      }
+    }
 
     console.log(`🖼️ Generating thumbnail for concept ${concept_id} (${cleanPrompt.length} chars)`);
 
     // ═══════════════════════════════════════════════════════════
-    // PRIMARY: Z-Image via KIE (fast, high quality, no text artifacts)
-    // ═══════════════════════════════════════════════════════════
-    if (KIE_KEY) {
-      try {
-        const zPrompt = cleanPrompt.substring(0, 1500) + ". Professional YouTube thumbnail quality, ultra high resolution, cinematic lighting, razor-sharp details.";
-        const tid = await kieCreate(KIE_KEY, "z-image", {
-          prompt: zPrompt,
-          aspect_ratio: aspectRatio
-        });
-        const url = await kiePoll(KIE_KEY, tid);
-        if (url) {
-          await base44.asServiceRole.entities.ThumbnailConcepts.update(concept_id, { image_url: url });
-          console.log(`✓ Z-Image thumbnail generated: ${url.substring(0, 60)}`);
-          return Response.json({ success: true, image_url: url, model: 'z-image', concept_id });
-        }
-      } catch (e) {
-        console.warn("Z-Image failed:", e.message, "→ falling back to Seedream/Ideogram");
-      }
-    }
-
-    // ═══════════════════════════════════════════════════════════
-    // FALLBACK 1: AI33 SeedDream (async submit → frontend polls)
+    // PRIMARY: AI33 SeedDream (async submit → frontend polls)
     // ═══════════════════════════════════════════════════════════
     if (AI33_KEY) {
       try {
         const ai33Prompt = cleanPrompt + ". Ultra high resolution, crisp sharp details, professional YouTube thumbnail quality, cinematic lighting.";
-        const taskId = await submitAI33Thumbnail(AI33_KEY, ai33Prompt, aspectRatio);
+        const taskId = await submitAI33Thumbnail(AI33_KEY, ai33Prompt, aspectRatio, dnaRefs);
 
         // Return immediately — frontend will poll via pollThumbnailTask
         return Response.json({

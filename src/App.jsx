@@ -13,6 +13,7 @@ import AutoEditReview from './pages/AutoEditReview';
 import YouTubeCallback from './pages/YouTubeCallback';
 import QuickPublish from './pages/QuickPublish';
 import ClipExtractor from './pages/ClipExtractor';
+import ChannelThumbnailDNAPage from './pages/ChannelThumbnailDNA';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -88,6 +89,11 @@ const AuthenticatedApp = () => {
       <Route path="/ClipExtractor" element={
         <LayoutWrapper currentPageName="ClipExtractor">
           <ClipExtractor />
+        </LayoutWrapper>
+      } />
+      <Route path="/ChannelThumbnailDNA" element={
+        <LayoutWrapper currentPageName="ChannelThumbnailDNA">
+          <ChannelThumbnailDNAPage />
         </LayoutWrapper>
       } />
       <Route path="*" element={<PageNotFound />} />

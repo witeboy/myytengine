@@ -1,12 +1,86 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 // ══════════════════════════════════════════════════════════════════
-// THUMBNAIL CONCEPTS v5.1 — Single-Call + Template Auto-Select (redeploy trigger)
+// THUMBNAIL CONCEPTS v6 — Channel DNA + Template Auto-Select
+// Channel DNA Lock: per-channel face refs, colors, font, mood bias
 // Template DNA Vault: 26 templates × 7 niches injected
 // Face/Emotion Intelligence: per-template expression specs
 // Shorts Detection: auto-switches to vertical 9:16 hook frame
 // CTR Target: 8-12% | View Target: 10M+
 // ══════════════════════════════════════════════════════════════════
+
+// ── Inline Channel DNA loader (no shared imports in Base44) ─────
+function _safeArr(s) {
+  if (!s) return [];
+  try { const v = JSON.parse(s); return Array.isArray(v) ? v : []; }
+  catch (_) { return []; }
+}
+
+async function loadChannelDNA(base44, project_id) {
+  if (!project_id) return { has_dna: false, dna: null };
+  try {
+    const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
+    const channel_id = projects[0]?.channel_id;
+    if (!channel_id) return { has_dna: false, dna: null };
+    const dnaList = await base44.asServiceRole.entities.ChannelThumbnailDNA.filter({ channel_id });
+    const d = dnaList[0];
+    if (!d || d.is_active === false) return { has_dna: false, dna: null };
+    return {
+      has_dna: true,
+      dna: {
+        face_reference_urls: _safeArr(d.face_reference_urls),
+        face_descriptions: _safeArr(d.face_descriptions),
+        primary_color: d.primary_color || '',
+        secondary_color: d.secondary_color || '',
+        background_color: d.background_color || '',
+        text_color: d.text_color || '#FFFFFF',
+        font_family: d.font_family || 'Impact',
+        text_style_preset: d.text_style_preset || 'mrbeast',
+        mood_bias: d.mood_bias || 'drama',
+        emotion_bias: d.emotion_bias || 'auto',
+        preferred_templates: _safeArr(d.preferred_templates),
+        banned_templates: _safeArr(d.banned_templates),
+        composition_style: d.composition_style || 'auto',
+        visual_style_lock: d.visual_style_lock || '',
+        logo_url: d.logo_url || '',
+        style_notes: d.style_notes || '',
+      }
+    };
+  } catch (e) {
+    console.warn('loadChannelDNA failed:', e.message);
+    return { has_dna: false, dna: null };
+  }
+}
+
+function dnaPromptBlock(dna) {
+  if (!dna) return '';
+  const lines = [];
+  lines.push('═══════════════════════════════════════════════════════════════');
+  lines.push('🔒 CHANNEL THUMBNAIL DNA — MANDATORY BRAND LOCK');
+  lines.push('Every concept MUST obey these channel-wide rules. They override template defaults.');
+  lines.push('═══════════════════════════════════════════════════════════════');
+  if (dna.face_reference_urls.length > 0) {
+    lines.push(`👤 LOCKED CHARACTER(S): ${dna.face_reference_urls.length} reference face(s) will be injected at render time. Compose every concept so the main character is clearly framed (rule-of-thirds, waist-up to face-closeup) and their face expression is the PRIMARY focal point.`);
+    dna.face_descriptions.forEach((d, i) => { if (d?.trim()) lines.push(`   • Character ${i + 1}: ${d.trim()}`); });
+  }
+  const colors = [
+    dna.primary_color && `primary ${dna.primary_color}`,
+    dna.secondary_color && `secondary ${dna.secondary_color}`,
+    dna.background_color && `background ${dna.background_color}`,
+    dna.text_color && `text ${dna.text_color}`,
+  ].filter(Boolean).join(', ');
+  if (colors) lines.push(`🎨 LOCKED PALETTE: ${colors}. Every concept color_scheme MUST use these.`);
+  if (dna.font_family) lines.push(`🔤 LOCKED FONT: ${dna.font_family}.`);
+  if (dna.mood_bias && dna.mood_bias !== 'drama') lines.push(`🎭 MOOD BIAS: ${dna.mood_bias}.`);
+  if (dna.emotion_bias && dna.emotion_bias !== 'auto') lines.push(`💥 EMOTION BIAS: Lead with "${dna.emotion_bias}" as the primary click trigger.`);
+  if (dna.preferred_templates.length) lines.push(`✅ PREFERRED TEMPLATES (use first): ${dna.preferred_templates.join(', ')}`);
+  if (dna.banned_templates.length) lines.push(`🚫 BANNED TEMPLATES (never use): ${dna.banned_templates.join(', ')}`);
+  if (dna.composition_style && dna.composition_style !== 'auto') lines.push(`📐 LOCKED COMPOSITION: ${dna.composition_style.replace(/_/g, ' ')}`);
+  if (dna.visual_style_lock) lines.push(`🎬 LOCKED VISUAL STYLE: ${dna.visual_style_lock}`);
+  if (dna.style_notes) lines.push(`📝 CHANNEL DIRECTIVES: ${dna.style_notes}`);
+  lines.push('═══════════════════════════════════════════════════════════════');
+  return lines.join('\n');
+}
 
 const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
 
@@ -273,6 +347,14 @@ Deno.serve(async (req) => {
       projectNiche = projectResult.value[0].niche || '';
     }
 
+    // ─── Load Channel DNA (overrides project defaults when locked) ───
+    const { has_dna, dna } = await loadChannelDNA(base44, project_id);
+    if (has_dna && dna.visual_style_lock) {
+      visualStyle = dna.visual_style_lock;
+      console.log(`🔒 Channel DNA: visual_style locked to "${visualStyle}"`);
+    }
+    const dnaBlock = has_dna ? dnaPromptBlock(dna) : '';
+
     let thumbTone = 'cinematic documentary', brandColors = '', brandStyle = '';
     if (brandResult.status === 'fulfilled' && Array.isArray(brandResult.value)) {
       const brand = brandResult.value.find(b => b.project_id === project_id);
@@ -300,7 +382,25 @@ Deno.serve(async (req) => {
       video_title.toLowerCase().startsWith('short ') ||
       (scriptContext.length > 0 && scriptContext.length < 600);
 
-    const selectedTemplates = selectTemplates(video_title, scriptContext, projectNiche, isShorts);
+    let selectedTemplates = selectTemplates(video_title, scriptContext, projectNiche, isShorts);
+
+    // ─── Apply Channel DNA template preferences ─────────────────────
+    if (has_dna) {
+      const banned = new Set(dna.banned_templates || []);
+      const preferred = dna.preferred_templates || [];
+      selectedTemplates = selectedTemplates.filter(t => !banned.has(t.id));
+      // Push preferred templates to front of queue
+      if (preferred.length > 0) {
+        const preferredDnas = preferred
+          .map(id => TEMPLATE_DNA[id])
+          .filter(t => t && !banned.has(t.id));
+        const existingIds = new Set(selectedTemplates.map(t => t.id));
+        const toPrepend = preferredDnas.filter(t => !existingIds.has(t.id));
+        selectedTemplates = [...preferredDnas.filter(t => existingIds.has(t.id)), ...toPrepend, ...selectedTemplates.filter(t => !preferred.includes(t.id))];
+        selectedTemplates = selectedTemplates.slice(0, 3);
+      }
+      if (selectedTemplates.length === 0) selectedTemplates = [TEMPLATE_DNA.shock_face];
+    }
     const primaryTemplate = selectedTemplates[0];
     const tmplBlock = templateContextBlock(selectedTemplates);
     const dimensionSpec = isShorts ? "1080x1920 Full HD 9:16 vertical YouTube Shorts" : "1920x1080 Full HD 16:9 widescreen landscape YouTube thumbnail";
@@ -345,7 +445,7 @@ ${topicContext ? `VIDEO CONTEXT: ${topicContext}` : ''}
 ${shortsNote}
 ${scriptSection}
 
-${tmplBlock}
+${dnaBlock ? dnaBlock + '\n\n' : ''}${tmplBlock}
 
 ${visualStyleBlock}
 

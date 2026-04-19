@@ -1,0 +1,133 @@
+{
+  "name": "ChannelThumbnailDNA",
+  "type": "object",
+  "properties": {
+    "channel_id": {
+      "type": "string",
+      "description": "Reference to the Channels entity this DNA belongs to"
+    },
+    "face_reference_urls": {
+      "type": "string",
+      "description": "JSON array of locked character/face reference image URLs used on every thumbnail for this channel"
+    },
+    "face_descriptions": {
+      "type": "string",
+      "description": "JSON array of per-face descriptions (e.g. clothing, character name) aligned with face_reference_urls"
+    },
+    "primary_color": {
+      "type": "string",
+      "description": "Primary brand color hex used for text/accents (e.g. #FFD700)"
+    },
+    "secondary_color": {
+      "type": "string",
+      "description": "Secondary brand color hex for highlights"
+    },
+    "background_color": {
+      "type": "string",
+      "description": "Preferred background color hex / tone"
+    },
+    "text_color": {
+      "type": "string",
+      "description": "Default text overlay color hex",
+      "default": "#FFFFFF"
+    },
+    "font_family": {
+      "type": "string",
+      "enum": [
+        "Impact",
+        "Bebas Neue",
+        "Montserrat Black",
+        "Anton",
+        "Oswald",
+        "Teko"
+      ],
+      "default": "Impact",
+      "description": "Locked font family for text overlays"
+    },
+    "text_style_preset": {
+      "type": "string",
+      "enum": [
+        "hormozi",
+        "mrbeast",
+        "documentary",
+        "stacked_shadow",
+        "split_color",
+        "minimal"
+      ],
+      "default": "mrbeast",
+      "description": "Canvas text compositing preset"
+    },
+    "mood_bias": {
+      "type": "string",
+      "enum": [
+        "crime",
+        "drama",
+        "nollywood",
+        "comedy",
+        "finance",
+        "inspirational",
+        "educational"
+      ],
+      "default": "drama",
+      "description": "Default color-grading mood applied post-generation"
+    },
+    "emotion_bias": {
+      "type": "string",
+      "enum": [
+        "shock",
+        "curiosity",
+        "fear",
+        "greed",
+        "transformation",
+        "status",
+        "mystery",
+        "urgency",
+        "heartbreak",
+        "auto"
+      ],
+      "default": "auto",
+      "description": "Preferred primary click-emotion for this channel"
+    },
+    "preferred_templates": {
+      "type": "string",
+      "description": "JSON array of template DNA ids this channel consistently uses (e.g. ['shock_face','income_reveal'])"
+    },
+    "banned_templates": {
+      "type": "string",
+      "description": "JSON array of template DNA ids to never use for this channel"
+    },
+    "composition_style": {
+      "type": "string",
+      "enum": [
+        "face_left_text_right",
+        "face_right_text_left",
+        "centered_face",
+        "split_screen",
+        "object_dominant",
+        "auto"
+      ],
+      "default": "auto",
+      "description": "Locked composition layout"
+    },
+    "visual_style_lock": {
+      "type": "string",
+      "description": "Locked visual style (e.g. cinematic_realistic, anime, cartoon_2d) \u2014 overrides project style"
+    },
+    "logo_url": {
+      "type": "string",
+      "description": "Optional channel logo/watermark URL to include subtly in corner"
+    },
+    "style_notes": {
+      "type": "string",
+      "description": "Freeform channel-wide thumbnail directives (injected into prompts)"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether DNA auto-injection is enabled for this channel"
+    }
+  },
+  "required": [
+    "channel_id"
+  ]
+}
