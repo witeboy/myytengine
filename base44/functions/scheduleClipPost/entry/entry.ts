@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 // v2 — uses UploadMetadata entity with record_type='scheduled_post'
 
 Deno.serve(async (req) => {
@@ -48,26 +48,10 @@ Deno.serve(async (req) => {
 
     const TIME_HOURS = { morning: 9, afternoon: 13, evening: 19, night: 21 };
     const strategy = body.strategy || 'spread';
-
-    // Parse custom start_time "HH:MM" or fall back to time_slot preset
-    let startHour = 19, startMinute = 0;
-    if (body.start_time && /^\d{1,2}:\d{2}$/.test(body.start_time)) {
-      const parts = body.start_time.split(':');
-      startHour = parseInt(parts[0], 10);
-      startMinute = parseInt(parts[1], 10);
-    } else {
-      startHour = TIME_HOURS[body.time_slot] || 19;
-    }
-
-    // Interval in minutes between consecutive posts on the same day (min 45)
-    const intervalMin = Math.max(45, parseInt(body.interval_minutes || 120, 10));
-
-    // Burst = postsPerDay posts per day (default 3), spread = 1 per day
-    const postsPerDay = strategy === 'burst' ? Math.max(2, parseInt(body.posts_per_day || 3, 10)) : 1;
+    const hour = TIME_HOURS[body.time_slot] || 19;
 
     const baseDate = body.start_date ? new Date(body.start_date) : new Date();
-    // If start_date already provided, don't add +1 day (user picked it explicitly)
-    if (!body.start_date) baseDate.setDate(baseDate.getDate() + 1);
+    baseDate.setDate(baseDate.getDate() + 1);
 
     const results = [];
 
@@ -75,14 +59,12 @@ Deno.serve(async (req) => {
       const clip = clips[i];
       const seo = clip.seo || {};
 
-      var dayOffset = Math.floor(i / postsPerDay);
-      var slotInDay = i % postsPerDay;
+      var dayOffset = strategy === 'spread' ? i : Math.floor(i / 3);
+      var inDayOffset = strategy === 'burst' ? (i % 3) * 2 : 0;
 
       const postDate = new Date(baseDate);
       postDate.setDate(postDate.getDate() + dayOffset);
-      postDate.setHours(startHour, startMinute, 0, 0);
-      // Add interval * slotInDay minutes
-      postDate.setMinutes(postDate.getMinutes() + (slotInDay * intervalMin));
+      postDate.setHours(hour + inDayOffset, 0, 0, 0);
       const scheduledAt = postDate.toISOString();
 
       const post = await base44.entities.UploadMetadata.create({
@@ -183,18 +165,6 @@ Deno.serve(async (req) => {
     }
 
     return Response.json({ success: true, processed: results.length, results: results });
-  }
-
-  // ── RESCHEDULE — Change the scheduled_at of a post ─────────
-  if (action === 'reschedule') {
-    if (!body.post_id || !body.scheduled_at) {
-      return Response.json({ error: 'post_id and scheduled_at required' }, { status: 400 });
-    }
-    await base44.entities.UploadMetadata.update(body.post_id, {
-      scheduled_at: body.scheduled_at,
-      status: 'scheduled',
-    });
-    return Response.json({ success: true, post_id: body.post_id, scheduled_at: body.scheduled_at });
   }
 
   // ── CANCEL ─────────────────────────────────────────────────
