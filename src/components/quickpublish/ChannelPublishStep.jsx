@@ -32,26 +32,37 @@ async function uploadToYouTube({ accessToken, file, metadata, thumbnailBlob, onP
   const cleanedTags = cleanYouTubeTags(metadata.tags);
 
   // ── STEP 1: Initiate resumable session ──────────────────────────────
+  // Spam-avoidance: complete metadata signals a legitimate creator upload.
+  // YouTube's trust system penalizes sparse/ambiguous uploads.
   const snippet = {
     title: (metadata.title || 'Untitled').slice(0, 100),
     description: (metadata.description || '').slice(0, 5000),
     ...(cleanedTags.length > 0 ? { tags: cleanedTags } : {}),
     categoryId: metadata.categoryId || '22',
     defaultLanguage: 'en',
+    defaultAudioLanguage: 'en',
+  };
+  const baseStatus = {
+    selfDeclaredMadeForKids: !!metadata.madeForKids,
+    embeddable: true,
+    publicStatsViewable: true,
+    license: 'youtube',
   };
   const status = metadata.publishAt
     ? {
+        ...baseStatus,
         privacyStatus: 'private',
         publishAt: metadata.publishAt,
-        selfDeclaredMadeForKids: !!metadata.madeForKids,
       }
     : {
+        ...baseStatus,
         privacyStatus: metadata.privacy || 'private',
-        selfDeclaredMadeForKids: !!metadata.madeForKids,
       };
 
+  // notifySubscribers=false on automated uploads prevents spam flags from
+  // mass-notification patterns. Users can notify manually from YouTube Studio.
   const initRes = await fetch(
-    'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status',
+    'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status&notifySubscribers=false',
     {
       method: 'POST',
       headers: {

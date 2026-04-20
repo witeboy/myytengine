@@ -1,7 +1,9 @@
 // Shared YouTube resumable upload function
 export async function uploadToYouTube({ accessToken, file, metadata, thumbnailBlob, onProgress }) {
   // Step 1: Init resumable upload
-  const initRes = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status', {
+  // Spam-avoidance: complete metadata + notifySubscribers=false signals a
+  // legitimate creator upload and avoids YouTube's mass-notification spam flags.
+  const initRes = await fetch('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status&notifySubscribers=false', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
@@ -21,10 +23,14 @@ export async function uploadToYouTube({ accessToken, file, metadata, thumbnailBl
         })()),
         categoryId: metadata.categoryId || '22',
         defaultLanguage: 'en',
+        defaultAudioLanguage: 'en',
       },
       status: {
         privacyStatus: metadata.privacy || 'private',
         selfDeclaredMadeForKids: false,
+        embeddable: true,
+        publicStatsViewable: true,
+        license: 'youtube',
       },
     }),
   });
