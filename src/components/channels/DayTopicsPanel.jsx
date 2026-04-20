@@ -3,14 +3,16 @@ import { base44 } from '@/api/base44Client';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Play, Clock, FileText, Zap, CheckCircle2, Loader2, ChevronDown, ChevronUp, Package, RotateCcw, Globe, Wand2 } from 'lucide-react';
+import { Play, Clock, FileText, Zap, CheckCircle2, Loader2, ChevronDown, ChevronUp, Package, RotateCcw, Globe, Wand2, Calendar as CalendarIcon } from 'lucide-react';
 import { ExpandableAssets } from './TopicAssetsPanel';
 import AutoEditButton from './AutoEditButton';
+import TopicScheduleDialog from './TopicScheduleDialog';
 
 export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose, channel, onTopicUpdated }) {
   const [projectData, setProjectData] = useState({});
   const [actionLoading, setActionLoading] = useState(null);
   const [expandedTopic, setExpandedTopic] = useState(null);
+  const [scheduleTopic, setScheduleTopic] = useState(null);
 
   // Fetch project data for topics that have projects
   useEffect(() => {
@@ -100,7 +102,11 @@ export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose,
             {topic.format === 'short' ? <Clock className="w-3 h-3 mr-0.5" /> : <FileText className="w-3 h-3 mr-0.5" />}
             {topic.format === 'short' ? `≤${channel?.short_form_word_limit || 200}w` : `${channel?.long_form_duration_minutes || 15}min`}
           </Badge>
-          {topic.suggested_post_time && (
+          {topic.scheduled_time ? (
+            <Badge className="text-[9px] flex-shrink-0 bg-indigo-50 text-indigo-700 border border-indigo-200">
+              <CalendarIcon className="w-2.5 h-2.5 mr-0.5" /> {topic.scheduled_time}
+            </Badge>
+          ) : topic.suggested_post_time && (
             <Badge className="text-[9px] flex-shrink-0 bg-blue-50 text-blue-600 border border-blue-200">
               <Clock className="w-2.5 h-2.5 mr-0.5" /> {topic.suggested_post_time}
             </Badge>
@@ -126,6 +132,15 @@ export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose,
 
           {canStart && (
             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                onClick={() => setScheduleTopic(topic)}
+                title="Schedule publish date/time"
+              >
+                <CalendarIcon className="w-3 h-3 mr-1" /> Schedule
+              </Button>
               <AutoEditButton topic={topic} channel={channel} onJobCreated={() => onTopicUpdated?.()} />
               <Button
                 size="sm"
@@ -240,6 +255,13 @@ export default function DayTopicsPanel({ date, topics, onStartPipeline, onClose,
           </div>
           <Button variant="ghost" size="sm" onClick={onClose} className="text-xs">✕ Close</Button>
         </div>
+
+        <TopicScheduleDialog
+          open={!!scheduleTopic}
+          onOpenChange={(o) => { if (!o) setScheduleTopic(null); }}
+          topic={scheduleTopic}
+          onSaved={() => { setScheduleTopic(null); onTopicUpdated?.(); }}
+        />
 
         {topics.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-6">No topics scheduled for this date</p>

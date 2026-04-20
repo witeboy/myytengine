@@ -24,6 +24,7 @@ import EditableTopicTitle from '@/components/channels/EditableTopicTitle';
 import AITitleGenerator from '@/components/channels/AITitleGenerator';
 import AutoEditButton from '@/components/channels/AutoEditButton';
 import AutoEditJobsList from '@/components/channels/AutoEditJobsList';
+import TopicScheduleDialog from '@/components/channels/TopicScheduleDialog';
 
 export default function ChannelDetail() {
   const navigate = useNavigate();
@@ -35,6 +36,7 @@ export default function ChannelDetail() {
   const [activeStatFilter, setActiveStatFilter] = useState(null);
   const [expandedTopicAll, setExpandedTopicAll] = useState(null);
   const [showAIGenerator, setShowAIGenerator] = useState(false);
+  const [scheduleTopic, setScheduleTopic] = useState(null);
 
   const getProjectRoute = (project) => {
     const s = project.status;
@@ -390,11 +392,20 @@ export default function ChannelDetail() {
                             <EditableTopicTitle topic={topic} onUpdated={() => refetchTopics()} />
                           </div>
                           {topic.scheduled_date && (
-                            <span className="text-[11px] text-gray-400 flex-shrink-0 flex items-center gap-1">
-                              <Clock className="w-3 h-3" />
-                              {topic.scheduled_date}
+                            <span className="text-[11px] text-indigo-600 flex-shrink-0 flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              {topic.scheduled_date}{topic.scheduled_time ? ` ${topic.scheduled_time}` : ''}
                             </span>
                           )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 w-6 p-0 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 flex-shrink-0"
+                            title="Schedule publish"
+                            onClick={(e) => { e.stopPropagation(); setScheduleTopic(topic); }}
+                          >
+                            <Calendar className="w-3.5 h-3.5" />
+                          </Button>
                           <Badge className={`text-[10px] flex-shrink-0 ${
                             topic.status === 'in_progress' ? 'bg-amber-100 text-amber-700' :
                             topic.status === 'completed' || topic.status === 'published' ? 'bg-green-100 text-green-700' :
@@ -516,6 +527,13 @@ export default function ChannelDetail() {
         channel={channel}
         existingTopics={topics}
         onComplete={() => refetchTopics()}
+      />
+
+      <TopicScheduleDialog
+        open={!!scheduleTopic}
+        onOpenChange={(o) => { if (!o) setScheduleTopic(null); }}
+        topic={scheduleTopic}
+        onSaved={() => { setScheduleTopic(null); refetchTopics(); }}
       />
     </div>
   );

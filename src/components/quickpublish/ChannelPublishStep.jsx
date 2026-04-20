@@ -305,17 +305,23 @@ export default function ChannelPublishStep({
         .filter(t => t && t.length >= 2);
 
       setUploadStatus('Uploading to YouTube...');
+      // Spam-safe default: if the user didn't explicitly pick 'public', fall back to
+      // 'unlisted' so first uploads from a new/reconnected channel avoid spam flags.
+      // Cap tags to 7 max (YouTube spam-safe limit — mirrors SEO generator).
+      const safePrivacy = scheduleEnabled ? 'private' : (privacy || 'unlisted');
+      const cappedTags = tagArray.slice(0, 7);
+
       const result = await uploadToYouTube({
         accessToken,
         file: videoFile,
         metadata: {
           title: title.trim(),
           description: description.trim(),
-          tags: tagArray,
-          privacy: scheduleEnabled ? 'private' : privacy,
-          categoryId,
+          tags: cappedTags,
+          privacy: safePrivacy,
+          categoryId: categoryId || '22',
           publishAt: publishAtIso,
-          madeForKids,
+          madeForKids: !!madeForKids,
         },
         thumbnailBlob,
         onProgress: setUploadProgress,
@@ -411,16 +417,18 @@ export default function ChannelPublishStep({
       <div className="flex gap-3">
         <div className="flex-1">
           <label className="text-sm font-medium mb-1.5 block">Privacy</label>
-          <Select value={privacy} onValueChange={onPrivacyChange} disabled={scheduleEnabled}>
+          <Select value={privacy || 'unlisted'} onValueChange={onPrivacyChange} disabled={scheduleEnabled}>
             <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="private">Private</SelectItem>
-              <SelectItem value="unlisted">Unlisted</SelectItem>
+              <SelectItem value="unlisted">Unlisted (recommended)</SelectItem>
               <SelectItem value="public">Public</SelectItem>
             </SelectContent>
           </Select>
-          {scheduleEnabled && (
+          {scheduleEnabled ? (
             <p className="text-[10px] text-gray-400 mt-0.5">Auto-public when scheduled</p>
+          ) : (
+            <p className="text-[10px] text-amber-600 mt-0.5">Start as Unlisted to avoid spam flags</p>
           )}
         </div>
         <div className="flex-1">

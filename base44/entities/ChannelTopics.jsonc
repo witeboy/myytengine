@@ -1,0 +1,86 @@
+{
+  "name": "ChannelTopics",
+  "type": "object",
+  "properties": {
+    "channel_id": {
+      "type": "string",
+      "description": "Reference to the channel"
+    },
+    "title": {
+      "type": "string",
+      "description": "Topic title"
+    },
+    "format": {
+      "type": "string",
+      "enum": [
+        "short",
+        "long"
+      ],
+      "default": "short",
+      "description": "Content format \u2014 short-form or long-form"
+    },
+    "scheduled_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Scheduled publish date (YYYY-MM-DD)"
+    },
+    "scheduled_time": {
+      "type": "string",
+      "description": "Scheduled publish time in 24h HH:MM format (user's local timezone)"
+    },
+    "scheduled_timezone": {
+      "type": "string",
+      "description": "IANA timezone string (e.g. America/New_York) of the scheduled_time"
+    },
+    "suggested_post_time": {
+      "type": "string",
+      "description": "AI-suggested best posting time (e.g. '9:00 AM', '2:00 PM')"
+    },
+    "slot_index": {
+      "type": "number",
+      "description": "Order within the day (1-5 for shorts, 1-3 for longform per week)"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "scheduled",
+        "in_progress",
+        "completed",
+        "published",
+        "skipped"
+      ],
+      "default": "queued",
+      "description": "Topic pipeline status"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Reference to auto-created project when topic enters pipeline"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional notes or brief for this topic"
+    },
+    "ai_notes": {
+      "type": "string",
+      "description": "AI strategic reasoning for format/placement decisions"
+    },
+    "priority": {
+      "type": "number",
+      "description": "Priority ranking for scheduling",
+      "default": 0
+    },
+    "theme_cluster": {
+      "type": "string",
+      "description": "Thematic grouping assigned by AI for strategic sequencing"
+    },
+    "trend_score": {
+      "type": "number",
+      "description": "YouTube trend relevance score (0-100)"
+    }
+  },
+  "required": [
+    "channel_id",
+    "title"
+  ]
+}
