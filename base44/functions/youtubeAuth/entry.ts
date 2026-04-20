@@ -147,15 +147,22 @@ Deno.serve(async (req) => {
       const channels = await getChannels(base44, userEmail);
       const existingIdx = channels.findIndex(c => c.channel_id === channelId);
 
+      // Preserve existing refresh_token if Google didn't return a new one (happens
+      // when user re-consents a scope they already granted). Only overwrite when
+      // we actually received a fresh refresh_token.
+      const preservedRefresh = existingIdx >= 0 ? channels[existingIdx].refresh_token : '';
       const channelObj = {
         user_id: userEmail,
         channel_id: channelId,
         channel_name: channelName,
         channel_thumbnail: channelThumbnail,
         access_token: accessToken,
-        refresh_token: refreshToken || (existingIdx >= 0 ? channels[existingIdx].refresh_token : ''),
+        refresh_token: refreshToken || preservedRefresh,
         token_expiry: tokenExpiry,
-        is_default: channels.length === 0,
+        is_default: existingIdx >= 0 ? channels[existingIdx].is_default : channels.length === 0,
+        refresh_invalid: false,
+        connected_at: existingIdx >= 0 ? channels[existingIdx].connected_at : Date.now(),
+        last_reconnected_at: Date.now(),
       };
 
       if (existingIdx >= 0) {
@@ -184,7 +191,10 @@ Deno.serve(async (req) => {
           channel_name: c.channel_name,
           channel_thumbnail: c.channel_thumbnail,
           is_default: c.is_default,
-          token_valid: c.token_expiry > Date.now(),
+          // Channel is "connected" as long as we hold a refresh_token.
+          // Access token expiry is irrelevant — we auto-refresh on demand.
+          token_valid: !!c.refresh_token,
+          needs_reconnect: !!c.refresh_invalid,
         })),
       });
     }
@@ -227,7 +237,10 @@ Deno.serve(async (req) => {
       // Refresh if expired or within 5 min of expiry
       if (ch.token_expiry < Date.now() + 300000) {
         if (!ch.refresh_token) {
-          return Response.json({ error: 'No refresh token — reconnect this channel' }, { status: 401 });
+          return Response.json({
+            error: 'No refresh token — please reconnect this channel',
+            needs_reconnect: true,
+          }, { status: 401 });
         }
 
         const refreshRes = await fetch('https://oauth2.googleapis.com/token', {
@@ -243,11 +256,29 @@ Deno.serve(async (req) => {
 
         const refreshData = await refreshRes.json();
         if (refreshData.error) {
-          return Response.json({ error: `Token refresh failed: ${refreshData.error}. Reconnect channel.` }, { status: 401 });
+          // invalid_grant = refresh token permanently revoked (7-day test expiry,
+          // password change, user revoked access, or >6 months inactive).
+          // Only mark as needing reconnect for hard failures — not transient errors.
+          const hardFail = refreshData.error === 'invalid_grant';
+          if (hardFail) {
+            ch.refresh_invalid = true;
+            await saveChannels(base44, userEmail, channels);
+          }
+          console.error(`❌ Refresh failed for ${ch.channel_name}: ${refreshData.error} — ${refreshData.error_description || ''}`);
+          return Response.json({
+            error: `Token refresh failed: ${refreshData.error_description || refreshData.error}. Please reconnect this channel.`,
+            needs_reconnect: hardFail,
+            google_error: refreshData.error,
+          }, { status: 401 });
         }
 
         ch.access_token = refreshData.access_token;
         ch.token_expiry = Date.now() + ((refreshData.expires_in || 3600) * 1000);
+        // Google sometimes rotates the refresh token — keep the new one if provided
+        if (refreshData.refresh_token) {
+          ch.refresh_token = refreshData.refresh_token;
+        }
+        ch.refresh_invalid = false;
         await saveChannels(base44, userEmail, channels);
 
         console.log(`🔄 Token refreshed for ${ch.channel_name}`);
