@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.6';
 
 // ===================================================================
 // HELPERS
@@ -69,77 +69,65 @@ function extractTranscriptText(data) {
 async function getYouTubeTranscript(videoId) {
   const apiKey = Deno.env.get("YOUTUBE_TRANSCRIPT_API_KEY");
   if (!apiKey) {
-    console.log('[Transcript] No YOUTUBE_TRANSCRIPT_API_KEY set');
+    console.log('[Transcript T1] No API key configured');
     return null;
   }
 
-  const MAX_RETRIES = 5;
-  const RETRY_DELAY = 4000;
+  const MAX_RETRIES = 3;
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      console.log(`[Transcript T1] Attempt ${attempt}/${MAX_RETRIES} for ${videoId}...`);
-      const response = await fetch('https://youtubetranscript.dev/api/v2/batch', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ video_ids: [videoId], lang: 'en', preserve_formatting: false })
-      });
+  // Try multiple endpoints — v2 batch can 405, v2 GET is the reliable path
+  const endpoints = [
+    { url: `https://youtubetranscript.dev/api/v2/transcript?video_id=${videoId}&lang=en`, method: 'GET' },
+    { url: 'https://youtubetranscript.dev/api/v2/batch', method: 'POST', body: JSON.stringify({ video_ids: [videoId], lang: 'en', preserve_formatting: false }) },
+    { url: `https://youtubetranscript.dev/api/transcript?video_id=${videoId}&lang=en`, method: 'GET' },
+  ];
 
-      if (!response.ok) {
-        console.log(`[Transcript T1] API returned ${response.status}`);
-        return null;
-      }
+  for (const ep of endpoints) {
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        console.log(`[Transcript T1] ${ep.method} ${ep.url.split('?')[0]} attempt ${attempt}`);
+        const fetchOpts = {
+          method: ep.method,
+          headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        };
+        if (ep.body) fetchOpts.body = ep.body;
 
-      const data = await response.json();
-      const status = data.results?.[0]?.status || 'no result';
-      console.log(`[Transcript T1] Response status: ${status}`);
+        const response = await fetch(ep.url, fetchOpts);
+        console.log(`[Transcript T1] Status: ${response.status}`);
 
-      // Log raw data keys for debugging
-      const rawData = data.results?.[0]?.data;
-      if (rawData) {
-        console.log(`[Transcript T1] Raw data keys: ${Object.keys(rawData).join(', ')}`);
-      }
-
-      // If still processing, wait and retry
-      if (status === 'processing' || status === 'pending' || status === 'queued') {
-        console.log(`[Transcript T1] Still ${status}, waiting ${RETRY_DELAY}ms before retry...`);
-        // Even while "processing", try to extract — some APIs populate data incrementally
-        const earlyText = extractTranscriptText(data);
-        if (earlyText.length > 50) {
-          console.log(`[Transcript T1] Found text (${earlyText.length} chars) despite '${status}' status`);
-          return earlyText;
+        if (!response.ok) {
+          if (response.status === 405 || response.status === 404) break; // Wrong endpoint, try next
+          if (attempt < MAX_RETRIES) { await new Promise(r => setTimeout(r, 3000)); continue; }
+          break;
         }
-        if (attempt < MAX_RETRIES) {
-          await new Promise(r => setTimeout(r, RETRY_DELAY));
+
+        const data = await response.json();
+
+        // Direct transcript response (GET v2)
+        if (typeof data.transcript === 'string' && data.transcript.length > 50) return data.transcript;
+        if (data.transcript?.text?.length > 50) return data.transcript.text;
+        if (typeof data.text === 'string' && data.text.length > 50) return data.text;
+        if (Array.isArray(data.transcript)) {
+          const joined = data.transcript.map(s => s.text || s.utf8 || '').join(' ').replace(/\s+/g, ' ').trim();
+          if (joined.length > 50) return joined;
+        }
+
+        // Batch response
+        const text = extractTranscriptText(data);
+        if (text.length > 50) return text;
+
+        if (data.results?.[0]?.status === 'processing' && attempt < MAX_RETRIES) {
+          console.log(`[Transcript T1] Processing, retrying...`);
+          await new Promise(r => setTimeout(r, 4000));
           continue;
         }
-        console.log('[Transcript T1] Max retries reached while processing');
-        return null;
-      }
 
-      // Try to extract regardless of status (some APIs return data with non-"completed" status)
-      const transcript = extractTranscriptText(data);
-      if (transcript.length > 50) {
-        console.log(`[Transcript T1] Got ${transcript.length} chars (status: ${status})`);
-        return transcript;
+        console.log(`[Transcript T1] No transcript in response`);
+        break; // Try next endpoint
+      } catch (e) {
+        console.log(`[Transcript T1] Error: ${e.message}`);
+        if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, 3000));
       }
-
-      if (status === 'completed') {
-        console.log(`[Transcript T1] Status completed but no usable text found. Full data: ${JSON.stringify(rawData).substring(0, 500)}`);
-      }
-
-      console.log(`[Transcript T1] No usable transcript (status: ${status})`);
-      return null;
-    } catch (error) {
-      console.log(`[Transcript T1] Error on attempt ${attempt}: ${error.message}`);
-      if (attempt < MAX_RETRIES) {
-        await new Promise(r => setTimeout(r, RETRY_DELAY));
-        continue;
-      }
-      return null;
     }
   }
   return null;
@@ -150,116 +138,114 @@ async function getYouTubeTranscript(videoId) {
 // ===================================================================
 async function getYouTubeTranscriptFree(videoId) {
   try {
-    console.log(`[Transcript T1.5] Fetching via InnerTube for ${videoId}...`);
-    
+    console.log(`[Transcript T1.5] InnerTube for ${videoId}`);
     const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-      headers: { 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept-Language': 'en-US,en;q=0.9',
-        'Accept': 'text/html,application/xhtml+xml'
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
       }
     });
     const html = await pageRes.text();
-    
-    // Multiple extraction patterns (YouTube changes these periodically)
+
     let captionTracks = null;
-    const patterns = [
-      /"captionTracks":\s*(\[.*?\])\s*[,}]/,
-      /captionTracks\\?":\s*(\[.*?\])/,
-      /"playerCaptionsTracklistRenderer".*?"captionTracks":\s*(\[.*?\])/s,
-    ];
-    
-    for (const pattern of patterns) {
-      const match = html.match(pattern);
-      if (match) {
-        try {
-          let jsonStr = match[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-          captionTracks = JSON.parse(jsonStr);
-          console.log(`[Transcript T1.5] Found ${captionTracks.length} caption tracks`);
-          break;
-        } catch (_) { continue; }
-      }
-    }
-    
-    if (!captionTracks || captionTracks.length === 0) {
-      // Try extracting from ytInitialPlayerResponse
-      const playerMatch = html.match(/ytInitialPlayerResponse\s*=\s*({.*?});/s);
-      if (playerMatch) {
-        try {
-          const player = JSON.parse(playerMatch[1]);
-          captionTracks = player?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
-          if (captionTracks) console.log(`[Transcript T1.5] Found ${captionTracks.length} tracks from playerResponse`);
-        } catch (_) {}
-      }
-    }
-    
-    if (!captionTracks || captionTracks.length === 0) {
-      console.log('[Transcript T1.5] No captionTracks found');
-      return null;
-    }
-    
-    // Priority: manual English > auto English > manual any > auto any
-    const enManual = captionTracks.find(t => t.languageCode === 'en' && t.kind !== 'asr');
-    const enAuto = captionTracks.find(t => t.languageCode === 'en' && t.kind === 'asr');
-    const enAny = captionTracks.find(t => t.languageCode?.startsWith('en'));
-    const anyManual = captionTracks.find(t => t.kind !== 'asr');
-    const track = enManual || enAuto || enAny || anyManual || captionTracks[0];
-    
-    if (!track?.baseUrl) {
-      console.log('[Transcript T1.5] No caption track URL found');
-      return null;
-    }
-    
-    console.log(`[Transcript T1.5] Using track: ${track.languageCode} (${track.kind === 'asr' ? 'auto-generated' : 'manual'})`);
-    
-    // Fetch caption XML — try with fmt=json3 first (more reliable), fall back to XML
-    let transcript = '';
-    
-    // Try JSON3 format
-    try {
-      const json3Url = track.baseUrl + (track.baseUrl.includes('?') ? '&' : '?') + 'fmt=json3';
-      const json3Res = await fetch(json3Url);
-      if (json3Res.ok) {
-        const json3 = await json3Res.json();
-        if (json3.events) {
-          const parts = json3.events
-            .filter(e => e.segs)
-            .flatMap(e => e.segs.map(s => s.utf8?.trim()).filter(Boolean));
-          transcript = parts.join(' ').replace(/\s+/g, ' ').trim();
-          if (transcript.length > 50) {
-            console.log(`[Transcript T1.5] Got ${transcript.length} chars from JSON3 format`);
-            return transcript;
+
+    // Strategy 1: Extract ytInitialPlayerResponse using balanced brace matching
+    const playerStart = html.indexOf('ytInitialPlayerResponse');
+    if (playerStart !== -1) {
+      const eqIdx = html.indexOf('=', playerStart);
+      if (eqIdx !== -1) {
+        const jsonStart = html.indexOf('{', eqIdx);
+        if (jsonStart !== -1) {
+          let depth = 0, i = jsonStart;
+          for (; i < html.length && i < jsonStart + 500000; i++) {
+            if (html[i] === '{') depth++;
+            else if (html[i] === '}') { depth--; if (depth === 0) break; }
+          }
+          if (depth === 0) {
+            const jsonStr = html.substring(jsonStart, i + 1);
+            try {
+              const player = JSON.parse(jsonStr);
+              captionTracks = player?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+              if (captionTracks?.length) console.log(`[Transcript T1.5] Found ${captionTracks.length} tracks via playerResponse`);
+            } catch (e) {
+              console.log(`[Transcript T1.5] playerResponse parse failed: ${e.message.slice(0, 100)}`);
+            }
           }
         }
       }
-    } catch (_) {}
-    
-    // Fall back to XML format
-    const captionRes = await fetch(track.baseUrl);
+    }
+
+    // Strategy 2: Direct regex fallback
+    if (!captionTracks?.length) {
+      const directPatterns = [
+        /"captionTracks"\s*:\s*(\[[\s\S]*?\])\s*,\s*"/,
+        /captionTracks['"]\s*:\s*(\[[\s\S]*?\])/,
+      ];
+      for (const pattern of directPatterns) {
+        const match = html.match(pattern);
+        if (match) {
+          try {
+            const cleaned = match[1].replace(/\\u0026/g, '&').replace(/\\"/g, '"');
+            captionTracks = JSON.parse(cleaned);
+            if (captionTracks?.length) { console.log(`[Transcript T1.5] Found ${captionTracks.length} tracks via regex`); break; }
+          } catch (_) {}
+        }
+      }
+    }
+
+    if (!captionTracks?.length) {
+      console.log(`[Transcript T1.5] No caption tracks found`);
+      return null;
+    }
+
+    const enManual = captionTracks.find(t => t.languageCode === 'en' && t.kind !== 'asr');
+    const enAuto = captionTracks.find(t => t.languageCode === 'en' && t.kind === 'asr');
+    const track = enManual || enAuto || captionTracks[0];
+    console.log(`[Transcript T1.5] Selected track: lang=${track?.languageCode}, kind=${track?.kind}`);
+    if (!track?.baseUrl) return null;
+
+    // CRITICAL: Fix escaped URLs — this was the bug causing 0 chars
+    const baseUrl = track.baseUrl.replace(/\\u0026/g, '&').replace(/&amp;/g, '&');
+
+    // Try JSON3 first
+    try {
+      const json3Url = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'fmt=json3';
+      const json3Res = await fetch(json3Url);
+      console.log(`[Transcript T1.5] JSON3 status: ${json3Res.status}`);
+      if (json3Res.ok) {
+        const json3 = await json3Res.json();
+        if (json3.events) {
+          const text = json3.events
+            .filter(e => e.segs)
+            .flatMap(e => e.segs.map(s => s.utf8?.trim()).filter(Boolean))
+            .join(' ').replace(/\s+/g, ' ').trim();
+          console.log(`[Transcript T1.5] JSON3 extracted ${text.length} chars`);
+          if (text.length > 50) return text;
+        }
+      }
+    } catch (e) {
+      console.log(`[Transcript T1.5] JSON3 error: ${e.message}`);
+    }
+
+    // XML fallback
+    const captionRes = await fetch(baseUrl);
     const captionXml = await captionRes.text();
-    
     const textParts = [];
     const textRegex = /<text[^>]*>(.*?)<\/text>/gs;
-    let match;
-    while ((match = textRegex.exec(captionXml)) !== null) {
-      let text = match[1]
+    let xmlMatch;
+    while ((xmlMatch = textRegex.exec(captionXml)) !== null) {
+      const t = xmlMatch[1]
         .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ')
+        .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
         .replace(/<[^>]+>/g, '').trim();
-      if (text) textParts.push(text);
+      if (t) textParts.push(t);
     }
-    
-    transcript = textParts.join(' ').replace(/\s+/g, ' ').trim();
-    
-    if (transcript.length > 50) {
-      console.log(`[Transcript T1.5] Got ${transcript.length} chars from XML format`);
-      return transcript;
-    }
-    
-    console.log(`[Transcript T1.5] Transcript too short: ${transcript.length} chars`);
-    return null;
-  } catch (error) {
-    console.log(`[Transcript T1.5] Error: ${error.message}`);
+    const transcript = textParts.join(' ').replace(/\s+/g, ' ').trim();
+    console.log(`[Transcript T1.5] XML extracted ${transcript.length} chars`);
+    return transcript.length > 50 ? transcript : null;
+  } catch (e) {
+    console.log(`[Transcript T1.5] Error: ${e.message}`);
     return null;
   }
 }
