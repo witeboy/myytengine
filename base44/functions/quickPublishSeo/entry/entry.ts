@@ -5,34 +5,44 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // Uses dedicated SEO Expert prompts for tags & strategic hashtag logic
 // ══════════════════════════════════════════════════════════════════
 
-async function callGemini(apiKey, prompt, maxTokens = 8192, retries = 3) {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.85, maxOutputTokens: maxTokens },
-        }),
+async function callGemini(apiKey, prompt, maxTokens = 8192) {
+  const MAX_RETRIES = 3;
+  let lastErr;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.85, maxOutputTokens: maxTokens },
+          }),
+        }
+      );
+      if (res.status === 429 || res.status >= 500) {
+        lastErr = new Error(`Gemini ${res.status}`);
+        if (attempt < MAX_RETRIES) {
+          await new Promise(r => setTimeout(r, 2000 * attempt));
+          continue;
+        }
       }
-    );
-    if (res.ok) {
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Gemini ${res.status}: ${err.substring(0, 300)}`);
+      }
       const data = await res.json();
       return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    } catch (err) {
+      lastErr = err;
+      if (attempt < MAX_RETRIES) {
+        await new Promise(r => setTimeout(r, 2000 * attempt));
+        continue;
+      }
     }
-    // Handle rate limits with exponential backoff
-    if (res.status === 429 && attempt < retries) {
-      const waitMs = Math.pow(2, attempt + 1) * 2000; // 4s, 8s, 16s
-      console.warn(`⏳ Gemini 429 — backing off ${waitMs / 1000}s (attempt ${attempt + 1}/${retries})`);
-      await new Promise(r => setTimeout(r, waitMs));
-      continue;
-    }
-    const err = await res.text();
-    throw new Error(`Gemini ${res.status}: ${err.substring(0, 300)}`);
   }
-  throw new Error('Gemini: retries exhausted');
+  throw lastErr;
 }
 
 function parseJson(text) {

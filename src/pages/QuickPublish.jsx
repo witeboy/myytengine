@@ -13,6 +13,9 @@ import UploadStep from '../components/quickpublish/UploadStep';
 import SeoReviewStep from '../components/quickpublish/SeoReviewStep';
 import ThumbnailStep from '../components/quickpublish/ThumbnailStep';
 import ChannelPublishStep from '../components/quickpublish/ChannelPublishStep';
+import ChaptersPanel from '../components/quickpublish/ChaptersPanel';
+import ViralMomentsPanel from '../components/quickpublish/ViralMomentsPanel';
+import SilenceTrimPanel from '../components/quickpublish/SilenceTrimPanel';
 
 const LS_KEY = 'qp_pipeline_state_v1';
 
@@ -29,6 +32,9 @@ export default function QuickPublish() {
   const [error, setError] = useState('');
   const [statusMessage, setStatusMessage] = useState('');
   const [transcript, setTranscript] = useState('');
+  const [transcriptChapters, setTranscriptChapters] = useState([]);
+  const [transcriptWords, setTranscriptWords] = useState([]);
+  const [transcriptDuration, setTranscriptDuration] = useState(0);
 
   const [titles, setTitles] = useState([]);
   const [seoAnalysis, setSeoAnalysis] = useState(null);
@@ -54,6 +60,9 @@ export default function QuickPublish() {
       if (s.niche) setNiche(s.niche);
       if (s.completedSteps) setCompletedSteps(s.completedSteps);
       if (s.transcript) setTranscript(s.transcript);
+      if (s.transcriptChapters) setTranscriptChapters(s.transcriptChapters);
+      if (s.transcriptWords) setTranscriptWords(s.transcriptWords);
+      if (s.transcriptDuration) setTranscriptDuration(s.transcriptDuration);
       if (s.titles) setTitles(s.titles);
       if (s.seoAnalysis) setSeoAnalysis(s.seoAnalysis);
       if (s.hashtags) setHashtags(s.hashtags);
@@ -78,12 +87,14 @@ export default function QuickPublish() {
         projectId, niche, completedSteps, transcript, titles, seoAnalysis,
         hashtags, pinnedComment, descriptionOptions, tagsBreakdown,
         title, description, tags, thumbnailUrl, privacy, categoryId,
+        transcriptChapters, transcriptWords, transcriptDuration,
       }));
     } catch (_) {}
   }, [
     projectId, niche, completedSteps, transcript, titles, seoAnalysis,
     hashtags, pinnedComment, descriptionOptions, tagsBreakdown,
     title, description, tags, thumbnailUrl, privacy, categoryId,
+    transcriptChapters, transcriptWords, transcriptDuration,
   ]);
 
   // ── Thumbnails query ────────────────────────────────────────
@@ -105,6 +116,7 @@ export default function QuickPublish() {
     setVideoFile(null); setFileUrl(''); setProjectId(null);
     setCurrentStep(null); setCompletedSteps([]);
     setError(''); setStatusMessage(''); setTranscript('');
+    setTranscriptChapters([]); setTranscriptWords([]); setTranscriptDuration(0);
     setTitles([]); setSeoAnalysis(null); setHashtags([]); setPinnedComment('');
     setDescriptionOptions([]); setTagsBreakdown(null);
     setTitle(''); setDescription(''); setTags('');
@@ -145,19 +157,31 @@ export default function QuickPublish() {
     const transcriptId = submitRes.data?.transcript_id;
     if (!transcriptId) throw new Error(submitRes.data?.error || 'No transcript ID returned');
 
-    // Poll up to 10 min (120 * 5s)
+    // Poll up to 30 min with adaptive backoff (long videos can take 15+ min)
     const startedAt = Date.now();
-    for (let attempts = 0; attempts < 120; attempts++) {
-      await new Promise(r => setTimeout(r, 5000));
+    const MAX_ATTEMPTS = 180; // 30 min total at avg 10s interval
+    for (let attempts = 0; attempts < MAX_ATTEMPTS; attempts++) {
+      // Adaptive: poll fast early, slow later
+      const interval = attempts < 12 ? 5000 : attempts < 60 ? 10000 : 15000;
+      await new Promise(r => setTimeout(r, interval));
       const elapsed = Math.round((Date.now() - startedAt) / 1000);
       setStatusMessage(`Transcribing... (${elapsed}s elapsed)`);
 
-      const pollRes = await base44.functions.invoke('quickPublishTranscribe', {
-        action: 'poll', transcript_id: transcriptId,
-      });
+      let pollRes;
+      try {
+        pollRes = await base44.functions.invoke('quickPublishTranscribe', {
+          action: 'poll', transcript_id: transcriptId,
+        });
+      } catch (netErr) {
+        // Transient — keep polling
+        continue;
+      }
       if (pollRes.data?.status === 'completed') {
         const text = pollRes.data.text || '';
         setTranscript(text);
+        setTranscriptChapters(pollRes.data.chapters || []);
+        setTranscriptWords(pollRes.data.words || []);
+        setTranscriptDuration(pollRes.data.duration || 0);
         markComplete('transcribe');
         return text;
       }
@@ -165,7 +189,7 @@ export default function QuickPublish() {
         throw new Error(pollRes.data?.error || 'Transcription failed');
       }
     }
-    throw new Error('Transcription timed out after 10 minutes');
+    throw new Error('Transcription timed out after 30 minutes');
   };
 
   const runSeo = async (transcriptText, pid, channelName = '') => {
@@ -453,7 +477,13 @@ export default function QuickPublish() {
                 <FileText className="w-4 h-4 text-blue-600" /> SEO & Metadata
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {/* Auto-chapters from transcript */}
+              <ChaptersPanel
+                chapters={transcriptChapters}
+                description={description}
+                onAppendToDescription={(block) => setDescription(prev => (prev || '') + block)}
+              />
               <SeoReviewStep
                 titleOptions={titleOptions}
                 titleObjects={titles}
@@ -467,6 +497,17 @@ export default function QuickPublish() {
                 seoAnalysis={seoAnalysis}
                 hashtags={hashtags}
                 pinnedComment={pinnedComment}
+              />
+              {/* Viral Shorts extractor */}
+              <ViralMomentsPanel
+                transcript={transcript}
+                words={transcriptWords}
+                duration={transcriptDuration}
+              />
+              {/* Silence + filler cleanup */}
+              <SilenceTrimPanel
+                words={transcriptWords}
+                duration={transcriptDuration}
               />
             </CardContent>
           </Card>

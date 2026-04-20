@@ -3,7 +3,6 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // ══════════════════════════════════════════════════════════════════
 // QUICK PUBLISH — Transcribe an uploaded video/audio via AssemblyAI
 // Returns transcript_id for polling, and full text when complete
-// v2 — redeploy trigger
 // ══════════════════════════════════════════════════════════════════
 
 Deno.serve(async (req) => {
@@ -26,8 +25,14 @@ Deno.serve(async (req) => {
         headers: { 'Authorization': API_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           audio_url: file_url,
-          speech_models: ['universal-3-pro'],
+          speech_model: 'best',
           language_detection: true,
+          // Enable speaker diarization + auto chapters + content safety for upgrades
+          speaker_labels: true,
+          auto_chapters: true,
+          punctuate: true,
+          format_text: true,
+          disfluencies: true, // keeps "um"/"uh" markers so we can detect + remove fillers
         }),
       });
 
@@ -59,6 +64,16 @@ Deno.serve(async (req) => {
           word: w.text,
           start: w.start / 1000,
           end: w.end / 1000,
+          speaker: w.speaker || null,
+          confidence: w.confidence ?? null,
+        }));
+        // AssemblyAI auto-chapters → use as YouTube chapters
+        const chapters = (result.chapters || []).map(c => ({
+          start: c.start / 1000,
+          end: c.end / 1000,
+          headline: c.headline,
+          summary: c.summary,
+          gist: c.gist,
         }));
         return Response.json({
           status: 'completed',
@@ -66,6 +81,8 @@ Deno.serve(async (req) => {
           words,
           word_count: words.length,
           duration: result.audio_duration,
+          chapters,
+          speakers_detected: new Set(words.map(w => w.speaker).filter(Boolean)).size,
         });
       }
 

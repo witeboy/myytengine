@@ -259,6 +259,7 @@ export default function ContentRepurpose() {
 
   // Step 4: New script
   const [newScript, setNewScript] = useState('');
+  const [tempProjectId, setTempProjectId] = useState(null); // for cleanup
 
   // Hook selection
   const [selectedHook, setSelectedHook] = useState(null);
@@ -495,6 +496,17 @@ OUTPUT: ${deficit} words of continuation.`,
       word_count: newScript.split(/\s+/).filter(w => w).length,
       estimated_duration_sec: targetDurationMin * 60,
     });
+
+    // Clean up the temporary project and its batches
+    if (tempProjectId) {
+      try {
+        const tempBatches = await base44.entities.ScriptBatches.filter({ project_id: tempProjectId });
+        await Promise.all(tempBatches.map(b => base44.entities.ScriptBatches.delete(b.id)));
+        await base44.entities.Projects.delete(tempProjectId);
+      } catch (cleanupErr) {
+        console.warn('Temp project cleanup skipped:', cleanupErr.message);
+      }
+    }
 
     setPipelineStep('Redirecting to Content Generation...');
     setLoading(false);
