@@ -68,8 +68,9 @@ export async function initFFmpeg(onProgress) {
     // The ffmpeg.wasm library internally spawns a Worker from its CDN location,
     // which browsers block as cross-origin. We must fetch the worker script
     // ourselves and pass a same-origin blob URL via `classWorkerURL`.
+    // unpkg serves the raw file with proper CORS (esm.sh rewrites it).
     const workerURL = await toBlobURL(
-      'https://esm.sh/@ffmpeg/ffmpeg@0.12.10/dist/esm/worker.js',
+      'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/worker.js',
       'text/javascript',
     );
 
