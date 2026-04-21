@@ -183,7 +183,7 @@ export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] })
   if (!clips.length) return null;
 
   return (
-    <Card className="border-2 border-purple-400 bg-gradient-to-br from-purple-100 via-pink-50 to-orange-50 shadow-xl ring-2 ring-purple-200/50">
+    <Card id="shorts-clipper-panel" className="border-2 border-purple-400 bg-gradient-to-br from-purple-100 via-pink-50 to-orange-50 shadow-xl ring-2 ring-purple-200/50 scroll-mt-4 transition-all duration-300">
       <CardContent className="p-5 space-y-3">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 flex-wrap">

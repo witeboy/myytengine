@@ -262,15 +262,23 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
             </Button>
           </div>
 
-          {/* Enhance for FYP */}
+          {/* Scroll to the real 9:16 renderer below the grid */}
           <Button
             size="sm"
             variant="outline"
-            className="w-full h-8 text-xs mt-1 border-purple-200 text-purple-700 hover:bg-purple-50"
-            onClick={() => setShowEnhance(true)}
+            className="w-full h-8 text-xs mt-1 border-purple-300 bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700 hover:from-purple-100 hover:to-pink-100 font-semibold"
+            onClick={() => {
+              const panel = document.getElementById('shorts-clipper-panel');
+              if (panel) {
+                panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Flash highlight
+                panel.classList.add('ring-4', 'ring-purple-400');
+                setTimeout(() => panel.classList.remove('ring-4', 'ring-purple-400'), 1500);
+              }
+            }}
           >
             <Wand2 className="w-3 h-3 mr-1" />
-            Enhance for FYP
+            🔥 Make Viral Short (9:16 + captions + SFX)
           </Button>
 
           {showEnhance && (
