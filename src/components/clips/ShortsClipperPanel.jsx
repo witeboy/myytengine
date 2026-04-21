@@ -7,10 +7,11 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Smartphone, Download, Loader2, CheckCircle, AlertCircle,
-  Wand2, Zap, Package, Scissors, Volume2,
+  Wand2, Zap, Package, Scissors, Volume2, Cloud, Cpu,
 } from 'lucide-react';
 import { isFFmpegSupported } from '@/lib/clipWithFFmpeg';
 import { renderShortWithCaptions, downloadShortBlob } from '@/lib/renderShortWithCaptions';
+import { renderShortCloud, downloadShortUrl } from '@/lib/renderShortCloud';
 
 const STATUS_IDLE = 'idle';
 const STATUS_RENDERING = 'rendering';
@@ -20,13 +21,14 @@ const STATUS_FAILED = 'failed';
 // ── Per-clip row ─────────────────────────────────────────────────────
 function ShortRow({
   clip, index, videoUrl, words,
-  captionStyle, trimSilence, addSfx,
+  captionStyle, trimSilence, addSfx, renderMode,
   autoTrigger, onStateChange,
 }) {
   const [status, setStatus] = useState(STATUS_IDLE);
   const [percent, setPercent] = useState(0);
   const [message, setMessage] = useState('');
-  const [blob, setBlob] = useState(null);
+  const [blob, setBlob] = useState(null);        // browser mode output
+  const [cloudUrl, setCloudUrl] = useState(null); // cloud mode output
   const [stats, setStats] = useState(null);
   const [error, setError] = useState('');
 
@@ -44,23 +46,41 @@ function ShortRow({
     setPercent(0);
     onStateChange?.(index, STATUS_RENDERING);
     try {
-      const result = await renderShortWithCaptions({
-        videoUrl,
-        startSec: clip.start,
-        endSec: clip.end,
-        words,
-        captionStyle,
-        trimSilence,
-        addSfx,
-        onProgress: ({ percent: p, message: m }) => {
-          if (typeof p === 'number') setPercent(p);
-          if (m) setMessage(m);
-        },
-      });
-      setBlob(result.blob);
-      setStats(result.stats);
-      setStatus(STATUS_DONE);
-      onStateChange?.(index, STATUS_DONE, result.blob);
+      if (renderMode === 'cloud') {
+        const result = await renderShortCloud({
+          videoUrl,
+          startSec: clip.start,
+          endSec: clip.end,
+          words,
+          captionStyle,
+          title: clip.title,
+          onProgress: ({ percent: p, message: m }) => {
+            if (typeof p === 'number') setPercent(p);
+            if (m) setMessage(m);
+          },
+        });
+        setCloudUrl(result.url);
+        setStatus(STATUS_DONE);
+        onStateChange?.(index, STATUS_DONE, { url: result.url });
+      } else {
+        const result = await renderShortWithCaptions({
+          videoUrl,
+          startSec: clip.start,
+          endSec: clip.end,
+          words,
+          captionStyle,
+          trimSilence,
+          addSfx,
+          onProgress: ({ percent: p, message: m }) => {
+            if (typeof p === 'number') setPercent(p);
+            if (m) setMessage(m);
+          },
+        });
+        setBlob(result.blob);
+        setStats(result.stats);
+        setStatus(STATUS_DONE);
+        onStateChange?.(index, STATUS_DONE, { blob: result.blob });
+      }
     } catch (err) {
       setError(err.message || 'Render failed');
       setStatus(STATUS_FAILED);
@@ -69,7 +89,11 @@ function ShortRow({
   };
 
   const download = () => {
-    if (blob) downloadShortBlob(blob, clip.title, index);
+    if (cloudUrl) {
+      downloadShortUrl(cloudUrl, clip.title, index);
+    } else if (blob) {
+      downloadShortBlob(blob, clip.title, index);
+    }
   };
 
   return (
@@ -149,6 +173,7 @@ function ShortRow({
 // MAIN PANEL
 // ══════════════════════════════════════════════════════════════════════
 export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] }) {
+  const [renderMode, setRenderMode] = useState('cloud'); // 'cloud' | 'browser'
   const [captionStyle, setCaptionStyle] = useState('hormozi_pro');
   const [trimSilence, setTrimSilence] = useState(true);
   const [addSfx, setAddSfx] = useState(true);
@@ -160,8 +185,15 @@ export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] })
   const hasWords = words.length > 0;
   const hasSAB = typeof SharedArrayBuffer !== 'undefined';
 
-  const handleStateChange = (idx, status, blob) => {
-    setRowStates(prev => ({ ...prev, [idx]: { status, blob: blob || prev[idx]?.blob } }));
+  const handleStateChange = (idx, status, output) => {
+    setRowStates(prev => ({
+      ...prev,
+      [idx]: {
+        status,
+        blob: output?.blob || prev[idx]?.blob,
+        url: output?.url || prev[idx]?.url,
+      },
+    }));
   };
 
   const renderAll = () => setRenderAllTick(t => t + 1);
@@ -172,10 +204,14 @@ export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] })
   const downloadAll = async () => {
     setBulkDownloading(true);
     const ready = clips
-      .map((c, i) => ({ clip: c, idx: i, blob: rowStates[i]?.blob }))
-      .filter(x => x.blob);
-    for (const { clip, idx, blob } of ready) {
-      downloadShortBlob(blob, clip.title, idx);
+      .map((c, i) => ({ clip: c, idx: i, state: rowStates[i] }))
+      .filter(x => x.state?.blob || x.state?.url);
+    for (const { clip, idx, state } of ready) {
+      if (state.url) {
+        await downloadShortUrl(state.url, clip.title, idx);
+      } else if (state.blob) {
+        downloadShortBlob(state.blob, clip.title, idx);
+      }
       await new Promise(r => setTimeout(r, 400));
     }
     setBulkDownloading(false);
@@ -207,15 +243,45 @@ export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] })
             </div>
           </div>
 
-          <Button
-            size="sm"
-            onClick={renderAll}
-            disabled={!supported || renderingCount > 0}
-            className="h-8 text-xs gap-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
-          >
-            <Zap className="w-3 h-3" />
-            Render All {clips.length}
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* Render mode toggle */}
+            <div className="flex items-center gap-1 p-0.5 rounded-lg bg-white border border-purple-200 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setRenderMode('cloud')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                  renderMode === 'cloud'
+                    ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+                title="Server-side rendering via Creatomate — fast & reliable"
+              >
+                <Cloud className="w-3 h-3" /> Cloud
+              </button>
+              <button
+                type="button"
+                onClick={() => setRenderMode('browser')}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                  renderMode === 'browser'
+                    ? 'bg-slate-800 text-white shadow'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+                title="In-browser FFmpeg.wasm (legacy) — may fail due to browser security"
+              >
+                <Cpu className="w-3 h-3" /> Browser
+              </button>
+            </div>
+
+            <Button
+              size="sm"
+              onClick={renderAll}
+              disabled={(renderMode === 'browser' && !supported) || renderingCount > 0}
+              className="h-8 text-xs gap-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
+            >
+              <Zap className="w-3 h-3" />
+              Render All {clips.length}
+            </Button>
+          </div>
         </div>
 
         {/* Controls row */}
@@ -260,20 +326,28 @@ export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] })
           </div>
         </div>
 
-        {/* Compat warning */}
-        {!supported && (
+        {/* Mode notice */}
+        {renderMode === 'cloud' && (
+          <div className="flex items-start gap-2 p-2 rounded-md bg-purple-50 border border-purple-200 text-[11px] text-purple-700">
+            <Cloud className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+            <span>Cloud mode: rendered server-side via Creatomate. Fast, reliable, no browser crashes. <strong>Auto-trim &amp; SFX are browser-only.</strong></span>
+          </div>
+        )}
+
+        {/* Compat warnings (browser mode only) */}
+        {renderMode === 'browser' && !supported && (
           <div className="flex items-start gap-2 p-2 rounded-md bg-red-50 border border-red-200 text-[11px] text-red-700">
             <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-            <span>Your browser doesn't support WebAssembly. Use Chrome/Edge/Firefox latest.</span>
+            <span>Your browser doesn't support WebAssembly. Use Chrome/Edge/Firefox latest, or switch to Cloud mode.</span>
           </div>
         )}
-        {supported && !hasSAB && (
+        {renderMode === 'browser' && supported && !hasSAB && (
           <div className="flex items-start gap-2 p-2 rounded-md bg-blue-50 border border-blue-200 text-[11px] text-blue-700">
             <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-            <span>Running single-threaded (no SharedArrayBuffer) — rendering will be slower but fully functional.</span>
+            <span>Running single-threaded (no SharedArrayBuffer) — slower but functional. Switch to Cloud mode for best speed.</span>
           </div>
         )}
-        {supported && !hasWords && (captionStyle !== 'none' || trimSilence) && (
+        {!hasWords && (captionStyle !== 'none' || trimSilence) && (
           <div className="flex items-start gap-2 p-2 rounded-md bg-amber-50 border border-amber-200 text-[11px] text-amber-700">
             <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
             <span>No word timestamps available — captions and auto-trim need transcript data.</span>
@@ -318,6 +392,7 @@ export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] })
               captionStyle={captionStyle}
               trimSilence={trimSilence}
               addSfx={addSfx}
+              renderMode={renderMode}
               autoTrigger={renderAllTick}
               onStateChange={handleStateChange}
             />
