@@ -155,28 +155,37 @@ Style: Default,${p.fontName},${p.fontSize},${p.primary},${p.primary},${p.outline
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
 
-  // ── Per-chunk dialogue lines ────────────────────────────────────
-  // Emit ONE line per (chunk, activeWord) pair so the active word stays
-  // highlighted for its own duration — this is how Hormozi/CapCut render
-  // "one-word-at-a-time" highlights with static surrounding text.
+  // ── Per-chunk dialogue lines (karaoke-style with \t transform) ──
+  // ONE Dialogue line per chunk, spanning the full chunk duration.
+  // Inside, we use \t(start_ms, end_ms, \c&color&\fscx&size&) to animate
+  // each word's highlight at the exact moment it's spoken. This avoids
+  // the flicker caused by emitting multiple overlapping lines per chunk.
+  //
+  // Times inside \t(...) are milliseconds RELATIVE to the Dialogue start.
   const lines = [];
   for (const chunk of chunks) {
-    for (let i = 0; i < chunk.words.length; i++) {
-      const active = chunk.words[i];
-      // Build text with the i-th word wrapped in highlight override
-      const parts = chunk.words.map((w, idx) => {
-        const t = assEscape(w.word.toUpperCase());
-        if (idx === i) {
-          // Highlight: yellow color + scale-up pop
-          return `{\\c${p.highlight}\\fscx115\\fscy115}${t}{\\c${p.primary}\\fscx100\\fscy100}`;
-        }
-        return t;
-      });
-      const text = parts.join(' ');
-      lines.push(
-        `Dialogue: 0,${assTime(active.start)},${assTime(active.end)},Default,,0,0,0,,${text}`
+    const chunkStart = chunk.start;
+    const chunkEnd = chunk.end;
+    // Start every word in primary (white) — animate to highlight on its turn
+    const parts = chunk.words.map((w) => {
+      const t = assEscape(w.word.toUpperCase());
+      const relStartMs = Math.max(0, Math.round((w.start - chunkStart) * 1000));
+      const relEndMs = Math.max(relStartMs + 30, Math.round((w.end - chunkStart) * 1000));
+      // \t(ms1, ms2, tags) — animate tags from ms1 to ms2
+      // Pop in: scale 100→115, white→highlight during word
+      // Pop out: scale back to 100, color back to primary after word
+      const popOutMs = relEndMs + 40;
+      return (
+        `{\\c${p.primary}\\fscx100\\fscy100}` +
+        `{\\t(${relStartMs},${relStartMs + 80},\\c${p.highlight}\\fscx115\\fscy115)}` +
+        `{\\t(${relEndMs},${popOutMs},\\c${p.primary}\\fscx100\\fscy100)}` +
+        t
       );
-    }
+    });
+    const text = parts.join(' ');
+    lines.push(
+      `Dialogue: 0,${assTime(chunkStart)},${assTime(chunkEnd)},Default,,0,0,0,,${text}`
+    );
   }
 
   return header + lines.join('\n') + '\n';
@@ -241,16 +250,14 @@ export async function renderShortWithCaptions({
   }
 
   // ── Build video filter chain ─────────────────────────────────────
-  // crop to 9:16 aspect (keep center, height-driven), scale to target,
-  // optionally burn subtitles.
-  //
-  // For a SOURCE that's wider than 9:16 (most podcasts/landscape):
-  //   crop = ih*9/16 × ih (center vertical column), scale to 1080×1920
-  // For a SOURCE already taller than 9:16 (rare): same filter still works.
+  // Use force_original_aspect_ratio=increase to scale so the source covers the
+  // full 1080x1920 frame (may overflow in one dimension), then center-crop the
+  // overflow. Works identically for landscape AND portrait sources, no escaping
+  // issues, no edge cases. Finally normalize SAR.
   const cropScale =
-    `crop='min(iw\\,ih*9/16)':'min(ih\\,iw*16/9)',` +
-    `scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,` +
-    `pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2:black`;
+    `scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=increase,` +
+    `crop=${targetWidth}:${targetHeight},` +
+    `setsar=1`;
 
   const vf = wantsCaptions
     ? `${cropScale},ass=subs.ass`
