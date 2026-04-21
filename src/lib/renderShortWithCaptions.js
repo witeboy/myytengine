@@ -51,12 +51,8 @@ export async function renderShortWithCaptions({
   targetHeight = 1920,
   onProgress,
 }) {
-  if (!isFFmpegSupported()) {
-    throw new Error('Shorts rendering requires SharedArrayBuffer. Use Chrome/Edge latest.');
-  }
-
   const ffmpeg = await initFFmpeg(onProgress);
-  if (!ffmpeg) throw new Error('FFmpeg failed to load');
+  if (!ffmpeg) throw new Error('FFmpeg failed to load. Try reloading the page.');
 
   const { fetchFile } = await import(
     /* webpackIgnore: true */

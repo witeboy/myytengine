@@ -14,10 +14,13 @@ let ffmpeg = null;
 let ffmpegLoaded = false;
 
 /**
- * Check if the browser supports ffmpeg.wasm (needs SharedArrayBuffer)
+ * Check if the browser supports ffmpeg.wasm.
+ * We now use the single-threaded v0.11 UMD build which works WITHOUT
+ * SharedArrayBuffer / COOP+COEP headers — so this is basically always true
+ * in modern browsers. Kept as a function for API compatibility.
  */
 export function isFFmpegSupported() {
-  return typeof SharedArrayBuffer !== 'undefined';
+  return typeof WebAssembly !== 'undefined';
 }
 
 /**
@@ -27,12 +30,9 @@ export function isFFmpegSupported() {
 export async function initFFmpeg(onProgress) {
   if (ffmpegLoaded && ffmpeg) return ffmpeg;
 
-  if (!isFFmpegSupported()) {
-    console.warn('[FFmpeg] SharedArrayBuffer not available — using fallback clipping');
-    return null;
-  }
-
   onProgress?.({ phase: 'loading', message: 'Loading FFmpeg engine…', percent: 0 });
+
+  const hasSAB = typeof SharedArrayBuffer !== 'undefined';
 
   try {
     // Dynamic import from CDN
@@ -59,7 +59,14 @@ export async function initFFmpeg(onProgress) {
       console.log('[FFmpeg]', message);
     });
 
-    const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+    // Use single-threaded core when SharedArrayBuffer isn't available (no COOP/COEP headers).
+    // The MT build at /dist/esm requires SAB; the UMD build at /dist/umd is single-threaded.
+    const baseURL = hasSAB
+      ? 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm'
+      : 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+
+    console.log(`[FFmpeg] Loading ${hasSAB ? 'multi-threaded' : 'single-threaded'} core from ${baseURL}`);
+
     await ffmpeg.load({
       coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
       wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),

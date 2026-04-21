@@ -158,6 +158,7 @@ export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] })
 
   const supported = isFFmpegSupported();
   const hasWords = words.length > 0;
+  const hasSAB = typeof SharedArrayBuffer !== 'undefined';
 
   const handleStateChange = (idx, status, blob) => {
     setRowStates(prev => ({ ...prev, [idx]: { status, blob: blob || prev[idx]?.blob } }));
@@ -261,9 +262,15 @@ export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] })
 
         {/* Compat warning */}
         {!supported && (
-          <div className="flex items-start gap-2 p-2 rounded-md bg-amber-50 border border-amber-200 text-[11px] text-amber-700">
+          <div className="flex items-start gap-2 p-2 rounded-md bg-red-50 border border-red-200 text-[11px] text-red-700">
             <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-            <span>Your browser doesn't support SharedArrayBuffer. Use Chrome/Edge/Firefox latest.</span>
+            <span>Your browser doesn't support WebAssembly. Use Chrome/Edge/Firefox latest.</span>
+          </div>
+        )}
+        {supported && !hasSAB && (
+          <div className="flex items-start gap-2 p-2 rounded-md bg-blue-50 border border-blue-200 text-[11px] text-blue-700">
+            <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+            <span>Running single-threaded (no SharedArrayBuffer) — rendering will be slower but fully functional.</span>
           </div>
         )}
         {supported && !hasWords && (captionStyle !== 'none' || trimSilence) && (
