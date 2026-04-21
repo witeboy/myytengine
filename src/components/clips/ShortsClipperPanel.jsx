@@ -3,36 +3,41 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Smartphone, Download, Loader2, CheckCircle, AlertCircle,
-  Wand2, Zap, Package,
+  Wand2, Zap, Package, Scissors, Volume2,
 } from 'lucide-react';
 import { isFFmpegSupported } from '@/lib/clipWithFFmpeg';
 import { renderShortWithCaptions, downloadShortBlob } from '@/lib/renderShortWithCaptions';
 
-// ── Per-clip render state ────────────────────────────────────────────
 const STATUS_IDLE = 'idle';
 const STATUS_RENDERING = 'rendering';
 const STATUS_DONE = 'done';
 const STATUS_FAILED = 'failed';
 
-function ShortRow({ clip, index, videoUrl, words, captionStyle, autoTrigger, onStateChange }) {
+// ── Per-clip row ─────────────────────────────────────────────────────
+function ShortRow({
+  clip, index, videoUrl, words,
+  captionStyle, trimSilence, addSfx,
+  autoTrigger, onStateChange,
+}) {
   const [status, setStatus] = useState(STATUS_IDLE);
   const [percent, setPercent] = useState(0);
   const [message, setMessage] = useState('');
   const [blob, setBlob] = useState(null);
+  const [stats, setStats] = useState(null);
   const [error, setError] = useState('');
 
-  // Auto-trigger rendering when parent signals "Render All"
   React.useEffect(() => {
     if (autoTrigger && status === STATUS_IDLE) {
-      render();
+      runRender();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoTrigger]);
 
-  const render = async () => {
+  const runRender = async () => {
     if (status === STATUS_RENDERING) return;
     setStatus(STATUS_RENDERING);
     setError('');
@@ -45,14 +50,17 @@ function ShortRow({ clip, index, videoUrl, words, captionStyle, autoTrigger, onS
         endSec: clip.end,
         words,
         captionStyle,
+        trimSilence,
+        addSfx,
         onProgress: ({ percent: p, message: m }) => {
           if (typeof p === 'number') setPercent(p);
           if (m) setMessage(m);
         },
       });
-      setBlob(result);
+      setBlob(result.blob);
+      setStats(result.stats);
       setStatus(STATUS_DONE);
-      onStateChange?.(index, STATUS_DONE, result);
+      onStateChange?.(index, STATUS_DONE, result.blob);
     } catch (err) {
       setError(err.message || 'Render failed');
       setStatus(STATUS_FAILED);
@@ -66,15 +74,13 @@ function ShortRow({ clip, index, videoUrl, words, captionStyle, autoTrigger, onS
 
   return (
     <div className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 bg-white">
-      {/* Rank badge */}
       <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
         #{index + 1}
       </div>
 
-      {/* Title + meta */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-gray-900 truncate">{clip.title}</p>
-        <div className="flex items-center gap-2 mt-0.5">
+        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
           <span className="text-[10px] text-gray-400 font-mono">
             {clip.duration?.toFixed(0) ?? Math.round(clip.end - clip.start)}s
           </span>
@@ -82,6 +88,20 @@ function ShortRow({ clip, index, videoUrl, words, captionStyle, autoTrigger, onS
             <Badge variant="outline" className="text-[9px] px-1 py-0 border-red-200 text-red-600">
               🔥 {clip.virality_score}
             </Badge>
+          )}
+          {status === STATUS_DONE && stats && (
+            <>
+              {stats.removedPercent > 1 && (
+                <Badge variant="outline" className="text-[9px] px-1 py-0 border-amber-200 text-amber-700">
+                  ✂ -{stats.removedPercent.toFixed(0)}% dead air
+                </Badge>
+              )}
+              {stats.sfxCount > 0 && (
+                <Badge variant="outline" className="text-[9px] px-1 py-0 border-purple-200 text-purple-700">
+                  🔊 {stats.sfxCount} SFX
+                </Badge>
+              )}
+            </>
           )}
         </div>
         {status === STATUS_RENDERING && (
@@ -95,10 +115,9 @@ function ShortRow({ clip, index, videoUrl, words, captionStyle, autoTrigger, onS
         )}
       </div>
 
-      {/* Action */}
       <div className="flex-shrink-0">
         {status === STATUS_IDLE && (
-          <Button size="sm" variant="outline" onClick={render} className="h-8 text-xs gap-1">
+          <Button size="sm" variant="outline" onClick={runRender} className="h-8 text-xs gap-1">
             <Wand2 className="w-3 h-3" /> Render
           </Button>
         )}
@@ -117,7 +136,7 @@ function ShortRow({ clip, index, videoUrl, words, captionStyle, autoTrigger, onS
           </Button>
         )}
         {status === STATUS_FAILED && (
-          <Button size="sm" variant="outline" onClick={render} className="h-8 text-xs gap-1 border-red-200 text-red-600">
+          <Button size="sm" variant="outline" onClick={runRender} className="h-8 text-xs gap-1 border-red-200 text-red-600">
             Retry
           </Button>
         )}
@@ -130,9 +149,11 @@ function ShortRow({ clip, index, videoUrl, words, captionStyle, autoTrigger, onS
 // MAIN PANEL
 // ══════════════════════════════════════════════════════════════════════
 export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] }) {
-  const [captionStyle, setCaptionStyle] = useState('hormozi');
+  const [captionStyle, setCaptionStyle] = useState('hormozi_pro');
+  const [trimSilence, setTrimSilence] = useState(true);
+  const [addSfx, setAddSfx] = useState(true);
   const [renderAllTick, setRenderAllTick] = useState(0);
-  const [rowStates, setRowStates] = useState({}); // { [index]: { status, blob } }
+  const [rowStates, setRowStates] = useState({});
   const [bulkDownloading, setBulkDownloading] = useState(false);
 
   const supported = isFFmpegSupported();
@@ -142,14 +163,11 @@ export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] })
     setRowStates(prev => ({ ...prev, [idx]: { status, blob: blob || prev[idx]?.blob } }));
   };
 
-  const renderAll = () => {
-    setRenderAllTick(t => t + 1);
-  };
+  const renderAll = () => setRenderAllTick(t => t + 1);
 
   const doneCount = Object.values(rowStates).filter(s => s.status === STATUS_DONE).length;
   const renderingCount = Object.values(rowStates).filter(s => s.status === STATUS_RENDERING).length;
 
-  // Download all rendered shorts as individual files (browsers cap concurrent downloads)
   const downloadAll = async () => {
     setBulkDownloading(true);
     const ready = clips
@@ -157,7 +175,7 @@ export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] })
       .filter(x => x.blob);
     for (const { clip, idx, blob } of ready) {
       downloadShortBlob(blob, clip.title, idx);
-      await new Promise(r => setTimeout(r, 400)); // stagger triggers
+      await new Promise(r => setTimeout(r, 400));
     }
     setBulkDownloading(false);
   };
@@ -173,36 +191,67 @@ export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] })
             <div className="flex items-center gap-2">
               <Smartphone className="w-4 h-4 text-purple-600" />
               <h3 className="font-semibold text-sm text-gray-900">
-                Shorts Auto-Clipper
+                Viral Shorts Auto-Clipper
               </h3>
               <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-[10px] border-0">
-                9:16 · Burned captions
+                9:16 · Captions · Trim · SFX
               </Badge>
             </div>
             <p className="text-[11px] text-gray-500 mt-0.5">
-              Renders each viral moment as a vertical MP4 with word-synced captions.
+              Word-synced captions + auto silence trim + viral SFX infusion.
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={renderAll}
+            disabled={!supported || renderingCount > 0}
+            className="h-8 text-xs gap-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
+          >
+            <Zap className="w-3 h-3" />
+            Render All {clips.length}
+          </Button>
+        </div>
+
+        {/* Controls row */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 p-2.5 rounded-lg bg-white/70 border border-purple-100">
+          {/* Caption style */}
+          <div>
+            <label className="text-[10px] font-medium text-gray-600 mb-1 block">Caption Style</label>
             <Select value={captionStyle} onValueChange={setCaptionStyle}>
-              <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="hormozi">Hormozi (yellow)</SelectItem>
-                <SelectItem value="mrbeast">MrBeast (red)</SelectItem>
-                <SelectItem value="minimal">Minimal (cyan)</SelectItem>
+                <SelectItem value="hormozi_pro">🔥 Hormozi Pro (yellow + green $)</SelectItem>
+                <SelectItem value="beast">💥 Beast Mode (red + impact)</SelectItem>
+                <SelectItem value="tiktok">📱 TikTok Native</SelectItem>
+                <SelectItem value="minimal">✨ Minimal</SelectItem>
                 <SelectItem value="none">No captions</SelectItem>
               </SelectContent>
             </Select>
-            <Button
-              size="sm"
-              onClick={renderAll}
-              disabled={!supported || renderingCount > 0}
-              className="h-8 text-xs gap-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
-            >
-              <Zap className="w-3 h-3" />
-              Render All {clips.length}
-            </Button>
+          </div>
+
+          {/* Trim silence */}
+          <div className="flex items-center justify-between p-1.5 rounded bg-gray-50">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Scissors className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-gray-700">Auto-Trim</p>
+                <p className="text-[9px] text-gray-400 truncate">Cut silences + "um/uh"</p>
+              </div>
+            </div>
+            <Switch checked={trimSilence} onCheckedChange={setTrimSilence} />
+          </div>
+
+          {/* SFX */}
+          <div className="flex items-center justify-between p-1.5 rounded bg-gray-50">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Volume2 className="w-3.5 h-3.5 text-purple-600 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[11px] font-medium text-gray-700">Viral SFX</p>
+                <p className="text-[9px] text-gray-400 truncate">Whoosh + impact hits</p>
+              </div>
+            </div>
+            <Switch checked={addSfx} onCheckedChange={setAddSfx} />
           </div>
         </div>
 
@@ -210,15 +259,13 @@ export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] })
         {!supported && (
           <div className="flex items-start gap-2 p-2 rounded-md bg-amber-50 border border-amber-200 text-[11px] text-amber-700">
             <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-            <span>
-              Your browser doesn't support SharedArrayBuffer. Vertical rendering requires Chrome/Edge/Firefox latest.
-            </span>
+            <span>Your browser doesn't support SharedArrayBuffer. Use Chrome/Edge/Firefox latest.</span>
           </div>
         )}
-        {supported && !hasWords && captionStyle !== 'none' && (
+        {supported && !hasWords && (captionStyle !== 'none' || trimSilence) && (
           <div className="flex items-start gap-2 p-2 rounded-md bg-amber-50 border border-amber-200 text-[11px] text-amber-700">
             <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-            <span>No word-level timestamps available — clips will render 9:16 without captions.</span>
+            <span>No word timestamps available — captions and auto-trim need transcript data.</span>
           </div>
         )}
 
@@ -258,6 +305,8 @@ export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] })
               videoUrl={videoUrl}
               words={words}
               captionStyle={captionStyle}
+              trimSilence={trimSilence}
+              addSfx={addSfx}
               autoTrigger={renderAllTick}
               onStateChange={handleStateChange}
             />
