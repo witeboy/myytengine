@@ -11,6 +11,7 @@ import { initFFmpeg, isFFmpegSupported } from '@/lib/clipWithFFmpeg';
 import ClipCard from '@/components/clips/ClipCard';
 import ClipScheduler from '@/components/clips/ClipScheduler';
 import YouTubeUrlInput from '@/components/clips/YouTubeUrlInput';
+import ShortsClipperPanel from '@/components/clips/ShortsClipperPanel';
 import {
   Upload, FileVideo, Mic, Brain, Scissors, ArrowLeft,
   Loader2, CheckCircle, AlertCircle, Sparkles, Flame,
@@ -499,6 +500,9 @@ export default function ClipExtractor() {
                 />
               ))}
             </div>
+
+            {/* ── Auto Shorts Clipper: 9:16 + Hormozi captions ── */}
+            <ShortsClipperPanel clips={clips} videoUrl={videoUrl} words={asrWords} />
 
             <ClipScheduler clips={clips} videoUrl={videoUrl} enhancements={{}} />
           </div>
