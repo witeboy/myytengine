@@ -184,8 +184,9 @@ export async function renderShortWithCaptions({
       `${mixInputs}amix=inputs=${1 + sfxLabels.length}:duration=first:dropout_transition=0:normalize=0[aout]`
     );
   } else {
-    // No SFX — just label the (possibly-trimmed) audio as final
-    filters.push(`${aLabel}acopy[aout]`);
+    // No SFX — pass (possibly-trimmed) audio through as final.
+    // `anull` is the identity audio filter (acopy is NOT a filter).
+    filters.push(`${aLabel}anull[aout]`);
   }
 
   cmd.push('-filter_complex', filters.join(';'));

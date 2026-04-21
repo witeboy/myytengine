@@ -183,23 +183,27 @@ export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] })
   if (!clips.length) return null;
 
   return (
-    <Card className="border-purple-200 bg-gradient-to-br from-purple-50/50 to-pink-50/30">
-      <CardContent className="p-4 space-y-3">
+    <Card className="border-2 border-purple-400 bg-gradient-to-br from-purple-100 via-pink-50 to-orange-50 shadow-xl ring-2 ring-purple-200/50">
+      <CardContent className="p-5 space-y-3">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <div className="flex items-center gap-2">
-              <Smartphone className="w-4 h-4 text-purple-600" />
-              <h3 className="font-semibold text-sm text-gray-900">
-                Viral Shorts Auto-Clipper
-              </h3>
-              <Badge className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-[10px] border-0">
-                9:16 · Captions · Trim · SFX
-              </Badge>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center shadow-md">
+                <Smartphone className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-gray-900 flex items-center gap-2">
+                  🎬 Viral Shorts Auto-Clipper
+                  <Badge className="bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[10px] border-0 shadow">
+                    NEW
+                  </Badge>
+                </h3>
+                <p className="text-[11px] text-gray-600 font-medium">
+                  9:16 · Hormozi captions · Auto-trim · Viral SFX
+                </p>
+              </div>
             </div>
-            <p className="text-[11px] text-gray-500 mt-0.5">
-              Word-synced captions + auto silence trim + viral SFX infusion.
-            </p>
           </div>
 
           <Button

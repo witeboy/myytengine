@@ -1,60 +1,173 @@
 // ══════════════════════════════════════════════════════════════════════
-// VIRAL SFX LIBRARY — short-form sound FX infusion
+// VIRAL SFX LIBRARY — synthesized in-browser (no network, no CORS)
 //
-// Strategy: for each clip, we pick 2-4 SFX placements:
-//   1. HOOK SFX at t=0      — "whoosh" or "bass drop" to grab attention
-//   2. KEYWORD HITS         — short "ding" / "boom" on money/shock words
-//   3. SCENE-CUT WHOOSHES   — on silence-trim jump cuts (subtle)
-//   4. OUTRO STING          — last 0.4s fade-out hit
+// Generates short punchy SFX using Web Audio OfflineAudioContext:
+//   • whoosh      — filtered noise sweep (transitions)
+//   • impact      — low sine thump + noise crack (keyword hits)
+//   • bass_drop   — sub-bass sine with pitch drop (hook opener)
+//   • ding        — bell-like sine decay (number accents)
 //
-// SFX files are sourced from a curated list of royalty-free Pixabay URLs
-// (short stingers, pre-vetted for viral shorts). The URLs are direct
-// CDN links that fetch-and-cache at render time.
+// Each returns a WAV file as Uint8Array — written directly into FFmpeg FS.
+// This is instant (no network) and always works.
 //
-// Each SFX is layered into the audio via FFmpeg amix with -18dB under
-// speech (so it punches but doesn't cover the voice).
+// Placement logic same as before: hook, keyword hits, scene-cut whooshes.
 // ══════════════════════════════════════════════════════════════════════
 
-// ── Curated royalty-free SFX from Pixabay (CC0) ─────────────────────
-// These are short (<1s each), loudness-normalized stingers commonly
-// used in TikTok/Shorts edits. All from Pixabay's free-use library.
-export const SFX_LIBRARY = {
-  // Whooshes — scene transitions, hook openers
-  whoosh: [
-    'https://cdn.pixabay.com/download/audio/2022/03/10/audio_d1718beaef.mp3?filename=whoosh-6316.mp3',
-    'https://cdn.pixabay.com/download/audio/2022/03/24/audio_c8c8a73467.mp3?filename=whoosh-cinematic-161021.mp3',
-  ],
-  // Impacts — keyword hits, money moments
-  impact: [
-    'https://cdn.pixabay.com/download/audio/2022/03/15/audio_db6591201b.mp3?filename=cinematic-boom-6872.mp3',
-    'https://cdn.pixabay.com/download/audio/2021/08/04/audio_c8c8a73467.mp3?filename=cinematic-hit-159067.mp3',
-  ],
-  // Bass drops — hook attention grabbers
-  bass_drop: [
-    'https://cdn.pixabay.com/download/audio/2022/10/30/audio_347111d654.mp3?filename=deep-cinematic-logo-142663.mp3',
-  ],
-  // Dings — small accents on numbers
-  ding: [
-    'https://cdn.pixabay.com/download/audio/2021/08/04/audio_12b0c7443c.mp3?filename=notification-sound-7062.mp3',
-  ],
-  // Risers — building to reveal
-  riser: [
-    'https://cdn.pixabay.com/download/audio/2022/08/23/audio_2dde7c6f69.mp3?filename=riser-120042.mp3',
-  ],
-};
+// ── WAV encoder for Float32 buffer → WAV bytes ──────────────────────
+function encodeWav(audioBuffer) {
+  const numChannels = audioBuffer.numberOfChannels;
+  const sampleRate = audioBuffer.sampleRate;
+  const length = audioBuffer.length;
+
+  // Interleave channels into Int16 PCM
+  const pcm = new Int16Array(length * numChannels);
+  for (let ch = 0; ch < numChannels; ch++) {
+    const channelData = audioBuffer.getChannelData(ch);
+    for (let i = 0; i < length; i++) {
+      const s = Math.max(-1, Math.min(1, channelData[i]));
+      pcm[i * numChannels + ch] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+  }
+
+  const dataBytes = pcm.length * 2;
+  const buffer = new ArrayBuffer(44 + dataBytes);
+  const view = new DataView(buffer);
+  const writeStr = (offset, s) => {
+    for (let i = 0; i < s.length; i++) view.setUint8(offset + i, s.charCodeAt(i));
+  };
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + dataBytes, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);              // PCM
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * 2, true);
+  view.setUint16(32, numChannels * 2, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, 'data');
+  view.setUint32(40, dataBytes, true);
+
+  // Copy PCM
+  new Int16Array(buffer, 44).set(pcm);
+  return new Uint8Array(buffer);
+}
+
+// ── SFX synth using OfflineAudioContext ─────────────────────────────
+const SR = 44100;
+
+async function synthWhoosh() {
+  const dur = 0.45;
+  const ctx = new OfflineAudioContext(2, SR * dur, SR);
+  // White-noise buffer
+  const noiseBuf = ctx.createBuffer(1, SR * dur, SR);
+  const data = noiseBuf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  const noise = ctx.createBufferSource();
+  noise.buffer = noiseBuf;
+  // Band-pass filter sweeping down
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.Q.value = 2;
+  filter.frequency.setValueAtTime(3000, 0);
+  filter.frequency.exponentialRampToValueAtTime(300, dur);
+  // Volume envelope (soft attack, quick decay)
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, 0);
+  gain.gain.exponentialRampToValueAtTime(0.7, 0.06);
+  gain.gain.exponentialRampToValueAtTime(0.0001, dur);
+  noise.connect(filter).connect(gain).connect(ctx.destination);
+  noise.start(0);
+  const rendered = await ctx.startRendering();
+  return encodeWav(rendered);
+}
+
+async function synthImpact() {
+  const dur = 0.55;
+  const ctx = new OfflineAudioContext(2, SR * dur, SR);
+  // Low sine thump
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(120, 0);
+  osc.frequency.exponentialRampToValueAtTime(40, 0.15);
+  const oscGain = ctx.createGain();
+  oscGain.gain.setValueAtTime(0.9, 0);
+  oscGain.gain.exponentialRampToValueAtTime(0.0001, 0.4);
+  osc.connect(oscGain).connect(ctx.destination);
+  // Noise crack on attack
+  const noiseBuf = ctx.createBuffer(1, SR * 0.08, SR);
+  const nData = noiseBuf.getChannelData(0);
+  for (let i = 0; i < nData.length; i++) nData[i] = Math.random() * 2 - 1;
+  const noise = ctx.createBufferSource();
+  noise.buffer = noiseBuf;
+  const nGain = ctx.createGain();
+  nGain.gain.setValueAtTime(0.5, 0);
+  nGain.gain.exponentialRampToValueAtTime(0.0001, 0.08);
+  noise.connect(nGain).connect(ctx.destination);
+  osc.start(0); noise.start(0);
+  const rendered = await ctx.startRendering();
+  return encodeWav(rendered);
+}
+
+async function synthBassDrop() {
+  const dur = 0.8;
+  const ctx = new OfflineAudioContext(2, SR * dur, SR);
+  const osc = ctx.createOscillator();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(200, 0);
+  osc.frequency.exponentialRampToValueAtTime(35, 0.6);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.0001, 0);
+  gain.gain.exponentialRampToValueAtTime(0.85, 0.08);
+  gain.gain.setValueAtTime(0.85, 0.5);
+  gain.gain.exponentialRampToValueAtTime(0.0001, dur);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(0);
+  const rendered = await ctx.startRendering();
+  return encodeWav(rendered);
+}
+
+async function synthDing() {
+  const dur = 0.35;
+  const ctx = new OfflineAudioContext(2, SR * dur, SR);
+  // Two sines for bell-like quality
+  const freqs = [1200, 2400];
+  for (const f of freqs) {
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = f;
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, 0);
+    g.gain.exponentialRampToValueAtTime(f === 1200 ? 0.4 : 0.2, 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, dur);
+    osc.connect(g).connect(ctx.destination);
+    osc.start(0);
+  }
+  const rendered = await ctx.startRendering();
+  return encodeWav(rendered);
+}
+
+// ── Cache synthesized SFX (synth once per session) ──────────────────
+const SFX_CACHE = {};
+
+async function getSfx(type) {
+  if (SFX_CACHE[type]) return SFX_CACHE[type];
+  let data;
+  switch (type) {
+    case 'whoosh':    data = await synthWhoosh(); break;
+    case 'impact':    data = await synthImpact(); break;
+    case 'bass_drop': data = await synthBassDrop(); break;
+    case 'ding':      data = await synthDing(); break;
+    default:          data = await synthWhoosh();
+  }
+  SFX_CACHE[type] = data;
+  return data;
+}
 
 // ══════════════════════════════════════════════════════════════════════
-// Plan SFX placements based on the transcript + keyword positions.
-//
-// @param words          — source words (original timeline)
-// @param clipStart/End  — clip bounds in source
-// @param removeRanges   — from silenceTrimmer (for scene-cut whooshes)
-// @param classifyFn     — from viralCaptionStyler (for keyword detection)
-//
-// @returns [{url, timeInTrimmed, volume, type}] — placements AFTER trim
-//
-// `timeInTrimmed` is the time in the FINAL (trimmed) clip, so the caller
-// can mix SFX directly into the post-trim audio.
+// Plan SFX placements based on transcript + keyword positions.
+// Returns [{type, timeInTrimmed, volume}]
 // ══════════════════════════════════════════════════════════════════════
 export function planSfxPlacements({
   words = [],
@@ -66,102 +179,98 @@ export function planSfxPlacements({
 }) {
   const placements = [];
 
-  // Helper: convert original-timeline time → trimmed-timeline time
+  // Convert original-timeline time → trimmed-timeline time
   const origToTrimmed = (tOrig) => {
     let shift = 0;
     for (const r of removeRanges) {
       if (tOrig >= r.end) shift += (r.end - r.start);
-      else if (tOrig >= r.start) shift += (tOrig - r.start); // inside removed range → clamp
+      else if (tOrig >= r.start) shift += (tOrig - r.start);
     }
     return Math.max(0, tOrig - clipStart - shift);
   };
 
-  // Compute final trimmed duration
   const removedDur = removeRanges.reduce((s, r) => s + (r.end - r.start), 0);
   const trimmedDur = (clipEnd - clipStart) - removedDur;
 
-  const pickRandom = (arr) => arr[Math.floor(Math.random() * arr.length)];
-
-  // 1. HOOK SFX at clip start (whoosh or bass drop)
-  const hookType = Math.random() < 0.6 ? 'whoosh' : 'bass_drop';
+  // 1. HOOK SFX at t=0 (random: whoosh OR bass_drop)
   placements.push({
-    url: pickRandom(SFX_LIBRARY[hookType]),
+    type: Math.random() < 0.6 ? 'whoosh' : 'bass_drop',
     timeInTrimmed: 0,
-    volume: hookType === 'bass_drop' ? 0.55 : 0.45,
-    type: `hook_${hookType}`,
+    volume: 0.45,
+    placement: 'hook',
   });
 
-  // 2. KEYWORD HITS — find money/power words, place impact under each
+  // 2. KEYWORD HITS — money/power words → impact
   const clipWords = (words || []).filter(w =>
     typeof w.start === 'number' && w.start >= clipStart && w.end <= clipEnd
   );
-  const keywordHits = [];
+  let lastHitT = -10;
+  let keywordCount = 0;
   for (const w of clipWords) {
-    if (!classifyFn) break;
+    if (!classifyFn || keywordCount >= 2) break;
     const cls = classifyFn(w.word || w.text);
     if (cls === 'money' || cls === 'power') {
-      keywordHits.push({
-        word: w.word,
-        orig: w.start,
-        trimmedT: origToTrimmed(w.start),
-        cls,
+      const trimmedT = origToTrimmed(w.start);
+      if (trimmedT - lastHitT < 2.0) continue;
+      if (trimmedT < 0.5 || trimmedT > trimmedDur - 0.4) continue;
+      placements.push({
+        type: 'impact',
+        timeInTrimmed: trimmedT,
+        volume: 0.4,
+        placement: `keyword_${cls}`,
       });
+      lastHitT = trimmedT;
+      keywordCount++;
+    } else if (cls === 'number' && keywordCount < 2) {
+      const trimmedT = origToTrimmed(w.start);
+      if (trimmedT - lastHitT < 2.5) continue;
+      if (trimmedT < 0.5 || trimmedT > trimmedDur - 0.4) continue;
+      placements.push({
+        type: 'ding',
+        timeInTrimmed: trimmedT,
+        volume: 0.25,
+        placement: 'number',
+      });
+      lastHitT = trimmedT;
+      keywordCount++;
     }
   }
-  // Pick up to 2 best keyword hits (prefer ones spaced >2s apart)
-  let lastHitT = -10;
-  for (const kh of keywordHits) {
-    if (kh.trimmedT - lastHitT < 2.0) continue;
-    if (kh.trimmedT < 0.5 || kh.trimmedT > trimmedDur - 0.3) continue;
-    placements.push({
-      url: pickRandom(SFX_LIBRARY.impact),
-      timeInTrimmed: kh.trimmedT,
-      volume: 0.35,
-      type: `keyword_${kh.cls}`,
-    });
-    lastHitT = kh.trimmedT;
-    if (placements.filter(p => p.type.startsWith('keyword')).length >= 2) break;
-  }
 
-  // 3. SCENE-CUT WHOOSHES — at jump-cut points from silence trim
-  //    Only add if we removed something substantial (>0.6s)
+  // 3. SCENE-CUT WHOOSHES at big trim points
   const bigCuts = removeRanges.filter(r => (r.end - r.start) > 0.6);
   let whooshCount = 0;
   for (const cut of bigCuts) {
     const cutT = origToTrimmed(cut.start);
     if (cutT < 0.5 || cutT > trimmedDur - 0.4) continue;
     placements.push({
-      url: pickRandom(SFX_LIBRARY.whoosh),
+      type: 'whoosh',
       timeInTrimmed: Math.max(0, cutT - 0.1),
       volume: 0.3,
-      type: 'scene_cut',
+      placement: 'scene_cut',
     });
     whooshCount++;
     if (whooshCount >= 2) break;
   }
 
-  // 4. Cap total SFX (avoid overmix)
-  if (placements.length > maxPlacements) {
-    placements.splice(maxPlacements);
-  }
-
+  if (placements.length > maxPlacements) placements.splice(maxPlacements);
   return placements;
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// Fetch SFX file and write to FFmpeg FS
+// Synthesize + write SFX files to FFmpeg FS
+// Returns array of {filename, timeInTrimmed, volume, type}
 // ══════════════════════════════════════════════════════════════════════
-export async function fetchAndWriteSfx(ffmpeg, fetchFile, placements) {
+export async function fetchAndWriteSfx(ffmpeg, _fetchFile, placements) {
   const written = [];
   for (let i = 0; i < placements.length; i++) {
     const p = placements[i];
     try {
-      const data = await fetchFile(p.url);
-      const filename = `sfx_${i}.mp3`;
-      await ffmpeg.writeFile(filename, data);
+      const wavData = await getSfx(p.type);
+      const filename = `sfx_${i}.wav`;
+      await ffmpeg.writeFile(filename, wavData);
       written.push({ ...p, filename });
     } catch (err) {
-      console.warn(`[SFX] Failed to load ${p.url}:`, err.message);
+      console.warn(`[SFX] Failed to synthesize ${p.type}:`, err.message);
     }
   }
   return written;
