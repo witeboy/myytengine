@@ -65,11 +65,20 @@ export async function initFFmpeg(onProgress) {
       ? 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm'
       : 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
 
+    // The ffmpeg.wasm library internally spawns a Worker from its CDN location,
+    // which browsers block as cross-origin. We must fetch the worker script
+    // ourselves and pass a same-origin blob URL via `classWorkerURL`.
+    const workerURL = await toBlobURL(
+      'https://esm.sh/@ffmpeg/ffmpeg@0.12.10/dist/esm/worker.js',
+      'text/javascript',
+    );
+
     console.log(`[FFmpeg] Loading ${hasSAB ? 'multi-threaded' : 'single-threaded'} core from ${baseURL}`);
 
     await ffmpeg.load({
       coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
       wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+      classWorkerURL: workerURL,
     });
 
     ffmpegLoaded = true;
