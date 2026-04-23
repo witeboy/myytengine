@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
+import { appParams } from '@/lib/app-params';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -131,7 +132,31 @@ export default function QuickPublish() {
     if (!videoFile) throw new Error('No video file selected');
     setCurrentStep('upload');
     setStatusMessage('Uploading video...');
-    const { file_url } = await base44.integrations.Core.UploadFile({ file: videoFile });
+
+    // Build FormData manually to avoid SDK multipart boundary corruption
+    // (Base44 SDK UploadFile wraps File internally, causing boundary mismatch
+    //  "Expected boundary char 45 got 46" on the preview/sandbox endpoint)
+    const form = new FormData();
+    form.append('file', videoFile, videoFile.name);
+
+    // Use appParams.appId — same source the base44 client uses
+    const uploadUrl = `/api/apps/${appParams.appId}/integration-endpoints/Core/UploadFile`;
+
+    const uploadRes = await fetch(uploadUrl, {
+      method: 'POST',
+      body: form,
+      // DO NOT set Content-Type — browser sets it automatically with correct boundary
+    });
+
+    if (!uploadRes.ok) {
+      let msg = `Upload failed (${uploadRes.status})`;
+      try { const d = await uploadRes.json(); msg = d.message || d.error || msg; } catch (_) {}
+      throw new Error(msg);
+    }
+
+    const { file_url } = await uploadRes.json();
+    if (!file_url) throw new Error('Upload succeeded but returned no file_url');
+
     setFileUrl(file_url);
     markComplete('upload');
     return file_url;
