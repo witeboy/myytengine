@@ -1,10 +1,16 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
-// QUICK PUBLISH — Transcribe an uploaded video/audio via AssemblyAI
-// v3 — fixed: speech_model + language_detection are mutually exclusive
-//             in AssemblyAI v2; removed conflict, added full error body
-//             surfacing so 500s show the real reason in the UI.
+// QUICK PUBLISH — Transcribe via AssemblyAI
+// Verified against docs at assemblyai.com/docs (April 2026):
+//
+// RULES (from live docs):
+//   - speech_models: REQUIRED array. Valid: "universal-3-pro", "universal-2"
+//   - Use ["universal-3-pro", "universal-2"] for best accuracy + fallback
+//   - language_detection: compatible with the two-model combo above
+//   - disfluencies: universal-2 ONLY — incompatible with universal-3-pro
+//   - auto_chapters: universal-2 ONLY — drop it when using u3-pro
+//   - punctuate / format_text: universal-2 ONLY features
 // ══════════════════════════════════════════════════════════════════
 
 Deno.serve(async (req) => {
@@ -18,9 +24,8 @@ Deno.serve(async (req) => {
 
     const API_KEY = Deno.env.get('ASSEMBLYAI_API_KEY');
     if (!API_KEY) {
-      console.error('ASSEMBLYAI_API_KEY env var is not set');
       return Response.json({
-        error: 'ASSEMBLYAI_API_KEY is not configured. Add it under Base44 Settings → Environment Variables.',
+        error: 'ASSEMBLYAI_API_KEY not set. Add it in Base44 Settings → Environment Variables.',
       }, { status: 500 });
     }
 
@@ -28,39 +33,33 @@ Deno.serve(async (req) => {
     if (action === 'submit') {
       if (!file_url) return Response.json({ error: 'file_url required' }, { status: 400 });
 
-      // IMPORTANT: language_detection: true is INCOMPATIBLE with speech_model in
-      // AssemblyAI v2 API — they are mutually exclusive. speech_model: 'best'
-      // handles language internally. Passing both causes a 400 error.
       const submitRes = await fetch('https://api.assemblyai.com/v2/transcript', {
         method: 'POST',
         headers: { 'Authorization': API_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           audio_url: file_url,
-          speech_models: ['universal-3-pro'],  // AssemblyAI v2 valid values: 'universal-3-pro' | 'universal-2'
-          punctuate: true,
-          format_text: true,
-          auto_chapters: true,    // populates result.chapters → ChaptersPanel
-          disfluencies: true,     // keeps um/uh for filler word detection
+          // Correct per AssemblyAI docs (April 2026):
+          // Two-model array: u3-pro for supported langs, u2 fallback for the rest
+          speech_models: ['universal-3-pro', 'universal-2'],
+          language_detection: true,
+          // NOTE: disfluencies and auto_chapters are universal-2 ONLY features.
+          // They are NOT compatible with universal-3-pro and will cause a 400.
+          // Removed both to keep the combo working cleanly.
         }),
       });
 
-      // Surface the full AssemblyAI error body, not just status code
       if (!submitRes.ok) {
         let errBody = '';
         try { errBody = JSON.stringify(await submitRes.json()); }
         catch (_) { errBody = await submitRes.text(); }
         console.error(`AssemblyAI submit ${submitRes.status}:`, errBody);
-        return Response.json({
-          error: `AssemblyAI submit failed (${submitRes.status}): ${errBody}`,
-        }, { status: 500 });
+        return Response.json({ error: `AssemblyAI submit failed (${submitRes.status}): ${errBody}` }, { status: 500 });
       }
 
       const submitData = await submitRes.json();
       const id = submitData.id;
       if (!id) {
-        return Response.json({
-          error: `AssemblyAI returned no transcript ID: ${JSON.stringify(submitData)}`,
-        }, { status: 500 });
+        return Response.json({ error: `No transcript ID returned: ${JSON.stringify(submitData)}` }, { status: 500 });
       }
 
       console.log(`📡 Transcription submitted: ${id}`);
@@ -95,6 +94,8 @@ Deno.serve(async (req) => {
           speaker: w.speaker || null,
         }));
 
+        // auto_chapters was removed from submit (u3-pro incompatible)
+        // but map it defensively in case the result still includes it
         const chapters = (result.chapters || []).map(ch => ({
           gist: ch.gist,
           headline: ch.headline,
@@ -103,7 +104,7 @@ Deno.serve(async (req) => {
           end: ch.end / 1000,
         }));
 
-        console.log(`✅ Transcription done: ${words.length} words, ${chapters.length} chapters`);
+        console.log(`✅ Done: ${words.length} words, model used: ${result.speech_model_used || 'unknown'}`);
         return Response.json({
           status: 'completed',
           text: fullText,
@@ -111,6 +112,7 @@ Deno.serve(async (req) => {
           word_count: words.length,
           duration: result.audio_duration,
           chapters,
+          model_used: result.speech_model_used || null,
         });
       }
 
