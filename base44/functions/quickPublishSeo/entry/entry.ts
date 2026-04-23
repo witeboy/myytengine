@@ -2,47 +2,68 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
 // QUICK PUBLISH SEO — Generate titles, descriptions, tags, hashtags
-// Uses dedicated SEO Expert prompts for tags & strategic hashtag logic
+// Claude primary + Gemini fallback (same pattern as generateScriptBatches)
 // ══════════════════════════════════════════════════════════════════
 
-async function callGemini(apiKey, prompt, maxTokens = 8192) {
-  const MAX_RETRIES = 3;
-  let lastErr;
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.85, maxOutputTokens: maxTokens },
-          }),
-        }
-      );
-      if (res.status === 429 || res.status >= 500) {
-        lastErr = new Error(`Gemini ${res.status}`);
-        if (attempt < MAX_RETRIES) {
-          await new Promise(r => setTimeout(r, 2000 * attempt));
-          continue;
-        }
-      }
-      if (!res.ok) {
-        const err = await res.text();
-        throw new Error(`Gemini ${res.status}: ${err.substring(0, 300)}`);
-      }
-      const data = await res.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    } catch (err) {
-      lastErr = err;
-      if (attempt < MAX_RETRIES) {
-        await new Promise(r => setTimeout(r, 2000 * attempt));
-        continue;
-      }
-    }
+async function callClaude(prompt, maxTokens) {
+  const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured');
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: maxTokens || 8192,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(`Claude ${res.status}: ${err.error?.message || 'Unknown'}`);
   }
-  throw lastErr;
+  const data = await res.json();
+  return data.content?.[0]?.text || '';
+}
+
+async function callGemini(prompt, maxTokens) {
+  const apiKey = Deno.env.get('GEMINI_API_KEY');
+  if (!apiKey) throw new Error('GEMINI_API_KEY not configured');
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.85, maxOutputTokens: maxTokens || 8192 },
+      }),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Gemini ${res.status}: ${err.substring(0, 300)}`);
+  }
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+// Claude primary, Gemini fallback — same pattern as generateScriptBatches
+async function callLLM(prompt, maxTokens) {
+  try {
+    const text = await callClaude(prompt, maxTokens);
+    console.log('LLM: Claude');
+    return text;
+  } catch (claudeErr) {
+    const msg = claudeErr.message || '';
+    const isFatal = /credit balance|billing|api key|unauthorized/i.test(msg);
+    console.warn('Claude failed' + (isFatal ? ' (fatal)' : '') + ':', msg.substring(0, 120));
+    console.log('LLM: falling back to Gemini...');
+    return await callGemini(prompt, maxTokens);
+  }
 }
 
 function parseJson(text) {
@@ -56,15 +77,12 @@ function parseJson(text) {
   return null;
 }
 
-// ══════════════════════════════════════════════════════════════════
-// DEDICATED TAG GENERATION — Role: YouTube SEO Expert
-// ══════════════════════════════════════════════════════════════════
-async function generateTagsFromScript(apiKey, scriptText, niche, videoTitle, seoAnalysis) {
+async function generateTagsFromScript(scriptText, niche, videoTitle, seoAnalysis) {
   const scriptExcerpt = scriptText.substring(0, 5000);
   const primaryKw = seoAnalysis?.primary_keyword || '';
   const secondaryKws = (seoAnalysis?.secondary_keywords || []).join(', ');
 
-  const prompt = `You are an expert YouTube SEO strategist and metadata specialist. You have 10+ years of experience ranking videos on YouTube search and suggested feeds. Below is a video script. Analyze it deeply and generate a comprehensive list of high-performing YouTube tags.
+  const prompt = `You are an expert YouTube SEO strategist. Analyze this video script and generate high-performing YouTube tags.
 
 VIDEO CONTEXT:
 - Title: "${videoTitle}"
@@ -77,58 +95,34 @@ FULL SCRIPT:
 ${scriptExcerpt}
 """
 
-═══════════════════════════════════════════════
-REQUIREMENTS — Follow these EXACTLY:
-═══════════════════════════════════════════════
+TAG RULES:
+- Each tag under 30 characters (YouTube limit)
+- Total all tags under 500 characters
+- No special characters except spaces and hyphens
+- No hashtags in tags
+- Aim for 20-25 total tags
 
-1. PRIMARY TAG: Start with the single most important, specific keyword for this exact video. This is the #1 search term a viewer would type.
-
-2. LONG-TAIL KEYWORDS: Include at least 8 long-tail keyword phrases (3-6 words) that real people would actually type into YouTube's search bar when looking for this content. Think like a viewer, not a marketer.
-
-3. BROAD CATEGORY TAGS: Include 3-4 broad niche/category tags that place this video in the right ecosystem (e.g., "true crime documentary", "personal finance", "history explained").
-
-4. MISSPELLINGS & ALTERNATES: Add 3-5 common misspellings, alternate names, or colloquial versions of the topic. Real viewers misspell things — capture that traffic.
-
-5. CONTENT GAP TAGS: Include 5 tags that specifically target "content gaps" — topics people are searching for but don't find enough good videos on. These are low-competition, high-intent keywords related to this script.
-
-6. VIEWER-INTENT TAGS: Include 3-4 tags based on the language and tone used in the script — are viewers beginners, hobbyists, or professionals? Tag accordingly.
-
-7. FORMAT: Output as comma-separated lists organized by category so tags can be copy-pasted directly into YouTube Studio.
-
-8. TAG RULES:
-   - Each tag must be under 30 characters (YouTube limit per tag)
-   - Total combined character count of ALL tags must be under 500 characters (YouTube limit)
-   - No special characters except spaces and hyphens
-   - No hashtags in tags (those are separate)
-   - Aim for 20-25 total tags
-
-═══════════════════════════════════════════════
-OUTPUT — RETURN ONLY VALID JSON, NO MARKDOWN:
-═══════════════════════════════════════════════
-
+Return ONLY valid JSON:
 {
   "primary_tag": "the single most important keyword",
   "tags_breakdown": {
-    "short": ["5 broad 1-2 word tags from the niche"],
-    "medium": ["8-10 medium 2-3 word specific tags"],
-    "long": ["8 long-tail 3-6 word search phrases viewers would type"]
+    "short": ["5 broad 1-2 word tags"],
+    "medium": ["8-10 medium 2-3 word tags"],
+    "long": ["8 long-tail 3-6 word phrases"]
   },
   "misspelling_tags": ["3-5 common misspellings or alternate names"],
   "content_gap_tags": ["5 low-competition high-intent tags"],
-  "all_tags_comma_separated": "every tag above combined into one comma-separated string ready for YouTube Studio"
+  "all_tags_comma_separated": "every tag combined into one comma-separated string"
 }`;
 
-  const raw = await callGemini(apiKey, prompt, 3000);
+  const raw = await callLLM(prompt, 3000);
   return parseJson(raw);
 }
 
-// ══════════════════════════════════════════════════════════════════
-// DEDICATED HASHTAG GENERATION — Strategic 3-5 Rule for 2026
-// ══════════════════════════════════════════════════════════════════
-async function generateHashtagsFromScript(apiKey, scriptText, niche, videoTitle, channelName) {
+async function generateHashtagsFromScript(scriptText, niche, videoTitle, channelName) {
   const scriptExcerpt = scriptText.substring(0, 3000);
 
-  const prompt = `You are a YouTube hashtag strategist. Hashtags are visible labels that appear ABOVE the video title. In 2026, the algorithm uses them as "context anchors" to confirm what the video is about.
+  const prompt = `You are a YouTube hashtag strategist. Generate exactly 5 strategic hashtags for this video.
 
 VIDEO CONTEXT:
 - Title: "${videoTitle}"
@@ -140,42 +134,22 @@ SCRIPT EXCERPT:
 ${scriptExcerpt}
 """
 
-═══════════════════════════════════════════════
-THE 3-5 RULE FOR 2026:
-═══════════════════════════════════════════════
+HASHTAG STRATEGY (use exactly 5):
+1. Branded tag: #${channelName ? channelName.replace(/[^a-zA-Z0-9]/g, '') : 'Channel'}
+2-3. Two broad category tags (e.g., #TrueCrime, #HistoryExplained)
+4-5. Two niche-specific tags hyper-relevant to this video
 
-- Use EXACTLY 5 hashtags. No more, no less.
-- The FIRST THREE are critical — they appear prominently above your video title on desktop and mobile.
-- Quality over quantity. The algorithm confirms your video's topic from these.
+BANNED: #viral #trending #fyp #foryou #explore #popular #blowup
 
-HASHTAG STRATEGY:
-1. BRANDED TAG: #${channelName ? channelName.replace(/[^a-zA-Z0-9]/g, '') : 'YourChannel'} — keeps viewers in your content ecosystem
-2. TWO BROAD CATEGORY TAGS: Place your video in the right niche ecosystem (e.g., #TrueCrime, #HistoryExplained)
-3. TWO NICHE-SPECIFIC TAGS: Hyper-relevant to THIS specific video's content based on the script
-
-BANNED HASHTAGS — DO NOT USE ANY OF THESE:
-#viral, #trending, #explore, #fyp, #foryou, #foryoupage, #viralvideo, #trend, #popular, #blowup, #algorithm
-These are too broad and actively HURT your discoverability.
-
-PLACEMENT RULES:
-- These will go at the BOTTOM of the description
-- YouTube auto-pulls the first 3 to display above the title
-- Order matters: put the 3 most important first
-
-═══════════════════════════════════════════════
-OUTPUT — RETURN ONLY VALID JSON:
-═══════════════════════════════════════════════
-
+Return ONLY valid JSON:
 {
-  "hashtags": ["#BrandedTag", "#BroadCategory1", "#BroadCategory2", "#NicheSpecific1", "#NicheSpecific2"],
-  "placement_order_reasoning": "Why these 3 appear first above the title",
+  "hashtags": ["#Tag1", "#Tag2", "#Tag3", "#Tag4", "#Tag5"],
   "hashtag_string": "#Tag1 #Tag2 #Tag3 #Tag4 #Tag5"
 }`;
 
-  const raw = await callGemini(apiKey, prompt, 1500);
+  const raw = await callLLM(prompt, 1500);
   return parseJson(raw);
 }
-
 
 Deno.serve(async (req) => {
   try {
@@ -186,19 +160,14 @@ Deno.serve(async (req) => {
     const { project_id, transcript, niche, channel_name } = await req.json();
     if (!project_id || !transcript) return Response.json({ error: 'project_id and transcript required' }, { status: 400 });
 
-    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-    if (!GEMINI_API_KEY) return Response.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
-
     const nicheLabel = niche || 'general';
     const channelName = channel_name || '';
-
-    console.log(`=== Quick Publish SEO: Titles + Descriptions + Tags + Hashtags ===`);
-    console.log(`Project: ${project_id} | Transcript: ${transcript.length} chars | Niche: ${nicheLabel} | Channel: ${channelName}`);
-
-    // ── STEP 1: TITLES + DESCRIPTIONS ─────────────────────────
     const scriptExcerpt = transcript.substring(0, 4000);
 
-    const titlePrompt = `You are the world's #1 YouTube title strategist. Analyze this video transcript and generate killer SEO-optimized titles and descriptions.
+    console.log('Quick Publish SEO | project:', project_id, '| niche:', nicheLabel);
+
+    // ── STEP 1: TITLES + DESCRIPTIONS ─────────────────────────
+    const titlePrompt = `You are a YouTube title and description strategist. Analyze this transcript and generate SEO-optimized titles and descriptions.
 
 TRANSCRIPT EXCERPT:
 """
@@ -207,15 +176,15 @@ ${scriptExcerpt}
 
 NICHE: ${nicheLabel}
 
-Generate 5 high-CTR titles + full SEO analysis + 3 descriptions.
+Generate 5 high-CTR titles and 3 descriptions.
 
 TITLE RULES:
 - Front-load primary keyword in first 5 words
 - Under 60 characters each
 - Use curiosity gaps, power words, or numbers
-- Each title must be unique in approach
+- Each title unique in approach
 
-OUTPUT — RETURN ONLY VALID JSON:
+Return ONLY valid JSON:
 {
   "titles": [
     {
@@ -268,10 +237,9 @@ OUTPUT — RETURN ONLY VALID JSON:
   ]
 }
 
-Generate EXACTLY 5 titles and 3 descriptions.
-Return ONLY valid JSON.`;
+Generate EXACTLY 5 titles and 3 descriptions. Return ONLY valid JSON.`;
 
-    const titleResponseText = await callGemini(GEMINI_API_KEY, titlePrompt, 8192);
+    const titleResponseText = await callLLM(titlePrompt, 8192);
     const parsed = parseJson(titleResponseText);
 
     if (!parsed?.titles?.length) {
@@ -286,11 +254,10 @@ Return ONLY valid JSON.`;
     }));
 
     const seoAnalysis = parsed.seo_analysis || {};
-    console.log(`✅ Generated ${titles.length} titles | Primary keyword: ${seoAnalysis.primary_keyword}`);
+    console.log('Titles done:', titles.length, '| keyword:', seoAnalysis.primary_keyword);
 
-    // ── STEP 2: DEDICATED TAG GENERATION (SEO Expert) ──────────
-    console.log(`🏷️ Generating tags from transcript via SEO Expert...`);
-    const tagResult = await generateTagsFromScript(GEMINI_API_KEY, transcript, nicheLabel, titles[0]?.title || 'Untitled', seoAnalysis);
+    // ── STEP 2: TAGS ───────────────────────────────────────────
+    const tagResult = await generateTagsFromScript(transcript, nicheLabel, titles[0]?.title || 'Untitled', seoAnalysis);
 
     let tagsBreakdown = { short: [], medium: [], long: [] };
     if (tagResult) {
@@ -301,26 +268,21 @@ Return ONLY valid JSON.`;
       if (tagResult.primary_tag && !tagsBreakdown.short.includes(tagResult.primary_tag)) {
         tagsBreakdown.short = [tagResult.primary_tag, ...tagsBreakdown.short];
       }
-      console.log(`✅ Tags: ${tagsBreakdown.short.length} short + ${tagsBreakdown.medium.length} medium + ${tagsBreakdown.long.length} long`);
-    } else {
-      console.warn('⚠️ Tag generation failed, using empty tags');
+      console.log('Tags done:', tagsBreakdown.short.length, '+', tagsBreakdown.medium.length, '+', tagsBreakdown.long.length);
     }
 
-    // ── STEP 3: DEDICATED HASHTAG GENERATION (Strategic 3-5 Rule) ──
-    console.log(`#️⃣ Generating strategic hashtags...`);
-    const hashResult = await generateHashtagsFromScript(GEMINI_API_KEY, transcript, nicheLabel, titles[0]?.title || 'Untitled', channelName);
+    // ── STEP 3: HASHTAGS ───────────────────────────────────────
+    const hashResult = await generateHashtagsFromScript(transcript, nicheLabel, titles[0]?.title || 'Untitled', channelName);
 
     let hashtags = [];
     let hashtagString = '';
     if (hashResult) {
       hashtags = hashResult.hashtags || [];
       hashtagString = hashResult.hashtag_string || hashtags.join(' ');
-      console.log(`✅ Hashtags: ${hashtagString}`);
-    } else {
-      console.warn('⚠️ Hashtag generation failed, using empty hashtags');
+      console.log('Hashtags done:', hashtagString);
     }
 
-    // ── SAVE TO UPLOAD METADATA ──────────────────────────────
+    // ── SAVE TO UPLOAD METADATA ────────────────────────────────
     const allTags = [
       ...(tagsBreakdown.short || []),
       ...(tagsBreakdown.medium || []),
@@ -362,7 +324,7 @@ Return ONLY valid JSON.`;
       await base44.asServiceRole.entities.UploadMetadata.create(metaData);
     }
 
-    console.log(`✅ All SEO data saved to UploadMetadata`);
+    console.log('SEO data saved to UploadMetadata');
 
     return Response.json({
       success: true,
