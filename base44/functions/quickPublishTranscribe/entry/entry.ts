@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
         headers: { 'Authorization': API_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           audio_url: file_url,
-          speech_models: ['best'],  // array form — 'best' or 'nano'
+          speech_models: ['universal-3-pro'],  // AssemblyAI v2 valid values: 'universal-3-pro' | 'universal-2'
           punctuate: true,
           format_text: true,
           auto_chapters: true,    // populates result.chapters → ChaptersPanel
