@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-// v5 — Claude primary + Gemini fallback; sleep mode split into story + meditation writers
+// v4 — Claude primary + Gemini fallback
 
 const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
@@ -30,14 +30,16 @@ async function callClaude(prompt, temperature = 0.85, retries = 2) {
 
     if (!response.ok) {
       const err = await response.json();
-      throw new Error(`Claude error ${response.status}: ${err.error?.message || JSON.stringify(err)}`);
+      throw new Error(`Claude error ${response.status}: ${err.error?.message || JSON.stringify(err)}`); 
     }
 
     const data = await response.json();
     const rawText = data.content?.[0]?.text || '';
 
+    // Extract JSON from response
     try { return JSON.parse(rawText); } catch (_) {}
 
+    // Try extracting from markdown code blocks
     let jsonStr = rawText;
     if (rawText.includes('```json')) {
       jsonStr = rawText.split('```json')[1].split('```')[0].trim();
@@ -46,6 +48,7 @@ async function callClaude(prompt, temperature = 0.85, retries = 2) {
     }
     try { return JSON.parse(jsonStr); } catch (_) {}
 
+    // Try extracting just the JSON object
     const objMatch = rawText.match(/\{[\s\S]*\}/);
     if (objMatch) {
       try { return JSON.parse(objMatch[0]); } catch (_) {}
@@ -56,6 +59,9 @@ async function callClaude(prompt, temperature = 0.85, retries = 2) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// GEMINI FALLBACK — gemini-2.5-pro for best creative writing
+// ═══════════════════════════════════════════════════════════════════
 async function callGemini(prompt, temperature = 0.85, retries = 2) {
   const model = 'gemini-2.5-pro';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_KEY}`;
@@ -89,6 +95,7 @@ async function callGemini(prompt, temperature = 0.85, retries = 2) {
     const data = await response.json();
     const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 
+    // Parse JSON
     try { return JSON.parse(rawText); } catch (_) {}
 
     let jsonStr = rawText;
@@ -109,7 +116,11 @@ async function callGemini(prompt, temperature = 0.85, retries = 2) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// UNIFIED LLM CALLER — Claude primary, Gemini fallback
+// ═══════════════════════════════════════════════════════════════════
 async function callLLM(prompt, temperature = 0.85) {
+  // Try Claude first
   try {
     const result = await callClaude(prompt, temperature);
     return { result, provider: 'claude' };
@@ -117,7 +128,10 @@ async function callLLM(prompt, temperature = 0.85) {
     const msg = claudeErr.message || '';
     const isFatal = /credit balance|billing|purchase credits|api key|unauthorized/i.test(msg);
     console.warn(`[LLM] Claude failed${isFatal ? ' (fatal — switching to Gemini)' : ''}: ${msg.substring(0, 120)}`);
-    if (!GEMINI_KEY) throw claudeErr;
+
+    if (!GEMINI_KEY) throw claudeErr; // No fallback available
+
+    // Fall back to Gemini
     console.log('[LLM] Falling back to Gemini 2.5 Pro...');
     const result = await callGemini(prompt, temperature);
     return { result, provider: 'gemini' };
@@ -125,191 +139,225 @@ async function callLLM(prompt, temperature = 0.85) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// SLEEP WRITER — routes to story vs meditation
+// SLEEP SCRIPT WRITING PROMPT
 // ═══════════════════════════════════════════════════════════════════
-function buildSleepWritingPrompt(args) {
-  return args.scriptMode === 'sleep_story'
-    ? buildSleepStoryWritingPrompt(args)
-    : buildSleepMeditationWritingPrompt(args);
-}
+function buildSleepWritingPrompt({ scriptMode, batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock }) {
+  const isMeditation = scriptMode === 'sleep_meditation';
 
-// ═══════════════════════════════════════════════════════════════════
-// SLEEP STORY WRITER — immersive bedtime narrative
-// ═══════════════════════════════════════════════════════════════════
-function buildSleepStoryWritingPrompt({ batch, project, topic, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch }) {
-  const title = topic?.title || project.name;
-  const description = topic?.description || '';
+  const meditationStructure = `**MEDITATION SECTION STRUCTURE**:
+PURPOSE: This is CALMING motivation — restoring the listener's sense of enoughness, worthiness, and peace. NOT energizing, NOT goal-activation. NOT motivational in the gym-coach sense. The listener is already enough. The meditation simply reminds them, softly, until they believe it in their body. Every affirmation should feel like a hand on a shoulder — not a push from behind.
 
-  return `You are a master bedtime-story writer in the tradition of Calm's Sleep Stories (Stephen Fry, Matthew McConaughey), Headspace Sleepcasts, and the Nothing Much Happens podcast. You write immersive, slow-unfolding prose that carries a listener gently into sleep.
+1. Soft Opening (Presence, Not Purpose)
+   - Begin with body awareness and breath — no theme yet
+   - Use slow, spacious language that asks nothing of the listener
+   - Example: warmth of the bed, the weight of the body, the rhythm of breath
 
-**═══ YOU ARE WRITING A STORY. NOT A MEDITATION. ═══**
+2. Nervous System Settling
+   - Gently guide awareness inward without commands
+   - Soft suggestions only: "you may notice…", "perhaps you feel…", "there is nothing you need to do"
+   - Introduce stillness, safety, and permission to rest
 
-This is a STORY. You are NOT a meditation guide. You are a storyteller sitting at the bedside, telling a soft, beautiful tale that the listener drifts off inside.
+3. First Whisper of the Affirmation
+   - Introduce the core affirmation almost like a passing thought — not a declaration
+   - Keep it simple and spacious: "you are enough…", "you are allowed to rest…", "just as you are…"
+   - No explanation. No why. Just the words, gently.
 
-**HARD DIFFERENCES FROM MEDITATION**:
-❌ DO NOT write affirmations ("you are safe," "you are enough," "you deserve rest")
-❌ DO NOT give breathing instructions ("breathe in, breathe out," "notice your breath")
-❌ DO NOT do body scans ("feel your feet, feel your legs, feel your shoulders")
-❌ DO NOT use generic nature-metaphor clichés unless they're literal parts of the story's setting
-❌ DO NOT address the listener's feelings, emotions, or inner state
-❌ DO NOT say "let go" or "release" abstract things
-❌ DO NOT repeat phrases as affirmations
+4. Layered Repetition (The Heart of the Meditation)
+   - Repeat the affirmation with slight variations — never identical rhythm
+   - Allow long pauses between phrases
+   - Weave nature imagery around the affirmation: the ocean doesn't explain its depth, the mountain doesn't justify its stillness
+   - The affirmation becomes a feeling, not a thought
 
-✅ INSTEAD, write ACTUAL STORY PROSE:
-- Describe SPECIFIC PLACES (a lighthouse, a harbor, a cottage, a train car, a garden)
-- Describe SPECIFIC OBJECTS (an oil lamp, a kettle, a wool blanket, a wooden stool)
-- Describe SPECIFIC SMALL EVENTS (water boiling, a page turning, a cat stretching, a door closing)
-- Use the FIVE SENSES constantly (sight, sound, smell, touch, taste)
-- Let scenes WANDER — the reader should feel time slow
-- Use gentle rhythmic prose — not broken-up single sentences with pauses after each
+5. Body Grounding
+   - Bring attention to weight, warmth, breath, softness
+   - No commands — only invitations: "you might feel…", "perhaps there is…", "allow…"
+   - Make the body feel safe, heavy, held
 
-**═══ STORY WORLD ═══**
-Title: **"${title}"**
-${description ? `Description: ${description}` : ''}
+6. Breath Rhythm Integration
+   - Introduce slow [BREATHE] cues
+   - Expand time between cues gradually — let silence grow
+   - Sync language with inhale/exhale: "breathe in… and you are safe… breathe out… and you can let go…"
 
-Everything you write must belong to the world this title promises. If the title is "A Quiet Night at the Lighthouse," we are at a lighthouse. If the title is "The Lavender Fields of Provence," we are in a Provence lavender field. The world is already set — your job is to live in it.
+7. Affirmation as Echo
+   - Return to the affirmation in shorter, softer fragments
+   - Almost like the listener is thinking it themselves, not being told
+   - Fewer words, more space between them
 
-**═══ YOUR SECTION ═══**
+8. Drift State
+   - Language becomes minimal — fragments, single phrases, long pauses
+   - No logic, no structure — just warmth and permission
+   - "You are held… [PAUSE 10 SEC]… you are safe… [PAUSE 10 SEC]…"
 
-You are writing **Section ${batch.batch_number} of ${sortedBatches.length}**: "${batch.story_segment}"
+9. Seamless Fade
+   - No conclusion. No closure. No "and now you will sleep."
+   - Simply allow the words to trail into breath and silence
+   - Bridge gently to the next section if not last
 
-Section purpose: ${batch.focus_area}
+ABSOLUTELY FORBIDDEN in meditation:
+❌ Goal-setting language ("you will achieve", "tomorrow you will", "you can do anything")
+❌ Motivational urgency ("push through", "believe in yourself", "you are capable of great things")
+❌ Future-focused thinking ("imagine your success", "visualize your goals")
+❌ Explaining why affirmations work
+❌ Any energy, drive, or activation — only rest, release, and return
 
-**DETAILED BLUEPRINT FOR THIS SECTION** (follow closely — this defines what happens):
-${batch.synopsis}
+AFFIRMATION FLOW (ADVANCED RHYTHM):
+- Introduce → [PAUSE 5 SEC]
+- Restate with slight variation → [PAUSE 5 SEC]
+- Blend into nature imagery → [PAUSE 5 SEC]
+- Return as shorter whisper → [PAUSE 10 SEC]
+- Echo once more, very softly → [PAUSE 10 SEC]
 
-**FULL STORY ARC** (so you know where this section fits):
+AFFIRMATION FORMAT: State simply → pause → restate → pause → dissolve into imagery → pause → return as whisper. Do NOT explain why the affirmation is true. Just say it, softly, again and again, until the listener stops thinking and starts feeling.`;
+
+  const storyStructure = `**SLEEP STORY SCENE STRUCTURE** (pure narrative — NO affirmations, NO second-person guidance):
+PURPOSE: The listener disappears into a peaceful world. They follow a character through a calm, sensory-rich environment. Nothing needs to happen. There is no plot — only presence. The story is a window, not a lesson.
+
+1. Scene Grounding (Arrival)
+   - Establish where the character is with slow, deliberate sensory inventory
+   - What do they see? What sounds surround them? What do they feel on their skin?
+   - No action yet. Just arrival. Just being there.
+   - Third person, present tense: "She stands at the edge of the water…", "He settles into the old chair by the window…"
+
+2. Gentle Movement (Drifting)
+   - The character moves softly through the world — a slow walk, a gentle drift, a quiet journey
+   - No destination. No purpose. Movement for its own sake.
+   - The environment responds: leaves shift, water ripples, light changes
+   - Pace every sentence to the length of a slow breath
+
+3. World Deepening (Expansion)
+   - Expand the sensory world — more detail, more texture, more quiet beauty
+   - Introduce subtle sounds: distant rain, a fire crackling, water moving over stones
+   - The character notices small things with quiet delight — a moth, a beam of light, a smell of wood smoke
+   - No urgency, no meaning, no message — only noticing
+
+4. Settling (Finding Rest)
+   - The character finds a natural place to slow down — a clearing, a window seat, a blanket by water
+   - They sit. They breathe. They watch.
+   - The world narrows to the immediate: the warmth around them, the sounds that hold them
+   - This is where the story begins to slow — fewer events, more sensation
+
+5. Environment as Lullaby (The World Becomes the Story)
+   - Describe only what soothes — rain on a roof, a fire's gentle crackle, the weight of warmth
+   - The character's thoughts slow and soften — no goals, no worries, just the moment
+   - Language becomes more rhythmic, more repetitive — like the sound of waves
+   - Introduce [PAUSE] markers here more frequently
+
+6. Dissolution (Edge of Sleep)
+   - The character's thoughts begin to lose their edges
+   - Half-formed images, soft impressions — not sleep yet, but the doorway to it
+   - Language fragments gently: shorter sentences, longer pauses, fewer verbs
+   - The world goes quiet around the character without announcement
+
+7. Seamless Fade
+   - No ending. No "and so she slept." No conclusion.
+   - Simply let the world grow quieter and quieter
+   - Bridge naturally to the next section if not last — a sound, a shift in light, a deepening warmth
+
+STORY RULES (non-negotiable):
+- Third person, present tense throughout: "She walks…", "He rests…", "They drift…"
+- The character is calm and safe at ALL times — no problems, no decisions, no other characters with dialogue
+- Sensory richness IS the plot — nothing needs to happen
+- Settings must be inherently peaceful: a lakeside cottage, a forest at dusk, a slow river at sunrise, a meadow under stars, a warm kitchen in winter
+- NEVER introduce anything requiring attention: conflict, dialogue, choices, danger, or surprise
+- Repetition of sensory details is a FEATURE — return to the same images with slight variation`;
+
+  return `You are an expert sleep audio script writer. You create professional-grade ${isMeditation ? 'calming motivation meditations — soothing, acceptance-based, restorative affirmations that remind the listener they are already enough' : 'bedtime sleep stories — immersive narrative journeys through peaceful worlds that carry the listener gently toward sleep'} following the proven format of top sleep channels (Jason Stephenson, Michael Sealey, The Honest Guys).
+
+**CRITICAL RULE — READ THIS FIRST**:
+You are writing the ACTUAL ${isMeditation ? 'meditation' : 'story'} script — the words the narrator speaks. You are NOT writing ABOUT ${isMeditation ? 'meditation or wellness' : 'storytelling or sleep'}. You ARE the soothing voice. Every single word must serve one purpose: helping the listener release the day and drift toward rest.
+
+**ABSOLUTELY FORBIDDEN CONTENT** (any of these will ruin the script):
+❌ Explaining what ASMR is, how it works, or its benefits
+❌ Mentioning dopamine, oxytocin, neuroscience, or "studies show"
+❌ Giving practical sleep tips (caffeine, screen time, sleep schedule)
+❌ Referencing "this video", "this channel", or YouTube
+❌ First-person anecdotes ("I remember when I…")
+❌ Educational content of any kind — no teaching, no explaining
+❌ Defining meditation, affirmations, or relaxation techniques
+❌ Suggesting the listener try other videos or content
+❌ Any meta-commentary about what the script is doing
+❌ Conflict, tension, danger, stress, urgency, or surprises
+❌ Questions requiring active thinking or answers
+❌ Energizing words: "exciting", "alert", "energy", "suddenly", "powerful", "amazing"
+❌ Unresolved storylines or cliffhangers
+
+**PROJECT CONTEXT**:
+- Topic: ${topic?.title || project.name}
+- Description: ${topic?.description || ''}
+- Content Type: ${isMeditation ? 'Calming Motivation Meditation' : 'Sleep Story'}
+- Duration: ${project.video_duration_minutes || 10} minutes total
+${selectedHook && isFirstBatch ? `- Opening line: "${selectedHook.hook_text}"` : ''}
+${strategyBlock}
+
+**FULL SCRIPT ARC** (all sections):
 ${outlineContext}
 
-${previousContent ? `**PREVIOUSLY WRITTEN** (continue seamlessly from where this left off — do NOT repeat):\n${previousContent.slice(-3500)}\n` : ''}
+**YOU ARE NOW WRITING SECTION ${batch.batch_number} of ${sortedBatches.length}**: "${batch.story_segment}"
 
-**═══ WORD COUNT ═══**
-Write AT LEAST **${batch.target_words} words**. This is non-negotiable. To reach this, WANDER — describe objects more slowly, add small detours (what the cat is doing, what the light looks like through the window, what can be heard in the distance), linger on textures and colors. Don't pad with affirmations or repetition — pad with richer sensory detail.
+**SECTION SYNOPSIS** (follow this closely):
+${batch.synopsis}
 
-**═══ VOICE & CRAFT ═══**
+**MANDATORY WORD COUNT**: You MUST write AT LEAST ${batch.target_words} words. This is NON-NEGOTIABLE. If your output is under ${Math.round(batch.target_words * 0.9)} words, it is a FAILURE. Add more repetition, more imagery, more [PAUSE] markers, more sensory grounding until you reach the target. The audio NEEDS this many words to fill its timeslot (150 words = 1 minute).
 
-**Prose style**: Gentle, warm, slightly old-fashioned. Think of a grandparent telling a bedtime tale. Unhurried. Flowing sentences mixed with short, soft ones. Rhythmic. Melodic. Occasional poetic touches, never purple.
+${previousContent ? `**PREVIOUSLY WRITTEN** (maintain continuity, do NOT repeat):\n${previousContent.slice(-4000)}\n` : ''}
 
-**Point of view**: ${isFirstBatch ? 'Open by placing the listener into the world — "you" can be used sparingly as a way to invite them in, but shift quickly to describing the world and its characters. Think "Imagine a small cottage at the edge of a lavender field. The evening light is the color of honey..."' : 'Stay in the world. Continue the narrative thread from where the last section ended.'}
+**═══ UNIVERSAL WRITING STYLE RULES ═══**
 
-**Tense**: Present tense preferred — it's immersive and dreamlike.
+**TONE & DELIVERY**:
+- Extremely gentle, warm, and soothing — deliberately slow and monotonous
+- Hypnotic, trance-inducing rhythm — repetition is your primary tool
+- Each key concept or image stated, then restated 3-5 times in different words
+- Progressive deepening: each paragraph calmer and slower than the last
+- Boring is GOOD. Predictable is GOOD. Sameness invites sleep.
 
-**Sentence rhythm**:
-- Mix short sentences (5-12 words) with longer, flowing ones (20-35 words)
-- Use commas generously — they create the cadence of slow breath
-- Occasionally let a sentence run long and gentle, like a thought drifting
-- Use soft conjunctions: "and," "as," "while"
+**LANGUAGE**:
+- Simple vocabulary — short sentences (8-18 words)
+- ${isMeditation ? 'Second-person "you" — speak directly to the listener as their gentle, accepting guide' : 'Third-person narrative, present tense — immerse the listener in a character\'s peaceful world'}
+- Soft consonants preferred — avoid harsh sounds (hard k, t, hard g, sh)
+- Rhythm over meaning — the sound of the words matters as much as their content
 
-**Pauses**: Include [PAUSE 3 SEC] or [PAUSE 5 SEC] markers at NATURAL scene transitions or moments of stillness — maybe 4-8 times across the section. DO NOT pause after every sentence — that shatters the story's flow. Pause when a moment has landed and deserves to breathe.
+**PAUSE MARKERS** (ESSENTIAL — include generously, every 2-3 sentences):
+- [PAUSE 3 SEC] — after key phrases
+- [PAUSE 5 SEC] — between thoughts
+- [PAUSE 10 SEC] — between major moments or after affirmations
+- [BREATHE] — breathing cue with the narrator's rhythm
+- Let silence carry weight — pauses are not empty, they are the deepening
 
-**Sensory richness (use ALL of these in every section)**:
-- SIGHT: colors, shapes, light quality, small visual details
-- SOUND: gentle sounds — rain, a kettle, distant bells, a page turning, a cat purring
-- SMELL: wood smoke, bread, old paper, sea salt, lavender, tea
-- TOUCH: textures — wool, warm stone, smooth wood, soft cotton
-- TASTE: only when relevant (tea, bread, honey)
+**SENSORY GROUNDING** (weave throughout every paragraph):
+- Touch: weight of blankets, softness of pillows, warmth spreading through the body, gentle pressure
+- Sound: rain on a roof, ocean waves, rustling leaves, a distant river, a fire crackling, silence between sounds
+- Sight: soft darkness, the light of stars, candlelight, moonlight through curtains, gentle shades of blue and grey
+- Smell: rain on earth, wood smoke, flowers, fresh night air (mention subtly, briefly)
 
-**Characters (if any)**: Sketch them lightly — a lighthouse keeper with silver hair, a baker with flour on her apron, a train conductor with a kind smile. Give them quiet, simple actions. They never speak dialogue with tension — they might hum, whisper a word, or move silently.
+**NATURE METAPHORS** (return to these throughout — they are anchors):
+- Ocean: vast, constant, each wave releasing, breath matching the tide
+- Mountain: stable, patient, enduring without effort
+- Tree: rooted, unhurried, growing in its own time
+- River: always moving, always releasing, natural and effortless
+- Moon & Stars: always present, always watching, gentle and constant
 
-**═══ ${isFirstBatch ? 'THIS IS THE OPENING — SECTION 1' : isLastBatch ? 'THIS IS THE FINAL SECTION — DESCENT INTO DREAM' : 'THIS IS A MIDDLE SECTION — THE STORY UNFOLDS'} ═══**
+${isMeditation ? meditationStructure : storyStructure}
 
-${isFirstBatch ? `Open by gently placing the listener into the world. Use a soft welcoming rhythm. Example opening patterns:
-- "Imagine a small [place]. The light is [color]. The air smells of [smell]..."
-- "Somewhere, in a quiet [setting], a [character] is [doing small peaceful thing]..."
-- "Tonight, we travel together to [place]. It is [time of day]. The [thing] is [doing something]..."
+**PERMISSION & RELEASE PHRASES** (use liberally throughout):
+"You don't have to…", "There's no need to…", "It's okay to…", "Let yourself…", "Allow…", "Release…", "Let go of…", "There is nothing you need to do…", "You are allowed to rest…"
 
-Establish the WORLD: place, time of day, weather, light, smells, sounds. Introduce any character with gentle detail. Do NOT start with "close your eyes" or "breathe in." Start with STORY. Within the first 60 words, the listener should know exactly where they are.` : isLastBatch ? `This is the DESCENT INTO DREAM. The story is ending, but not with a conclusion — it's fading, like someone telling a story whose voice is growing quieter.
+**ANCHORING PHRASES** (return to these every few minutes like a gentle heartbeat):
+"Safe… held… at peace…", "Let it go… just for now…", "Rest now…", "You are safe here…", "All is well…", "You can let go…"
 
-Write in SHORTER, SOFTER sentences as the section progresses. Return to IMAGES from earlier in the story — the lamp still burning, the cat still sleeping, the kettle cooling — like echoes. Use fragments toward the end. Use more [PAUSE 5 SEC] and [PAUSE 10 SEC] markers in the final third. The last 100 words should feel like a candle slowly guttering out.
+**${isFirstBatch ? `OPENING: Begin with a gentle, wordless welcome — no announcement, no "welcome back". Simply arrive into the space with the listener. Settle them physically first: body sinking into the bed, the weight of warmth, pillows and blankets holding them. Guide 3 slow breaths with [BREATHE] markers, expanding the time between each. Then ease into the first ${isMeditation ? 'affirmation or theme through imagery — arrive at it like mist, not like a spotlight' : 'scene with slow sensory arrival — let the listener find themselves already there'}.` : 'Continue seamlessly from where the previous section ended. Maintain the deepening arc — each section should feel calmer, slower, and more dissolved than the last.'}**
 
-End on a VERY gentle fragment or two — like the story itself is falling asleep. Something like:
-"...the lamp, still glowing. The sea, still breathing, in and out. And the night, so quiet now... [PAUSE 10 SEC] ...so very quiet..."
-
-NO "goodnight, sleep well, thank you for listening." Just the story fading to silence.` : `Continue the story seamlessly from where the previous section ended. This is where the story UNFOLDS — a small scene, a quiet event, a moment of observation. Let it breathe. Let it wander. Describe lovingly and slowly. End by gently handing off to the next section — a character moving toward the next place, a light dimming, a sound fading.`}
-
-**═══ RETURN FORMAT ═══**
+**${isLastBatch ? 'ENDING: This is the final section — the gentlest, most minimal content of the entire script. Fewer words. More pauses. Let language dissolve. End with the softest possible landing: "Rest now… [PAUSE 10 SEC]… peaceful dreams… [PAUSE 10 SEC]…" then one final breath of presence: "You are safe… you are loved… you are held… [PAUSE 10 SEC]" — then silence.' : 'End by deepening the relaxation one layer further, bridging gently into the next section with a soft sensory or imagery transition — no announcement, just a natural drift.'}**
 
 Return JSON:
 {
-  "content": "The full prose for this section, including any [PAUSE X SEC] markers where they feel natural. Write it as flowing, beautiful storytelling prose — not as a list of instructions.",
+  "content": "The full script text for this section including all [PAUSE X SEC] and [BREATHE] markers…",
   "word_count": 1234
 }`;
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// SLEEP MEDITATION WRITER — theme-aware affirmation flow
-// ═══════════════════════════════════════════════════════════════════
-function buildSleepMeditationWritingPrompt({ batch, project, topic, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch }) {
-  const title = topic?.title || project.name;
-  const description = topic?.description || '';
-
-  return `You are an expert sleep-meditation writer in the tradition of Jason Stephenson and Michael Sealey. You write guided meditations that carry the listener into deep, peaceful sleep.
-
-**═══ CRITICAL — READ FIRST ═══**
-
-You are writing the ACTUAL spoken meditation — the words the narrator says aloud. Every affirmation and every image must serve the specific theme of the title: **"${title}"**
-${description ? `(${description})` : ''}
-
-Do NOT default to generic "you are enough" content unless the title demands it. Read the title. Understand what the listener needs. Write affirmations that answer THAT need.
-
-**ABSOLUTELY FORBIDDEN**:
-❌ Explaining what meditation, ASMR, or affirmations are
-❌ Neuroscience, dopamine, oxytocin, "studies show"
-❌ Sleep tips, caffeine advice, screen-time advice
-❌ Referencing YouTube, videos, or channels
-❌ First-person anecdotes
-❌ Any meta-commentary about the meditation itself
-❌ Tension, urgency, surprises, questions that require thinking
-❌ Energizing words
-
-**═══ YOUR SECTION ═══**
-
-You are writing **Section ${batch.batch_number} of ${sortedBatches.length}**: "${batch.story_segment}"
-
-Section purpose: ${batch.focus_area}
-
-**DETAILED BLUEPRINT FOR THIS SECTION**:
-${batch.synopsis}
-
-**FULL MEDITATION ARC**:
-${outlineContext}
-
-${previousContent ? `**PREVIOUSLY WRITTEN** (continue seamlessly — do NOT repeat):\n${previousContent.slice(-3500)}\n` : ''}
-
-**═══ WORD COUNT ═══**
-Write AT LEAST **${batch.target_words} words**. To reach this, layer the section's affirmation with more repetition, more nature imagery, more [PAUSE] markers, more permission phrases.
-
-**═══ CRAFT RULES ═══**
-
-**Tone**: Extremely gentle. Deliberately monotonous (monotony is good for sleep). Hypnotic. Each key phrase stated, then restated 3-5 times in subtle variations.
-
-**Voice**: Second-person "you." Speak directly to the listener as their gentle guide.
-
-**Sentences**: Short (8-18 words). Soft consonants. Avoid harsh sounds.
-
-**Pauses**: Include generous [PAUSE 3 SEC], [PAUSE 5 SEC], [PAUSE 10 SEC], [BREATHE] markers — every 2-3 sentences is normal for meditations.
-
-**Permission phrases** (use liberally): "You don't have to...", "It's okay to...", "Allow yourself to...", "Let yourself...", "There's no need to..."
-
-**Nature imagery**: Weave in ocean, mountain, tree, river, moon, stars — but let the title's theme guide which images feel right.
-
-**Section rhythm**: Introduce affirmation softly → [PAUSE] → repeat with slight variation → [PAUSE] → blend with nature imagery → [BREATHE] → return as whisper → [PAUSE 5 SEC]
-
-**═══ ${isFirstBatch ? 'OPENING SECTION' : isLastBatch ? 'FINAL SECTION — DESCENT TO SLEEP' : 'MIDDLE SECTION'} ═══**
-
-${isFirstBatch ? `Start with a gentle welcome. Settle the listener physically (body sinking, pillows, warmth). Guide 2-3 slow breaths with [BREATHE] markers. Then ease into the theme through imagery — NOT by explaining what you're about to do.` : isLastBatch ? `Final section — gentlest, most minimal. Long pauses. Short fragments. Echo earlier affirmations softly. End with: "Rest now... peaceful dreams... [PAUSE 10 SEC] ...so safe... so still..." fading to silence. No "goodnight" or meta-commentary.` : `Continue the deepening arc. The affirmation of this section should feel like a natural next wave after the last. Bridge gently to the next section at the end.`}
-
-**═══ RETURN FORMAT ═══**
-
-Return JSON:
-{
-  "content": "The full meditation text for this section, with all [PAUSE X SEC] and [BREATHE] markers in natural places.",
-  "word_count": 1234
-}`;
-}
 
 // ═══════════════════════════════════════════════════════════════════
-// STANDARD VIRAL SCRIPT WRITING PROMPT
+// STANDARD VIRAL SCRIPT WRITING PROMPT (existing logic)
 // ═══════════════════════════════════════════════════════════════════
 function buildStandardWritingPrompt({ batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock }) {
   return `You are an elite YouTube scriptwriter creating a viral narration script.
@@ -363,28 +411,33 @@ Deno.serve(async (req) => {
 
     const { project_id } = await req.json();
 
+    // Get project
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
+    // Get topic
     let topic = null;
     if (project.selected_topic_id) {
       const topics = await base44.asServiceRole.entities.Topics.filter({ id: project.selected_topic_id });
       topic = topics[0];
     }
 
+    // Get selected hook
     let selectedHook = null;
     if (project.selected_hook_id) {
       const hooks = await base44.asServiceRole.entities.Hooks.filter({ id: project.selected_hook_id });
       selectedHook = hooks[0];
     }
 
+    // Get channel for script mode detection
     let channel = null;
     if (project.channel_id) {
       const channels = await base44.asServiceRole.entities.Channels.filter({ id: project.channel_id });
       channel = channels[0];
     }
 
+    // Detect script mode
     const scriptMode = project.project_mode && (project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story')
       ? project.project_mode
       : 'standard';
@@ -392,6 +445,7 @@ Deno.serve(async (req) => {
 
     console.log(`[generateScriptBatches] Script mode: ${scriptMode}`);
 
+    // Get channel script strategy
     let scriptStrategy = '';
     if (project.script_strategy_override) {
       scriptStrategy = project.script_strategy_override;
@@ -417,6 +471,7 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Get all batches for this project
     const allBatches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
     const sortedBatches = allBatches.sort((a, b) => a.batch_number - b.batch_number);
     const pendingBatches = sortedBatches.filter(b => b.status === 'pending' || b.status === 'generating');
@@ -427,95 +482,105 @@ Deno.serve(async (req) => {
 
     console.log(`[generateScriptBatches] ${pendingBatches.length} pending batches for project ${project_id}`);
 
+    // Build context from already-completed batches
     const completedBatches = sortedBatches.filter(b => b.status === 'completed' && b.content);
+
     let completedCount = 0;
+
+    // Process only ONE batch per call to avoid platform timeout
     const batch = pendingBatches[0];
+    {
+      await base44.asServiceRole.entities.ScriptBatches.update(batch.id, { status: 'generating' });
 
-    await base44.asServiceRole.entities.ScriptBatches.update(batch.id, { status: 'generating' });
+      const previousContent = completedBatches
+        .concat(sortedBatches.filter(b => b.status === 'completed' && b.content && !completedBatches.find(c => c.id === b.id)))
+        .sort((a, b) => a.batch_number - b.batch_number)
+        .map(b => `--- BATCH ${b.batch_number}: ${b.story_segment} ---\n${b.content}`)
+        .join('\n\n');
 
-    const previousContent = completedBatches
-      .concat(sortedBatches.filter(b => b.status === 'completed' && b.content && !completedBatches.find(c => c.id === b.id)))
-      .sort((a, b) => a.batch_number - b.batch_number)
-      .map(b => `--- BATCH ${b.batch_number}: ${b.story_segment} ---\n${b.content}`)
-      .join('\n\n');
+      const isFirstBatch = batch.batch_number === 1;
+      const isLastBatch = batch.batch_number === sortedBatches.length;
 
-    const isFirstBatch = batch.batch_number === 1;
-    const isLastBatch = batch.batch_number === sortedBatches.length;
+      const outlineContext = sortedBatches
+        .map(b => `Batch ${b.batch_number} "${b.story_segment}": ${b.focus_area}`)
+        .join('\n');
 
-    const outlineContext = sortedBatches
-      .map(b => `Batch ${b.batch_number} "${b.story_segment}": ${b.focus_area}`)
-      .join('\n');
+      const promptArgs = {
+        batch, project, topic, selectedHook, sortedBatches,
+        previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock
+      };
 
-    const promptArgs = {
-      batch, project, topic, selectedHook, sortedBatches,
-      previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock
-    };
+      const prompt = isSleepMode
+        ? buildSleepWritingPrompt({ ...promptArgs, scriptMode })
+        : buildStandardWritingPrompt(promptArgs);
 
-    const prompt = isSleepMode
-      ? buildSleepWritingPrompt({ ...promptArgs, scriptMode })
-      : buildStandardWritingPrompt(promptArgs);
+      console.log(`[Batch ${batch.batch_number}] Generating ~${batch.target_words} words (${scriptMode})...`);
 
-    console.log(`[Batch ${batch.batch_number}] Generating ~${batch.target_words} words (${scriptMode})...`);
+      // Sleep scripts use lower temperature for more consistent, soothing output
+      const baseTemp = isSleepMode ? 0.65 : 0.85;
+      const minWords = Math.round(batch.target_words * 0.92);
+      let content = '';
+      let wordCount = 0;
+      const MAX_ATTEMPTS = 3;
 
-    const baseTemp = isSleepMode ? 0.7 : 0.85;
-    const minWords = Math.round(batch.target_words * 0.92);
-    let content = '';
-    let wordCount = 0;
-    const MAX_ATTEMPTS = 3;
-
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      let currentPrompt;
-      if (attempt === 1 || !content) {
-        currentPrompt = prompt;
-      } else {
-        const wordsNeeded = batch.target_words - wordCount;
-        currentPrompt = `You previously wrote the following script section but it was too short (${wordCount} words, need ${batch.target_words}).
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        let currentPrompt;
+        if (attempt === 1 || !content) {
+          currentPrompt = prompt;
+        } else {
+          // Continuation prompt — ask Claude to extend the existing content
+          const wordsNeeded = batch.target_words - wordCount;
+          currentPrompt = `You previously wrote the following script section but it was too short (${wordCount} words, need ${batch.target_words}).
 
 EXISTING CONTENT (DO NOT REPEAT — continue SEAMLESSLY from the last line):
 ---
 ${content.slice(-3000)}
 ---
 
-Write EXACTLY ${wordsNeeded} MORE words continuing this section. Maintain the same tone, style, and pacing. ${isSleepMode ? 'Add more sensory detail, more specific objects, more small events, more textures — not more repetition.' : 'Add more detail, more anecdotes, more specific examples, more emotional beats.'}
+Write EXACTLY ${wordsNeeded} MORE words continuing this section. Maintain the same tone, style, and pacing. ${isSleepMode ? 'Add more repetition, more imagery, more [PAUSE] markers, more sensory grounding.' : 'Add more detail, more anecdotes, more specific examples, more emotional beats.'}
 
 Return JSON:
 {"content": "The additional continuation text only...", "word_count": ${wordsNeeded}}`;
-      }
-
-      const { result, provider } = await callLLM(currentPrompt, baseTemp);
-      if (attempt === 1) console.log(`[Batch ${batch.batch_number}] Using ${provider}`);
-      const newContent = result.content || '';
-
-      if (attempt > 1 && content) {
-        content = content.trim() + '\n\n' + newContent.trim();
-      } else {
-        content = newContent;
-      }
-      wordCount = content.split(/\s+/).filter(w => w.length > 0).length;
-
-      if (wordCount >= minWords || attempt === MAX_ATTEMPTS) {
-        if (wordCount < minWords) {
-          console.warn(`[Batch ${batch.batch_number}] ⚠️ Only ${wordCount}/${batch.target_words} words after ${MAX_ATTEMPTS} attempts — accepting`);
         }
-        break;
+
+        const { result, provider } = await callLLM(currentPrompt, baseTemp);
+        if (attempt === 1) console.log(`[Batch ${batch.batch_number}] Using ${provider}`);
+        const newContent = result.content || '';
+
+        if (attempt > 1 && content) {
+          // Append continuation to existing content
+          content = content.trim() + '\n\n' + newContent.trim();
+        } else {
+          content = newContent;
+        }
+        wordCount = content.split(/\s+/).filter(w => w.length > 0).length;
+
+        if (wordCount >= minWords || attempt === MAX_ATTEMPTS) {
+          if (wordCount < minWords) {
+            console.warn(`[Batch ${batch.batch_number}] ⚠️ Only ${wordCount}/${batch.target_words} words after ${MAX_ATTEMPTS} attempts — accepting`);
+          }
+          break;
+        }
+        console.log(`[Batch ${batch.batch_number}] ⚠️ Only ${wordCount}/${batch.target_words} words (attempt ${attempt}/${MAX_ATTEMPTS}) — extending...`);
       }
-      console.log(`[Batch ${batch.batch_number}] ⚠️ Only ${wordCount}/${batch.target_words} words (attempt ${attempt}/${MAX_ATTEMPTS}) — extending...`);
+
+      await base44.asServiceRole.entities.ScriptBatches.update(batch.id, {
+        content: content,
+        word_count: wordCount,
+        status: 'completed'
+      });
+
+      completedCount++;
+      console.log(`[Batch ${batch.batch_number}] ✅ ${wordCount} words written (${scriptMode})`);
     }
 
-    await base44.asServiceRole.entities.ScriptBatches.update(batch.id, {
-      content: content,
-      word_count: wordCount,
-      status: 'completed'
-    });
-
-    completedCount++;
-    console.log(`[Batch ${batch.batch_number}] ✅ ${wordCount} words written (${scriptMode})`);
-
+    // Update project status
     await base44.asServiceRole.entities.Projects.update(project_id, {
       status: 'scripting',
       current_step: 3
     });
 
+    // Check if all batches are now completed
     const remainingPending = sortedBatches.filter(b =>
       b.id !== batch.id && (b.status === 'pending' || b.status === 'generating')
     ).length;
@@ -533,6 +598,7 @@ Return JSON:
     });
   } catch (error) {
     console.error('generateScriptBatches error:', error.message);
+    // Return error details in a way the frontend can parse
     const msg = error.message || 'Unknown error';
     let code = 500;
     if (/credit balance|billing|purchase credits/i.test(msg)) code = 402;
