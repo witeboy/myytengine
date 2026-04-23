@@ -2,15 +2,8 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
 // QUICK PUBLISH — Transcribe via AssemblyAI
-// Verified against docs at assemblyai.com/docs (April 2026):
-//
-// RULES (from live docs):
-//   - speech_models: REQUIRED array. Valid: "universal-3-pro", "universal-2"
-//   - Use ["universal-3-pro", "universal-2"] for best accuracy + fallback
-//   - language_detection: compatible with the two-model combo above
-//   - disfluencies: universal-2 ONLY — incompatible with universal-3-pro
-//   - auto_chapters: universal-2 ONLY — drop it when using u3-pro
-//   - punctuate / format_text: universal-2 ONLY features
+// speech_models: ["universal-3-pro", "universal-2"] per docs (April 2026)
+// Response payload: minimal — only what QuickPublish.jsx actually reads
 // ══════════════════════════════════════════════════════════════════
 
 Deno.serve(async (req) => {
@@ -38,13 +31,8 @@ Deno.serve(async (req) => {
         headers: { 'Authorization': API_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           audio_url: file_url,
-          // Correct per AssemblyAI docs (April 2026):
-          // Two-model array: u3-pro for supported langs, u2 fallback for the rest
           speech_models: ['universal-3-pro', 'universal-2'],
           language_detection: true,
-          // NOTE: disfluencies and auto_chapters are universal-2 ONLY features.
-          // They are NOT compatible with universal-3-pro and will cause a 400.
-          // Removed both to keep the combo working cleanly.
         }),
       });
 
@@ -52,7 +40,7 @@ Deno.serve(async (req) => {
         let errBody = '';
         try { errBody = JSON.stringify(await submitRes.json()); }
         catch (_) { errBody = await submitRes.text(); }
-        console.error(`AssemblyAI submit ${submitRes.status}:`, errBody);
+        console.error('AssemblyAI submit failed:', submitRes.status, errBody);
         return Response.json({ error: `AssemblyAI submit failed (${submitRes.status}): ${errBody}` }, { status: 500 });
       }
 
@@ -62,7 +50,7 @@ Deno.serve(async (req) => {
         return Response.json({ error: `No transcript ID returned: ${JSON.stringify(submitData)}` }, { status: 500 });
       }
 
-      console.log(`📡 Transcription submitted: ${id}`);
+      console.log('Transcription submitted:', id);
       return Response.json({ success: true, transcript_id: id });
     }
 
@@ -84,18 +72,14 @@ Deno.serve(async (req) => {
       const result = await res.json();
 
       if (result.status === 'completed') {
-        const fullText = result.text || '';
-
+        // Only return the 3 fields QuickPublish.jsx actually reads:
+        // words, chapters, text, duration — nothing else to keep payload small
         const words = (result.words || []).map(w => ({
           word: w.text,
           start: w.start / 1000,
           end: w.end / 1000,
-          confidence: w.confidence ?? null,
-          speaker: w.speaker || null,
         }));
 
-        // auto_chapters was removed from submit (u3-pro incompatible)
-        // but map it defensively in case the result still includes it
         const chapters = (result.chapters || []).map(ch => ({
           gist: ch.gist,
           headline: ch.headline,
@@ -104,20 +88,18 @@ Deno.serve(async (req) => {
           end: ch.end / 1000,
         }));
 
-        console.log(`✅ Done: ${words.length} words, model used: ${result.speech_model_used || 'unknown'}`);
+        console.log('Transcription complete:', words.length, 'words,', chapters.length, 'chapters');
         return Response.json({
           status: 'completed',
-          text: fullText,
+          text: result.text || '',
           words,
-          word_count: words.length,
-          duration: result.audio_duration,
+          duration: result.audio_duration || 0,
           chapters,
-          model_used: result.speech_model_used || null,
         });
       }
 
       if (result.status === 'error') {
-        console.error('AssemblyAI error:', result.error);
+        console.error('AssemblyAI transcription error:', result.error);
         return Response.json({ status: 'error', error: result.error || 'Transcription failed' });
       }
 
