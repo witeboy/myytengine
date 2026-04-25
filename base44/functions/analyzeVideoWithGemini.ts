@@ -66,14 +66,15 @@ Deno.serve(async (req) => {
 
     const {
       videoUrl,
-      geminiKey,
       maxClips = 8,
       minSec = 20,
       maxSec = 60,
     } = await req.json();
 
+    const geminiKey = Deno.env.get('GEMINI_API_KEY');
+
     if (!videoUrl)   return Response.json({ error: 'videoUrl is required' }, { status: 400 });
-    if (!geminiKey)  return Response.json({ error: 'geminiKey is required — add it in Open Shorts Settings' }, { status: 400 });
+    if (!geminiKey)  return Response.json({ error: 'GEMINI_API_KEY not set in environment variables' }, { status: 500 });
 
     console.log(`🎬 Gemini analyzing: ${videoUrl.slice(0, 80)}...`);
 
