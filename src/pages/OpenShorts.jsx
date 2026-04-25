@@ -15,7 +15,6 @@ import {
 
 // ─── localStorage keys ─────────────────────────────────────────────────
 const LS = {
-  GEMINI:       'openshorts_gemini_key',
   CLOUD_NAME:   'openshorts_cloud_name',
   CLOUD_PRESET: 'openshorts_cloud_preset',
   SUPABASE_URL: 'openshorts_supabase_url',
@@ -155,12 +154,6 @@ function StageBar({ stageKeys, current, done }) {
 function SettingsPanel({ onClose }) {
   const FIELDS = [
     {
-      section: 'AI Analysis',
-      k: LS.GEMINI, label: 'Gemini API Key *', pw: true,
-      ph: 'AIza...',
-      hint: 'Required. Free at aistudio.google.com → Get API key',
-    },
-    {
       section: 'Cloudinary — Permanent Clip Storage (Optional)',
       k: LS.CLOUD_NAME, label: 'Cloud Name', pw: false,
       ph: 'your-cloud-name',
@@ -253,7 +246,7 @@ function SettingsPanel({ onClose }) {
         {/* Status indicators */}
         <div className="pt-2 space-y-1.5">
           {[
-            { ok: !!vals[LS.GEMINI],       label: 'Gemini AI — analysis ready' },
+            { ok: true,                    label: 'Gemini AI — ready (env key)' },
             { ok: !!vals[LS.CLOUD_NAME],   label: 'Cloudinary — permanent clip storage' },
             { ok: !!(vals[LS.SUPABASE_URL] && vals[LS.SUPABASE_KEY]), label: 'Supabase — clip library' },
           ].map(({ ok, label }) => (
@@ -637,7 +630,7 @@ export default function OpenShorts() {
   const [showSettings, setShowSettings] = useState(false);
   const [mainTab, setMainTab]           = useState('generate');
   const [inputMode, setInputMode]       = useState('youtube');
-  const hasGemini = !!localStorage.getItem(LS.GEMINI);
+  const hasGemini = true;
 
   // Inputs
   const [ytUrl, setYtUrl]       = useState('');
@@ -687,7 +680,6 @@ export default function OpenShorts() {
     try {
       const res  = await base44.functions.invoke('analyzeVideoWithGemini', {
         videoUrl:  ytUrl.trim(),
-        geminiKey: localStorage.getItem(LS.GEMINI),
         maxClips:  parseInt(maxClips) || 8,
         minSec:    parseInt(minSec)   || 20,
         maxSec:    parseInt(maxSec)   || 60,
