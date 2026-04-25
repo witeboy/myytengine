@@ -69,6 +69,7 @@ import StoryTopics from './pages/StoryTopics';
 import TimelineEditor from './pages/TimelineEditor';
 import ToolsHub from './pages/ToolsHub';
 import UGCPipeline from './pages/UGCPipeline';
+import OpenShorts from './pages/OpenShorts';
 import VersionHistory from './pages/VersionHistory';
 import __Layout from './Layout.jsx';
 
@@ -96,6 +97,7 @@ export const PAGES = {
     "TimelineEditor": TimelineEditor,
     "ToolsHub": ToolsHub,
     "UGCPipeline": UGCPipeline,
+    "OpenShorts": OpenShorts,
     "VersionHistory": VersionHistory,
 }
 
