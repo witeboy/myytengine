@@ -378,6 +378,392 @@ Return JSON:
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// SLEEP STORY PROMPT — real narrative, not affirmations
+// ═══════════════════════════════════════════════════════════════════
+function buildSleepStoryWritingPrompt({ batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch }) {
+  return `You are a world-class author of soothing bedtime stories for adults, in the tradition of Calm and the Sleep Stories podcast. You write REAL STORIES — not guided meditations, not affirmations, not breathing exercises.
+
+A sleep story has named characters, a specific setting, a gentle plot, and a satisfying peaceful resolution. It is interesting enough to follow but calming enough to ease a listener into sleep. Think of it as a book chapter read aloud at 11pm.
+
+WHAT A SLEEP STORY IS:
+- A real story with a named protagonist (give them a name, age, personality)
+- A specific, sensory-rich setting (a cottage, a boat, a mountain village, a moonlit garden)
+- A gentle plot arc: something happens, then resolves peacefully
+- Lush, slow prose — every sentence paints a picture
+- Third person narration, past tense
+- Emotional warmth: the world of the story is safe, kind, unhurried
+
+WHAT A SLEEP STORY IS NOT:
+- Guided breathing or body scan exercises
+- Affirmations like "you are safe, you are loved"
+- Instructions to the listener like "now relax your shoulders"
+- Educational content of any kind
+- Conflict, danger, or unresolved tension
+- Excitement, surprise, or urgency
+- Any reference to sleep, YouTube, or content creation
+
+SLEEP STORY PROSE RULES:
+- Long, flowing, descriptive sentences preferred over short punchy ones
+- Use all five senses: what does the air smell like, what sounds are present, what does the light look like
+- Return to the same peaceful details as anchors — repetition of calming imagery is intentional
+- [PAUSE 3 SEC] markers at natural breath points, every 4-6 sentences
+- Soft consonants preferred: l, m, n, s, w, h
+- Simple vocabulary throughout
+- Each paragraph deepens the peaceful atmosphere — always getting calmer
+
+PROJECT CONTEXT:
+- Topic/Theme: ${topic?.title || project.name}
+- Total Duration: ${project.video_duration_minutes || 10} minutes
+${selectedHook && isFirstBatch ? `- Opening line: "${selectedHook.hook_text}"` : ''}
+
+FULL STORY ARC:
+${outlineContext}
+
+WRITING SECTION ${batch.batch_number} of ${sortedBatches.length}: "${batch.story_segment}"
+
+SECTION SYNOPSIS:
+${batch.synopsis}
+
+MANDATORY WORD COUNT: AT LEAST ${batch.target_words} words. This fills ${Math.round(batch.target_words / 150)} minute(s) of audio. Add more sensory description, more [PAUSE] markers, more setting details until you reach it.
+
+${previousContent ? `PREVIOUSLY WRITTEN (continue seamlessly, do NOT repeat):\n${previousContent.slice(-3000)}\n` : ''}
+
+${isFirstBatch ? 'OPENING: Begin mid-scene. Place the reader inside the story world from the first sentence. No preamble.' : 'Continue seamlessly from where the previous section left off.'}
+${isLastBatch ? 'ENDING: Bring the story to a complete, peaceful resolution. End on a single final image of quiet and rest.' : 'End on a moment of gentle calm. No tension or cliffhangers.'}
+
+Return JSON:
+{
+  "content": "The full story narration text including all [PAUSE X SEC] markers...",
+  "word_count": 1234
+}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPLAINER VIDEO PROMPT — structured teaching by subject
+// ═══════════════════════════════════════════════════════════════════
+function buildExplainerWritingPrompt({ storyArch, batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock }) {
+
+  const ARCH_CONFIGS = {
+    explainer_tech: {
+      voice: 'tech educator in the tradition of CGP Grey and Mark Rober',
+      hook: 'A WTF moment that breaks what the viewer thought they knew about technology',
+      structure: 'WTF Hook, Concrete Analogy, 3-Step Breakdown, Real-World Application, Future Implications, CTA',
+      rules: [
+        'Feynman Technique: explain as if to a smart 12-year-old first, then add layers',
+        'Every abstract concept needs a physical, relatable analogy before the technical explanation',
+        'Use specific product names, company names, version numbers — never be vague',
+        'Show failure cases: what happens when this goes wrong, who got hacked, what crashed',
+        'Technical accuracy matters — no hand-waving, no oversimplification that misleads',
+      ],
+      tone: 'Curious, precise, slightly nerdy but never condescending.',
+    },
+    explainer_finance: {
+      voice: 'financial educator in the tradition of Andrei Jikh and Graham Stephan',
+      hook: 'Personal stakes — how this concept is already affecting the viewer\'s money right now',
+      structure: 'Stakes Hook, Common Mistake Busted, How It Actually Works, Step-by-Step Action, Real Numbers Example, CTA',
+      rules: [
+        'Lead with the dollar amount — what does this cost or save in real terms',
+        'Destroy one common misconception in the first 60 seconds',
+        'Use specific numbers: percentages, dollar amounts, time horizons — never "could earn more"',
+        'Include a worked example with a specific fictional person\'s situation',
+        'Acknowledge risk honestly — do not make everything sound guaranteed',
+        'High-CPM: reference real financial products and services by name',
+      ],
+      tone: 'Relatable, slightly skeptical of the mainstream, genuinely trying to help the viewer build wealth.',
+    },
+    explainer_legal: {
+      voice: 'legal educator in the tradition of LegalEagle — plain language, no legalese',
+      hook: 'A real case, lawsuit, or law that directly affects the viewer\'s everyday life',
+      structure: 'Real Case Hook, Plain-English Translation, 3 Common Traps, What To Actually Do, When To Get a Lawyer, CTA',
+      rules: [
+        'Open with a specific case — a person, a lawsuit, a fine — that makes the law tangible',
+        'Translate every legal term into plain language when first used',
+        'Clarify jurisdiction: be honest about which country or state this applies to',
+        'Focus on practical action — what does the viewer DO with this information',
+        'Highlight asymmetries: what powerful parties know that ordinary people do not',
+        'One of the highest CPM categories on YouTube — treat it seriously',
+      ],
+      tone: 'Calm, authoritative, slightly indignant on behalf of the viewer. Demystifying, never intimidating.',
+    },
+    explainer_ai: {
+      voice: 'AI educator in the tradition of Fireship and Marques Brownlee — show then explain',
+      hook: 'A live demonstration of what this AI tool does that is more impressive than anything the viewer imagined',
+      structure: 'Demo Hook, Before and After Comparison, Setup Walkthrough, 5 Pro Tips Most People Miss, Limitations, CTA',
+      rules: [
+        'SHOW first, explain second — describe the output before describing how it works',
+        'Use real prompts and real outputs — be specific about what was typed and what came back',
+        'Compare to existing tools — what does this replace, what is it 10x better at',
+        'Acknowledge what it cannot do — managing expectations builds trust',
+        'Growth angle: mention adoption numbers, company use cases, salary impact of knowing this tool',
+        'This niche is exploding 340% — lean into the current AI moment',
+      ],
+      tone: 'Excited but honest. You have genuinely used this tool. You are sharing a discovery.',
+    },
+  };
+
+  const arch = ARCH_CONFIGS[storyArch] || ARCH_CONFIGS['explainer_tech'];
+
+  return `You are an elite YouTube ${arch.voice}.
+
+Your mission: write a section of a high-retention educational YouTube script teaching "${topic?.title || project.name}".
+
+EXPLAINER STYLE:
+- Hook style: ${arch.hook}
+- Structure formula: ${arch.structure}
+- Tone: ${arch.tone}
+
+CONTENT RULES:
+${arch.rules.map((r, i) => (i + 1) + '. ' + r).join('\n')}
+
+GENERAL RULES:
+- NO scene directions, NO stage directions — narration text only
+- NO "welcome back", NO "in this video" — no meta-commentary
+- Every sentence must teach, set up a reveal, or deepen understanding
+- Mix short punchy sentences with longer explanatory ones
+- Micro-hook every 60-90 seconds: "But here is the part nobody talks about...", "This is where most people make the mistake..."
+- Use specific names, numbers, percentages, dates — never be vague
+
+PROJECT CONTEXT:
+- Topic: ${topic?.title || project.name}
+- Description: ${topic?.description || ''}
+- Duration: ${project.video_duration_minutes || 10} minutes total
+${selectedHook && isFirstBatch ? `- Opening hook: "${selectedHook.hook_text}"` : ''}
+${strategyBlock}
+
+FULL VIDEO ARC:
+${outlineContext}
+
+WRITING BATCH ${batch.batch_number} of ${sortedBatches.length}: "${batch.story_segment}"
+
+BATCH SYNOPSIS:
+${batch.synopsis}
+
+MANDATORY WORD COUNT: AT LEAST ${batch.target_words} words. Add more examples, more specifics, more depth until you reach it.
+
+${previousContent ? `PREVIOUSLY WRITTEN (continue seamlessly):\n${previousContent.slice(-3000)}\n` : ''}
+
+${isFirstBatch ? 'Start with the hook. Make the first sentence impossible to skip.' : 'Continue directly. No recapping, no transitional summaries.'}
+${isLastBatch ? 'End with a clear, satisfying summary of the key insight, then a direct, confident call to action.' : 'End this batch on a curiosity hook that pulls into the next section.'}
+
+Return JSON:
+{
+  "content": "The full narration text for this batch...",
+  "word_count": 1234
+}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// STORY WRITING PROMPT — genre-specific narrative engine
+// ═══════════════════════════════════════════════════════════════════
+function buildStoryWritingPrompt({ storyArch, batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch }) {
+
+  const GENRE_CONFIGS = {
+    story_comedy: {
+      label: 'Comedy',
+      voice: 'comedic author in the tradition of Terry Pratchett and Douglas Adams',
+      principles: [
+        'Comedy is about subverted expectations — set up one thing, deliver another',
+        'Character quirks drive humor more than situations — make the protagonist wonderfully specific',
+        'Rule of three: establish a pattern twice, break it the third time for maximum effect',
+        'Timing in narration: a short sentence after a long buildup IS the punchline',
+        'Callbacks reward the audience — plant a detail early, pay it off later',
+        'Absurdist logic must be internally consistent — the world is strange but follows its own rules',
+        'Never explain the joke',
+      ],
+      tone: 'Warm, wry, intelligent. Humor from observation and character, not farce.',
+    },
+    story_children: {
+      label: "Children's Story",
+      voice: "children's author in the tradition of Roald Dahl and A.A. Milne",
+      principles: [
+        'Simple words: if a 6-year-old would not know it, find a simpler synonym',
+        'Repetition is a feature — children love and expect repeated phrases',
+        'The hero must want something specific and fail before succeeding',
+        'Animals or child protagonists work best',
+        'Sensory details that children find delightful: colors, textures, food, sounds',
+        'Moral lesson should emerge from events, never stated directly',
+        'Short sentences, active verbs, present tense for immediacy',
+      ],
+      tone: 'Warm, wonder-filled, gently funny. The world is magical and safe.',
+    },
+    story_nursery: {
+      label: 'Nursery Rhyme',
+      voice: 'poet-storyteller in the tradition of Edward Lear and Mother Goose',
+      principles: [
+        'AABB or ABAB rhyme scheme — maintain consistently throughout',
+        'Strong rhythm: read it aloud in your head, it must sing',
+        'Simple, vivid imagery: moons, mice, dishes, spoons, hills, pails',
+        'Playful nonsense is welcome — sound and rhythm matter as much as logic',
+        'Short lines: 4-8 syllables each for singability',
+        'Repetition of key lines or refrains is expected and loved',
+        'Each verse should have its own complete visual scene',
+      ],
+      tone: 'Playful, musical, timeless. Every verse should make the reader want to clap along.',
+    },
+    story_crime: {
+      label: 'Crime',
+      voice: 'crime author in the tradition of Gillian Flynn and James Ellroy',
+      principles: [
+        'Open on the crime or its aftermath — in medias res drops the reader into tension immediately',
+        'Plant clues early that only make sense in retrospect — the reader should have an "of course" moment',
+        'Red herrings must be convincing — cheap ones make the reader feel cheated',
+        'The investigator should have a flaw that complicates the case',
+        'Reveal information strategically — keep one level of mystery alive at all times',
+        'Specific forensic or procedural details build credibility',
+        'Justice is not always clean or satisfying — do not fake it',
+      ],
+      tone: 'Tense, precise, slightly cold. Emotion erupts in specific moments.',
+    },
+    story_love: {
+      label: 'Romance',
+      voice: 'romance author in the tradition of Nora Roberts and Sally Rooney',
+      principles: [
+        'The obstacle between the characters must feel genuinely insurmountable until it is not',
+        'Interiority is everything — live inside the protagonist\'s longing, fear, and hope',
+        'Physical detail carries emotional meaning — a specific gesture, a particular laugh',
+        'Tension through almost-moments: almost touched, almost said it, almost kissed',
+        'Both characters must be complex — the love interest is not a trophy',
+        'The moment of emotional vulnerability is the real climax',
+        'The resolution must feel earned — it takes courage to love',
+      ],
+      tone: 'Warm, yearning, emotionally precise. Honesty matters more than grandeur.',
+    },
+    story_horror: {
+      label: 'Horror',
+      voice: 'horror author in the tradition of Shirley Jackson and Stephen Graham Jones',
+      principles: [
+        'What you do not show is scarier than what you do — suggestion over description',
+        'Establish the normal in loving detail before you break it',
+        'Dread is preferable to shock — the slow approach of something wrong is more effective',
+        'Ground the supernatural in the mundane: the phone keeps ringing, the milk is always cold',
+        'The protagonist must make understandable choices that lead them deeper',
+        'Sensory wrongness: sounds slightly off, smells that do not belong',
+        'Leave at least one question unanswered — complete explanation destroys horror',
+      ],
+      tone: 'Controlled, precise, deeply unsettling. Too calm about impossible things.',
+    },
+    story_thriller: {
+      label: 'Thriller',
+      voice: 'thriller author in the tradition of Lee Child and Tana French',
+      principles: [
+        'The clock is always ticking — remind the reader of the deadline at every act break',
+        'Every scene must advance the plot or be cut',
+        'Reversals keep the reader off-balance: what looks like progress becomes setback',
+        'The protagonist must be in genuine danger — physical, moral, or reputational',
+        'Information is a weapon — who knows what, and when, drives all tension',
+        'The antagonist is intelligent and has reasonable motives',
+        'The climax must be physically and emotionally overwhelming',
+      ],
+      tone: 'Fast, precise, muscular. Short sentences during action. Never stop moving.',
+    },
+    story_historical: {
+      label: 'Historical Fiction',
+      voice: 'historical fiction author in the tradition of Hilary Mantel and Anthony Burgess',
+      principles: [
+        'Period detail must be specific: what people ate, wore, smelled like, believed',
+        'Modern readers need emotional access — the protagonist has psychology we recognize',
+        'Historical pressure: the large events of the era bear down on individual choices',
+        'Avoid anachronism: no modern idioms or attitudes that would be impossible for the time',
+        'Great history felt through small personal moments',
+        'Power dynamics of the era must be present and felt',
+        'Feel the contingency — people made choices that could have gone otherwise',
+      ],
+      tone: 'Immersive, precise, respectful of the period. Formal but not archaic.',
+    },
+    story_scifi: {
+      label: 'Science Fiction',
+      voice: 'science fiction author in the tradition of Ted Chiang and Ursula K. Le Guin',
+      principles: [
+        'Establish the world rules early and follow them consistently',
+        'The technology is the premise; the story is about what it means to be human inside that premise',
+        'Character desire must be specific and personal, not abstract',
+        'The big idea should give the reader a new way of seeing by the end',
+        'Ground the extraordinary in the familiar — mundane details alongside the impossible',
+        'Avoid techno-jargon without meaning — technology is backstory, not plot',
+        'Ask: what is the ethical or emotional cost of this world? Every sci-fi premise has one.',
+      ],
+      tone: 'Precise, thoughtful, quietly astonishing. Wonder in the implications, not the spectacle.',
+    },
+    story_mystery: {
+      label: 'Mystery',
+      voice: 'mystery author in the tradition of Agatha Christie and Tana French',
+      principles: [
+        'Play fair: every clue needed to solve the mystery must be present and visible to the reader',
+        'The solution must be surprising but feel inevitable in retrospect',
+        'Every character introduced is a suspect — give everyone motive, means, and opportunity',
+        'The detective\'s method of thinking should be distinctive and consistent',
+        'Red herrings must be genuinely convincing, not obviously red',
+        'Atmosphere is as important as plot — the setting should feel pregnant with secrecy',
+        'The reveal is earned by the investigation, not a deus ex machina',
+      ],
+      tone: 'Controlled, precise, intelligent. Respect the reader\'s intelligence.',
+    },
+    story_adventure: {
+      label: 'Adventure',
+      voice: 'adventure author in the tradition of Tolkien and Patrick O\'Brian',
+      principles: [
+        'The call to adventure must disrupt a stable situation',
+        'Each obstacle must genuinely threaten failure — stakes must be real',
+        'The protagonist must change through the journey',
+        'Companions reveal character through pressure',
+        'Landscape as character: the world should feel alive and specific',
+        'Setbacks should feel insurmountable before the solution emerges from character',
+        'The climax requires the protagonist to use everything they have learned',
+      ],
+      tone: 'Epic but intimate. Grand events filtered through one human perspective. Courage, loyalty, wonder.',
+    },
+  };
+
+  const genre = GENRE_CONFIGS[storyArch] || GENRE_CONFIGS['story_crime'];
+
+  return `You are a professional ${genre.voice}, writing an original story for a YouTube narration channel.
+
+GENRE: ${genre.label}
+
+NARRATIVE PRINCIPLES FOR THIS GENRE:
+${genre.principles.map((p, i) => (i + 1) + '. ' + p).join('\n')}
+
+TONE: ${genre.tone}
+
+UNIVERSAL CRAFT REQUIREMENTS:
+- Third person past tense narration
+- Show do not tell: "her hands were shaking" not "she was nervous"
+- Named, specific characters with distinct voices and motivations
+- Dialogue that reveals character, not just information
+- Sensory grounding in every scene: sight, sound, smell, touch, temperature
+- Vary paragraph length deliberately — short paragraphs land like blows; long ones build atmosphere
+- Zero filler sentences — every line must earn its place
+
+STORY CONTEXT:
+- Title or Theme: ${topic?.title || project.name}
+- Description: ${topic?.description || ''}
+- Total Duration: ${project.video_duration_minutes || 10} minutes
+${selectedHook && isFirstBatch ? `- Opening line (use as inspiration): "${selectedHook.hook_text}"` : ''}
+
+FULL STORY ARC:
+${outlineContext}
+
+WRITING SECTION ${batch.batch_number} of ${sortedBatches.length}: "${batch.story_segment}"
+
+SECTION SYNOPSIS:
+${batch.synopsis}
+
+MANDATORY WORD COUNT: AT LEAST ${batch.target_words} words. If short, deepen the scene — more interiority, more dialogue, more sensory detail. Do not pad; enrich.
+
+${previousContent ? `PREVIOUSLY WRITTEN (continue seamlessly, do NOT recap or repeat):\n${previousContent.slice(-3500)}\n` : ''}
+
+${isFirstBatch ? 'BEGIN: Drop into the story immediately. The first sentence should make the reader unable to stop. No preamble. No scene-setting before the scene.' : 'Continue directly and seamlessly from where the previous section left off. Do not recap. Just continue the story.'}
+${isLastBatch ? 'END: Bring the story to its conclusion. The final paragraph should feel resonant and complete — a landing that satisfies everything the story set up.' : 'End this section at a natural story beat that flows into the next section.'}
+
+Return JSON:
+{
+  "content": "The full story narration for this section...",
+  "word_count": 1234
+}`;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
 // STANDARD VIRAL SCRIPT WRITING PROMPT (existing logic)
 // ═══════════════════════════════════════════════════════════════════
 function buildStandardWritingPrompt({ batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock }) {
@@ -458,11 +844,14 @@ Deno.serve(async (req) => {
       channel = channels[0];
     }
 
-    // Detect script mode
-    const scriptMode = project.project_mode && (project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story')
-      ? project.project_mode
-      : 'standard';
-    const isSleepMode = scriptMode !== 'standard';
+    // Detect script mode — covers all modes including new story/explainer arches
+    const rawMode = project.project_mode || '';
+    const KNOWN_MODES = ['sleep_meditation', 'sleep_story', 'story', 'explainer'];
+    const scriptMode = KNOWN_MODES.includes(rawMode) ? rawMode : 'standard';
+    const storyArch = project.shorts_niche || (channel && channel.shorts_niche) || '';
+    const isSleepMode   = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
+    const isStoryMode   = scriptMode === 'story';
+    const isExplainMode = scriptMode === 'explainer';
 
     console.log(`[generateScriptBatches] Script mode: ${scriptMode}`);
 
@@ -531,14 +920,24 @@ Deno.serve(async (req) => {
         previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock
       };
 
-      const prompt = isSleepMode
-        ? buildSleepWritingPrompt({ ...promptArgs, scriptMode })
-        : buildStandardWritingPrompt(promptArgs);
+      // Route to the correct prompt builder based on mode
+      let prompt;
+      if (scriptMode === 'sleep_meditation') {
+        prompt = buildSleepWritingPrompt({ ...promptArgs, scriptMode });
+      } else if (scriptMode === 'sleep_story') {
+        prompt = buildSleepStoryWritingPrompt(promptArgs);
+      } else if (isStoryMode) {
+        prompt = buildStoryWritingPrompt({ ...promptArgs, storyArch });
+      } else if (isExplainMode) {
+        prompt = buildExplainerWritingPrompt({ ...promptArgs, storyArch });
+      } else {
+        prompt = buildStandardWritingPrompt(promptArgs);
+      }
 
       console.log(`[Batch ${batch.batch_number}] Generating ~${batch.target_words} words (${scriptMode})...`);
 
       // Sleep scripts use lower temperature for more consistent, soothing output
-      const baseTemp = isSleepMode ? 0.65 : 0.85;
+      const baseTemp = (isSleepMode || isStoryMode) ? 0.72 : 0.85;
       const minWords = Math.round(batch.target_words * 0.92);
       let content = '';
       let wordCount = 0;
@@ -558,7 +957,7 @@ EXISTING CONTENT (DO NOT REPEAT — continue SEAMLESSLY from the last line):
 ${content.slice(-3000)}
 ---
 
-Write EXACTLY ${wordsNeeded} MORE words continuing this section. Maintain the same tone, style, and pacing. ${isSleepMode ? 'Add more repetition, more imagery, more [PAUSE] markers, more sensory grounding.' : 'Add more detail, more anecdotes, more specific examples, more emotional beats.'}
+Write EXACTLY ${wordsNeeded} MORE words continuing this section seamlessly. Maintain the exact same tone, style, voice, and pacing. ${isSleepMode ? 'Add more sensory imagery, more [PAUSE] markers, more peaceful detail.' : (isStoryMode || isExplainMode) ? 'Add more depth, more detail, more scene richness — do not rush.' : 'Add more anecdotes, more specific examples, more emotional beats.'}
 
 Return JSON:
 {"content": "The additional continuation text only...", "word_count": ${wordsNeeded}}`;
