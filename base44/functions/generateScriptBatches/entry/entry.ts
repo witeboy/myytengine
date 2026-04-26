@@ -144,7 +144,9 @@ async function callLLM(prompt, temperature = 0.85) {
 function buildSleepWritingPrompt({ scriptMode, batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock }) {
   const isMeditation = scriptMode === 'sleep_meditation';
 
-  return `You are an expert sleep audio script writer. You create professional-grade ${isMeditation ? 'bedtime motivational meditations' : 'bedtime sleep stories'} following the proven format of top sleep channels (Jason Stephenson, Michael Sealey, The Honest Guys).
+  return `You are an expert sleep audio script writer. You create professional-grade bedtime guided meditations following the proven format of top sleep channels (Jason Stephenson, Michael Sealey, The Honest Guys).
+
+NOTE: This function handles SLEEP MEDITATION only. Sleep Story is handled by buildSleepStoryWritingPrompt.
 
 **CRITICAL RULE — READ THIS FIRST**:
 You are writing the ACTUAL meditation/story script — the words the narrator speaks. You are NOT writing ABOUT meditation. You are NOT explaining what ASMR is. You are NOT giving sleep tips or advice. You ARE the soothing voice guiding someone to sleep. Every single word must serve that purpose.
@@ -167,7 +169,7 @@ You are writing the ACTUAL meditation/story script — the words the narrator sp
 **PROJECT CONTEXT**:
 - Topic: ${topic?.title || project.name}
 - Description: ${topic?.description || ''}
-- Content Type: ${isMeditation ? 'Motivational Meditation' : 'Sleep Story'}
+- Content Type: Guided Sleep Meditation (second-person, affirmations, breathing)
 - Duration: ${project.video_duration_minutes || 10} minutes total
 ${selectedHook && isFirstBatch ? `- Opening line: "${selectedHook.hook_text}"` : ''}
 ${strategyBlock}
