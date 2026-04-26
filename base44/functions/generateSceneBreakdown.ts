@@ -303,6 +303,405 @@ function getNicheDirectorProfile(niche) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// GENRE-ADAPTIVE PHASE STRUCTURES
+// Each genre/mode gets its own dramatic shape.
+// Comedy peaks at the punchline. Horror needs a NORMAL phase first.
+// Romance needs an ALMOST moment. One size does NOT fit all.
+// ══════════════════════════════════════════════════════════════════
+
+function getGenrePhaseStructure(projectMode, storyArch) {
+  // Determine the effective genre key
+  const arch = storyArch || '';
+
+  const PHASE_MAPS = {
+
+    // ── STANDARD / DOCUMENTARY ──────────────────────────────────
+    standard: [
+      { name: 'cold_open',       weight: 0.10, purpose: 'Hook — visceral, immediate, impossible to ignore. Drop the viewer into the most gripping moment.' },
+      { name: 'rising_tension',  weight: 0.25, purpose: 'Build the world and the problem — escalate stakes, layer complexity.' },
+      { name: 'emotional_core',  weight: 0.40, purpose: 'Heart of the story — maximum emotional impact, reveal hidden truth.' },
+      { name: 'resolution',      weight: 0.25, purpose: 'Deliver the payoff — transformation, consequence, new understanding.' },
+    ],
+
+    // ── EXPLAINER VIDEOS ────────────────────────────────────────
+    explainer: [
+      { name: 'hook',            weight: 0.12, purpose: 'The WTF moment — show the thing that breaks the viewer\'s assumption before any explanation.' },
+      { name: 'the_problem',     weight: 0.20, purpose: 'Establish what is broken, confusing, or costly for the viewer right now — make it personal.' },
+      { name: 'the_mechanism',   weight: 0.38, purpose: 'Show how it actually works — step by step, concrete, specific, no jargon without analogy.' },
+      { name: 'application',     weight: 0.20, purpose: 'Show the viewer doing it — the before/after, the action, the result.' },
+      { name: 'cta',             weight: 0.10, purpose: 'Confident, specific, single action the viewer should take right now.' },
+    ],
+
+    // ── COMEDY ─────────────────────────────────────────────────
+    story_comedy: [
+      { name: 'normal_world',    weight: 0.15, purpose: 'Establish the character\'s normal, slightly absurd world. Make the audience like them.' },
+      { name: 'inciting_chaos',  weight: 0.20, purpose: 'Something goes wrong in the most inconvenient way possible. Escalation begins.' },
+      { name: 'worse_and_worse', weight: 0.35, purpose: 'Each attempt to fix things makes everything funnier and more disastrous. Build the pattern.' },
+      { name: 'punchline',       weight: 0.20, purpose: 'The pattern breaks in the most unexpected, perfectly timed way. This is the beat that lands.' },
+      { name: 'callback',        weight: 0.10, purpose: 'The warm landing — a callback to the setup that rewards the audience for watching.' },
+    ],
+
+    // ── CHILDREN\'S STORY ────────────────────────────────────────
+    story_children: [
+      { name: 'meet_the_hero',   weight: 0.18, purpose: 'Introduce the child hero in their world — warm, specific, immediately lovable.' },
+      { name: 'the_problem',     weight: 0.17, purpose: 'A clear, concrete problem appears. Something the hero wants but cannot have.' },
+      { name: 'try_and_fail_1',  weight: 0.18, purpose: 'First attempt fails — show the hero trying hard but falling short.' },
+      { name: 'try_and_fail_2',  weight: 0.18, purpose: 'Second attempt fails — things look hopeless. The lowest point.' },
+      { name: 'breakthrough',    weight: 0.17, purpose: 'The hero finds a new approach — often from an unexpected source or inner quality.' },
+      { name: 'happy_ending',    weight: 0.12, purpose: 'Warm, satisfying resolution. The lesson emerges naturally from events.' },
+    ],
+
+    // ── NURSERY RHYME ───────────────────────────────────────────
+    story_nursery: [
+      { name: 'intro_verse',     weight: 0.25, purpose: 'Set the scene with the first rhyming verse — bright, playful, establishes the rhythm.' },
+      { name: 'middle_verses',   weight: 0.50, purpose: 'The body of the rhyme — each verse its own visual scene, rhythm consistent.' },
+      { name: 'final_verse',     weight: 0.25, purpose: 'The satisfying ending verse — completes the rhyme, lands with warmth and a smile.' },
+    ],
+
+    // ── CRIME / MYSTERY ─────────────────────────────────────────
+    story_crime: [
+      { name: 'cold_open_crime', weight: 0.10, purpose: 'Drop into the crime or its immediate aftermath. No setup. Maximum tension from frame one.' },
+      { name: 'investigation',   weight: 0.25, purpose: 'The investigator pieces it together — show the work, the evidence, the first red herring.' },
+      { name: 'deeper_mystery',  weight: 0.30, purpose: 'A second layer appears — things are more complicated than they seemed. Stakes rise.' },
+      { name: 'false_solution',  weight: 0.15, purpose: 'The wrong answer seems right. Build to a beat that feels like resolution — then undercut it.' },
+      { name: 'revelation',      weight: 0.12, purpose: 'The truth. It must feel both surprising and inevitable. Everything clicks into place.' },
+      { name: 'aftermath',       weight: 0.08, purpose: 'The weight of what happened — justice, or its absence. Leave a resonant image.' },
+    ],
+
+    // ── LOVE / ROMANCE ──────────────────────────────────────────
+    story_love: [
+      { name: 'first_encounter', weight: 0.12, purpose: 'The meeting — something specific makes them notice each other. Not a cliché.' },
+      { name: 'growing_closer',  weight: 0.22, purpose: 'Small moments of connection — shared glances, accidental touches, the world narrowing.' },
+      { name: 'the_obstacle',    weight: 0.22, purpose: 'Something real stands between them — internal or external. The distance grows.' },
+      { name: 'almost_moment',   weight: 0.16, purpose: 'They almost break through — the moment that was so close. Most important beat in the film.' },
+      { name: 'lowest_point',    weight: 0.12, purpose: 'It seems over. The distance feels permanent. The longing is at its peak.' },
+      { name: 'breakthrough',    weight: 0.10, purpose: 'Someone chooses to be vulnerable. The emotional wall comes down.' },
+      { name: 'resolution',      weight: 0.06, purpose: 'The earned landing — warmth, rightness, the future implied.' },
+    ],
+
+    // ── HORROR ──────────────────────────────────────────────────
+    story_horror: [
+      { name: 'normal_world',    weight: 0.15, purpose: 'The world exactly as it should be — establish what is precious before you threaten it.' },
+      { name: 'wrongness_creeps', weight: 0.20, purpose: 'Something is slightly off. Small details that do not add up. Dread not yet named.' },
+      { name: 'escalating_dread', weight: 0.30, purpose: 'The wrongness compounds — each scene more unsettling. Anticipation is the weapon.' },
+      { name: 'confrontation',   weight: 0.20, purpose: 'The horror is faced directly. Maximum tension. The character at their limit.' },
+      { name: 'aftermath',       weight: 0.15, purpose: 'What remains. Not relief — residual wrongness. One question unanswered.' },
+    ],
+
+    // ── THRILLER ────────────────────────────────────────────────
+    story_thriller: [
+      { name: 'inciting_crisis', weight: 0.12, purpose: 'Something is already wrong. Drop the viewer into the situation at maximum stakes.' },
+      { name: 'pursuit_begins',  weight: 0.20, purpose: 'The clock starts. The protagonist is moving — against time, against an enemy, against themselves.' },
+      { name: 'complications',   weight: 0.28, purpose: 'Every step forward creates a new problem. Alliances shift. Trust is broken.' },
+      { name: 'reversal',        weight: 0.18, purpose: 'Everything the protagonist believed is wrong. The rug is pulled. Recalibration under fire.' },
+      { name: 'climax',          weight: 0.14, purpose: 'All resources, all information, all emotion — spent in one moment.' },
+      { name: 'resolution',      weight: 0.08, purpose: 'The cost of what just happened. Not fully clean. Not fully safe.' },
+    ],
+
+    // ── HISTORICAL FICTION ──────────────────────────────────────
+    story_historical: [
+      { name: 'world_anchoring', weight: 0.14, purpose: 'Root the viewer in the period — specific detail, not generic "old timey." The year, the place, the smell.' },
+      { name: 'personal_stakes', weight: 0.20, purpose: 'Introduce the character\'s personal situation within the historical moment.' },
+      { name: 'historical_pressure', weight: 0.30, purpose: 'The large forces of the era bear down on individual choices — war, law, power, poverty.' },
+      { name: 'the_choice',      weight: 0.22, purpose: 'The pivotal decision that the period made both necessary and costly.' },
+      { name: 'consequence',     weight: 0.14, purpose: 'What follows from the choice — and what it tells us about now.' },
+    ],
+
+    // ── SCI-FI ──────────────────────────────────────────────────
+    story_scifi: [
+      { name: 'world_rules',     weight: 0.15, purpose: 'Establish the world\'s rules visually before dialogue explains them.' },
+      { name: 'character_desire', weight: 0.18, purpose: 'Show what the protagonist wants — specific, personal, not "save humanity."' },
+      { name: 'system_conflict', weight: 0.32, purpose: 'The world\'s rules directly prevent the protagonist\'s desire. The heart of the story.' },
+      { name: 'idea_escalation', weight: 0.22, purpose: 'The big idea unfolds — its implications grow more disturbing or wonderful.' },
+      { name: 'revelation',      weight: 0.13, purpose: 'A new way of seeing — the viewer\'s worldview has been quietly dismantled and rebuilt.' },
+    ],
+
+    // ── ADVENTURE ───────────────────────────────────────────────
+    story_adventure: [
+      { name: 'the_call',        weight: 0.12, purpose: 'The stable world is disrupted — something requires the hero to leave the known.' },
+      { name: 'crossing_threshold', weight: 0.15, purpose: 'The hero steps into the unknown — the world changes visually.' },
+      { name: 'tests_and_allies', weight: 0.28, purpose: 'Obstacles, failures, companions found. The hero grows.' },
+      { name: 'ordeal',          weight: 0.22, purpose: 'The greatest challenge — the hero must sacrifice or transform to survive.' },
+      { name: 'road_back',       weight: 0.13, purpose: 'Returning changed — carrying the reward or the wound.' },
+      { name: 'return',          weight: 0.10, purpose: 'The world they left — seen with new eyes. The transformation visible.' },
+    ],
+
+    // ── MYSTERY ─────────────────────────────────────────────────
+    story_mystery: [
+      { name: 'inciting_puzzle', weight: 0.12, purpose: 'The puzzle is posed — specific, concrete, seemingly unsolvable.' },
+      { name: 'first_clues',     weight: 0.20, purpose: 'The detective gathers early evidence — establish the method of thinking.' },
+      { name: 'red_herrings',    weight: 0.25, purpose: 'False leads that feel real — the viewer is deliberately misled.' },
+      { name: 'narrowing',       weight: 0.20, purpose: 'The truth begins to emerge — one suspect remains credible.' },
+      { name: 'revelation',      weight: 0.14, purpose: 'The solution — surprising but inevitable. "Of course."' },
+      { name: 'resolution',      weight: 0.09, purpose: 'The aftermath — loose ends, the cost of knowing, what changed.' },
+    ],
+
+    // ── SLEEP STORY ─────────────────────────────────────────────
+    sleep_story: [
+      { name: 'arrival',         weight: 0.18, purpose: 'The character arrives in the peaceful world — ground them in a specific, sensory-rich setting.' },
+      { name: 'gentle_exploration', weight: 0.25, purpose: 'They move through this world slowly — each discovery calmer than the last.' },
+      { name: 'deepening_peace', weight: 0.30, purpose: 'The world grows quieter — sound, light, and movement all diminish.' },
+      { name: 'near_rest',       weight: 0.27, purpose: 'The character settles. The world is still. Images longer, slower, emptier.' },
+    ],
+
+    // ── SLEEP MEDITATION ────────────────────────────────────────
+    sleep_meditation: [
+      { name: 'physical_settling', weight: 0.20, purpose: 'Body awareness — environments that evoke physical weight and warmth.' },
+      { name: 'breath_and_calm',   weight: 0.25, purpose: 'Breathing imagery — slow water, candle flame, tide, mist.' },
+      { name: 'affirmation_core',  weight: 0.30, purpose: 'The emotional heart — safe spaces, remembered warmth, belonging.' },
+      { name: 'deep_rest',         weight: 0.25, purpose: 'Near-silence. Long static holds. The world going to sleep.' },
+    ],
+  };
+
+  // Map project mode + story arch to a phase key
+  let key = 'standard';
+  if (projectMode === 'sleep_story')    key = 'sleep_story';
+  else if (projectMode === 'sleep_meditation') key = 'sleep_meditation';
+  else if (projectMode === 'explainer') key = 'explainer';
+  else if (projectMode === 'story' && PHASE_MAPS[arch]) key = arch;
+  else if (PHASE_MAPS[projectMode])     key = projectMode;
+
+  return PHASE_MAPS[key] || PHASE_MAPS['standard'];
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GENRE CINEMATOGRAPHY PRESETS
+// Used in BOTH scene breakdown (director notes) and
+// scene prompt generation (image prompt language).
+// Each genre gets: prompt_prefix, mandatory_lighting, color_grade,
+// forbidden, reference_directors, emotional_tools.
+// ══════════════════════════════════════════════════════════════════
+
+function getGenreCinematographyPreset(projectMode, storyArch) {
+  const arch = storyArch || '';
+
+  const PRESETS = {
+
+    standard: {
+      prompt_prefix: 'Cinematic documentary scene',
+      mandatory_lighting: 'motivated practical lighting, golden hour or high-contrast interior',
+      color_grade: 'teal-orange blockbuster grade, high detail midtones',
+      reference_directors: 'Roger Deakins, Emmanuel Lubezki',
+      forbidden: 'flat lighting, studio backdrop, blurred backgrounds',
+      emotional_tools: 'slow push-ins for revelation, wide shots for isolation, close-ups for humanity',
+    },
+
+    explainer: {
+      prompt_prefix: 'Clean cinematic educational scene',
+      mandatory_lighting: 'soft motivated key light, warm practical fill, clean shadows',
+      color_grade: 'slightly desaturated warm palette, emphasis on clarity not drama',
+      reference_directors: 'David Gelb food-documentary style, clean and bright',
+      forbidden: 'heavy shadow, extreme angles, visual complexity that distracts from the concept',
+      emotional_tools: 'medium close-ups during explanation, wide during demonstration, insert shots of the tool or object being explained',
+    },
+
+    story_comedy: {
+      prompt_prefix: 'Wide, bright, populated comedic scene',
+      mandatory_lighting: 'high-key warm lighting, no heavy shadows — comedy lives in visibility',
+      color_grade: 'warm saturated tones, slightly elevated brightness, vibrant practical colors',
+      reference_directors: 'Edgar Wright kinetic energy, Wes Anderson symmetry',
+      forbidden: 'dark shadows, extreme close-ups, dutch angles, desaturation',
+      emotional_tools: 'wide shots that show the full absurd situation, tight timing cuts, reaction close-ups after punchlines',
+    },
+
+    story_children: {
+      prompt_prefix: 'Warm, bright, wonder-filled scene',
+      mandatory_lighting: 'soft golden hour or bright daylight, no harsh shadows',
+      color_grade: 'warm saturated primary colors, storybook palette',
+      reference_directors: 'Pixar visual warmth, Studio Ghibli detail and wonder',
+      forbidden: 'desaturation, dutch angles, extreme contrast, dark corners',
+      emotional_tools: 'low-angle shots (child eye level), wide shots to show the big world, close-ups on expressive faces',
+    },
+
+    story_nursery: {
+      prompt_prefix: 'Playful, colorful, storybook scene',
+      mandatory_lighting: 'bright even lighting, saturated primary colors',
+      color_grade: 'bold primary palette, clean and bright, illustration-like',
+      reference_directors: 'classic illustrated storybook, Mary Blair Disney color design',
+      forbidden: 'realism, muted colors, heavy shadows, adult-feeling environments',
+      emotional_tools: 'symmetrical compositions, bold color blocks, simple clear silhouettes',
+    },
+
+    story_crime: {
+      prompt_prefix: 'Noir cinematic crime scene',
+      mandatory_lighting: 'low-key chiaroscuro, single hard source, deep shadow pools, sodium streetlight',
+      color_grade: 'cold desaturated blue-black with amber accent, high contrast',
+      reference_directors: 'David Fincher clinical precision, Roger Deakins Blade Runner 2049 shadow',
+      forbidden: 'bright daylight, warm soft lighting, cheerful colors, shallow motivation',
+      emotional_tools: 'dutch angles for psychological wrongness, extreme close-ups on evidence, wide cold shots for isolation and consequence',
+    },
+
+    story_love: {
+      prompt_prefix: 'Intimate, warm, emotionally charged romantic scene',
+      mandatory_lighting: 'golden hour backlight, soft window light, warm practical glow — always warm, always soft',
+      color_grade: 'warm amber, rose gold, soft desaturated backgrounds to make subjects glow',
+      reference_directors: 'Wong Kar-wai intimate framing, Barry Jenkins Moonlight warmth',
+      forbidden: 'harsh lighting, cold blue tones, wide crowd shots, clinical environments',
+      emotional_tools: 'OTS shots for tension, medium close-ups for intimacy, slow push-ins for vulnerability, soft focus backgrounds',
+    },
+
+    story_horror: {
+      prompt_prefix: 'Deeply unsettling horror scene with wrong proportions',
+      mandatory_lighting: 'extreme low-key, 80-90% shadow, single cold source or sickly green, NEVER overhead warm',
+      color_grade: 'desaturated cold palette with wrong-hue accent (sickly green, bruise purple), deep blacks',
+      reference_directors: 'Stanley Kubrick cold geometry, James Wan controlled dread, Robert Eggers texture',
+      forbidden: 'warm lighting, bright environments, full faces clearly lit, cheerful colors, happy populated crowds',
+      emotional_tools: 'dutch angles for psychological wrongness, long static shots letting the dread build, wide shots of wrong spaces, slow zooms into darkness',
+    },
+
+    story_thriller: {
+      prompt_prefix: 'Tense, kinetic thriller scene under pressure',
+      mandatory_lighting: 'motivated dramatic lighting, high contrast, urgency visible in the light',
+      color_grade: 'cool clinical blue-gray with warm accent for human moments, high contrast',
+      reference_directors: 'Christopher Nolan controlled tension, Denis Villeneuve precision',
+      forbidden: 'soft casual lighting, warm golden glow, leisurely wide shots',
+      emotional_tools: 'tight medium close-ups during pursuit, handheld urgency in action, static wide shots for entrapment feeling',
+    },
+
+    story_historical: {
+      prompt_prefix: 'Period-accurate historical cinematic scene with authentic texture',
+      mandatory_lighting: 'period-appropriate practical lighting — candles, torches, harsh daylight through small windows, no electric light',
+      color_grade: 'desaturated warm period palette, aged texture, light through atmosphere',
+      reference_directors: 'Ridley Scott historical texture, Barry Lyndon candlelight realism',
+      forbidden: 'modern lighting quality, clean contemporary environments, anachronistic elements',
+      emotional_tools: 'wide shots to show the period world, close-ups on period-specific objects and faces, slow deliberate pacing',
+    },
+
+    story_scifi: {
+      prompt_prefix: 'Precise science fiction scene with lived-in world detail',
+      mandatory_lighting: 'cold practical light sources — screens, LEDs, bioluminescence, harsh work lights',
+      color_grade: 'cool blue-gray future palette or warm analog-future amber, always purposeful',
+      reference_directors: 'Denis Villeneuve Blade Runner 2049 precision, Alex Garland Ex Machina sterility',
+      forbidden: 'generic future aesthetics, lens flare everywhere, neon without motivation',
+      emotional_tools: 'wide shots to establish the world\'s scale, close-ups on the human face against the inhuman, reflection and glass for duality',
+    },
+
+    story_mystery: {
+      prompt_prefix: 'Atmospheric mystery scene with careful visual misdirection',
+      mandatory_lighting: 'overcast day or low interior light, motivated shadows that could hide or reveal',
+      color_grade: 'slightly desaturated, cool undertone, neutral that feels pregnant with potential',
+      reference_directors: 'Tomas Alfredson Let the Right One In restraint, Coen Brothers precise composition',
+      forbidden: 'revealing lighting that shows everything, warm cheerful palette, busy uncontrolled backgrounds',
+      emotional_tools: 'OTS shots to create information asymmetry, inserts on clues, wide observation shots',
+    },
+
+    story_adventure: {
+      prompt_prefix: 'Epic adventure scene with scale and movement',
+      mandatory_lighting: 'strong directional light — golden sun, storm light, moonlight — always dramatic source',
+      color_grade: 'wide dynamic range, deep skies, rich earth tones, saturated but grounded',
+      reference_directors: 'Peter Jackson scale and intimacy, David Lean epic geography',
+      forbidden: 'flat overcast lighting, interior corporate environments, small cramped spaces unless specifically claustrophobic',
+      emotional_tools: 'wide establishing shots to show scale, low angle upshots for heroism, tracking shots for movement',
+    },
+
+    sleep_story: {
+      prompt_prefix: 'Peaceful bedtime atmosphere, warm dim and still',
+      mandatory_lighting: 'very dim warm candlelight or moonlight, 80% shadow, no bright areas',
+      color_grade: 'deep amber, burnt sienna, midnight navy, muted and dim',
+      reference_directors: 'Terrence Malick stillness, slow nature documentary calm',
+      forbidden: 'bright daylight, vivid colors, busy environments, people in action',
+      emotional_tools: 'long static holds, slow gentle pans, simple uncluttered compositions',
+    },
+
+    sleep_meditation: {
+      prompt_prefix: 'Dark atmospheric pure environment for sleep meditation',
+      mandatory_lighting: 'extremely dim, barely visible warm glow, deep shadow',
+      color_grade: 'dark moody oil painting palette, Rembrandt shadow, warm amber only',
+      reference_directors: 'pure atmosphere, painterly darkness',
+      forbidden: 'any human figures, bright light, vivid colors, busy compositions',
+      emotional_tools: 'almost static compositions, nature environments only, symbolic peaceful imagery',
+    },
+  };
+
+  let key = 'standard';
+  if (projectMode === 'sleep_story')         key = 'sleep_story';
+  else if (projectMode === 'sleep_meditation') key = 'sleep_meditation';
+  else if (projectMode === 'explainer')       key = 'explainer';
+  else if (projectMode === 'story' && PRESETS[arch]) key = arch;
+  else if (PRESETS[projectMode])              key = projectMode;
+
+  return PRESETS[key] || PRESETS['standard'];
+}
+
+// ══════════════════════════════════════════════════════════════════
+// EMOTIONAL BEAT LIBRARY
+// Maps narrative position (0-100) + phase to viewer emotion.
+// Used to give each scene a target emotional state for the viewer.
+// ══════════════════════════════════════════════════════════════════
+
+function getEmotionalBeat(phaseName, sceneIndexInPhase, totalScenesInPhase, narrativePositionPct) {
+  // Base emotion from phase name
+  const PHASE_EMOTIONS = {
+    cold_open:          ['intrigue', 'shock', 'curiosity'],
+    inciting_crisis:    ['alarm', 'tension', 'disorientation'],
+    normal_world:       ['warmth', 'familiarity', 'calm'],
+    rising_tension:     ['unease', 'concern', 'building dread'],
+    emotional_core:     ['empathy', 'investment', 'urgency'],
+    resolution:         ['satisfaction', 'reflection', 'peace'],
+    investigation:      ['curiosity', 'tension', 'focus'],
+    deeper_mystery:     ['confusion', 'unease', 'doubt'],
+    false_solution:     ['false relief', 'dawning wrongness'],
+    revelation:         ['shock', 'clarity', 'catharsis'],
+    aftermath:          ['weight', 'melancholy', 'acceptance'],
+    wrongness_creeps:   ['unease', 'subtle dread', 'wrongness'],
+    escalating_dread:   ['fear', 'dread', 'anticipation of horror'],
+    confrontation:      ['terror', 'adrenaline', 'extreme tension'],
+    first_encounter:    ['curiosity', 'attraction', 'hope'],
+    growing_closer:     ['warmth', 'longing', 'intimacy'],
+    the_obstacle:       ['heartache', 'frustration', 'distance'],
+    almost_moment:      ['yearning', 'suspended breath', 'vulnerability'],
+    lowest_point:       ['sadness', 'loss', 'resignation'],
+    breakthrough:       ['relief', 'joy', 'emotional release'],
+    hook:               ['surprise', 'curiosity', 'engagement'],
+    the_problem:        ['recognition', 'frustration', 'relatability'],
+    the_mechanism:      ['understanding', 'clarity', 'aha moment'],
+    application:        ['empowerment', 'confidence', 'motivation'],
+    cta:                ['decisiveness', 'readiness', 'action'],
+    inciting_chaos:     ['amusement', 'sympathy', 'anticipation'],
+    worse_and_worse:    ['escalating amusement', 'delighted tension'],
+    punchline:          ['release', 'laughter', 'joy'],
+    callback:           ['warmth', 'recognition', 'satisfaction'],
+    arrival:            ['calm', 'peace', 'settling'],
+    gentle_exploration: ['gentle curiosity', 'slow delight'],
+    deepening_peace:    ['heaviness', 'drowsiness', 'letting go'],
+    near_rest:          ['near-sleep', 'stillness', 'dissolution'],
+    physical_settling:  ['heaviness', 'warmth', 'bodily peace'],
+    breath_and_calm:    ['slowing', 'rhythm', 'surrender'],
+    affirmation_core:   ['safety', 'acceptance', 'belonging'],
+    deep_rest:          ['dissolution', 'silence', 'sleep'],
+  };
+
+  const emotions = PHASE_EMOTIONS[phaseName] || ['engagement', 'investment'];
+  // Progress through the emotions within the phase
+  const ratio = totalScenesInPhase > 1 ? sceneIndexInPhase / (totalScenesInPhase - 1) : 0.5;
+  const emotionIndex = Math.min(Math.floor(ratio * emotions.length), emotions.length - 1);
+  const primaryEmotion = emotions[emotionIndex];
+
+  // Emotional intensity follows a curve: builds through middle, peaks near climax
+  let intensity;
+  if (narrativePositionPct < 15) intensity = 0.3 + (narrativePositionPct / 15) * 0.2;
+  else if (narrativePositionPct < 70) intensity = 0.5 + ((narrativePositionPct - 15) / 55) * 0.4;
+  else if (narrativePositionPct < 85) intensity = 0.9 + ((narrativePositionPct - 70) / 15) * 0.1;
+  else intensity = 1.0 - ((narrativePositionPct - 85) / 15) * 0.3;
+
+  return {
+    viewer_emotion: primaryEmotion,
+    emotional_intensity: Math.round(Math.min(1.0, Math.max(0.1, intensity)) * 100) / 100,
+  };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// NARRATIVE POSITION HELPER
+// Returns position 0-100 for any scene in the film.
+// ══════════════════════════════════════════════════════════════════
+
+function getNarrativePosition(sceneNumber, totalScenes) {
+  if (totalScenes <= 1) return 50;
+  return Math.round(((sceneNumber - 1) / (totalScenes - 1)) * 100);
+}
+
+
+// ══════════════════════════════════════════════════════════════════
 // PHASE STRUCTURE
 // ══════════════════════════════════════════════════════════════════
 
@@ -360,86 +759,126 @@ function splitScriptByPhase(script, phases) {
 function buildBreakdownPrompt({
   styleDirective, storyAnalysis, characterBlock, continuityContext,
   phaseName, phasePurpose, sceneCount, sceneStart, scriptText,
-  beatDurationsSlice, nicheProfile
+  beatDurationsSlice, nicheProfile,
+  cinemaPreset, sceneStartGlobal, totalScenes
 }) {
   const durLine = beatDurationsSlice.length > 0
     ? `\n**DURATION TARGETS (seconds per scene):** [${beatDurationsSlice.map(d => d.toFixed(1)).join(', ')}]`
     : '';
 
-  return `You are a world-class film director blocking out scenes for a visual narrative.
-${styleDirective}
+  // Build emotional beat targets for each scene in this batch
+  const narrativeStart = getNarrativePosition(sceneStartGlobal || sceneStart, totalScenes || sceneStart + sceneCount);
+  const narrativeEnd   = getNarrativePosition((sceneStartGlobal || sceneStart) + sceneCount - 1, totalScenes || sceneStart + sceneCount);
+  const emotionalBeats = [];
+  for (let i = 0; i < sceneCount; i++) {
+    const posPct = sceneCount > 1
+      ? narrativeStart + (i / (sceneCount - 1)) * (narrativeEnd - narrativeStart)
+      : (narrativeStart + narrativeEnd) / 2;
+    emotionalBeats.push(getEmotionalBeat(phaseName, i, sceneCount, posPct));
+  }
+  const beatTable = emotionalBeats.map((b, i) =>
+    `Scene ${sceneStart + i}: viewer feels "${b.viewer_emotion}" | intensity ${b.emotional_intensity}`
+  ).join('\n');
 
-**YOUR STORY ANALYSIS:**
+  // Visual motifs from story analysis
+  const motifs = storyAnalysis.recurring_visual_motifs || [];
+  const motifLine = motifs.length > 0
+    ? `\n**RECURRING VISUAL MOTIFS (plant at least one per phase):** ${motifs.join(', ')}`
+    : '';
+
+  // Genre cinema preset
+  const preset = cinemaPreset || {};
+  const cinemaBlock = preset.prompt_prefix ? `
+**GENRE CINEMATOGRAPHY MANDATE (${preset.reference_directors}):**
+- Visual identity: ${preset.prompt_prefix}
+- Lighting law: ${preset.mandatory_lighting}
+- Color grade: ${preset.color_grade}
+- Emotional tools: ${preset.emotional_tools}
+- FORBIDDEN: ${preset.forbidden}
+Every scene must feel like it belongs to this specific visual world. No generic cinema.` : '';
+
+  // Narrative position label
+  const positionLabel = narrativeStart < 15 ? 'OPENING — establish the world, set the hook'
+    : narrativeStart < 40 ? 'BUILDING — escalate stakes, deepen complexity'
+    : narrativeStart < 70 ? 'CORE — maximum emotional and narrative intensity'
+    : narrativeStart < 85 ? 'CLIMAX — everything at stake, peak tension'
+    : 'RESOLUTION — the earned landing, resonant and complete';
+
+  return `You are a world-class film director — the visual intelligence behind a cinematic narrative. Your job is not to illustrate the script. Your job is to make the viewer FEEL something specific at every single moment.
+${styleDirective}
+${cinemaBlock}
+
+**STORY ANALYSIS:**
 - Central Theme: ${storyAnalysis.central_theme}
 - Narrative Arc: ${storyAnalysis.narrative_arc_summary}
 - Emotional Trajectory: ${JSON.stringify(storyAnalysis.emotional_trajectory)}
 - Visual World: ${storyAnalysis.visual_world}
-- Recurring Motifs: ${JSON.stringify(storyAnalysis.recurring_visual_motifs)}
-- Color Arc: ${storyAnalysis.color_arc}
+- Color Arc: ${storyAnalysis.color_arc}${motifLine}
 
 ${characterBlock}
 
 ${continuityContext}
 
-**CURRENT PHASE: ${phaseName.toUpperCase()}**
-Purpose: ${phasePurpose}
-Scenes to create: ${sceneCount}
-Scene numbers: ${sceneStart} through ${sceneStart + sceneCount - 1}
+**NARRATIVE POSITION: ${positionLabel}**
+Scene ${sceneStartGlobal || sceneStart} of ${totalScenes || '?'} — approximately ${Math.round(narrativeStart)}% through the film.
+This position determines everything: shot intimacy, light intensity, emotional register, pacing.
+
+**CURRENT PHASE: ${phaseName.toUpperCase().replace(/_/g, ' ')}**
+Dramatic purpose: ${phasePurpose}
+Scenes to create: ${sceneCount} (numbers ${sceneStart} through ${sceneStart + sceneCount - 1})
 ${durLine}
+
+**EMOTIONAL BEAT TARGETS — the viewer must feel THIS at each scene:**
+${beatTable}
+
+These are not suggestions. Every choice — shot size, lighting angle, color temperature, camera movement — exists to deliver the target emotion at the target intensity. Before each scene ask: "Will this make the viewer feel [emotion] at [intensity]?"
 
 **SCRIPT SEGMENT:**
 ${scriptText}
 
-**RULES:**
-1. **PLOT-DRIVEN SCENES (MOST IMPORTANT RULE):** Every scene must serve the STORY'S PLOT. Before creating any scene, ask: "What is happening in the STORY at this moment?" The visual must show THAT — the actual narrative event, situation, or consequence being described. If the narration says "You're leaving $1200 on the table every month" and the story is about side hustles, show someone at their kitchen table with bills and a laptop showing missed freelance opportunities — NOT an abstract metaphor of someone hanging from a building.
-2. **STORY CONTEXT OVER SENTENCE LITERAL:** Each scene exists within the FULL story arc. A scene for "Rule #3: Automate your savings" in a finance story should show the CHARACTER performing that action in THEIR world (e.g., setting up auto-transfer on their phone at their desk) — not a generic savings concept. The CHARACTER, their ENVIRONMENT, and their JOURNEY inform every visual.
-3. Scenes are VISUAL BEATS, not sentences. Change scene when the visual changes.
-4. visual_concept: 2-4 sentences. Environment FIRST, then character ACTION, then atmosphere. The visual concept must clearly connect to what is HAPPENING in the plot at this moment.
-5. **CINEMATIC SHOT DISTRIBUTION (MANDATORY):** At least 50% of scenes must use WIDE or WIDER framing (WS, EWS, MWS, HIGH ANGLE, ESTABLISHING). Mix in MS, LOW, OTS, MCU, CU for variety. NEVER same shot type consecutively. Close-ups (CU/ECU) max 15% of total scenes.
-6. ALWAYS name specific objects from the narration (cellphone, laptop, bill, receipt, etc.) as PROPS — "clutching her cellphone", "staring at the overdue bill". But NEVER describe what's ON the screen/paper — no text, UI, dollar amounts, app names.
-7. **NO ABSTRACT METAPHORS.** Do NOT create symbolic or metaphorical visuals. If the narration talks about "leaving money on the table," show the CHARACTER in their actual life situation where they're missing that opportunity — NOT a surreal image of floating money or someone dangling from a building. Every visual must be a PLAUSIBLE SCENE from the character's life that illustrates the narrative point.
-8. **POPULATED WORLD:** Most scenes should include MULTIPLE PEOPLE — passersby, crowds, coworkers, family members, bystanders. The world feels alive and busy.
-9. **CHARACTER PRESENCE RULE:** Only include human characters when the narration implies or requires them. If the narration describes a pure environment — render it as environment. But when the narration describes a situation, action, or consequence — the CHARACTER should be IN that situation.
-10. **SCENE FLOW & CONTINUITY:** Adjacent scenes MUST share visual elements. Use: shared color shifts, matched geometry, motion echo, environmental bridges, light continuity. The continuity_bridge field MUST describe which visual thread connects this scene to the next.
-11. IMMERSION — every scene must include at least 2 of: (a) foreground element, (b) sensory texture, (c) character micro-action, (d) background storytelling detail, (e) specific time-of-day lighting, (f) scale contrast.
-12. **TONE SAFETY:** NEVER create visuals that could be misread as violence, self-harm, suicide, or danger — especially when the story tone is about opportunity, education, or motivation. A finance video about saving money must NEVER show imagery that looks like someone falling, hanging, drowning, or in peril.
-13. NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palette}
+**DIRECTOR'S LAWS:**
+1. PLOT-DRIVEN SCENES: Show what is HAPPENING in the story at this exact moment — the real situation, action, or consequence. Never a symbolic substitute. Ask: "What is the character actually doing right now in this narrative?"
+2. EMOTIONAL DELIVERY FIRST: Every technical choice serves the emotional beat target. A scene targeting "dread at 0.8" gets deep shadow, low angle, slow push-in. A scene targeting "joy at 0.7" gets wide shot, warm light, populated world.
+3. NARRATIVE POSITION: Opening (0-15%) — wider, cooler, establishing. Building (15-40%) — medium, warming. Core (40-70%) — tighter, peak contrast. Climax (70-85%) — closest, hottest or darkest. Resolution (85-100%) — wide again, settled.
+4. visual_concept: 2-4 sentences. Environment FIRST (sets the world), character ACTION second (anchors the story beat), atmosphere third (locks the emotion). Every word earns its place.
+5. SHOT DISTRIBUTION: Minimum 50% wide/wider (WS, EWS, MWS, HIGH ANGLE, ESTABLISHING). Mix MS, LOW, OTS, MCU, CU. Never same shot type twice in a row. Close-ups maximum 15% of total.
+6. NAMED PROPS: Use specific objects from the narration — "clutching her iPhone", "staring at the overdue bill". Never describe what is ON a screen or paper — no text, UI, numbers, app names.
+7. NO ABSTRACT METAPHORS: Every visual is a plausible real-world scene from the character's actual life. Never floating symbols, surreal imagery, or impossible visuals.
+8. MOTIF WEAVING: Plant the recurring visual motifs naturally. Not forced, not every scene — but consistently enough that they become the film's visual heartbeat.
+9. SCENE CONTINUITY: Each scene shares at least one visual element with the next — a color shift, matched geometry, motion direction, environmental bridge, or light quality continuation. The continuity_bridge must be specific and actionable, not generic.
+10. POPULATED WORLD: Most scenes include other people. The world breathes.
+11. IMMERSION: Every scene needs at least 2 of: (a) foreground element, (b) sensory texture, (c) character micro-action, (d) background storytelling detail, (e) specific time-of-day light, (f) scale contrast.
+12. TONE SAFETY: No imagery readable as violence, self-harm, or danger in non-horror/thriller content.
 
 **RESPONSE FORMAT:**
 {
   "scenes": [
     {
       "scene_number": ${sceneStart},
-      "narration_text": "EXACT words from the script segment.",
-      "visual_concept": "Rich cinematic description of what we SEE.",
+      "narration_text": "EXACT words from script only — never paraphrase.",
+      "visual_concept": "2-4 sentences. Environment first, character action second, atmosphere third.",
+      "viewer_emotion": "The target emotion from the beat table above.",
+      "emotional_intensity": 0.7,
       "shot_type": "e.g. WS — Wide Shot",
       "camera_angle": "e.g. Low angle, 15 degrees",
       "camera_movement": "e.g. Slow push-in over 5 seconds",
-      "lighting": "e.g. Single warm practical light from desk lamp",
-      "color_palette": "e.g. Warm amber #D4A574, deep shadow #2C1810",
+      "lighting": "e.g. Single hard side light, 80 percent shadow, cold blue",
+      "color_palette": "e.g. Deep navy #1A2744, amber accent #D4A574",
       "mood": "2-3 words",
-      "depth_of_field": "e.g. Shallow f/1.4",
-      "continuity_bridge": "Visual thread to next scene",
-      "emotional_intensity": 0.5,
+      "depth_of_field": "e.g. Shallow f/1.4, subject sharp, world soft",
+      "continuity_bridge": "Specific visual element linking this scene to the next.",
       "duration_seconds": 5,
       "characters_present": ["Name1"]
     }
   ]
 }
 
-**CHARACTER PRESENCE TAGGING (CRITICAL):**
-For each scene, list the characters_present — the names of characters who VISUALLY APPEAR in this scene.
-- Only include characters who would be SEEN on screen. Narrated references alone don't count.
-- If a scene is a pure environment/landscape/concept shot with NO people, use an empty array [].
-- Use the EXACT character names from the CHARACTER block above.
-- This field is used by the image generator to know which character DNA to inject.
+CHARACTER PRESENCE: List only characters who physically appear on screen. Pure environment scenes use []. Use exact names from the CHARACTER block above — the image generator uses this field to inject character DNA.
 
-**CRITICAL:** Generate EXACTLY ${sceneCount} scenes. Use ONLY script words for narration_text.`;
+GENERATE EXACTLY ${sceneCount} SCENES. NARRATION TEXT FROM SCRIPT WORDS ONLY.`;
 }
 
-// ══════════════════════════════════════════════════════════════════
-// MAIN HANDLER
-// ══════════════════════════════════════════════════════════════════
+
 
 Deno.serve(async (req) => {
   const callStart = Date.now();
@@ -502,8 +941,27 @@ Deno.serve(async (req) => {
     const avgSceneDuration = getAvgSceneDuration(durationMinutes);
     const totalTargetScenes = Math.max(isSleep ? 4 : 8, Math.round((durationMinutes * 60) / avgSceneDuration));
 
-    const phases = calculatePhaseAllocation(totalTargetScenes);
+    // Genre-aware phase structure — comedy, horror, romance all get different dramatic shapes
+    const projectMode = project.project_mode || '';
+    const storyArch   = project.shorts_niche  || '';
+    const genrePhases = getGenrePhaseStructure(projectMode, storyArch);
+    const cinemaPreset = getGenreCinematographyPreset(projectMode, storyArch);
+
+    // Convert genre phase weights to scene counts
+    const phases = genrePhases.map((phase, index) => {
+      if (index === genrePhases.length - 1) {
+        const usedSoFar = genrePhases.slice(0, index).reduce((sum, p) => {
+          return sum + Math.max(1, Math.round(totalTargetScenes * p.weight));
+        }, 0);
+        return { ...phase, scenes: Math.max(1, totalTargetScenes - usedSoFar) };
+      }
+      return { ...phase, scenes: Math.max(1, Math.round(totalTargetScenes * phase.weight)) };
+    });
+
     const scriptChunks = splitScriptByPhase(finalScript, phases);
+
+    console.log(\`🎭 Genre: \${projectMode || 'standard'}/\${storyArch || 'none'} → \${phases.length} phases: \${phases.map(p => p.name + '(' + p.scenes + ')').join(', ')}\`);
+    console.log(\`🎬 Cinema preset: \${cinemaPreset.reference_directors}\`);
     const numBatches = scriptChunks.length;
     const nicheProfile = getNicheDirectorProfile(niche);
 
@@ -758,7 +1216,10 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
           sceneStart: sub.offset + 1,
           scriptText: subText,
           beatDurationsSlice: subBeats,
-          nicheProfile
+          nicheProfile,
+          cinemaPreset,
+          sceneStartGlobal: sub.offset + 1,
+          totalScenes: totalTargetScenes
         });
 
         const subLabel = subBatches.length > 1 ? ` (sub ${si+1}/${subBatches.length})` : '';
@@ -780,7 +1241,10 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
                 sceneStart: sub.offset + 1,
                 scriptText: subText,
                 beatDurationsSlice: subBeats.slice(0, Math.ceil(sub.count / 2)),
-                nicheProfile
+                nicheProfile,
+                cinemaPreset,
+                sceneStartGlobal: sub.offset + 1,
+                totalScenes: totalTargetScenes
               });
               result = await callGemini(halfPrompt, 0.7);
             } catch (retryErr) {
