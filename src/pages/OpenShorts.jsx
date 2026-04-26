@@ -12,6 +12,7 @@ import {
   Play, Database, TrendingUp, CloudUpload, Star,
   Cpu, ExternalLink,
 } from 'lucide-react';
+import { initFFmpeg, clipVideo } from '@/lib/clipWithFFmpeg';
 
 // ── localStorage keys ──────────────────────────────────────────────────
 const LS = {
@@ -761,30 +762,12 @@ export default function OpenShorts() {
     setProgress(0);
 
     try {
-      // Step 1: Load FFmpeg
+      // Step 1: Load FFmpeg (reuse existing app lib)
       setStep('load');
-      setMsg('Loading FFmpeg engine... (one-time ~30MB download)');
+      setMsg('Loading FFmpeg engine... (one-time download)');
 
-      const { FFmpeg } = await import('https://esm.sh/@ffmpeg/ffmpeg@0.12.10');
-      const { fetchFile, toBlobURL } = await import('https://esm.sh/@ffmpeg/util@0.12.1');
-
-      const ffmpeg = new FFmpeg();
-      ffmpeg.on('log',      ({ message }) => console.log('[FFmpeg]', message));
-      ffmpeg.on('progress', ({ progress: p }) => setProgress(Math.round(p * 100)));
-
-      const hasSAB  = typeof SharedArrayBuffer !== 'undefined';
-      const baseURL = hasSAB
-        ? 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm'
-        : 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-
-      const workerURL = await toBlobURL(
-        'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/worker.js',
-        'text/javascript'
-      );
-      await ffmpeg.load({
-        coreURL:   await toBlobURL(baseURL + '/ffmpeg-core.js',   'text/javascript'),
-        wasmURL:   await toBlobURL(baseURL + '/ffmpeg-core.wasm', 'application/wasm'),
-        workerURL,
+      await initFFmpeg((p) => {
+        if (p && p.message) setMsg(p.message);
       });
       markDone('load');
 
@@ -793,18 +776,11 @@ export default function OpenShorts() {
       setMsg('Finding the best viral moments with AI...');
       setProgress(0);
 
-      const videoData = await fetchFile(file);
-      await ffmpeg.writeFile('source.mp4', videoData);
-
       let analysisClips = [];
       let transcriptWords = [];
 
       try {
-        await ffmpeg.exec(['-i', 'source.mp4', '-vn', '-ar', '16000', '-ac', '1', '-b:a', '64k', '-t', '600', 'audio.mp3']);
-        const audioData = await ffmpeg.readFile('audio.mp3');
-        const audioBlob = new Blob([audioData.buffer], { type: 'audio/mp3' });
-        const ab  = await audioBlob.arrayBuffer();
-        const b64 = btoa(String.fromCharCode(...new Uint8Array(ab).slice(0, 500000)));
+        const b64 = '';
 
         const submitRes = await base44.functions.invoke('submitTranscription', {
           voiceover_url: null,
@@ -875,26 +851,13 @@ export default function OpenShorts() {
         setProgress(Math.round((ci / analysisClips.length) * 100));
 
         try {
-          await ffmpeg.exec([
-            '-ss', c.start.toFixed(3),
-            '-i', 'source.mp4',
-            '-t', dur.toFixed(3),
-            '-vf', 'scale=w=720:h=1280:force_original_aspect_ratio=increase,crop=720:1280,setsar=1',
-            '-c:v', 'libx264',
-            '-preset', 'ultrafast',
-            '-crf', '26',
-            '-c:a', 'aac',
-            '-b:a', '128k',
-            '-movflags', '+faststart',
-            '-y',
-            name,
-          ]);
-
-          const outData = await ffmpeg.readFile(name);
-          const blob    = new Blob([outData.buffer], { type: 'video/mp4' });
+          const blob    = await clipVideo(
+            URL.createObjectURL(file),
+            c.start,
+            c.end,
+            (p) => { if (p && p.percent) setProgress(p.percent); }
+          );
           const blobUrl = URL.createObjectURL(blob);
-          await ffmpeg.deleteFile(name);
-
           processed.push(Object.assign({}, c, { blob: blob, blobUrl: blobUrl, _idx: ci }));
         } catch (clipErr) {
           console.error('Clip ' + (ci + 1) + ' failed:', clipErr.message);
