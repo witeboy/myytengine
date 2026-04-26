@@ -231,7 +231,7 @@ This is NOT final copy. This is RAW MATERIAL to be TRANSFORMED into a viral, cap
    **GOOD EXAMPLES:**
    
    Original hook: "The story of how one decision changed everything"
-   ✅ Enhanced: "The email sat unopened for 3 hours. By the time Sarah Chen clicked it, $89 million had already vanished—and the world's most secure banking system had just been exposed as a lie."
+   ✅ Enhanced: "The email sat unopened for 3 hours. Then the transfer cleared. $89 million — gone. And the world's most secure banking system had just been exposed as a lie."
    
    Original hook: "This technology will change the world"
    ✅ Enhanced: "They called it impossible. Every expert said it would never work. Then, on November 30th, 2022, a single demo broke the internet—and suddenly, every rule we knew about human creativity became obsolete."
