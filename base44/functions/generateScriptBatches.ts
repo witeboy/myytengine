@@ -383,61 +383,97 @@ Return JSON:
 // SLEEP STORY PROMPT — real narrative, not affirmations
 // ═══════════════════════════════════════════════════════════════════
 function buildSleepStoryWritingPrompt({ batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch }) {
-  return `You are a world-class author of soothing bedtime stories for adults, in the tradition of Calm and the Sleep Stories podcast. You write REAL STORIES — not guided meditations, not affirmations, not breathing exercises.
+  const storyTitle   = (topic && topic.title) ? topic.title : (project.name || 'Bedtime Story');
+  const totalMins    = project.video_duration_minutes || 10;
+  const targetWords  = batch.target_words || 800;
+  const batchNum     = batch.batch_number || 1;
+  const totalBatches = sortedBatches.length || 2;
+  const synopsisText = batch.synopsis || '';
+  const sectionTitle = batch.story_segment || `Story Chapter ${batchNum}`;
 
-A sleep story has named characters, a specific setting, a gentle plot, and a satisfying peaceful resolution. It is interesting enough to follow but calming enough to ease a listener into sleep. Think of it as a book chapter read aloud at 11pm.
+  const badWords = [
+    'opening & welcome', 'physical settling', 'breathing to ease',
+    'guide the listener', 'body scan', 'relaxation', 'affirmation',
+    'you are safe', 'you are loved', 'deep rest', 'minimal words',
+  ];
+  const hasMedBleed    = badWords.some(w => synopsisText.toLowerCase().includes(w));
+  const hasTitleBleed  = badWords.some(w => sectionTitle.toLowerCase().includes(w));
+  const cleanTitle     = hasTitleBleed ? `Story Chapter ${batchNum}` : sectionTitle;
+  const cleanSynopsis  = hasMedBleed
+    ? 'STORY BEAT: The synopsis contained meditation language — ignore it. Write the next natural chapter of the sleep story based on the topic and what came before.'
+    : `STORY BEAT FOR THIS SECTION:\n${synopsisText}`;
 
-WHAT A SLEEP STORY IS:
-- A real story with a named protagonist (give them a name, age, personality)
-- A specific, sensory-rich setting (a cottage, a boat, a mountain village, a moonlit garden)
-- A gentle plot arc: something happens, then resolves peacefully
-- Lush, slow prose — every sentence paints a picture
-- Third person narration, past tense
-- Emotional warmth: the world of the story is safe, kind, unhurried
+  const openLine = isFirstBatch
+    ? 'OPENING: Begin mid-scene. First sentence drops the reader into the story world with a single sensory detail — a smell, a sound, a texture. Do not open with "Welcome" or address the listener. No preamble.'
+    : 'CONTINUATION: Pick up exactly where the previous chapter ended. No recap, no transition. Just continue the story.';
 
-WHAT A SLEEP STORY IS NOT:
-- Guided breathing or body scan exercises
-- Affirmations like "you are safe, you are loved"
-- Instructions to the listener like "now relax your shoulders"
-- Educational content of any kind
-- Conflict, danger, or unresolved tension
-- Excitement, surprise, or urgency
-- Any reference to sleep, YouTube, or content creation
+  const closeLine = isLastBatch
+    ? 'ENDING: The final paragraph must be the quietest thing in the whole story. End on one still image — a candle going out, snow settling, a door gently closing.'
+    : 'CHAPTER END: Close on a moment of quiet — a pause in the action, a character settling, the world going still.';
 
-SLEEP STORY PROSE RULES:
-- Long, flowing, descriptive sentences preferred over short punchy ones
-- Use all five senses: what does the air smell like, what sounds are present, what does the light look like
-- Return to the same peaceful details as anchors — repetition of calming imagery is intentional
-- [PAUSE 3 SEC] markers at natural breath points, every 4-6 sentences
-- Soft consonants preferred: l, m, n, s, w, h
-- Simple vocabulary throughout
-- Each paragraph deepens the peaceful atmosphere — always getting calmer
+  const prevBlock = previousContent
+    ? `PREVIOUSLY WRITTEN (continue from here — do NOT repeat any of it):\n${previousContent.slice(-3000)}`
+    : '';
 
-PROJECT CONTEXT:
-- Topic/Theme: ${topic?.title || project.name}
-- Total Duration: ${project.video_duration_minutes || 10} minutes
-${selectedHook && isFirstBatch ? `- Opening line: "${selectedHook.hook_text}"` : ''}
+  const arcBlock = outlineContext ? `FULL STORY ARC:\n${outlineContext}` : '';
 
-FULL STORY ARC:
-${outlineContext}
+  const lines = [
+    'You are writing a bedtime story for adults — in the tradition of the Calm app Sleep Stories.',
+    'You write a REAL STORY with characters, a setting, and a gentle plot. This is NOT a meditation.',
+    '',
+    '=== ABSOLUTE RULES ===',
+    'NEVER use second-person: no "you", "your", "you feel", "you are"',
+    'NEVER write affirmations: no "you are safe", "you are loved", "all is well"',
+    'NEVER give breathing instructions: no "breathe in", "breathe out", "inhale", "exhale"',
+    'NEVER address the listener: no "dear listener", "welcome", "settle now"',
+    'NEVER write body relaxation instructions: no "let your shoulders drop", "feel your toes"',
+    'NEVER start a paragraph with "Feel" as a command to the listener',
+    'ALWAYS write in third person: "she", "he", "they", or character names',
+    'ALWAYS use past tense: "she walked", "he noticed", "the light fell"',
+    'ALWAYS name your characters — no "a woman" or "a man" — give them a real name',
+    '',
+    '=== WRONG vs RIGHT ===',
+    'WRONG: "Feel your body sinking into the earth. You are safe here. Breathe in peace."',
+    'RIGHT: "She set the candle on the windowsill and watched the flame lean sideways in the draught from under the door."',
+    '',
+    'WRONG: "Let go of the day. You are loved. Your mind grows quiet."',
+    'RIGHT: "Thomas sat on the back step listening to the wood pigeons settle into the oak tree one by one, each one going quiet."',
+    '',
+    '=== HOW TO WRITE SLEEP STORY PROSE ===',
+    'Write long, slow sentences that wander through sensory detail before arriving at a full stop',
+    'Describe small unhurried things — the sound rain makes on a specific surface, the way light moves',
+    'Let the pace slow as the chapter progresses — longer sentences, more pauses near the end',
+    'Include [PAUSE 3 SEC] every 4-6 sentences at a natural breath point',
+    'Repeat a calming detail — a recurring sound or familiar object — as a gentle anchor',
+    'The plot moves very slowly: a character finds something, notices something, settles somewhere',
+    'No drama, no conflict, no urgency, no unresolved questions',
+    'The world of the story is safe, kind, and unhurried',
+    '',
+    '=== STORY CONTEXT ===',
+    `Story: ${storyTitle}`,
+    `Total duration: ${totalMins} minutes`,
+    `This is chapter ${batchNum} of ${totalBatches}`,
+    '',
+    arcBlock,
+    '',
+    `CURRENT CHAPTER: ${cleanTitle}`,
+    '',
+    cleanSynopsis,
+    '',
+    prevBlock,
+    '',
+    openLine,
+    '',
+    closeLine,
+    '',
+    `WORD COUNT: Write AT LEAST ${targetWords} words (${Math.round(targetWords / 150)} minutes of audio).`,
+    'If short, add more sensory description and story detail. Do not pad with affirmations — add more STORY.',
+    '',
+    'Return ONLY valid JSON with no markdown:',
+    '{"content":"The full story narration text with [PAUSE X SEC] markers woven in naturally...","word_count":1234}',
+  ];
 
-WRITING SECTION ${batch.batch_number} of ${sortedBatches.length}: "${batch.story_segment}"
-
-SECTION SYNOPSIS:
-${batch.synopsis}
-
-MANDATORY WORD COUNT: AT LEAST ${batch.target_words} words. This fills ${Math.round(batch.target_words / 150)} minute(s) of audio. Add more sensory description, more [PAUSE] markers, more setting details until you reach it.
-
-${previousContent ? `PREVIOUSLY WRITTEN (continue seamlessly, do NOT repeat):\n${previousContent.slice(-3000)}\n` : ''}
-
-${isFirstBatch ? 'OPENING: Begin mid-scene. Place the reader inside the story world from the first sentence. No preamble.' : 'Continue seamlessly from where the previous section left off.'}
-${isLastBatch ? 'ENDING: Bring the story to a complete, peaceful resolution. End on a single final image of quiet and rest.' : 'End on a moment of gentle calm. No tension or cliffhangers.'}
-
-Return JSON:
-{
-  "content": "The full story narration text including all [PAUSE X SEC] markers...",
-  "word_count": 1234
-}`;
+  return lines.join('\n');
 }
 
 // ═══════════════════════════════════════════════════════════════════
