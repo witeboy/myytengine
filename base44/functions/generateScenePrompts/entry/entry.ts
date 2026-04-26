@@ -675,6 +675,47 @@ Deno.serve(async (req) => {
     const isSleepAmbient = rawStyle === 'sleep_ambient';
     const useSleepStyle = isSleepProject || isSleepAmbient;
     const visualStyle = useSleepStyle ? 'oil_painting' : normalizeStyleKey(rawStyle);
+
+    // ═══ GENRE CINEMATOGRAPHY PRESET ═══
+    // Gives every story/explainer mode its own visual language at the prompt level.
+    // Crime gets noir shadow. Romance gets golden backlight. Horror gets wrong angles.
+    const projectMode = project.project_mode || '';
+    const storyArch   = project.shorts_niche  || '';
+
+    // Inline genre preset resolver (mirrors generateSceneBreakdown logic)
+    function resolveGenrePreset(mode, arch) {
+      const GENRE_PRESETS = {
+        standard:         { prefix: 'Cinematic documentary scene', lighting: 'motivated practical lighting, golden hour or high-contrast interior', grade: 'teal-orange blockbuster, high detail midtones', forbidden: 'flat lighting, studio backdrop' },
+        explainer:        { prefix: 'Clean cinematic educational scene', lighting: 'soft motivated key light, warm practical fill, clean shadows', grade: 'slightly desaturated warm, emphasis on clarity', forbidden: 'heavy shadow, extreme angles, visual complexity that distracts' },
+        story_comedy:     { prefix: 'Wide, bright, populated comedic scene', lighting: 'high-key warm, no heavy shadows — comedy lives in visibility', grade: 'warm saturated, elevated brightness, vibrant practicals', forbidden: 'dark shadows, extreme close-ups, dutch angles, desaturation' },
+        story_children:   { prefix: 'Warm, bright, wonder-filled storybook scene', lighting: 'soft golden or bright daylight, no harsh shadows', grade: 'warm saturated primaries, storybook palette', forbidden: 'desaturation, dutch angles, extreme contrast, dark corners' },
+        story_nursery:    { prefix: 'Playful, colorful, storybook illustration scene', lighting: 'bright even, saturated primary colors throughout', grade: 'bold primary palette, clean and bright, illustration-like', forbidden: 'realism, muted colors, heavy shadows' },
+        story_crime:      { prefix: 'Noir cinematic crime scene — hard shadow, cold light', lighting: 'low-key chiaroscuro, single hard source, deep shadow pools, sodium orange or cold blue', grade: 'cold desaturated blue-black with amber accent, high contrast', forbidden: 'bright daylight, warm soft lighting, cheerful colors' },
+        story_love:       { prefix: 'Intimate warm romantic scene — golden light, soft world', lighting: 'golden hour backlight, soft window light, warm practical glow — always warm, always soft', grade: 'warm amber, rose gold, soft desaturated backgrounds to make subjects glow', forbidden: 'harsh lighting, cold blue tones, wide crowd shots, clinical environments' },
+        story_horror:     { prefix: 'Deeply unsettling horror scene — wrong angles, deep shadow', lighting: 'extreme low-key, 80-90 percent shadow, single cold source or sickly green, never overhead warm', grade: 'desaturated cold palette with wrong-hue accent, deep blacks', forbidden: 'warm lighting, bright environments, fully lit faces, cheerful colors' },
+        story_thriller:   { prefix: 'Tense kinetic thriller scene under visible pressure', lighting: 'motivated dramatic, high contrast, urgency visible in the light quality', grade: 'cool clinical blue-gray with warm accent for human moments, high contrast', forbidden: 'soft casual lighting, warm golden glow, leisurely framing' },
+        story_historical: { prefix: 'Period-accurate historical scene with authentic texture', lighting: 'period-appropriate practical — candles, torches, harsh daylight through small windows, no electric', grade: 'desaturated warm period palette, aged texture, light through atmosphere', forbidden: 'modern lighting quality, clean contemporary environments, anachronistic elements' },
+        story_scifi:      { prefix: 'Precise science fiction scene with lived-in world detail', lighting: 'cold practical sources — screens, LEDs, bioluminescence, harsh work lights', grade: 'cool blue-gray future palette or warm analog-future amber, always purposeful', forbidden: 'generic future aesthetics, random lens flare, unmotivated neon' },
+        story_mystery:    { prefix: 'Atmospheric mystery scene with careful visual misdirection', lighting: 'overcast day or low interior, motivated shadows that could hide or reveal', grade: 'slightly desaturated, cool undertone, neutral pregnant with potential', forbidden: 'revealing lighting that shows everything, warm cheerful palette' },
+        story_adventure:  { prefix: 'Epic adventure scene with scale and directional light', lighting: 'strong directional — golden sun, storm light, moonlight — always dramatic source', grade: 'wide dynamic range, deep skies, rich earth tones, saturated but grounded', forbidden: 'flat overcast lighting, corporate interiors, small cramped spaces unless claustrophobic' },
+        sleep_story:      { prefix: 'Peaceful bedtime scene, warm dim and utterly still', lighting: 'very dim warm candlelight or moonlight, 80 percent shadow, no bright areas', grade: 'deep amber, burnt sienna, midnight navy, muted and dim', forbidden: 'bright daylight, vivid colors, busy environments, people in action' },
+        sleep_meditation: { prefix: 'Dark atmospheric pure environment for sleep', lighting: 'extremely dim barely visible warm glow, deep shadow everywhere', grade: 'dark moody oil painting palette, Rembrandt shadow, warm amber only', forbidden: 'any human figures, bright light, vivid colors, busy compositions' },
+      };
+      let key = 'standard';
+      if (mode === 'sleep_story')          key = 'sleep_story';
+      else if (mode === 'sleep_meditation') key = 'sleep_meditation';
+      else if (mode === 'explainer')        key = 'explainer';
+      else if (mode === 'story' && GENRE_PRESETS[arch]) key = arch;
+      else if (GENRE_PRESETS[mode])         key = mode;
+      return GENRE_PRESETS[key] || GENRE_PRESETS['standard'];
+    }
+
+    const genrePreset = useSleepStyle
+      ? resolveGenrePreset(projectMode, storyArch)
+      : resolveGenrePreset(projectMode, storyArch);
+
+    console.log(`🎭 Genre preset: ${genrePreset.prefix}`);
+
     let styleConfig;
 
     // ═══ SLEEP MODE or SLEEP_AMBIENT style — REPLACE style entirely with dark oil painting ═══
@@ -752,10 +793,16 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
     }
 
 
+    // Genre-aware framing prefix — the opening words of every image prompt
     const framingPrefix = useSleepStyle
-      ? "Wide ambient shot of a dark atmospheric environment"
-      : "Cinematic scene with detailed sharp environment, visible architecture and props, character mid-action in a living world";
+      ? genrePreset.prefix                         // sleep gets its own prefix from preset
+      : genrePreset.prefix;                        // all genres now use their preset prefix
     const promptPrefix = `${framingPrefix}. `;
+
+    // Genre lighting mandate — injected into every scene that lacks explicit lighting
+    const genreLightingMandate = genrePreset.lighting || '';
+    const genreColorGrade      = genrePreset.grade     || '';
+    const genreForbidden       = genrePreset.forbidden  || '';
 
 
     let characters = [];
@@ -774,7 +821,7 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
           const identity = c.identity_core || c.visual_description || c.description || '';
           const clothing = c.default_clothing || '';
           return `• ${c.name}:\n  IDENTITY (permanent): ${identity}${clothing ? `\n  DEFAULT CLOTHING (can change per scene): ${clothing}` : ''}`;
-        }).join('\n')}\n\n**RULE: You MUST embed the FULL identity description for EVERY character in EVERY image_prompt. The image generator has ZERO memory — each prompt is a fresh start. Name alone means NOTHING to the renderer.**\n\n**CRITICAL WEAVING RULE — THE #1 CAUSE OF BAD IMAGES IS VIOLATING THIS:**\nCharacter features must be WOVEN INTO the action and environment — NEVER listed as an isolated block.\nThe image generator reads prompts left-to-right. If it encounters a paragraph of face/body traits detached from any action, it renders a PORTRAIT of that person — ignoring the scene entirely.\n\nDEATH PATTERN (produces floating heads / portraits): "Close-up of a coin in a gutter. A 55 year old male with light-medium skin, oval face, hazel eyes, straight nose, medium lips, graying hair, average build, 5ft10, wrinkles around eyes, confident smile is implied by the perspective."\nThe image gen reads the trait dump and renders a face in a gutter.\n\nCORRECT PATTERN (produces a scene with character IN it): "Close-up of a tarnished coin lying in a rain-filled gutter, the gray asphalt reflecting overcast sky. A graying-haired man in a rumpled coat crouches at the curb, his weathered face twisted in disappointment as he stares down at the coin, rain collecting on his hunched shoulders."\nEvery trait is CONNECTED: hair → visible because he\'s crouching, face → twisted in emotion, shoulders → hunched + wet from rain.\n\nRULES:\n1. NEVER write a character description as a standalone clause or sentence. Every trait must be mid-action or affected by the environment.\n2. Spread traits across the prompt — hair in one clause, skin in another, build shown through posture. Don\'t front-load them.\n3. Use the character\'s NAME in your prompt — our post-processing system will replace it with the correct identity tag. Write "Sarah crouches by the gutter" not "A 55 year old male with light-medium skin crouches...".\n4. The environment sentence MUST come BEFORE the character.`
+        }).join('\n')}\n\n**RULE: You MUST embed the FULL identity description for EVERY character in EVERY image_prompt. The image generator has ZERO memory — each prompt is a fresh start. Name alone means NOTHING to the renderer.**\n\n**CRITICAL WEAVING RULE — THE #1 CAUSE OF BAD IMAGES IS VIOLATING THIS:**\nCharacter features must be WOVEN INTO the action and environment — NEVER listed as an isolated block.\nThe image generator reads prompts left-to-right. If it encounters a paragraph of face/body traits detached from any action, it renders a PORTRAIT of that person — ignoring the scene entirely.\n\nDEATH PATTERN (produces floating heads / portraits): "Close-up of a coin in a gutter. A 55 year old male with light-medium skin, oval face, hazel eyes, straight nose, medium lips, graying hair, average build, 5ft10, wrinkles around eyes, confident smile is implied by the perspective."\nThe image gen reads the trait dump and renders a face in a gutter.\n\nCORRECT PATTERN (produces a scene with character IN it): "Close-up of a tarnished coin lying in a rain-filled gutter, the gray asphalt reflecting overcast sky. A graying-haired man in a rumpled coat crouches at the curb, his weathered face twisted in disappointment as he stares down at the coin, rain collecting on his hunched shoulders."\nEvery trait is CONNECTED: hair → visible because he\'s crouching, face → twisted in emotion, shoulders → hunched + wet from rain.\n\nRULES:\n1. NEVER write a character description as a standalone clause or sentence. Every trait must be mid-action or affected by the environment.\n2. Spread traits across the prompt — hair in one clause, skin in another, build shown through posture. Don\'t front-load them.\n3. Use the character\'s NAME in your prompt — our post-processing system will replace it with the correct identity tag. Write "[CHARACTER_NAME] crouches by the gutter" not "A 55 year old male with light-medium skin crouches...".\n4. The environment sentence MUST come BEFORE the character.`
       : '';
 
 
@@ -948,16 +995,44 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
       const name = (c.name || '').toLowerCase().trim();
       let identityDesc = c.identity_core || c.visual_description || c.description || '';
       const clothing = c.default_clothing || '';
-
-      // Light cleanup only — identity now comes from extractCharacterDNA (single source)
-      // Heavy label-stripping is no longer needed since breakdown consumes DNA instead of regenerating it.
+      // Clean junk Gemini sometimes echoes back from our prompt instructions
+      // Clean junk + normalize gender-neutral → concrete gender for image gen
       identityDesc = identityDesc
         .replace(/^Casting[- ]sheet:?\s*/i, '')
-        .replace(/\bshown full (?:body|figure)\b/gi, '')
-        // Normalize any lingering gender-neutral phrases (shouldn't exist post-DNA, but safety net)
-        .replace(/\bgender[\s:]*neutral\b/gi, 'male')
-        .replace(/\bgender[\s:]*any\b/gi, 'male')
+        .replace(/^IMMUTABLE[^:]*:\s*/i, '')
+        .replace(/^Identity[^:]*:\s*/i, '')
+        .replace(/\bCasting[- ]sheet:?\s*/gi, '')
+        .replace(/\(\s*Beige\s*\d*\s*\)/gi, match => match) // keep but don't duplicate
+        .replace(/\bshown full (?:body|figure)\b/gi, '')     // rendering instruction, not identity
+        .replace(/\bshown full body in the scene\b/gi, '')
+        // Force a concrete gender — image gen can't render "neutral"
+        // Detect best gender from surrounding identity context instead of defaulting female
+        .replace(/\bgender[\s:]*neutral\b/gi, (match) => {
+          // Check if surrounding text gives clues
+          const ctx = identityDesc.toLowerCase();
+          if (/\b(father|husband|king|prince|brother|uncle|nephew|grandson|sir|mr|beard|mustache)\b/.test(ctx)) return 'male';
+          if (/\b(mother|wife|queen|princess|sister|aunt|niece|granddaughter|ms|mrs|miss|pregnant|headwrap|braids)\b/.test(ctx)) return 'female';
+          return 'male'; // truly ambiguous — pick based on visual contrast
+        })
+        .replace(/\bgender[\s:]*any\b/gi, (match) => {
+          const ctx = identityDesc.toLowerCase();
+          if (/\b(mother|wife|queen|princess|sister|aunt|niece|ms|mrs|miss)\b/.test(ctx)) return 'female';
+          return 'male';
+        })
         .replace(/\bnon[\s-]?binary\b/gi, 'male')
+        // Strip key-value label prefixes the breakdown LLM generates
+        .replace(/\bAge[\s:]+/gi, '')
+        .replace(/\bGender[\s:]+/gi, '')
+        .replace(/\bSkin tone[\s:]*(shade[\s:]*)?/gi, '')
+        .replace(/\bFace shape[\s:]+/gi, '')
+        .replace(/\bEye color\+?shape[\s:]+/gi, '')
+        .replace(/\bNose[\s:]+/gi, '')
+        .replace(/\bLips[\s:]+/gi, '')
+        .replace(/\bHair[\s:]*\([^)]*\)[\s:]+/gi, '')
+        .replace(/\bHair[\s:]+/gi, '')
+        .replace(/\bBuild\+?height[\s:]+/gi, '')
+        .replace(/\bDistinguishing marks[\s:]+/gi, '')
+        .replace(/\bBuild[\s:]+/gi, '')
         .replace(/,\s*,/g, ',').replace(/^\s*,/, '').replace(/,\s*$/, '')
         .replace(/\s{2,}/g, ' ')
         .trim();
@@ -1222,22 +1297,34 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
         if (!s.director) {
           return `Scene ${s.scene_number}: (No director notes — generate from narration)\n  Narration: "${s.narration_text}"\n  Duration: ${sceneDuration}s\n  Character Detail Level: ${identityTier.toUpperCase()} (match description depth to this)\n  Camera Feel: ${bodyDirective}\n  Arc Phase: ${arcPosition}\n  Arc Animation: ${arcAnim}${propsLine}`;
         }
-        return `Scene ${s.scene_number}:
+        // Build narrative position label for this scene
+        const sceneTotal = allScenes.length || 1;
+        const scenePct = Math.round(((s.scene_number - 1) / Math.max(sceneTotal - 1, 1)) * 100);
+        const posLabel = scenePct < 15 ? 'OPENING' : scenePct < 40 ? 'BUILDING' : scenePct < 70 ? 'CORE' : scenePct < 85 ? 'CLIMAX' : 'RESOLUTION';
+
+        // Viewer emotion from director notes (set by new breakdown engine)
+        const viewerEmotion = s.director.viewer_emotion || '';
+        const emotionIntensity = s.director.emotional_intensity || 0.5;
+        const emotionLine = viewerEmotion
+          ? `
+  EMOTIONAL TARGET: Make the viewer feel "${viewerEmotion}" at intensity ${emotionIntensity}. Every lighting choice, angle, and color must serve this emotion.`
+          : '';
+
+        return `Scene ${s.scene_number} [${posLabel} — ${scenePct}% through]:
   Narration: "${s.narration_text}"
-  Duration: ${sceneDuration}s
+  Duration: ${sceneDuration}s${emotionLine}
   Visual Concept: ${s.director.visual_concept}
   Shot Type: ${s.director.shot_type}
   Character Detail Level: ${identityTier.toUpperCase()} (${identityTier === 'minimal' ? 'character is distant — silhouette only, NO face details' : identityTier === 'moderate' ? 'character shares frame with world — weave identity into action' : 'face is the subject — full identity woven with emotion'})
   Camera Feel: ${bodyDirective}
   Camera Angle: ${s.director.camera_angle}
   Camera Movement: ${s.director.camera_movement}
-  Lighting: ${s.director.lighting}
-  Color Palette: ${s.director.color_palette}
+  Lighting: ${s.director.lighting || genreLightingMandate}
+  Color Palette: ${s.director.color_palette || genreColorGrade}
   Mood: ${s.director.mood}
   DOF: ${s.director.depth_of_field}
   Niche Element: ${s.director.niche_visual_element || 'N/A'}
   Continuity: ${s.director.continuity_bridge || 'N/A'}
-  Intensity: ${s.director.emotional_intensity || 0.5}
   Arc Phase: ${arcPosition}
   Arc Animation: ${arcAnim}${propsLine}`;
       }).join('\n\n');
@@ -1254,8 +1341,18 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
 **═══════════════════════════════════════════════════════════════**` : '';
 
 
+     // Build genre mandate block
+      const genreMandateBlock = (genreLightingMandate || genreColorGrade || genreForbidden) ? `
+**GENRE VISUAL MANDATE (applies to EVERY scene — non-negotiable):**
+- Visual identity: ${genrePreset.prefix}
+- Lighting law: ${genreLightingMandate}
+- Color grade: ${genreColorGrade}
+- FORBIDDEN in all prompts: ${genreForbidden}
+This genre mandate overrides generic defaults. Every image must feel like it belongs to this specific visual world.` : '';
+
      const prompt = `**MISSION: Convert Director's Notes → Production-Ready Image & Animation Prompts**
 
+${genreMandateBlock}
 
 ${storyContext}
 
