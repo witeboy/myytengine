@@ -65,9 +65,10 @@ export default function StoryDuration() {
   const isShorts = scriptMode === 'youtube_shorts';
   const isLongViral = scriptMode === 'long_viral';
   const isSleepProject = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
+  const isStoryProject = scriptMode === 'story' || scriptMode === 'explainer';
   const safeDuration = isShorts ? 1.5 : (duration || 8);
   const totalWords = isShorts ? 220 : safeDuration * 150;
-  const numBatches = isShorts ? 1 : Math.max(2, Math.ceil(totalWords / (isSleepProject ? 1100 : 800)));
+  const numBatches = isShorts ? 1 : Math.max(2, Math.ceil(totalWords / (isSleepProject ? 1100 : isStoryProject ? 900 : 800)));
 
   const handleGenerate = async () => {
     const finalDuration = isShorts ? 1.5 : Math.max(1, Math.round(safeDuration));
@@ -100,6 +101,10 @@ export default function StoryDuration() {
       return;
     }
 
+    // Save story arch for story and explainer modes
+    if ((scriptMode === 'story' || scriptMode === 'explainer') && project?.channel_id) {
+      try { await base44.entities.Channels.update(project.channel_id, { shorts_niche: shortsNiche }); } catch (_) {}
+    }
     // Outline + batches are now created by initializeScriptBatches on StoryScript
     // auto-trigger. We just set status and navigate.
     await base44.entities.Projects.update(projectId, { status: 'hooks_ready' });
