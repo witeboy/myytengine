@@ -101,10 +101,15 @@ export default function StoryDuration() {
       return;
     }
 
-    // Save story arch for story and explainer modes
+    // Save story arch / explainer subject for new modes
     if ((scriptMode === 'story' || scriptMode === 'explainer') && project?.channel_id) {
       try { await base44.entities.Channels.update(project.channel_id, { shorts_niche: shortsNiche }); } catch (_) {}
     }
+    // Also save directly to project so the backend can read it immediately
+    if (scriptMode === 'story' || scriptMode === 'explainer') {
+      await base44.entities.Projects.update(projectId, { shorts_niche: shortsNiche });
+    }
+
     // Outline + batches are now created by initializeScriptBatches on StoryScript
     // auto-trigger. We just set status and navigate.
     await base44.entities.Projects.update(projectId, { status: 'hooks_ready' });
