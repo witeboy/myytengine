@@ -38,7 +38,10 @@ Deno.serve(async (req) => {
     // Check if this is a sleep project to use smaller batch sizes
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
     const project = projects[0];
-    const isSleep = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
+    const isSleep     = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
+    const isStory     = project?.project_mode === 'story';
+    const isExplainer = project?.project_mode === 'explainer';
+    const storyArch   = project?.shorts_niche || '';
 
     const totalWords = duration_minutes * 150;
     const wordsPerBatchTarget = isSleep ? 1100 : 800;
@@ -49,7 +52,7 @@ Deno.serve(async (req) => {
 
     if (isSleep) {
       const isMeditation = project.project_mode === 'sleep_meditation';
-      const contentType = isMeditation ? 'calming motivation meditation' : 'sleep story';
+      const contentType = isMeditation ? 'motivational meditation' : 'sleep story';
 
       prompt = `You are an expert sleep audio script planner. You plan ${contentType} scripts that ARE the soothing content — not scripts that talk ABOUT meditation or sleep.
 
