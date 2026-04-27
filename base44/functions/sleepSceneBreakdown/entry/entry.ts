@@ -1,9 +1,9 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // v2 — redeployed
 // ══════════════════════════════════════════════════════════════════
 // SLEEP VISUAL BREAKDOWN ENGINE (v3)
 // ══════════════════════════════════════════════════════════════════
-// Generates 6-12 ambient environment image definitions.
+// Generates ambient environment image definitions.
 // Narration is split in code (not by AI) to avoid timeout.
 // AI only generates visual concepts + image prompts.
 // NO PEOPLE — pure environment/landscape scenes. 
