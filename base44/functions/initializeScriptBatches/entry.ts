@@ -12,7 +12,7 @@ async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
         max_tokens: 16384,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: 'You are a YouTube content strategist. Always respond with valid JSON.' },
+          { role: 'system', content: 'You are a creative writing and content planning expert. Always respond with valid JSON.' },
           { role: 'user', content: prompt },
         ],
       });
@@ -28,211 +28,214 @@ async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Detect sleep script mode from channel or project (v2)
+// Detect sleep script mode from channel or project
 // ═══════════════════════════════════════════════════════════════════
 function detectScriptMode(channel, project) {
-  // Explicit mode from channel
+  // 1. Explicit project_mode takes priority
+  if (project?.project_mode && project.project_mode !== 'standard') {
+    return project.project_mode;
+  }
+  // 2. Explicit channel script_mode
   if (channel?.script_mode && channel.script_mode !== 'standard') {
     return channel.script_mode;
   }
-  // Auto-detect from niche keywords
-  const niche = (channel?.niche || project?.niche || '').toLowerCase();
-  const name = (channel?.name || '').toLowerCase();
-  const combined = `${niche} ${name}`;
-  if (/sleep\s*stor/i.test(combined) || /bedtime\s*stor/i.test(combined)) {
-    return 'sleep_story';
-  }
-  if (/sleep|meditation|relax|calm|sooth|asmr|bedtime/i.test(combined)) {
-    return 'sleep_meditation';
-  }
+  // 3. Auto-detect from niche/name keywords
+  const combined = `${channel?.niche || ''} ${channel?.name || ''} ${project?.niche || ''}`.toLowerCase();
+  if (/sleep\s*stor|bedtime\s*stor/i.test(combined)) return 'sleep_story';
+  if (/sleep|meditation|relax|calm|sooth|asmr|bedtime/i.test(combined)) return 'sleep_meditation';
   return 'standard';
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// SLEEP OUTLINE PROMPT — generates sections instead of TVF phases
+// Protagonist name picker — keeps sleep stories consistent
 // ═══════════════════════════════════════════════════════════════════
-function buildSleepOutlinePrompt({ scriptMode, topic, project, channel, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock }) {
-  const isMeditation = scriptMode === 'sleep_meditation';
-
-  // ═══════════════════════════════════════════════════════════════════
-  // MEDITATION OUTLINE — affirmations, breathing, second-person
-  // ═══════════════════════════════════════════════════════════════════
-  if (isMeditation) {
-    const sectionTemplates = [
-      'Opening & Welcome (settle, breathe, body awareness)',
-      'You Are Enough (self-worth affirmations with ocean imagery)',
-      'You Deserve Rest (permission to stop, release guilt, mountain metaphors)',
-      'Let Go of Today (release worries, river carrying them away)',
-      'You Are Safe Here (safety, warmth, protection, starlight imagery)',
-      'Your Journey Matters (progress, self-compassion, tree growth metaphor)',
-      'You Belong (acceptance, connection, forest community)',
-      'Tomorrow Holds Promise (gentle hope, sunrise imagery)',
-      'Your Body Knows (trust body wisdom, release control, breathing focus)',
-      'Deep Rest (minimal words, long pauses, pure relaxation)',
-      'Closing & Fade (brief gentle goodbye, silence)',
-    ];
-
-    return `You are an expert sleep audio script planner. You plan motivational meditation scripts that ARE the soothing content — not scripts that talk ABOUT meditation or sleep.
-
-**CRITICAL RULE**: Every section synopsis must describe WHAT THE NARRATOR WILL SAY — the actual soothing words, affirmations, imagery, and guided relaxation. Synopses must NEVER include:
-❌ Explaining what ASMR is or how it works
-❌ Discussing neuroscience, dopamine, oxytocin, or "studies"
-❌ Giving practical sleep tips or advice
-❌ Educational content about meditation or relaxation techniques
-❌ Referencing YouTube, channels, videos, or content creation
-❌ Personal anecdotes or first-person stories about discovering meditation
-❌ Any meta-commentary ("in this section we will...")
-
-**CONTENT TYPE**: Motivational Meditation — the narrator speaks directly to the listener with gentle affirmations, nature imagery, and soothing repetition. Think Jason Stephenson, Michael Sealey.
-
-**PROJECT**:
-- Topic: ${topic?.title || project.name}
-- Description: ${topic?.description || ''}
-- Niche: ${project.niche || 'Sleep'}
-- Duration: ${durationMinutes} minutes (~${totalTargetWords} words at 150 wpm)
-${selectedHook ? `- Opening Hook: "${selectedHook.hook_text}"` : ''}
-${strategyBlock}
-
-**MEDITATION CONTENT PRINCIPLES**:
-- Extremely gentle and soothing tone throughout
-- Deliberately monotonous (boring is GOOD for sleep)
-- Strategic repetition — each key concept repeated 4-6 times in different words
-- NO excitement, urgency, drama, tension, or surprises
-- Include [PAUSE X SEC] markers in synopses
-- Simple vocabulary, short sentences (8-18 words ideal)
-- Progressive deepening: physical relaxation → mental calm → emotional peace → deep rest
-- Nature metaphors throughout: ocean, mountain, tree, river, moon, stars, forest
-- Sensory grounding: touch, sound, sight, smell references
-- Second-person "you" — speak directly to the listener
-
-**SECTION TEMPLATE IDEAS** (adapt to fit ${numBatches} batches):
-${sectionTemplates.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}
-
-**YOUR TASK**: Plan exactly ${numBatches} batches for a ${durationMinutes}-minute motivational meditation.
-
-Each section should contain ONLY:
-- Gentle theme introduction through imagery (NOT by defining or explaining the concept)
-- Core affirmation stated simply, then repeated 3-5 times in different phrasings
-- Nature imagery and sensory details that reinforce the affirmation
-- Body awareness cues (breath, weight, warmth)
-- [BREATHE] and [PAUSE] markers
-- Gentle bridge to next theme
-
-Example good synopsis: "The narrator gently speaks: 'You are enough... just as you are... you are enough.' [PAUSE 5 SEC] Then weaves ocean imagery — waves rolling in, each one whispering 'enough.' The listener's breath matches the tide. [BREATHE] 'With every breath... you sink deeper into knowing... you have always been enough.' Repeat the affirmation with mountain imagery — solid, unmovable, complete. [PAUSE 3 SEC] Return to body: weight of blankets, warmth, safety."
-
-Example BAD synopsis: "This section explains the science behind self-worth affirmations and discusses how ASMR triggers help the brain release dopamine. The narrator shares a personal story about discovering meditation."
-
-Return JSON:
-{
-  "batches": [
-    {
-      "batch_number": 1,
-      "story_segment": "Short segment title (3-5 words)",
-      "section_type": "opening|affirmation|grounding|deepening|closing",
-      "focus_area": "Brief focus (1 sentence)",
-      "synopsis": "EXTREMELY DETAILED synopsis (200-300 words) describing the ACTUAL soothing content the narrator will speak. Include: specific affirmation phrases in quotes, nature imagery to use, sensory details, [PAUSE] and [BREATHE] placement, how the section deepens relaxation."
-    }
-  ]
+function pickProtagonistName(topicTitle) {
+  const pools = {
+    japanese:      ['Yuki', 'Haruki', 'Sora', 'Ren', 'Nao'],
+    nordic:        ['Astrid', 'Sven', 'Freya', 'Bjorn', 'Saga'],
+    celtic:        ['Rowan', 'Niamh', 'Callum', 'Isla', 'Finn'],
+    mediterranean: ['Elena', 'Marco', 'Sofia', 'Luca', 'Aria'],
+    english:       ['Thomas', 'Clara', 'Oliver', 'Mara', 'James'],
+    african:       ['Amara', 'Kofi', 'Zara', 'Seun', 'Nia'],
+    default:       ['Mara', 'Thomas', 'Elena', 'Rowan', 'Luca', 'Clara', 'Finn', 'Aria'],
+  };
+  const t = (topicTitle || '').toLowerCase();
+  if (/japan|kyoto|tokyo|zen|sakura|bamboo|shrine/i.test(t))          return pools.japanese[Math.floor(Math.random() * pools.japanese.length)];
+  if (/norse|viking|nordic|fjord|scandinav/i.test(t))                 return pools.nordic[Math.floor(Math.random() * pools.nordic.length)];
+  if (/ireland|scottish|celtic|highland|loch|druid/i.test(t))        return pools.celtic[Math.floor(Math.random() * pools.celtic.length)];
+  if (/italy|greek|tuscany|mediterranean|provence|spain/i.test(t))    return pools.mediterranean[Math.floor(Math.random() * pools.mediterranean.length)];
+  if (/africa|ghana|nigeria|kenya|savanna/i.test(t))                  return pools.african[Math.floor(Math.random() * pools.african.length)];
+  if (/england|english|cottage|village|countryside|british/i.test(t)) return pools.english[Math.floor(Math.random() * pools.english.length)];
+  return pools.default[Math.floor(Math.random() * pools.default.length)];
 }
 
-**RULES:**
-- Generate exactly ${numBatches} batches`;
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SLEEP STORY OUTLINE — real narrative with named characters, plot, setting
-  // ═══════════════════════════════════════════════════════════════════
-  const storyTemplates = [
-    'Chapter Opening (introduce protagonist by name, establish setting with rich sensory detail)',
-    'The Peaceful World (protagonist explores their environment — sights, sounds, textures)',
-    'A Gentle Errand (protagonist undertakes a calm, purposeful activity)',
-    'A Warm Encounter (protagonist meets a kind character, gentle dialogue)',
-    'A Beautiful Discovery (protagonist finds something lovely — a garden, a view, a hidden path)',
-    'Quiet Craftsmanship (protagonist engages in a slow, detailed hands-on activity)',
-    'Nature\'s Embrace (protagonist rests in nature — riverside, meadow, hilltop)',
-    'Evening Ritual (protagonist winds down — preparing tea, lighting candles, watching sunset)',
-    'Settling In (protagonist returns home, cozy interior, warmth and comfort)',
-    'Drifting Off (protagonist falls asleep — minimal narration, long pauses, ambient sounds)',
+// ═══════════════════════════════════════════════════════════════════
+// MEDITATION OUTLINE PROMPT — affirmations/second-person are correct here
+// ═══════════════════════════════════════════════════════════════════
+function buildMeditationOutlinePrompt({ topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes }) {
+  const sectionTemplates = [
+    'Opening & Welcome (settle, breathe, body awareness)',
+    'Core Affirmation Introduction (gentle theme entry through imagery)',
+    'Affirmation Deepening (repeat core phrase 4-6 times in different words)',
+    'Nature Imagery Weaving (ocean / mountain / forest / river / stars)',
+    'Body Awareness & Breath (weight, warmth, breath rhythm, [BREATHE] cues)',
+    'Emotional Release (permission to rest, release guilt, let go)',
+    'Deeper Stillness (reduced language density, longer pauses)',
+    'Drift State (near-silence, minimal words, pure presence)',
+    'Closing Fade (final soft affirmation, then silence)',
   ];
 
-  return `You are an expert bedtime story writer. You write REAL STORIES — narratives with named characters, specific settings, plot events, and gentle adventures. You are NOT a meditation guide. You do NOT write affirmations.
+  return `You are an expert sleep audio script planner creating a motivational meditation outline.
 
-**WHAT YOU ARE WRITING**: A bedtime story for adults. Think: Calm app sleep stories, Headspace sleepcasts, or a soothing audiobook. A real narrative told in a lullaby-like cadence. The listener falls asleep because the story is gentle, warm, and immersive — NOT because you're telling them to relax or breathe.
+**CONTENT TYPE**: Motivational Meditation — the narrator speaks directly to the listener with gentle affirmations, nature imagery, and soothing repetition. Think Jason Stephenson, Michael Sealey, The Honest Guys.
 
-**ABSOLUTE PROHIBITIONS FOR SLEEP STORY** — violating ANY of these ruins the story:
-❌ NEVER use second-person "you" language ("you feel calm", "you notice", "you breathe")
-❌ NEVER include affirmations ("you are safe", "you are loved", "you are enough")
-❌ NEVER include breathing cues or body scan instructions ([BREATHE], "take a deep breath", "feel your body")
-❌ NEVER name a section "Opening & Welcome" — this is a STORY, not a meditation
-❌ NEVER write "the listener" or address someone directly
-❌ NEVER include guided relaxation, body awareness, or settling instructions
-❌ NEVER write meta-commentary ("in this section", "this part of the story")
-❌ NEVER include educational content, advice, or explanations
-❌ NO urgency, tension, conflict, danger, or surprises
-
-**WHAT EVERY SYNOPSIS MUST CONTAIN**:
-✅ A named protagonist (give them a real name like "Elena", "Thomas", "Amara")
-✅ A specific physical setting (not abstract — "a stone cottage by a lavender field", not "a peaceful place")
-✅ Concrete actions the character takes (walking, cooking, gardening, reading, sailing)
-✅ Rich sensory details: what the character sees, hears, smells, touches, tastes
-✅ Third-person narration, present tense ("Elena walks along the path...")
-✅ [PAUSE X SEC] markers between paragraphs for pacing
-✅ A gentle plot — things happen, even if small and peaceful
+**CRITICAL**: Every synopsis describes WHAT THE NARRATOR WILL SAY — actual words, affirmations, imagery. NEVER include:
+❌ Explaining ASMR, neuroscience, dopamine, or "studies show"
+❌ Practical sleep tips or educational content
+❌ References to YouTube, videos, or channels
+❌ Meta-commentary ("in this section we will...")
+❌ First-person anecdotes from the narrator
 
 **PROJECT**:
 - Topic: ${topic?.title || project.name}
 - Description: ${topic?.description || ''}
-- Niche: ${project.niche || 'Sleep'}
 - Duration: ${durationMinutes} minutes (~${totalTargetWords} words at 150 wpm)
-${selectedHook ? `- Opening line: "${selectedHook.hook_text}"` : ''}
-${strategyBlock}
+${selectedHook ? `- Opening Hook: "${selectedHook.hook_text}"` : ''}
 
-**STORY PRINCIPLES**:
-- Extremely gentle pacing — unhurried, like a lullaby
-- Lush sensory descriptions that make the listener feel immersed
-- The protagonist is content, peaceful, curious — never anxious or rushed
-- Small, mundane activities described in loving, slow detail (kneading bread, arranging flowers, rowing a boat)
-- Nature and environment are characters too — the wind, the light, the water
-- Progressive winding down: the story world gets quieter and cozier as it goes
-- By the final sections, the protagonist is settling into rest themselves
+**MEDITATION PRINCIPLES**:
+- Extremely gentle, monotonous, soothing throughout
+- Strategic repetition — each concept restated 4-6 times in different words
+- NO excitement, urgency, drama, or tension
+- Second-person "you" throughout — speak directly to the listener
+- Simple vocabulary, short sentences (8-18 words)
+- Progressive deepening: physical → mental → emotional → deep rest
+- Nature metaphors: ocean, mountain, tree, river, moon, stars, forest
+- [PAUSE X SEC] and [BREATHE] markers throughout synopses
 
-**SECTION TEMPLATE IDEAS** (adapt to fit ${numBatches} batches):
-${storyTemplates.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}
+**SECTION TEMPLATE IDEAS** (adapt to fit ${numBatches} sections):
+${sectionTemplates.slice(0, numBatches).map((s, i) => `  ${i + 1}. ${s}`).join('\n')}
 
-**YOUR TASK**: Plan exactly ${numBatches} chapters/scenes for a ${durationMinutes}-minute bedtime story.
+**EXAMPLE GOOD SYNOPSIS**:
+"The narrator softly says: 'You are enough... just as you are... you are enough.' [PAUSE 5 SEC] Ocean imagery: waves rolling in, each one whispering 'enough.' The listener's breath matches the tide. [BREATHE] 'With every breath... you sink deeper into knowing... you have always been enough.' Repeat with mountain imagery — solid, unmovable, complete. [PAUSE 3 SEC] Return to body: weight of blankets, warmth, safety. 'You are enough... right now... in this moment... you are enough.'"
 
-Example GOOD synopsis: "Elena steps out of her stone cottage into the cool morning air. The lavender field stretches before her, purple and silver in the early light. She walks the narrow path between the rows, trailing her fingers along the tops of the plants. The scent rises — warm, herbal, faintly sweet. [PAUSE 3 SEC] A honeybee drifts past her shoulder. She follows it lazily with her eyes as it lands on a bloom. The sky is pale blue, streaked with thin clouds. She can hear the distant sound of church bells from the village below. [PAUSE 5 SEC] She reaches the old wooden gate at the field's edge and leans against it, looking out at the rolling hills beyond..."
-
-Example BAD synopsis (MEDITATION BLEED — DO NOT DO THIS): "The narrator gently welcomes the listener and invites them to settle into their pillow. Physical settling and breathing to ease into the story. 'You are safe... you are loved...' The listener feels their body becoming heavy..."
+Create exactly ${numBatches} sections.
 
 Return JSON:
 {
   "batches": [
     {
       "batch_number": 1,
-      "story_segment": "Short chapter title (3-5 words)",
-      "section_type": "opening|scene|deepening|closing",
-      "focus_area": "Brief focus (1 sentence — what happens in this chapter)",
-      "synopsis": "EXTREMELY DETAILED synopsis (200-300 words) describing the ACTUAL STORY CONTENT — character actions, setting details, sensory descriptions, what the character does and observes. NO affirmations, NO breathing cues, NO second-person language."
+      "story_segment": "Short title (3-5 words)",
+      "focus_area": "Brief focus — what the narrator guides the listener through (1 sentence)",
+      "synopsis": "200-300 words describing the ACTUAL meditation content — affirmation phrases in quotes, nature imagery, [PAUSE] and [BREATHE] placement, sensory details, how it deepens relaxation."
     }
   ]
 }
 
-**RULES:**
-- Generate exactly ${numBatches} batches
-- First batch introduces the protagonist BY NAME and establishes the setting — NO "Opening & Welcome"
-- Last batch: the protagonist settles into rest — minimal narration, mostly atmosphere and pauses
-- EVERY synopsis must name the protagonist and describe concrete events/actions
-- EVERY synopsis must include sensory details (sights, sounds, smells, textures)
-- Include [PAUSE X SEC] markers for pacing — but NO [BREATHE] markers
-- ZERO second-person language, ZERO affirmations, ZERO breathing instructions
-- This is a STORY, not a guided relaxation. If a synopsis reads like meditation, REWRITE IT.
-- Progressive winding down: each chapter quieter and slower than the last
-- Every synopsis: 200-300 words of SPECIFIC story content`;
+Generate exactly ${numBatches} batches.`;
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// STANDARD TVF OUTLINE PROMPT (existing logic)
+// SLEEP STORY OUTLINE PROMPT — v2: pure narrative, NO meditation DNA
+// ═══════════════════════════════════════════════════════════════════
+function buildSleepStoryOutlinePrompt({ topic, project, numBatches, totalTargetWords, durationMinutes }) {
+  const protagonistName = pickProtagonistName(topic?.title || project.name);
+
+  // Chapter arc: arrival → exploration (middle chapters) → natural rest
+  const chapterArcHints = [];
+  chapterArcHints.push(`Chapter 1 — ARRIVAL: ${protagonistName} arrives at or is already within a specific, vividly described setting. Introduce the world immediately, like the opening line of a novel. ${protagonistName} begins a simple, concrete activity.`);
+  for (let i = 2; i < numBatches; i++) {
+    chapterArcHints.push(`Chapter ${i} — EXPLORATION: ${protagonistName} moves through the world, notices things, completes a gentle task, or discovers a small detail. The world gets quieter and slower with each chapter.`);
+  }
+  chapterArcHints.push(`Chapter ${numBatches} — NATURAL REST: ${protagonistName} finds a warm, still place. The world outside is quiet. The narration slows to near-silence. The story simply... stops. No instruction to sleep. No address to any listener. Just stillness.`);
+
+  return `You are a creative director planning an adult bedtime story — the kind told on the Calm app or Headspace Sleepcasts. You are writing a STORY OUTLINE, not a meditation plan.
+
+═══════════════════════════════════════
+WHAT THIS IS
+═══════════════════════════════════════
+A sleep story is NARRATIVE FICTION. A named character moves through a beautiful, specific world. The listener falls asleep because the world is so warm and detailed and unhurried that sleep finds them naturally — not because they are instructed to relax or breathe.
+
+Think: a gentle novel read aloud. A lullaby with plot. A nature documentary in prose.
+
+═══════════════════════════════════════
+THE PROTAGONIST
+═══════════════════════════════════════
+Name: **${protagonistName}**
+Use this exact name in EVERY chapter synopsis — no exceptions. Never use "the character", "the listener", or "you". Always ${protagonistName}.
+
+Personality: content, gently curious, unhurried, observant. Never anxious, rushed, or conflicted.
+
+═══════════════════════════════════════
+ABSOLUTE RULES FOR EVERY SYNOPSIS
+═══════════════════════════════════════
+
+✅ MUST HAVE:
+- ${protagonistName}'s name used explicitly at least twice
+- A specific, named location ("the stone harbour at Ardmore", "her kitchen in the old mill house" — never just "a peaceful place")
+- Concrete actions ${protagonistName} takes: walks, stirs, ties, folds, lifts, opens, watches, picks up
+- Rich sensory details: what is seen, heard, smelled, touched (and occasionally tasted)
+- Third-person present tense: "${protagonistName} walks...", "${protagonistName} watches..."
+- Natural micro-narrative: something happens, even if gently
+
+❌ NEVER include:
+- Second-person "you" in any form ("you feel", "you notice", "you breathe", "imagine you're")
+- Affirmations ("you are safe", "you are loved", "you deserve rest", "you are enough")
+- Breathing instructions ("take a deep breath", "breathe in", "inhale slowly")
+- Body scan language ("feel your muscles relax", "your eyelids grow heavy", "sink into your pillow")
+- [PAUSE] or [BREATHE] markers — these belong in the SCRIPT not the outline
+- Chapter titles like "Opening & Welcome", "Settling In", "Body Awareness", "Closing & Fade"
+- "The listener", "the audience", or any reference to someone listening
+- Meta-commentary ("this chapter will...", "we now transition to...")
+- Conflict, danger, tension, urgency, or anything that raises heart rate
+
+═══════════════════════════════════════
+PROJECT DETAILS
+═══════════════════════════════════════
+- Story topic / setting: ${topic?.title || project.name}
+- Setting description: ${topic?.description || ''}
+- Duration: ${durationMinutes} minutes (~${totalTargetWords} words at 150 wpm)
+- Total chapters: ${numBatches}
+
+═══════════════════════════════════════
+CHAPTER ARC (follow this structure)
+═══════════════════════════════════════
+${chapterArcHints.join('\n')}
+
+═══════════════════════════════════════
+EXAMPLE OF A GOOD SYNOPSIS
+═══════════════════════════════════════
+Chapter: "The Harbour at Low Tide"
+Synopsis: "${protagonistName} walks the harbour wall as the tide retreats, leaving the fishing boats tilted gently on their moorings. The smell of salt and old rope is thick in the evening air. She moves slowly, one hand trailing along the worn stone, watching a heron pick its way between the exposed rocks below. At the far end of the wall there is a wooden bench, warped by years of sea wind, and she sits there watching the light change — the sky shifting from pale gold to a soft, bruised blue above the headland. A lobster fisherman she knows by sight nods as he passes, carrying a coil of rope over one shoulder. She nods back. Two swallows cut low across the water, almost touching the surface, then arrow up into the pale sky. The village bells ring the half-hour from somewhere behind her. She does not count them. She listens to the water moving against the stone below, the occasional soft knock of a hull against a buoy, and feels in no hurry to be anywhere at all."
+
+═══════════════════════════════════════
+EXAMPLE OF A BAD SYNOPSIS (never write this)
+═══════════════════════════════════════
+"Opening & Welcome: The narrator invites the listener to settle in and get comfortable. Take a deep breath as we begin tonight's story. You are safe here. Let your body relax as you breathe in... [BREATHE] ... and breathe out. You are loved. Let go of the day..."
+→ WRONG: second-person, affirmations, breathing cues, no protagonist, no setting, no story.
+
+═══════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════
+Return only valid JSON:
+{
+  "storytelling_format": "sleep story",
+  "protagonist_name": "${protagonistName}",
+  "batches": [
+    {
+      "batch_number": 1,
+      "story_segment": "Evocative chapter title (3-6 words, NOT 'Opening', NOT 'Welcome', NOT 'Settling')",
+      "focus_area": "One sentence: what ${protagonistName} does and where — no affirmations, no meditation language",
+      "synopsis": "200-300 words of specific story content. ${protagonistName} named explicitly. Specific location. Concrete actions. Layered sensory details. Third-person present tense. Zero second-person. Zero affirmations. Zero breathing cues. Zero [PAUSE] markers."
+    }
+  ]
+}
+
+Generate exactly ${numBatches} chapters.`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// STANDARD TVF OUTLINE PROMPT — unchanged
 // ═══════════════════════════════════════════════════════════════════
 function buildStandardOutlinePrompt({ topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock }) {
   const TVF_PHASES = [
@@ -247,11 +250,11 @@ function buildStandardOutlinePrompt({ topic, project, selectedHook, numBatches, 
   ];
 
   const formatFlavors = {
-    'Big Lie': 'Frame the HOOK around a widely-believed lie. The TENSION reveals cracks. The INSIGHT exposes the truth.',
+    'Big Lie':    'Frame the HOOK around a widely-believed lie. The TENSION reveals cracks. The INSIGHT exposes the truth.',
     'Zero to Hero': 'Frame the HOOK around the lowest point. The INSIGHT is the catalyst moment. The TRANSFORMATION is the triumphant rise.',
-    'Timeline': 'Frame the HOOK around a pivotal historical moment. Progress chronologically. The INSIGHT is the turning point.',
-    'Mystery': 'Frame the HOOK as an unsolved puzzle. The TENSION builds through clues. The INSIGHT is the revelation.',
-    'default': 'Use the standard TVF flow. Adapt tone to the niche. Focus on maximum curiosity and retention throughout.',
+    'Timeline':   'Frame the HOOK around a pivotal historical moment. Progress chronologically. The INSIGHT is the turning point.',
+    'Mystery':    'Frame the HOOK as an unsolved puzzle. The TENSION builds through clues. The INSIGHT is the revelation.',
+    'default':    'Use the standard TVF flow. Adapt tone to the niche. Focus on maximum curiosity and retention throughout.',
   };
 
   const formatFlavor = formatFlavors[project.storytelling_format] || formatFlavors['default'];
@@ -276,8 +279,8 @@ ${selectedHook ? `- Opening Hook (MUST USE): "${selectedHook.hook_text}"` : ''}
 **YOUR TASK**: Map the 8 TVF phases across exactly ${numBatches} batches.
 
 ${numBatches <= 3 ? `With ${numBatches} batches, combine multiple phases per batch.` :
-numBatches <= 6 ? `With ${numBatches} batches, spread phases across batches. Some may cover 1-2 phases.` :
-`With ${numBatches} batches, dedicate full batches to meatiest phases while combining shorter ones.`}
+  numBatches <= 6 ? `With ${numBatches} batches, spread phases across batches. Some may cover 1-2 phases.` :
+  `With ${numBatches} batches, dedicate full batches to meatiest phases while combining shorter ones.`}
 
 Return JSON:
 {
@@ -302,6 +305,9 @@ ${selectedHook ? `- Batch 1 MUST open with this hook: "${selectedHook.hook_text}
 - No filler, no generic buzzwords, no "in today's video"`;
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// MAIN HANDLER
+// ═══════════════════════════════════════════════════════════════════
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
@@ -310,51 +316,56 @@ Deno.serve(async (req) => {
 
     const { project_id } = await req.json();
 
-    // Get project
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-    // Get topic
     const topics = await base44.asServiceRole.entities.Topics.filter({ id: project.selected_topic_id });
     const topic = topics[0];
 
-    // Get selected hook if any (skip for sleep projects — they don't use hooks)
+    // Sleep projects don't use hooks
+    const scriptMode = detectScriptMode(null, project); // channel loaded below
+    const isSleepProject = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
+
     let selectedHook = null;
-    const isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
     if (!isSleepProject && project.selected_hook_id) {
       const hooks = await base44.asServiceRole.entities.Hooks.filter({ id: project.selected_hook_id });
       selectedHook = hooks[0];
     }
 
-    // Get channel
     let channel = null;
     if (project.channel_id) {
       const channels = await base44.asServiceRole.entities.Channels.filter({ id: project.channel_id });
       channel = channels[0];
     }
 
-    // Get channel script strategy
-    let scriptStrategy = '';
-    if (project.script_strategy_override) {
-      scriptStrategy = project.script_strategy_override;
-    } else if (channel?.script_strategy) {
-      scriptStrategy = channel.script_strategy;
-    }
+    // Re-detect now that we have channel
+    const resolvedScriptMode = detectScriptMode(channel, project);
+    const isSleepMode = resolvedScriptMode === 'sleep_meditation' || resolvedScriptMode === 'sleep_story';
+    const isSleepStory = resolvedScriptMode === 'sleep_story';
+    const isMeditation = resolvedScriptMode === 'sleep_meditation';
 
+    console.log(`[initializeScriptBatches] Script mode: ${resolvedScriptMode} (channel: ${channel?.name || 'none'})`);
+
+    // ── Strategy block — ONLY for standard mode ──
+    // Sleep modes intentionally skip channel strategy to prevent
+    // viral/retention writing patterns bleeding into sleep content.
     let strategyBlock = '';
-    if (scriptStrategy) {
-      try {
-        const strat = typeof scriptStrategy === 'string' ? JSON.parse(scriptStrategy) : scriptStrategy;
-        strategyBlock = `\n**NICHE-SPECIFIC SCRIPT STRATEGY** (follow this closely):
+    if (!isSleepMode) {
+      const scriptStrategy = project.script_strategy_override || channel?.script_strategy || '';
+      if (scriptStrategy) {
+        try {
+          const strat = typeof scriptStrategy === 'string' ? JSON.parse(scriptStrategy) : scriptStrategy;
+          strategyBlock = `\n**NICHE-SPECIFIC SCRIPT STRATEGY** (follow this closely):
 - Hook Formula: ${strat.hook_formula || 'N/A'}
 - Structure: ${Array.isArray(strat.structure) ? strat.structure.join(' → ') : (strat.structure || 'N/A')}
 - Tone: ${strat.tone || 'N/A'}
 - Pacing: ${strat.pacing || 'N/A'}
 - Retention Tricks: ${strat.retention_tricks || strat.retention || 'N/A'}
 - CTA Style: ${strat.cta_style || strat.cta || 'N/A'}\n`;
-      } catch (_) {
-        strategyBlock = `\n**NICHE STRATEGY NOTES**: ${scriptStrategy}\n`;
+        } catch (_) {
+          strategyBlock = `\n**NICHE STRATEGY NOTES**: ${scriptStrategy}\n`;
+        }
       }
     }
 
@@ -364,20 +375,10 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.ScriptBatches.delete(batch.id);
     }
 
-    // ── DETECT SCRIPT MODE ──
-    const scriptMode = detectScriptMode(channel, project);
-    const isSleepMode = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
-
-    console.log(`[initializeScriptBatches] Script mode: ${scriptMode} (channel: ${channel?.name || 'none'})`);
-
-    // ── CALCULATE BATCH COUNT ──
+    // ── Batch sizing ──
     const durationMinutes = project.video_duration_minutes || 10;
-    // Sleep content uses 150 wpm (deliberately slow speaking pace)
-    const wordsPerMinute = 150;
-    const totalTargetWords = Math.round(durationMinutes * wordsPerMinute);
-    // Sleep scripts: ~1100 words per batch (~7 min each) for more granular sections
-    // Standard: ~800 words per batch (~5 min each) for quality and granularity
-    const WORDS_PER_BATCH = isSleepMode ? 1100 : 800;
+    const totalTargetWords = Math.round(durationMinutes * 150);
+    const WORDS_PER_BATCH = isMeditation ? 1100 : isSleepStory ? 900 : 800;
     const numBatches = Math.max(2, Math.ceil(totalTargetWords / WORDS_PER_BATCH));
 
     const batchTargets = [];
@@ -391,22 +392,47 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`Project: ${durationMinutes} min → ${totalTargetWords} words → ${numBatches} batches (${scriptMode})`);
+    console.log(`Project: ${durationMinutes} min → ${totalTargetWords} words → ${numBatches} batches (${resolvedScriptMode})`);
 
-    // ── BUILD OUTLINE PROMPT ──
-    const promptArgs = { topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock };
-    const outlinePrompt = isSleepMode
-      ? buildSleepOutlinePrompt({ ...promptArgs, scriptMode, channel })
-      : buildStandardOutlinePrompt(promptArgs);
+    // ── Build outline prompt ──
+    const promptArgs = { topic, project, channel, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock };
+
+    let outlinePrompt;
+    if (isMeditation) {
+      outlinePrompt = buildMeditationOutlinePrompt(promptArgs);
+    } else if (isSleepStory) {
+      outlinePrompt = buildSleepStoryOutlinePrompt(promptArgs);
+    } else {
+      outlinePrompt = buildStandardOutlinePrompt(promptArgs);
+    }
+
+    // Temperature: sleep_story slightly higher for narrative variety
+    const temperature = isSleepStory ? 0.8 : isMeditation ? 0.6 : 0.7;
 
     console.log("Generating detailed outline...");
-    const outlineResult = await callOpenAI(outlinePrompt, isSleepMode ? 0.6 : 0.7);
+    const outlineResult = await callOpenAI(outlinePrompt, temperature);
 
     if (!outlineResult.batches || outlineResult.batches.length === 0) {
       throw new Error("AI failed to generate outline batches");
     }
 
-    // ── CREATE BATCH RECORDS ──
+    // ── For sleep stories: validate and stamp protagonist name on every batch ──
+    if (isSleepStory) {
+      const protagonist = outlineResult.protagonist_name || pickProtagonistName(topic?.title || project.name);
+      for (const batch of outlineResult.batches) {
+        batch.protagonist_name = protagonist;
+        // Inject name hint if synopsis somehow omits it
+        if (!batch.synopsis.includes(protagonist)) {
+          batch.synopsis = `[Protagonist: ${protagonist}] ` + batch.synopsis;
+        }
+        // Strip any [PAUSE] or [BREATHE] markers that leaked into synopses
+        batch.synopsis = batch.synopsis.replace(/\[PAUSE[^\]]*\]/gi, '').replace(/\[BREATHE\]/gi, '').trim();
+        // Strip any second-person fragments
+        batch.synopsis = batch.synopsis.replace(/\byou (feel|notice|breathe|hear|see|sense|are)\b/gi, `${protagonist} $1`);
+      }
+    }
+
+    // ── Create batch records ──
     const createdBatches = [];
     for (let i = 0; i < numBatches; i++) {
       const aiBatch = outlineResult.batches[i];
@@ -419,28 +445,30 @@ Deno.serve(async (req) => {
         focus_area: aiBatch?.focus_area || fallbackSegment,
         synopsis: aiBatch?.synopsis || `Write approximately ${batchTargets[i]} words for part ${i + 1}.`,
         target_words: batchTargets[i],
-        status: 'pending'
+        status: 'pending',
       });
       createdBatches.push(batch);
     }
 
-    // Update project status — also store the detected script_mode for downstream use
+    // Update project — persist resolved script mode for downstream functions
     await base44.asServiceRole.entities.Projects.update(project_id, {
       status: 'scripting',
       current_step: 3,
-      project_mode: isSleepMode ? scriptMode : ''
+      project_mode: isSleepMode ? resolvedScriptMode : (project.project_mode || ''),
     });
 
-    console.log(`Created ${createdBatches.length} batches with detailed outlines (${scriptMode})`);
+    console.log(`Created ${createdBatches.length} batches (${resolvedScriptMode})`);
 
     return Response.json({
       success: true,
       batches_created: createdBatches.length,
       total_target_words: totalTargetWords,
       duration_minutes: durationMinutes,
-      script_mode: scriptMode,
-      batches: createdBatches
+      script_mode: resolvedScriptMode,
+      protagonist_name: isSleepStory ? (outlineResult.protagonist_name || null) : undefined,
+      batches: createdBatches,
     });
+
   } catch (error) {
     console.error('Error initializing batches:', error);
     return Response.json({ error: error.message }, { status: 500 });
