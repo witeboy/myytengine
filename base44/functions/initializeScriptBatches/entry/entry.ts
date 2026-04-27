@@ -3,117 +3,6 @@ import OpenAI from 'npm:openai@4.58.1';
 
 const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
 
-// ══════════════════════════════════════════════════════════════════
-// DIVERSITY SEED — inlined (Base44 functions can't share modules)
-// Source of truth for protagonist identity across the pipeline.
-// ══════════════════════════════════════════════════════════════════
-const SEED_NAMING_POOLS = {
-  eastern_european: ['Katya','Dimitri','Anya','Mikhail','Nadia','Viktor','Elena','Yuri','Sasha','Irina'],
-  west_african: ['Kwame','Amara','Tunde','Nneka','Kofi','Adaeze','Femi','Zainab','Chibuzo','Oluchi'],
-  south_asian: ['Priya','Arjun','Divya','Rohan','Meera','Vikram','Ananya','Karan','Ishita','Raj'],
-  east_asian: ['Mei','Jun','Hana','Ren','Yuki','Wei','Akira','Lin','Takeshi','Xiaolin'],
-  latin_american: ['Mateo','Sofia','Diego','Camila','Ezequiel','Valentina','Rafael','Lucia','Joaquin','Isabela'],
-  middle_eastern: ['Layla','Omar','Yasmin','Karim','Farah','Sami','Noor','Hassan','Zahra','Tariq'],
-  anglo_american: ['Sarah','James','Emily','Michael','Rachel','David','Jessica','Daniel','Hannah','Benjamin'],
-  celtic: ['Siobhan','Declan','Aoife','Cian','Niamh','Eamon','Saoirse','Finn','Caoimhe','Lorcan'],
-  scandinavian: ['Astrid','Mikkel','Freja','Lars','Ingrid','Soren','Maja','Anders','Linnea','Bjorn'],
-  mediterranean: ['Giulia','Matteo','Francesca','Alessandro','Chiara','Stefano','Elena','Luca','Sofia','Marco']
-};
-const SEED_ARCHETYPES = [
-  { name: 'solo_hustler', desc: 'Self-employed, grinding, balancing ambition with burnout' },
-  { name: 'single_parent', desc: 'Carrying a household alone, every dollar accounted for' },
-  { name: 'immigrant_striver', desc: 'First-generation, carrying family expectations, building from nothing' },
-  { name: 'recovering_failure', desc: 'Crashed once, rebuilding smarter, humility earned the hard way' },
-  { name: 'quiet_professional', desc: 'Senior employee, competent, under-recognized, late-career pivot' },
-  { name: 'young_optimist', desc: 'Early 20s, still forming identity, mentor-hungry' },
-  { name: 'skeptical_veteran', desc: 'Has seen every fad, trusts evidence only, hard to impress' },
-  { name: 'blue_collar_builder', desc: 'Trades, hands-on, practical wisdom, distrusts office thinking' },
-  { name: 'creative_outsider', desc: 'Artist, writer, musician — unconventional path, financial anxiety' },
-  { name: 'late_bloomer', desc: '40+, starting over, wisdom without the scars of youthful overconfidence' }
-];
-const SEED_SHAPES = [
-  { name: 'three_act', rhythm: 'setup → confrontation → resolution (classical)' },
-  { name: 'spiral_descent', rhythm: 'each act worse than the last, hope thinner each time' },
-  { name: 'rising_revelation', rhythm: 'each act uncovers a deeper truth hidden under the last' },
-  { name: 'circular_return', rhythm: 'start at the end, unpack how we got here, return changed' },
-  { name: 'parallel_threads', rhythm: 'two timelines braiding, meeting at the climax' },
-  { name: 'kintsugi_arc', rhythm: 'breaking point first, then the slow gold-filled repair' }
-];
-const SEED_VOICES = [
-  { name: 'fireside', desc: 'Warm, measured, storyteller — like NPR at night' },
-  { name: 'urgent_confidant', desc: 'Leaning in, low volume, "you need to hear this"' },
-  { name: 'amused_skeptic', desc: 'Dry wit, slightly above the chaos, Last Week Tonight energy' },
-  { name: 'documentary_weight', desc: 'Restrained gravitas, letting facts land — Ken Burns' },
-  { name: 'empathetic_coach', desc: 'Direct but kind, Brené Brown cadence, no condescension' },
-  { name: 'poetic_observer', desc: 'Metaphor-rich, rhythmic, Alan Watts meets a novelist' }
-];
-const SEED_SCHEMES = [
-  { name: 'triadic', desc: 'Rule of three in nearly every key claim (X, Y, and Z)' },
-  { name: 'anaphora', desc: 'Sentences starting with the same phrase for emphasis' },
-  { name: 'antithesis', desc: 'Pairing opposites — "not X, but Y" constructions' },
-  { name: 'chiasmus', desc: '"Ask not what A can do for B; ask what B can do for A" mirror structure' },
-  { name: 'polysyndeton', desc: 'Deliberate "and ... and ... and" for cumulative weight' },
-  { name: 'epistrophe', desc: 'Sentences ending with the same phrase for percussive landing' }
-];
-const SEED_NICHE_BIAS = {
-  true_crime: ['anglo_american','eastern_european','celtic','mediterranean'],
-  finance: ['anglo_american','south_asian','east_asian'],
-  history: ['anglo_american','mediterranean','east_asian','eastern_european','middle_eastern'],
-  motivation: ['west_african','latin_american','south_asian','anglo_american'],
-  technology: ['east_asian','south_asian','anglo_american','scandinavian'],
-  health: ['anglo_american','mediterranean','scandinavian'],
-  education: ['south_asian','east_asian','west_african','anglo_american'],
-  travel: ['latin_american','mediterranean','east_asian','middle_eastern'],
-  relationship: ['anglo_american','mediterranean','latin_american','south_asian'],
-  horror: ['anglo_american','eastern_european','celtic'],
-  retirement: ['anglo_american','mediterranean','scandinavian']
-};
-function seededRng(seedStr) {
-  let h = 2166136261;
-  for (let i = 0; i < seedStr.length; i++) {
-    h ^= seedStr.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return () => {
-    h = Math.imul(h ^ (h >>> 15), 2246822507);
-    h = Math.imul(h ^ (h >>> 13), 3266489909);
-    h ^= h >>> 16;
-    return (h >>> 0) / 4294967296;
-  };
-}
-function ensureSeedInline(project) {
-  // Return existing seed if already persisted
-  if (project.script_strategy_override) {
-    try {
-      const strat = typeof project.script_strategy_override === 'string'
-        ? JSON.parse(project.script_strategy_override)
-        : project.script_strategy_override;
-      if (strat?._script_seed) return { data: strat._script_seed, isNew: false };
-    } catch (_) {}
-  }
-  // Generate a new deterministic seed
-  const rng = seededRng(project.id || String(Date.now()));
-  const pick = (arr) => arr[Math.floor(rng() * arr.length)];
-  const nicheKey = (project.niche || 'general').toLowerCase();
-  const culturePool = SEED_NICHE_BIAS[nicheKey] || Object.keys(SEED_NAMING_POOLS);
-  const namingCulture = pick(culturePool.filter(c => SEED_NAMING_POOLS[c]));
-  const firstName = pick(SEED_NAMING_POOLS[namingCulture] || SEED_NAMING_POOLS.anglo_american);
-  const archetype = pick(SEED_ARCHETYPES);
-  const shape = pick(SEED_SHAPES);
-  const voiceRegister = pick(SEED_VOICES);
-  const rhetoricalScheme = pick(SEED_SCHEMES);
-  return {
-    data: {
-      firstName, namingCulture,
-      archetype: archetype.desc,
-      archetypeName: archetype.name,
-      shape, voiceRegister, rhetoricalScheme,
-      generated_at: new Date().toISOString()
-    },
-    isNew: true
-  };
-}
-
 async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
@@ -164,36 +53,26 @@ function detectScriptMode(channel, project) {
 // ═══════════════════════════════════════════════════════════════════
 function buildSleepOutlinePrompt({ scriptMode, topic, project, channel, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock }) {
   const isMeditation = scriptMode === 'sleep_meditation';
-  const contentType = isMeditation ? 'motivational meditation' : 'sleep story';
 
-  const sectionTemplates = isMeditation
-    ? [
-        'Opening & Welcome (settle, breathe, body awareness)',
-        'You Are Enough (self-worth affirmations with ocean imagery)',
-        'You Deserve Rest (permission to stop, release guilt, mountain metaphors)',
-        'Let Go of Today (release worries, river carrying them away)',
-        'You Are Safe Here (safety, warmth, protection, starlight imagery)',
-        'Your Journey Matters (progress, self-compassion, tree growth metaphor)',
-        'You Belong (acceptance, connection, forest community)',
-        'Tomorrow Holds Promise (gentle hope, sunrise imagery)',
-        'Your Body Knows (trust body wisdom, release control, breathing focus)',
-        'Deep Rest (minimal words, long pauses, pure relaxation)',
-        'Closing & Fade (brief gentle goodbye, silence)',
-      ]
-    : [
-        'Opening & Welcome (settle, breathe, story world intro)',
-        'Scene 1 — Setting the Atmosphere (rich sensory environment)',
-        'Scene 2 — Gentle Activity (detailed peaceful process)',
-        'Scene 3 — Observation & Reflection (contentment, presence)',
-        'Scene 4 — New Setting (seamless transition, fresh sensory details)',
-        'Scene 5 — Deeper Calm (slower pace, deeper relaxation)',
-        'Scene 6 — Nature & Stillness (natural world, timelessness)',
-        'Scene 7 — Evening Settling (winding down, warmth)',
-        'Scene 8 — Deep Rest (minimal narrative, ambient atmosphere)',
-        'Closing & Fade (character settles, gentle goodbye)',
-      ];
+  // ═══════════════════════════════════════════════════════════════════
+  // MEDITATION OUTLINE — affirmations, breathing, second-person
+  // ═══════════════════════════════════════════════════════════════════
+  if (isMeditation) {
+    const sectionTemplates = [
+      'Opening & Welcome (settle, breathe, body awareness)',
+      'You Are Enough (self-worth affirmations with ocean imagery)',
+      'You Deserve Rest (permission to stop, release guilt, mountain metaphors)',
+      'Let Go of Today (release worries, river carrying them away)',
+      'You Are Safe Here (safety, warmth, protection, starlight imagery)',
+      'Your Journey Matters (progress, self-compassion, tree growth metaphor)',
+      'You Belong (acceptance, connection, forest community)',
+      'Tomorrow Holds Promise (gentle hope, sunrise imagery)',
+      'Your Body Knows (trust body wisdom, release control, breathing focus)',
+      'Deep Rest (minimal words, long pauses, pure relaxation)',
+      'Closing & Fade (brief gentle goodbye, silence)',
+    ];
 
-  return `You are an expert sleep audio script planner. You plan ${contentType} scripts that ARE the soothing content — not scripts that talk ABOUT meditation or sleep.
+    return `You are an expert sleep audio script planner. You plan motivational meditation scripts that ARE the soothing content — not scripts that talk ABOUT meditation or sleep.
 
 **CRITICAL RULE**: Every section synopsis must describe WHAT THE NARRATOR WILL SAY — the actual soothing words, affirmations, imagery, and guided relaxation. Synopses must NEVER include:
 ❌ Explaining what ASMR is or how it works
@@ -204,7 +83,7 @@ function buildSleepOutlinePrompt({ scriptMode, topic, project, channel, selected
 ❌ Personal anecdotes or first-person stories about discovering meditation
 ❌ Any meta-commentary ("in this section we will...")
 
-**CONTENT TYPE**: ${isMeditation ? 'Motivational Meditation — the narrator speaks directly to the listener with gentle affirmations, nature imagery, and soothing repetition. Think Jason Stephenson, Michael Sealey.' : 'Sleep Story — the narrator tells a peaceful story with rich sensory details, calm settings, and gentle activities. Think Calm app, Headspace sleepcasts.'}
+**CONTENT TYPE**: Motivational Meditation — the narrator speaks directly to the listener with gentle affirmations, nature imagery, and soothing repetition. Think Jason Stephenson, Michael Sealey.
 
 **PROJECT**:
 - Topic: ${topic?.title || project.name}
@@ -214,7 +93,7 @@ function buildSleepOutlinePrompt({ scriptMode, topic, project, channel, selected
 ${selectedHook ? `- Opening Hook: "${selectedHook.hook_text}"` : ''}
 ${strategyBlock}
 
-**SLEEP CONTENT PRINCIPLES**:
+**MEDITATION CONTENT PRINCIPLES**:
 - Extremely gentle and soothing tone throughout
 - Deliberately monotonous (boring is GOOD for sleep)
 - Strategic repetition — each key concept repeated 4-6 times in different words
@@ -224,13 +103,14 @@ ${strategyBlock}
 - Progressive deepening: physical relaxation → mental calm → emotional peace → deep rest
 - Nature metaphors throughout: ocean, mountain, tree, river, moon, stars, forest
 - Sensory grounding: touch, sound, sight, smell references
+- Second-person "you" — speak directly to the listener
 
 **SECTION TEMPLATE IDEAS** (adapt to fit ${numBatches} batches):
 ${sectionTemplates.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}
 
-**YOUR TASK**: Plan exactly ${numBatches} batches for a ${durationMinutes}-minute ${contentType}.
+**YOUR TASK**: Plan exactly ${numBatches} batches for a ${durationMinutes}-minute motivational meditation.
 
-${isMeditation ? `Each section should contain ONLY:
+Each section should contain ONLY:
 - Gentle theme introduction through imagery (NOT by defining or explaining the concept)
 - Core affirmation stated simply, then repeated 3-5 times in different phrasings
 - Nature imagery and sensory details that reinforce the affirmation
@@ -240,12 +120,7 @@ ${isMeditation ? `Each section should contain ONLY:
 
 Example good synopsis: "The narrator gently speaks: 'You are enough... just as you are... you are enough.' [PAUSE 5 SEC] Then weaves ocean imagery — waves rolling in, each one whispering 'enough.' The listener's breath matches the tide. [BREATHE] 'With every breath... you sink deeper into knowing... you have always been enough.' Repeat the affirmation with mountain imagery — solid, unmovable, complete. [PAUSE 3 SEC] Return to body: weight of blankets, warmth, safety."
 
-Example BAD synopsis: "This section explains the science behind self-worth affirmations and discusses how ASMR triggers help the brain release dopamine. The narrator shares a personal story about discovering meditation."` :
-`Each scene section should contain ONLY:
-- Rich sensory atmosphere (what the character sees, hears, smells, feels)
-- A peaceful activity described in loving, slow detail
-- The character's quiet contentment and simple observations
-- Seamless transition to the next scene`}
+Example BAD synopsis: "This section explains the science behind self-worth affirmations and discusses how ASMR triggers help the brain release dopamine. The narrator shares a personal story about discovering meditation."
 
 Return JSON:
 {
@@ -253,7 +128,7 @@ Return JSON:
     {
       "batch_number": 1,
       "story_segment": "Short segment title (3-5 words)",
-      "section_type": "${isMeditation ? 'opening|affirmation|grounding|deepening|closing' : 'opening|scene|deepening|closing'}",
+      "section_type": "opening|affirmation|grounding|deepening|closing",
       "focus_area": "Brief focus (1 sentence)",
       "synopsis": "EXTREMELY DETAILED synopsis (200-300 words) describing the ACTUAL soothing content the narrator will speak. Include: specific affirmation phrases in quotes, nature imagery to use, sensory details, [PAUSE] and [BREATHE] placement, how the section deepens relaxation."
     }
@@ -271,6 +146,98 @@ Return JSON:
 - Every synopsis: 200-300 words of SPECIFIC soothing content detail
 - NO educational content, NO science, NO advice, NO meta-commentary
 - Content gets progressively more repetitive and slower as it goes`;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SLEEP STORY OUTLINE — real narrative with named characters, plot, setting
+  // ═══════════════════════════════════════════════════════════════════
+  const storyTemplates = [
+    'Chapter Opening (introduce protagonist by name, establish setting with rich sensory detail)',
+    'The Peaceful World (protagonist explores their environment — sights, sounds, textures)',
+    'A Gentle Errand (protagonist undertakes a calm, purposeful activity)',
+    'A Warm Encounter (protagonist meets a kind character, gentle dialogue)',
+    'A Beautiful Discovery (protagonist finds something lovely — a garden, a view, a hidden path)',
+    'Quiet Craftsmanship (protagonist engages in a slow, detailed hands-on activity)',
+    'Nature\'s Embrace (protagonist rests in nature — riverside, meadow, hilltop)',
+    'Evening Ritual (protagonist winds down — preparing tea, lighting candles, watching sunset)',
+    'Settling In (protagonist returns home, cozy interior, warmth and comfort)',
+    'Drifting Off (protagonist falls asleep — minimal narration, long pauses, ambient sounds)',
+  ];
+
+  return `You are an expert bedtime story writer. You write REAL STORIES — narratives with named characters, specific settings, plot events, and gentle adventures. You are NOT a meditation guide. You do NOT write affirmations.
+
+**WHAT YOU ARE WRITING**: A bedtime story for adults. Think: Calm app sleep stories, Headspace sleepcasts, or a soothing audiobook. A real narrative told in a lullaby-like cadence. The listener falls asleep because the story is gentle, warm, and immersive — NOT because you're telling them to relax or breathe.
+
+**ABSOLUTE PROHIBITIONS FOR SLEEP STORY** — violating ANY of these ruins the story:
+❌ NEVER use second-person "you" language ("you feel calm", "you notice", "you breathe")
+❌ NEVER include affirmations ("you are safe", "you are loved", "you are enough")
+❌ NEVER include breathing cues or body scan instructions ([BREATHE], "take a deep breath", "feel your body")
+❌ NEVER name a section "Opening & Welcome" — this is a STORY, not a meditation
+❌ NEVER write "the listener" or address someone directly
+❌ NEVER include guided relaxation, body awareness, or settling instructions
+❌ NEVER write meta-commentary ("in this section", "this part of the story")
+❌ NEVER include educational content, advice, or explanations
+❌ NO urgency, tension, conflict, danger, or surprises
+
+**WHAT EVERY SYNOPSIS MUST CONTAIN**:
+✅ A named protagonist (give them a real name like "Elena", "Thomas", "Amara")
+✅ A specific physical setting (not abstract — "a stone cottage by a lavender field", not "a peaceful place")
+✅ Concrete actions the character takes (walking, cooking, gardening, reading, sailing)
+✅ Rich sensory details: what the character sees, hears, smells, touches, tastes
+✅ Third-person narration, present tense ("Elena walks along the path...")
+✅ [PAUSE X SEC] markers between paragraphs for pacing
+✅ A gentle plot — things happen, even if small and peaceful
+
+**PROJECT**:
+- Topic: ${topic?.title || project.name}
+- Description: ${topic?.description || ''}
+- Niche: ${project.niche || 'Sleep'}
+- Duration: ${durationMinutes} minutes (~${totalTargetWords} words at 150 wpm)
+${selectedHook ? `- Opening line: "${selectedHook.hook_text}"` : ''}
+${strategyBlock}
+
+**STORY PRINCIPLES**:
+- Extremely gentle pacing — unhurried, like a lullaby
+- Lush sensory descriptions that make the listener feel immersed
+- The protagonist is content, peaceful, curious — never anxious or rushed
+- Small, mundane activities described in loving, slow detail (kneading bread, arranging flowers, rowing a boat)
+- Nature and environment are characters too — the wind, the light, the water
+- Progressive winding down: the story world gets quieter and cozier as it goes
+- By the final sections, the protagonist is settling into rest themselves
+
+**SECTION TEMPLATE IDEAS** (adapt to fit ${numBatches} batches):
+${storyTemplates.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}
+
+**YOUR TASK**: Plan exactly ${numBatches} chapters/scenes for a ${durationMinutes}-minute bedtime story.
+
+Example GOOD synopsis: "Elena steps out of her stone cottage into the cool morning air. The lavender field stretches before her, purple and silver in the early light. She walks the narrow path between the rows, trailing her fingers along the tops of the plants. The scent rises — warm, herbal, faintly sweet. [PAUSE 3 SEC] A honeybee drifts past her shoulder. She follows it lazily with her eyes as it lands on a bloom. The sky is pale blue, streaked with thin clouds. She can hear the distant sound of church bells from the village below. [PAUSE 5 SEC] She reaches the old wooden gate at the field's edge and leans against it, looking out at the rolling hills beyond..."
+
+Example BAD synopsis (MEDITATION BLEED — DO NOT DO THIS): "The narrator gently welcomes the listener and invites them to settle into their pillow. Physical settling and breathing to ease into the story. 'You are safe... you are loved...' The listener feels their body becoming heavy..."
+
+Return JSON:
+{
+  "batches": [
+    {
+      "batch_number": 1,
+      "story_segment": "Short chapter title (3-5 words)",
+      "section_type": "opening|scene|deepening|closing",
+      "focus_area": "Brief focus (1 sentence — what happens in this chapter)",
+      "synopsis": "EXTREMELY DETAILED synopsis (200-300 words) describing the ACTUAL STORY CONTENT — character actions, setting details, sensory descriptions, what the character does and observes. NO affirmations, NO breathing cues, NO second-person language."
+    }
+  ]
+}
+
+**RULES:**
+- Generate exactly ${numBatches} batches
+- First batch introduces the protagonist BY NAME and establishes the setting — NO "Opening & Welcome"
+- Last batch: the protagonist settles into rest — minimal narration, mostly atmosphere and pauses
+- EVERY synopsis must name the protagonist and describe concrete events/actions
+- EVERY synopsis must include sensory details (sights, sounds, smells, textures)
+- Include [PAUSE X SEC] markers for pacing — but NO [BREATHE] markers
+- ZERO second-person language, ZERO affirmations, ZERO breathing instructions
+- This is a STORY, not a guided relaxation. If a synopsis reads like meditation, REWRITE IT.
+- Progressive winding down: each chapter quieter and slower than the last
+- Every synopsis: 200-300 words of SPECIFIC story content`;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -405,44 +372,6 @@ Deno.serve(async (req) => {
     for (const batch of existingBatches) {
       await base44.asServiceRole.entities.ScriptBatches.delete(batch.id);
     }
-
-    // ═══ ENSURE DIVERSITY SEED EXISTS (inlined — functions can't share modules) ═══
-    // The seed is the single source of truth for protagonist identity,
-    // narrative shape, and voice register across the entire pipeline.
-    // It's persisted into project.script_strategy_override._script_seed
-    // and read verbatim by extractCharacterDNA + generateSceneBreakdown.
-    let seed = ensureSeedInline(project);
-    if (seed.isNew) {
-      // Persist the newly generated seed back to the project
-      let stratObj = {};
-      if (project.script_strategy_override) {
-        try {
-          stratObj = typeof project.script_strategy_override === 'string'
-            ? JSON.parse(project.script_strategy_override)
-            : project.script_strategy_override;
-        } catch (_) {}
-      }
-      stratObj._script_seed = seed.data;
-      await base44.asServiceRole.entities.Projects.update(project_id, {
-        script_strategy_override: JSON.stringify(stratObj)
-      });
-      scriptStrategy = JSON.stringify(stratObj);
-      console.log(`🎲 Seed created: ${seed.data.firstName} (${seed.data.namingCulture}) | ${seed.data.archetypeName} | ${seed.data.shape.name} | ${seed.data.voiceRegister.name} | ${seed.data.rhetoricalScheme.name}`);
-    } else {
-      console.log(`🎲 Seed already exists: ${seed.data.firstName} (${seed.data.namingCulture})`);
-    }
-
-    // Build seed block to inject into the outline prompt
-    const seedData = seed.data;
-    const seedBlock = `
-**🎲 PROJECT DIVERSITY SEED — honor these choices when planning the outline:**
-- Protagonist first name: **${seedData.firstName}** (${seedData.namingCulture.replace(/_/g, ' ')})
-- Archetype: ${seedData.archetype}
-- Narrative shape: ${seedData.shape.name} — ${seedData.shape.rhythm}
-- Voice register: ${seedData.voiceRegister.name} — ${seedData.voiceRegister.desc}
-- Rhetorical scheme (use at least twice per section): ${seedData.rhetoricalScheme.name} — ${seedData.rhetoricalScheme.desc}
-`;
-    strategyBlock = seedBlock + strategyBlock;
 
     // ── DETECT SCRIPT MODE ──
     const scriptMode = detectScriptMode(channel, project);
