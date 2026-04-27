@@ -115,8 +115,7 @@ function useHistory(initialState) {
   return { state, setState, undo, redo, reset, canUndo: index > 0, canRedo: index < history.length - 1 };
 }
 
-function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport, onDownloadAssets, onShowExporter, onNext, onSave, isSaving, saveStatus }) {
-  const panels = [
+function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport, onDownloadAssets, onShowExporter, onShowFFmpegExporter, onNext, onSave, isSaving, saveStatus }) {  const panels = [
     { id: 'media',       label: 'Media',       icon: Film     },
     { id: 'audio',       label: 'Audio',       icon: Music    },
     { id: 'text',        label: 'Text',        icon: Type     },
@@ -167,6 +166,9 @@ function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport,
         </Button>
         <Button onClick={onShowExporter} size="sm" className="gap-1.5 text-xs bg-green-600 hover:bg-green-700">
           <FileVideo size={14} /> Export MP4
+        </Button>
+        <Button onClick={onShowFFmpegExporter} size="sm" className="gap-1.5 text-xs bg-orange-500 hover:bg-orange-600">
+          <FileVideo size={14} /> FFmpeg Export
         </Button>
         <Button onClick={onNext} size="sm" className="gap-1.5 text-xs bg-purple-600 hover:bg-purple-700">
           Post Production <ArrowRight size={14} />
@@ -1428,7 +1430,8 @@ export default function TimelineEditor() {
     setSelectedMusicId(dup.id);
   };
   const handleBack           = () => navigate(createPageUrl('ContentGeneration') + `?project_id=${projectId}`);
-  const handleExport         = () => alert('Export MP4 coming soon!');
+  const handleExport         = () => setShowExporter(true);
+  const [showFFmpegExporter, setShowFFmpegExporter] = useState(false);
   const handleDownloadAssets = () => alert('Download Assets coming soon!');
   const handleSeek           = t  => {
     const ct = Math.max(0, Math.min(totalDuration, t));
@@ -1523,7 +1526,8 @@ export default function TimelineEditor() {
         activePanel={activePanel} onPanelChange={setActivePanel}
         projectName={project?.name} onBack={handleBack}
         onExport={handleExport} onDownloadAssets={handleDownloadAssets}
-        onShowExporter={() => setShowExporter(true)} onNext={handleNext}
+        onShowExporter={() => setShowExporter(true)}
+        onShowFFmpegExporter={() => setShowFFmpegExporter(true)} onNext={handleNext}
         onSave={handleSaveTimeline} isSaving={isSaving} saveStatus={saveStatus}
       />
 
@@ -1858,6 +1862,39 @@ export default function TimelineEditor() {
         captionClips={captionClips}
         prodSettings={prodSettings}
       />
+
+      {/* FFmpeg Exporter modal */}
+      {showFFmpegExporter && (() => {
+        const exportScenes = videoClips.map(clip => {
+          const scene = scenes.find(s => s.id === clip.sceneId);
+          return {
+            ...clip,
+            image_url: clip.imageUrl || scene?.image_url,
+            video_url: clip.videoUrl || scene?.video_url,
+            narration_text: scene?.narration_text,
+            voiceover_text: scene?.voiceover_text,
+            mediaType: clip.mediaType || 'image',
+            playbackRate: clip.playbackRate ?? 1.0,
+            videoDuration: clip.videoDuration ?? null,
+            cinematicMotion: clip.cinematicMotion || null,
+            motionSpeed: clip.motionSpeed ?? 1.0,
+            motionIntensity: clip.motionIntensity ?? 1.0,
+            transition: clip.transition || null,
+            transitionDuration: clip.transitionDuration ?? DEFAULT_TRANSITION_DURATION,
+          };
+        });
+        return (
+          <VideoExporter
+            open={showFFmpegExporter} onClose={() => setShowFFmpegExporter(false)}
+            scenes={exportScenes} orientation={orientation}
+            voiceoverUrl={voiceoverUrl} musicUrl={musicUrl} musicVolume={musicVol}
+            musicClips={musicClips}
+            projectName={project?.name || 'Untitled'} projectNiche={project?.niche} projectId={projectId} exportHook={exportHook}
+            captions={captionClips}
+            defaultMode="ffmpeg"
+          />
+        );
+      })()}
 
       {/* Exporter modal */}
       {showExporter && (() => {
