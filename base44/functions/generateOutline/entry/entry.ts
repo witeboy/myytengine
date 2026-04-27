@@ -82,16 +82,6 @@ Deno.serve(async (req) => {
 
 Create exactly ${numBatches} sections for this ${duration_minutes}-minute motivational meditation.
 
-Rules:
-- First section MUST be Opening & Welcome (physical settling, breathing, body awareness)
-- Last section should be the gentlest, most minimal — mostly pauses and silence
-- Progressive deepening: each section calmer and slower than the last
-- Synopses must describe the ACTUAL words and imagery, not explain concepts
-- Include specific affirmation phrases IN QUOTES in synopses
-- Include [PAUSE X SEC] markers in synopses
-- Every synopsis: 200-300 words of SPECIFIC soothing content detail
-- NO educational content, NO science, NO advice, NO meta-commentary
-
 Return JSON:
 {"storytelling_format": "motivational meditation", "batches": [{"batch_number": 1, "story_segment": "Short title (3-5 words)", "focus_area": "Brief focus (1 sentence)", "target_words": ${wordsPerBatch}, "synopsis": "EXTREMELY DETAILED synopsis (200-300 words) describing the ACTUAL soothing content."}]}`;
       } else {
