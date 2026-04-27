@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-// v4 — Claude primary + Gemini fallback
+// v5 — Claude primary + Gemini fallback — SLEEP STORY FIX: fully separated from meditation
 
 const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
@@ -139,37 +139,38 @@ async function callLLM(prompt, temperature = 0.85) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// SLEEP SCRIPT WRITING PROMPT
+// ROUTER — dispatches to the correct sleep prompt
 // ═══════════════════════════════════════════════════════════════════
 function buildSleepWritingPrompt({ scriptMode, batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock }) {
-  const isMeditation = scriptMode === 'sleep_meditation';
+  if (scriptMode === 'sleep_story') {
+    return buildSleepStoryWritingPrompt({ batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock });
+  }
+  return buildSleepMeditationWritingPrompt({ batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock });
+}
 
-  return `You are an expert sleep audio script writer. You create professional-grade bedtime guided meditations following the proven format of top sleep channels (Jason Stephenson, Michael Sealey, The Honest Guys).
+// ═══════════════════════════════════════════════════════════════════
+// MEDITATION WRITING PROMPT — affirmations, second-person, breathing
+// ═══════════════════════════════════════════════════════════════════
+function buildSleepMeditationWritingPrompt({ batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock }) {
+  return `You are an expert sleep audio script writer. You create professional-grade bedtime motivational meditations following the proven format of top sleep channels (Jason Stephenson, Michael Sealey, The Honest Guys).
 
-NOTE: This function handles SLEEP MEDITATION only. Sleep Story is handled by buildSleepStoryWritingPrompt.
+**CRITICAL RULE**: You are writing the ACTUAL meditation script — the words the narrator speaks. You are NOT writing ABOUT meditation. You ARE the soothing voice guiding someone to sleep.
 
-**CRITICAL RULE — READ THIS FIRST**:
-You are writing the ACTUAL meditation/story script — the words the narrator speaks. You are NOT writing ABOUT meditation. You are NOT explaining what ASMR is. You are NOT giving sleep tips or advice. You ARE the soothing voice guiding someone to sleep. Every single word must serve that purpose.
-
-**ABSOLUTELY FORBIDDEN CONTENT** (including these will ruin the script):
+**ABSOLUTELY FORBIDDEN CONTENT**:
 ❌ Explaining what ASMR is, how it works, or its benefits
 ❌ Mentioning dopamine, oxytocin, neuroscience, or "studies show"
 ❌ Giving practical sleep tips (caffeine, screen time, sleep schedule)
 ❌ Referencing "this video", "this channel", or YouTube
 ❌ First-person anecdotes ("I remember when I...")
-❌ Educational content of any kind — no teaching, no explaining
+❌ Educational content of any kind
 ❌ Defining meditation, affirmations, or relaxation techniques
-❌ Suggesting the listener try other videos or content
 ❌ Any meta-commentary about what the script is doing
 ❌ Conflict, tension, danger, stress, urgency, surprises
-❌ Questions requiring active thinking or answers
-❌ Energizing words: "exciting", "alert", "energy", "suddenly"
-❌ Unresolved storylines or cliffhangers
 
 **PROJECT CONTEXT**:
 - Topic: ${topic?.title || project.name}
 - Description: ${topic?.description || ''}
-- Content Type: Guided Sleep Meditation (second-person, affirmations, breathing)
+- Content Type: Motivational Meditation
 - Duration: ${project.video_duration_minutes || 10} minutes total
 ${selectedHook && isFirstBatch ? `- Opening line: "${selectedHook.hook_text}"` : ''}
 ${strategyBlock}
@@ -182,7 +183,7 @@ ${outlineContext}
 **SECTION SYNOPSIS** (follow this closely):
 ${batch.synopsis}
 
-**MANDATORY WORD COUNT**: You MUST write AT LEAST ${batch.target_words} words. This is NON-NEGOTIABLE. If your output is under ${Math.round(batch.target_words * 0.9)} words, it is a FAILURE. Add more repetition, more imagery, more [PAUSE] markers, more sensory grounding until you reach the target. The audio NEEDS this many words to fill its timeslot (150 words = 1 minute).
+**MANDATORY WORD COUNT**: You MUST write AT LEAST ${batch.target_words} words. NON-NEGOTIABLE. If under ${Math.round(batch.target_words * 0.9)} words, FAILURE. Add more repetition, imagery, [PAUSE] markers. 150 words = 1 minute.
 
 ${previousContent ? `**PREVIOUSLY WRITTEN** (maintain continuity, do NOT repeat):\n${previousContent.slice(-4000)}\n` : ''}
 
@@ -196,7 +197,7 @@ ${previousContent ? `**PREVIOUSLY WRITTEN** (maintain continuity, do NOT repeat)
 
 **LANGUAGE**:
 - Simple vocabulary — short sentences (8-18 words)
-- ${isMeditation ? 'Second-person "you" — speak directly to the listener as their gentle guide' : 'Third-person narrative, present tense — immerse the listener in a character\'s peaceful world'}
+- Second-person "you" — speak directly to the listener as their gentle guide
 - Soft consonants preferred — avoid harsh sounds (k, t, hard g)
 
 **PAUSE MARKERS** (ESSENTIAL — include generously):
@@ -210,8 +211,7 @@ ${previousContent ? `**PREVIOUSLY WRITTEN** (maintain continuity, do NOT repeat)
 - Touch: weight of blankets, softness, warmth, gentle pressure
 - Sound: rain, ocean waves, rustling leaves, distant gentle sounds
 - Sight: soft darkness, starlight, candlelight, gentle colors
-- Smell: rain, flowers, wood smoke, fresh air (subtle mentions)
-
+- Smell: rain, flowers, wood smoke, fresh air
 
 **NATURE METAPHORS** (core imagery):
 - Ocean: vast, constant, waves matching breath
@@ -220,586 +220,144 @@ ${previousContent ? `**PREVIOUSLY WRITTEN** (maintain continuity, do NOT repeat)
 - River: flowing, releasing, natural path
 - Moon & Stars: gentle light, constant presence
 
-${isMeditation ? `**MEDITATION SECTION STRUCTURE**:
-1. Soft Opening (Indirect Theme Emergence)  
-- Begin with imagery that embodies the theme (never define it)  
-- Use slow, spacious language  
-- Example: drifting clouds, quiet water, warm light  
+**MEDITATION SECTION STRUCTURE**:
+1. Soft Opening — imagery that embodies the theme
+2. Energetic Settling — guide awareness inward with soft suggestions
+3. Core Affirmation — introduce softly, like a thought
+4. Affirmation Expansion — repeat with slight variations
+5. Imagery Weaving — blend affirmation with nature imagery
+6. Embodied Awareness — breath, body, weight, warmth (invitations, not commands)
+7. Breath Rhythm — [BREATHE] cues, expanding intervals
+8. Affirmation Deepening — softer, more abstract forms
+9. Drift State — reduced language density, longer pauses
+10. Seamless Descent — fade into calm, no conclusion
 
-2. Energetic Settling (Nervous System Downshift)  
-- Gently guide awareness inward without commands  
-- Use soft suggestions: "you may notice...", "perhaps you feel..."  
-- Introduce stillness, safety, and slowness  
-
-3. Core Affirmation Introduction (First Whisper)  
-- Introduce the affirmation softly, almost like a thought  
-- Keep it simple and spacious:  
-"you are enough..."  
-"just as you are..."  
-
-4. Affirmation Expansion (Layered Repetition)  
-- Repeat with slight variations, never identical rhythm  
-- Allow pauses to breathe between phrases  
-- No explanation, no logic — just presence  
-
-5. Imagery Weaving (Emotion Through Nature)  
-- Blend affirmation with calming imagery  
-- Nature reflects the truth of the affirmation  
-- Example:  
-"like the ocean… never needing to prove its depth…"  
-
-6. Embodied Awareness (Grounding Without Effort)  
-- Bring attention to breath, body, weight, warmth  
-- Avoid commands like “focus” — use invitations instead  
-- Make the body feel safe, heavy, supported  
-
-7. Breath Rhythm Integration ([BREATHE] Cycle)  
-- Introduce slow breathing cues  
-- Expand time between cues gradually  
-- Sync language with inhale/exhale flow  
-
-8. Affirmation Deepening (Subconscious Layer)  
-- Return to affirmation in softer, more abstract forms  
-- Almost like echoes or distant thoughts  
-- Shorter phrases, more space  
-
-9. Drift State (Thought Dissolution)  
-- Reduce language density  
-- Use longer pauses, softer imagery  
-- Allow listener to float rather than follow  
-
-10. Seamless Descent (Bridge to Silence or Sleep)  
-- No conclusion or closure  
-- Fade into calm imagery or breath  
-- Leave space for continuation or loop  
-11. [BREATHE] cycle
-12. Gentle bridge deeper into relaxation
-
-AFFIRMATION FLOW (ADVANCED RHYTHM):
-- Introduce → pause  
-- Repeat → longer pause  
-- Slight variation → pause  
-- Blend into imagery → pause  
-- Return as whisper → longer pause  
-
-STYLE RULES:
-- Use soft, flowing, hypnotic language  
-- Prefer suggestions over instructions ("you might notice..." vs "focus on...")  
-- Avoid explanations, reasoning, or teaching  
-- Avoid abrupt transitions or strong statements  
-- Let silence (pauses) do as much work as words  
-- Keep emotional tone: safe, accepting, weightless  
-
-
-AFFIRMATION FORMAT: State simply → pause → restate → pause → elaborate with imagery → pause → restate again. Do NOT explain WHY the affirmation matters. Just say it, softly, repeatedly.` :
-
-`**STORY SCENE STRUCTURE**:
-1. Soft Opening (Indirect Theme Emergence)  
-   - Begin with imagery that embodies the theme (never define it)  
-   - Use slow, spacious language  
-   - Example: drifting clouds, quiet water, warm light  
-
-2. Energetic Settling (Nervous System Downshift)  
-   - Gently guide awareness inward without commands  
-   - Use soft suggestions: "you may notice...", "perhaps you feel..."  
-   - Introduce stillness, safety, and slowness  
-
-3. Core Affirmation Introduction (First Whisper)  
-   - Introduce the affirmation softly, almost like a thought  
-   - Keep it simple and spacious:  
-     "you are enough..."  
-     "just as you are..."  
-
-4. Affirmation Expansion (Layered Repetition)  
-   - Repeat with slight variations, never identical rhythm  
-   - Allow pauses to breathe between phrases  
-   - No explanation, no logic — just presence  
-
-5. Imagery Weaving (Emotion Through Nature)  
-   - Blend affirmation with calming imagery  
-   - Nature reflects the truth of the affirmation  
-   - Example:  
-     "like the ocean… never needing to prove its depth…"  
-
-6. Embodied Awareness (Grounding Without Effort)  
-   - Bring attention to breath, body, weight, warmth  
-   - Avoid commands like “focus” — use invitations instead  
-   - Make the body feel safe, heavy, supported  
-
-7. Breath Rhythm Integration ([BREATHE] Cycle)  
-   - Introduce slow breathing cues  
-   - Expand time between cues gradually  
-   - Sync language with inhale/exhale flow  
-
-8. Affirmation Deepening (Subconscious Layer)  
-   - Return to affirmation in softer, more abstract forms  
-   - Almost like echoes or distant thoughts  
-   - Shorter phrases, more space  
-
-9. Drift State (Thought Dissolution)  
-   - Reduce language density  
-   - Use longer pauses, softer imagery  
-   - Allow listener to “float” rather than follow  
-
-10. Seamless Descent (Bridge to Silence or Sleep)  
-   - No conclusion or closure  
-   - Fade into calm imagery or breath  
-   - Leave space for continuation or loop  
-11. Seamless transition to the next scene`}
-
-AFFIRMATION FLOW (ADVANCED RHYTHM):
-- Introduce → pause  
-- Repeat → longer pause  
-- Slight variation → pause  
-- Blend into imagery → pause  
-- Return as whisper → longer pause  
-
-STYLE RULES:
-- Use soft, flowing, hypnotic language  
-- Prefer suggestions over instructions ("you might notice..." vs "focus on...")  
-- Avoid explanations, reasoning, or teaching  
-- Avoid abrupt transitions or strong statements  
-- Let silence (pauses) do as much work as words  
-- Keep emotional tone: safe, accepting, weightless 
-
+AFFIRMATION FORMAT: State simply → pause → restate → pause → elaborate with imagery → pause → restate again.
 
 **PERMISSION & RELEASE PHRASES** (use liberally):
-"You don't have to...", "There's no need to...", "It's okay to...", "Let yourself...", "Allow...", "Release...", "Let go of..."
+"You don't have to...", "There's no need to...", "It's okay to...", "Let yourself...", "Allow...", "Release..."
 
 **ANCHORING PHRASES** (repeat every few minutes):
 "Safe... held... at peace...", "Let it go... just for now...", "Rest now...", "You are safe here..."
 
-**${isFirstBatch ? 'OPENING: Start with a gentle welcome. Settle the listener physically (body sinking, pillows, warmth). Guide 3 slow breaths with [BREATHE] markers. Then ease into the first theme through imagery — NOT by explaining what you\'re about to do.' : 'Continue seamlessly from where the previous section ended — maintain the deepening relaxation arc.'}**
-**${isLastBatch ? 'ENDING: This is the final section — the gentlest, most minimal content. Fewer words, more pauses. End with: "Rest now... peaceful dreams... [PAUSE 10 SEC]" then fade to near-silence with one final "You are safe... you are loved... [PAUSE 10 SEC]"' : 'End by gently deepening relaxation, bridging naturally to the next theme.'}**
+**${isFirstBatch ? 'OPENING: Start with a gentle welcome. Settle the listener physically. Guide 3 slow breaths with [BREATHE] markers. Then ease into the first theme through imagery.' : 'Continue seamlessly from where the previous section ended.'}**
+**${isLastBatch ? 'ENDING: Gentlest, most minimal content. Fewer words, more pauses. End with: "Rest now... peaceful dreams... [PAUSE 10 SEC]" then fade to near-silence.' : 'End by gently deepening relaxation, bridging naturally to the next theme.'}**
 
 Return JSON:
 {
-  "content": "The full script text for this section including all [PAUSE X SEC] and [BREATHE] markers...",
+  "content": "The full meditation script text including all [PAUSE X SEC] and [BREATHE] markers...",
   "word_count": 1234
 }`;
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// SLEEP STORY PROMPT — real narrative, not affirmations
+// SLEEP STORY WRITING PROMPT — real narrative, NOT meditation
 // ═══════════════════════════════════════════════════════════════════
-function buildSleepStoryWritingPrompt({ batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch }) {
-  const storyTitle   = (topic && topic.title) ? topic.title : (project.name || 'Bedtime Story');
-  const totalMins    = project.video_duration_minutes || 10;
-  const targetWords  = batch.target_words || 800;
-  const batchNum     = batch.batch_number || 1;
-  const totalBatches = sortedBatches.length || 2;
-  const synopsisText = batch.synopsis || '';
-  const sectionTitle = batch.story_segment || `Story Chapter ${batchNum}`;
+function buildSleepStoryWritingPrompt({ batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock }) {
+  // Auto-detect and override meditation bleed in the synopsis
+  const meditationBleedPatterns = /\b(affirmation|breathe in|breathe out|body awareness|you are safe|you are loved|you are enough|settle into|settling in|guided relaxation|body scan|feel your body|take a deep breath|opening & welcome|physical settling)\b/i;
+  let cleanSynopsis = batch.synopsis;
+  if (meditationBleedPatterns.test(batch.synopsis)) {
+    console.warn(`[Batch ${batch.batch_number}] ⚠️ MEDITATION BLEED detected in synopsis — overriding`);
+    cleanSynopsis = `[MEDITATION CONTENT DETECTED — IGNORE SYNOPSIS AND REPLACE] Write a genuine story scene for "${batch.story_segment}". The protagonist (use the same name from earlier batches or introduce one) performs a peaceful, concrete activity in a specific setting. Describe what they see, hear, smell, and touch. NO affirmations, NO breathing cues, NO second-person "you". Write a real narrative scene.`;
+  }
 
-  const badWords = [
-    'opening & welcome', 'physical settling', 'breathing to ease',
-    'guide the listener', 'body scan', 'relaxation', 'affirmation',
-    'you are safe', 'you are loved', 'deep rest', 'minimal words',
-  ];
-  const hasMedBleed    = badWords.some(w => synopsisText.toLowerCase().includes(w));
-  const hasTitleBleed  = badWords.some(w => sectionTitle.toLowerCase().includes(w));
-  const cleanTitle     = hasTitleBleed ? `Story Chapter ${batchNum}` : sectionTitle;
-  const cleanSynopsis  = hasMedBleed
-    ? 'STORY BEAT: The synopsis contained meditation language — ignore it. Write the next natural chapter of the sleep story based on the topic and what came before.'
-    : `STORY BEAT FOR THIS SECTION:\n${synopsisText}`;
+  return `You are an expert bedtime story writer. You write REAL STORIES — narratives with named characters, specific settings, and gentle adventures told in a lullaby-like cadence. Adults fall asleep to your stories because they are warm, immersive, and soothing — NOT because you tell them to relax.
 
-  const openLine = isFirstBatch
-    ? 'OPENING: Begin mid-scene. First sentence drops the reader into the story world with a single sensory detail — a smell, a sound, a texture. Do not open with "Welcome" or address the listener. No preamble.'
-    : 'CONTINUATION: Pick up exactly where the previous chapter ended. No recap, no transition. Just continue the story.';
+**═══ WHAT YOU ARE ═══**
+You are a storyteller. Think: Calm app sleep stories, Headspace sleepcasts, a soothing audiobook.
+You tell stories about characters doing things in beautiful places.
 
-  const closeLine = isLastBatch
-    ? 'ENDING: The final paragraph must be the quietest thing in the whole story. End on one still image — a candle going out, snow settling, a door gently closing.'
-    : 'CHAPTER END: Close on a moment of quiet — a pause in the action, a character settling, the world going still.';
+**═══ WHAT YOU ARE NOT ═══**
+You are NOT a meditation guide. You do NOT write affirmations. You do NOT address the listener.
 
-  const prevBlock = previousContent
-    ? `PREVIOUSLY WRITTEN (continue from here — do NOT repeat any of it):\n${previousContent.slice(-3000)}`
-    : '';
+**HARD RULES — VIOLATING ANY OF THESE IS A COMPLETE FAILURE**:
 
-  const arcBlock = outlineContext ? `FULL STORY ARC:\n${outlineContext}` : '';
+❌ NEVER use second-person "you" ("you feel calm", "you notice the stars", "you breathe deeply")
+   CORRECT: "Elena feels the warmth of the fire" / "Thomas notices the stars"
+❌ NEVER write affirmations ("you are safe", "you are loved", "you are enough", "you deserve rest")
+❌ NEVER include breathing instructions ("take a deep breath", "breathe in", "feel your breath", [BREATHE])
+❌ NEVER include body scan language ("feel your body", "your shoulders relax", "sink into your pillow")
+❌ NEVER address "the listener" or break the fourth wall
+❌ NEVER write "Opening & Welcome" content — no settling, no grounding, no "welcome to this story"
+❌ NEVER use permission phrases ("you don't have to...", "let yourself...", "it's okay to...")
+❌ NEVER use anchoring phrases ("safe... held... at peace...", "rest now...")
+❌ NO conflict, tension, danger, urgency, or surprises
+❌ NO educational content, advice, or meta-commentary
 
-  const lines = [
-    'You are writing a bedtime story for adults — in the tradition of the Calm app Sleep Stories.',
-    'You write a REAL STORY with characters, a setting, and a gentle plot. This is NOT a meditation.',
-    '',
-    '=== ABSOLUTE RULES ===',
-    'NEVER use second-person: no "you", "your", "you feel", "you are"',
-    'NEVER write affirmations: no "you are safe", "you are loved", "all is well"',
-    'NEVER give breathing instructions: no "breathe in", "breathe out", "inhale", "exhale"',
-    'NEVER address the listener: no "dear listener", "welcome", "settle now"',
-    'NEVER write body relaxation instructions: no "let your shoulders drop", "feel your toes"',
-    'NEVER start a paragraph with "Feel" as a command to the listener',
-    'ALWAYS write in third person: "she", "he", "they", or character names',
-    'ALWAYS use past tense: "she walked", "he noticed", "the light fell"',
-    'ALWAYS name your characters — no "a woman" or "a man" — give them a real name',
-    '',
-    '=== WRONG vs RIGHT ===',
-    'WRONG: "Feel your body sinking into the earth. You are safe here. Breathe in peace."',
-    'RIGHT: "She set the candle on the windowsill and watched the flame lean sideways in the draught from under the door."',
-    '',
-    'WRONG: "Let go of the day. You are loved. Your mind grows quiet."',
-    'RIGHT: "Thomas sat on the back step listening to the wood pigeons settle into the oak tree one by one, each one going quiet."',
-    '',
-    '=== HOW TO WRITE SLEEP STORY PROSE ===',
-    'Write long, slow sentences that wander through sensory detail before arriving at a full stop',
-    'Describe small unhurried things — the sound rain makes on a specific surface, the way light moves',
-    'Let the pace slow as the chapter progresses — longer sentences, more pauses near the end',
-    'Include [PAUSE 3 SEC] every 4-6 sentences at a natural breath point',
-    'Repeat a calming detail — a recurring sound or familiar object — as a gentle anchor',
-    'The plot moves very slowly: a character finds something, notices something, settles somewhere',
-    'No drama, no conflict, no urgency, no unresolved questions',
-    'The world of the story is safe, kind, and unhurried',
-    '',
-    '=== STORY CONTEXT ===',
-    `Story: ${storyTitle}`,
-    `Total duration: ${totalMins} minutes`,
-    `This is chapter ${batchNum} of ${totalBatches}`,
-    '',
-    arcBlock,
-    '',
-    `CURRENT CHAPTER: ${cleanTitle}`,
-    '',
-    cleanSynopsis,
-    '',
-    prevBlock,
-    '',
-    openLine,
-    '',
-    closeLine,
-    '',
-    `WORD COUNT: Write AT LEAST ${targetWords} words (${Math.round(targetWords / 150)} minutes of audio).`,
-    'If short, add more sensory description and story detail. Do not pad with affirmations — add more STORY.',
-    '',
-    'Return ONLY valid JSON with no markdown:',
-    '{"content":"The full story narration text with [PAUSE X SEC] markers woven in naturally...","word_count":1234}',
-  ];
+**WRONG vs RIGHT**:
 
-  return lines.join('\n');
-}
+WRONG (meditation bleed — NEVER write this):
+"You feel the warmth of the blankets around you... you are safe here... take a deep breath and let yourself sink deeper... you don't have to do anything... just rest... you are enough..."
 
-// ═══════════════════════════════════════════════════════════════════
-// EXPLAINER VIDEO PROMPT — structured teaching by subject
-// ═══════════════════════════════════════════════════════════════════
-function buildExplainerWritingPrompt({ storyArch, batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock }) {
+RIGHT (actual bedtime story):
+"Elena pulls the quilt up to her chin and watches the last ember glow orange in the fireplace. The cottage smells of pine and old books. Outside, rain taps against the window in a gentle, unhurried rhythm. She listens to it for a long while, her eyes half-closed, the warmth of the fire still reaching her across the room. [PAUSE 5 SEC] A barn owl calls somewhere in the distance — a soft, hollow sound that seems to come from the woods beyond the garden wall."
 
-  const ARCH_CONFIGS = {
-    explainer_tech: {
-      voice: 'tech educator in the tradition of CGP Grey and Mark Rober',
-      hook: 'A WTF moment that breaks what the viewer thought they knew about technology',
-      structure: 'WTF Hook, Concrete Analogy, 3-Step Breakdown, Real-World Application, Future Implications, CTA',
-      rules: [
-        'Feynman Technique: explain as if to a smart 12-year-old first, then add layers',
-        'Every abstract concept needs a physical, relatable analogy before the technical explanation',
-        'Use specific product names, company names, version numbers — never be vague',
-        'Show failure cases: what happens when this goes wrong, who got hacked, what crashed',
-        'Technical accuracy matters — no hand-waving, no oversimplification that misleads',
-      ],
-      tone: 'Curious, precise, slightly nerdy but never condescending.',
-    },
-    explainer_finance: {
-      voice: 'financial educator in the tradition of Andrei Jikh and Graham Stephan',
-      hook: 'Personal stakes — how this concept is already affecting the viewer\'s money right now',
-      structure: 'Stakes Hook, Common Mistake Busted, How It Actually Works, Step-by-Step Action, Real Numbers Example, CTA',
-      rules: [
-        'Lead with the dollar amount — what does this cost or save in real terms',
-        'Destroy one common misconception in the first 60 seconds',
-        'Use specific numbers: percentages, dollar amounts, time horizons — never "could earn more"',
-        'Include a worked example with a specific fictional person\'s situation',
-        'Acknowledge risk honestly — do not make everything sound guaranteed',
-        'High-CPM: reference real financial products and services by name',
-      ],
-      tone: 'Relatable, slightly skeptical of the mainstream, genuinely trying to help the viewer build wealth.',
-    },
-    explainer_legal: {
-      voice: 'legal educator in the tradition of LegalEagle — plain language, no legalese',
-      hook: 'A real case, lawsuit, or law that directly affects the viewer\'s everyday life',
-      structure: 'Real Case Hook, Plain-English Translation, 3 Common Traps, What To Actually Do, When To Get a Lawyer, CTA',
-      rules: [
-        'Open with a specific case — a person, a lawsuit, a fine — that makes the law tangible',
-        'Translate every legal term into plain language when first used',
-        'Clarify jurisdiction: be honest about which country or state this applies to',
-        'Focus on practical action — what does the viewer DO with this information',
-        'Highlight asymmetries: what powerful parties know that ordinary people do not',
-        'One of the highest CPM categories on YouTube — treat it seriously',
-      ],
-      tone: 'Calm, authoritative, slightly indignant on behalf of the viewer. Demystifying, never intimidating.',
-    },
-    explainer_ai: {
-      voice: 'AI educator in the tradition of Fireship and Marques Brownlee — show then explain',
-      hook: 'A live demonstration of what this AI tool does that is more impressive than anything the viewer imagined',
-      structure: 'Demo Hook, Before and After Comparison, Setup Walkthrough, 5 Pro Tips Most People Miss, Limitations, CTA',
-      rules: [
-        'SHOW first, explain second — describe the output before describing how it works',
-        'Use real prompts and real outputs — be specific about what was typed and what came back',
-        'Compare to existing tools — what does this replace, what is it 10x better at',
-        'Acknowledge what it cannot do — managing expectations builds trust',
-        'Growth angle: mention adoption numbers, company use cases, salary impact of knowing this tool',
-        'This niche is exploding 340% — lean into the current AI moment',
-      ],
-      tone: 'Excited but honest. You have genuinely used this tool. You are sharing a discovery.',
-    },
-  };
-
-  const arch = ARCH_CONFIGS[storyArch] || ARCH_CONFIGS['explainer_tech'];
-
-  return `You are an elite YouTube ${arch.voice}.
-
-Your mission: write a section of a high-retention educational YouTube script teaching "${topic?.title || project.name}".
-
-EXPLAINER STYLE:
-- Hook style: ${arch.hook}
-- Structure formula: ${arch.structure}
-- Tone: ${arch.tone}
-
-CONTENT RULES:
-${arch.rules.map((r, i) => (i + 1) + '. ' + r).join('\n')}
-
-GENERAL RULES:
-- NO scene directions, NO stage directions — narration text only
-- NO "welcome back", NO "in this video" — no meta-commentary
-- Every sentence must teach, set up a reveal, or deepen understanding
-- Mix short punchy sentences with longer explanatory ones
-- Micro-hook every 60-90 seconds: "But here is the part nobody talks about...", "This is where most people make the mistake..."
-- Use specific names, numbers, percentages, dates — never be vague
-
-PROJECT CONTEXT:
+**PROJECT CONTEXT**:
 - Topic: ${topic?.title || project.name}
 - Description: ${topic?.description || ''}
+- Content Type: SLEEP STORY (narrative fiction — NOT meditation)
 - Duration: ${project.video_duration_minutes || 10} minutes total
-${selectedHook && isFirstBatch ? `- Opening hook: "${selectedHook.hook_text}"` : ''}
+${selectedHook && isFirstBatch ? `- Opening line: "${selectedHook.hook_text}"` : ''}
 ${strategyBlock}
 
-FULL VIDEO ARC:
+**FULL STORY ARC** (all chapters):
 ${outlineContext}
 
-WRITING BATCH ${batch.batch_number} of ${sortedBatches.length}: "${batch.story_segment}"
+**YOU ARE NOW WRITING CHAPTER ${batch.batch_number} of ${sortedBatches.length}**: "${batch.story_segment}"
 
-BATCH SYNOPSIS:
-${batch.synopsis}
+**CHAPTER SYNOPSIS** (if it contains meditation language, override with real story content):
+${cleanSynopsis}
 
-MANDATORY WORD COUNT: AT LEAST ${batch.target_words} words. Add more examples, more specifics, more depth until you reach it.
+**MANDATORY WORD COUNT**: You MUST write AT LEAST ${batch.target_words} words. NON-NEGOTIABLE. If under ${Math.round(batch.target_words * 0.9)} words, FAILURE. Add more sensory descriptions, more character actions, more atmospheric texture, more [PAUSE] markers. 150 words = 1 minute.
 
-${previousContent ? `PREVIOUSLY WRITTEN (continue seamlessly):\n${previousContent.slice(-3000)}\n` : ''}
+${previousContent ? `**PREVIOUSLY WRITTEN** (maintain continuity — keep same protagonist name, do NOT repeat):\n${previousContent.slice(-4000)}\n` : ''}
 
-${isFirstBatch ? 'Start with the hook. Make the first sentence impossible to skip.' : 'Continue directly. No recapping, no transitional summaries.'}
-${isLastBatch ? 'End with a clear, satisfying summary of the key insight, then a direct, confident call to action.' : 'End this batch on a curiosity hook that pulls into the next section.'}
+**═══ STORY WRITING RULES ═══**
+
+**NARRATIVE VOICE**:
+- Third-person, present tense: "Elena walks", "Thomas stirs the pot", "Amara watches"
+- Warm, gentle, unhurried — like a lullaby told by a favorite grandparent
+- Descriptive and immersive — the listener should SEE the world
+- Deliberately slow pacing — linger on details, don't rush
+
+**CHARACTER**:
+- Named protagonist (use the name from previous batches if continuing)
+- Content, peaceful, gently curious — never anxious, rushed, or worried
+- Show the character DOING things: walking, cooking, gardening, reading, sailing, painting
+- Show quiet enjoyment through actions, not by telling the listener how to feel
+
+**SETTING & SENSORY DETAIL**:
+- Specific, vivid settings — "a whitewashed cottage overlooking a turquoise bay"
+- Sight: colors, light quality, shapes, distances
+- Sound: birdsong, water, wind, fire crackling, distant music
+- Smell: flowers, rain, bread baking, pine, sea salt
+- Touch: textures, temperatures, grass, stone, fabric, water
+- Taste: when relevant — tea, fruit, bread, honey
+
+**PACING MARKERS** (include generously):
+- [PAUSE 3 SEC] — after a descriptive paragraph
+- [PAUSE 5 SEC] — between scenes or moments
+- [PAUSE 8 SEC] — at major transitions or in the final chapter
+- Use pauses every 3-4 sentences
+- Do NOT use [BREATHE] — that is a meditation marker, not a story marker
+
+**STORY STRUCTURE FOR THIS CHAPTER**:
+1. Establish where the character is and what they're doing
+2. Describe the environment with layered sensory detail
+3. Show the character engaged in a gentle, specific activity
+4. Include small, peaceful moments of observation or discovery
+5. Transition naturally to the next chapter or wind down
+
+**${isFirstBatch ? 'OPENING: Introduce the protagonist by name and place them in a specific, vivid setting. Describe the environment. Show them beginning a peaceful activity. Do NOT welcome the listener — just begin the story, like a novel opening.' : 'Continue seamlessly from where the previous chapter ended — same character, natural flow.'}**
+**${isLastBatch ? 'ENDING: The protagonist settles into rest — finding a cozy spot, pulling up a blanket, watching the last light fade. Narration slows to near-silence. End with a final gentle image and a long pause. Do NOT address the listener. Do NOT say "you are safe" — just let the character drift off.' : 'End at a natural resting point — the character finishing an activity or pausing to observe something beautiful.'}**
 
 Return JSON:
 {
-  "content": "The full narration text for this batch...",
+  "content": "The full story text for this chapter including [PAUSE X SEC] markers. Third-person narrative, present tense. NO second-person, NO affirmations, NO breathing cues.",
   "word_count": 1234
 }`;
 }
-
-// ═══════════════════════════════════════════════════════════════════
-// STORY WRITING PROMPT — genre-specific narrative engine
-// ═══════════════════════════════════════════════════════════════════
-function buildStoryWritingPrompt({ storyArch, batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch }) {
-
-  const GENRE_CONFIGS = {
-    story_comedy: {
-      label: 'Comedy',
-      voice: 'comedic author in the tradition of Terry Pratchett and Douglas Adams',
-      principles: [
-        'Comedy is about subverted expectations — set up one thing, deliver another',
-        'Character quirks drive humor more than situations — make the protagonist wonderfully specific',
-        'Rule of three: establish a pattern twice, break it the third time for maximum effect',
-        'Timing in narration: a short sentence after a long buildup IS the punchline',
-        'Callbacks reward the audience — plant a detail early, pay it off later',
-        'Absurdist logic must be internally consistent — the world is strange but follows its own rules',
-        'Never explain the joke',
-      ],
-      tone: 'Warm, wry, intelligent. Humor from observation and character, not farce.',
-    },
-    story_children: {
-      label: "Children's Story",
-      voice: "children's author in the tradition of Roald Dahl and A.A. Milne",
-      principles: [
-        'Simple words: if a 6-year-old would not know it, find a simpler synonym',
-        'Repetition is a feature — children love and expect repeated phrases',
-        'The hero must want something specific and fail before succeeding',
-        'Animals or child protagonists work best',
-        'Sensory details that children find delightful: colors, textures, food, sounds',
-        'Moral lesson should emerge from events, never stated directly',
-        'Short sentences, active verbs, present tense for immediacy',
-      ],
-      tone: 'Warm, wonder-filled, gently funny. The world is magical and safe.',
-    },
-    story_nursery: {
-      label: 'Nursery Rhyme',
-      voice: 'poet-storyteller in the tradition of Edward Lear and Mother Goose',
-      principles: [
-        'AABB or ABAB rhyme scheme — maintain consistently throughout',
-        'Strong rhythm: read it aloud in your head, it must sing',
-        'Simple, vivid imagery: moons, mice, dishes, spoons, hills, pails',
-        'Playful nonsense is welcome — sound and rhythm matter as much as logic',
-        'Short lines: 4-8 syllables each for singability',
-        'Repetition of key lines or refrains is expected and loved',
-        'Each verse should have its own complete visual scene',
-      ],
-      tone: 'Playful, musical, timeless. Every verse should make the reader want to clap along.',
-    },
-    story_crime: {
-      label: 'Crime',
-      voice: 'crime author in the tradition of Gillian Flynn and James Ellroy',
-      principles: [
-        'Open on the crime or its aftermath — in medias res drops the reader into tension immediately',
-        'Plant clues early that only make sense in retrospect — the reader should have an "of course" moment',
-        'Red herrings must be convincing — cheap ones make the reader feel cheated',
-        'The investigator should have a flaw that complicates the case',
-        'Reveal information strategically — keep one level of mystery alive at all times',
-        'Specific forensic or procedural details build credibility',
-        'Justice is not always clean or satisfying — do not fake it',
-      ],
-      tone: 'Tense, precise, slightly cold. Emotion erupts in specific moments.',
-    },
-    story_love: {
-      label: 'Romance',
-      voice: 'romance author in the tradition of Nora Roberts and Sally Rooney',
-      principles: [
-        'The obstacle between the characters must feel genuinely insurmountable until it is not',
-        'Interiority is everything — live inside the protagonist\'s longing, fear, and hope',
-        'Physical detail carries emotional meaning — a specific gesture, a particular laugh',
-        'Tension through almost-moments: almost touched, almost said it, almost kissed',
-        'Both characters must be complex — the love interest is not a trophy',
-        'The moment of emotional vulnerability is the real climax',
-        'The resolution must feel earned — it takes courage to love',
-      ],
-      tone: 'Warm, yearning, emotionally precise. Honesty matters more than grandeur.',
-    },
-    story_horror: {
-      label: 'Horror',
-      voice: 'horror author in the tradition of Shirley Jackson and Stephen Graham Jones',
-      principles: [
-        'What you do not show is scarier than what you do — suggestion over description',
-        'Establish the normal in loving detail before you break it',
-        'Dread is preferable to shock — the slow approach of something wrong is more effective',
-        'Ground the supernatural in the mundane: the phone keeps ringing, the milk is always cold',
-        'The protagonist must make understandable choices that lead them deeper',
-        'Sensory wrongness: sounds slightly off, smells that do not belong',
-        'Leave at least one question unanswered — complete explanation destroys horror',
-      ],
-      tone: 'Controlled, precise, deeply unsettling. Too calm about impossible things.',
-    },
-    story_thriller: {
-      label: 'Thriller',
-      voice: 'thriller author in the tradition of Lee Child and Tana French',
-      principles: [
-        'The clock is always ticking — remind the reader of the deadline at every act break',
-        'Every scene must advance the plot or be cut',
-        'Reversals keep the reader off-balance: what looks like progress becomes setback',
-        'The protagonist must be in genuine danger — physical, moral, or reputational',
-        'Information is a weapon — who knows what, and when, drives all tension',
-        'The antagonist is intelligent and has reasonable motives',
-        'The climax must be physically and emotionally overwhelming',
-      ],
-      tone: 'Fast, precise, muscular. Short sentences during action. Never stop moving.',
-    },
-    story_historical: {
-      label: 'Historical Fiction',
-      voice: 'historical fiction author in the tradition of Hilary Mantel and Anthony Burgess',
-      principles: [
-        'Period detail must be specific: what people ate, wore, smelled like, believed',
-        'Modern readers need emotional access — the protagonist has psychology we recognize',
-        'Historical pressure: the large events of the era bear down on individual choices',
-        'Avoid anachronism: no modern idioms or attitudes that would be impossible for the time',
-        'Great history felt through small personal moments',
-        'Power dynamics of the era must be present and felt',
-        'Feel the contingency — people made choices that could have gone otherwise',
-      ],
-      tone: 'Immersive, precise, respectful of the period. Formal but not archaic.',
-    },
-    story_scifi: {
-      label: 'Science Fiction',
-      voice: 'science fiction author in the tradition of Ted Chiang and Ursula K. Le Guin',
-      principles: [
-        'Establish the world rules early and follow them consistently',
-        'The technology is the premise; the story is about what it means to be human inside that premise',
-        'Character desire must be specific and personal, not abstract',
-        'The big idea should give the reader a new way of seeing by the end',
-        'Ground the extraordinary in the familiar — mundane details alongside the impossible',
-        'Avoid techno-jargon without meaning — technology is backstory, not plot',
-        'Ask: what is the ethical or emotional cost of this world? Every sci-fi premise has one.',
-      ],
-      tone: 'Precise, thoughtful, quietly astonishing. Wonder in the implications, not the spectacle.',
-    },
-    story_mystery: {
-      label: 'Mystery',
-      voice: 'mystery author in the tradition of Agatha Christie and Tana French',
-      principles: [
-        'Play fair: every clue needed to solve the mystery must be present and visible to the reader',
-        'The solution must be surprising but feel inevitable in retrospect',
-        'Every character introduced is a suspect — give everyone motive, means, and opportunity',
-        'The detective\'s method of thinking should be distinctive and consistent',
-        'Red herrings must be genuinely convincing, not obviously red',
-        'Atmosphere is as important as plot — the setting should feel pregnant with secrecy',
-        'The reveal is earned by the investigation, not a deus ex machina',
-      ],
-      tone: 'Controlled, precise, intelligent. Respect the reader\'s intelligence.',
-    },
-    story_adventure: {
-      label: 'Adventure',
-      voice: 'adventure author in the tradition of Tolkien and Patrick O\'Brian',
-      principles: [
-        'The call to adventure must disrupt a stable situation',
-        'Each obstacle must genuinely threaten failure — stakes must be real',
-        'The protagonist must change through the journey',
-        'Companions reveal character through pressure',
-        'Landscape as character: the world should feel alive and specific',
-        'Setbacks should feel insurmountable before the solution emerges from character',
-        'The climax requires the protagonist to use everything they have learned',
-      ],
-      tone: 'Epic but intimate. Grand events filtered through one human perspective. Courage, loyalty, wonder.',
-    },
-  };
-
-  const genre = GENRE_CONFIGS[storyArch] || GENRE_CONFIGS['story_crime'];
-
-  return `You are a professional ${genre.voice}, writing an original story for a YouTube narration channel.
-
-GENRE: ${genre.label}
-
-NARRATIVE PRINCIPLES FOR THIS GENRE:
-${genre.principles.map((p, i) => (i + 1) + '. ' + p).join('\n')}
-
-TONE: ${genre.tone}
-
-UNIVERSAL CRAFT REQUIREMENTS:
-- Third person past tense narration
-- Show do not tell: "her hands were shaking" not "she was nervous"
-- Named, specific characters with distinct voices and motivations
-- Dialogue that reveals character, not just information
-- Sensory grounding in every scene: sight, sound, smell, touch, temperature
-- Vary paragraph length deliberately — short paragraphs land like blows; long ones build atmosphere
-- Zero filler sentences — every line must earn its place
-
-STORY CONTEXT:
-- Title or Theme: ${topic?.title || project.name}
-- Description: ${topic?.description || ''}
-- Total Duration: ${project.video_duration_minutes || 10} minutes
-${selectedHook && isFirstBatch ? `- Opening line (use as inspiration): "${selectedHook.hook_text}"` : ''}
-
-FULL STORY ARC:
-${outlineContext}
-
-WRITING SECTION ${batch.batch_number} of ${sortedBatches.length}: "${batch.story_segment}"
-
-SECTION SYNOPSIS:
-${batch.synopsis}
-
-MANDATORY WORD COUNT: AT LEAST ${batch.target_words} words. If short, deepen the scene — more interiority, more dialogue, more sensory detail. Do not pad; enrich.
-
-${previousContent ? `PREVIOUSLY WRITTEN (continue seamlessly, do NOT recap or repeat):\n${previousContent.slice(-3500)}\n` : ''}
-
-${isFirstBatch ? 'BEGIN: Drop into the story immediately. The first sentence should make the reader unable to stop. No preamble. No scene-setting before the scene.' : 'Continue directly and seamlessly from where the previous section left off. Do not recap. Just continue the story.'}
-${isLastBatch ? 'END: Bring the story to its conclusion. The final paragraph should feel resonant and complete — a landing that satisfies everything the story set up.' : 'End this section at a natural story beat that flows into the next section.'}
-
-Return JSON:
-{
-  "content": "The full story narration for this section...",
-  "word_count": 1234
-}`;
-}
-
 
 // ═══════════════════════════════════════════════════════════════════
 // STANDARD VIRAL SCRIPT WRITING PROMPT (existing logic)
@@ -882,14 +440,11 @@ Deno.serve(async (req) => {
       channel = channels[0];
     }
 
-    // Detect script mode — covers all modes including new story/explainer arches
-    const rawMode = project.project_mode || '';
-    const KNOWN_MODES = ['sleep_meditation', 'sleep_story', 'story', 'explainer'];
-    const scriptMode = KNOWN_MODES.includes(rawMode) ? rawMode : 'standard';
-    const storyArch = project.shorts_niche || (channel && channel.shorts_niche) || '';
-    const isSleepMode   = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
-    const isStoryMode   = scriptMode === 'story';
-    const isExplainMode = scriptMode === 'explainer';
+    // Detect script mode
+    const scriptMode = project.project_mode && (project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story')
+      ? project.project_mode
+      : 'standard';
+    const isSleepMode = scriptMode !== 'standard';
 
     console.log(`[generateScriptBatches] Script mode: ${scriptMode}`);
 
@@ -958,24 +513,14 @@ Deno.serve(async (req) => {
         previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock
       };
 
-      // Route to the correct prompt builder based on mode
-      let prompt;
-      if (scriptMode === 'sleep_meditation') {
-        prompt = buildSleepWritingPrompt({ ...promptArgs, scriptMode });
-      } else if (scriptMode === 'sleep_story') {
-        prompt = buildSleepStoryWritingPrompt(promptArgs);
-      } else if (isStoryMode) {
-        prompt = buildStoryWritingPrompt({ ...promptArgs, storyArch });
-      } else if (isExplainMode) {
-        prompt = buildExplainerWritingPrompt({ ...promptArgs, storyArch });
-      } else {
-        prompt = buildStandardWritingPrompt(promptArgs);
-      }
+      const prompt = isSleepMode
+        ? buildSleepWritingPrompt({ ...promptArgs, scriptMode })
+        : buildStandardWritingPrompt(promptArgs);
 
       console.log(`[Batch ${batch.batch_number}] Generating ~${batch.target_words} words (${scriptMode})...`);
 
       // Sleep scripts use lower temperature for more consistent, soothing output
-      const baseTemp = (isSleepMode || isStoryMode) ? 0.72 : 0.85;
+      const baseTemp = isSleepMode ? 0.65 : 0.85;
       const minWords = Math.round(batch.target_words * 0.92);
       let content = '';
       let wordCount = 0;
@@ -988,6 +533,9 @@ Deno.serve(async (req) => {
         } else {
           // Continuation prompt — ask Claude to extend the existing content
           const wordsNeeded = batch.target_words - wordCount;
+          const sleepStoryExtend = scriptMode === 'sleep_story'
+            ? 'Add more sensory descriptions of what the character sees, hears, and touches. More atmospheric detail. More [PAUSE] markers. Keep third-person narration — do NOT switch to second-person or affirmations.'
+            : 'Add more repetition, more imagery, more [PAUSE] markers, more sensory grounding.';
           currentPrompt = `You previously wrote the following script section but it was too short (${wordCount} words, need ${batch.target_words}).
 
 EXISTING CONTENT (DO NOT REPEAT — continue SEAMLESSLY from the last line):
@@ -995,7 +543,7 @@ EXISTING CONTENT (DO NOT REPEAT — continue SEAMLESSLY from the last line):
 ${content.slice(-3000)}
 ---
 
-Write EXACTLY ${wordsNeeded} MORE words continuing this section seamlessly. Maintain the exact same tone, style, voice, and pacing. ${isSleepMode ? 'Add more sensory imagery, more [PAUSE] markers, more peaceful detail.' : (isStoryMode || isExplainMode) ? 'Add more depth, more detail, more scene richness — do not rush.' : 'Add more anecdotes, more specific examples, more emotional beats.'}
+Write EXACTLY ${wordsNeeded} MORE words continuing this section. Maintain the same tone, style, and pacing. ${isSleepMode ? sleepStoryExtend : 'Add more detail, more anecdotes, more specific examples, more emotional beats.'}
 
 Return JSON:
 {"content": "The additional continuation text only...", "word_count": ${wordsNeeded}}`;
