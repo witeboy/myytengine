@@ -53,26 +53,36 @@ function detectScriptMode(channel, project) {
 // ═══════════════════════════════════════════════════════════════════
 function buildSleepOutlinePrompt({ scriptMode, topic, project, channel, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock }) {
   const isMeditation = scriptMode === 'sleep_meditation';
+  const contentType = isMeditation ? 'motivational meditation' : 'sleep story';
 
-  // ═══════════════════════════════════════════════════════════════════
-  // MEDITATION OUTLINE — affirmations, breathing, second-person
-  // ═══════════════════════════════════════════════════════════════════
-  if (isMeditation) {
-    const sectionTemplates = [
-      'Opening & Welcome (settle, breathe, body awareness)',
-      'You Are Enough (self-worth affirmations with ocean imagery)',
-      'You Deserve Rest (permission to stop, release guilt, mountain metaphors)',
-      'Let Go of Today (release worries, river carrying them away)',
-      'You Are Safe Here (safety, warmth, protection, starlight imagery)',
-      'Your Journey Matters (progress, self-compassion, tree growth metaphor)',
-      'You Belong (acceptance, connection, forest community)',
-      'Tomorrow Holds Promise (gentle hope, sunrise imagery)',
-      'Your Body Knows (trust body wisdom, release control, breathing focus)',
-      'Deep Rest (minimal words, long pauses, pure relaxation)',
-      'Closing & Fade (brief gentle goodbye, silence)',
-    ];
+  const sectionTemplates = isMeditation
+    ? [
+        'Opening & Welcome (settle, breathe, body awareness)',
+        'You Are Enough (self-worth affirmations with ocean imagery)',
+        'You Deserve Rest (permission to stop, release guilt, mountain metaphors)',
+        'Let Go of Today (release worries, river carrying them away)',
+        'You Are Safe Here (safety, warmth, protection, starlight imagery)',
+        'Your Journey Matters (progress, self-compassion, tree growth metaphor)',
+        'You Belong (acceptance, connection, forest community)',
+        'Tomorrow Holds Promise (gentle hope, sunrise imagery)',
+        'Your Body Knows (trust body wisdom, release control, breathing focus)',
+        'Deep Rest (minimal words, long pauses, pure relaxation)',
+        'Closing & Fade (brief gentle goodbye, silence)',
+      ]
+    : [
+        'Opening & Welcome (settle, breathe, story world intro)',
+        'Scene 1 — Setting the Atmosphere (rich sensory environment)',
+        'Scene 2 — Gentle Activity (detailed peaceful process)',
+        'Scene 3 — Observation & Reflection (contentment, presence)',
+        'Scene 4 — New Setting (seamless transition, fresh sensory details)',
+        'Scene 5 — Deeper Calm (slower pace, deeper relaxation)',
+        'Scene 6 — Nature & Stillness (natural world, timelessness)',
+        'Scene 7 — Evening Settling (winding down, warmth)',
+        'Scene 8 — Deep Rest (minimal narrative, ambient atmosphere)',
+        'Closing & Fade (character settles, gentle goodbye)',
+      ];
 
-    return `You are an expert sleep audio script planner. You plan motivational meditation scripts that ARE the soothing content — not scripts that talk ABOUT meditation or sleep.
+  return `You are an expert sleep audio script planner. You plan ${contentType} scripts that ARE the soothing content — not scripts that talk ABOUT meditation or sleep.
 
 **CRITICAL RULE**: Every section synopsis must describe WHAT THE NARRATOR WILL SAY — the actual soothing words, affirmations, imagery, and guided relaxation. Synopses must NEVER include:
 ❌ Explaining what ASMR is or how it works
@@ -83,7 +93,7 @@ function buildSleepOutlinePrompt({ scriptMode, topic, project, channel, selected
 ❌ Personal anecdotes or first-person stories about discovering meditation
 ❌ Any meta-commentary ("in this section we will...")
 
-**CONTENT TYPE**: Motivational Meditation — the narrator speaks directly to the listener with gentle affirmations, nature imagery, and soothing repetition. Think Jason Stephenson, Michael Sealey.
+**CONTENT TYPE**: ${isMeditation ? 'Motivational Meditation — the narrator speaks directly to the listener with gentle affirmations, nature imagery, and soothing repetition. Think Jason Stephenson, Michael Sealey.' : 'Sleep Story — the narrator tells a peaceful story with rich sensory details, calm settings, and gentle activities. Think Calm app, Headspace sleepcasts.'}
 
 **PROJECT**:
 - Topic: ${topic?.title || project.name}
@@ -93,7 +103,7 @@ function buildSleepOutlinePrompt({ scriptMode, topic, project, channel, selected
 ${selectedHook ? `- Opening Hook: "${selectedHook.hook_text}"` : ''}
 ${strategyBlock}
 
-**MEDITATION CONTENT PRINCIPLES**:
+**SLEEP CONTENT PRINCIPLES**:
 - Extremely gentle and soothing tone throughout
 - Deliberately monotonous (boring is GOOD for sleep)
 - Strategic repetition — each key concept repeated 4-6 times in different words
@@ -103,14 +113,13 @@ ${strategyBlock}
 - Progressive deepening: physical relaxation → mental calm → emotional peace → deep rest
 - Nature metaphors throughout: ocean, mountain, tree, river, moon, stars, forest
 - Sensory grounding: touch, sound, sight, smell references
-- Second-person "you" — speak directly to the listener
 
 **SECTION TEMPLATE IDEAS** (adapt to fit ${numBatches} batches):
 ${sectionTemplates.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}
 
-**YOUR TASK**: Plan exactly ${numBatches} batches for a ${durationMinutes}-minute motivational meditation.
+**YOUR TASK**: Plan exactly ${numBatches} batches for a ${durationMinutes}-minute ${contentType}.
 
-Each section should contain ONLY:
+${isMeditation ? `Each section should contain ONLY:
 - Gentle theme introduction through imagery (NOT by defining or explaining the concept)
 - Core affirmation stated simply, then repeated 3-5 times in different phrasings
 - Nature imagery and sensory details that reinforce the affirmation
@@ -120,7 +129,12 @@ Each section should contain ONLY:
 
 Example good synopsis: "The narrator gently speaks: 'You are enough... just as you are... you are enough.' [PAUSE 5 SEC] Then weaves ocean imagery — waves rolling in, each one whispering 'enough.' The listener's breath matches the tide. [BREATHE] 'With every breath... you sink deeper into knowing... you have always been enough.' Repeat the affirmation with mountain imagery — solid, unmovable, complete. [PAUSE 3 SEC] Return to body: weight of blankets, warmth, safety."
 
-Example BAD synopsis: "This section explains the science behind self-worth affirmations and discusses how ASMR triggers help the brain release dopamine. The narrator shares a personal story about discovering meditation."
+Example BAD synopsis: "This section explains the science behind self-worth affirmations and discusses how ASMR triggers help the brain release dopamine. The narrator shares a personal story about discovering meditation."` :
+`Each scene section should contain ONLY:
+- Rich sensory atmosphere (what the character sees, hears, smells, feels)
+- A peaceful activity described in loving, slow detail
+- The character's quiet contentment and simple observations
+- Seamless transition to the next scene`}
 
 Return JSON:
 {
@@ -128,7 +142,7 @@ Return JSON:
     {
       "batch_number": 1,
       "story_segment": "Short segment title (3-5 words)",
-      "section_type": "opening|affirmation|grounding|deepening|closing",
+      "section_type": "${isMeditation ? 'opening|affirmation|grounding|deepening|closing' : 'opening|scene|deepening|closing'}",
       "focus_area": "Brief focus (1 sentence)",
       "synopsis": "EXTREMELY DETAILED synopsis (200-300 words) describing the ACTUAL soothing content the narrator will speak. Include: specific affirmation phrases in quotes, nature imagery to use, sensory details, [PAUSE] and [BREATHE] placement, how the section deepens relaxation."
     }
@@ -136,108 +150,7 @@ Return JSON:
 }
 
 **RULES:**
-- Generate exactly ${numBatches} batches
-- First batch MUST be Opening & Welcome (physical settling, breathing, ease into theme)
-- Last batch should be the gentlest, most minimal content — mostly pauses and silence
-- Progressive deepening: each batch calmer and slower than the last
-- Synopses must describe the ACTUAL words and imagery, not explain concepts
-- Include specific affirmation phrases IN QUOTES in synopses
-- Include specific [PAUSE X SEC] markers in synopses
-- Every synopsis: 200-300 words of SPECIFIC soothing content detail
-- NO educational content, NO science, NO advice, NO meta-commentary
-- Content gets progressively more repetitive and slower as it goes`;
-  }
-
-  // ═══════════════════════════════════════════════════════════════════
-  // SLEEP STORY OUTLINE — real narrative with named characters, plot, setting
-  // ═══════════════════════════════════════════════════════════════════
-  const storyTemplates = [
-    'Chapter Opening (introduce protagonist by name, establish setting with rich sensory detail)',
-    'The Peaceful World (protagonist explores their environment — sights, sounds, textures)',
-    'A Gentle Errand (protagonist undertakes a calm, purposeful activity)',
-    'A Warm Encounter (protagonist meets a kind character, gentle dialogue)',
-    'A Beautiful Discovery (protagonist finds something lovely — a garden, a view, a hidden path)',
-    'Quiet Craftsmanship (protagonist engages in a slow, detailed hands-on activity)',
-    'Nature\'s Embrace (protagonist rests in nature — riverside, meadow, hilltop)',
-    'Evening Ritual (protagonist winds down — preparing tea, lighting candles, watching sunset)',
-    'Settling In (protagonist returns home, cozy interior, warmth and comfort)',
-    'Drifting Off (protagonist falls asleep — minimal narration, long pauses, ambient sounds)',
-  ];
-
-  return `You are an expert bedtime story writer. You write REAL STORIES — narratives with named characters, specific settings, plot events, and gentle adventures. You are NOT a meditation guide. You do NOT write affirmations.
-
-**WHAT YOU ARE WRITING**: A bedtime story for adults. Think: Calm app sleep stories, Headspace sleepcasts, or a soothing audiobook. A real narrative told in a lullaby-like cadence. The listener falls asleep because the story is gentle, warm, and immersive — NOT because you're telling them to relax or breathe.
-
-**ABSOLUTE PROHIBITIONS FOR SLEEP STORY** — violating ANY of these ruins the story:
-❌ NEVER use second-person "you" language ("you feel calm", "you notice", "you breathe")
-❌ NEVER include affirmations ("you are safe", "you are loved", "you are enough")
-❌ NEVER include breathing cues or body scan instructions ([BREATHE], "take a deep breath", "feel your body")
-❌ NEVER name a section "Opening & Welcome" — this is a STORY, not a meditation
-❌ NEVER write "the listener" or address someone directly
-❌ NEVER include guided relaxation, body awareness, or settling instructions
-❌ NEVER write meta-commentary ("in this section", "this part of the story")
-❌ NEVER include educational content, advice, or explanations
-❌ NO urgency, tension, conflict, danger, or surprises
-
-**WHAT EVERY SYNOPSIS MUST CONTAIN**:
-✅ A named protagonist (give them a real name like "Elena", "Thomas", "Amara")
-✅ A specific physical setting (not abstract — "a stone cottage by a lavender field", not "a peaceful place")
-✅ Concrete actions the character takes (walking, cooking, gardening, reading, sailing)
-✅ Rich sensory details: what the character sees, hears, smells, touches, tastes
-✅ Third-person narration, present tense ("Elena walks along the path...")
-✅ [PAUSE X SEC] markers between paragraphs for pacing
-✅ A gentle plot — things happen, even if small and peaceful
-
-**PROJECT**:
-- Topic: ${topic?.title || project.name}
-- Description: ${topic?.description || ''}
-- Niche: ${project.niche || 'Sleep'}
-- Duration: ${durationMinutes} minutes (~${totalTargetWords} words at 150 wpm)
-${selectedHook ? `- Opening line: "${selectedHook.hook_text}"` : ''}
-${strategyBlock}
-
-**STORY PRINCIPLES**:
-- Extremely gentle pacing — unhurried, like a lullaby
-- Lush sensory descriptions that make the listener feel immersed
-- The protagonist is content, peaceful, curious — never anxious or rushed
-- Small, mundane activities described in loving, slow detail (kneading bread, arranging flowers, rowing a boat)
-- Nature and environment are characters too — the wind, the light, the water
-- Progressive winding down: the story world gets quieter and cozier as it goes
-- By the final sections, the protagonist is settling into rest themselves
-
-**SECTION TEMPLATE IDEAS** (adapt to fit ${numBatches} batches):
-${storyTemplates.map((s, i) => `  ${i + 1}. ${s}`).join('\n')}
-
-**YOUR TASK**: Plan exactly ${numBatches} chapters/scenes for a ${durationMinutes}-minute bedtime story.
-
-Example GOOD synopsis: "Elena steps out of her stone cottage into the cool morning air. The lavender field stretches before her, purple and silver in the early light. She walks the narrow path between the rows, trailing her fingers along the tops of the plants. The scent rises — warm, herbal, faintly sweet. [PAUSE 3 SEC] A honeybee drifts past her shoulder. She follows it lazily with her eyes as it lands on a bloom. The sky is pale blue, streaked with thin clouds. She can hear the distant sound of church bells from the village below. [PAUSE 5 SEC] She reaches the old wooden gate at the field's edge and leans against it, looking out at the rolling hills beyond..."
-
-Example BAD synopsis (MEDITATION BLEED — DO NOT DO THIS): "The narrator gently welcomes the listener and invites them to settle into their pillow. Physical settling and breathing to ease into the story. 'You are safe... you are loved...' The listener feels their body becoming heavy..."
-
-Return JSON:
-{
-  "batches": [
-    {
-      "batch_number": 1,
-      "story_segment": "Short chapter title (3-5 words)",
-      "section_type": "opening|scene|deepening|closing",
-      "focus_area": "Brief focus (1 sentence — what happens in this chapter)",
-      "synopsis": "EXTREMELY DETAILED synopsis (200-300 words) describing the ACTUAL STORY CONTENT — character actions, setting details, sensory descriptions, what the character does and observes. NO affirmations, NO breathing cues, NO second-person language."
-    }
-  ]
-}
-
-**RULES:**
-- Generate exactly ${numBatches} batches
-- First batch introduces the protagonist BY NAME and establishes the setting — NO "Opening & Welcome"
-- Last batch: the protagonist settles into rest — minimal narration, mostly atmosphere and pauses
-- EVERY synopsis must name the protagonist and describe concrete events/actions
-- EVERY synopsis must include sensory details (sights, sounds, smells, textures)
-- Include [PAUSE X SEC] markers for pacing — but NO [BREATHE] markers
-- ZERO second-person language, ZERO affirmations, ZERO breathing instructions
-- This is a STORY, not a guided relaxation. If a synopsis reads like meditation, REWRITE IT.
-- Progressive winding down: each chapter quieter and slower than the last
-- Every synopsis: 200-300 words of SPECIFIC story content`;
+- Generate exactly ${numBatches} batches`;
 }
 
 // ═══════════════════════════════════════════════════════════════════
