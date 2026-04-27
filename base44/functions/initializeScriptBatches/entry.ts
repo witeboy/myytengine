@@ -136,16 +136,7 @@ Return JSON:
 }
 
 **RULES:**
-- Generate exactly ${numBatches} batches
-- First batch MUST be Opening & Welcome (physical settling, breathing, ease into theme)
-- Last batch should be the gentlest, most minimal content — mostly pauses and silence
-- Progressive deepening: each batch calmer and slower than the last
-- Synopses must describe the ACTUAL words and imagery, not explain concepts
-- Include specific affirmation phrases IN QUOTES in synopses
-- Include specific [PAUSE X SEC] markers in synopses
-- Every synopsis: 200-300 words of SPECIFIC soothing content detail
-- NO educational content, NO science, NO advice, NO meta-commentary
-- Content gets progressively more repetitive and slower as it goes`;
+- Generate exactly ${numBatches} batches`;
   }
 
   // ═══════════════════════════════════════════════════════════════════
