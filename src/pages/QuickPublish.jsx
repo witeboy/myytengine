@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Youtube, Upload, Loader2, ArrowLeft, Zap, FileText, Image,
-  Send, RotateCcw, X, Settings, Eye, EyeOff, Check,
+  Send, RotateCcw, X,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PipelineProgress from '../components/quickpublish/PipelineProgress';
@@ -32,7 +32,6 @@ import ViralMomentsPanel from '../components/quickpublish/ViralMomentsPanel';
 import SilenceTrimPanel from '../components/quickpublish/SilenceTrimPanel';
 
 import {
-  LS_KEYS,
   uploadToCloudinary,
   transcribeFile,
   generateSeo,
@@ -40,127 +39,11 @@ import {
 } from '@/lib/directApi';
 
 // ── localStorage keys ─────────────────────────────────────────────────────────
-const LS_KEY       = 'qp_pipeline_state_v2';          // bumped version to avoid stale v1 data
-const LS_THUMBS    = 'qp_thumbnail_concepts';
-const LS_CHAN_NAME = 'qp_channel_name';
-
-// ── Settings panel ─────────────────────────────────────────────────────────────
-function SettingsPanel({ onClose }) {
-  const FIELDS = [
-    {
-      section: 'Cloudinary — Video Upload',
-      k: LS_KEYS.CLOUD_NAME, label: 'Cloud Name', pw: false,
-      ph: 'your-cloud-name',
-      hint: 'Cloudinary dashboard → top left corner',
-    },
-    {
-      k: LS_KEYS.CLOUD_PRESET, label: 'Upload Preset (video)', pw: false,
-      ph: 'openshorts_clips',
-      hint: 'Cloudinary → Settings → Upload → Add unsigned preset',
-    },
-    {
-      section: 'AssemblyAI — Transcription',
-      k: LS_KEYS.ASSEMBLYAI, label: 'AssemblyAI API Key', pw: true,
-      ph: 'your-assemblyai-key',
-      hint: 'assemblyai.com → Account → API key',
-    },
-    {
-      section: 'YouTube Channel (optional)',
-      k: LS_CHAN_NAME, label: 'Channel Name', pw: false,
-      ph: 'My Awesome Channel',
-      hint: 'Used for branded hashtags in SEO generation',
-    },
-  ];
-
-  const [vals, setVals]   = useState(() => {
-    const obj = {};
-    FIELDS.forEach(f => { obj[f.k] = localStorage.getItem(f.k) || ''; });
-    return obj;
-  });
-  const [show, setShow]   = useState({});
-  const [saved, setSaved] = useState(false);
-
-  const save = () => {
-    FIELDS.forEach(f => localStorage.setItem(f.k, vals[f.k].trim()));
-    setSaved(true);
-    setTimeout(() => { setSaved(false); onClose(); }, 800);
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white border border-gray-100 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-3 max-h-[90vh] overflow-y-auto"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="font-bold text-gray-900 flex items-center gap-2">
-            <Settings size={15} className="text-blue-500" />
-            Quick Publish Settings
-          </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={17} /></button>
-        </div>
-
-        {FIELDS.map((f, idx) => (
-          <div key={f.k}>
-            {f.section && (
-              <div className={'pb-1 ' + (idx > 0 ? 'pt-3 border-t border-gray-100' : '')}>
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{f.section}</span>
-              </div>
-            )}
-            <div>
-              <label className="text-xs font-medium text-gray-700 block mb-1">{f.label}</label>
-              <div className="relative">
-                <input
-                  type={(f.pw && !show[f.k]) ? 'password' : 'text'}
-                  value={vals[f.k]}
-                  onChange={e => setVals(p => ({ ...p, [f.k]: e.target.value }))}
-                  placeholder={f.ph}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:border-blue-400 pr-9"
-                />
-                {f.pw && (
-                  <button
-                    onClick={() => setShow(p => ({ ...p, [f.k]: !p[f.k] }))}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {show[f.k] ? <EyeOff size={13} /> : <Eye size={13} />}
-                  </button>
-                )}
-              </div>
-              {f.hint && <p className="text-xs text-gray-400 mt-0.5">{f.hint}</p>}
-            </div>
-          </div>
-        ))}
-
-        <div className="pt-2 space-y-1.5">
-          {[
-            { ok: !!vals[LS_KEYS.CLOUD_NAME], label: 'Cloudinary configured' },
-            { ok: !!vals[LS_KEYS.ASSEMBLYAI], label: 'AssemblyAI configured' },
-          ].map(({ ok, label }) => (
-            <div key={label} className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg ${ok ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-50 text-gray-400'}`}>
-              {ok ? <Check size={11} /> : <div className="w-2.5 h-2.5 rounded-full border border-gray-300" />}
-              {label}
-            </div>
-          ))}
-        </div>
-
-        <Button
-          onClick={save}
-          className={`w-full h-10 text-white transition-all ${saved ? 'bg-emerald-500' : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700'}`}
-        >
-          {saved ? <span className="flex items-center gap-1"><Check size={12} /> Saved!</span> : 'Save Settings'}
-        </Button>
-      </div>
-    </div>
-  );
-}
+const LS_KEY    = 'qp_pipeline_state_v2';
+const LS_THUMBS = 'qp_thumbnail_concepts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function QuickPublish() {
-  const [showSettings, setShowSettings] = useState(false);
-
   // ── File (not persisted) ───────────────────────────────────
   const [videoFile, setVideoFile] = useState(null);
   const [fileUrl, setFileUrl]     = useState('');
@@ -322,7 +205,7 @@ export default function QuickPublish() {
     setCurrentStep('seo');
     setStatusMessage('Generating SEO titles, descriptions, tags & hashtags…');
 
-    const channelName = localStorage.getItem(LS_CHAN_NAME) || '';
+    const channelName = '';
     const d = await generateSeo({ transcript: transcriptText, niche, channelName });
 
     if (!d.titles?.length) throw new Error('SEO generation returned no titles');
@@ -449,8 +332,6 @@ export default function QuickPublish() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-6">
-      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
-
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -461,15 +342,8 @@ export default function QuickPublish() {
             </div>
             <div className="flex-1">
               <h1 className="text-lg font-bold">Quick Publish</h1>
-              <p className="text-xs text-gray-500">Upload → Transcribe (AssemblyAI) → SEO (Claude) → Thumbnails → Publish</p>
+              <p className="text-xs text-gray-500">Upload → Transcribe → SEO → Thumbnails → Publish</p>
             </div>
-            <Button
-              variant="ghost" size="sm"
-              onClick={() => setShowSettings(true)}
-              className="gap-1.5 text-xs text-gray-500"
-            >
-              <Settings className="w-3.5 h-3.5" /> Settings
-            </Button>
             {pipelineStarted && (
               <Button
                 variant="ghost" size="sm"
@@ -542,16 +416,6 @@ export default function QuickPublish() {
                   </SelectContent>
                 </Select>
               </div>
-
-              {/* Config check warning */}
-              {(!localStorage.getItem(LS_KEYS.CLOUD_NAME) || !localStorage.getItem(LS_KEYS.ASSEMBLYAI)) && (
-                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2">
-                  <Settings className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span>
-                    Open <button onClick={() => setShowSettings(true)} className="underline font-medium">Settings</button> to add your Cloudinary and AssemblyAI keys before starting.
-                  </span>
-                </div>
-              )}
 
               <Button
                 onClick={runPipeline}
