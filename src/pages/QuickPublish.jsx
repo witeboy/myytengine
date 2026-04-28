@@ -13,13 +13,12 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { base44 } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Youtube, Upload, Loader2, ArrowLeft, Zap, FileText, Image,
-  Send, RotateCcw, X,
+  Send, RotateCcw, X, Settings, Eye, EyeOff, Check,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PipelineProgress from '../components/quickpublish/PipelineProgress';
@@ -32,6 +31,7 @@ import ViralMomentsPanel from '../components/quickpublish/ViralMomentsPanel';
 import SilenceTrimPanel from '../components/quickpublish/SilenceTrimPanel';
 
 import {
+  LS_KEYS,
   uploadToCloudinary,
   transcribeFile,
   generateSeo,
@@ -42,8 +42,61 @@ import {
 const LS_KEY    = 'qp_pipeline_state_v2';
 const LS_THUMBS = 'qp_thumbnail_concepts';
 
+// ── Minimal Cloudinary settings panel (cloud name + preset only) ──────────────
+function CloudinarySettings({ onClose }) {
+  const [cloudName, setCloudName] = useState(localStorage.getItem(LS_KEYS.CLOUD_NAME) || '');
+  const [preset,    setPreset]    = useState(localStorage.getItem(LS_KEYS.CLOUD_PRESET) || '');
+  const [showPreset, setShowP]    = useState(false);
+  const [saved, setSaved]         = useState(false);
+
+  const save = () => {
+    localStorage.setItem(LS_KEYS.CLOUD_NAME,   cloudName.trim());
+    localStorage.setItem(LS_KEYS.CLOUD_PRESET, preset.trim() || 'openshorts_clips');
+    setSaved(true);
+    setTimeout(() => { setSaved(false); onClose(); }, 700);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold text-gray-900 flex items-center gap-2">
+            <Settings size={15} className="text-blue-500" /> Upload Settings
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={17} /></button>
+        </div>
+        <p className="text-xs text-gray-500">Videos are uploaded to Cloudinary so AssemblyAI can transcribe them. Use an <strong>unsigned</strong> upload preset.</p>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-gray-700 block mb-1">Cloud Name</label>
+            <input value={cloudName} onChange={e => setCloudName(e.target.value)} placeholder="your-cloud-name"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400" />
+            <p className="text-xs text-gray-400 mt-0.5">Cloudinary dashboard → top left</p>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-700 block mb-1">Upload Preset (unsigned)</label>
+            <input value={preset} onChange={e => setPreset(e.target.value)} placeholder="openshorts_clips"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-400" />
+            <p className="text-xs text-gray-400 mt-0.5">Cloudinary → Settings → Upload → unsigned preset</p>
+          </div>
+        </div>
+        <div className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg ${cloudName ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-50 text-gray-400'}`}>
+          {cloudName ? <Check size={11} /> : <div className="w-2.5 h-2.5 rounded-full border border-gray-300" />}
+          {cloudName ? 'Cloudinary configured' : 'Cloud Name required'}
+        </div>
+        <button onClick={save}
+          className={`w-full h-10 rounded-xl text-sm font-medium text-white transition-all ${saved ? 'bg-emerald-500' : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700'}`}>
+          {saved ? '✓ Saved!' : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 export default function QuickPublish() {
+  const [showSettings, setShowSettings] = useState(false);
+
   // ── File (not persisted) ───────────────────────────────────
   const [videoFile, setVideoFile] = useState(null);
   const [fileUrl, setFileUrl]     = useState('');
@@ -157,32 +210,30 @@ export default function QuickPublish() {
   // STEP RUNNERS
   // ══════════════════════════════════════════════════════════
 
-  // STEP 1: Upload to Cloudinary (replaces base44.integrations.Core.UploadFile)
+  // STEP 1: Upload directly to Cloudinary from browser (no base44 integration)
+  // Returns public CDN URL used by AssemblyAI for transcription.
   const runUpload = async () => {
     if (!videoFile) throw new Error('No video file selected');
+
+    if (!localStorage.getItem(LS_KEYS.CLOUD_NAME)) {
+      throw new Error('Cloudinary Cloud Name not set — click the Settings button above to add it.');
+    }
+
     setCurrentStep('upload');
     setStatusMessage('Uploading video to Cloudinary…');
 
-    const cleanFile = videoFile instanceof File
-      ? new File([videoFile], videoFile.name, { type: videoFile.type })
-      : videoFile;
-
-    const result = await uploadToCloudinary(cleanFile, {
+    const result = await uploadToCloudinary(videoFile, {
       resourceType: 'video',
       onProgress: (pct) => setStatusMessage(`Uploading… ${pct}%`),
     });
 
     if (!result?.secure_url) throw new Error('Cloudinary upload returned no URL');
 
-    const url = result.secure_url;
-    setFileUrl(url);
-
-    // Use Cloudinary public_id as projectId (no DB needed)
+    setFileUrl(result.secure_url);
     const pid = result.public_id || ('qp_' + Date.now());
     setProjectId(pid);
-
     markComplete('upload');
-    return { url, pid };
+    return { url: result.secure_url, pid };
   };
 
   // STEP 2: Transcribe via AssemblyAI direct (replaces quickPublishTranscribe)
@@ -332,6 +383,7 @@ export default function QuickPublish() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-6">
+      {showSettings && <CloudinarySettings onClose={() => setShowSettings(false)} />}
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -344,6 +396,9 @@ export default function QuickPublish() {
               <h1 className="text-lg font-bold">Quick Publish</h1>
               <p className="text-xs text-gray-500">Upload → Transcribe → SEO → Thumbnails → Publish</p>
             </div>
+            <Button variant="ghost" size="sm" onClick={() => setShowSettings(true)} className="gap-1.5 text-xs text-gray-500">
+              <Settings className="w-3.5 h-3.5" /> Settings
+            </Button>
             {pipelineStarted && (
               <Button
                 variant="ghost" size="sm"
@@ -416,6 +471,13 @@ export default function QuickPublish() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {!localStorage.getItem(LS_KEYS.CLOUD_NAME) && (
+                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2">
+                  <Settings className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>Add your Cloudinary Cloud Name in <button onClick={() => setShowSettings(true)} className="underline font-semibold">Settings</button> before starting.</span>
+                </div>
+              )}
 
               <Button
                 onClick={runPipeline}
