@@ -1,7 +1,9 @@
 import { createClientFromRequest } from "https://cdn.base44.com/base44-deno-sdk.js";
 
 Deno.serve(async (req) => {
-  createClientFromRequest(req); // auth check
+  try {
+    createClientFromRequest(req);
+  } catch (_) {}
 
   return Response.json({
     cloudinary_cloud_name: Deno.env.get('openshorts_cloud_name')   || '',
