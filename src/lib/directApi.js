@@ -1,24 +1,53 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // directApi.js — Browser-direct API calls.
-// All credentials come from the backend via getAppConfig (reads server env vars).
-// NO localStorage settings, NO Settings panels, NO hardcoded keys.
+// Credentials fetched from backend env via getAppConfig function.
+// Falls back to localStorage if getAppConfig not yet deployed.
 // ─────────────────────────────────────────────────────────────────────────────
 import { base44 } from '@/api/base44Client';
 
-// ── In-memory config cache (populated once on first call) ─────────────────────
+// ── In-memory config cache ────────────────────────────────────────────────────
 let _cfg = null;
 
 const getConfig = async () => {
   if (_cfg) return _cfg;
-  const res = await base44.functions.invoke('getAppConfig', {});
-  const d   = res.data || {};
+
+  // Try backend first (reads server env vars)
+  try {
+    const res = await base44.functions.invoke('getAppConfig', {});
+    const d   = res.data || {};
+    if (d.assemblyai_key) {
+      _cfg = {
+        cloudName:   d.cloudinary_cloud_name || localStorage.getItem('openshorts_cloud_name') || '',
+        cloudPreset: d.cloudinary_preset     || localStorage.getItem('openshorts_cloud_preset') || 'openshorts_clips',
+        assemblyKey: d.assemblyai_key,
+        cobaltUrl:   d.cobalt_url            || 'https://api.cobalt.tools',
+      };
+      return _cfg;
+    }
+  } catch (_) {
+    // getAppConfig not deployed yet or auth error — fall through to localStorage
+    _cfg = null; // don't cache the failure — retry next time
+  }
+
+  // Fallback: read from localStorage (set via OpenShorts Settings panel)
   _cfg = {
-    cloudName:    d.cloudinary_cloud_name || '',
-    cloudPreset:  d.cloudinary_preset     || 'openshorts_clips',
-    assemblyKey:  d.assemblyai_key        || '',
-    cobaltUrl:    d.cobalt_url            || 'https://api.cobalt.tools',
+    cloudName:   localStorage.getItem('openshorts_cloud_name')   || '',
+    cloudPreset: localStorage.getItem('openshorts_cloud_preset') || 'openshorts_clips',
+    assemblyKey: localStorage.getItem('ASSEMBLYAI_API_KEY')      || '',
+    cobaltUrl:   localStorage.getItem('COBALT_API_URL')          || 'https://api.cobalt.tools',
   };
   return _cfg;
+};
+
+// Call this to force a re-fetch of config (e.g. after deploying getAppConfig)
+export const resetConfigCache = () => { _cfg = null; };
+
+// Exported for pages that need to read/write localStorage keys directly
+export const LS_KEYS = {
+  CLOUD_NAME:   'openshorts_cloud_name',
+  CLOUD_PRESET: 'openshorts_cloud_preset',
+  ASSEMBLYAI:   'ASSEMBLYAI_API_KEY',
+  COBALT_URL:   'COBALT_API_URL',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -26,7 +55,7 @@ const getConfig = async () => {
 // ─────────────────────────────────────────────────────────────────────────────
 export const uploadToCloudinary = async (file, { resourceType = 'video', onProgress } = {}) => {
   const { cloudName, cloudPreset } = await getConfig();
-  if (!cloudName) throw new Error('Cloudinary cloud name not configured in server env (openshorts_cloud_name).');
+  if (!cloudName) throw new Error('Cloudinary cloud name not configured. Add openshorts_cloud_name to server env or Open Shorts Settings.');
 
   return new Promise((resolve, reject) => {
     const fd = new FormData();
@@ -42,8 +71,8 @@ export const uploadToCloudinary = async (file, { resourceType = 'video', onProgr
       try {
         const res = JSON.parse(xhr.responseText);
         if (res.error) return reject(new Error(res.error.message || 'Cloudinary upload failed'));
-        resolve(res); // res.secure_url, res.public_id
-      } catch { reject(new Error('Cloudinary response parse error')); }
+        resolve(res);
+      } catch (_) { reject(new Error('Cloudinary response parse error')); }
     };
     xhr.onerror = () => reject(new Error('Cloudinary network error'));
     xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`);
@@ -69,7 +98,7 @@ const AAI = 'https://api.assemblyai.com/v2';
 
 export const uploadToAssemblyAI = async (file, onProgress) => {
   const { assemblyKey } = await getConfig();
-  if (!assemblyKey) throw new Error('ASSEMBLYAI_API_KEY not set in server env.');
+  if (!assemblyKey) throw new Error('ASSEMBLYAI_API_KEY not set. Add it to server env or Open Shorts Settings.');
 
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -81,7 +110,7 @@ export const uploadToAssemblyAI = async (file, onProgress) => {
         const res = JSON.parse(xhr.responseText);
         if (res.error) return reject(new Error(res.error));
         resolve(res.upload_url);
-      } catch { reject(new Error('AssemblyAI upload parse error')); }
+      } catch (_) { reject(new Error('AssemblyAI upload parse error')); }
     };
     xhr.onerror = () => reject(new Error('AssemblyAI upload network error'));
     xhr.open('POST', `${AAI}/upload`);
@@ -92,7 +121,7 @@ export const uploadToAssemblyAI = async (file, onProgress) => {
 
 export const transcribeFile = async (fileOrUrl, onStatus) => {
   const { assemblyKey } = await getConfig();
-  if (!assemblyKey) throw new Error('ASSEMBLYAI_API_KEY not set in server env.');
+  if (!assemblyKey) throw new Error('ASSEMBLYAI_API_KEY not set. Add it to server env or Open Shorts Settings.');
 
   let audioUrl = fileOrUrl;
 
@@ -144,7 +173,7 @@ export const transcribeFile = async (fileOrUrl, onStatus) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. COBALT — YouTube audio extraction using URL from server env
+// 3. COBALT — YouTube audio extraction
 // ─────────────────────────────────────────────────────────────────────────────
 export const extractYouTubeAudio = async (youtubeUrl) => {
   const { cobaltUrl } = await getConfig();
@@ -154,7 +183,7 @@ export const extractYouTubeAudio = async (youtubeUrl) => {
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body:    JSON.stringify({ url: youtubeUrl, aFormat: 'mp3', isAudioOnly: true }),
   });
-  if (!res.ok) throw new Error(`Cobalt request failed (${res.status}). Check COBALT_API_URL in server env.`);
+  if (!res.ok) throw new Error(`Cobalt request failed (${res.status}). Check COBALT_API_URL.`);
   const data = await res.json();
   if (data.status === 'error' || data.status === 'rate-limit') {
     throw new Error(data.text || 'Cobalt extraction failed');
@@ -165,7 +194,7 @@ export const extractYouTubeAudio = async (youtubeUrl) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. ANTHROPIC — direct /v1/messages (artifact proxy — no key needed client-side)
+// 4. ANTHROPIC — direct /v1/messages (artifact proxy, no key needed client-side)
 // ─────────────────────────────────────────────────────────────────────────────
 const callClaude = async (system, user, { maxTokens = 2000 } = {}) => {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
