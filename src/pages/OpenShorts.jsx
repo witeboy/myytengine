@@ -15,7 +15,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -31,6 +30,7 @@ import {
   LS_KEYS,
   uploadToCloudinary,
   buildCloudinaryClipUrl,
+  extractYouTubeAudio,
   transcribeFile,
   analyzeViralMoments,
 } from '@/lib/directApi';
@@ -109,16 +109,6 @@ const saveToSupabase = async (clips) => {
     end_seconds:      c.end   ?? null,
     duration_seconds: (c.end && c.start) ? +(c.end - c.start).toFixed(2) : null,
   })));
-};
-
-// ── Cobalt audio extraction — routed through backend (has COBALT_API_URL env var)
-const extractYouTubeAudio = async (youtubeUrl) => {
-  const res = await base44.functions.invoke('cobaltExtract', {
-    url: youtubeUrl,
-  });
-  const audioUrl = res.data?.url || res.data?.audio_url;
-  if (!audioUrl) throw new Error(res.data?.error || 'Cobalt extraction failed. Check COBALT_API_URL in your env.');
-  return audioUrl;
 };
 
 // ── Stage bar ──────────────────────────────────────────────────────────
@@ -785,7 +775,7 @@ export default function OpenShorts() {
                 {inputMode === 'file' && (
                   <div className="space-y-3">
                     <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-xs text-emerald-700 flex items-start gap-2">
-                      <Cpu size={12} className="shrink-0 mt-0.5 text-emerald-500" />
+                      <Scissors size={12} className="shrink-0 mt-0.5 text-emerald-500" />
                       <span>
                         Video uploads to Cloudinary → AssemblyAI transcribes → Claude finds viral moments → Cloudinary generates 9:16 clips server-side. No browser processing needed.
                       </span>
