@@ -32,6 +32,8 @@ import {
 
 import {
   uploadToCloudinary,
+  buildCloudinaryClipUrl,
+  getCloudinaryConfig,
   transcribeFile,
   analyzeViralMoments,
 } from '@/lib/directApi';
@@ -194,36 +196,46 @@ export default function ClipExtractor() {
 
     try {
       let uploadedUrl;
+      let cloudPublicId = null;
 
       if (videoFile._isUrl) {
-        // YouTube URL mode: audio URL already resolved by YouTubeUrlInput via backend
+        // YouTube URL mode: audio URL already resolved by YouTubeUrlInput
         uploadedUrl = videoFile._audioUrl || videoFile._streamUrl;
         markComplete('upload');
       } else {
-        // File mode: upload to Cloudinary via backend (has env vars)
+        // File mode: upload to Cloudinary directly (unsigned preset)
         setCurrentStage('upload');
         setStatusMessage('Uploading to Cloudinary…');
         const cloudResult = await uploadToCloudinary(videoFile, {
           resourceType: 'video',
           onProgress: pct => setStatusMessage(`Uploading… ${pct}%`),
         });
-        uploadedUrl = cloudResult.secure_url;
+        uploadedUrl    = cloudResult.secure_url;
+        cloudPublicId  = cloudResult.public_id;
         if (!uploadedUrl) throw new Error('Upload returned no URL');
         markComplete('upload');
       }
 
-      // Transcribe via AssemblyAI (through backend)
+      // Transcribe via AssemblyAI (backend has the key)
       const asrResult = await runTranscription(uploadedUrl);
 
       // Viral analysis via Claude direct
       await runViralAnalysis(asrResult.words, asrResult.duration || videoDuration);
 
-      // Init FFmpeg for clipping (non-blocking)
+      // Attach Cloudinary clip URLs to results so ClipCard can play/download them
+      if (cloudPublicId) {
+        const { cloudName } = getCloudinaryConfig();
+        setClips(prev => prev.map(clip => ({
+          ...clip,
+          cloudinary_clip_url: buildCloudinaryClipUrl(cloudPublicId, cloudName, clip.start, clip.end),
+        })));
+      }
+
+      // Init FFmpeg optionally for ShortsClipperPanel (non-blocking, best-effort)
       if (isFFmpegSupported() && !ffmpegReady) {
-        try {
-          await initFFmpeg(({ message }) => setStatusMessage(message));
-          setFfmpegReady(true);
-        } catch (_e) { /* fallback to canvas */ }
+        initFFmpeg(({ message }) => setStatusMessage(message))
+          .then(() => setFfmpegReady(true))
+          .catch(() => {}); // silent fallback — Cloudinary clips still work
       }
     } catch (err) {
       setError(err.message);
