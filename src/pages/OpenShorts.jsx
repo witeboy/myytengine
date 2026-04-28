@@ -1,6 +1,20 @@
+/**
+ * OpenShorts.jsx  —  Refactored: zero base44 integration dependencies
+ *
+ * Replaces:
+ *   base44.functions.invoke('analyzeVideoWithGemini')  → Claude direct (transcript-first)
+ *   base44.functions.invoke('analyzeViralMoments')     → analyzeViralMoments (directApi)
+ *   base44.functions.invoke('submitTranscription')     → transcribeFile (directApi / AssemblyAI direct)
+ *   base44.functions.invoke('pollTranscription')       → built into transcribeFile
+ *
+ * For File mode: FFmpeg clips → Cloudinary upload (replaces base44 UploadFile 402 error)
+ * For YouTube mode: user pastes URL → Cobalt extracts audio → AssemblyAI transcribes → Claude analyzes
+ *
+ * Cloudinary, AssemblyAI key, and Supabase config all live in Settings panel (localStorage).
+ */
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -10,18 +24,26 @@ import {
   Scissors, Zap, Copy, Check, ChevronDown, ChevronUp,
   Globe, Eye, EyeOff, Flame, Library, Clock,
   Play, Database, TrendingUp, CloudUpload, Star,
-  Cpu, ExternalLink,
+  Cpu, ExternalLink, Mic,
 } from 'lucide-react';
 import { initFFmpeg, clipVideo } from '@/lib/clipWithFFmpeg';
+import {
+  LS_KEYS,
+  uploadToCloudinary,
+  transcribeFile,
+  analyzeViralMoments,
+} from '@/lib/directApi';
 
 // ── localStorage keys ──────────────────────────────────────────────────
 const LS = {
-  CLOUD_NAME:   'openshorts_cloud_name',
-  CLOUD_PRESET: 'openshorts_cloud_preset',
+  CLOUD_NAME:   LS_KEYS.CLOUD_NAME,
+  CLOUD_PRESET: LS_KEYS.CLOUD_PRESET,
+  ASSEMBLYAI:   'ASSEMBLYAI_API_KEY',
   SUPABASE_URL: 'openshorts_supabase_url',
   SUPABASE_KEY: 'openshorts_supabase_anon_key',
   UP_KEY:       'openshorts_uploadpost_key',
   UP_USER:      'openshorts_uploadpost_user',
+  COBALT_URL:   'COBALT_API_URL',
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -42,66 +64,34 @@ const formatTime = (secs) => {
   return m + ':' + s.toString().padStart(2, '0');
 };
 
-// ── Supabase REST (no SDK needed) ──────────────────────────────────────
+// ── Supabase REST ──────────────────────────────────────────────────────
 const sb = {
   ready: () => !!(localStorage.getItem(LS.SUPABASE_URL) && localStorage.getItem(LS.SUPABASE_KEY)),
   _h: () => {
     const k = localStorage.getItem(LS.SUPABASE_KEY) || '';
     return { apikey: k, Authorization: 'Bearer ' + k, 'Content-Type': 'application/json' };
   },
-  _u: (t, q) => {
-    const base = (localStorage.getItem(LS.SUPABASE_URL) || '').replace(/\/$/, '');
-    return base + '/rest/v1/' + t + (q || '');
-  },
+  _u: (t, q) => (localStorage.getItem(LS.SUPABASE_URL) || '').replace(/\/$/, '') + '/rest/v1/' + t + (q || ''),
   async insert(t, rows) {
     if (!this.ready()) return null;
     try {
       const r = await fetch(this._u(t), {
         method: 'POST',
-        headers: Object.assign({}, this._h(), { Prefer: 'return=minimal' }),
+        headers: { ...this._h(), Prefer: 'return=minimal' },
         body: JSON.stringify(rows),
       });
       return r.ok;
-    } catch (e) { return null; }
+    } catch { return null; }
   },
   async select(t, q) {
     if (!this.ready()) return [];
     try {
       const r = await fetch(this._u(t, q), { headers: this._h() });
       return r.ok ? r.json() : [];
-    } catch (e) { return []; }
+    } catch { return []; }
   },
 };
 
-// ── Cloudinary browser upload ──────────────────────────────────────────
-const uploadToCloudinary = (file, onProgress) => {
-  const cloudName = localStorage.getItem(LS.CLOUD_NAME);
-  const preset    = localStorage.getItem(LS.CLOUD_PRESET) || 'openshorts_clips';
-  if (!cloudName) return Promise.resolve(null);
-
-  return new Promise((resolve, reject) => {
-    const fd = new FormData();
-    fd.append('file', file);
-    fd.append('upload_preset', preset);
-    fd.append('resource_type', 'video');
-
-    const xhr = new XMLHttpRequest();
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) {
-        if (onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
-      }
-    };
-    xhr.onload  = () => {
-      try { resolve(JSON.parse(xhr.responseText)); }
-      catch (e) { reject(new Error('Parse error')); }
-    };
-    xhr.onerror = () => reject(new Error('Network error'));
-    xhr.open('POST', 'https://api.cloudinary.com/v1_1/' + cloudName + '/video/upload');
-    xhr.send(fd);
-  });
-};
-
-// ── Save clips to Supabase ─────────────────────────────────────────────
 const saveToSupabase = async (clips) => {
   if (!sb.ready() || !clips.length) return;
   const jobId = 'os_' + Date.now();
@@ -114,18 +104,49 @@ const saveToSupabase = async (clips) => {
     hook_text:        c.viral_hook_text || null,
     tiktok_desc:      c.video_description_for_tiktok  || null,
     ig_desc:          c.video_description_for_instagram || null,
-    start_seconds:    c.start != null ? c.start : null,
-    end_seconds:      c.end   != null ? c.end   : null,
+    start_seconds:    c.start ?? null,
+    end_seconds:      c.end   ?? null,
     duration_seconds: (c.end && c.start) ? +(c.end - c.start).toFixed(2) : null,
   })));
 };
 
+// ── Cobalt audio extraction (self-hosted or api.cobalt.tools) ───────────
+/**
+ * Extracts a direct audio/video stream URL from a YouTube URL.
+ * Requires either:
+ *   - A self-hosted Cobalt instance URL in Settings, OR
+ *   - api.cobalt.tools (rate-limited public instance)
+ */
+const extractYouTubeAudio = async (youtubeUrl) => {
+  const cobaltBase = localStorage.getItem(LS.COBALT_URL) || 'https://api.cobalt.tools';
+  const res = await fetch(`${cobaltBase}/api/json`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      url:            youtubeUrl,
+      aFormat:        'mp3',
+      isAudioOnly:    true,
+      isNoTTWatermark: true,
+    }),
+  });
+  if (!res.ok) throw new Error(`Cobalt request failed (${res.status}). Add your Cobalt instance URL in Settings.`);
+  const data = await res.json();
+  if (data.status === 'error' || data.status === 'rate-limit') {
+    throw new Error(data.text || 'Cobalt extraction failed. Try a self-hosted Cobalt instance.');
+  }
+  // status: 'stream' | 'redirect' | 'picker'
+  const audioUrl = data.url || (data.picker && data.picker[0]?.url);
+  if (!audioUrl) throw new Error('Cobalt returned no audio URL.');
+  return audioUrl;
+};
+
 // ── Stage bar ──────────────────────────────────────────────────────────
 const STAGE_DEFS = {
-  load:    { label: 'Load FFmpeg',     icon: Cpu        },
-  analyze: { label: 'Find Moments',   icon: Sparkles   },
-  clip:    { label: 'Cut + Crop 9:16', icon: Scissors   },
-  upload:  { label: 'Upload CDN',     icon: CloudUpload },
+  transcribe: { label: 'Transcribe',    icon: Mic        },
+  analyze:    { label: 'Find Moments',  icon: Sparkles   },
+  load:       { label: 'Load FFmpeg',   icon: Cpu        },
+  clip:       { label: 'Cut + Crop 9:16', icon: Scissors },
+  upload:     { label: 'Upload CDN',    icon: CloudUpload},
 };
 
 function StageBar({ stageKeys, current, done }) {
@@ -152,9 +173,7 @@ function StageBar({ stageKeys, current, done }) {
               }
               <span className="hidden sm:inline">{def.label}</span>
             </div>
-            {i < stageKeys.length - 1 && (
-              <div className="w-3 h-px bg-gray-200 hidden sm:block" />
-            )}
+            {i < stageKeys.length - 1 && <div className="w-3 h-px bg-gray-200 hidden sm:block" />}
           </div>
         );
       })}
@@ -166,31 +185,43 @@ function StageBar({ stageKeys, current, done }) {
 function SettingsPanel({ onClose }) {
   const FIELDS = [
     {
-      section: 'Cloudinary - Permanent Clip Storage (Optional)',
+      section: 'Cloudinary — Clip Storage',
       k: LS.CLOUD_NAME, label: 'Cloud Name', pw: false,
       ph: 'your-cloud-name',
-      hint: 'Cloudinary dashboard, top left corner',
+      hint: 'Cloudinary dashboard, top left',
     },
     {
       k: LS.CLOUD_PRESET, label: 'Upload Preset', pw: false,
       ph: 'openshorts_clips',
-      hint: 'Cloudinary, Settings, Upload, Add unsigned preset, name it openshorts_clips',
+      hint: 'Cloudinary → Settings → Upload → Add unsigned preset',
     },
     {
-      section: 'Supabase - Clip Library (Optional)',
+      section: 'AssemblyAI — Transcription',
+      k: LS.ASSEMBLYAI, label: 'AssemblyAI API Key', pw: true,
+      ph: 'your-assemblyai-key',
+      hint: 'assemblyai.com → Account → API key',
+    },
+    {
+      section: 'YouTube Audio Extraction',
+      k: LS.COBALT_URL, label: 'Cobalt Instance URL (optional)', pw: false,
+      ph: 'https://api.cobalt.tools',
+      hint: 'Self-hosted Cobalt for reliable YT extraction. Leave blank to use public API.',
+    },
+    {
+      section: 'Supabase — Clip Library (Optional)',
       k: LS.SUPABASE_URL, label: 'Project URL', pw: false,
       ph: 'https://xxxx.supabase.co',
-      hint: 'Supabase, Settings, API, Project URL',
+      hint: 'Supabase → Settings → API → Project URL',
     },
     {
       k: LS.SUPABASE_KEY, label: 'Anon Public Key', pw: true,
-      ph: 'eyJ...',
-      hint: 'Supabase, Settings, API, anon public',
+      ph: 'eyJ…',
+      hint: 'Supabase → Settings → API → anon public',
     },
     {
       section: 'Social Posting (Optional)',
       k: LS.UP_KEY, label: 'Upload-Post API Key', pw: true,
-      ph: 'up_...',
+      ph: 'up_…',
       hint: 'uploadpost.com API key',
     },
     {
@@ -199,46 +230,36 @@ function SettingsPanel({ onClose }) {
     },
   ];
 
-  const [vals, setVals]   = useState(function() {
-    var obj = {};
-    FIELDS.forEach(function(f) { obj[f.k] = localStorage.getItem(f.k) || ''; });
+  const [vals, setVals]   = useState(() => {
+    const obj = {};
+    FIELDS.forEach(f => { obj[f.k] = localStorage.getItem(f.k) || ''; });
     return obj;
   });
   const [show, setShow]   = useState({});
   const [saved, setSaved] = useState(false);
 
   const save = () => {
-    FIELDS.forEach((f) => localStorage.setItem(f.k, vals[f.k].trim()));
+    FIELDS.forEach(f => localStorage.setItem(f.k, vals[f.k].trim()));
     setSaved(true);
     setTimeout(() => { setSaved(false); onClose(); }, 800);
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="bg-white border border-gray-100 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-3 max-h-screen overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white border border-gray-100 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-3 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <h2 className="font-bold text-gray-900 flex items-center gap-2">
             <Settings size={15} className="text-rose-500" />
             Open Shorts Settings
           </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700">
-            <X size={17} />
-          </button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={17} /></button>
         </div>
 
         {FIELDS.map((f, idx) => (
           <div key={f.k}>
             {f.section && (
               <div className={'pb-1 ' + (idx > 0 ? 'pt-3 border-t border-gray-100' : '')}>
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                  {f.section}
-                </span>
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{f.section}</span>
               </div>
             )}
             <div>
@@ -247,15 +268,12 @@ function SettingsPanel({ onClose }) {
                 <input
                   type={(f.pw && !show[f.k]) ? 'password' : 'text'}
                   value={vals[f.k]}
-                  onChange={(e) => setVals((p) => Object.assign({}, p, { [f.k]: e.target.value }))}
+                  onChange={e => setVals(p => ({ ...p, [f.k]: e.target.value }))}
                   placeholder={f.ph}
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:border-rose-400 pr-9"
                 />
                 {f.pw && (
-                  <button
-                    onClick={() => setShow((p) => Object.assign({}, p, { [f.k]: !p[f.k] }))}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
+                  <button onClick={() => setShow(p => ({ ...p, [f.k]: !p[f.k] }))} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
                     {show[f.k] ? <EyeOff size={13} /> : <Eye size={13} />}
                   </button>
                 )}
@@ -267,42 +285,26 @@ function SettingsPanel({ onClose }) {
 
         <div className="pt-2 space-y-1.5">
           {[
-            { ok: !!vals[LS.CLOUD_NAME], label: 'Cloudinary - permanent clip storage' },
-            { ok: !!(vals[LS.SUPABASE_URL] && vals[LS.SUPABASE_KEY]), label: 'Supabase - clip library' },
+            { ok: !!vals[LS.CLOUD_NAME], label: 'Cloudinary — clip storage' },
+            { ok: !!vals[LS.ASSEMBLYAI], label: 'AssemblyAI — transcription' },
+            { ok: !!(vals[LS.SUPABASE_URL] && vals[LS.SUPABASE_KEY]), label: 'Supabase — clip library' },
           ].map(({ ok, label }) => (
-            <div
-              key={label}
-              className={'flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg ' +
-                (ok ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-50 text-gray-400')}
-            >
-              {ok
-                ? <CheckCircle size={11} />
-                : <div className="w-2.5 h-2.5 rounded-full border border-gray-300" />
-              }
+            <div key={label} className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg ${ok ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-50 text-gray-400'}`}>
+              {ok ? <CheckCircle size={11} /> : <div className="w-2.5 h-2.5 rounded-full border border-gray-300" />}
               {label}
             </div>
           ))}
         </div>
 
-        <Button
-          onClick={save}
-          className={
-            'w-full h-10 text-white transition-all ' +
-            (saved
-              ? 'bg-emerald-500'
-              : 'bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700')
-          }
-        >
-          {saved ? (
-            <span className="flex items-center gap-1"><Check size={12} /> Saved!</span>
-          ) : 'Save Settings'}
+        <Button onClick={save} className={`w-full h-10 text-white transition-all ${saved ? 'bg-emerald-500' : 'bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700'}`}>
+          {saved ? <span className="flex items-center gap-1"><Check size={12} /> Saved!</span> : 'Save Settings'}
         </Button>
       </div>
     </div>
   );
 }
 
-// ── YouTube clip card ──────────────────────────────────────────────────
+// ── YouTubeClipCard — unchanged from original ──────────────────────────
 function YouTubeClipCard({ clip, index, ytUrl }) {
   const [copied, setCopied] = useState(null);
   const [expanded, setExp]  = useState(false);
@@ -310,10 +312,7 @@ function YouTubeClipCard({ clip, index, ytUrl }) {
   const dur  = (clip.end && clip.start) ? Math.round(clip.end - clip.start) : null;
 
   const copy = (text, key) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(key);
-      setTimeout(() => setCopied(null), 2000);
-    });
+    navigator.clipboard.writeText(text).then(() => { setCopied(key); setTimeout(() => setCopied(null), 2000); });
   };
 
   return (
@@ -322,71 +321,43 @@ function YouTubeClipCard({ clip, index, ytUrl }) {
         {ytId && (
           <iframe
             className="w-full h-full"
-            src={'https://www.youtube.com/embed/' + ytId + '?start=' + Math.floor(clip.start) + '&rel=0'}
-            title={'Clip ' + (index + 1)}
+            src={`https://www.youtube.com/embed/${ytId}?start=${Math.floor(clip.start)}&rel=0`}
+            title={`Clip ${index + 1}`}
             frameBorder="0"
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture"
             allowFullScreen
           />
         )}
-        <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center text-white text-xs font-bold shadow">
-          {index + 1}
-        </div>
+        <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center text-white text-xs font-bold shadow">{index + 1}</div>
         {dur && (
           <div className="absolute top-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 bg-black/80 text-white rounded-full text-xs font-mono">
-            <Clock size={8} />
-            <span>{dur}s</span>
+            <Clock size={8} /><span>{dur}s</span>
           </div>
         )}
         {clip.virality_score && (
           <div className="absolute bottom-2 left-2 flex items-center gap-1 px-2 py-0.5 bg-rose-600/90 text-white rounded-full text-xs font-bold">
-            <Star size={8} />
-            <span>{clip.virality_score}</span>
+            <Star size={8} /><span>{clip.virality_score}</span>
           </div>
         )}
       </div>
-
       <div className="p-3 space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-mono text-gray-400">
-            {formatTime(clip.start)} to {formatTime(clip.end)}
-          </span>
-          <a
-            href={'https://www.youtube.com/watch?v=' + ytId + '&t=' + Math.floor(clip.start) + 's'}
-            target="_blank"
-            rel="noreferrer"
-            className="flex items-center gap-1 text-xs text-rose-500 hover:text-rose-700 font-medium"
-          >
-            <ExternalLink size={9} />
-            <span>Open on YouTube</span>
+          <span className="text-xs font-mono text-gray-400">{formatTime(clip.start)} to {formatTime(clip.end)}</span>
+          <a href={`https://www.youtube.com/watch?v=${ytId}&t=${Math.floor(clip.start)}s`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-rose-500 hover:text-rose-700 font-medium">
+            <ExternalLink size={9} /><span>Open on YouTube</span>
           </a>
         </div>
-
         {clip.viral_hook_text && (
           <div className="flex items-start gap-1.5">
             <Flame className="w-3 h-3 text-rose-500 shrink-0 mt-0.5" />
             <p className="text-xs font-semibold text-gray-800 leading-snug">{clip.viral_hook_text}</p>
           </div>
         )}
-
-        {clip.video_title_for_youtube_short && (
-          <p className="text-xs text-gray-500 line-clamp-2">{clip.video_title_for_youtube_short}</p>
-        )}
-
-        {clip.virality_reason && (
-          <p className="text-xs text-gray-400 italic border-l-2 border-rose-100 pl-2 leading-relaxed">
-            {clip.virality_reason}
-          </p>
-        )}
-
+        {clip.video_title_for_youtube_short && <p className="text-xs text-gray-500 line-clamp-2">{clip.video_title_for_youtube_short}</p>}
+        {clip.virality_reason && <p className="text-xs text-gray-400 italic border-l-2 border-rose-100 pl-2 leading-relaxed">{clip.virality_reason}</p>}
         <div>
-          <button
-            onClick={() => setExp(!expanded)}
-            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <Globe size={9} />
-            <span>Platform captions</span>
-            {expanded ? <ChevronUp size={9} /> : <ChevronDown size={9} />}
+          <button onClick={() => setExp(!expanded)} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+            <Globe size={9} /><span>Platform captions</span>{expanded ? <ChevronUp size={9} /> : <ChevronDown size={9} />}
           </button>
           {expanded && (
             <div className="mt-2 space-y-1.5">
@@ -394,17 +365,11 @@ function YouTubeClipCard({ clip, index, ytUrl }) {
                 { icon: <Youtube size={10} className="text-red-500" />,    label: 'YouTube',   text: clip.video_title_for_youtube_short,   key: 'yt' },
                 { icon: <TikTokIcon size={10} />,                           label: 'TikTok',    text: clip.video_description_for_tiktok,    key: 'tt' },
                 { icon: <Instagram size={10} className="text-pink-500" />, label: 'Instagram', text: clip.video_description_for_instagram, key: 'ig' },
-              ].filter((x) => x.text).map(({ icon, label, text, key }) => (
+              ].filter(x => x.text).map(({ icon, label, text, key }) => (
                 <div key={key} className="bg-gray-50 rounded-lg p-2 group">
                   <div className="flex items-center justify-between mb-0.5">
-                    <div className="flex items-center gap-1 text-xs font-medium text-gray-500">
-                      {icon}
-                      <span>{label}</span>
-                    </div>
-                    <button
-                      onClick={() => copy(text, key)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400"
-                    >
+                    <div className="flex items-center gap-1 text-xs font-medium text-gray-500">{icon}<span>{label}</span></div>
+                    <button onClick={() => copy(text, key)} className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400">
                       {copied === key ? <Check size={9} className="text-emerald-500" /> : <Copy size={9} />}
                     </button>
                   </div>
@@ -419,7 +384,7 @@ function YouTubeClipCard({ clip, index, ytUrl }) {
   );
 }
 
-// ── File clip card ─────────────────────────────────────────────────────
+// ── FileClipCard — unchanged from original ─────────────────────────────
 function FileClipCard({ clip, index }) {
   const [copied, setCopied]   = useState(null);
   const [expanded, setExp]    = useState(false);
@@ -430,19 +395,15 @@ function FileClipCard({ clip, index }) {
   const dur = (clip.end && clip.start) ? Math.round(clip.end - clip.start) : null;
 
   const copy = (text, key) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(key);
-      setTimeout(() => setCopied(null), 2000);
-    });
+    navigator.clipboard.writeText(text).then(() => { setCopied(key); setTimeout(() => setCopied(null), 2000); });
   };
 
   const runPost = async () => {
     const upKey  = localStorage.getItem(LS.UP_KEY);
     const upUser = localStorage.getItem(LS.UP_USER);
-    if (!upKey)               return setPostRes({ error: 'Upload-Post key required - add in Settings' });
+    if (!upKey)               return setPostRes({ error: 'Upload-Post key required — add in Settings' });
     if (!clip.cloudinary_url) return setPostRes({ error: 'Clip must finish uploading to Cloudinary first' });
-    setPosting(true);
-    setPostRes(null);
+    setPosting(true); setPostRes(null);
     try {
       const res = await fetch('https://api.upload-post.com/v1/post', {
         method: 'POST',
@@ -456,70 +417,29 @@ function FileClipCard({ clip, index }) {
         }),
       });
       setPostRes(await res.json());
-    } catch (e) {
-      setPostRes({ error: e.message });
-    } finally {
-      setPosting(false);
-    }
+    } catch (e) { setPostRes({ error: e.message }); }
+    finally { setPosting(false); }
   };
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-      <div
-        className="relative bg-zinc-900 overflow-hidden"
-        style={{ aspectRatio: '9/16', maxHeight: 220 }}
-      >
+      <div className="relative bg-zinc-900 overflow-hidden" style={{ aspectRatio: '9/16', maxHeight: 220 }}>
         {src ? (
-          <video
-            ref={videoRef}
-            src={src}
-            className="absolute inset-0 w-full h-full object-cover"
-            muted
-            loop
-            playsInline
-            onMouseEnter={() => { if (videoRef.current) videoRef.current.play(); }}
-            onMouseLeave={() => { if (videoRef.current) videoRef.current.pause(); }}
-          />
+          <video ref={videoRef} src={src} className="absolute inset-0 w-full h-full object-cover" muted loop playsInline
+            onMouseEnter={() => videoRef.current?.play()} onMouseLeave={() => videoRef.current?.pause()} />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Loader2 className="w-6 h-6 animate-spin text-zinc-600" />
-          </div>
+          <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-zinc-600" /></div>
         )}
-        <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center text-white text-xs font-bold shadow">
-          {index + 1}
-        </div>
-        {dur && (
-          <div className="absolute top-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 bg-black/80 text-white rounded-full text-xs font-mono">
-            <Clock size={8} />
-            <span>{dur}s</span>
-          </div>
-        )}
-        {clip.cloudinary_url && (
-          <div className="absolute bottom-2 right-2 px-1.5 py-0.5 bg-blue-600/90 text-white rounded text-xs font-bold">
-            CDN
-          </div>
-        )}
+        <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center text-white text-xs font-bold shadow">{index + 1}</div>
+        {dur && <div className="absolute top-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 bg-black/80 text-white rounded-full text-xs font-mono"><Clock size={8} /><span>{dur}s</span></div>}
+        {clip.cloudinary_url && <div className="absolute bottom-2 right-2 px-1.5 py-0.5 bg-blue-600/90 text-white rounded text-xs font-bold">CDN</div>}
       </div>
-
       <div className="p-3 space-y-2">
-        {clip.viral_hook_text && (
-          <div className="flex items-start gap-1.5">
-            <Flame className="w-3 h-3 text-rose-500 shrink-0 mt-0.5" />
-            <p className="text-xs font-semibold text-gray-800 leading-snug">{clip.viral_hook_text}</p>
-          </div>
-        )}
-        {clip.video_title_for_youtube_short && (
-          <p className="text-xs text-gray-400 line-clamp-2">{clip.video_title_for_youtube_short}</p>
-        )}
-
+        {clip.viral_hook_text && <div className="flex items-start gap-1.5"><Flame className="w-3 h-3 text-rose-500 shrink-0 mt-0.5" /><p className="text-xs font-semibold text-gray-800 leading-snug">{clip.viral_hook_text}</p></div>}
+        {clip.video_title_for_youtube_short && <p className="text-xs text-gray-400 line-clamp-2">{clip.video_title_for_youtube_short}</p>}
         <div>
-          <button
-            onClick={() => setExp(!expanded)}
-            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <Globe size={9} />
-            <span>Captions</span>
-            {expanded ? <ChevronUp size={9} /> : <ChevronDown size={9} />}
+          <button onClick={() => setExp(!expanded)} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+            <Globe size={9} /><span>Captions</span>{expanded ? <ChevronUp size={9} /> : <ChevronDown size={9} />}
           </button>
           {expanded && (
             <div className="mt-2 space-y-1.5">
@@ -527,17 +447,11 @@ function FileClipCard({ clip, index }) {
                 { icon: <Youtube size={10} className="text-red-500" />,    label: 'YouTube',   text: clip.video_title_for_youtube_short,   key: 'yt' },
                 { icon: <TikTokIcon size={10} />,                           label: 'TikTok',    text: clip.video_description_for_tiktok,    key: 'tt' },
                 { icon: <Instagram size={10} className="text-pink-500" />, label: 'Instagram', text: clip.video_description_for_instagram, key: 'ig' },
-              ].filter((x) => x.text).map(({ icon, label, text, key }) => (
+              ].filter(x => x.text).map(({ icon, label, text, key }) => (
                 <div key={key} className="bg-gray-50 rounded-lg p-2 group">
                   <div className="flex items-center justify-between mb-0.5">
-                    <div className="flex items-center gap-1 text-xs font-medium text-gray-500">
-                      {icon}
-                      <span>{label}</span>
-                    </div>
-                    <button
-                      onClick={() => copy(text, key)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400"
-                    >
+                    <div className="flex items-center gap-1 text-xs font-medium text-gray-500">{icon}<span>{label}</span></div>
+                    <button onClick={() => copy(text, key)} className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400">
                       {copied === key ? <Check size={9} className="text-emerald-500" /> : <Copy size={9} />}
                     </button>
                   </div>
@@ -547,38 +461,24 @@ function FileClipCard({ clip, index }) {
             </div>
           )}
         </div>
-
         <div className="flex gap-1.5">
           {src && (
-            <a
-              href={src}
-              download={'clip_' + (index + 1) + '.mp4'}
-              className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium transition-colors"
-            >
-              <Download size={10} />
-              <span>Download</span>
+            <a href={src} download={`clip_${index + 1}.mp4`} className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium transition-colors">
+              <Download size={10} /><span>Download</span>
             </a>
           )}
-          <button
-            onClick={runPost}
-            disabled={posting}
-            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white text-xs font-semibold disabled:opacity-50 transition-all"
-          >
+          <button onClick={runPost} disabled={posting} className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white text-xs font-semibold disabled:opacity-50 transition-all">
             {posting ? <Loader2 size={10} className="animate-spin" /> : <Share2 size={10} />}
             <span>Post</span>
           </button>
         </div>
-        {postRes && (
-          <p className={'text-xs rounded px-2 py-1 ' + (postRes.error ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700')}>
-            {postRes.error || 'Posted!'}
-          </p>
-        )}
+        {postRes && <p className={`text-xs rounded px-2 py-1 ${postRes.error ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>{postRes.error || 'Posted!'}</p>}
       </div>
     </div>
   );
 }
 
-// ── Clip Library ───────────────────────────────────────────────────────
+// ── Clip Library — unchanged from original ─────────────────────────────
 function ClipLibrary() {
   const [clips, setClips]   = useState([]);
   const [loading, setLoad]  = useState(true);
@@ -587,35 +487,22 @@ function ClipLibrary() {
   useEffect(() => {
     if (!sb.ready()) { setLoad(false); return; }
     sb.select('clip_library', '?select=*&order=created_at.desc&limit=100')
-      .then((c) => setClips(Array.isArray(c) ? c : []))
+      .then(c => setClips(Array.isArray(c) ? c : []))
       .finally(() => setLoad(false));
   }, []);
 
-  if (!sb.ready()) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 max-w-sm mx-auto">
-        <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center">
-          <Database size={22} className="text-emerald-400" />
-        </div>
-        <div>
-          <p className="font-semibold text-gray-800">Connect Supabase to unlock your Clip Library</p>
-          <p className="text-sm text-gray-400 mt-1">Every clip you generate gets saved here automatically.</p>
-        </div>
-        <div className="text-xs text-gray-400 bg-gray-50 border border-gray-100 rounded-xl px-4 py-4 text-left w-full space-y-2">
-          <p className="font-semibold text-gray-600">Setup (5 min):</p>
-          <ol className="list-decimal list-inside space-y-1.5">
-            <li>Go to supabase.com, open your project, SQL Editor</li>
-            <li>Run the table setup SQL from the setup guide</li>
-            <li>Copy Project URL and anon key from Settings, API</li>
-            <li>Paste both into Open Shorts Settings above</li>
-          </ol>
-        </div>
+  if (!sb.ready()) return (
+    <div className="flex flex-col items-center justify-center py-20 text-center space-y-4 max-w-sm mx-auto">
+      <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center"><Database size={22} className="text-emerald-400" /></div>
+      <div>
+        <p className="font-semibold text-gray-800">Connect Supabase to unlock your Clip Library</p>
+        <p className="text-sm text-gray-400 mt-1">Every clip you generate gets saved here automatically.</p>
       </div>
-    );
-  }
+    </div>
+  );
 
-  const now = Date.now();
-  const filtered = clips.filter((c) => {
+  const now      = Date.now();
+  const filtered = clips.filter(c => {
     if (filter === 'today') return now - new Date(c.created_at).getTime() < 86400000;
     if (filter === 'week')  return now - new Date(c.created_at).getTime() < 604800000;
     return true;
@@ -625,9 +512,9 @@ function ClipLibrary() {
     <div className="space-y-6">
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Total Clips',   val: clips.length, icon: Scissors,    color: 'text-rose-500'    },
-          { label: 'This Week',     val: clips.filter((c) => now - new Date(c.created_at).getTime() < 604800000).length, icon: TrendingUp, color: 'text-emerald-500' },
-          { label: 'On Cloudinary', val: clips.filter((c) => c.cloudinary_url).length, icon: CloudUpload, color: 'text-blue-500' },
+          { label: 'Total Clips',   val: clips.length, icon: Scissors,    color: 'text-rose-500' },
+          { label: 'This Week',     val: clips.filter(c => now - new Date(c.created_at).getTime() < 604800000).length, icon: TrendingUp, color: 'text-emerald-500' },
+          { label: 'On Cloudinary', val: clips.filter(c => c.cloudinary_url).length, icon: CloudUpload, color: 'text-blue-500' },
         ].map(({ label, val, icon: Icon, color }) => (
           <div key={label} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
             <Icon size={14} className={color + ' mb-1'} />
@@ -636,40 +523,21 @@ function ClipLibrary() {
           </div>
         ))}
       </div>
-
       <div className="flex items-center gap-3">
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-          {[['all', 'All time'], ['week', 'This week'], ['today', 'Today']].map(([k, l]) => (
-            <button
-              key={k}
-              onClick={() => setFilter(k)}
-              className={'px-3 py-1.5 rounded-md text-xs font-medium transition-colors ' +
-                (filter === k ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500')}
-            >
-              {l}
-            </button>
+          {[['all','All time'],['week','This week'],['today','Today']].map(([k,l]) => (
+            <button key={k} onClick={() => setFilter(k)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${filter === k ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>{l}</button>
           ))}
         </div>
         <span className="text-xs text-gray-400">{filtered.length} clips</span>
       </div>
-
       {loading ? (
-        <div className="flex items-center justify-center py-16 gap-3">
-          <Loader2 className="w-5 h-5 animate-spin text-rose-400" />
-          <span className="text-gray-400 text-sm">Loading library...</span>
-        </div>
+        <div className="flex items-center justify-center py-16 gap-3"><Loader2 className="w-5 h-5 animate-spin text-rose-400" /><span className="text-gray-400 text-sm">Loading library…</span></div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-16">
-          <Library size={28} className="text-gray-200 mx-auto mb-3" />
-          <p className="text-gray-400 text-sm">
-            {filter !== 'all' ? 'No clips in this period.' : 'No clips yet. Generate your first clips above.'}
-          </p>
-        </div>
+        <div className="text-center py-16"><Library size={28} className="text-gray-200 mx-auto mb-3" /><p className="text-gray-400 text-sm">No clips yet.</p></div>
       ) : (
         <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {filtered.map((c) => (
-            <FileClipCard key={c.id} clip={c} index={c.clip_index} />
-          ))}
+          {filtered.map(c => <FileClipCard key={c.id} clip={c} index={c.clip_index} />)}
         </div>
       )}
     </div>
@@ -703,7 +571,7 @@ export default function OpenShorts() {
   const [maxSec, setMaxSec]     = useState('60');
   const [showAdv, setShowAdv]   = useState(false);
 
-  const markDone = (s) => setDone((p) => p.includes(s) ? p : [...p, s]);
+  const markDone = (s) => setDone(p => p.includes(s) ? p : [...p, s]);
 
   const handleFileSelect = (f) => {
     setFile(f);
@@ -714,35 +582,44 @@ export default function OpenShorts() {
     v.src = url;
   };
 
-  // YouTube mode
+  // ── YouTube mode: extract audio → transcribe → analyze ────────────────
   const runYouTubeMode = async () => {
     if (!ytUrl.trim()) return setErr('Paste a YouTube URL first');
-    setStage('processing');
-    setErr('');
-    setClips([]);
-    setCost(null);
-    setDone([]);
-    setStep('analyze');
-    setMsg('Gemini is watching the video and finding viral moments...');
+    if (!localStorage.getItem(LS.ASSEMBLYAI)) return setErr('Add your AssemblyAI key in Settings first');
+
+    setStage('processing'); setErr(''); setClips([]); setCost(null); setDone([]);
 
     try {
-      const res  = await base44.functions.invoke('analyzeVideoWithGemini', {
-        videoUrl: ytUrl.trim(),
-        maxClips: parseInt(maxClips) || 8,
-        minSec:   parseInt(minSec)   || 20,
-        maxSec:   parseInt(maxSec)   || 60,
+      // 1. Extract audio via Cobalt
+      setStep('transcribe');
+      setMsg('Extracting audio from YouTube via Cobalt…');
+      const audioUrl = await extractYouTubeAudio(ytUrl.trim());
+
+      // 2. Transcribe via AssemblyAI direct
+      setMsg('Submitting to AssemblyAI for transcription…');
+      const transcript = await transcribeFile(audioUrl, (msg) => setMsg(msg));
+      markDone('transcribe');
+
+      // 3. Analyze with Claude
+      setStep('analyze');
+      setMsg('Claude is finding the best viral moments…');
+      const result = await analyzeViralMoments({
+        transcript: transcript.text,
+        words:      transcript.words,
+        duration:   transcript.duration,
+        maxClips:   parseInt(maxClips) || 8,
+        minSeconds: parseInt(minSec)   || 20,
+        maxSeconds: parseInt(maxSec)   || 60,
       });
-      const data = res && res.data ? res.data : res;
-      if (!data || !data.clips || !data.clips.length) {
-        throw new Error((data && data.error) || (data && data.message) || 'No viral moments found. Try a different video.');
-      }
+
+      if (!result?.clips?.length) throw new Error('No viral moments found. Try a different video.');
       markDone('analyze');
-      const enriched = data.clips.map((c) => Object.assign({}, c, { youtube_url: ytUrl }));
+
+      const enriched = result.clips.map(c => ({ ...c, youtube_url: ytUrl }));
       setClips(enriched);
-      if (data.cost_analysis) setCost(data.cost_analysis);
       await saveToSupabase(enriched);
       setStage('done');
-      setMsg('Found ' + enriched.length + ' viral moments!');
+      setMsg(`Found ${enriched.length} viral moments!`);
     } catch (e) {
       setStage('error');
       setErr(e.message || 'Something went wrong');
@@ -751,116 +628,68 @@ export default function OpenShorts() {
     }
   };
 
-  // File mode
+  // ── File mode: FFmpeg clip → Cloudinary upload → analyze ──────────────
   const runFileMode = async () => {
     if (!file) return setErr('Select a video file first');
-    setStage('processing');
-    setErr('');
-    setClips([]);
-    setCost(null);
-    setDone([]);
-    setProgress(0);
+    if (!localStorage.getItem(LS.CLOUD_NAME)) return setErr('Add your Cloudinary Cloud Name in Settings first');
+    if (!localStorage.getItem(LS.ASSEMBLYAI)) return setErr('Add your AssemblyAI key in Settings first');
+
+    setStage('processing'); setErr(''); setClips([]); setCost(null); setDone([]); setProgress(0);
 
     try {
-      // Step 1: Load FFmpeg (reuse existing app lib)
+      // Step 1: Load FFmpeg
       setStep('load');
-      setMsg('Loading FFmpeg engine... (one-time download)');
-
-      await initFFmpeg((p) => {
-        if (p && p.message) setMsg(p.message);
-      });
+      setMsg('Loading FFmpeg engine… (one-time download ~30MB)');
+      await initFFmpeg(p => { if (p?.message) setMsg(p.message); });
       markDone('load');
 
-      // Step 2: Analyze
+      // Step 2: Upload the full file to Cloudinary for AssemblyAI to transcribe
+      setStep('transcribe');
+      setMsg('Uploading video to Cloudinary for transcription…');
+      const uploadResult = await uploadToCloudinary(file, {
+        resourceType: 'video',
+        onProgress: pct => setMsg(`Uploading… ${pct}%`),
+      });
+      const cloudUrl = uploadResult.secure_url;
+      setMsg('Transcribing with AssemblyAI…');
+      const transcript = await transcribeFile(cloudUrl, msg => setMsg(msg));
+      markDone('transcribe');
+
+      // Step 3: Analyze viral moments with Claude
       setStep('analyze');
-      setMsg('Finding the best viral moments with AI...');
-      setProgress(0);
+      setMsg('Claude is finding the best viral moments…');
+      const result = await analyzeViralMoments({
+        transcript: transcript.text,
+        words:      transcript.words,
+        duration:   transcript.duration || vidDuration,
+        maxClips:   parseInt(maxClips) || 8,
+        minSeconds: parseInt(minSec)   || 20,
+        maxSeconds: parseInt(maxSec)   || 60,
+      });
 
-      let analysisClips = [];
-      let transcriptWords = [];
-
-      try {
-        const b64 = '';
-
-        const submitRes = await base44.functions.invoke('submitTranscription', {
-          voiceover_url: null,
-          audio_blob_b64: b64,
-        }).catch(() => null);
-
-        if (submitRes && submitRes.data && submitRes.data.transcript_id) {
-          const tid      = submitRes.data.transcript_id;
-          const deadline = Date.now() + 180000;
-          while (Date.now() < deadline) {
-            await new Promise((r) => setTimeout(r, 3000));
-            const poll = await base44.functions.invoke('pollTranscription', { transcript_id: tid }).catch(() => null);
-            if (poll && poll.data && poll.data.status === 'completed') {
-              transcriptWords = poll.data.words || [];
-              break;
-            }
-            if (poll && poll.data && poll.data.status === 'error') break;
-          }
-        }
-      } catch (audioErr) {
-        console.warn('Audio extraction skipped:', audioErr.message);
-      }
-
-      if (transcriptWords.length > 0) {
-        const aRes = await base44.functions.invoke('analyzeViralMoments', {
-          transcript:       transcriptWords.map((w) => w.word).join(' '),
-          words:            transcriptWords,
-          duration:         vidDuration || 300,
-          max_clips:        parseInt(maxClips) || 8,
-          min_clip_seconds: parseInt(minSec)   || 20,
-          max_clip_seconds: parseInt(maxSec)   || 60,
-        });
-        analysisClips = (aRes && aRes.data && aRes.data.clips) ? aRes.data.clips : [];
-      }
-
-      if (!analysisClips.length) {
-        const dur     = vidDuration || 120;
-        const clipLen = parseInt(maxSec) || 60;
-        const count   = Math.min(parseInt(maxClips) || 8, Math.floor(dur / clipLen));
-        for (var i = 0; i < count; i++) {
-          analysisClips.push({
-            start: i * clipLen,
-            end:   Math.min((i + 1) * clipLen, dur),
-            video_title_for_youtube_short: 'Clip ' + (i + 1),
-            viral_hook_text: '',
-            video_description_for_tiktok: '',
-            video_description_for_instagram: '',
-          });
-        }
-      }
-
-      if (!analysisClips.length) throw new Error('No clips to generate. Try a longer video.');
+      const analysisClips = result?.clips || [];
+      if (!analysisClips.length) throw new Error('No viral moments detected. Try a different video.');
       markDone('analyze');
 
-      // Step 3: Cut and crop
+      // Step 4: Cut clips with FFmpeg
       setStep('clip');
-      setMsg('Cutting and cropping clips to 9:16...');
+      setMsg('Cutting and cropping clips to 9:16…');
       setProgress(0);
 
       const processed = [];
-
-      for (var ci = 0; ci < analysisClips.length; ci++) {
-        const c    = analysisClips[ci];
-        const name = 'clip_' + (ci + 1) + '.mp4';
-        const dur  = c.end - c.start;
-
-        setMsg('Processing clip ' + (ci + 1) + ' of ' + analysisClips.length + '...');
+      for (let ci = 0; ci < analysisClips.length; ci++) {
+        const c = analysisClips[ci];
+        setMsg(`Processing clip ${ci + 1} of ${analysisClips.length}…`);
         setProgress(Math.round((ci / analysisClips.length) * 100));
-
         try {
           const blob    = await clipVideo(
-            URL.createObjectURL(file),
-            c.start,
-            c.end,
-            (p) => { if (p && p.percent) setProgress(p.percent); }
+            URL.createObjectURL(file), c.start, c.end,
+            p => { if (p?.percent) setProgress(p.percent); }
           );
           const blobUrl = URL.createObjectURL(blob);
-          processed.push(Object.assign({}, c, { blob: blob, blobUrl: blobUrl, _idx: ci }));
+          processed.push({ ...c, blob, blobUrl, _idx: ci });
         } catch (clipErr) {
-          console.error('Clip ' + (ci + 1) + ' failed:', clipErr.message);
+          console.error(`Clip ${ci + 1} failed:`, clipErr.message);
         }
       }
 
@@ -869,39 +698,31 @@ export default function OpenShorts() {
 
       setClips(processed);
       setStage('done');
-      setMsg(processed.length + ' clips ready!');
+      setMsg(`${processed.length} clips ready!`);
       setProgress(100);
 
-      // Step 4: Upload to Cloudinary if configured
-      const cloudName = localStorage.getItem(LS.CLOUD_NAME);
-      if (cloudName) {
+      // Step 5: Upload clips to Cloudinary
+      if (localStorage.getItem(LS.CLOUD_NAME)) {
         setStep('upload');
-        setMsg('Uploading to Cloudinary for permanent storage...');
-
-        const withCDN = await Promise.all(
-          processed.map(async (c) => {
-            try {
-              const result = await uploadToCloudinary(
-                new File([c.blob], 'clip_' + (c._idx + 1) + '.mp4', { type: 'video/mp4' }),
-                null
-              );
-              return Object.assign({}, c, { cloudinary_url: (result && result.secure_url) || null });
-            } catch (e) {
-              return c;
-            }
-          })
-        );
-
+        setMsg('Uploading clips to Cloudinary…');
+        const withCDN = await Promise.all(processed.map(async c => {
+          try {
+            const r = await uploadToCloudinary(
+              new File([c.blob], `clip_${c._idx + 1}.mp4`, { type: 'video/mp4' }),
+              { resourceType: 'video' }
+            );
+            return { ...c, cloudinary_url: r?.secure_url || null };
+          } catch { return c; }
+        }));
         markDone('upload');
         setClips(withCDN);
-        setMsg(processed.length + ' clips saved to Cloudinary!');
+        setMsg(`${processed.length} clips saved to Cloudinary!`);
         await saveToSupabase(withCDN);
       } else {
         await saveToSupabase(processed);
       }
 
       setStep(null);
-
     } catch (e) {
       console.error('OpenShorts file error:', e);
       setStage('error');
@@ -911,17 +732,9 @@ export default function OpenShorts() {
   };
 
   const handleReset = () => {
-    setStage('idle');
-    setClips([]);
-    setCost(null);
-    setErr('');
-    setStep(null);
-    setDone([]);
-    setMsg('');
-    setProgress(0);
-    setFile(null);
-    setYtUrl('');
-    setVidDur(0);
+    setStage('idle'); setClips([]); setCost(null); setErr('');
+    setStep(null); setDone([]); setMsg(''); setProgress(0);
+    setFile(null); setYtUrl(''); setVidDur(0);
   };
 
   const isActive = stage === 'processing' || stage === 'done' || stage === 'error';
@@ -934,12 +747,8 @@ export default function OpenShorts() {
       <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link
-              to="/"
-              className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 transition-colors"
-            >
-              <ArrowLeft size={13} />
-              <span>Dashboard</span>
+            <Link to="/" className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 transition-colors">
+              <ArrowLeft size={13} /><span>Dashboard</span>
             </Link>
             <div className="w-px h-4 bg-gray-200" />
             <div className="flex items-center gap-2">
@@ -954,46 +763,24 @@ export default function OpenShorts() {
                 { k: 'generate', label: 'Generate', icon: Sparkles },
                 { k: 'library',  label: 'Library',  icon: Library  },
               ].map(({ k, label, icon: Icon }) => (
-                <button
-                  key={k}
-                  onClick={() => setMainTab(k)}
-                  className={
-                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ' +
-                    (mainTab === k
-                      ? 'bg-rose-50 text-rose-600 border border-rose-100'
-                      : 'text-gray-500 hover:text-gray-700')
-                  }
-                >
-                  <Icon size={11} />
-                  <span>{label}</span>
-                  {k === 'library' && !sb.ready() && (
-                    <span className="text-gray-300 text-xs">locked</span>
-                  )}
+                <button key={k} onClick={() => setMainTab(k)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${mainTab === k ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'text-gray-500 hover:text-gray-700'}`}>
+                  <Icon size={11} /><span>{label}</span>
                 </button>
               ))}
             </div>
           </div>
-
           <div className="flex items-center gap-2">
             {isActive && (
-              <button
-                onClick={handleReset}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium transition-colors"
-              >
-                <X size={11} />
-                <span>Reset</span>
+              <button onClick={handleReset} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium transition-colors">
+                <X size={11} /><span>Reset</span>
               </button>
             )}
             {sb.ready() && (
               <div className="hidden sm:flex items-center gap-1 px-2 py-1 bg-emerald-50 border border-emerald-100 rounded-lg text-emerald-600 text-xs font-medium">
-                <Database size={9} />
-                <span>Library On</span>
+                <Database size={9} /><span>Library On</span>
               </div>
             )}
-            <button
-              onClick={() => setShowSettings(true)}
-              className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-            >
+            <button onClick={() => setShowSettings(true)} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
               <Settings size={15} />
             </button>
           </div>
@@ -1007,12 +794,11 @@ export default function OpenShorts() {
           {!isActive && (
             <div className="text-center space-y-2">
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-rose-50 border border-rose-100 rounded-full text-rose-600 text-xs font-medium mb-1">
-                <Zap size={11} />
-                <span>No Docker, No Server, 100% In-Browser</span>
+                <Zap size={11} /><span>AssemblyAI Transcription · Claude Analysis · FFmpeg Clips · Cloudinary CDN</span>
               </div>
               <h1 className="text-3xl font-bold text-gray-900">Open Shorts</h1>
               <p className="text-gray-400 text-sm max-w-lg mx-auto">
-                Gemini AI finds viral moments. FFmpeg cuts and crops to 9:16 in your browser. Cloudinary stores them permanently.
+                AssemblyAI transcribes. Claude finds viral moments. FFmpeg cuts 9:16 clips in-browser. Cloudinary stores them.
               </p>
             </div>
           )}
@@ -1021,23 +807,11 @@ export default function OpenShorts() {
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="flex border-b border-gray-100">
                 {[
-                  { k: 'youtube', icon: Youtube, label: 'YouTube URL',  desc: 'Gemini watches it directly' },
-                  { k: 'file',    icon: Upload,  label: 'Upload File',  desc: 'Real 9:16 clip files'       },
+                  { k: 'youtube', icon: Youtube, label: 'YouTube URL',  desc: 'Extracts audio → transcribes → finds moments' },
+                  { k: 'file',    icon: Upload,  label: 'Upload File',  desc: 'FFmpeg in-browser, real 9:16 output files'    },
                 ].map(({ k, icon: Icon, label, desc }) => (
-                  <button
-                    key={k}
-                    onClick={() => setInputMode(k)}
-                    className={
-                      'flex-1 flex flex-col items-center gap-0.5 py-3 text-sm font-medium transition-colors border-b-2 ' +
-                      (inputMode === k
-                        ? 'text-rose-600 border-rose-500 bg-rose-50/30'
-                        : 'text-gray-500 border-transparent hover:text-gray-700')
-                    }
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <Icon size={14} />
-                      <span>{label}</span>
-                    </div>
+                  <button key={k} onClick={() => setInputMode(k)} className={`flex-1 flex flex-col items-center gap-0.5 py-3 text-sm font-medium transition-colors border-b-2 ${inputMode === k ? 'text-rose-600 border-rose-500 bg-rose-50/30' : 'text-gray-500 border-transparent hover:text-gray-700'}`}>
+                    <div className="flex items-center gap-1.5"><Icon size={14} /><span>{label}</span></div>
                     <span className="text-xs font-normal text-gray-400">{desc}</span>
                   </button>
                 ))}
@@ -1047,19 +821,13 @@ export default function OpenShorts() {
                 {inputMode === 'youtube' && (
                   <div className="space-y-3">
                     <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-700 flex items-start gap-2">
-                      <Zap size={12} className="shrink-0 mt-0.5 text-blue-500" />
+                      <Mic size={12} className="shrink-0 mt-0.5 text-blue-500" />
                       <span>
-                        Gemini watches your YouTube video and returns the exact timestamps of the most viral moments,
-                        plus ready-made captions for every platform.
+                        Audio is extracted via Cobalt, transcribed by AssemblyAI, then Claude identifies the best viral moments with exact timestamps.
+                        Add your AssemblyAI key in Settings to get started.
                       </span>
                     </div>
-                    <Input
-                      value={ytUrl}
-                      onChange={(e) => setYtUrl(e.target.value)}
-                      placeholder="https://www.youtube.com/watch?v=..."
-                      className="h-12 text-sm"
-                      onKeyDown={(e) => { if (e.key === 'Enter') runYouTubeMode(); }}
-                    />
+                    <Input value={ytUrl} onChange={e => setYtUrl(e.target.value)} placeholder="https://www.youtube.com/watch?v=…" className="h-12 text-sm" onKeyDown={e => { if (e.key === 'Enter') runYouTubeMode(); }} />
                     <p className="text-xs text-gray-400">Supports youtube.com and youtu.be links</p>
                   </div>
                 )}
@@ -1069,63 +837,30 @@ export default function OpenShorts() {
                     <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-xs text-emerald-700 flex items-start gap-2">
                       <Cpu size={12} className="shrink-0 mt-0.5 text-emerald-500" />
                       <span>
-                        FFmpeg runs inside your browser to cut clips and crop each one to 9:16 portrait.
-                        No files leave your computer until you choose to upload.
+                        Video uploads to Cloudinary → AssemblyAI transcribes → Claude finds viral moments → FFmpeg cuts 9:16 clips in your browser.
                       </span>
                     </div>
                     <div
-                      className={
-                        'border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ' +
-                        (dragging     ? 'border-rose-400 bg-rose-50' :
-                         file         ? 'border-rose-300 bg-rose-50/50' :
-                                        'border-gray-200 hover:border-rose-300 hover:bg-rose-50/20')
-                      }
-                      onClick={() => { if (fileRef.current) fileRef.current.click(); }}
-                      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+                      className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${dragging ? 'border-rose-400 bg-rose-50' : file ? 'border-rose-300 bg-rose-50/50' : 'border-gray-200 hover:border-rose-300 hover:bg-rose-50/20'}`}
+                      onClick={() => fileRef.current?.click()}
+                      onDragOver={e => { e.preventDefault(); setDragging(true); }}
                       onDragLeave={() => setDragging(false)}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        setDragging(false);
-                        const f = e.dataTransfer.files && e.dataTransfer.files[0];
-                        if (f && f.type.startsWith('video/')) handleFileSelect(f);
-                      }}
+                      onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f?.type.startsWith('video/')) handleFileSelect(f); }}
                     >
-                      <input
-                        ref={fileRef}
-                        type="file"
-                        accept="video/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files && e.target.files[0];
-                          if (f) handleFileSelect(f);
-                        }}
-                      />
+                      <input ref={fileRef} type="file" accept="video/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }} />
                       {file ? (
                         <div className="flex items-center justify-center gap-3">
                           <FileVideo className="text-rose-500" size={20} />
                           <div className="text-left">
                             <p className="text-sm font-medium text-gray-800">{file.name}</p>
-                            <p className="text-xs text-gray-400">
-                              {(file.size / 1024 / 1024).toFixed(1)} MB
-                              {vidDuration ? ' / ' + formatTime(vidDuration) : ''}
-                            </p>
+                            <p className="text-xs text-gray-400">{(file.size / 1024 / 1024).toFixed(1)} MB{vidDuration ? ' / ' + formatTime(vidDuration) : ''}</p>
                           </div>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setFile(null); setVidDur(0); }}
-                            className="ml-auto text-gray-400 hover:text-gray-600"
-                          >
-                            <X size={15} />
-                          </button>
+                          <button onClick={e => { e.stopPropagation(); setFile(null); setVidDur(0); }} className="ml-auto text-gray-400 hover:text-gray-600"><X size={15} /></button>
                         </div>
                       ) : (
                         <div className="space-y-2">
-                          <div className="w-10 h-10 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-center mx-auto">
-                            <Upload size={18} className="text-gray-400" />
-                          </div>
-                          <p className="text-sm text-gray-600 font-medium">
-                            Drag and drop video or{' '}
-                            <span className="text-rose-500">browse</span>
-                          </p>
+                          <div className="w-10 h-10 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-center mx-auto"><Upload size={18} className="text-gray-400" /></div>
+                          <p className="text-sm text-gray-600 font-medium">Drag and drop video or <span className="text-rose-500">browse</span></p>
                           <p className="text-xs text-gray-400">MP4, MOV, AVI, any size</p>
                         </div>
                       )}
@@ -1134,13 +869,8 @@ export default function OpenShorts() {
                 )}
 
                 <div>
-                  <button
-                    onClick={() => setShowAdv(!showAdv)}
-                    className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    <Settings size={11} />
-                    <span>Advanced settings</span>
-                    {showAdv ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
+                  <button onClick={() => setShowAdv(!showAdv)} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                    <Settings size={11} /><span>Advanced settings</span>{showAdv ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
                   </button>
                   {showAdv && (
                     <div className="mt-3 grid grid-cols-3 gap-3">
@@ -1151,12 +881,7 @@ export default function OpenShorts() {
                       ].map(({ label, val, set, ph }) => (
                         <div key={label}>
                           <label className="text-xs text-gray-500 block mb-1">{label}</label>
-                          <Input
-                            value={val}
-                            onChange={(e) => set(e.target.value)}
-                            placeholder={ph}
-                            className="h-9 text-sm"
-                          />
+                          <Input value={val} onChange={e => set(e.target.value)} placeholder={ph} className="h-9 text-sm" />
                         </div>
                       ))}
                     </div>
@@ -1165,36 +890,21 @@ export default function OpenShorts() {
 
                 {err && stage === 'idle' && (
                   <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3">
-                    <AlertCircle size={13} />
-                    <span>{err}</span>
+                    <AlertCircle size={13} /><span>{err}</span>
                   </div>
                 )}
 
                 <Button
                   onClick={inputMode === 'youtube' ? runYouTubeMode : runFileMode}
-                  disabled={
-                    stage === 'processing' ||
-                    (inputMode === 'youtube' && !ytUrl.trim()) ||
-                    (inputMode === 'file'    && !file)
-                  }
+                  disabled={stage === 'processing' || (inputMode === 'youtube' && !ytUrl.trim()) || (inputMode === 'file' && !file)}
                   className="w-full h-12 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-semibold rounded-xl disabled:opacity-50"
                 >
-                  {stage === 'processing' ? (
-                    <span className="flex items-center gap-2">
-                      <Loader2 size={15} className="animate-spin" />
-                      Processing...
-                    </span>
-                  ) : inputMode === 'youtube' ? (
-                    <span className="flex items-center gap-2">
-                      <Sparkles size={15} />
-                      Analyze with Gemini
-                    </span>
-                  ) : (
-                    <span className="flex items-center gap-2">
-                      <Scissors size={15} />
-                      Generate 9:16 Clips
-                    </span>
-                  )}
+                  {stage === 'processing'
+                    ? <span className="flex items-center gap-2"><Loader2 size={15} className="animate-spin" />Processing…</span>
+                    : inputMode === 'youtube'
+                      ? <span className="flex items-center gap-2"><Mic size={15} />Transcribe + Analyze</span>
+                      : <span className="flex items-center gap-2"><Scissors size={15} />Generate 9:16 Clips</span>
+                  }
                 </Button>
               </div>
             </div>
@@ -1204,7 +914,7 @@ export default function OpenShorts() {
           {stage === 'processing' && (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
               <StageBar
-                stageKeys={inputMode === 'youtube' ? ['analyze'] : ['load', 'analyze', 'clip', 'upload']}
+                stageKeys={inputMode === 'youtube' ? ['transcribe', 'analyze'] : ['load', 'transcribe', 'analyze', 'clip', 'upload']}
                 current={currentStep}
                 done={doneSteps}
               />
@@ -1212,21 +922,9 @@ export default function OpenShorts() {
                 <p className="text-sm text-gray-700 font-medium">{statusMsg}</p>
                 {progress > 0 && (
                   <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className="bg-gradient-to-r from-rose-500 to-red-600 h-1.5 rounded-full transition-all duration-300"
-                      style={{ width: progress + '%' }}
-                    />
+                    <div className="bg-gradient-to-r from-rose-500 to-red-600 h-1.5 rounded-full transition-all duration-300" style={{ width: progress + '%' }} />
                   </div>
                 )}
-                <p className="text-xs text-gray-400">
-                  {inputMode === 'youtube'
-                    ? 'Gemini watches the full video. Takes 30 to 120 seconds depending on length.'
-                    : currentStep === 'load'
-                      ? 'Downloading FFmpeg. One-time download, will be cached.'
-                      : currentStep === 'clip'
-                        ? 'FFmpeg is cropping each clip to 9:16. Takes 30 to 90 seconds per clip.'
-                        : ''}
-                </p>
               </div>
             </div>
           )}
@@ -1234,19 +932,15 @@ export default function OpenShorts() {
           {/* Error */}
           {stage === 'error' && (
             <div className="bg-red-50 border border-red-100 rounded-2xl p-6 space-y-3">
-              <p className="font-semibold text-red-700 flex items-center gap-2">
-                <AlertCircle size={16} />
-                Something went wrong
-              </p>
+              <p className="font-semibold text-red-700 flex items-center gap-2"><AlertCircle size={16} />Something went wrong</p>
               <p className="text-sm text-red-600">{err}</p>
               <div className="text-xs text-red-500 space-y-1">
-                {err && err.includes('Gemini') && <p>Check your Gemini key is working correctly.</p>}
-                {err && err.includes('YouTube') && <p>Some videos are restricted. Try a different video or use File Upload mode.</p>}
-                {err && err.includes('FFmpeg') && <p>Try Chrome or Firefox. WebAssembly must be enabled.</p>}
+                {err?.includes('AssemblyAI') && <p>Check your AssemblyAI key in Settings.</p>}
+                {err?.includes('Cloudinary') && <p>Check your Cloudinary Cloud Name and preset in Settings.</p>}
+                {err?.includes('Cobalt')     && <p>Cobalt may be rate-limiting. Try adding a self-hosted Cobalt URL in Settings.</p>}
+                {err?.includes('FFmpeg')     && <p>Try Chrome or Firefox. WebAssembly must be enabled.</p>}
               </div>
-              <Button onClick={handleReset} className="bg-red-600 hover:bg-red-700 text-white h-9 text-sm">
-                Try Again
-              </Button>
+              <Button onClick={handleReset} className="bg-red-600 hover:bg-red-700 text-white h-9 text-sm">Try Again</Button>
             </div>
           )}
 
@@ -1256,24 +950,11 @@ export default function OpenShorts() {
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                   <Sparkles size={16} className="text-rose-500" />
-                  <span>
-                    {stage === 'done'
-                      ? clips.length + ' Viral Clips Ready'
-                      : 'Processing... (' + clips.length + ' done)'}
-                  </span>
-                  {costInfo && (
-                    <span className="text-xs bg-emerald-50 border border-emerald-100 text-emerald-600 px-2 py-1 rounded-full font-normal">
-                      {'$' + (costInfo.total_cost || 0).toFixed(5)}
-                    </span>
-                  )}
+                  <span>{stage === 'done' ? `${clips.length} Viral Clips Ready` : `Processing… (${clips.length} done)`}</span>
                 </h2>
                 {stage === 'done' && (
-                  <button
-                    onClick={handleReset}
-                    className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 font-medium px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"
-                  >
-                    <X size={11} />
-                    <span>New video</span>
+                  <button onClick={handleReset} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 font-medium px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors">
+                    <X size={11} /><span>New video</span>
                   </button>
                 )}
               </div>
@@ -1281,41 +962,29 @@ export default function OpenShorts() {
               {inputMode === 'youtube' && (
                 <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-xs text-amber-700 flex items-start gap-2">
                   <Youtube size={12} className="shrink-0 mt-0.5 text-amber-500" />
-                  <span>
-                    These clips play in embedded YouTube players at the exact viral timestamps.
-                    To get actual 9:16 video files, download the video and use Upload File mode instead.
-                  </span>
+                  <span>These clips play at the exact viral timestamps in embedded YouTube players. Use File Upload mode to get real 9:16 video files.</span>
                 </div>
               )}
 
-              <div className={
-                'grid gap-5 ' +
-                (inputMode === 'youtube'
-                  ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
-                  : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4')
-              }>
-                {clips.map((c, i) =>
-                  inputMode === 'youtube'
-                    ? <YouTubeClipCard key={i} clip={c} index={i} ytUrl={ytUrl} />
-                    : <FileClipCard    key={i} clip={c} index={i} />
+              <div className={`grid gap-5 ${inputMode === 'youtube' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'}`}>
+                {clips.map((c, i) => inputMode === 'youtube'
+                  ? <YouTubeClipCard key={i} clip={c} index={i} ytUrl={ytUrl} />
+                  : <FileClipCard    key={i} clip={c} index={i} />
                 )}
               </div>
             </div>
           )}
 
-          {/* How it works */}
           {!isActive && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { icon: Youtube,     label: 'YouTube Mode',  desc: 'Gemini watches directly, no download needed' },
-                { icon: Cpu,         label: 'File Mode',     desc: 'FFmpeg in-browser, real 9:16 output files'   },
-                { icon: CloudUpload, label: 'Cloudinary',    desc: 'Optional permanent CDN clip storage'          },
-                { icon: Database,    label: 'Clip Library',  desc: 'Optional Supabase saves your history'        },
+                { icon: Mic,         label: 'AssemblyAI',    desc: 'Word-level transcription for precise clip boundaries' },
+                { icon: Sparkles,    label: 'Claude AI',     desc: 'Finds the highest-virality moments automatically'     },
+                { icon: Cpu,         label: 'FFmpeg WASM',   desc: 'Cuts 9:16 clips locally, no server needed'           },
+                { icon: CloudUpload, label: 'Cloudinary',    desc: 'Permanent CDN storage for all your clips'            },
               ].map(({ icon: Icon, label, desc }) => (
                 <div key={label} className="bg-white rounded-xl border border-gray-100 p-3 text-center shadow-sm">
-                  <div className="w-7 h-7 rounded-lg bg-rose-50 flex items-center justify-center mx-auto mb-2">
-                    <Icon size={13} className="text-rose-500" />
-                  </div>
+                  <div className="w-7 h-7 rounded-lg bg-rose-50 flex items-center justify-center mx-auto mb-2"><Icon size={13} className="text-rose-500" /></div>
                   <p className="text-xs font-semibold text-gray-800">{label}</p>
                   <p className="text-xs text-gray-400 mt-0.5">{desc}</p>
                 </div>
@@ -1329,13 +998,8 @@ export default function OpenShorts() {
       {mainTab === 'library' && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
           <div className="mb-6">
-            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <Library size={18} className="text-rose-500" />
-              <span>Clip Library</span>
-            </h2>
-            <p className="text-sm text-gray-400 mt-0.5">
-              All your generated clips, saved automatically via Supabase
-            </p>
+            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2"><Library size={18} className="text-rose-500" /><span>Clip Library</span></h2>
+            <p className="text-sm text-gray-400 mt-0.5">All your generated clips, saved automatically via Supabase</p>
           </div>
           <ClipLibrary />
         </div>
