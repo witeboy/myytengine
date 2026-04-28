@@ -39,12 +39,10 @@ import {
 const LS = {
   CLOUD_NAME:   LS_KEYS.CLOUD_NAME,
   CLOUD_PRESET: LS_KEYS.CLOUD_PRESET,
-  ASSEMBLYAI:   'ASSEMBLYAI_API_KEY',
   SUPABASE_URL: 'openshorts_supabase_url',
   SUPABASE_KEY: 'openshorts_supabase_anon_key',
   UP_KEY:       'openshorts_uploadpost_key',
   UP_USER:      'openshorts_uploadpost_user',
-  COBALT_URL:   'COBALT_API_URL',
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -165,18 +163,6 @@ function SettingsPanel({ onClose }) {
       hint: 'Cloudinary → Settings → Upload → Add unsigned preset',
     },
     {
-      section: 'AssemblyAI — Transcription',
-      k: LS.ASSEMBLYAI, label: 'AssemblyAI API Key', pw: true,
-      ph: 'your-assemblyai-key',
-      hint: 'assemblyai.com → Account → API key',
-    },
-    {
-      section: 'YouTube Audio Extraction',
-      k: LS.COBALT_URL, label: 'Cobalt Instance URL (optional)', pw: false,
-      ph: 'https://api.cobalt.tools',
-      hint: 'Self-hosted Cobalt for reliable YT extraction. Leave blank to use public API.',
-    },
-    {
       section: 'Supabase — Clip Library (Optional)',
       k: LS.SUPABASE_URL, label: 'Project URL', pw: false,
       ph: 'https://xxxx.supabase.co',
@@ -255,7 +241,6 @@ function SettingsPanel({ onClose }) {
         <div className="pt-2 space-y-1.5">
           {[
             { ok: !!vals[LS.CLOUD_NAME], label: 'Cloudinary — clip storage' },
-            { ok: !!vals[LS.ASSEMBLYAI], label: 'AssemblyAI — transcription' },
             { ok: !!(vals[LS.SUPABASE_URL] && vals[LS.SUPABASE_KEY]), label: 'Supabase — clip library' },
           ].map(({ ok, label }) => (
             <div key={label} className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg ${ok ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-50 text-gray-400'}`}>
