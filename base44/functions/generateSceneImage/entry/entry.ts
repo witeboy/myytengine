@@ -1,29 +1,16 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
-// IMAGE GENERATION — SUBMIT-ONLY (v2)
+// IMAGE GENERATION — SUBMIT-ONLY (v3 — Z-Image only)
 // Pipeline: Script → Breakdown → Prompts → [THIS] → pollSceneImage → Animation
 // ══════════════════════════════════════════════════════════════════
 
 const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
-const AI33_BASE = "https://api.ai33.pro";
 
 const MAX_CONCURRENT = 4;
 const MAX_RETRIES = 2;
-const AI33_MAX_PROMPT_CHARS = 4000;
 const RETRY_BASE_MS = 2000;
-
-// ─────────────────────────────────────────────
-// ASPECT RATIO HELPERS
-// ─────────────────────────────────────────────
-
-// Z-Image and Grok accept "16:9" / "9:16" directly (colon format)
-// Nano Banana's image_size uses underscore format e.g. "landscape_16_9"
-function toNanoImageSize(aspectRatio) {
-  // aspectRatio is "16:9" or "9:16"
-  if (aspectRatio === "9:16") return "portrait_9_16";
-  return "landscape_16_9"; // default landscape
-}
+const Z_IMAGE_MAX_CHARS = 1000; // Hard limit per Z-Image API spec
 
 // ─────────────────────────────────────────────
 // KIE API — SUBMIT ONLY (no polling)
@@ -33,7 +20,7 @@ async function kieCreateTask(apiKey, model, input) {
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       const payload = { model, input };
-      console.log(`📡 Kie createTask: model=${model}, prompt=${(input.prompt || '').substring(0, 80)}...`);
+      console.log(`📡 Kie createTask: model=${model}, prompt=${(input.prompt || '').substring(0, 80)}... (${(input.prompt || '').length} chars)`);
       const res = await fetch(`${KIE_BASE}/createTask`, {
         method: "POST",
         headers: {
@@ -67,62 +54,36 @@ async function kieCreateTask(apiKey, model, input) {
 }
 
 // ─────────────────────────────────────────────
-// AI33 SEEDREAM — SUBMIT ONLY
+// PROMPT PREPARATION — Z-Image specific
+// Hard limit: 1000 chars per Z-Image API spec
 // ─────────────────────────────────────────────
 
-async function submitAI33Seedream(apiKey, prompt, aspectRatio) {
-  const ai33Aspect = aspectRatio === "9:16" ? "9:16" : "16:9";
-  console.log(`🌱 AI33 Seedream: submitting (${prompt.length} chars, ratio=${ai33Aspect})...`);
-
-  const formData = new FormData();
-  formData.append('prompt', prompt.substring(0, AI33_MAX_PROMPT_CHARS));
-  formData.append('model_id', 'bytedance-seedream-4.5');
-  formData.append('generations_count', '1');
-  formData.append('model_parameters', JSON.stringify({
-    aspect_ratio: ai33Aspect,
-    resolution: "2K"
-  }));
-
-  const submitRes = await fetch(`${AI33_BASE}/v1i/task/generate-image`, {
-    method: 'POST',
-    headers: { 'xi-api-key': apiKey },
-    body: formData
-  });
-
-  const submitData = await submitRes.json();
-
-  if (!submitData.success || !submitData.task_id) {
-    throw new Error(`AI33 submit failed: ${submitData.message || JSON.stringify(submitData)}`);
-  }
-
-  console.log(`📡 AI33 task submitted: ${submitData.task_id}`);
-  return submitData.task_id;
-}
-
-// ─────────────────────────────────────────────
-// PROMPT PREPARATION
-// ─────────────────────────────────────────────
-
-function preparePromptForProvider(rawPrompt, provider = 'grok', isSleep = false) {
+function preparePromptForZImage(rawPrompt) {
   let p = rawPrompt;
 
+  // Strip aspect ratio / orientation language (handled by API param)
   p = p
     .replace(/\b(LANDSCAPE|PORTRAIT)\s+(HORIZONTAL|VERTICAL)\b/gi, '')
     .replace(/\b\d{1,2}\s*:\s*\d{1,2}\s*(frame|format|ratio|widescreen|vertical|horizontal)?\s*,?\s*/gi, '');
 
+  // Strip resolution language
   p = p
     .replace(/\b\d{3,4}\s*[x×]\s*\d{3,4}\s*(pixels?|px)?\b/gi, '')
     .replace(/\b(8K|4K|1080p|720p)\s*(resolution|quality|detail)?\b/gi, 'highly detailed');
 
+  // Strip f-stop (triggers portrait mode)
   p = p.replace(/\bf[/:]?\s*\d+\.?\d*\b/gi, 'shallow depth of field');
 
+  // Strip markdown
   p = p
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/\*/g, '')
     .replace(/#{1,3}\s*/g, '');
 
+  // Strip skeleton protagonist label prefix
   p = p.replace(/^Skeleton\s+protagonist\s*→\s*/i, '').replace(/\bSkeleton\s+protagonist\s*→\s*/gi, '');
 
+  // Strip screen text content (Z-Image may render it literally)
   p = p
     .replace(/\b(phone|iphone|smartphone|tablet|ipad|mobile)\s+(screen|display)\s+(showing|displaying|with|reading|open\s+to)\s+[^,.]{5,80}[.,]/gi, 'phone screen glowing with soft light,')
     .replace(/\b(laptop|computer|monitor|desktop|macbook)\s+(screen|display)\s+(showing|displaying|with|open\s+to)\s+[^,.]{5,80}[.,]/gi, 'laptop screen casting cool light,')
@@ -132,18 +93,26 @@ function preparePromptForProvider(rawPrompt, provider = 'grok', isSleep = false)
     .replace(/\$[\d,]+\.?\d*\s*(in\s+)?(outstanding|owed|due|remaining|total|balance|charges?|debt|worth|dollars?)?\s*/gi, '')
     .replace(/\b\d+\.?\d*\s*(%|percent)\b/gi, '');
 
+  // Strip embedded anti-text instructions (Z-Image doesn't need them and they waste chars)
   p = p
     .replace(/,?\s*ABSOLUTELY\s+NO\s+text[^.]*\.\s*/gi, '')
     .replace(/,?\s*NO\s+text,?\s*words,?\s*letters[^.]*\.\s*/gi, '')
     .replace(/,?\s*FORBIDDEN:?\s*text[^.]*\.\s*/gi, '');
 
+  // Strip bare NAME placeholders
   p = p.replace(/\bNAME(?:'s)?\b/g, '');
+
+  // Strip all-caps words that are not common acronyms (may render as text)
   p = p.replace(/\b([A-Z]{2,15})\b/g, (match) => {
-    const commonCaps = ['ARRI', 'DSLR', 'HDR', 'LUT', 'POV', 'OTS', 'RGB', 'LED', 'CGI', 'DOF', 'ECU', 'MCU', 'CU', 'MS', 'WS', 'EWS', 'MWS', 'DM', 'UI', 'NO', 'ON', 'IN', 'AT', 'TO', 'BY', 'OF', 'OR', 'IF', 'AS', 'IS', 'IT', 'AN', 'DO', 'SO', 'UP', 'THE', 'AND', 'FOR', 'NOT', 'BUT', 'ALL', 'HAS', 'HIS', 'HER', 'RAW', 'RED', 'BMW', 'USA'];
+    const commonCaps = ['ARRI', 'DSLR', 'HDR', 'LUT', 'POV', 'OTS', 'RGB', 'LED', 'CGI', 'DOF',
+      'ECU', 'MCU', 'CU', 'MS', 'WS', 'EWS', 'MWS', 'DM', 'UI', 'NO', 'ON', 'IN', 'AT', 'TO',
+      'BY', 'OF', 'OR', 'IF', 'AS', 'IS', 'IT', 'AN', 'DO', 'SO', 'UP', 'THE', 'AND', 'FOR',
+      'NOT', 'BUT', 'ALL', 'HAS', 'HIS', 'HER', 'RAW', 'RED', 'BMW', 'USA'];
     if (commonCaps.includes(match)) return match;
     return '';
   });
 
+  // Clean up punctuation artifacts
   p = p
     .replace(/,\s*,/g, ',')
     .replace(/\.\s*\./g, '.')
@@ -153,6 +122,7 @@ function preparePromptForProvider(rawPrompt, provider = 'grok', isSleep = false)
     .replace(/\(\s*\)/g, '')
     .trim();
 
+  // Deduplicate near-identical sentences
   const sentences = p.split(/(?<=\.)\s+/).filter(s => s.length > 0);
   if (sentences.length > 3) {
     const kept = [];
@@ -174,14 +144,19 @@ function preparePromptForProvider(rawPrompt, provider = 'grok', isSleep = false)
     }
   }
 
-  const maxChars = provider === 'ai33_seedream' ? AI33_MAX_PROMPT_CHARS : 1500;
-
-  if (p.length > maxChars) {
-    const cutZone = p.substring(maxChars - 150, maxChars);
+  // ── HARD TRUNCATE to Z-Image 1000 char limit ──
+  if (p.length > Z_IMAGE_MAX_CHARS) {
+    // Try to cut at a sentence boundary first
+    const cutZone = p.substring(Z_IMAGE_MAX_CHARS - 150, Z_IMAGE_MAX_CHARS);
     const lastPeriod = cutZone.lastIndexOf('.');
-    const cutPoint = lastPeriod >= 0 ? (maxChars - 150) + lastPeriod + 1 : maxChars;
+    const lastComma = cutZone.lastIndexOf(',');
+    const cutPoint = lastPeriod >= 0
+      ? (Z_IMAGE_MAX_CHARS - 150) + lastPeriod + 1
+      : lastComma >= 0
+        ? (Z_IMAGE_MAX_CHARS - 150) + lastComma
+        : Z_IMAGE_MAX_CHARS;
     p = p.substring(0, cutPoint).trim();
-    console.log(`✂️ Truncated to ${p.length} chars for ${provider}`);
+    console.log(`✂️ Truncated to ${p.length} chars for z-image (limit: ${Z_IMAGE_MAX_CHARS})`);
   }
 
   return p;
@@ -207,154 +182,70 @@ function detectCharacterPresence(scene) {
 }
 
 // ─────────────────────────────────────────────
-// SINGLE SCENE PROCESSOR — SUBMIT ONLY
+// SINGLE SCENE PROCESSOR — Z-Image only
 // ─────────────────────────────────────────────
 
-async function processScene(base44, scene, project, kieApiKey, ai33ApiKey, aspectRatio, referenceImageUrl, providerPref = 'auto') {
+async function processScene(base44, scene, project, kieApiKey, aspectRatio) {
   const sceneNum = scene.scene_number;
-  const isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story' || project.visual_style === 'sleep_ambient';
 
   if (!scene.image_prompt) {
     return { scene_id: scene.id, scene_number: sceneNum, status: 'skipped', reason: 'no_prompt' };
   }
 
-  if (scene.status === 'image_generated' && scene.image_url && !scene.image_url.startsWith('ai33_task:') && !scene.image_url.startsWith('grok_img_task:') && !scene.image_url.startsWith('nano_task:') && !scene.image_url.startsWith('zimage_task:')) {
+  // Skip if already fully generated (not a pending task token)
+  if (
+    scene.status === 'image_generated' &&
+    scene.image_url &&
+    !scene.image_url.startsWith('zimage_task:')
+  ) {
     return { scene_id: scene.id, scene_number: sceneNum, status: 'skipped', reason: 'already_generated' };
   }
+
   if (scene.status === 'image_pending') {
     return { scene_id: scene.id, scene_number: sceneNum, status: 'skipped', reason: 'already_pending' };
   }
 
-  const sceneHasCharacter = detectCharacterPresence(scene);
+  // Prepare and truncate prompt to Z-Image's 1000 char hard limit
+  const finalPrompt = preparePromptForZImage(scene.image_prompt);
 
-  let finalPrompt = scene.image_prompt;
-
-  if (isSleepProject) {
-    finalPrompt = finalPrompt
-      .replace(/\b(a\s+)?(photorealistic\s+)?(female|male|woman|man|person|figure|girl|boy|lady|gentleman),?\s+[A-Z][a-z]+,?\s+(with\s+)?[^.]{20,300}(pajamas|clothing|dressed|wearing|shirt|pants|outfit|build|slender|muscular)[^.]*\.\s*/gi, '')
-      .replace(/\b[A-Z][a-z]{2,15}\s*(→|is|sits?|stands?|lies?|rests?|gazes?|walks?|holds?|closes?|faces?)\s+/gi, '')
-      .replace(/\b(Sarah|The Listener|the listener|the figure|the character|the protagonist)\b/gi, '')
-      .replace(/\bbright\s+(daylight|sunlight|sunshine|light|white|blue)\b/gi, 'very dim warm glow')
-      .replace(/\bhigh[- ]key\s+lighting\b/gi, 'ultra low-key lighting')
-      .replace(/\bvibrant\s+(saturated\s+)?colors?\b/gi, 'muted dark tones')
-      .replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').replace(/\s{2,}/g, ' ').trim();
-
-    if (!/dark moody oil painting/i.test(finalPrompt)) {
-      finalPrompt += ' Dark moody oil painting, deep shadows, very dim warm amber candlelight, ultra low-key lighting.';
-    }
-
-    finalPrompt = preparePromptForProvider(finalPrompt, 'ai33_seedream', true);
-    console.log(`🌙 Scene ${sceneNum}: sleep prompt (${finalPrompt.length}ch): ${finalPrompt.substring(0, 200)}`);
-  } else {
-    finalPrompt = scene.image_prompt;
-  }
-
-  console.log(`📐 Scene ${sceneNum}: raw prompt ${finalPrompt.length} chars: "${finalPrompt.substring(0, 150)}..."`);
-
-  // ── Provider order ────────────────────────────────────────
-  const wasFailedBefore = scene.status === 'image_failed';
-  let providers;
-
-  if (providerPref === 'auto') {
-    providers = isSleepProject
-      ? [ai33ApiKey ? 'ai33_seedream' : null, 'nano_banana', 'z_image', 'grok'].filter(Boolean)
-      : [ai33ApiKey ? 'ai33_seedream' : null, 'grok', 'nano_banana', 'z_image'].filter(Boolean);
-  } else {
-    const allProviders = ['ai33_seedream', 'grok', 'nano_banana', 'z_image'];
-    providers = [providerPref, ...allProviders.filter(p => p !== providerPref)];
-    providers = providers.filter(p => {
-      if (p === 'ai33_seedream' && !ai33ApiKey) return false;
-      if (['grok', 'nano_banana', 'z_image'].includes(p) && !kieApiKey) return false;
-      return true;
-    });
-  }
-
-  console.log(`🎯 Scene ${sceneNum}: provider order [${providers.join(' → ')}]`);
-
-  const useReference = !isSleepProject
-    && referenceImageUrl
-    && sceneHasCharacter
-    && referenceImageUrl.startsWith('http');
-
-  if (useReference) {
-    console.log(`🔗 Scene ${sceneNum}: using character reference (image-to-image)`);
-  }
-
-  // ── TRY EACH PROVIDER ──────────────────────
-  for (const provider of providers) {
-    try {
-      let taskId;
-      let taskPrefix;
-      const providerPrompt = preparePromptForProvider(finalPrompt, provider, isSleepProject);
-
-      if (provider === 'ai33_seedream') {
-        taskId = await submitAI33Seedream(ai33ApiKey, providerPrompt, aspectRatio);
-        taskPrefix = 'ai33_task';
-
-      } else if (provider === 'grok') {
-        if (useReference) {
-          taskId = await kieCreateTask(kieApiKey, "grok-imagine/image-to-image", {
-            prompt: providerPrompt,
-            image_urls: [referenceImageUrl]
-          });
-        } else {
-          taskId = await kieCreateTask(kieApiKey, "grok-imagine/text-to-image", {
-            prompt: providerPrompt,
-            aspect_ratio: aspectRatio   // ✅ "16:9" or "9:16"
-          });
-        }
-        taskPrefix = 'grok_img_task';
-
-      } else if (provider === 'nano_banana') {
-        // ✅ FIX: nano_banana uses image_size with underscore format, NOT aspect_ratio with colon
-        const nanoImageSize = toNanoImageSize(aspectRatio);
-        taskId = await kieCreateTask(kieApiKey, "google/nano-banana", {
-          prompt: providerPrompt,
-          output_format: "png",
-          image_size: nanoImageSize    // ✅ "landscape_16_9" or "portrait_9_16"
-        });
-        taskPrefix = 'nano_task';
-
-      } else if (provider === 'z_image') {
-        // ✅ Z-Image: requires both prompt AND aspect_ratio (both required per spec)
-        taskId = await kieCreateTask(kieApiKey, "z-image", {
-          prompt: providerPrompt,
-          aspect_ratio: aspectRatio    // ✅ "16:9" or "9:16" — matches z-image spec enum
-        });
-        taskPrefix = 'zimage_task';
-      }
-
-      await base44.asServiceRole.entities.Scenes.update(scene.id, {
-        image_url: `${taskPrefix}:${taskId}`,
-        status: "image_pending"
-      });
-
-      console.log(`✓ Scene ${sceneNum}: ${provider} task submitted (${taskId})`);
-
-      return {
-        scene_id: scene.id,
-        scene_number: sceneNum,
-        status: 'submitted',
-        task_id: taskId,
-        provider
-      };
-
-    } catch (err) {
-      console.warn(`⚠️ Scene ${sceneNum} ${provider} submit failed: ${err.message}`);
-      // Try next provider
-    }
-  }
+  console.log(`📐 Scene ${sceneNum}: prompt ${finalPrompt.length} chars (max ${Z_IMAGE_MAX_CHARS}): "${finalPrompt.substring(0, 150)}..."`);
 
   try {
-    await base44.asServiceRole.entities.Scenes.update(scene.id, { status: "image_failed" });
-  } catch (_) {}
+    // Z-Image: requires prompt + aspect_ratio (colon format: "16:9" or "9:16")
+    const taskId = await kieCreateTask(kieApiKey, "z-image", {
+      prompt: finalPrompt,
+      aspect_ratio: aspectRatio   // "16:9" or "9:16"
+    });
 
-  return {
-    scene_id: scene.id,
-    scene_number: sceneNum,
-    status: 'failed',
-    error: 'All providers failed to submit'
-  };
+    await base44.asServiceRole.entities.Scenes.update(scene.id, {
+      image_url: `zimage_task:${taskId}`,
+      status: "image_pending"
+    });
+
+    console.log(`✓ Scene ${sceneNum}: z-image task submitted (${taskId})`);
+
+    return {
+      scene_id: scene.id,
+      scene_number: sceneNum,
+      status: 'submitted',
+      task_id: taskId,
+      provider: 'z_image'
+    };
+
+  } catch (err) {
+    console.warn(`⚠️ Scene ${sceneNum} z-image submit failed: ${err.message}`);
+
+    try {
+      await base44.asServiceRole.entities.Scenes.update(scene.id, { status: "image_failed" });
+    } catch (_) {}
+
+    return {
+      scene_id: scene.id,
+      scene_number: sceneNum,
+      status: 'failed',
+      error: err.message
+    };
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -392,12 +283,11 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
     const body = await req.json();
-    const { scene_id, scene_ids, project_id, preferred_provider } = body;
+    const { scene_id, scene_ids, project_id } = body;
 
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
-    const AI33_API_KEY = Deno.env.get("AI33_API_KEY");
-    if (!KIE_API_KEY && !AI33_API_KEY) {
-      return Response.json({ error: "No image API keys configured" }, { status: 500 });
+    if (!KIE_API_KEY) {
+      return Response.json({ error: "KIE_API_KEY not configured" }, { status: 500 });
     }
 
     let scenesToProcess = [];
@@ -441,23 +331,14 @@ Deno.serve(async (req) => {
 
     const aspectRatio = project.orientation === "portrait" ? "9:16" : "16:9";
 
-    let providerPref = preferred_provider || project?.image_provider || 'auto';
-    // ✅ FIX: added z_image to valid provider list
-    if (!['auto', 'ai33_seedream', 'grok', 'nano_banana', 'z_image'].includes(providerPref)) providerPref = 'auto';
-
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`🎨 IMAGE SUBMIT — ${scenesToProcess.length} scenes`);
-    console.log(`📐 Aspect: ${aspectRatio} | ⚡ Concurrency: ${MAX_CONCURRENT} | 🎯 Provider: ${providerPref}`);
-    console.log(`🏗️ Available: ${AI33_API_KEY ? 'AI33' : '—'} | ${KIE_API_KEY ? 'Grok + Nano + Z-Image' : '—'}`);
+    console.log(`📐 Aspect: ${aspectRatio} | ⚡ Concurrency: ${MAX_CONCURRENT} | 🎯 Provider: z-image`);
+    console.log(`✂️  Prompt limit: ${Z_IMAGE_MAX_CHARS} chars (Z-Image API hard limit)`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
-    const referenceImageUrl = project.reference_image_url || null;
-    if (referenceImageUrl) {
-      console.log(`🔗 Reference image available: ${referenceImageUrl.substring(0, 60)}...`);
-    }
-
     const tasks = scenesToProcess.map(scene => () =>
-      processScene(base44, scene, project, KIE_API_KEY, AI33_API_KEY, aspectRatio, referenceImageUrl, providerPref)
+      processScene(base44, scene, project, KIE_API_KEY, aspectRatio)
     );
 
     const results = await processWithConcurrency(tasks, MAX_CONCURRENT);
@@ -482,7 +363,7 @@ Deno.serve(async (req) => {
         scene_number: r.scene_number,
         status: r.status,
         task_id: r.task_id,
-        provider: r.provider,
+        provider: r.provider || 'z_image',
         error: r.error
       }))
     });
