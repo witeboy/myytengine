@@ -18,7 +18,7 @@ async function callGemini(prompt, temperature = 0.7) {
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" }, 
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { temperature, maxOutputTokens: 16384, responseMimeType: "application/json" }
