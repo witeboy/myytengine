@@ -27,7 +27,6 @@ import {
   ExternalLink, Mic,
 } from 'lucide-react';
 import {
-  LS_KEYS,
   uploadToCloudinary,
   buildCloudinaryClipUrl,
   extractYouTubeAudio,
@@ -35,10 +34,10 @@ import {
   analyzeViralMoments,
 } from '@/lib/directApi';
 
-// ── localStorage keys ──────────────────────────────────────────────────
+// ── localStorage keys (Cloudinary only — all other keys come from server env) ─
 const LS = {
-  CLOUD_NAME:   LS_KEYS.CLOUD_NAME,
-  CLOUD_PRESET: LS_KEYS.CLOUD_PRESET,
+  CLOUD_NAME:   'openshorts_cloud_name',
+  CLOUD_PRESET: 'openshorts_cloud_preset',
   SUPABASE_URL: 'openshorts_supabase_url',
   SUPABASE_KEY: 'openshorts_supabase_anon_key',
   UP_KEY:       'openshorts_uploadpost_key',
