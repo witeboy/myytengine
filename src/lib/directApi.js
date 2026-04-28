@@ -1,30 +1,31 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// directApi.js  —  Browser-direct API calls. No backend function dependencies.
-// Cloudinary: unsigned upload using preset stored in OpenShorts Settings.
-// AssemblyAI: routed through base44 backend (has ASSEMBLYAI_API_KEY env var).
+// directApi.js — 100% browser-direct API calls. Zero base44 dependencies.
+//
+// Keys stored in localStorage (set via OpenShorts Settings panel):
+//   openshorts_cloud_name    — Cloudinary cloud name
+//   openshorts_cloud_preset  — Cloudinary unsigned upload preset
+//   ASSEMBLYAI_API_KEY       — AssemblyAI API key
+//   COBALT_API_URL           — Cobalt instance URL (for YouTube audio extraction)
 // ─────────────────────────────────────────────────────────────────────────────
-import { base44 } from '@/api/base44Client';
 
-// localStorage keys — set via OpenShorts Settings panel
 export const LS_KEYS = {
   CLOUD_NAME:   'openshorts_cloud_name',
   CLOUD_PRESET: 'openshorts_cloud_preset',
+  ASSEMBLYAI:   'ASSEMBLYAI_API_KEY',
+  COBALT_URL:   'COBALT_API_URL',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. CLOUDINARY — direct browser unsigned upload (no backend function needed)
-//    Requires: Cloud Name + Upload Preset set in OpenShorts Settings.
-//    Unsigned presets are safe for browser use — they have no API secret.
+// 1. CLOUDINARY — direct browser unsigned upload
 // ─────────────────────────────────────────────────────────────────────────────
-export const getCloudinaryConfig = () => {
-  const cloudName = localStorage.getItem(LS_KEYS.CLOUD_NAME);
-  const preset    = localStorage.getItem(LS_KEYS.CLOUD_PRESET) || 'openshorts_clips';
-  return { cloudName, preset };
-};
+export const getCloudinaryConfig = () => ({
+  cloudName: localStorage.getItem(LS_KEYS.CLOUD_NAME) || '',
+  preset:    localStorage.getItem(LS_KEYS.CLOUD_PRESET) || 'openshorts_clips',
+});
 
 export const uploadToCloudinary = (file, { resourceType = 'video', onProgress } = {}) => {
   const { cloudName, preset } = getCloudinaryConfig();
-  if (!cloudName) throw new Error('Cloudinary Cloud Name not set — open Settings in Open Shorts to add it.');
+  if (!cloudName) throw new Error('Cloudinary Cloud Name not set — open Settings to add it.');
 
   return new Promise((resolve, reject) => {
     const fd = new FormData();
@@ -38,9 +39,9 @@ export const uploadToCloudinary = (file, { resourceType = 'video', onProgress } 
     };
     xhr.onload = () => {
       try {
-        const result = JSON.parse(xhr.responseText);
-        if (result.error) return reject(new Error(result.error.message || 'Cloudinary upload failed'));
-        resolve(result); // result.secure_url, result.public_id, result.duration etc.
+        const res = JSON.parse(xhr.responseText);
+        if (res.error) return reject(new Error(res.error.message || 'Cloudinary upload failed'));
+        resolve(res);
       } catch { reject(new Error('Cloudinary response parse error')); }
     };
     xhr.onerror = () => reject(new Error('Cloudinary network error'));
@@ -49,110 +50,130 @@ export const uploadToCloudinary = (file, { resourceType = 'video', onProgress } 
   });
 };
 
-/**
- * Build a Cloudinary transformation URL for a clip segment.
- * No FFmpeg needed — Cloudinary crops to 9:16 and trims server-side.
- * Returns a playable/downloadable MP4 URL.
- *
- * @param {string} publicId  - Cloudinary public_id of the uploaded video
- * @param {string} cloudName - Cloudinary cloud name
- * @param {number} start     - clip start in seconds
- * @param {number} end       - clip end in seconds
- */
 export const buildCloudinaryClipUrl = (publicId, cloudName, start, end) => {
-  const dur = Math.round(end - start);
-  // so_ = start offset, du_ = duration, c_fill = fill crop, ar_9:16 = portrait
+  const dur       = Math.round(end - start);
   const transform = `so_${Math.round(start)},du_${dur},c_fill,ar_9:16,w_720,q_auto,f_mp4`;
   return `https://res.cloudinary.com/${cloudName}/video/upload/${transform}/${publicId}.mp4`;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. ASSEMBLYAI TRANSCRIPTION — routed through base44 backend
-//    Reuses the existing quickPublishTranscribe function (submit + poll pattern)
+// 2. ASSEMBLYAI — direct browser calls
 // ─────────────────────────────────────────────────────────────────────────────
+const AAI = 'https://api.assemblyai.com/v2';
 
-/**
- * All-in-one: submit URL → poll → return transcript.
- * audioUrl must be a public URL (Cloudinary CDN, AssemblyAI upload, etc.)
- * onStatus(msg) for progress updates.
- */
+const aaiKey = () => {
+  const key = localStorage.getItem(LS_KEYS.ASSEMBLYAI);
+  if (!key) throw new Error('AssemblyAI API key not set — open Settings to add it.');
+  return key;
+};
+
+export const uploadToAssemblyAI = (file, onProgress) =>
+  new Promise((resolve, reject) => {
+    const key = aaiKey();
+    const xhr = new XMLHttpRequest();
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      try {
+        const res = JSON.parse(xhr.responseText);
+        if (res.error) return reject(new Error(res.error));
+        resolve(res.upload_url);
+      } catch { reject(new Error('AssemblyAI upload parse error')); }
+    };
+    xhr.onerror = () => reject(new Error('AssemblyAI upload network error'));
+    xhr.open('POST', `${AAI}/upload`);
+    xhr.setRequestHeader('authorization', key);
+    xhr.send(file);
+  });
+
 export const transcribeFile = async (fileOrUrl, onStatus) => {
-  // If given a File/Blob, upload to Cloudinary first to get a public URL
   let audioUrl = fileOrUrl;
+
   if (fileOrUrl instanceof File || fileOrUrl instanceof Blob) {
-    if (onStatus) onStatus('Uploading to Cloudinary for transcription…');
-    const uploaded = await uploadToCloudinary(fileOrUrl, {
-      resourceType: 'video',
-      onProgress: pct => { if (onStatus) onStatus(`Uploading… ${pct}%`); },
+    if (onStatus) onStatus('Uploading audio to AssemblyAI...');
+    audioUrl = await uploadToAssemblyAI(fileOrUrl, pct => {
+      if (onStatus) onStatus(`Uploading... ${pct}%`);
     });
-    audioUrl = uploaded.secure_url;
   }
 
-  if (onStatus) onStatus('Submitting to AssemblyAI…');
+  if (onStatus) onStatus('Submitting transcription job...');
 
-  // Submit via backend (has ASSEMBLYAI_API_KEY in env)
-  const submitRes = await base44.functions.invoke('quickPublishTranscribe', {
-    action:   'submit',
-    file_url: audioUrl,
+  const submitRes = await fetch(`${AAI}/transcript`, {
+    method:  'POST',
+    headers: { authorization: aaiKey(), 'content-type': 'application/json' },
+    body:    JSON.stringify({ audio_url: audioUrl, auto_chapters: true }),
   });
-  const transcriptId = submitRes.data?.transcript_id;
-  if (!transcriptId) throw new Error(submitRes.data?.error || 'No transcript ID returned');
+  const submitData = await submitRes.json();
+  if (submitData.error) throw new Error('AssemblyAI submit error: ' + submitData.error);
+  const transcriptId = submitData.id;
 
-  // Poll (backend polls AssemblyAI or we poll directly — reuse existing pattern)
-  const startedAt   = Date.now();
-  const MAX_ATTEMPTS = 180;
-  for (let attempts = 0; attempts < MAX_ATTEMPTS; attempts++) {
+  const startedAt = Date.now();
+  for (let attempts = 0; attempts < 180; attempts++) {
     const interval = attempts < 12 ? 5000 : attempts < 60 ? 10000 : 15000;
     await new Promise(r => setTimeout(r, interval));
     const elapsed = Math.round((Date.now() - startedAt) / 1000);
-    if (onStatus) onStatus(`Transcribing… (${elapsed}s elapsed)`);
+    if (onStatus) onStatus(`Transcribing... (${elapsed}s elapsed)`);
 
-    let pollRes;
+    let data;
     try {
-      pollRes = await base44.functions.invoke('quickPublishTranscribe', {
-        action:        'poll',
-        transcript_id: transcriptId,
+      const pollRes = await fetch(`${AAI}/transcript/${transcriptId}`, {
+        headers: { authorization: aaiKey() },
       });
+      data = await pollRes.json();
     } catch (_) { continue; }
 
-    if (pollRes.data?.status === 'completed') {
+    if (data.status === 'completed') {
       return {
-        text:       pollRes.data.text      || '',
-        words:      pollRes.data.words     || [],
-        chapters:   pollRes.data.chapters  || [],
-        duration:   pollRes.data.duration  || 0,
-        word_count: (pollRes.data.words || []).length,
+        text:       data.text           || '',
+        words:      data.words          || [],
+        chapters:   data.chapters       || [],
+        duration:   data.audio_duration || 0,
+        word_count: (data.words || []).length,
       };
     }
-    if (pollRes.data?.status === 'error') {
-      throw new Error(pollRes.data?.error || 'Transcription failed');
-    }
+    if (data.status === 'error') throw new Error('AssemblyAI error: ' + (data.error || 'unknown'));
   }
   throw new Error('Transcription timed out after 30 minutes');
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. ANTHROPIC — direct /v1/messages calls (same as artifact pattern)
-//    Uses the artifact proxy endpoint so no API key needed client-side.
+// 3. COBALT — YouTube audio extraction (direct browser call)
 // ─────────────────────────────────────────────────────────────────────────────
-const ANTHROPIC_ENDPOINT = 'https://api.anthropic.com/v1/messages';
-const ANTHROPIC_MODEL    = 'claude-sonnet-4-20250514';
+export const extractYouTubeAudio = async (youtubeUrl) => {
+  const cobaltBase = localStorage.getItem(LS_KEYS.COBALT_URL) || 'https://api.cobalt.tools';
+  const res = await fetch(`${cobaltBase}/api/json`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body:    JSON.stringify({ url: youtubeUrl, aFormat: 'mp3', isAudioOnly: true }),
+  });
+  if (!res.ok) throw new Error(`Cobalt request failed (${res.status}). Check COBALT_API_URL in Settings.`);
+  const data = await res.json();
+  if (data.status === 'error' || data.status === 'rate-limit') {
+    throw new Error(data.text || 'Cobalt extraction failed');
+  }
+  const audioUrl = data.url || data.picker?.[0]?.url;
+  if (!audioUrl) throw new Error('Cobalt returned no audio URL');
+  return audioUrl;
+};
 
-const callClaude = async (systemPrompt, userContent, { maxTokens = 2000 } = {}) => {
-  const res = await fetch(ANTHROPIC_ENDPOINT, {
+// ─────────────────────────────────────────────────────────────────────────────
+// 4. ANTHROPIC — direct /v1/messages (artifact proxy)
+// ─────────────────────────────────────────────────────────────────────────────
+const callClaude = async (system, user, { maxTokens = 2000 } = {}) => {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model:      ANTHROPIC_MODEL,
+      model:      'claude-sonnet-4-20250514',
       max_tokens: maxTokens,
-      system:     systemPrompt,
-      messages:   [{ role: 'user', content: userContent }],
+      system,
+      messages:   [{ role: 'user', content: user }],
     }),
   });
   const data = await res.json();
-  if (data.error) throw new Error('Claude API error: ' + (data.error.message || JSON.stringify(data.error)));
-  const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
-  return text;
+  if (data.error) throw new Error('Claude error: ' + (data.error.message || JSON.stringify(data.error)));
+  return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
 };
 
 const parseJson = (raw) => {
@@ -161,148 +182,100 @@ const parseJson = (raw) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. VIRAL MOMENT ANALYSIS  (replaces analyzeViralMoments base44 function)
+// 5. VIRAL MOMENT ANALYSIS
 // ─────────────────────────────────────────────────────────────────────────────
 export const analyzeViralMoments = async ({
-  transcript,
-  words,
-  duration,
-  maxClips    = 8,
-  minSeconds  = 20,
-  maxSeconds  = 60,
-  context     = '',
+  transcript, words, duration,
+  maxClips = 8, minSeconds = 20, maxSeconds = 60, context = '',
 }) => {
-  const system = `You are a viral content strategist specializing in short-form video.
-Your job: find the most viral, shareable moments in a transcript.
-Always respond with valid JSON only — no preamble, no markdown fences.`;
-
-  const user = `Analyze this transcript and find the ${maxClips} most viral moments.
+  const raw = await callClaude(
+    `You are a viral content strategist. Find the most viral moments in a transcript.
+Always respond with valid JSON only — no preamble, no markdown fences.`,
+    `Find the ${maxClips} most viral moments in this video.
 ${context ? `Context: ${context}` : ''}
-Video duration: ${Math.round(duration)}s
-Each clip must be between ${minSeconds}s and ${maxSeconds}s.
+Duration: ${Math.round(duration)}s. Each clip: ${minSeconds}s-${maxSeconds}s.
 
-WORDS WITH TIMESTAMPS (use these for precise start/end):
+WORD TIMESTAMPS:
 ${JSON.stringify(words.slice(0, 3000))}
 
-FULL TRANSCRIPT:
+TRANSCRIPT:
 ${transcript.slice(0, 6000)}
 
 Return JSON:
 {
-  "clips": [
-    {
-      "start": <number, seconds>,
-      "end": <number, seconds>,
-      "duration": <number>,
-      "virality_score": <1-10>,
-      "virality_reason": "<why this moment is viral>",
-      "viral_hook_text": "<punchy 1-line hook for overlay>",
-      "category": "<hook|story|insight|controversy|emotional|educational>",
-      "video_title_for_youtube_short": "<optimized YT Shorts title>",
-      "video_description_for_tiktok": "<TikTok caption with hashtags>",
-      "video_description_for_instagram": "<IG Reels caption>"
-    }
-  ]
+  "clips": [{
+    "start": <seconds>, "end": <seconds>, "duration": <seconds>,
+    "virality_score": <1-10>, "virality_reason": "<why>",
+    "viral_hook_text": "<1-line hook>",
+    "category": "<hook|story|insight|controversy|emotional|educational>",
+    "video_title_for_youtube_short": "<title>",
+    "video_description_for_tiktok": "<caption+hashtags>",
+    "video_description_for_instagram": "<caption>"
+  }]
 }
-
-Sort by virality_score descending. Ensure start/end align to word boundaries from the timestamps.`;
-
-  const raw   = await callClaude(system, user, { maxTokens: 3000 });
-  const data  = parseJson(raw);
-  return data; // { clips: [...] }
+Sort by virality_score descending.`,
+    { maxTokens: 3000 }
+  );
+  return parseJson(raw);
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5. SEO GENERATION  (replaces quickPublishSeo base44 function)
+// 6. SEO GENERATION
 // ─────────────────────────────────────────────────────────────────────────────
 export const generateSeo = async ({ transcript, niche, channelName = '' }) => {
-  const system = `You are an expert YouTube SEO strategist.
-Respond ONLY with valid JSON — no preamble, no markdown fences.`;
+  const raw = await callClaude(
+    `You are an expert YouTube SEO strategist. Respond ONLY with valid JSON — no preamble, no markdown fences.`,
+    `Generate a complete YouTube SEO package.
+Niche: ${niche}${channelName ? `\nChannel: ${channelName}` : ''}
 
-  const user = `Generate complete YouTube SEO package for this video.
-Niche: ${niche}
-${channelName ? `Channel: ${channelName}` : ''}
-
-TRANSCRIPT (first 8000 chars):
+TRANSCRIPT:
 ${transcript.slice(0, 8000)}
 
-Return JSON exactly:
+Return JSON:
 {
-  "titles": [
-    { "title": "<title>", "hook_type": "<curiosity|shock|how-to|list|story>", "ctr_score": <1-10> }
-  ],
-  "descriptions": [
-    { "style": "<storytelling|direct|seo-heavy>", "content": "<full description with timestamps placeholder>" }
-  ],
-  "tags_breakdown": {
-    "short":  ["<1-2 word tags>"],
-    "medium": ["<3-4 word tags>"],
-    "long":   ["<5+ word long-tail tags>"]
-  },
-  "hashtags": ["#tag1", "#tag2"],
-  "pinned_comment": "<engaging pinned comment to boost engagement>",
+  "titles": [{ "title": "<title>", "hook_type": "<curiosity|shock|how-to|list|story>", "ctr_score": <1-10> }],
+  "descriptions": [{ "style": "<storytelling|direct|seo-heavy>", "content": "<full description>" }],
+  "tags_breakdown": { "short": ["<tag>"], "medium": ["<tag>"], "long": ["<tag>"] },
+  "hashtags": ["#tag"],
+  "pinned_comment": "<engaging pinned comment>",
   "seo_analysis": {
-    "primary_keyword": "<main keyword>",
-    "secondary_keywords": ["<kw2>", "<kw3>"],
+    "primary_keyword": "<kw>", "secondary_keywords": ["<kw>"],
     "search_intent": "<informational|entertainment|tutorial>",
     "competition_level": "<low|medium|high>",
     "recommended_upload_time": "<e.g. Tue-Thu 2-4pm EST>"
   }
 }
-
-Generate 5 titles, 3 descriptions, 20 short tags, 15 medium tags, 10 long tags, 10 hashtags.`;
-
-  const raw  = await callClaude(system, user, { maxTokens: 3000 });
+Generate 5 titles, 3 descriptions, 20 short tags, 15 medium tags, 10 long tags, 10 hashtags.`,
+    { maxTokens: 3000 }
+  );
   return parseJson(raw);
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6. THUMBNAIL CONCEPTS  (replaces generateThumbnails base44 function)
-//    Returns concept objects (no DB writes — caller manages state)
+// 7. THUMBNAIL CONCEPTS
 // ─────────────────────────────────────────────────────────────────────────────
 export const generateThumbnailConcepts = async ({ videoTitle, transcript, niche }) => {
-  const system = `You are a world-class YouTube thumbnail designer.
-Respond ONLY with valid JSON — no preamble, no markdown fences.`;
-
-  const user = `Create 3 high-CTR thumbnail concepts for this YouTube video.
+  const raw = await callClaude(
+    `You are a world-class YouTube thumbnail designer. Respond ONLY with valid JSON — no preamble, no markdown fences.`,
+    `Create 3 high-CTR thumbnail concepts.
 Title: ${videoTitle}
 Niche: ${niche}
 Transcript excerpt: ${transcript.slice(0, 2000)}
 
 Return JSON:
 {
-  "concepts": [
-    {
-      "concept_name": "<name>",
-      "background_description": "<detailed background scene description for image AI>",
-      "overlay_text": "<short punchy text, max 4 words>",
-      "overlay_style": "<mrbeast|hormozi|nollywood_drama|playful|red_block>",
-      "emotion": "<shock|curiosity|excitement|fear|joy>",
-      "color_palette": ["#hex1", "#hex2", "#hex3"],
-      "ctr_prediction": <1-10>,
-      "reasoning": "<why this thumbnail works>"
-    }
-  ]
-}`;
-
-  const raw  = await callClaude(system, user, { maxTokens: 2000 });
-  return parseJson(raw); // { concepts: [...] }
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 7. YOUTUBE MODE ANALYSIS via Gemini-style prompt to Claude
-//    (replaces analyzeVideoWithGemini — Claude can't watch video directly,
-//     so we use the transcript approach with a YouTube URL as context)
-// ─────────────────────────────────────────────────────────────────────────────
-export const analyzeYouTubeUrl = async ({ videoUrl, maxClips, minSec, maxSec }) => {
-  // For YouTube mode without a transcript we ask Claude to generate
-  // plausible clip structures based on the URL context.
-  // In practice you'll want to first transcribe via AssemblyAI using
-  // the Cobalt-extracted audio URL, then call analyzeViralMoments.
-  // This stub keeps the OpenShorts YouTube flow intact.
-  throw new Error(
-    'YouTube analysis requires transcription first. ' +
-    'Please use File Upload mode, or paste the YouTube URL into the URL field ' +
-    'to extract audio and then transcribe.'
+  "concepts": [{
+    "concept_name": "<name>",
+    "background_description": "<scene for image AI>",
+    "overlay_text": "<max 4 words>",
+    "overlay_style": "<mrbeast|hormozi|nollywood_drama|playful|red_block>",
+    "emotion": "<shock|curiosity|excitement|fear|joy>",
+    "color_palette": ["#hex"],
+    "ctr_prediction": <1-10>,
+    "reasoning": "<why this works>"
+  }]
+}`,
+    { maxTokens: 2000 }
   );
+  return parseJson(raw);
 };
