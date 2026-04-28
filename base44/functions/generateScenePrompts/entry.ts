@@ -1,12 +1,10 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 import OpenAI from 'npm:openai@4.52.0';
 
-
 // ══════════════════════════════════════════════════════════════════
 // SCENE PROMPT GENERATOR — DIRECTOR NOTES → PRODUCTION PROMPTS
 // Pipeline: Script → Breakdown → [THIS] → OpenAI Clean → Image Gen → Animation
 // ══════════════════════════════════════════════════════════════════
-
 
 const BASE_BATCH_SIZE = 12;
 
@@ -75,8 +73,8 @@ async function cleanPromptWithOpenAI(messyPrompt, visualStyle) {
     return messyPrompt;
   }
 }
-const PARALLEL_PROMPT_BATCHES = 3; // Run 3 Gemini prompt calls concurrently
 
+const PARALLEL_PROMPT_BATCHES = 3; // Run 3 Claude prompt calls concurrently
 
 function repairJSON(str) {
   return str
@@ -85,25 +83,32 @@ function repairJSON(str) {
     .replace(/(["\w\d])\s*\n\s*"/g, '$1, "');
 }
 
+async function callClaude(prompt, temperature = 0.7, maxTokens = 8192, retries = 3) {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
 
-async function callGemini(prompt, temperature = 0.7, maxTokens = 16384, retries = 3) {
-  const apiKey = Deno.env.get("GEMINI_API_KEY");
-
+  if (!apiKey) {
+    throw new Error("Missing ANTHROPIC_API_KEY environment variable");
+  }
 
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature, maxOutputTokens: maxTokens, responseMimeType: "application/json" }
-          })
-        }
-      );
-
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01"
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-5",
+          max_tokens: maxTokens,
+          temperature: temperature,
+          system: "You are a world-class film director and cinematic data extractor. You must return ONLY raw, valid JSON. Do not include markdown formatting like ```json and do not include any conversational text.",
+          messages: [
+            { role: "user", content: prompt }
+          ]
+        })
+      });
 
       if (response.status === 429) {
         const waitMs = Math.pow(2, attempt + 1) * 5000;
@@ -112,31 +117,26 @@ async function callGemini(prompt, temperature = 0.7, maxTokens = 16384, retries 
         continue;
       }
 
-
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(`Gemini ${response.status}: ${err.error?.message || "Unknown"}`);
+        throw new Error(`Claude ${response.status}: ${err.error?.message || "Unknown"}`);
       }
 
-
       const data = await response.json();
-      if (!data.candidates?.length) throw new Error("No candidates from Gemini");
-      const rawText = data.candidates[0].content.parts[0].text;
-
+      if (!data.content || !data.content.length) throw new Error("No content returned from Claude");
+      
+      const rawText = data.content[0].text;
 
       try { return JSON.parse(rawText); } catch (_) {}
       try { return JSON.parse(repairJSON(rawText)); } catch (_) {}
-
 
       let jsonStr = rawText;
       if (rawText.includes("```json")) jsonStr = rawText.split("```json")[1].split("```")[0].trim();
       else if (rawText.includes("```")) jsonStr = rawText.split("```")[1].split("```")[0].trim();
       try { return JSON.parse(repairJSON(jsonStr)); } catch (_) {}
 
-
       const objMatch = jsonStr.match(/\{[\s\S]*\}/);
       if (objMatch) { try { return JSON.parse(objMatch[0]); } catch (_) {} }
-
 
       const lastBrace = rawText.lastIndexOf('}');
       if (lastBrace > 0) {
@@ -149,8 +149,7 @@ async function callGemini(prompt, temperature = 0.7, maxTokens = 16384, retries 
         }
       }
 
-
-      throw new Error("Failed to parse Gemini JSON after recovery");
+      throw new Error("Failed to parse Claude JSON after recovery");
     } catch (error) {
       if (attempt === retries - 1) throw error;
       console.warn(`Attempt ${attempt + 1} failed: ${error.message}, retrying...`);
@@ -159,11 +158,9 @@ async function callGemini(prompt, temperature = 0.7, maxTokens = 16384, retries 
   }
 }
 
-
 // ══════════════════════════════════════════════════════════════════
 // EXTRACT DIRECTOR NOTES FROM image_prompt
 // ══════════════════════════════════════════════════════════════════
-
 
 function extractDirectorNotes(imagePrompt) {
   if (!imagePrompt) return null;
@@ -178,11 +175,9 @@ function extractDirectorNotes(imagePrompt) {
   return null;
 }
 
-
 // ══════════════════════════════════════════════════════════════════
 // STYLE NORMALIZER — handles "Skeleton Protagonist" → "skeleton_protagonist"
 // ══════════════════════════════════════════════════════════════════
-
 
 function normalizeStyleKey(raw) {
   if (!raw) return 'cinematic_realistic';
@@ -200,11 +195,9 @@ function normalizeStyleKey(raw) {
   return 'cinematic_realistic';
 }
 
-
 // ══════════════════════════════════════════════════════════════════
 // VISUAL STYLE MAP
 // ══════════════════════════════════════════════════════════════════
-
 
 const styleMap = {
   cinematic_realistic: {
@@ -275,15 +268,12 @@ const styleMap = {
   }
 };
 
-
 // Universal anti-crop negative (appended to ALL styles)
 const UNIVERSAL_NEGATIVE_SUFFIX = ", torso only, bust shot, cropped at waist, isolated character on blank background, portrait crop, blurred empty background";
-
 
 // ══════════════════════════════════════════════════════════════════
 // STYLE-SPECIFIC INSTRUCTIONS FOR LLM
 // ══════════════════════════════════════════════════════════════════
-
 
 function getStyleSceneBodyRules(styleName) {
   const rules = {
@@ -392,7 +382,6 @@ function getStyleSceneBodyRules(styleName) {
     }
   };
 
-
   // ═══ UNIVERSAL FRAMING — appended to ALL styles ═══
   const base = rules[styleName] || null;
   if (base) {
@@ -401,11 +390,9 @@ function getStyleSceneBodyRules(styleName) {
   return base;
 }
 
-
 // ══════════════════════════════════════════════════════════════════
 // STYLE-SPECIFIC LLM REINFORCEMENT
 // ══════════════════════════════════════════════════════════════════
-
 
 function getStyleReinforcementInstruction(visualStyle) {
   // ═══ UNIVERSAL — every style gets this ═══
@@ -430,7 +417,6 @@ CONTINUITY: Each scene must contain a visual element that connects to the next s
 
 FORBIDDEN LANGUAGE: Never write "from waist up", "from chest up", "from shoulders up", "torso visible", "head to feet", "shown full body". The camera angle implies the framing.
 `;
-
 
   const instructions = {
     afro_nolly_global: universalReinforcement + `
@@ -487,11 +473,9 @@ MANDATORY FRAMING:
   return instructions[visualStyle] || universalReinforcement;
 }
 
-
 // ══════════════════════════════════════════════════════════════════
 // PROMPT VALIDATION
 // ══════════════════════════════════════════════════════════════════
-
 
 // ══════════════════════════════════════════════════════════════════
 // SUBJECT-TYPE SANITY CHECK — Prompt Engine Rulebook enforcement
@@ -545,7 +529,6 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
 
   enhanced = enhanced.replace(/\b\d{3,4}\s*[x×]\s*\d{3,4}\s*(pixels?|px)?\s*\.?\s*/gi, '');
 
-
   // Ensure style quality suffix is present — APPEND at END, never prepend
   // The first 200 chars of the prompt must be FRAMING + ENVIRONMENT, not style language
   // For sleep: check for "dark moody oil painting" since that's the canonical sleep suffix
@@ -553,7 +536,6 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
   if (!enhanced.toLowerCase().includes(styleCheck.substring(0, 20))) {
     enhanced = `${enhanced}. ${styleConfig.positive}`;
   }
-
 
   // For non-photorealistic styles, strip any photorealistic camera language that may have leaked in
   const isPhotoStyle = ['cinematic_realistic', 'photorealistic_4k', 'skeleton_protagonist'].includes(visualStyle);
@@ -569,7 +551,6 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
             .replace(/\bshown full (?:body|figure)\s*(?:in the scene)?\b/gi, '')
             .replace(/\s{2,}/g, ' ').replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.');
   }
-
 
  // Strip any orientation words the LLM may have included (orientation is handled by API aspect_ratio param)
   enhanced = enhanced
@@ -591,25 +572,20 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
     .replace(/\bmedium\s+shot\s+(from|of)\b/gi, '')
     .replace(/,\s*,/g, ',').replace(/\.\s*\./g, '.').replace(/\s{2,}/g, ' ');
 
-
   // DO NOT add anti-text instruction — Grok renders it as visible text
   // The LLM prompt already instructs physical metaphors for abstract concepts
-
 
   // Quality suffix — style-appropriate (no resolution numbers — Grok renders them)
   if (!/masterpiece|professional|high quality/i.test(enhanced)) {
     enhanced += ', masterpiece quality, highly detailed, professional composition';
   }
 
-
   return enhanced;
 }
-
 
 // ══════════════════════════════════════════════════════════════════
 // ARC-AWARE ANIMATION DYNAMICS
 // ══════════════════════════════════════════════════════════════════
-
 
 function getArcAnimationGuidance(arcPosition) {
   const map = {
@@ -624,11 +600,9 @@ function getArcAnimationGuidance(arcPosition) {
   return map[arcPosition] || map.rising;
 }
 
-
 // ══════════════════════════════════════════════════════════════════
 // MAIN — PROMPT GENERATION (no compression — breakdown is authority)
 // ══════════════════════════════════════════════════════════════════
-
 
 Deno.serve(async (req) => {
   try {
@@ -636,24 +610,19 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-
     const { project_id } = await req.json();
-
 
     const [projects, allScenes] = await Promise.all([
       base44.asServiceRole.entities.Projects.filter({ id: project_id }),
       base44.asServiceRole.entities.Scenes.filter({ project_id })
     ]);
 
-
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
-
 
     let pendingScenes = allScenes
       .filter(s => s.status === 'breakdown_ready')
       .sort((a, b) => a.scene_number - b.scene_number);
-
 
     if (pendingScenes.length === 0) {
       return Response.json({
@@ -663,12 +632,10 @@ Deno.serve(async (req) => {
       });
     }
 
-
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`🎨 PROMPT GENERATION`);
     console.log(`📊 ${pendingScenes.length} scenes from deterministic breakdown — converting to production prompts`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-
 
     const rawStyle = project.visual_style || 'cinematic_realistic';
     const isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
@@ -730,13 +697,10 @@ Deno.serve(async (req) => {
     }
     console.log(`🎨 Style: raw="${rawStyle}" → resolved="${visualStyle}"${useSleepStyle ? ' [SLEEP DARK MODE]' : ''}`);
 
-
     // ═══ UNIVERSAL: Append anti-crop negatives to ALL styles ═══
     const effectiveNegative = (styleConfig.negative || '') + UNIVERSAL_NEGATIVE_SUFFIX;
 
-
     const orientation = project.orientation || 'landscape';
-
 
     // ── Style-specific LLM reinforcement (e.g. skeleton protagonist) ──
     let styleReinforcement = getStyleReinforcementInstruction(visualStyle);
@@ -774,7 +738,6 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
       console.log(`🦴 Style reinforcement active: ${visualStyle}`);
     }
 
-
     let orientationConfig;
     if (orientation === 'portrait') {
       orientationConfig = {
@@ -792,10 +755,9 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
       };
     }
 
-
     // Genre-aware framing prefix — the opening words of every image prompt
     const framingPrefix = useSleepStyle
-      ? genrePreset.prefix                         // sleep gets its own prefix from preset
+      ? genrePreset.prefix                           // sleep gets its own prefix from preset
       : genrePreset.prefix;                        // all genres now use their preset prefix
     const promptPrefix = `${framingPrefix}. `;
 
@@ -803,7 +765,6 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
     const genreLightingMandate = genrePreset.lighting || '';
     const genreColorGrade      = genrePreset.grade     || '';
     const genreForbidden       = genrePreset.forbidden  || '';
-
 
     let characters = [];
     if (!useSleepStyle && project.character_descriptions) {
@@ -821,9 +782,8 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
           const identity = c.identity_core || c.visual_description || c.description || '';
           const clothing = c.default_clothing || '';
           return `• ${c.name}:\n  IDENTITY (permanent): ${identity}${clothing ? `\n  DEFAULT CLOTHING (can change per scene): ${clothing}` : ''}`;
-        }).join('\n')}\n\n**RULE: You MUST embed the FULL identity description for EVERY character in EVERY image_prompt. The image generator has ZERO memory — each prompt is a fresh start. Name alone means NOTHING to the renderer.**\n\n**CRITICAL WEAVING RULE — THE #1 CAUSE OF BAD IMAGES IS VIOLATING THIS:**\nCharacter features must be WOVEN INTO the action and environment — NEVER listed as an isolated block.\nThe image generator reads prompts left-to-right. If it encounters a paragraph of face/body traits detached from any action, it renders a PORTRAIT of that person — ignoring the scene entirely.\n\nDEATH PATTERN (produces floating heads / portraits): "Close-up of a coin in a gutter. A 55 year old male with light-medium skin, oval face, hazel eyes, straight nose, medium lips, graying hair, average build, 5ft10, wrinkles around eyes, confident smile is implied by the perspective."\nThe image gen reads the trait dump and renders a face in a gutter.\n\nCORRECT PATTERN (produces a scene with character IN it): "Close-up of a tarnished coin lying in a rain-filled gutter, the gray asphalt reflecting overcast sky. A graying-haired man in a rumpled coat crouches at the curb, his weathered face twisted in disappointment as he stares down at the coin, rain collecting on his hunched shoulders."\nEvery trait is CONNECTED: hair → visible because he\'s crouching, face → twisted in emotion, shoulders → hunched + wet from rain.\n\nRULES:\n1. NEVER write a character description as a standalone clause or sentence. Every trait must be mid-action or affected by the environment.\n2. Spread traits across the prompt — hair in one clause, skin in another, build shown through posture. Don\'t front-load them.\n3. Use the character\'s NAME in your prompt — our post-processing system will replace it with the correct identity tag. Write "[CHARACTER_NAME] crouches by the gutter" not "A 55 year old male with light-medium skin crouches...".\n4. The environment sentence MUST come BEFORE the character.`
+        }).join('\n')}\n\n**RULE: You MUST embed the FULL identity description for EVERY character in EVERY image_prompt. The image generator has ZERO memory — each prompt is a fresh start. Name alone means NOTHING to the renderer.**\n\n**CRITICAL WEAVING RULE — THE #1 CAUSE OF BAD IMAGES IS VIOLATING THIS:**\nCharacter features must be WOVEN INTO the action and environment — NEVER listed as an isolated block.\nThe image generator reads prompts left-to-right. If it encounters a paragraph of face/body traits detached from any action, it renders a PORTRAIT of that person — ignoring the scene entirely.\n\nDEATH PATTERN (produces floating heads / portraits): "Close-up of a coin in a gutter. A 55 year old male with light-medium skin, oval face, hazel eyes, straight nose, medium lips, graying hair, average build, 5ft10, wrinkles around eyes, confident smile is implied by the perspective."\nThe image gen reads the trait dump and renders a face in a gutter.\n\nCORRECT PATTERN (produces a scene with character IN it): "Close-up of a tarnished coin lying in a rain-filled gutter, the gray asphalt reflecting overcast sky. A graying-haired man in a rumpled coat crouches at the curb, his weathered face twisted in disappointment as he stares down at the coin, rain collecting on his hunched shoulders."\nEvery trait is CONNECTED: hair → visible because he's crouching, face → twisted in emotion, shoulders → hunched + wet from rain.\n\nRULES:\n1. NEVER write a character description as a standalone clause or sentence. Every trait must be mid-action or affected by the environment.\n2. Spread traits across the prompt — hair in one clause, skin in another, build shown through posture. Don't front-load them.\n3. Use the character's NAME in your prompt — our post-processing system will replace it with the correct identity tag. Write "[CHARACTER_NAME] crouches by the gutter" not "A 55 year old male with light-medium skin crouches...".\n4. The environment sentence MUST come BEFORE the character.`
       : '';
-
 
     // ═══ CHARACTER IDENTITY TAGS — style-aware, force-injected into EVERY prompt post-LLM ═══
     // CRITICAL: Tags are structured BODY-FIRST to prevent Grok from rendering portraits.
@@ -832,7 +792,6 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
     // and commits to rendering a portrait. We restructure it here:
     //   → body/build/height/posture FIRST (sets "this is a person in a scene" framing)
     //   → face/hair as a COMPACT trailing clause (maintains identity without triggering portrait mode)
-
 
     // Split identity_core into body traits vs face traits
     // Produces CLEAN natural-language descriptions, not raw regex extractions.
@@ -926,13 +885,11 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
         `a 3D Pixar-quality ${bodyDesc}, ${faceDesc}, skin glowing with warm subsurface scattering, individually strand-rendered hair with fiber detail, vibrant colorful clothing heavy with realistic fabric weight, gold jewelry catching the light`
     };
 
-
     const defaultStyleTransform = (bodyDesc, faceDesc) => `${bodyDesc}, ${faceDesc}`;
 
-
-    // ══════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════
     // IDENTITY TIER SYSTEM — shot-type-aware character depth
-    // ══════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════
     // Not every scene needs a 500-char character description.
     // A wide city street shot where the character is tiny needs just
     // "a woman with a dark-brown bob in a lavender jacket."
@@ -941,7 +898,7 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
     // MINIMAL: Wide/environmental shots — silhouette identifiers only
     // MODERATE: Medium/action shots — add skin tone, key features
     // FULL: Close-up/emotional — complete identity for face consistency
-    // ══════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════
 
     function getIdentityTier(shotType) {
       if (!shotType) return 'moderate'; // safe default
@@ -954,13 +911,13 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
       return 'moderate';
     }
 
-    // ══════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════
     // BODY PROPORTION DIRECTIVE — shot type → explicit body framing
-    // ══════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════
     // This tells the image generator EXACTLY how much of the body to show
     // based on the director's shot type. Prevents full-body dumps in CU
     // and head-only portraits in wide shots.
-    // ══════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════
 
     function getBodyProportionDirective(shotType) {
       if (!shotType) return 'actively engaged with their surroundings';
@@ -990,12 +947,11 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
     const characterReferencePrompts = {};
     const styleTransform = styleCharacterRules[visualStyle] || defaultStyleTransform;
 
-
     for (const c of characters) {
       const name = (c.name || '').toLowerCase().trim();
       let identityDesc = c.identity_core || c.visual_description || c.description || '';
       const clothing = c.default_clothing || '';
-      // Clean junk Gemini sometimes echoes back from our prompt instructions
+      // Clean junk the LLM sometimes echoes back from our prompt instructions
       // Clean junk + normalize gender-neutral → concrete gender for image gen
       identityDesc = identityDesc
         .replace(/^Casting[- ]sheet:?\s*/i, '')
@@ -1036,6 +992,7 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
         .replace(/,\s*,/g, ',').replace(/^\s*,/, '').replace(/,\s*$/, '')
         .replace(/\s{2,}/g, ' ')
         .trim();
+
       if (name && identityDesc) {
         const { body, face } = splitIdentity(identityDesc);
         const bodyDesc = body || 'adult character';
@@ -1119,15 +1076,14 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
       console.log(`📸 Reference prompts available for: ${Object.keys(characterReferencePrompts).join(', ')}`);
     }
 
-
-    // ══════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════
     // PROP EXTRACTOR — named objects from narration
-    // ══════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════
     // The narration says "iPhone" but the LLM might write "phone" or
     // even "laptop." We extract specific nouns from narration and
-    // inject them into the scene directions so Gemini uses them.
+    // inject them into the scene directions so the LLM uses them.
     // Props are PART of the scene — never the SUBJECT.
-    // ══════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════
 
     function extractNamedProps(narrationText) {
       if (!narrationText) return [];
@@ -1170,7 +1126,6 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
       return props;
     }
 
-
     let storyContext = '';
     let blueprintSceneMap = {}; // scene_number → director data (now read from Scene records, not blueprint)
     try {
@@ -1195,15 +1150,12 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
       storyContext = `**STORY:** Topic: "${project.name}" | Niche: ${project.niche || 'general'}`;
     }
 
-
     console.log(`🎨 Generating prompts for ${pendingScenes.length} scenes`);
     console.log(`🖼️ Style: ${visualStyle} | 📐 ${orientation}`);
-
 
     let totalPrompts = 0;
     let totalWarnings = 0;
     const totalBatches = Math.ceil(pendingScenes.length / BASE_BATCH_SIZE);
-
 
     // ═══ QUALITY ANCHORS — best prompts from completed scenes ═══
     // Inject 2-3 examples of GOOD prompts into every batch so the LLM
@@ -1214,13 +1166,11 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
         .filter(s => s.status === 'prompts_ready' && s.image_prompt && !s.image_prompt.startsWith('DIRECTOR_NOTES:'))
         .sort((a, b) => a.scene_number - b.scene_number);
 
-
       if (completedScenes.length >= 2) {
         // Pick the longest/richest prompts as quality examples
         const ranked = [...completedScenes]
           .sort((a, b) => (b.image_prompt?.length || 0) - (a.image_prompt?.length || 0))
           .slice(0, 3);
-
 
         qualityAnchors = `
 **═══════════════════════════════════════════════════════════════**
@@ -1234,12 +1184,12 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
 **Every prompt you write MUST be at least this detailed. Prompts shorter than 150 characters will be REJECTED.**
 **═══════════════════════════════════════════════════════════════**`;
 
-
         console.log(`📋 Quality anchors loaded from ${ranked.length} existing scenes (${ranked.map(s => `S${s.scene_number}: ${s.image_prompt.length}ch`).join(', ')})`);
       }
     } catch (_) {
       console.log('No quality anchors available — first batch');
     }
+    
     // Process 1 batch per call to avoid platform timeout
     // Adaptive batch size: 12 for first 60 scenes, 8 for 60-200, 6 for 200+
     const totalPendingScenes = pendingScenes.length;
@@ -1247,16 +1197,13 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
     const BATCH_SIZE = completedSoFar > 200 ? 6 : completedSoFar > 60 ? 8 : BASE_BATCH_SIZE;
     console.log(`📦 Batch size: ${BATCH_SIZE} (${completedSoFar} scenes already completed)`);
 
-
     const startBIdx = 0;
     const maxBatchesPerCall = 1;
     for (let bIdx = startBIdx; bIdx < Math.min(startBIdx + maxBatchesPerCall, totalBatches); bIdx++) {
       const batchScenes = pendingScenes.slice(bIdx * BATCH_SIZE, (bIdx + 1) * BATCH_SIZE);
       if (batchScenes.length === 0) break;
 
-
       if (bIdx > 0) await new Promise(r => setTimeout(r, 2000));
-
 
       const scenesWithNotes = batchScenes.map(scene => {
         // Priority 1: Blueprint scenes (where phase-based breakdown stores director data)
@@ -1274,7 +1221,6 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
           director
         };
       });
-
 
       const sceneDirections = scenesWithNotes.map(s => {
         // Resolve arc position: prefer director.phase (from breakdown), fall back to arc_position, then 'rising'
@@ -1306,8 +1252,7 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
         const viewerEmotion = s.director.viewer_emotion || '';
         const emotionIntensity = s.director.emotional_intensity || 0.5;
         const emotionLine = viewerEmotion
-          ? `
-  EMOTIONAL TARGET: Make the viewer feel "${viewerEmotion}" at intensity ${emotionIntensity}. Every lighting choice, angle, and color must serve this emotion.`
+          ? `\n  EMOTIONAL TARGET: Make the viewer feel "${viewerEmotion}" at intensity ${emotionIntensity}. Every lighting choice, angle, and color must serve this emotion.`
           : '';
 
         return `Scene ${s.scene_number} [${posLabel} — ${scenePct}% through]:
@@ -1329,7 +1274,6 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
   Arc Animation: ${arcAnim}${propsLine}`;
       }).join('\n\n');
 
-
       const styleBodyRules = getStyleSceneBodyRules(visualStyle);
       const styleBodyBlock = styleBodyRules ? `
 **═══════════════════════════════════════════════════════════════**
@@ -1339,7 +1283,6 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
 **Objects & Props:** ${styleBodyRules.objects}
 **Rendering Language:** ${styleBodyRules.rendering}
 **═══════════════════════════════════════════════════════════════**` : '';
-
 
      // Build genre mandate block
       const genreMandateBlock = (genreLightingMandate || genreColorGrade || genreForbidden) ? `
@@ -1356,20 +1299,16 @@ ${genreMandateBlock}
 
 ${storyContext}
 
-
 ${characterBlock}
 ${styleReinforcement}
 ${qualityAnchors}
 
-
 **VISUAL STYLE: ${visualStyle.replace(/_/g, ' ')}**
 **ORIENTATION:** ${orientationConfig.format}
-
 
 **STYLE QUALITY SUFFIX (append at the END of each image_prompt as plain descriptive text, NOT the beginning):**
 ${styleConfig.positive}
 ${styleBodyBlock}
-
 
 **CINEMATIC LANGUAGE & CAMERA ANGLES (use these instead of generic "medium shot" or "wide shot"):**
 Write prompts the way a cinematographer thinks — through CAMERA PLACEMENT and what it REVEALS about the character.
@@ -1401,13 +1340,10 @@ Write prompts the way a cinematographer thinks — through CAMERA PLACEMENT and 
 - **NO ABSTRACT METAPHORS:** Never create surreal, symbolic, or metaphorical visuals. Every scene must be a plausible moment from the character's life. No floating objects, no impossible scenarios, no visual poetry that disconnects from the actual story.
 - **TONE SAFETY:** Never create visuals that could be misread as violence, self-harm, or danger when the story tone is positive/educational.
 
-
 **DIRECTOR'S SCENE NOTES:**
 ${sceneDirections}
 
-
 **YOUR TASK — for EACH scene produce:**
-
 
 1. **image_prompt** — Write each prompt as a CINEMATOGRAPHER would describe a shot to their crew. NOT a feature catalog. NOT a mechanical breakdown. A living, breathing scene description.
 
@@ -1499,7 +1435,6 @@ ${sceneDirections}
    **TOKEN CLEANUP:** Remove repeated quality words. One quality phrase is enough.
    **═══════════════════════════════════════════════════════════════**
 
-
 2. **animation_prompt** — RICH motion direction for the EXACT duration of each scene (see Duration field per scene):
 ${useSleepStyle ? `   **🌙 SLEEP MODE ANIMATION — STRICT RULES:**
    This is sleep content. The animation must be CALM, MINIMAL, and HYPNOTIC — designed to lull viewers to sleep.
@@ -1530,7 +1465,6 @@ ${useSleepStyle ? `   **🌙 SLEEP MODE ANIMATION — STRICT RULES:**
      • RESOLUTION: Exhale. Camera pulls back gently. Peace settles.`}
    - **MINIMUM 3-4 rich sentences** — NEVER generic "slow pan right"
 
-
 **RESPONSE:**
 {
   "prompts": [
@@ -1542,25 +1476,19 @@ ${useSleepStyle ? `   **🌙 SLEEP MODE ANIMATION — STRICT RULES:**
   ]
 }`;
 
-
       console.log(`🎨 Batch ${bIdx + 1}/${totalBatches}: scenes ${batchScenes[0].scene_number}-${batchScenes[batchScenes.length - 1].scene_number}...`);
 
-
-      const result = await callGemini(prompt, 0.7, 16384);
-
+      const result = await callClaude(prompt, 0.7, 8192);
 
       if (!result.prompts || !Array.isArray(result.prompts)) {
         console.error(`Batch ${bIdx + 1} returned no prompts array`);
         continue;
       }
 
-
       const updatePromises = scenesWithNotes.map(async (s) => {
         const generated = result.prompts.find(p => p.scene_number === s.scene_number);
 
-
         let imagePrompt, animationPrompt;
-
 
         if (generated) {
           let rawPrompt = generated.image_prompt || '';
@@ -1570,7 +1498,6 @@ ${useSleepStyle ? `   **🌙 SLEEP MODE ANIMATION — STRICT RULES:**
 
           // ═══ QUALITY GATE — catch lazy/thin prompts ═══
           const promptWords = rawPrompt.split(/\s+/).filter(w => w.length > 0).length;
-
 
           if (promptWords < 30) {
             // Critically thin — LLM got lazy on this scene. Regenerate solo.
@@ -1595,8 +1522,7 @@ End with mood and style: ${styleConfig.positive.substring(0, 100)}
 
 Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
 
-
-              const soloResult = await callGemini(soloPrompt, 0.8, 4096);
+              const soloResult = await callClaude(soloPrompt, 0.8, 4096);
               const soloText = typeof soloResult === 'string' ? soloResult : (soloResult.image_prompt || soloResult.prompt || JSON.stringify(soloResult));
               if (soloText && soloText.split(/\s+/).length > 30) {
                 rawPrompt = soloText;
@@ -1606,7 +1532,6 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
               console.warn(`Scene ${s.scene_number} regen failed: ${regenErr.message}`);
             }
           }
-
 
           // ═══ SHOT-TYPE-AWARE CHARACTER IDENTITY INJECTION ═══
           // Uses characters_present from director notes (scene breakdown) as PRIMARY source.
@@ -1803,9 +1728,6 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
             }
           }
 
-
-
-
           // ═══ STRIP REMAINING BARE CHARACTER NAMES — image gen renders them as text ═══
           // After identity injection, any remaining bare name occurrences are dangerous:
           // Grok/Seedream will render "NAME" or "Sarah" as literal on-screen text.
@@ -1914,7 +1836,6 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
                 : vc.includes('ocean') || vc.includes('water') || vc.includes('lake') || vc.includes('river') ? 'gentle water ripples spreading slowly across the surface'
                 : vc.includes('rain') ? 'soft rain falling steadily, tiny ripples forming in still puddles'
                 : vc.includes('snow') ? 'soft snowflakes drifting down slowly through still air'
-                : vc.includes('mountain') || vc.includes('valley') ? 'thin clouds drifting slowly across distant peaks'
                 : 'very faint mist drifting slowly through the still scene';
               animationPrompt = `Ultra-slow ${movement} over ${sceneDuration} seconds. ${sleepEnv}. Completely still atmosphere, no changes in lighting or brightness.`;
             } else {
@@ -1935,7 +1856,6 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
           } else {
             fallback += `Cinematic scene depicting: ${s.narration_text}. Professional composition. `;
           }
-
 
           // ═══ FALLBACK SANITIZATION — same fixes as primary path ═══
           const primaryChar = characters[0] || {};
@@ -1985,7 +1905,6 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
           }
         }
 
-
         // ═══ OPENAI PROMPT CLEANER — final structuring pass ═══
         // Skip for sleep projects — their prompts are already well-structured
         // and the OpenAI cleaner adds ~5s per scene causing timeouts
@@ -2012,13 +1931,11 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
         }
       });
 
-
       const results = await Promise.all(updatePromises);
       const batchApplied = results.filter(Boolean).length;
       totalPrompts += batchApplied;
       console.log(`✓ Batch ${bIdx + 1}: ${batchApplied} prompts applied`);
     }
-
 
     try {
       await base44.asServiceRole.entities.Projects.update(project_id, {
@@ -2026,17 +1943,14 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
       });
     } catch (_) {}
 
-
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`🎉 ALL PROMPTS GENERATED — ${totalPrompts} scenes ready for image gen`);
     if (totalWarnings > 0) console.log(`⚠️ ${totalWarnings} fallback prompts used`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
-
     const remainingScenes = (await base44.asServiceRole.entities.Scenes.filter({ project_id }))
       .filter(s => s.status === 'breakdown_ready').length;
     const allDone = remainingScenes === 0;
-
 
     return Response.json({
       success: true,
@@ -2053,7 +1967,6 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
         ? characterReferencePrompts
         : undefined
     });
-
 
   } catch (error) {
     console.error("❌ generateScenePrompts error:", error.message);
