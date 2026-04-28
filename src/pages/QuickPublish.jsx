@@ -1,11 +1,25 @@
+/**
+ * QuickPublish.jsx  —  Refactored: zero base44 integration dependencies
+ *
+ * Replaces:
+ *   base44.integrations.Core.UploadFile  →  uploadToCloudinary (directApi)
+ *   base44.functions.invoke('quickPublishTranscribe') →  transcribeFile (directApi / AssemblyAI direct)
+ *   base44.functions.invoke('quickPublishSeo')        →  generateSeo (directApi / Claude direct)
+ *   base44.functions.invoke('generateThumbnails')     →  generateThumbnailConcepts (directApi / Claude direct)
+ *   base44.functions.invoke('generateThumbnailImage') →  uploadToCloudinary image gen (KIE removed — concepts only)
+ *   base44.functions.invoke('youtubeAuth')            →  localStorage channelName setting
+ *
+ * base44.entities.* (Projects, ThumbnailConcepts) → localStorage only (no DB needed for the pipeline state)
+ */
+
 import React, { useState, useEffect, useCallback } from 'react';
-import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Youtube, Upload, Loader2, ArrowLeft, Zap, FileText, Image, Send, RotateCcw, X
+  Youtube, Upload, Loader2, ArrowLeft, Zap, FileText, Image,
+  Send, RotateCcw, X, Settings, Eye, EyeOff, Check,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PipelineProgress from '../components/quickpublish/PipelineProgress';
@@ -17,70 +31,204 @@ import ChaptersPanel from '../components/quickpublish/ChaptersPanel';
 import ViralMomentsPanel from '../components/quickpublish/ViralMomentsPanel';
 import SilenceTrimPanel from '../components/quickpublish/SilenceTrimPanel';
 
-const LS_KEY = 'qp_pipeline_state_v1';
+import {
+  LS_KEYS,
+  uploadToCloudinary,
+  transcribeFile,
+  generateSeo,
+  generateThumbnailConcepts,
+} from '@/lib/directApi';
 
+// ── localStorage keys ─────────────────────────────────────────────────────────
+const LS_KEY       = 'qp_pipeline_state_v2';          // bumped version to avoid stale v1 data
+const LS_THUMBS    = 'qp_thumbnail_concepts';
+const LS_CHAN_NAME = 'qp_channel_name';
+
+// ── Settings panel ─────────────────────────────────────────────────────────────
+function SettingsPanel({ onClose }) {
+  const FIELDS = [
+    {
+      section: 'Cloudinary — Video Upload',
+      k: LS_KEYS.CLOUD_NAME, label: 'Cloud Name', pw: false,
+      ph: 'your-cloud-name',
+      hint: 'Cloudinary dashboard → top left corner',
+    },
+    {
+      k: LS_KEYS.CLOUD_PRESET, label: 'Upload Preset (video)', pw: false,
+      ph: 'openshorts_clips',
+      hint: 'Cloudinary → Settings → Upload → Add unsigned preset',
+    },
+    {
+      section: 'AssemblyAI — Transcription',
+      k: LS_KEYS.ASSEMBLYAI, label: 'AssemblyAI API Key', pw: true,
+      ph: 'your-assemblyai-key',
+      hint: 'assemblyai.com → Account → API key',
+    },
+    {
+      section: 'YouTube Channel (optional)',
+      k: LS_CHAN_NAME, label: 'Channel Name', pw: false,
+      ph: 'My Awesome Channel',
+      hint: 'Used for branded hashtags in SEO generation',
+    },
+  ];
+
+  const [vals, setVals]   = useState(() => {
+    const obj = {};
+    FIELDS.forEach(f => { obj[f.k] = localStorage.getItem(f.k) || ''; });
+    return obj;
+  });
+  const [show, setShow]   = useState({});
+  const [saved, setSaved] = useState(false);
+
+  const save = () => {
+    FIELDS.forEach(f => localStorage.setItem(f.k, vals[f.k].trim()));
+    setSaved(true);
+    setTimeout(() => { setSaved(false); onClose(); }, 800);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="bg-white border border-gray-100 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-3 max-h-[90vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="font-bold text-gray-900 flex items-center gap-2">
+            <Settings size={15} className="text-blue-500" />
+            Quick Publish Settings
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={17} /></button>
+        </div>
+
+        {FIELDS.map((f, idx) => (
+          <div key={f.k}>
+            {f.section && (
+              <div className={'pb-1 ' + (idx > 0 ? 'pt-3 border-t border-gray-100' : '')}>
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{f.section}</span>
+              </div>
+            )}
+            <div>
+              <label className="text-xs font-medium text-gray-700 block mb-1">{f.label}</label>
+              <div className="relative">
+                <input
+                  type={(f.pw && !show[f.k]) ? 'password' : 'text'}
+                  value={vals[f.k]}
+                  onChange={e => setVals(p => ({ ...p, [f.k]: e.target.value }))}
+                  placeholder={f.ph}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:border-blue-400 pr-9"
+                />
+                {f.pw && (
+                  <button
+                    onClick={() => setShow(p => ({ ...p, [f.k]: !p[f.k] }))}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    {show[f.k] ? <EyeOff size={13} /> : <Eye size={13} />}
+                  </button>
+                )}
+              </div>
+              {f.hint && <p className="text-xs text-gray-400 mt-0.5">{f.hint}</p>}
+            </div>
+          </div>
+        ))}
+
+        <div className="pt-2 space-y-1.5">
+          {[
+            { ok: !!vals[LS_KEYS.CLOUD_NAME], label: 'Cloudinary configured' },
+            { ok: !!vals[LS_KEYS.ASSEMBLYAI], label: 'AssemblyAI configured' },
+          ].map(({ ok, label }) => (
+            <div key={label} className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg ${ok ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-50 text-gray-400'}`}>
+              {ok ? <Check size={11} /> : <div className="w-2.5 h-2.5 rounded-full border border-gray-300" />}
+              {label}
+            </div>
+          ))}
+        </div>
+
+        <Button
+          onClick={save}
+          className={`w-full h-10 text-white transition-all ${saved ? 'bg-emerald-500' : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700'}`}
+        >
+          {saved ? <span className="flex items-center gap-1"><Check size={12} /> Saved!</span> : 'Save Settings'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 export default function QuickPublish() {
-  // ── File (not persisted) ──────────────────────────────────
-  const [videoFile, setVideoFile] = useState(null);
-  const [fileUrl, setFileUrl] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
 
-  // ── Persisted state ───────────────────────────────────────
-  const [niche, setNiche] = useState('general');
-  const [projectId, setProjectId] = useState(null);
-  const [currentStep, setCurrentStep] = useState(null);
-  const [completedSteps, setCompletedSteps] = useState([]);
-  const [error, setError] = useState('');
-  const [statusMessage, setStatusMessage] = useState('');
-  const [transcript, setTranscript] = useState('');
+  // ── File (not persisted) ───────────────────────────────────
+  const [videoFile, setVideoFile] = useState(null);
+  const [fileUrl, setFileUrl]     = useState('');
+
+  // ── Persisted pipeline state ───────────────────────────────
+  const [niche, setNiche]                     = useState('general');
+  const [projectId, setProjectId]             = useState(null);   // kept for ThumbnailStep compat
+  const [currentStep, setCurrentStep]         = useState(null);
+  const [completedSteps, setCompletedSteps]   = useState([]);
+  const [error, setError]                     = useState('');
+  const [statusMessage, setStatusMessage]     = useState('');
+  const [transcript, setTranscript]           = useState('');
   const [transcriptChapters, setTranscriptChapters] = useState([]);
   const [transcriptWords, setTranscriptWords] = useState([]);
   const [transcriptDuration, setTranscriptDuration] = useState(0);
 
-  const [titles, setTitles] = useState([]);
-  const [seoAnalysis, setSeoAnalysis] = useState(null);
-  const [hashtags, setHashtags] = useState([]);
-  const [pinnedComment, setPinnedComment] = useState('');
+  const [titles, setTitles]                   = useState([]);
+  const [seoAnalysis, setSeoAnalysis]         = useState(null);
+  const [hashtags, setHashtags]               = useState([]);
+  const [pinnedComment, setPinnedComment]     = useState('');
   const [descriptionOptions, setDescriptionOptions] = useState([]);
-  const [tagsBreakdown, setTagsBreakdown] = useState(null);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [tags, setTags] = useState('');
+  const [tagsBreakdown, setTagsBreakdown]     = useState(null);
+  const [title, setTitle]                     = useState('');
+  const [description, setDescription]         = useState('');
+  const [tags, setTags]                       = useState('');
+
+  // Thumbnail concepts stored locally instead of base44 entity
+  const [thumbnailConcepts, setThumbnailConcepts] = useState([]);
 
   const [thumbnailUrl, setThumbnailUrl] = useState('');
-  const [privacy, setPrivacy] = useState('private');
-  const [categoryId, setCategoryId] = useState('22');
+  const [privacy, setPrivacy]           = useState('private');
+  const [categoryId, setCategoryId]     = useState('22');
 
-  // ── Restore from localStorage on mount ─────────────────────
+  // ── Restore from localStorage ──────────────────────────────
   useEffect(() => {
     try {
       const saved = localStorage.getItem(LS_KEY);
       if (!saved) return;
       const s = JSON.parse(saved);
-      if (s.projectId) setProjectId(s.projectId);
-      if (s.niche) setNiche(s.niche);
-      if (s.completedSteps) setCompletedSteps(s.completedSteps);
-      if (s.transcript) setTranscript(s.transcript);
+      if (s.projectId)          setProjectId(s.projectId);
+      if (s.niche)              setNiche(s.niche);
+      if (s.completedSteps)     setCompletedSteps(s.completedSteps);
+      if (s.transcript)         setTranscript(s.transcript);
       if (s.transcriptChapters) setTranscriptChapters(s.transcriptChapters);
-      if (s.transcriptWords) setTranscriptWords(s.transcriptWords);
+      if (s.transcriptWords)    setTranscriptWords(s.transcriptWords);
       if (s.transcriptDuration) setTranscriptDuration(s.transcriptDuration);
-      if (s.titles) setTitles(s.titles);
-      if (s.seoAnalysis) setSeoAnalysis(s.seoAnalysis);
-      if (s.hashtags) setHashtags(s.hashtags);
-      if (s.pinnedComment) setPinnedComment(s.pinnedComment);
+      if (s.titles)             setTitles(s.titles);
+      if (s.seoAnalysis)        setSeoAnalysis(s.seoAnalysis);
+      if (s.hashtags)           setHashtags(s.hashtags);
+      if (s.pinnedComment)      setPinnedComment(s.pinnedComment);
       if (s.descriptionOptions) setDescriptionOptions(s.descriptionOptions);
-      if (s.tagsBreakdown) setTagsBreakdown(s.tagsBreakdown);
-      if (s.title) setTitle(s.title);
-      if (s.description) setDescription(s.description);
-      if (s.tags) setTags(s.tags);
-      if (s.thumbnailUrl) setThumbnailUrl(s.thumbnailUrl);
-      if (s.privacy) setPrivacy(s.privacy);
-      if (s.categoryId) setCategoryId(s.categoryId);
+      if (s.tagsBreakdown)      setTagsBreakdown(s.tagsBreakdown);
+      if (s.title)              setTitle(s.title);
+      if (s.description)        setDescription(s.description);
+      if (s.tags)               setTags(s.tags);
+      if (s.thumbnailUrl)       setThumbnailUrl(s.thumbnailUrl);
+      if (s.privacy)            setPrivacy(s.privacy);
+      if (s.categoryId)         setCategoryId(s.categoryId);
+    } catch (_) {}
+
+    try {
+      const tc = localStorage.getItem(LS_THUMBS);
+      if (tc) setThumbnailConcepts(JSON.parse(tc));
     } catch (_) {}
   }, []);
 
-  // ── Persist to localStorage on changes (throttled by React batching) ──
+  // ── Persist on changes ─────────────────────────────────────
   useEffect(() => {
-    // Don't persist if nothing meaningful
     if (!projectId && completedSteps.length === 0) return;
     try {
       localStorage.setItem(LS_KEY, JSON.stringify({
@@ -97,22 +245,20 @@ export default function QuickPublish() {
     transcriptChapters, transcriptWords, transcriptDuration,
   ]);
 
-  // ── Thumbnails query ────────────────────────────────────────
-  const { data: thumbnails = [], refetch: refetchThumbs } = useQuery({
-    queryKey: ['qp-thumbs', projectId],
-    queryFn: () => base44.entities.ThumbnailConcepts.filter({ project_id: projectId }),
-    enabled: !!projectId,
-  });
+  useEffect(() => {
+    try { localStorage.setItem(LS_THUMBS, JSON.stringify(thumbnailConcepts)); } catch (_) {}
+  }, [thumbnailConcepts]);
 
   const markComplete = useCallback((step) => {
     setCompletedSteps(prev => prev.includes(step) ? prev : [...prev, step]);
     setCurrentStep(null);
   }, []);
 
-  // ── Reset entire pipeline ──────────────────────────────────
+  // ── Reset ──────────────────────────────────────────────────
   const resetPipeline = () => {
     if (!window.confirm('Reset pipeline? This clears all generated SEO, titles, and thumbnails.')) return;
     localStorage.removeItem(LS_KEY);
+    localStorage.removeItem(LS_THUMBS);
     setVideoFile(null); setFileUrl(''); setProjectId(null);
     setCurrentStep(null); setCompletedSteps([]);
     setError(''); setStatusMessage(''); setTranscript('');
@@ -121,95 +267,65 @@ export default function QuickPublish() {
     setDescriptionOptions([]); setTagsBreakdown(null);
     setTitle(''); setDescription(''); setTags('');
     setThumbnailUrl(''); setPrivacy('private'); setCategoryId('22');
+    setThumbnailConcepts([]);
   };
 
   // ══════════════════════════════════════════════════════════
-  // INDIVIDUAL STEP RUNNERS (enable per-step retry)
+  // STEP RUNNERS
   // ══════════════════════════════════════════════════════════
 
+  // STEP 1: Upload to Cloudinary (replaces base44.integrations.Core.UploadFile)
   const runUpload = async () => {
     if (!videoFile) throw new Error('No video file selected');
     setCurrentStep('upload');
-    setStatusMessage('Uploading video...');
+    setStatusMessage('Uploading video to Cloudinary…');
 
-    // Re-wrap as a clean File to avoid any stale Blob/reference issues
-    // that can cause multipart boundary corruption in some browser/SDK combos
     const cleanFile = videoFile instanceof File
       ? new File([videoFile], videoFile.name, { type: videoFile.type })
       : videoFile;
 
-    const { file_url } = await base44.integrations.Core.UploadFile({ file: cleanFile });
-    if (!file_url) throw new Error('Upload returned no file_url');
-
-    setFileUrl(file_url);
-    markComplete('upload');
-    return file_url;
-  };
-
-  const createProject = async () => {
-    if (projectId) return projectId;
-    const proj = await base44.entities.Projects.create({
-      name: `Quick Publish - ${videoFile?.name || 'Untitled'}`,
-      niche: niche,
-      status: 'created',
+    const result = await uploadToCloudinary(cleanFile, {
+      resourceType: 'video',
+      onProgress: (pct) => setStatusMessage(`Uploading… ${pct}%`),
     });
-    setProjectId(proj.id);
-    return proj.id;
+
+    if (!result?.secure_url) throw new Error('Cloudinary upload returned no URL');
+
+    const url = result.secure_url;
+    setFileUrl(url);
+
+    // Use Cloudinary public_id as projectId (no DB needed)
+    const pid = result.public_id || ('qp_' + Date.now());
+    setProjectId(pid);
+
+    markComplete('upload');
+    return { url, pid };
   };
 
+  // STEP 2: Transcribe via AssemblyAI direct (replaces quickPublishTranscribe)
   const runTranscribe = async (uploadedUrl) => {
     setCurrentStep('transcribe');
-    setStatusMessage('Submitting to transcription service...');
-    const submitRes = await base44.functions.invoke('quickPublishTranscribe', {
-      action: 'submit', file_url: uploadedUrl,
-    });
-    const transcriptId = submitRes.data?.transcript_id;
-    if (!transcriptId) throw new Error(submitRes.data?.error || 'No transcript ID returned');
+    setStatusMessage('Submitting to AssemblyAI…');
 
-    // Poll up to 30 min with adaptive backoff (long videos can take 15+ min)
-    const startedAt = Date.now();
-    const MAX_ATTEMPTS = 180; // 30 min total at avg 10s interval
-    for (let attempts = 0; attempts < MAX_ATTEMPTS; attempts++) {
-      // Adaptive: poll fast early, slow later
-      const interval = attempts < 12 ? 5000 : attempts < 60 ? 10000 : 15000;
-      await new Promise(r => setTimeout(r, interval));
-      const elapsed = Math.round((Date.now() - startedAt) / 1000);
-      setStatusMessage(`Transcribing... (${elapsed}s elapsed)`);
+    const result = await transcribeFile(uploadedUrl, (msg) => setStatusMessage(msg));
 
-      let pollRes;
-      try {
-        pollRes = await base44.functions.invoke('quickPublishTranscribe', {
-          action: 'poll', transcript_id: transcriptId,
-        });
-      } catch (netErr) {
-        // Transient — keep polling
-        continue;
-      }
-      if (pollRes.data?.status === 'completed') {
-        const text = pollRes.data.text || '';
-        setTranscript(text);
-        setTranscriptChapters(pollRes.data.chapters || []);
-        setTranscriptWords(pollRes.data.words || []);
-        setTranscriptDuration(pollRes.data.duration || 0);
-        markComplete('transcribe');
-        return text;
-      }
-      if (pollRes.data?.status === 'error') {
-        throw new Error(pollRes.data?.error || 'Transcription failed');
-      }
-    }
-    throw new Error('Transcription timed out after 30 minutes');
+    setTranscript(result.text);
+    setTranscriptChapters(result.chapters);
+    setTranscriptWords(result.words);
+    setTranscriptDuration(result.duration);
+    markComplete('transcribe');
+    return result.text;
   };
 
-  const runSeo = async (transcriptText, pid, channelName = '') => {
+  // STEP 3: SEO via Claude direct (replaces quickPublishSeo)
+  const runSeo = async (transcriptText) => {
     setCurrentStep('seo');
-    setStatusMessage('Generating SEO titles, descriptions, tags & hashtags...');
-    const seoRes = await base44.functions.invoke('quickPublishSeo', {
-      project_id: pid, transcript: transcriptText, niche: niche,
-      channel_name: channelName,
-    });
-    const d = seoRes.data || {};
-    if (!d.titles?.length) throw new Error(d.error || 'SEO generation returned no titles');
+    setStatusMessage('Generating SEO titles, descriptions, tags & hashtags…');
+
+    const channelName = localStorage.getItem(LS_CHAN_NAME) || '';
+    const d = await generateSeo({ transcript: transcriptText, niche, channelName });
+
+    if (!d.titles?.length) throw new Error('SEO generation returned no titles');
 
     setTitles(d.titles);
     setSeoAnalysis(d.seo_analysis || null);
@@ -223,99 +339,73 @@ export default function QuickPublish() {
     setDescription(descs[0]?.content || '');
 
     const allTags = [
-      ...(d.tags_breakdown?.short || []),
+      ...(d.tags_breakdown?.short  || []),
       ...(d.tags_breakdown?.medium || []),
-      ...(d.tags_breakdown?.long || []),
+      ...(d.tags_breakdown?.long   || []),
     ];
     setTags(allTags.join(', '));
     markComplete('seo');
     return d;
   };
 
-  const runThumbnails = async (pid, firstTitle) => {
+  // STEP 4: Thumbnail concepts via Claude direct (replaces generateThumbnails + polling)
+  const runThumbnails = async (firstTitle, transcriptText) => {
     setCurrentStep('thumbnails');
-    setStatusMessage('Generating thumbnail concepts...');
-    const thumbRes = await base44.functions.invoke('generateThumbnails', {
-      project_id: pid,
-      video_title: firstTitle || videoFile?.name || 'Untitled',
+    setStatusMessage('Generating thumbnail concepts with Claude…');
+
+    const result = await generateThumbnailConcepts({
+      videoTitle: firstTitle || videoFile?.name || 'Untitled',
+      transcript: transcriptText,
+      niche,
     });
-    await refetchThumbs();
 
-    // Auto-generate first 2 thumbnail images (reduced from 3 for speed)
-    const conceptIds = thumbRes.data?.concept_ids || [];
-    const topIds = conceptIds.slice(0, 2);
+    const concepts = (result.concepts || []).map((c, i) => ({
+      ...c,
+      id:         'concept_' + Date.now() + '_' + i,
+      project_id: projectId,
+      image_url:  null, // image generation is separate (KIE / user-triggered)
+    }));
 
-    for (let idx = 0; idx < topIds.length; idx++) {
-      const cid = topIds[idx];
-      setStatusMessage(`Rendering thumbnail ${idx + 1}/${topIds.length}...`);
-      try {
-        const imgRes = await base44.functions.invoke('generateThumbnailImage', { concept_id: cid });
-        const data = imgRes.data || {};
-        if (data.image_url) continue; // Already done
-        if (data.pending && data.task_id) {
-          // Poll max 90s per thumbnail
-          for (let i = 0; i < 18; i++) {
-            await new Promise(r => setTimeout(r, 5000));
-            try {
-              const pollRes = await base44.functions.invoke('pollThumbnailTask', {
-                task_id: data.task_id, concept_id: cid, task_type: data.task_type || 'kie',
-              });
-              if (pollRes.data?.completed) break;
-            } catch (_) { /* transient poll error, keep trying */ }
-          }
-        }
-      } catch (err) {
-        console.warn(`Thumbnail ${cid} failed:`, err.message);
-      }
-    }
-    await refetchThumbs();
+    setThumbnailConcepts(concepts);
     markComplete('thumbnails');
   };
 
   // ══════════════════════════════════════════════════════════
-  // FULL PIPELINE ORCHESTRATION
+  // FULL PIPELINE
   // ══════════════════════════════════════════════════════════
   const runPipeline = async () => {
     if (!videoFile) { setError('Please select a video file first.'); return; }
-    if (currentStep) return; // concurrency guard
+    if (currentStep) return;
     setError('');
 
     try {
-      // STEP 1: Upload (skip if already done)
-      const uploadedUrl = completedSteps.includes('upload') && fileUrl
-        ? fileUrl
-        : await runUpload();
+      // STEP 1
+      let uploadedUrl = fileUrl;
+      let pid         = projectId;
+      if (!completedSteps.includes('upload') || !fileUrl) {
+        const up = await runUpload();
+        uploadedUrl = up.url;
+        pid         = up.pid;
+      }
 
-      // Ensure project exists
-      const pid = await createProject();
-
-      // STEP 2: Transcribe (skip if already done)
+      // STEP 2
       const transcriptText = completedSteps.includes('transcribe') && transcript
         ? transcript
         : await runTranscribe(uploadedUrl);
 
-      // STEP 3: SEO — ALWAYS use local `d` result for downstream, never state (avoids stale closure)
+      // STEP 3
       let firstTitle = title;
       if (!completedSteps.includes('seo')) {
-        // Try to grab the default channel name for branded hashtag
-        let channelName = '';
-        try {
-          const chRes = await base44.functions.invoke('youtubeAuth', { action: 'list_channels' });
-          const chs = chRes.data?.channels || [];
-          const def = chs.find(c => c.is_default) || chs[0];
-          if (def) channelName = def.channel_name;
-        } catch (_) {}
-
-        const seoData = await runSeo(transcriptText, pid, channelName);
+        const seoData = await runSeo(transcriptText);
         firstTitle = seoData.titles?.[0]?.title || firstTitle;
       } else {
         firstTitle = titles[0]?.title || firstTitle;
       }
 
-      // STEP 4: Thumbnails (non-blocking — failures are logged but don't stop pipeline)
+      // STEP 4 (non-blocking)
       if (!completedSteps.includes('thumbnails')) {
         try {
-          await runThumbnails(pid, firstTitle);
+          await runThumbnails(firstTitle, transcriptText);
         } catch (thumbErr) {
           console.warn('Thumbnails failed (non-blocking):', thumbErr.message);
           markComplete('thumbnails');
@@ -331,44 +421,36 @@ export default function QuickPublish() {
     }
   };
 
-  // ── Retry the single failed step ───────────────────────────
-  const retryFailedStep = async () => {
-    setError('');
-    await runPipeline();
-  };
+  const retryFailedStep = async () => { setError(''); await runPipeline(); };
 
-  // ── Retry thumbnails only (wipe existing concepts + regenerate) ──
   const retryThumbnails = async () => {
-    if (!projectId) { setError('No project to regenerate thumbnails for.'); return; }
     if (currentStep) return;
     setError('');
+    setThumbnailConcepts([]);
+    setCompletedSteps(prev => prev.filter(s => s !== 'thumbnails'));
     try {
-      // Delete existing concepts so we get a fresh batch
-      const existing = await base44.entities.ThumbnailConcepts.filter({ project_id: projectId });
-      await Promise.all(existing.map(c => base44.entities.ThumbnailConcepts.delete(c.id)));
-      await refetchThumbs();
-
-      // Remove 'thumbnails' from completed so runThumbnails can re-run
-      setCompletedSteps(prev => prev.filter(s => s !== 'thumbnails'));
-
-      await runThumbnails(projectId, title || titles[0]?.title);
+      await runThumbnails(title || titles[0]?.title, transcript);
       setStatusMessage('');
       setCurrentStep(null);
     } catch (e) {
       setError(e.message || 'Thumbnail regeneration failed');
       setCurrentStep(null);
-      setStatusMessage('');
     }
   };
 
-  // ── Derived state ──────────────────────────────────────────
-  const titleOptions = titles.map(t => t.title).filter(Boolean);
+  // ── Derived ────────────────────────────────────────────────
+  const titleOptions    = titles.map(t => t.title).filter(Boolean);
   const pipelineStarted = completedSteps.length > 0 || !!currentStep;
-  const seoDone = completedSteps.includes('seo');
-  const publishDone = completedSteps.includes('publish');
+  const seoDone         = completedSteps.includes('seo');
+  const publishDone     = completedSteps.includes('publish');
+
+  // ── ThumbnailStep expects the old shape: { id, image_url, concept_name, … }
+  // thumbnailConcepts already matches that shape.
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-6">
+      {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
+
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center gap-3">
@@ -379,14 +461,20 @@ export default function QuickPublish() {
             </div>
             <div className="flex-1">
               <h1 className="text-lg font-bold">Quick Publish</h1>
-              <p className="text-xs text-gray-500">Upload external video → Auto SEO → Thumbnails → Publish</p>
+              <p className="text-xs text-gray-500">Upload → Transcribe (AssemblyAI) → SEO (Claude) → Thumbnails → Publish</p>
             </div>
+            <Button
+              variant="ghost" size="sm"
+              onClick={() => setShowSettings(true)}
+              className="gap-1.5 text-xs text-gray-500"
+            >
+              <Settings className="w-3.5 h-3.5" /> Settings
+            </Button>
             {pipelineStarted && (
               <Button
                 variant="ghost" size="sm"
                 onClick={resetPipeline}
                 className="gap-1.5 text-xs text-gray-500 hover:text-red-600"
-                title="Reset pipeline"
               >
                 <X className="w-3.5 h-3.5" /> Reset
               </Button>
@@ -394,15 +482,13 @@ export default function QuickPublish() {
           </div>
         </div>
 
-        {/* Resume banner if state was loaded without file */}
+        {/* Resume banner */}
         {!videoFile && projectId && !publishDone && (
           <Card className="bg-amber-50 border-amber-200">
             <CardContent className="p-3 flex items-center gap-2 text-sm text-amber-800">
               <RotateCcw className="w-4 h-4 flex-shrink-0" />
               <span className="flex-1">Resuming previous session. Select your video again to continue.</span>
-              <Button size="sm" variant="outline" onClick={resetPipeline} className="h-7 text-xs">
-                Start fresh
-              </Button>
+              <Button size="sm" variant="outline" onClick={resetPipeline} className="h-7 text-xs">Start fresh</Button>
             </CardContent>
           </Card>
         )}
@@ -447,32 +533,35 @@ export default function QuickPublish() {
                 <Select value={niche} onValueChange={setNiche}>
                   <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="general">General</SelectItem>
-                    <SelectItem value="finance">Finance / Money</SelectItem>
-                    <SelectItem value="tech">Tech / AI</SelectItem>
-                    <SelectItem value="education">Education</SelectItem>
-                    <SelectItem value="entertainment">Entertainment</SelectItem>
-                    <SelectItem value="health">Health & Fitness</SelectItem>
-                    <SelectItem value="travel">Travel</SelectItem>
-                    <SelectItem value="true_crime">True Crime</SelectItem>
-                    <SelectItem value="gaming">Gaming</SelectItem>
-                    <SelectItem value="music">Music</SelectItem>
-                    <SelectItem value="cooking">Cooking / Food</SelectItem>
-                    <SelectItem value="motivation">Motivation / Self-Help</SelectItem>
+                    {[
+                      ['general','General'],['finance','Finance / Money'],['tech','Tech / AI'],
+                      ['education','Education'],['entertainment','Entertainment'],['health','Health & Fitness'],
+                      ['travel','Travel'],['true_crime','True Crime'],['gaming','Gaming'],
+                      ['music','Music'],['cooking','Cooking / Food'],['motivation','Motivation / Self-Help'],
+                    ].map(([v,l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* Config check warning */}
+              {(!localStorage.getItem(LS_KEYS.CLOUD_NAME) || !localStorage.getItem(LS_KEYS.ASSEMBLYAI)) && (
+                <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2">
+                  <Settings className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>
+                    Open <button onClick={() => setShowSettings(true)} className="underline font-medium">Settings</button> to add your Cloudinary and AssemblyAI keys before starting.
+                  </span>
+                </div>
+              )}
 
               <Button
                 onClick={runPipeline}
                 disabled={!videoFile || !!currentStep}
                 className="w-full h-11 gap-2 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
               >
-                {currentStep ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
-                ) : (
-                  <><Zap className="w-4 h-4" /> Start Pipeline — Transcribe → SEO → Thumbnails</>
-                )}
+                {currentStep
+                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing…</>
+                  : <><Zap className="w-4 h-4" /> Start Pipeline — Upload → Transcribe → SEO → Thumbnails</>
+                }
               </Button>
             </CardContent>
           </Card>
@@ -487,7 +576,6 @@ export default function QuickPublish() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Auto-chapters from transcript */}
               <ChaptersPanel
                 chapters={transcriptChapters}
                 description={description}
@@ -507,13 +595,11 @@ export default function QuickPublish() {
                 hashtags={hashtags}
                 pinnedComment={pinnedComment}
               />
-              {/* Viral Shorts extractor */}
               <ViralMomentsPanel
                 transcript={transcript}
                 words={transcriptWords}
                 duration={transcriptDuration}
               />
-              {/* Silence + filler cleanup */}
               <SilenceTrimPanel
                 words={transcriptWords}
                 duration={transcriptDuration}
@@ -531,26 +617,24 @@ export default function QuickPublish() {
                   <Image className="w-4 h-4 text-purple-600" /> Thumbnails
                 </CardTitle>
                 <Button
-                  variant="outline"
-                  size="sm"
+                  variant="outline" size="sm"
                   onClick={retryThumbnails}
-                  disabled={!!currentStep || !projectId}
+                  disabled={!!currentStep}
                   className="h-7 text-xs gap-1.5"
-                  title="Regenerate AI thumbnail concepts"
                 >
-                  {currentStep === 'thumbnails' ? (
-                    <><Loader2 className="w-3 h-3 animate-spin" /> Regenerating...</>
-                  ) : (
-                    <><RotateCcw className="w-3 h-3" /> Retry Thumbnails</>
-                  )}
+                  {currentStep === 'thumbnails'
+                    ? <><Loader2 className="w-3 h-3 animate-spin" /> Regenerating…</>
+                    : <><RotateCcw className="w-3 h-3" /> Retry Thumbnails</>
+                  }
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
+              {/* ThumbnailStep receives concepts array instead of querying base44 */}
               <ThumbnailStep
                 projectId={projectId}
-                thumbnails={thumbnails}
-                onRefetch={refetchThumbs}
+                thumbnails={thumbnailConcepts}
+                onRefetch={() => {}} // no-op: state-driven now
                 selectedThumbnailUrl={thumbnailUrl}
                 onSelect={setThumbnailUrl}
                 videoFile={videoFile}
@@ -563,7 +647,7 @@ export default function QuickPublish() {
           </Card>
         )}
 
-        {/* Step 4: Channel + Publish */}
+        {/* Step 4: Publish */}
         {seoDone && (
           <Card className="border-red-200">
             <CardHeader className="pb-3">
