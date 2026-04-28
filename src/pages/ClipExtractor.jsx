@@ -36,21 +36,11 @@ import {
   analyzeViralMoments,
 } from '@/lib/directApi';
 
-// ── Cobalt audio extraction helper (same as OpenShorts) ───────────────
+// ── Cobalt audio extraction — routed through backend (has COBALT_API_URL env var)
 const extractYouTubeAudio = async (youtubeUrl) => {
-  const cobaltBase = localStorage.getItem('COBALT_API_URL') || 'https://api.cobalt.tools';
-  const res = await fetch(`${cobaltBase}/api/json`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ url: youtubeUrl, aFormat: 'mp3', isAudioOnly: true }),
-  });
-  if (!res.ok) throw new Error(`Cobalt request failed (${res.status})`);
-  const data = await res.json();
-  if (data.status === 'error' || data.status === 'rate-limit') {
-    throw new Error(data.text || 'Cobalt extraction failed');
-  }
-  const audioUrl = data.url || (data.picker && data.picker[0]?.url);
-  if (!audioUrl) throw new Error('Cobalt returned no audio URL');
+  const res = await base44.functions.invoke('cobaltExtract', { url: youtubeUrl });
+  const audioUrl = res.data?.url || res.data?.audio_url;
+  if (!audioUrl) throw new Error(res.data?.error || 'Cobalt extraction failed');
   return audioUrl;
 };
 
@@ -206,28 +196,26 @@ export default function ClipExtractor() {
       let uploadedUrl;
 
       if (videoFile._isUrl) {
-        // YouTube URL mode: Cobalt already gave us audioUrl via YouTubeUrlInput
+        // YouTube URL mode: audio URL already resolved by YouTubeUrlInput via backend
         uploadedUrl = videoFile._audioUrl || videoFile._streamUrl;
         markComplete('upload');
       } else {
-        // File mode: upload to Cloudinary first (replaces base44 UploadFile)
+        // File mode: upload to Cloudinary via backend (has env vars)
         setCurrentStage('upload');
         setStatusMessage('Uploading to Cloudinary…');
-
         const cloudResult = await uploadToCloudinary(videoFile, {
           resourceType: 'video',
           onProgress: pct => setStatusMessage(`Uploading… ${pct}%`),
         });
-
         uploadedUrl = cloudResult.secure_url;
-        if (!uploadedUrl) throw new Error('Cloudinary upload returned no URL');
+        if (!uploadedUrl) throw new Error('Upload returned no URL');
         markComplete('upload');
       }
 
-      // Transcribe
+      // Transcribe via AssemblyAI (through backend)
       const asrResult = await runTranscription(uploadedUrl);
 
-      // Viral analysis
+      // Viral analysis via Claude direct
       await runViralAnalysis(asrResult.words, asrResult.duration || videoDuration);
 
       // Init FFmpeg for clipping (non-blocking)
@@ -295,8 +283,6 @@ export default function ClipExtractor() {
             <div>
               <p className="font-medium">Pipeline error</p>
               <p className="text-red-600 mt-0.5">{error}</p>
-              {error.includes('Cloudinary') && <p className="text-xs mt-1 text-red-500">Add your Cloudinary Cloud Name in Settings (Open Shorts Settings panel).</p>}
-              {error.includes('AssemblyAI') && <p className="text-xs mt-1 text-red-500">Add your AssemblyAI API key in Settings.</p>}
             </div>
           </div>
         )}
