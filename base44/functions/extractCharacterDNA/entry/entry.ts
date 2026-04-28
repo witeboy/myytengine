@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-// v2 — redeployed
+
+// v2 — redeployed (Switched to Claude)
 // ══════════════════════════════════════════════════════════════════
 // CHARACTER DNA EXTRACTOR
 // ══════════════════════════════════════════════════════════════════
@@ -24,30 +25,48 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // The scene breakdown and prompt generator both consume this data.
 // ══════════════════════════════════════════════════════════════════
 
-async function callGemini(prompt, temperature = 0.5) {
-  const apiKey = Deno.env.get("GEMINI_API_KEY");
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: 8192, responseMimeType: "application/json" }
-      })
-    }
-  );
+async function callClaude(prompt, temperature = 0.5) {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  
+  if (!apiKey) {
+    throw new Error("Missing ANTHROPIC_API_KEY environment variable");
+  }
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { 
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01"
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-5", // Updated to use the requested model
+      max_tokens: 4096,
+      temperature: temperature,
+      system: "You are a casting director and data extraction system. You must return ONLY raw, valid JSON. Do not include markdown formatting like ```json and do not include any conversational text.",
+      messages: [
+        { role: "user", content: prompt }
+      ]
+    })
+  });
+
   if (!response.ok) {
     const err = await response.json();
-    throw new Error(`Gemini error: ${err.error?.message || response.status}`); 
+    throw new Error(`Claude error: ${err.error?.message || response.status}`); 
   }
+
   const data = await response.json();
-  if (!data.candidates?.length) throw new Error("No candidates from Gemini");
-  const rawText = data.candidates[0].content.parts[0].text;
-  try { return JSON.parse(rawText); } catch (_) {
+  if (!data.content || !data.content.length) throw new Error("No content returned from Claude");
+  
+  const rawText = data.content[0].text;
+  
+  try { 
+    return JSON.parse(rawText); 
+  } catch (_) {
+    // Fallback regex to extract JSON if Claude accidentally includes markdown/text
     const match = rawText.match(/\{[\s\S]*\}/);
     if (match) return JSON.parse(match[0]);
-    throw new Error("Failed to parse Gemini JSON");
+    throw new Error("Failed to parse Claude JSON");
   }
 }
 
@@ -100,7 +119,7 @@ Deno.serve(async (req) => {
 
     console.log(`🧬 Extracting Character DNA for "${project.name}" (${niche})${seed ? ` | seed: ${seed.firstName} [${seed.namingCulture}]` : ''}`);
 
-    const prompt = `You are a casting director and character analyst. Study this script carefully and extract EVERY character that appears or is referenced.
+    const prompt = `Study this script carefully and extract EVERY character that appears or is referenced.
 ${seedConstraint}
 
 **SCRIPT:**
@@ -157,7 +176,7 @@ ${fullScript}
 - For multi-character stories, ensure characters look DIFFERENT from each other — contrasting builds, hair colors, skin tones, clothing styles.
 - Maximum 5 characters. Merge background characters into archetypes if there are many.`;
 
-    const result = await callGemini(prompt, 0.4);
+    const result = await callClaude(prompt, 0.4);
 
     const characters = result.characters || [];
     const hasCharacters = result.has_characters !== false && characters.length > 0;
