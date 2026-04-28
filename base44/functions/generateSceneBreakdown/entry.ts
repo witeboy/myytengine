@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
-// CINEMATIC SCENE BREAKDOWN ENGINE
+// CINEMATIC SCENE BREAKDOWN ENGINE (Switched to Claude)
 // ══════════════════════════════════════════════════════════════════
 // Single-call architecture from the original, upgraded with:
 // - Duration-aware scene density & beat pacing
@@ -12,35 +12,47 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // - Timeout safety valve for long videos
 // ══════════════════════════════════════════════════════════════════
 
-async function callGemini(prompt, temperature = 0.7) {
-  const apiKey = Deno.env.get("GEMINI_API_KEY");
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" }, 
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: 16384, responseMimeType: "application/json" }
-      })
-    }
-  );
+async function callClaude(prompt, temperature = 0.7) {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  
+  if (!apiKey) {
+    throw new Error("Missing ANTHROPIC_API_KEY environment variable");
+  }
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { 
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01"
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-5",
+      max_tokens: 8192,
+      temperature: temperature,
+      system: "You are a world-class film director and cinematic data extractor. You must return ONLY raw, valid JSON. Do not include markdown formatting like ```json and do not include any conversational text.",
+      messages: [
+        { role: "user", content: prompt }
+      ]
+    })
+  });
 
   if (!response.ok) {
     const err = await response.json();
-    throw new Error(`Gemini error: ${err.error?.message || response.status}`);
+    throw new Error(`Claude error: ${err.error?.message || response.status}`); 
   }
 
   const data = await response.json();
-  if (!data.candidates?.length) throw new Error("No candidates from Gemini");
-  const rawText = data.candidates[0].content.parts[0].text;
+  if (!data.content || !data.content.length) throw new Error("No content returned from Claude");
+  
+  const rawText = data.content[0].text;
 
   try { return JSON.parse(rawText); } catch (_) {}
 
   // Recovery: try closing truncated JSON
   console.log("JSON parse failed, attempting recovery...");
   const lastBrace = rawText.lastIndexOf('}');
-  if (lastBrace === -1) throw new Error("Cannot recover JSON from Gemini response");
+  if (lastBrace === -1) throw new Error("Cannot recover JSON from Claude response");
   const trimmed = rawText.substring(0, lastBrace + 1);
   for (const suffix of [']}', '}]}', '']) {
     try {
@@ -52,7 +64,7 @@ async function callGemini(prompt, temperature = 0.7) {
       if (parsed.story_analysis) return parsed;
     } catch (_) {}
   }
-  throw new Error("Failed to parse Gemini JSON after recovery");
+  throw new Error("Failed to parse Claude JSON after recovery");
 }
 
 function cleanScriptText(text) {
@@ -1026,7 +1038,7 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
 Analyze the script above and identify: WHO is the main character? WHAT is their situation? WHAT journey do they go through? Every scene must show a moment from THIS character's journey — not a disconnected visual metaphor.`;
 
       console.log(`🎬 Story analysis...`);
-      const analysis = await callGemini(analysisPrompt, 0.6);
+      const analysis = await callClaude(analysisPrompt, 0.6);
       storyAnalysis = analysis.story_analysis || analysis;
 
       // ── Beat durations ──
@@ -1227,7 +1239,7 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
 
         let result;
         try {
-          result = await callGemini(prompt, 0.7);
+          result = await callClaude(prompt, 0.7);
         } catch (err) {
           console.error(`❌ Scenes ${sub.offset+1}-${sub.offset+sub.count} FAILED: ${err.message}`);
           // Retry with half the scenes
@@ -1246,7 +1258,7 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
                 sceneStartGlobal: sub.offset + 1,
                 totalScenes: totalTargetScenes
               });
-              result = await callGemini(halfPrompt, 0.7);
+              result = await callClaude(halfPrompt, 0.7);
             } catch (retryErr) {
               console.error(`❌ Retry also failed: ${retryErr.message} — skipping`);
               continue;
