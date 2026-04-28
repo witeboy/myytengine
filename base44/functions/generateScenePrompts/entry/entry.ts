@@ -508,9 +508,25 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
   // DO NOT add anti-text instruction — Grok renders it as visible text
   // The LLM prompt already instructs physical metaphors for abstract concepts
 
-  // Quality suffix — style-appropriate (no resolution numbers — Grok renders them)
+  // Quality suffix — style-appropriate (no resolution numbers — Z-Image renders them as text)
   if (!/masterpiece|professional|high quality/i.test(enhanced)) {
     enhanced += ', masterpiece quality, highly detailed, professional composition';
+  }
+
+  // ── HARD TRUNCATE to Z-Image 1000 char limit ──
+  // Z-Image API rejects prompts over 1000 chars. Cut at sentence or comma boundary.
+  const Z_IMAGE_LIMIT = 1000;
+  if (enhanced.length > Z_IMAGE_LIMIT) {
+    const cutZone = enhanced.substring(Z_IMAGE_LIMIT - 150, Z_IMAGE_LIMIT);
+    const lastPeriod = cutZone.lastIndexOf('.');
+    const lastComma = cutZone.lastIndexOf(',');
+    const cutPoint = lastPeriod >= 0
+      ? (Z_IMAGE_LIMIT - 150) + lastPeriod + 1
+      : lastComma >= 0
+        ? (Z_IMAGE_LIMIT - 150) + lastComma
+        : Z_IMAGE_LIMIT;
+    enhanced = enhanced.substring(0, cutPoint).trim();
+    console.log(`✂️ Scene ${sceneNumber}: prompt truncated to ${enhanced.length} chars (Z-Image 1000 char limit)`);
   }
 
   return enhanced;
