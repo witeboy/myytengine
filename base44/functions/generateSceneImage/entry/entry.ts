@@ -48,7 +48,11 @@ Deno.serve(async (req) => {
     // Robust payload parsing to prevent 400 errors
     let body = {};
     try {
-      body = await req.json();
+      const rawBody = await req.json();
+      // Unwrap Base44 SDK payload which nests arguments inside a "data" object
+      body = (rawBody.data && typeof rawBody.data === 'object' && !Array.isArray(rawBody.data)) 
+        ? rawBody.data 
+        : rawBody;
     } catch (e) {
       return Response.json({ error: "Invalid JSON payload" }, { status: 400 });
     }
