@@ -45,11 +45,19 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
-    const body = await req.json();
-    const { project_id } = body;
+    // Robust payload parsing to prevent 400 errors
+    let body = {};
+    try {
+      body = await req.json();
+    } catch (e) {
+      return Response.json({ error: "Invalid JSON payload" }, { status: 400 });
+    }
+
+    // Accept both snake_case and camelCase
+    const project_id = body.project_id || body.projectId;
 
     if (!project_id) {
-      return Response.json({ error: "Provide project_id" }, { status: 400 });
+      return Response.json({ error: "Provide project_id or projectId" }, { status: 400 });
     }
 
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
