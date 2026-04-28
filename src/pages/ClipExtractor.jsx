@@ -11,7 +11,6 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -34,17 +33,10 @@ import {
   uploadToCloudinary,
   buildCloudinaryClipUrl,
   getCloudinaryConfig,
+  extractYouTubeAudio,
   transcribeFile,
   analyzeViralMoments,
 } from '@/lib/directApi';
-
-// ── Cobalt audio extraction — routed through backend (has COBALT_API_URL env var)
-const extractYouTubeAudio = async (youtubeUrl) => {
-  const res = await base44.functions.invoke('cobaltExtract', { url: youtubeUrl });
-  const audioUrl = res.data?.url || res.data?.audio_url;
-  if (!audioUrl) throw new Error(res.data?.error || 'Cobalt extraction failed');
-  return audioUrl;
-};
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -190,6 +182,13 @@ export default function ClipExtractor() {
   // ── Full pipeline ───────────────────────────────────────────
   const runFullPipeline = async () => {
     if (!videoFile) return;
+
+    // Guard: Cloudinary cloud name must be set (in Open Shorts Settings)
+    if (!videoFile._isUrl && !localStorage.getItem('openshorts_cloud_name')) {
+      setError('Cloudinary Cloud Name not set. Open the Open Shorts page → Settings → add your Cloud Name and Upload Preset, then come back.');
+      return;
+    }
+
     setError('');
     setClips([]);
     setCompletedStages([]);
