@@ -1,78 +1,11 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-import OpenAI from 'npm:openai@4.52.0';
 
 // ══════════════════════════════════════════════════════════════════
 // SCENE PROMPT GENERATOR — DIRECTOR NOTES → PRODUCTION PROMPTS
-// Pipeline: Script → Breakdown → [THIS] → OpenAI Clean → Image Gen → Animation
+// Pipeline: Script → Breakdown → [THIS] → Image Gen → Animation
 // ══════════════════════════════════════════════════════════════════
 
 const BASE_BATCH_SIZE = 12;
-
-// ══════════════════════════════════════════════════════════════════
-// OPENAI PROMPT CLEANER — structures messy prompts for image gen
-// ══════════════════════════════════════════════════════════════════
-
-const _openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
-
-const CLEANER_SYSTEM_PROMPT = `You are a principal prompt engineer specialized in cinematic image and video generation.
-
-Your task is to CLEAN and STRUCTURE the following messy prompt WITHOUT changing, paraphrasing, or adding new creative ideas.
-
-DO NOT rewrite creatively.
-
-DO NOT expand or embellish.
-ONLY organize, clarify relationships, remove ambiguity, and enforce visual hierarchy so an AI model can interpret it correctly without hallucination.
-
-REQUIREMENTS:
-1. Preserve ALL original elements exactly as given
-2. Explicitly define: subject priority, spatial relationships, camera perspective, action timing
-3. Resolve ambiguity in: who is holding objects, where objects appear, what is foreground/midground/background
-4. Enforce: one clear primary subject, no conflicting perspectives, no duplicate or floating elements
-
-TEXT HANDLING (CRITICAL):
-If the prompt includes ANY text, UI, or screen elements:
-- Treat text as a digital UI overlay, NOT part of the environment
-- Place all text inside a defined container (no floating text)
-- Use minimal, short, clean text only
-- Enforce legibility: all text must be perfectly spelled, sharp, readable, high contrast
-- Specify position (e.g., top banner, inside phone screen)
-- Prevent hallucination with: no garbled text, no distorted letters, no stylized typography
-
-STYLE ENFORCEMENT:
-If a style is mentioned (e.g., 3D whiteboard cartoon):
-- Lock it strictly
-- Add constraints to prevent realism bleed: no photorealism, no complex textures, no cinematic blur unless specified
-
-OUTPUT: Return ONLY a single clean structured prompt as ONE continuous text block. Structure it in this internal order as flowing prose (NOT labeled sections):
-[MAIN SUBJECT] → [ENVIRONMENT] → [OBJECTS & DETAILS] → [CHARACTERS & POSITIONS] → [ACTIONS] → [CAMERA / COMPOSITION] → [LIGHTING] → [STYLE / MOOD] → [TEXT / UI if applicable] → [TECHNICAL SPECS] → [CONSTRAINTS / NEGATIVES]
-
-IMPORTANT: Do NOT explain anything. Do NOT add commentary. Output ONLY the final cleaned prompt. Do NOT add section labels.`;
-
-async function cleanPromptWithOpenAI(messyPrompt, visualStyle) {
-  try {
-    const styleConstraint = visualStyle
-      ? (visualStyle === 'skeleton_protagonist'
-        ? `\nThe visual style is skeleton protagonist — a transparent skeleton with glass-like body replaces the human character entirely. The skeleton is NOT overlaid on a real person. No real human skin or flesh on the protagonist. Other characters are normal humans. Do NOT write "Skeleton protagonist" as a label prefix.`
-        : `\nThe visual style is strictly ${visualStyle.replace(/_/g, ' ')}. Lock this style and prevent any realism bleed or style mixing.`)
-      : '';
-    const response = await _openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      temperature: 0.2,
-      max_tokens: 1024,
-      messages: [
-        { role: "system", content: CLEANER_SYSTEM_PROMPT },
-        { role: "user", content: `Clean and structure this prompt:${styleConstraint}\n\n${messyPrompt}` }
-      ]
-    });
-    const cleaned = (response.choices[0]?.message?.content || '').trim();
-    if (cleaned && cleaned.length > 50) return cleaned;
-    console.warn(`OpenAI cleaner returned thin result (${cleaned.length}ch), keeping original`);
-    return messyPrompt;
-  } catch (err) {
-    console.warn(`OpenAI cleaner failed: ${err.message}, keeping original`);
-    return messyPrompt;
-  }
-}
 
 const PARALLEL_PROMPT_BATCHES = 3; // Run 3 Claude prompt calls concurrently
 
@@ -1839,7 +1772,7 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
                 : 'very faint mist drifting slowly through the still scene';
               animationPrompt = `Ultra-slow ${movement} over ${sceneDuration} seconds. ${sleepEnv}. Completely still atmosphere, no changes in lighting or brightness.`;
             } else {
-              animationPrompt = `${movement} over ${sceneDuration} seconds. ${getArcAnimationGuidance(arcPosition)} Foreground elements shift with parallax depth against the background. Subject's body language carries the emotion — micro-movements in hands, shoulders, breathing rhythm. Environmental details respond: ${vc.includes('rain') ? 'rain streaks down surfaces, pooling light reflections ripple' : vc.includes('wind') ? 'fabric and hair catch the wind, leaves scatter across frame' : vc.includes('night') ? 'shadows crawl across walls, distant lights pulse faintly' : 'ambient textures shift — dust motes, fabric settling, light evolving across surfaces'}. The emotional quality is ${mood} — motion weight and speed match this energy. Shallow depth of field breathes subtly between foreground and subject.`;
+              animationPrompt = `${movement} over ${sceneDuration} seconds. ${getArcAnimationGuidance(arcPosition)} Camera reveals the scene through parallax — foreground elements drift at different speed than background, creating cinematic depth. Subject exhibits natural micro-motion: breathing rhythm visible in chest and shoulders, weight shifts, small involuntary gestures. Environmental physics respond to the world: ${vc.includes('rain') ? 'water streaks surfaces, reflections ripple in puddles, droplets catch light' : vc.includes('wind') ? 'fabric ripples, hair lifts and settles, loose objects shift' : vc.includes('crowd') ? 'background figures move at varied speeds, creating depth layers' : 'ambient textures evolve — light creeps across surfaces, shadows rotate, particles drift through beams'}. Light is alive — ${mood.includes('tense') || mood.includes('anxiety') ? 'flickering, unstable, casting nervous shadows' : mood.includes('warm') || mood.includes('hope') ? 'gradually warming, golden rays expanding across frame' : 'shifting slowly, painting the scene with evolving tones'}. Shallow DOF breathes between planes, drawing focus where emotion lives.`;
             }
           }
         } else {
@@ -1905,22 +1838,9 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
           }
         }
 
-        // ═══ OPENAI PROMPT CLEANER — final structuring pass ═══
-        // Skip for sleep projects — their prompts are already well-structured
-        // and the OpenAI cleaner adds ~5s per scene causing timeouts
-        let cleanedImagePrompt = imagePrompt;
-        if (!useSleepStyle) {
-          cleanedImagePrompt = await cleanPromptWithOpenAI(imagePrompt, visualStyle);
-          if (cleanedImagePrompt !== imagePrompt) {
-            console.log(`🧹 Scene ${s.scene_number}: OpenAI cleaned (${imagePrompt.length}→${cleanedImagePrompt.length}ch)`);
-          }
-        } else {
-          console.log(`🌙 Scene ${s.scene_number}: skipping OpenAI cleaner (sleep mode)`);
-        }
-
         try {
           await base44.asServiceRole.entities.Scenes.update(s.scene_id, {
-            image_prompt: cleanedImagePrompt,
+            image_prompt: imagePrompt,
             animation_prompt: animationPrompt,
             status: "prompts_ready"
           });
