@@ -1,36 +1,37 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// directApi.js — 100% browser-direct API calls. Zero base44 dependencies.
-//
-// Keys stored in localStorage (set via OpenShorts Settings panel):
-//   openshorts_cloud_name    — Cloudinary cloud name
-//   openshorts_cloud_preset  — Cloudinary unsigned upload preset
-//   ASSEMBLYAI_API_KEY       — AssemblyAI API key
-//   COBALT_API_URL           — Cobalt instance URL (for YouTube audio extraction)
+// directApi.js — Browser-direct API calls.
+// All credentials come from the backend via getAppConfig (reads server env vars).
+// NO localStorage settings, NO Settings panels, NO hardcoded keys.
 // ─────────────────────────────────────────────────────────────────────────────
+import { base44 } from '@/api/base44Client';
 
-export const LS_KEYS = {
-  CLOUD_NAME:   'openshorts_cloud_name',
-  CLOUD_PRESET: 'openshorts_cloud_preset',
-  ASSEMBLYAI:   'ASSEMBLYAI_API_KEY',
-  COBALT_URL:   'COBALT_API_URL',
+// ── In-memory config cache (populated once on first call) ─────────────────────
+let _cfg = null;
+
+const getConfig = async () => {
+  if (_cfg) return _cfg;
+  const res = await base44.functions.invoke('getAppConfig', {});
+  const d   = res.data || {};
+  _cfg = {
+    cloudName:    d.cloudinary_cloud_name || '',
+    cloudPreset:  d.cloudinary_preset     || 'openshorts_clips',
+    assemblyKey:  d.assemblyai_key        || '',
+    cobaltUrl:    d.cobalt_url            || 'https://api.cobalt.tools',
+  };
+  return _cfg;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. CLOUDINARY — direct browser unsigned upload
 // ─────────────────────────────────────────────────────────────────────────────
-export const getCloudinaryConfig = () => ({
-  cloudName: localStorage.getItem(LS_KEYS.CLOUD_NAME) || '',
-  preset:    localStorage.getItem(LS_KEYS.CLOUD_PRESET) || 'openshorts_clips',
-});
-
-export const uploadToCloudinary = (file, { resourceType = 'video', onProgress } = {}) => {
-  const { cloudName, preset } = getCloudinaryConfig();
-  if (!cloudName) throw new Error('Cloudinary Cloud Name not set — open Settings to add it.');
+export const uploadToCloudinary = async (file, { resourceType = 'video', onProgress } = {}) => {
+  const { cloudName, cloudPreset } = await getConfig();
+  if (!cloudName) throw new Error('Cloudinary cloud name not configured in server env (openshorts_cloud_name).');
 
   return new Promise((resolve, reject) => {
     const fd = new FormData();
     fd.append('file',          file);
-    fd.append('upload_preset', preset);
+    fd.append('upload_preset', cloudPreset);
     fd.append('resource_type', resourceType);
 
     const xhr = new XMLHttpRequest();
@@ -41,13 +42,18 @@ export const uploadToCloudinary = (file, { resourceType = 'video', onProgress } 
       try {
         const res = JSON.parse(xhr.responseText);
         if (res.error) return reject(new Error(res.error.message || 'Cloudinary upload failed'));
-        resolve(res);
+        resolve(res); // res.secure_url, res.public_id
       } catch { reject(new Error('Cloudinary response parse error')); }
     };
     xhr.onerror = () => reject(new Error('Cloudinary network error'));
     xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`);
     xhr.send(fd);
   });
+};
+
+export const getCloudinaryConfig = async () => {
+  const { cloudName, cloudPreset } = await getConfig();
+  return { cloudName, preset: cloudPreset };
 };
 
 export const buildCloudinaryClipUrl = (publicId, cloudName, start, end) => {
@@ -57,19 +63,15 @@ export const buildCloudinaryClipUrl = (publicId, cloudName, start, end) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 2. ASSEMBLYAI — direct browser calls
+// 2. ASSEMBLYAI — direct browser calls using key from server env
 // ─────────────────────────────────────────────────────────────────────────────
 const AAI = 'https://api.assemblyai.com/v2';
 
-const aaiKey = () => {
-  const key = localStorage.getItem(LS_KEYS.ASSEMBLYAI);
-  if (!key) throw new Error('AssemblyAI API key not set — open Settings to add it.');
-  return key;
-};
+export const uploadToAssemblyAI = async (file, onProgress) => {
+  const { assemblyKey } = await getConfig();
+  if (!assemblyKey) throw new Error('ASSEMBLYAI_API_KEY not set in server env.');
 
-export const uploadToAssemblyAI = (file, onProgress) =>
-  new Promise((resolve, reject) => {
-    const key = aaiKey();
+  return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
@@ -83,11 +85,15 @@ export const uploadToAssemblyAI = (file, onProgress) =>
     };
     xhr.onerror = () => reject(new Error('AssemblyAI upload network error'));
     xhr.open('POST', `${AAI}/upload`);
-    xhr.setRequestHeader('authorization', key);
+    xhr.setRequestHeader('authorization', assemblyKey);
     xhr.send(file);
   });
+};
 
 export const transcribeFile = async (fileOrUrl, onStatus) => {
+  const { assemblyKey } = await getConfig();
+  if (!assemblyKey) throw new Error('ASSEMBLYAI_API_KEY not set in server env.');
+
   let audioUrl = fileOrUrl;
 
   if (fileOrUrl instanceof File || fileOrUrl instanceof Blob) {
@@ -101,7 +107,7 @@ export const transcribeFile = async (fileOrUrl, onStatus) => {
 
   const submitRes = await fetch(`${AAI}/transcript`, {
     method:  'POST',
-    headers: { authorization: aaiKey(), 'content-type': 'application/json' },
+    headers: { authorization: assemblyKey, 'content-type': 'application/json' },
     body:    JSON.stringify({ audio_url: audioUrl, auto_chapters: true }),
   });
   const submitData = await submitRes.json();
@@ -118,7 +124,7 @@ export const transcribeFile = async (fileOrUrl, onStatus) => {
     let data;
     try {
       const pollRes = await fetch(`${AAI}/transcript/${transcriptId}`, {
-        headers: { authorization: aaiKey() },
+        headers: { authorization: assemblyKey },
       });
       data = await pollRes.json();
     } catch (_) { continue; }
@@ -138,16 +144,17 @@ export const transcribeFile = async (fileOrUrl, onStatus) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. COBALT — YouTube audio extraction (direct browser call)
+// 3. COBALT — YouTube audio extraction using URL from server env
 // ─────────────────────────────────────────────────────────────────────────────
 export const extractYouTubeAudio = async (youtubeUrl) => {
-  const cobaltBase = localStorage.getItem(LS_KEYS.COBALT_URL) || 'https://api.cobalt.tools';
-  const res = await fetch(`${cobaltBase}/api/json`, {
+  const { cobaltUrl } = await getConfig();
+
+  const res = await fetch(`${cobaltUrl}/api/json`, {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body:    JSON.stringify({ url: youtubeUrl, aFormat: 'mp3', isAudioOnly: true }),
   });
-  if (!res.ok) throw new Error(`Cobalt request failed (${res.status}). Check COBALT_API_URL in Settings.`);
+  if (!res.ok) throw new Error(`Cobalt request failed (${res.status}). Check COBALT_API_URL in server env.`);
   const data = await res.json();
   if (data.status === 'error' || data.status === 'rate-limit') {
     throw new Error(data.text || 'Cobalt extraction failed');
@@ -158,7 +165,7 @@ export const extractYouTubeAudio = async (youtubeUrl) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. ANTHROPIC — direct /v1/messages (artifact proxy)
+// 4. ANTHROPIC — direct /v1/messages (artifact proxy — no key needed client-side)
 // ─────────────────────────────────────────────────────────────────────────────
 const callClaude = async (system, user, { maxTokens = 2000 } = {}) => {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
