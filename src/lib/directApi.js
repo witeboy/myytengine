@@ -7,7 +7,8 @@
 export const LS_KEYS = {
   CLOUD_NAME:    'openshorts_cloud_name',
   CLOUD_PRESET:  'openshorts_cloud_preset',
-  ASSEMBLYAI:    'directapi_assemblyai_key',
+  ASSEMBLYAI:    'ASSEMBLYAI_API_KEY',
+  COBALT_URL:    'COBALT_API_URL',
   ANTHROPIC:     'directapi_anthropic_key',   // only needed if not using Claude artifact proxy
 };
 
