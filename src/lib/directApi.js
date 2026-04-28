@@ -15,18 +15,17 @@ const getConfig = async () => {
   try {
     const res = await base44.functions.invoke('getAppConfig', {});
     const d   = res.data || {};
-    if (d.assemblyai_key) {
-      _cfg = {
-        cloudName:   d.cloudinary_cloud_name || localStorage.getItem('openshorts_cloud_name') || '',
-        cloudPreset: d.cloudinary_preset     || localStorage.getItem('openshorts_cloud_preset') || 'openshorts_clips',
-        assemblyKey: d.assemblyai_key,
-        cobaltUrl:   d.cobalt_url            || 'https://api.cobalt.tools',
-      };
-      return _cfg;
-    }
+    // Always use backend response — it has access to server env vars
+    _cfg = {
+      cloudName:   d.cloudinary_cloud_name || localStorage.getItem('openshorts_cloud_name') || '',
+      cloudPreset: d.cloudinary_preset     || localStorage.getItem('openshorts_cloud_preset') || 'openshorts_clips',
+      assemblyKey: d.assemblyai_key        || localStorage.getItem('ASSEMBLYAI_API_KEY')    || '',
+      cobaltUrl:   d.cobalt_url            || localStorage.getItem('COBALT_API_URL')        || 'https://api.cobalt.tools',
+    };
+    return _cfg;
   } catch (_) {
-    // getAppConfig not deployed yet or auth error — fall through to localStorage
-    _cfg = null; // don't cache the failure — retry next time
+    // getAppConfig not reachable — fall through to localStorage only
+    _cfg = null;
   }
 
   // Fallback: read from localStorage (set via OpenShorts Settings panel)
