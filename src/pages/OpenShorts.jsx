@@ -15,6 +15,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
+import { base44 } from '@/api/base44Client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -110,33 +111,13 @@ const saveToSupabase = async (clips) => {
   })));
 };
 
-// ── Cobalt audio extraction (self-hosted or api.cobalt.tools) ───────────
-/**
- * Extracts a direct audio/video stream URL from a YouTube URL.
- * Requires either:
- *   - A self-hosted Cobalt instance URL in Settings, OR
- *   - api.cobalt.tools (rate-limited public instance)
- */
+// ── Cobalt audio extraction — routed through backend (has COBALT_API_URL env var)
 const extractYouTubeAudio = async (youtubeUrl) => {
-  const cobaltBase = localStorage.getItem(LS.COBALT_URL) || 'https://api.cobalt.tools';
-  const res = await fetch(`${cobaltBase}/api/json`, {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({
-      url:            youtubeUrl,
-      aFormat:        'mp3',
-      isAudioOnly:    true,
-      isNoTTWatermark: true,
-    }),
+  const res = await base44.functions.invoke('cobaltExtract', {
+    url: youtubeUrl,
   });
-  if (!res.ok) throw new Error(`Cobalt request failed (${res.status}). Add your Cobalt instance URL in Settings.`);
-  const data = await res.json();
-  if (data.status === 'error' || data.status === 'rate-limit') {
-    throw new Error(data.text || 'Cobalt extraction failed. Try a self-hosted Cobalt instance.');
-  }
-  // status: 'stream' | 'redirect' | 'picker'
-  const audioUrl = data.url || (data.picker && data.picker[0]?.url);
-  if (!audioUrl) throw new Error('Cobalt returned no audio URL.');
+  const audioUrl = res.data?.url || res.data?.audio_url;
+  if (!audioUrl) throw new Error(res.data?.error || 'Cobalt extraction failed. Check COBALT_API_URL in your env.');
   return audioUrl;
 };
 
@@ -585,7 +566,6 @@ export default function OpenShorts() {
   // ── YouTube mode: extract audio → transcribe → analyze ────────────────
   const runYouTubeMode = async () => {
     if (!ytUrl.trim()) return setErr('Paste a YouTube URL first');
-    if (!localStorage.getItem(LS.ASSEMBLYAI)) return setErr('Add your AssemblyAI key in Settings first');
 
     setStage('processing'); setErr(''); setClips([]); setCost(null); setDone([]);
 
@@ -631,8 +611,6 @@ export default function OpenShorts() {
   // ── File mode: FFmpeg clip → Cloudinary upload → analyze ──────────────
   const runFileMode = async () => {
     if (!file) return setErr('Select a video file first');
-    if (!localStorage.getItem(LS.CLOUD_NAME)) return setErr('Add your Cloudinary Cloud Name in Settings first');
-    if (!localStorage.getItem(LS.ASSEMBLYAI)) return setErr('Add your AssemblyAI key in Settings first');
 
     setStage('processing'); setErr(''); setClips([]); setCost(null); setDone([]); setProgress(0);
 
@@ -702,25 +680,21 @@ export default function OpenShorts() {
       setProgress(100);
 
       // Step 5: Upload clips to Cloudinary
-      if (localStorage.getItem(LS.CLOUD_NAME)) {
-        setStep('upload');
-        setMsg('Uploading clips to Cloudinary…');
-        const withCDN = await Promise.all(processed.map(async c => {
-          try {
-            const r = await uploadToCloudinary(
-              new File([c.blob], `clip_${c._idx + 1}.mp4`, { type: 'video/mp4' }),
-              { resourceType: 'video' }
-            );
-            return { ...c, cloudinary_url: r?.secure_url || null };
-          } catch { return c; }
-        }));
+      setStep('upload');
+      setMsg('Uploading clips to Cloudinary…');
+      const withCDN = await Promise.all(processed.map(async c => {
+        try {
+          const r = await uploadToCloudinary(
+            new File([c.blob], `clip_${c._idx + 1}.mp4`, { type: 'video/mp4' }),
+            { resourceType: 'video' }
+          );
+          return { ...c, cloudinary_url: r?.secure_url || null };
+        } catch { return c; }
+      }));
         markDone('upload');
         setClips(withCDN);
         setMsg(`${processed.length} clips saved to Cloudinary!`);
         await saveToSupabase(withCDN);
-      } else {
-        await saveToSupabase(processed);
-      }
 
       setStep(null);
     } catch (e) {
