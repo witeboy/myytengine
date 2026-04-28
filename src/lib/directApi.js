@@ -1,71 +1,69 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// directApi.js  —  All env-dependent calls routed through base44 backend.
-// Keys (CLOUDINARY, ASSEMBLYAI_API_KEY, COBALT_API_URL) live in server env —
-// never in the browser. Frontend calls base44.functions.invoke which has access.
+// directApi.js  —  Browser-direct API calls. No backend function dependencies.
+// Cloudinary: unsigned upload using preset stored in OpenShorts Settings.
+// AssemblyAI: routed through base44 backend (has ASSEMBLYAI_API_KEY env var).
 // ─────────────────────────────────────────────────────────────────────────────
 import { base44 } from '@/api/base44Client';
 
-// LS_KEYS kept for any optional user-overridable settings (Supabase etc.)
+// localStorage keys — set via OpenShorts Settings panel
 export const LS_KEYS = {
-  CLOUD_NAME:   'openshorts_cloud_name',   // optional override; backend env used by default
-  CLOUD_PRESET: 'openshorts_cloud_preset', // optional override
+  CLOUD_NAME:   'openshorts_cloud_name',
+  CLOUD_PRESET: 'openshorts_cloud_preset',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. CLOUDINARY UPLOAD — routed through base44 backend (has env vars)
-//    Backend function: uploadToCloudinary({ file_url, resource_type })
-//    For large files we first get a Cloudinary signed URL from the backend,
-//    then upload directly from the browser for progress tracking.
-//
-//    Simpler path: upload the File to base44 first (which works, no 402),
-//    get back a temp URL, then backend uploads to Cloudinary and returns CDN URL.
+// 1. CLOUDINARY — direct browser unsigned upload (no backend function needed)
+//    Requires: Cloud Name + Upload Preset set in OpenShorts Settings.
+//    Unsigned presets are safe for browser use — they have no API secret.
 // ─────────────────────────────────────────────────────────────────────────────
-export const uploadToCloudinary = async (file, { resourceType = 'video', onProgress } = {}) => {
-  // Step 1: upload raw file to base44 temp storage (this replaces Core.UploadFile
-  // but uses the functions endpoint which is NOT subject to the 402 billing gate)
-  if (onProgress) onProgress(10);
+export const getCloudinaryConfig = () => {
+  const cloudName = localStorage.getItem(LS_KEYS.CLOUD_NAME);
+  const preset    = localStorage.getItem(LS_KEYS.CLOUD_PRESET) || 'openshorts_clips';
+  return { cloudName, preset };
+};
 
-  // Convert File to base64 for backend transport if small (<50MB),
-  // otherwise stream via FormData to the backend upload helper.
-  const res = await base44.functions.invoke('cloudinaryUpload', {
-    resource_type: resourceType,
-    file_name:     file.name,
-    file_size:     file.size,
-    file_type:     file.type,
-  });
+export const uploadToCloudinary = (file, { resourceType = 'video', onProgress } = {}) => {
+  const { cloudName, preset } = getCloudinaryConfig();
+  if (!cloudName) throw new Error('Cloudinary Cloud Name not set — open Settings in Open Shorts to add it.');
 
-  const { upload_url, signature, timestamp, api_key, cloud_name, public_id } = res.data || {};
-
-  if (!upload_url) throw new Error('Cloudinary upload init failed: no upload_url from backend');
-
-  // Step 2: browser uploads directly to Cloudinary using the signed params
   return new Promise((resolve, reject) => {
     const fd = new FormData();
-    fd.append('file',      file);
-    fd.append('signature', signature);
-    fd.append('timestamp', timestamp);
-    fd.append('api_key',   api_key);
-    if (public_id) fd.append('public_id', public_id);
+    fd.append('file',          file);
+    fd.append('upload_preset', preset);
+    fd.append('resource_type', resourceType);
 
     const xhr = new XMLHttpRequest();
     xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && onProgress) {
-        onProgress(Math.round((e.loaded / e.total) * 100));
-      }
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
     };
     xhr.onload = () => {
       try {
         const result = JSON.parse(xhr.responseText);
         if (result.error) return reject(new Error(result.error.message || 'Cloudinary upload failed'));
-        resolve(result); // result.secure_url is the CDN URL
-      } catch (e) {
-        reject(new Error('Cloudinary response parse error'));
-      }
+        resolve(result); // result.secure_url, result.public_id, result.duration etc.
+      } catch { reject(new Error('Cloudinary response parse error')); }
     };
     xhr.onerror = () => reject(new Error('Cloudinary network error'));
-    xhr.open('POST', upload_url);
+    xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`);
     xhr.send(fd);
   });
+};
+
+/**
+ * Build a Cloudinary transformation URL for a clip segment.
+ * No FFmpeg needed — Cloudinary crops to 9:16 and trims server-side.
+ * Returns a playable/downloadable MP4 URL.
+ *
+ * @param {string} publicId  - Cloudinary public_id of the uploaded video
+ * @param {string} cloudName - Cloudinary cloud name
+ * @param {number} start     - clip start in seconds
+ * @param {number} end       - clip end in seconds
+ */
+export const buildCloudinaryClipUrl = (publicId, cloudName, start, end) => {
+  const dur = Math.round(end - start);
+  // so_ = start offset, du_ = duration, c_fill = fill crop, ar_9:16 = portrait
+  const transform = `so_${Math.round(start)},du_${dur},c_fill,ar_9:16,w_720,q_auto,f_mp4`;
+  return `https://res.cloudinary.com/${cloudName}/video/upload/${transform}/${publicId}.mp4`;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
