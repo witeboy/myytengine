@@ -25,12 +25,12 @@ import {
   Scissors, Zap, Copy, Check, ChevronDown, ChevronUp,
   Globe, Eye, EyeOff, Flame, Library, Clock,
   Play, Database, TrendingUp, CloudUpload, Star,
-  Cpu, ExternalLink, Mic,
+  ExternalLink, Mic,
 } from 'lucide-react';
-import { initFFmpeg, clipVideo } from '@/lib/clipWithFFmpeg';
 import {
   LS_KEYS,
   uploadToCloudinary,
+  buildCloudinaryClipUrl,
   transcribeFile,
   analyzeViralMoments,
 } from '@/lib/directApi';
@@ -123,11 +123,9 @@ const extractYouTubeAudio = async (youtubeUrl) => {
 
 // ── Stage bar ──────────────────────────────────────────────────────────
 const STAGE_DEFS = {
-  transcribe: { label: 'Transcribe',    icon: Mic        },
-  analyze:    { label: 'Find Moments',  icon: Sparkles   },
-  load:       { label: 'Load FFmpeg',   icon: Cpu        },
-  clip:       { label: 'Cut + Crop 9:16', icon: Scissors },
-  upload:     { label: 'Upload CDN',    icon: CloudUpload},
+  transcribe: { label: 'Upload + Transcribe', icon: Mic        },
+  analyze:    { label: 'Find Moments',        icon: Sparkles   },
+  clip:       { label: 'Generate Clips',      icon: Scissors   },
 };
 
 function StageBar({ stageKeys, current, done }) {
@@ -611,24 +609,23 @@ export default function OpenShorts() {
   // ── File mode: FFmpeg clip → Cloudinary upload → analyze ──────────────
   const runFileMode = async () => {
     if (!file) return setErr('Select a video file first');
+    if (!localStorage.getItem(LS.CLOUD_NAME)) return setErr('Add your Cloudinary Cloud Name in Open Shorts Settings first');
 
     setStage('processing'); setErr(''); setClips([]); setCost(null); setDone([]); setProgress(0);
 
     try {
-      // Step 1: Load FFmpeg
-      setStep('load');
-      setMsg('Loading FFmpeg engine… (one-time download ~30MB)');
-      await initFFmpeg(p => { if (p?.message) setMsg(p.message); });
-      markDone('load');
-
-      // Step 2: Upload the full file to Cloudinary for AssemblyAI to transcribe
+      // Step 1: Upload full video to Cloudinary (one upload, then clip server-side)
       setStep('transcribe');
-      setMsg('Uploading video to Cloudinary for transcription…');
+      setMsg('Uploading video to Cloudinary…');
       const uploadResult = await uploadToCloudinary(file, {
         resourceType: 'video',
         onProgress: pct => setMsg(`Uploading… ${pct}%`),
       });
-      const cloudUrl = uploadResult.secure_url;
+      const cloudUrl  = uploadResult.secure_url;
+      const publicId  = uploadResult.public_id;
+      const cloudName = localStorage.getItem(LS.CLOUD_NAME);
+
+      // Step 2: Transcribe via AssemblyAI (backend has the key)
       setMsg('Transcribing with AssemblyAI…');
       const transcript = await transcribeFile(cloudUrl, msg => setMsg(msg));
       markDone('transcribe');
@@ -649,54 +646,33 @@ export default function OpenShorts() {
       if (!analysisClips.length) throw new Error('No viral moments detected. Try a different video.');
       markDone('analyze');
 
-      // Step 4: Cut clips with FFmpeg
+      // Step 4: Generate 9:16 clips via Cloudinary URL transformations
+      // No FFmpeg, no WASM — Cloudinary crops + trims server-side instantly.
       setStep('clip');
-      setMsg('Cutting and cropping clips to 9:16…');
+      setMsg('Generating 9:16 clips via Cloudinary…');
       setProgress(0);
 
-      const processed = [];
-      for (let ci = 0; ci < analysisClips.length; ci++) {
-        const c = analysisClips[ci];
-        setMsg(`Processing clip ${ci + 1} of ${analysisClips.length}…`);
-        setProgress(Math.round((ci / analysisClips.length) * 100));
-        try {
-          const blob    = await clipVideo(
-            URL.createObjectURL(file), c.start, c.end,
-            p => { if (p?.percent) setProgress(p.percent); }
-          );
-          const blobUrl = URL.createObjectURL(blob);
-          processed.push({ ...c, blob, blobUrl, _idx: ci });
-        } catch (clipErr) {
-          console.error(`Clip ${ci + 1} failed:`, clipErr.message);
-        }
-      }
+      const processed = analysisClips.map((c, ci) => {
+        const clipUrl = buildCloudinaryClipUrl(publicId, cloudName, c.start, c.end);
+        return {
+          ...c,
+          cloudinary_url: clipUrl,
+          blobUrl:        clipUrl, // FileClipCard uses blobUrl for <video> src
+          _idx:           ci,
+        };
+      });
 
-      if (!processed.length) throw new Error('All clips failed to process. Check the video file.');
       markDone('clip');
-
       setClips(processed);
       setStage('done');
-      setMsg(`${processed.length} clips ready!`);
+      setMsg(`${processed.length} clips ready! Cloudinary is rendering them — playback starts in a few seconds.`);
       setProgress(100);
 
-      // Step 5: Upload clips to Cloudinary
-      setStep('upload');
-      setMsg('Uploading clips to Cloudinary…');
-      const withCDN = await Promise.all(processed.map(async c => {
-        try {
-          const r = await uploadToCloudinary(
-            new File([c.blob], `clip_${c._idx + 1}.mp4`, { type: 'video/mp4' }),
-            { resourceType: 'video' }
-          );
-          return { ...c, cloudinary_url: r?.secure_url || null };
-        } catch { return c; }
-      }));
-        markDone('upload');
-        setClips(withCDN);
-        setMsg(`${processed.length} clips saved to Cloudinary!`);
-        await saveToSupabase(withCDN);
-
+      // Step 5: Save to Supabase library
+      markDone('upload'); // clips are already on Cloudinary CDN
+      await saveToSupabase(processed);
       setStep(null);
+
     } catch (e) {
       console.error('OpenShorts file error:', e);
       setStage('error');
@@ -772,7 +748,7 @@ export default function OpenShorts() {
               </div>
               <h1 className="text-3xl font-bold text-gray-900">Open Shorts</h1>
               <p className="text-gray-400 text-sm max-w-lg mx-auto">
-                AssemblyAI transcribes. Claude finds viral moments. FFmpeg cuts 9:16 clips in-browser. Cloudinary stores them.
+                Upload video → AssemblyAI transcribes → Claude finds viral moments → Cloudinary generates 9:16 clips instantly.
               </p>
             </div>
           )}
@@ -782,7 +758,7 @@ export default function OpenShorts() {
               <div className="flex border-b border-gray-100">
                 {[
                   { k: 'youtube', icon: Youtube, label: 'YouTube URL',  desc: 'Extracts audio → transcribes → finds moments' },
-                  { k: 'file',    icon: Upload,  label: 'Upload File',  desc: 'FFmpeg in-browser, real 9:16 output files'    },
+                  { k: 'file',    icon: Upload,  label: 'Upload File',  desc: 'Cloudinary generates 9:16 clips server-side' },
                 ].map(({ k, icon: Icon, label, desc }) => (
                   <button key={k} onClick={() => setInputMode(k)} className={`flex-1 flex flex-col items-center gap-0.5 py-3 text-sm font-medium transition-colors border-b-2 ${inputMode === k ? 'text-rose-600 border-rose-500 bg-rose-50/30' : 'text-gray-500 border-transparent hover:text-gray-700'}`}>
                     <div className="flex items-center gap-1.5"><Icon size={14} /><span>{label}</span></div>
@@ -811,7 +787,7 @@ export default function OpenShorts() {
                     <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-xs text-emerald-700 flex items-start gap-2">
                       <Cpu size={12} className="shrink-0 mt-0.5 text-emerald-500" />
                       <span>
-                        Video uploads to Cloudinary → AssemblyAI transcribes → Claude finds viral moments → FFmpeg cuts 9:16 clips in your browser.
+                        Video uploads to Cloudinary → AssemblyAI transcribes → Claude finds viral moments → Cloudinary generates 9:16 clips server-side. No browser processing needed.
                       </span>
                     </div>
                     <div
@@ -888,7 +864,7 @@ export default function OpenShorts() {
           {stage === 'processing' && (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
               <StageBar
-                stageKeys={inputMode === 'youtube' ? ['transcribe', 'analyze'] : ['load', 'transcribe', 'analyze', 'clip', 'upload']}
+                stageKeys={['transcribe', 'analyze', 'clip']}
                 current={currentStep}
                 done={doneSteps}
               />
@@ -954,8 +930,8 @@ export default function OpenShorts() {
               {[
                 { icon: Mic,         label: 'AssemblyAI',    desc: 'Word-level transcription for precise clip boundaries' },
                 { icon: Sparkles,    label: 'Claude AI',     desc: 'Finds the highest-virality moments automatically'     },
-                { icon: Cpu,         label: 'FFmpeg WASM',   desc: 'Cuts 9:16 clips locally, no server needed'           },
-                { icon: CloudUpload, label: 'Cloudinary',    desc: 'Permanent CDN storage for all your clips'            },
+                { icon: Scissors,    label: 'Cloudinary AI', desc: 'Crops 9:16 + trims clips server-side, instant'       },
+                { icon: CloudUpload, label: 'CDN Ready',     desc: 'Every clip is a permanent Cloudinary CDN URL'        },
               ].map(({ icon: Icon, label, desc }) => (
                 <div key={label} className="bg-white rounded-xl border border-gray-100 p-3 text-center shadow-sm">
                   <div className="w-7 h-7 rounded-lg bg-rose-50 flex items-center justify-center mx-auto mb-2"><Icon size={13} className="text-rose-500" /></div>
