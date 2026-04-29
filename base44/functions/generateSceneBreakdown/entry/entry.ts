@@ -1,55 +1,38 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
-// ══════════════════════════════════════════════════════════════════
-// CINEMATIC SCENE BREAKDOWN ENGINE (Switched to Claude)
-// ══════════════════════════════════════════════════════════════════
-// Single-call architecture from the original, upgraded with:
-// - Duration-aware scene density & beat pacing
-// - DIRECTOR_NOTES stored on each Scene record
-// - Story analysis → ProductionSettings (no scene_blueprint size limit)
-// - Sub-batching for phases > 20 scenes
-// - Immersion & object naming rules
-// - Timeout safety valve for long videos
-// ══════════════════════════════════════════════════════════════════
-
 async function callClaude(prompt, temperature = 0.7) {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-  
-  if (!apiKey) {
-    throw new Error("Missing ANTHROPIC_API_KEY environment variable");
-  }
+  if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY environment variable");
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
-    headers: { 
+    headers: {
       "Content-Type": "application/json",
       "x-api-key": apiKey,
       "anthropic-version": "2023-06-01"
     },
     body: JSON.stringify({
+      // FIX 1: Updated to current valid model string
       model: "claude-sonnet-4-5",
       max_tokens: 8192,
       temperature: temperature,
       system: "You are a world-class film director and cinematic data extractor. You must return ONLY raw, valid JSON. Do not include markdown formatting like ```json and do not include any conversational text.",
-      messages: [
-        { role: "user", content: prompt }
-      ]
+      messages: [{ role: "user", content: prompt }]
     })
   });
 
   if (!response.ok) {
     const err = await response.json();
-    throw new Error(`Claude error: ${err.error?.message || response.status}`); 
+    throw new Error(`Claude error: ${err.error?.message || response.status}`);
   }
 
   const data = await response.json();
   if (!data.content || !data.content.length) throw new Error("No content returned from Claude");
-  
+
   const rawText = data.content[0].text;
 
   try { return JSON.parse(rawText); } catch (_) {}
 
-  // Recovery: try closing truncated JSON
   console.log("JSON parse failed, attempting recovery...");
   const lastBrace = rawText.lastIndexOf('}');
   if (lastBrace === -1) throw new Error("Cannot recover JSON from Claude response");
@@ -58,7 +41,7 @@ async function callClaude(prompt, temperature = 0.7) {
     try {
       const parsed = JSON.parse(trimmed + suffix);
       if (parsed.scenes && Array.isArray(parsed.scenes)) {
-        console.log(`Recovered ${parsed.scenes.length} scenes from truncated JSON`); 
+        console.log(`Recovered ${parsed.scenes.length} scenes from truncated JSON`);
         return parsed;
       }
       if (parsed.story_analysis) return parsed;
@@ -95,10 +78,6 @@ function cleanNarrationText(text) {
   cleaned = cleaned.replace(/\n{2,}/g, ' ').replace(/\s{2,}/g, ' ').trim();
   return cleaned;
 }
-
-// ══════════════════════════════════════════════════════════════════
-// VISUAL STYLE
-// ══════════════════════════════════════════════════════════════════
 
 function normalizeStyleKey(raw) {
   if (!raw) return '';
@@ -139,14 +118,8 @@ RULES: Always 3D Pixar-quality CGI. Faces ALWAYS well-lit and readable. Include 
   return directives[visualStyle] || '';
 }
 
-// ══════════════════════════════════════════════════════════════════
-// DURATION-AWARE BEAT CALCULATOR
-// ══════════════════════════════════════════════════════════════════
-
 function calculateBeatDurations(phases, durationMinutes, isSleep = false) {
-  if (isSleep) {
-    return calculateSleepBeatDurations(phases, durationMinutes);
-  }
+  if (isSleep) return calculateSleepBeatDurations(phases, durationMinutes);
 
   const anchors = [
     {m:1,s:0.70},{m:3,s:0.85},{m:5,s:1.00},{m:10,s:1.20},
@@ -188,37 +161,29 @@ function calculateBeatDurations(phases, durationMinutes, isSleep = false) {
   return durations;
 }
 
-// ══════════════════════════════════════════════════════════════════
-// SLEEP-SPECIFIC BEAT CALCULATOR — slow, gentle, progressively longer
-// ══════════════════════════════════════════════════════════════════
-
 function calculateSleepBeatDurations(phases, durationMinutes) {
-  // Sleep scenes are much longer — viewers should see slow, calming visuals
-  // Each scene: 15-40 seconds, getting progressively longer toward the end
   const sleepPacing = {
-    cold_open: { base: 15, variance: 3 },       // Opening: 12-18s per scene
-    rising_tension: { base: 20, variance: 5 },   // Body settling: 15-25s
-    emotional_core: { base: 25, variance: 8 },   // Deep relaxation: 17-33s
-    resolution: { base: 35, variance: 10 }       // Near-sleep: 25-45s (longest holds)
+    cold_open: { base: 15, variance: 3 },
+    rising_tension: { base: 20, variance: 5 },
+    emotional_core: { base: 25, variance: 8 },
+    resolution: { base: 35, variance: 10 }
   };
 
   const durations = [];
-
   for (const phase of phases) {
     const p = sleepPacing[phase.name] || { base: 22, variance: 5 };
     for (let i = 0; i < phase.scenes; i++) {
-      // Progressive deepening within each phase too
       const ratio = phase.scenes > 1 ? i / (phase.scenes - 1) : 0.5;
       const d = Math.round((p.base + (ratio - 0.3) * p.variance) * 10) / 10;
       durations.push(Math.max(12, d));
     }
   }
 
-  // Scale to match target duration
   const totalCurrent = durations.reduce((a, b) => a + b, 0);
   const totalTarget = durationMinutes * 60;
+  // FIX 2: Guard against divide-by-zero if no scenes
+  if (totalCurrent === 0) return durations;
   const scaleFactor = totalTarget / totalCurrent;
-
   return durations.map(d => Math.round(d * scaleFactor * 10) / 10);
 }
 
@@ -231,10 +196,6 @@ function calculateStartTimes(durations) {
   }
   return starts;
 }
-
-// ══════════════════════════════════════════════════════════════════
-// NICHE DIRECTOR PROFILES
-// ══════════════════════════════════════════════════════════════════
 
 function getNicheDirectorProfile(niche) {
   const profiles = {
@@ -314,181 +275,133 @@ function getNicheDirectorProfile(niche) {
   };
 }
 
-// ══════════════════════════════════════════════════════════════════
-// GENRE-ADAPTIVE PHASE STRUCTURES
-// Each genre/mode gets its own dramatic shape.
-// Comedy peaks at the punchline. Horror needs a NORMAL phase first.
-// Romance needs an ALMOST moment. One size does NOT fit all.
-// ══════════════════════════════════════════════════════════════════
-
 function getGenrePhaseStructure(projectMode, storyArch) {
-  // Determine the effective genre key
   const arch = storyArch || '';
 
   const PHASE_MAPS = {
-
-    // ── STANDARD / DOCUMENTARY ──────────────────────────────────
     standard: [
-      { name: 'cold_open',       weight: 0.10, purpose: 'Hook — visceral, immediate, impossible to ignore. Drop the viewer into the most gripping moment.' },
-      { name: 'rising_tension',  weight: 0.25, purpose: 'Build the world and the problem — escalate stakes, layer complexity.' },
-      { name: 'emotional_core',  weight: 0.40, purpose: 'Heart of the story — maximum emotional impact, reveal hidden truth.' },
-      { name: 'resolution',      weight: 0.25, purpose: 'Deliver the payoff — transformation, consequence, new understanding.' },
+      { name: 'cold_open',       weight: 0.10, purpose: 'Hook — visceral, immediate, impossible to ignore.' },
+      { name: 'rising_tension',  weight: 0.25, purpose: 'Build the world and the problem — escalate stakes.' },
+      { name: 'emotional_core',  weight: 0.40, purpose: 'Heart of the story — maximum emotional impact.' },
+      { name: 'resolution',      weight: 0.25, purpose: 'Deliver the payoff — transformation, consequence.' },
     ],
-
-    // ── EXPLAINER VIDEOS ────────────────────────────────────────
     explainer: [
-      { name: 'hook',            weight: 0.12, purpose: 'The WTF moment — show the thing that breaks the viewer\'s assumption before any explanation.' },
-      { name: 'the_problem',     weight: 0.20, purpose: 'Establish what is broken, confusing, or costly for the viewer right now — make it personal.' },
-      { name: 'the_mechanism',   weight: 0.38, purpose: 'Show how it actually works — step by step, concrete, specific, no jargon without analogy.' },
-      { name: 'application',     weight: 0.20, purpose: 'Show the viewer doing it — the before/after, the action, the result.' },
-      { name: 'cta',             weight: 0.10, purpose: 'Confident, specific, single action the viewer should take right now.' },
+      { name: 'hook',            weight: 0.12, purpose: 'The WTF moment — show the thing that breaks assumption.' },
+      { name: 'the_problem',     weight: 0.20, purpose: 'Establish what is broken or costly — make it personal.' },
+      { name: 'the_mechanism',   weight: 0.38, purpose: 'Show how it actually works — step by step, specific.' },
+      { name: 'application',     weight: 0.20, purpose: 'Show the viewer doing it — the before/after, the result.' },
+      { name: 'cta',             weight: 0.10, purpose: 'Confident, specific, single action right now.' },
     ],
-
-    // ── COMEDY ─────────────────────────────────────────────────
     story_comedy: [
-      { name: 'normal_world',    weight: 0.15, purpose: 'Establish the character\'s normal, slightly absurd world. Make the audience like them.' },
-      { name: 'inciting_chaos',  weight: 0.20, purpose: 'Something goes wrong in the most inconvenient way possible. Escalation begins.' },
-      { name: 'worse_and_worse', weight: 0.35, purpose: 'Each attempt to fix things makes everything funnier and more disastrous. Build the pattern.' },
-      { name: 'punchline',       weight: 0.20, purpose: 'The pattern breaks in the most unexpected, perfectly timed way. This is the beat that lands.' },
-      { name: 'callback',        weight: 0.10, purpose: 'The warm landing — a callback to the setup that rewards the audience for watching.' },
+      { name: 'normal_world',    weight: 0.15, purpose: 'Establish the slightly absurd world.' },
+      { name: 'inciting_chaos',  weight: 0.20, purpose: 'Something goes wrong in the most inconvenient way.' },
+      { name: 'worse_and_worse', weight: 0.35, purpose: 'Each fix makes things funnier and more disastrous.' },
+      { name: 'punchline',       weight: 0.20, purpose: 'Pattern breaks in the most unexpected, perfectly-timed way.' },
+      { name: 'callback',        weight: 0.10, purpose: 'Warm landing — a callback that rewards the audience.' },
     ],
-
-    // ── CHILDREN\'S STORY ────────────────────────────────────────
     story_children: [
-      { name: 'meet_the_hero',   weight: 0.18, purpose: 'Introduce the child hero in their world — warm, specific, immediately lovable.' },
-      { name: 'the_problem',     weight: 0.17, purpose: 'A clear, concrete problem appears. Something the hero wants but cannot have.' },
-      { name: 'try_and_fail_1',  weight: 0.18, purpose: 'First attempt fails — show the hero trying hard but falling short.' },
-      { name: 'try_and_fail_2',  weight: 0.18, purpose: 'Second attempt fails — things look hopeless. The lowest point.' },
-      { name: 'breakthrough',    weight: 0.17, purpose: 'The hero finds a new approach — often from an unexpected source or inner quality.' },
-      { name: 'happy_ending',    weight: 0.12, purpose: 'Warm, satisfying resolution. The lesson emerges naturally from events.' },
+      { name: 'meet_the_hero',   weight: 0.18, purpose: 'Introduce the child hero — warm, specific, lovable.' },
+      { name: 'the_problem',     weight: 0.17, purpose: 'A clear, concrete problem appears.' },
+      { name: 'try_and_fail_1',  weight: 0.18, purpose: 'First attempt fails.' },
+      { name: 'try_and_fail_2',  weight: 0.18, purpose: 'Second attempt fails — things look hopeless.' },
+      { name: 'breakthrough',    weight: 0.17, purpose: 'The hero finds a new approach.' },
+      { name: 'happy_ending',    weight: 0.12, purpose: 'Warm, satisfying resolution.' },
     ],
-
-    // ── NURSERY RHYME ───────────────────────────────────────────
     story_nursery: [
-      { name: 'intro_verse',     weight: 0.25, purpose: 'Set the scene with the first rhyming verse — bright, playful, establishes the rhythm.' },
-      { name: 'middle_verses',   weight: 0.50, purpose: 'The body of the rhyme — each verse its own visual scene, rhythm consistent.' },
-      { name: 'final_verse',     weight: 0.25, purpose: 'The satisfying ending verse — completes the rhyme, lands with warmth and a smile.' },
+      { name: 'intro_verse',     weight: 0.25, purpose: 'Set the scene with the first rhyming verse.' },
+      { name: 'middle_verses',   weight: 0.50, purpose: 'The body of the rhyme — each verse its own visual scene.' },
+      { name: 'final_verse',     weight: 0.25, purpose: 'The satisfying ending verse.' },
     ],
-
-    // ── CRIME / MYSTERY ─────────────────────────────────────────
     story_crime: [
-      { name: 'cold_open_crime', weight: 0.10, purpose: 'Drop into the crime or its immediate aftermath. No setup. Maximum tension from frame one.' },
-      { name: 'investigation',   weight: 0.25, purpose: 'The investigator pieces it together — show the work, the evidence, the first red herring.' },
-      { name: 'deeper_mystery',  weight: 0.30, purpose: 'A second layer appears — things are more complicated than they seemed. Stakes rise.' },
-      { name: 'false_solution',  weight: 0.15, purpose: 'The wrong answer seems right. Build to a beat that feels like resolution — then undercut it.' },
-      { name: 'revelation',      weight: 0.12, purpose: 'The truth. It must feel both surprising and inevitable. Everything clicks into place.' },
-      { name: 'aftermath',       weight: 0.08, purpose: 'The weight of what happened — justice, or its absence. Leave a resonant image.' },
+      { name: 'cold_open_crime', weight: 0.10, purpose: 'Drop into the crime or aftermath. Maximum tension.' },
+      { name: 'investigation',   weight: 0.25, purpose: 'Investigator pieces it together — show the work.' },
+      { name: 'deeper_mystery',  weight: 0.30, purpose: 'Second layer appears — more complicated than it seemed.' },
+      { name: 'false_solution',  weight: 0.15, purpose: 'Wrong answer seems right — then undercut it.' },
+      { name: 'revelation',      weight: 0.12, purpose: 'The truth. Surprising and inevitable.' },
+      { name: 'aftermath',       weight: 0.08, purpose: 'The weight of what happened.' },
     ],
-
-    // ── LOVE / ROMANCE ──────────────────────────────────────────
     story_love: [
-      { name: 'first_encounter', weight: 0.12, purpose: 'The meeting — something specific makes them notice each other. Not a cliché.' },
-      { name: 'growing_closer',  weight: 0.22, purpose: 'Small moments of connection — shared glances, accidental touches, the world narrowing.' },
-      { name: 'the_obstacle',    weight: 0.22, purpose: 'Something real stands between them — internal or external. The distance grows.' },
-      { name: 'almost_moment',   weight: 0.16, purpose: 'They almost break through — the moment that was so close. Most important beat in the film.' },
-      { name: 'lowest_point',    weight: 0.12, purpose: 'It seems over. The distance feels permanent. The longing is at its peak.' },
-      { name: 'breakthrough',    weight: 0.10, purpose: 'Someone chooses to be vulnerable. The emotional wall comes down.' },
-      { name: 'resolution',      weight: 0.06, purpose: 'The earned landing — warmth, rightness, the future implied.' },
+      { name: 'first_encounter', weight: 0.12, purpose: 'The meeting — something specific makes them notice each other.' },
+      { name: 'growing_closer',  weight: 0.22, purpose: 'Small moments of connection.' },
+      { name: 'the_obstacle',    weight: 0.22, purpose: 'Something real stands between them.' },
+      { name: 'almost_moment',   weight: 0.16, purpose: 'They almost break through — the closest moment.' },
+      { name: 'lowest_point',    weight: 0.12, purpose: 'It seems over. The distance feels permanent.' },
+      { name: 'breakthrough',    weight: 0.10, purpose: 'Someone chooses to be vulnerable.' },
+      { name: 'resolution',      weight: 0.06, purpose: 'The earned landing.' },
     ],
-
-    // ── HORROR ──────────────────────────────────────────────────
     story_horror: [
-      { name: 'normal_world',    weight: 0.15, purpose: 'The world exactly as it should be — establish what is precious before you threaten it.' },
-      { name: 'wrongness_creeps', weight: 0.20, purpose: 'Something is slightly off. Small details that do not add up. Dread not yet named.' },
-      { name: 'escalating_dread', weight: 0.30, purpose: 'The wrongness compounds — each scene more unsettling. Anticipation is the weapon.' },
-      { name: 'confrontation',   weight: 0.20, purpose: 'The horror is faced directly. Maximum tension. The character at their limit.' },
-      { name: 'aftermath',       weight: 0.15, purpose: 'What remains. Not relief — residual wrongness. One question unanswered.' },
+      { name: 'normal_world',    weight: 0.15, purpose: 'The world exactly as it should be.' },
+      { name: 'wrongness_creeps', weight: 0.20, purpose: 'Something is slightly off. Dread not yet named.' },
+      { name: 'escalating_dread', weight: 0.30, purpose: 'The wrongness compounds — each scene more unsettling.' },
+      { name: 'confrontation',   weight: 0.20, purpose: 'The horror is faced directly. Maximum tension.' },
+      { name: 'aftermath',       weight: 0.15, purpose: 'What remains. Residual wrongness.' },
     ],
-
-    // ── THRILLER ────────────────────────────────────────────────
     story_thriller: [
-      { name: 'inciting_crisis', weight: 0.12, purpose: 'Something is already wrong. Drop the viewer into the situation at maximum stakes.' },
-      { name: 'pursuit_begins',  weight: 0.20, purpose: 'The clock starts. The protagonist is moving — against time, against an enemy, against themselves.' },
-      { name: 'complications',   weight: 0.28, purpose: 'Every step forward creates a new problem. Alliances shift. Trust is broken.' },
-      { name: 'reversal',        weight: 0.18, purpose: 'Everything the protagonist believed is wrong. The rug is pulled. Recalibration under fire.' },
-      { name: 'climax',          weight: 0.14, purpose: 'All resources, all information, all emotion — spent in one moment.' },
-      { name: 'resolution',      weight: 0.08, purpose: 'The cost of what just happened. Not fully clean. Not fully safe.' },
+      { name: 'inciting_crisis', weight: 0.12, purpose: 'Something is already wrong. Maximum stakes.' },
+      { name: 'pursuit_begins',  weight: 0.20, purpose: 'The clock starts. The protagonist is moving.' },
+      { name: 'complications',   weight: 0.28, purpose: 'Every step creates a new problem.' },
+      { name: 'reversal',        weight: 0.18, purpose: 'Everything believed is wrong. Recalibration under fire.' },
+      { name: 'climax',          weight: 0.14, purpose: 'All resources spent in one moment.' },
+      { name: 'resolution',      weight: 0.08, purpose: 'The cost of what just happened.' },
     ],
-
-    // ── HISTORICAL FICTION ──────────────────────────────────────
     story_historical: [
-      { name: 'world_anchoring', weight: 0.14, purpose: 'Root the viewer in the period — specific detail, not generic "old timey." The year, the place, the smell.' },
-      { name: 'personal_stakes', weight: 0.20, purpose: 'Introduce the character\'s personal situation within the historical moment.' },
-      { name: 'historical_pressure', weight: 0.30, purpose: 'The large forces of the era bear down on individual choices — war, law, power, poverty.' },
-      { name: 'the_choice',      weight: 0.22, purpose: 'The pivotal decision that the period made both necessary and costly.' },
-      { name: 'consequence',     weight: 0.14, purpose: 'What follows from the choice — and what it tells us about now.' },
+      { name: 'world_anchoring',    weight: 0.14, purpose: 'Root in the period — specific detail.' },
+      { name: 'personal_stakes',    weight: 0.20, purpose: 'Character personal situation within the historical moment.' },
+      { name: 'historical_pressure', weight: 0.30, purpose: 'Large forces of era bear down on individual choices.' },
+      { name: 'the_choice',         weight: 0.22, purpose: 'Pivotal decision made necessary and costly by the period.' },
+      { name: 'consequence',        weight: 0.14, purpose: 'What follows from the choice.' },
     ],
-
-    // ── SCI-FI ──────────────────────────────────────────────────
     story_scifi: [
-      { name: 'world_rules',     weight: 0.15, purpose: 'Establish the world\'s rules visually before dialogue explains them.' },
-      { name: 'character_desire', weight: 0.18, purpose: 'Show what the protagonist wants — specific, personal, not "save humanity."' },
-      { name: 'system_conflict', weight: 0.32, purpose: 'The world\'s rules directly prevent the protagonist\'s desire. The heart of the story.' },
-      { name: 'idea_escalation', weight: 0.22, purpose: 'The big idea unfolds — its implications grow more disturbing or wonderful.' },
-      { name: 'revelation',      weight: 0.13, purpose: 'A new way of seeing — the viewer\'s worldview has been quietly dismantled and rebuilt.' },
+      { name: 'world_rules',      weight: 0.15, purpose: "Establish the world's rules visually." },
+      { name: 'character_desire', weight: 0.18, purpose: 'Show what the protagonist wants — specific, personal.' },
+      { name: 'system_conflict',  weight: 0.32, purpose: "World's rules directly prevent protagonist's desire." },
+      { name: 'idea_escalation',  weight: 0.22, purpose: 'Big idea unfolds — implications grow.' },
+      { name: 'revelation',       weight: 0.13, purpose: 'A new way of seeing.' },
     ],
-
-    // ── ADVENTURE ───────────────────────────────────────────────
     story_adventure: [
-      { name: 'the_call',        weight: 0.12, purpose: 'The stable world is disrupted — something requires the hero to leave the known.' },
-      { name: 'crossing_threshold', weight: 0.15, purpose: 'The hero steps into the unknown — the world changes visually.' },
-      { name: 'tests_and_allies', weight: 0.28, purpose: 'Obstacles, failures, companions found. The hero grows.' },
-      { name: 'ordeal',          weight: 0.22, purpose: 'The greatest challenge — the hero must sacrifice or transform to survive.' },
-      { name: 'road_back',       weight: 0.13, purpose: 'Returning changed — carrying the reward or the wound.' },
-      { name: 'return',          weight: 0.10, purpose: 'The world they left — seen with new eyes. The transformation visible.' },
+      { name: 'the_call',           weight: 0.12, purpose: 'Stable world disrupted — hero must leave the known.' },
+      { name: 'crossing_threshold', weight: 0.15, purpose: 'Hero steps into the unknown.' },
+      { name: 'tests_and_allies',   weight: 0.28, purpose: 'Obstacles, failures, companions found.' },
+      { name: 'ordeal',             weight: 0.22, purpose: 'Greatest challenge — hero must transform to survive.' },
+      { name: 'road_back',          weight: 0.13, purpose: 'Returning changed.' },
+      { name: 'return',             weight: 0.10, purpose: 'The world they left — seen with new eyes.' },
     ],
-
-    // ── MYSTERY ─────────────────────────────────────────────────
     story_mystery: [
-      { name: 'inciting_puzzle', weight: 0.12, purpose: 'The puzzle is posed — specific, concrete, seemingly unsolvable.' },
-      { name: 'first_clues',     weight: 0.20, purpose: 'The detective gathers early evidence — establish the method of thinking.' },
-      { name: 'red_herrings',    weight: 0.25, purpose: 'False leads that feel real — the viewer is deliberately misled.' },
-      { name: 'narrowing',       weight: 0.20, purpose: 'The truth begins to emerge — one suspect remains credible.' },
-      { name: 'revelation',      weight: 0.14, purpose: 'The solution — surprising but inevitable. "Of course."' },
-      { name: 'resolution',      weight: 0.09, purpose: 'The aftermath — loose ends, the cost of knowing, what changed.' },
+      { name: 'inciting_puzzle', weight: 0.12, purpose: 'The puzzle is posed — seemingly unsolvable.' },
+      { name: 'first_clues',     weight: 0.20, purpose: 'Early evidence — establish the method of thinking.' },
+      { name: 'red_herrings',    weight: 0.25, purpose: 'False leads that feel real.' },
+      { name: 'narrowing',       weight: 0.20, purpose: 'Truth begins to emerge — one suspect remains credible.' },
+      { name: 'revelation',      weight: 0.14, purpose: 'The solution — surprising but inevitable.' },
+      { name: 'resolution',      weight: 0.09, purpose: 'Aftermath — loose ends, the cost of knowing.' },
     ],
-
-    // ── SLEEP STORY ─────────────────────────────────────────────
     sleep_story: [
-      { name: 'arrival',         weight: 0.18, purpose: 'The character arrives in the peaceful world — ground them in a specific, sensory-rich setting.' },
-      { name: 'gentle_exploration', weight: 0.25, purpose: 'They move through this world slowly — each discovery calmer than the last.' },
-      { name: 'deepening_peace', weight: 0.30, purpose: 'The world grows quieter — sound, light, and movement all diminish.' },
-      { name: 'near_rest',       weight: 0.27, purpose: 'The character settles. The world is still. Images longer, slower, emptier.' },
+      { name: 'arrival',            weight: 0.18, purpose: 'Character arrives in the peaceful world.' },
+      { name: 'gentle_exploration', weight: 0.25, purpose: 'They move through slowly — each discovery calmer.' },
+      { name: 'deepening_peace',    weight: 0.30, purpose: 'World grows quieter — sound, light, movement diminish.' },
+      { name: 'near_rest',          weight: 0.27, purpose: 'Character settles. World is still. Longer, slower, emptier.' },
     ],
-
-    // ── SLEEP MEDITATION ────────────────────────────────────────
     sleep_meditation: [
-      { name: 'physical_settling', weight: 0.20, purpose: 'Body awareness — environments that evoke physical weight and warmth.' },
-      { name: 'breath_and_calm',   weight: 0.25, purpose: 'Breathing imagery — slow water, candle flame, tide, mist.' },
-      { name: 'affirmation_core',  weight: 0.30, purpose: 'The emotional heart — safe spaces, remembered warmth, belonging.' },
-      { name: 'deep_rest',         weight: 0.25, purpose: 'Near-silence. Long static holds. The world going to sleep.' },
+      { name: 'physical_settling', weight: 0.20, purpose: 'Body awareness — environments evoking physical weight.' },
+      { name: 'breath_and_calm',   weight: 0.25, purpose: 'Breathing imagery — slow water, candle flame, tide.' },
+      { name: 'affirmation_core',  weight: 0.30, purpose: 'Emotional heart — safe spaces, remembered warmth.' },
+      { name: 'deep_rest',         weight: 0.25, purpose: 'Near-silence. Long static holds. World going to sleep.' },
     ],
   };
 
-  // Map project mode + story arch to a phase key
   let key = 'standard';
-  if (projectMode === 'sleep_story')    key = 'sleep_story';
+  if (projectMode === 'sleep_story')         key = 'sleep_story';
   else if (projectMode === 'sleep_meditation') key = 'sleep_meditation';
-  else if (projectMode === 'explainer') key = 'explainer';
+  else if (projectMode === 'explainer')       key = 'explainer';
   else if (projectMode === 'story' && PHASE_MAPS[arch]) key = arch;
-  else if (PHASE_MAPS[projectMode])     key = projectMode;
+  else if (PHASE_MAPS[projectMode])           key = projectMode;
 
   return PHASE_MAPS[key] || PHASE_MAPS['standard'];
 }
-
-// ══════════════════════════════════════════════════════════════════
-// GENRE CINEMATOGRAPHY PRESETS
-// Used in BOTH scene breakdown (director notes) and
-// scene prompt generation (image prompt language).
-// Each genre gets: prompt_prefix, mandatory_lighting, color_grade,
-// forbidden, reference_directors, emotional_tools.
-// ══════════════════════════════════════════════════════════════════
 
 function getGenreCinematographyPreset(projectMode, storyArch) {
   const arch = storyArch || '';
 
   const PRESETS = {
-
     standard: {
       prompt_prefix: 'Cinematic documentary scene',
       mandatory_lighting: 'motivated practical lighting, golden hour or high-contrast interior',
@@ -497,34 +410,30 @@ function getGenreCinematographyPreset(projectMode, storyArch) {
       forbidden: 'flat lighting, studio backdrop, blurred backgrounds',
       emotional_tools: 'slow push-ins for revelation, wide shots for isolation, close-ups for humanity',
     },
-
     explainer: {
       prompt_prefix: 'Clean cinematic educational scene',
       mandatory_lighting: 'soft motivated key light, warm practical fill, clean shadows',
       color_grade: 'slightly desaturated warm palette, emphasis on clarity not drama',
       reference_directors: 'David Gelb food-documentary style, clean and bright',
-      forbidden: 'heavy shadow, extreme angles, visual complexity that distracts from the concept',
-      emotional_tools: 'medium close-ups during explanation, wide during demonstration, insert shots of the tool or object being explained',
+      forbidden: 'heavy shadow, extreme angles, visual complexity that distracts',
+      emotional_tools: 'medium close-ups during explanation, wide during demonstration',
     },
-
     story_comedy: {
       prompt_prefix: 'Wide, bright, populated comedic scene',
-      mandatory_lighting: 'high-key warm lighting, no heavy shadows — comedy lives in visibility',
-      color_grade: 'warm saturated tones, slightly elevated brightness, vibrant practical colors',
+      mandatory_lighting: 'high-key warm lighting, no heavy shadows',
+      color_grade: 'warm saturated tones, slightly elevated brightness',
       reference_directors: 'Edgar Wright kinetic energy, Wes Anderson symmetry',
       forbidden: 'dark shadows, extreme close-ups, dutch angles, desaturation',
-      emotional_tools: 'wide shots that show the full absurd situation, tight timing cuts, reaction close-ups after punchlines',
+      emotional_tools: 'wide shots showing full absurd situation, reaction close-ups after punchlines',
     },
-
     story_children: {
       prompt_prefix: 'Warm, bright, wonder-filled scene',
       mandatory_lighting: 'soft golden hour or bright daylight, no harsh shadows',
       color_grade: 'warm saturated primary colors, storybook palette',
       reference_directors: 'Pixar visual warmth, Studio Ghibli detail and wonder',
       forbidden: 'desaturation, dutch angles, extreme contrast, dark corners',
-      emotional_tools: 'low-angle shots (child eye level), wide shots to show the big world, close-ups on expressive faces',
+      emotional_tools: 'low-angle shots (child eye level), wide shots for the big world',
     },
-
     story_nursery: {
       prompt_prefix: 'Playful, colorful, storybook scene',
       mandatory_lighting: 'bright even lighting, saturated primary colors',
@@ -533,116 +442,99 @@ function getGenreCinematographyPreset(projectMode, storyArch) {
       forbidden: 'realism, muted colors, heavy shadows, adult-feeling environments',
       emotional_tools: 'symmetrical compositions, bold color blocks, simple clear silhouettes',
     },
-
     story_crime: {
       prompt_prefix: 'Noir cinematic crime scene',
-      mandatory_lighting: 'low-key chiaroscuro, single hard source, deep shadow pools, sodium streetlight',
+      mandatory_lighting: 'low-key chiaroscuro, single hard source, deep shadow pools',
       color_grade: 'cold desaturated blue-black with amber accent, high contrast',
       reference_directors: 'David Fincher clinical precision, Roger Deakins Blade Runner 2049 shadow',
-      forbidden: 'bright daylight, warm soft lighting, cheerful colors, shallow motivation',
-      emotional_tools: 'dutch angles for psychological wrongness, extreme close-ups on evidence, wide cold shots for isolation and consequence',
+      forbidden: 'bright daylight, warm soft lighting, cheerful colors',
+      emotional_tools: 'dutch angles for psychological wrongness, extreme close-ups on evidence',
     },
-
     story_love: {
       prompt_prefix: 'Intimate, warm, emotionally charged romantic scene',
-      mandatory_lighting: 'golden hour backlight, soft window light, warm practical glow — always warm, always soft',
-      color_grade: 'warm amber, rose gold, soft desaturated backgrounds to make subjects glow',
+      mandatory_lighting: 'golden hour backlight, soft window light, warm practical glow',
+      color_grade: 'warm amber, rose gold, soft desaturated backgrounds',
       reference_directors: 'Wong Kar-wai intimate framing, Barry Jenkins Moonlight warmth',
       forbidden: 'harsh lighting, cold blue tones, wide crowd shots, clinical environments',
-      emotional_tools: 'OTS shots for tension, medium close-ups for intimacy, slow push-ins for vulnerability, soft focus backgrounds',
+      emotional_tools: 'OTS shots for tension, medium close-ups for intimacy, slow push-ins',
     },
-
     story_horror: {
       prompt_prefix: 'Deeply unsettling horror scene with wrong proportions',
-      mandatory_lighting: 'extreme low-key, 80-90% shadow, single cold source or sickly green, NEVER overhead warm',
-      color_grade: 'desaturated cold palette with wrong-hue accent (sickly green, bruise purple), deep blacks',
-      reference_directors: 'Stanley Kubrick cold geometry, James Wan controlled dread, Robert Eggers texture',
-      forbidden: 'warm lighting, bright environments, full faces clearly lit, cheerful colors, happy populated crowds',
-      emotional_tools: 'dutch angles for psychological wrongness, long static shots letting the dread build, wide shots of wrong spaces, slow zooms into darkness',
+      mandatory_lighting: 'extreme low-key, 80-90% shadow, single cold source or sickly green',
+      color_grade: 'desaturated cold palette with wrong-hue accent, deep blacks',
+      reference_directors: 'Stanley Kubrick cold geometry, James Wan controlled dread',
+      forbidden: 'warm lighting, bright environments, cheerful colors',
+      emotional_tools: 'dutch angles, long static shots, slow zooms into darkness',
     },
-
     story_thriller: {
       prompt_prefix: 'Tense, kinetic thriller scene under pressure',
       mandatory_lighting: 'motivated dramatic lighting, high contrast, urgency visible in the light',
-      color_grade: 'cool clinical blue-gray with warm accent for human moments, high contrast',
+      color_grade: 'cool clinical blue-gray with warm accent for human moments',
       reference_directors: 'Christopher Nolan controlled tension, Denis Villeneuve precision',
       forbidden: 'soft casual lighting, warm golden glow, leisurely wide shots',
-      emotional_tools: 'tight medium close-ups during pursuit, handheld urgency in action, static wide shots for entrapment feeling',
+      emotional_tools: 'tight medium close-ups during pursuit, handheld urgency in action',
     },
-
     story_historical: {
-      prompt_prefix: 'Period-accurate historical cinematic scene with authentic texture',
-      mandatory_lighting: 'period-appropriate practical lighting — candles, torches, harsh daylight through small windows, no electric light',
-      color_grade: 'desaturated warm period palette, aged texture, light through atmosphere',
+      prompt_prefix: 'Period-accurate historical cinematic scene',
+      mandatory_lighting: 'period-appropriate practical lighting — candles, torches, harsh daylight',
+      color_grade: 'desaturated warm period palette, aged texture',
       reference_directors: 'Ridley Scott historical texture, Barry Lyndon candlelight realism',
       forbidden: 'modern lighting quality, clean contemporary environments, anachronistic elements',
-      emotional_tools: 'wide shots to show the period world, close-ups on period-specific objects and faces, slow deliberate pacing',
+      emotional_tools: 'wide shots to show the period world, close-ups on period-specific objects',
     },
-
     story_scifi: {
       prompt_prefix: 'Precise science fiction scene with lived-in world detail',
-      mandatory_lighting: 'cold practical light sources — screens, LEDs, bioluminescence, harsh work lights',
-      color_grade: 'cool blue-gray future palette or warm analog-future amber, always purposeful',
-      reference_directors: 'Denis Villeneuve Blade Runner 2049 precision, Alex Garland Ex Machina sterility',
-      forbidden: 'generic future aesthetics, lens flare everywhere, neon without motivation',
-      emotional_tools: 'wide shots to establish the world\'s scale, close-ups on the human face against the inhuman, reflection and glass for duality',
+      mandatory_lighting: 'cold practical light sources — screens, LEDs, bioluminescence',
+      color_grade: 'cool blue-gray future palette or warm analog-future amber',
+      reference_directors: 'Denis Villeneuve Blade Runner 2049, Alex Garland Ex Machina',
+      forbidden: 'generic future aesthetics, lens flare everywhere',
+      emotional_tools: "wide shots to establish scale, close-ups on human face against the inhuman",
     },
-
     story_mystery: {
       prompt_prefix: 'Atmospheric mystery scene with careful visual misdirection',
-      mandatory_lighting: 'overcast day or low interior light, motivated shadows that could hide or reveal',
-      color_grade: 'slightly desaturated, cool undertone, neutral that feels pregnant with potential',
-      reference_directors: 'Tomas Alfredson Let the Right One In restraint, Coen Brothers precise composition',
-      forbidden: 'revealing lighting that shows everything, warm cheerful palette, busy uncontrolled backgrounds',
-      emotional_tools: 'OTS shots to create information asymmetry, inserts on clues, wide observation shots',
+      mandatory_lighting: 'overcast day or low interior light, motivated shadows',
+      color_grade: 'slightly desaturated, cool undertone, neutral pregnant with potential',
+      reference_directors: 'Tomas Alfredson restraint, Coen Brothers precise composition',
+      forbidden: 'revealing lighting that shows everything, warm cheerful palette',
+      emotional_tools: 'OTS shots to create information asymmetry, inserts on clues',
     },
-
     story_adventure: {
       prompt_prefix: 'Epic adventure scene with scale and movement',
-      mandatory_lighting: 'strong directional light — golden sun, storm light, moonlight — always dramatic source',
-      color_grade: 'wide dynamic range, deep skies, rich earth tones, saturated but grounded',
+      mandatory_lighting: 'strong directional light — golden sun, storm light, moonlight',
+      color_grade: 'wide dynamic range, deep skies, rich earth tones',
       reference_directors: 'Peter Jackson scale and intimacy, David Lean epic geography',
-      forbidden: 'flat overcast lighting, interior corporate environments, small cramped spaces unless specifically claustrophobic',
-      emotional_tools: 'wide establishing shots to show scale, low angle upshots for heroism, tracking shots for movement',
+      forbidden: 'flat overcast lighting, interior corporate environments',
+      emotional_tools: 'wide establishing shots for scale, low angle upshots for heroism',
     },
-
     sleep_story: {
       prompt_prefix: 'Peaceful bedtime atmosphere, warm dim and still',
-      mandatory_lighting: 'very dim warm candlelight or moonlight, 80% shadow, no bright areas',
+      mandatory_lighting: 'very dim warm candlelight or moonlight, 80% shadow',
       color_grade: 'deep amber, burnt sienna, midnight navy, muted and dim',
       reference_directors: 'Terrence Malick stillness, slow nature documentary calm',
       forbidden: 'bright daylight, vivid colors, busy environments, people in action',
       emotional_tools: 'long static holds, slow gentle pans, simple uncluttered compositions',
     },
-
     sleep_meditation: {
       prompt_prefix: 'Dark atmospheric pure environment for sleep meditation',
       mandatory_lighting: 'extremely dim, barely visible warm glow, deep shadow',
       color_grade: 'dark moody oil painting palette, Rembrandt shadow, warm amber only',
       reference_directors: 'pure atmosphere, painterly darkness',
       forbidden: 'any human figures, bright light, vivid colors, busy compositions',
-      emotional_tools: 'almost static compositions, nature environments only, symbolic peaceful imagery',
+      emotional_tools: 'almost static compositions, nature environments only',
     },
   };
 
   let key = 'standard';
-  if (projectMode === 'sleep_story')         key = 'sleep_story';
+  if (projectMode === 'sleep_story')           key = 'sleep_story';
   else if (projectMode === 'sleep_meditation') key = 'sleep_meditation';
-  else if (projectMode === 'explainer')       key = 'explainer';
+  else if (projectMode === 'explainer')        key = 'explainer';
   else if (projectMode === 'story' && PRESETS[arch]) key = arch;
-  else if (PRESETS[projectMode])              key = projectMode;
+  else if (PRESETS[projectMode])               key = projectMode;
 
   return PRESETS[key] || PRESETS['standard'];
 }
 
-// ══════════════════════════════════════════════════════════════════
-// EMOTIONAL BEAT LIBRARY
-// Maps narrative position (0-100) + phase to viewer emotion.
-// Used to give each scene a target emotional state for the viewer.
-// ══════════════════════════════════════════════════════════════════
-
 function getEmotionalBeat(phaseName, sceneIndexInPhase, totalScenesInPhase, narrativePositionPct) {
-  // Base emotion from phase name
   const PHASE_EMOTIONS = {
     cold_open:          ['intrigue', 'shock', 'curiosity'],
     inciting_crisis:    ['alarm', 'tension', 'disorientation'],
@@ -684,12 +576,10 @@ function getEmotionalBeat(phaseName, sceneIndexInPhase, totalScenesInPhase, narr
   };
 
   const emotions = PHASE_EMOTIONS[phaseName] || ['engagement', 'investment'];
-  // Progress through the emotions within the phase
   const ratio = totalScenesInPhase > 1 ? sceneIndexInPhase / (totalScenesInPhase - 1) : 0.5;
   const emotionIndex = Math.min(Math.floor(ratio * emotions.length), emotions.length - 1);
   const primaryEmotion = emotions[emotionIndex];
 
-  // Emotional intensity follows a curve: builds through middle, peaks near climax
   let intensity;
   if (narrativePositionPct < 15) intensity = 0.3 + (narrativePositionPct / 15) * 0.2;
   else if (narrativePositionPct < 70) intensity = 0.5 + ((narrativePositionPct - 15) / 55) * 0.4;
@@ -702,71 +592,60 @@ function getEmotionalBeat(phaseName, sceneIndexInPhase, totalScenesInPhase, narr
   };
 }
 
-// ══════════════════════════════════════════════════════════════════
-// NARRATIVE POSITION HELPER
-// Returns position 0-100 for any scene in the film.
-// ══════════════════════════════════════════════════════════════════
-
 function getNarrativePosition(sceneNumber, totalScenes) {
   if (totalScenes <= 1) return 50;
   return Math.round(((sceneNumber - 1) / (totalScenes - 1)) * 100);
 }
 
-
-// ══════════════════════════════════════════════════════════════════
-// PHASE STRUCTURE
-// ══════════════════════════════════════════════════════════════════
-
-function calculatePhaseAllocation(totalTargetScenes) {
-  const phaseWeights = [
-    { name: "cold_open", weight: 0.10, purpose: "Hook — visceral, immediate, intriguing." },
-    { name: "rising_tension", weight: 0.25, purpose: "Build the world and problem — escalate stakes." },
-    { name: "emotional_core", weight: 0.40, purpose: "Heart of the story — maximum emotional impact." },
-    { name: "resolution", weight: 0.25, purpose: "Deliver the payoff — resolution, transformation." }
-  ];
-
-  let remaining = totalTargetScenes;
-  return phaseWeights.map((phase, index) => {
-    if (index === phaseWeights.length - 1) {
-      return { ...phase, scenes: Math.max(1, remaining) };
-    }
-    const scenes = Math.max(1, Math.round(totalTargetScenes * phase.weight));
-    remaining -= scenes;
-    return { ...phase, scenes };
-  });
-}
+// FIX 3: Replaced the old fixed-weight calculatePhaseAllocation with
+// the genre-aware version used everywhere else. The old version was a dead
+// code path that produced a mismatched 4-phase structure for non-standard
+// genres and was never called — removing to prevent accidental future use.
 
 function splitScriptByPhase(script, phases) {
+  // FIX 4: Guard — if script is empty or phases is empty, return empty array
+  if (!script || !script.trim() || !phases || phases.length === 0) return [];
+
   const sentences = script.match(/[^.!?]+[.!?]+[\s]*/g) || [script];
   const totalSentences = sentences.length;
   const totalPhaseScenes = phases.reduce((a, b) => a + b.scenes, 0);
+
+  // FIX 5: Guard against zero total scenes (would cause divide-by-zero)
+  if (totalPhaseScenes === 0) return [];
+
   let cursor = 0;
   const chunks = [];
 
   for (let i = 0; i < phases.length; i++) {
     const phase = phases[i];
+    // FIX 6: Skip phases with 0 scenes (can occur from rounding)
+    if (!phase.scenes || phase.scenes <= 0) continue;
+
     const proportion = phase.scenes / totalPhaseScenes;
     const sentenceCount = Math.max(1, Math.round(totalSentences * proportion));
     const isLast = i === phases.length - 1;
     const endCursor = isLast ? totalSentences : Math.min(cursor + sentenceCount, totalSentences);
-    const segment = sentences.slice(cursor, endCursor).join("").trim();
 
-    if (segment.length > 0) {
-      chunks.push({
-        phase: phase.name,
-        purpose: phase.purpose,
-        scenes: phase.scenes,
-        text: segment
-      });
+    // FIX 7: Only push chunk if there is actually text in this segment
+    if (endCursor > cursor) {
+      const segment = sentences.slice(cursor, endCursor).join("").trim();
+      if (segment.length > 0) {
+        chunks.push({
+          phase: phase.name,
+          purpose: phase.purpose,
+          scenes: phase.scenes,
+          text: segment
+        });
+      }
     }
     cursor = endCursor;
+
+    // FIX 8: Don't advance cursor past end of sentences
+    if (cursor >= totalSentences) break;
   }
+
   return chunks;
 }
-
-// ══════════════════════════════════════════════════════════════════
-// SCENE BREAKDOWN PROMPT BUILDER
-// ══════════════════════════════════════════════════════════════════
 
 function buildBreakdownPrompt({
   styleDirective, storyAnalysis, characterBlock, continuityContext,
@@ -778,7 +657,6 @@ function buildBreakdownPrompt({
     ? `\n**DURATION TARGETS (seconds per scene):** [${beatDurationsSlice.map(d => d.toFixed(1)).join(', ')}]`
     : '';
 
-  // Build emotional beat targets for each scene in this batch
   const narrativeStart = getNarrativePosition(sceneStartGlobal || sceneStart, totalScenes || sceneStart + sceneCount);
   const narrativeEnd   = getNarrativePosition((sceneStartGlobal || sceneStart) + sceneCount - 1, totalScenes || sceneStart + sceneCount);
   const emotionalBeats = [];
@@ -792,13 +670,11 @@ function buildBreakdownPrompt({
     `Scene ${sceneStart + i}: viewer feels "${b.viewer_emotion}" | intensity ${b.emotional_intensity}`
   ).join('\n');
 
-  // Visual motifs from story analysis
   const motifs = storyAnalysis.recurring_visual_motifs || [];
   const motifLine = motifs.length > 0
     ? `\n**RECURRING VISUAL MOTIFS (plant at least one per phase):** ${motifs.join(', ')}`
     : '';
 
-  // Genre cinema preset
   const preset = cinemaPreset || {};
   const cinemaBlock = preset.prompt_prefix ? `
 **GENRE CINEMATOGRAPHY MANDATE (${preset.reference_directors}):**
@@ -809,7 +685,6 @@ function buildBreakdownPrompt({
 - FORBIDDEN: ${preset.forbidden}
 Every scene must feel like it belongs to this specific visual world. No generic cinema.` : '';
 
-  // Narrative position label
   const positionLabel = narrativeStart < 15 ? 'OPENING — establish the world, set the hook'
     : narrativeStart < 40 ? 'BUILDING — escalate stakes, deepen complexity'
     : narrativeStart < 70 ? 'CORE — maximum emotional and narrative intensity'
@@ -833,34 +708,29 @@ ${continuityContext}
 
 **NARRATIVE POSITION: ${positionLabel}**
 Scene ${sceneStartGlobal || sceneStart} of ${totalScenes || '?'} — approximately ${Math.round(narrativeStart)}% through the film.
-This position determines everything: shot intimacy, light intensity, emotional register, pacing.
 
 **CURRENT PHASE: ${phaseName.toUpperCase().replace(/_/g, ' ')}**
 Dramatic purpose: ${phasePurpose}
 Scenes to create: ${sceneCount} (numbers ${sceneStart} through ${sceneStart + sceneCount - 1})
 ${durLine}
 
-**EMOTIONAL BEAT TARGETS — the viewer must feel THIS at each scene:**
+**EMOTIONAL BEAT TARGETS:**
 ${beatTable}
-
-These are not suggestions. Every choice — shot size, lighting angle, color temperature, camera movement — exists to deliver the target emotion at the target intensity. Before each scene ask: "Will this make the viewer feel [emotion] at [intensity]?"
 
 **SCRIPT SEGMENT:**
 ${scriptText}
 
 **DIRECTOR'S LAWS:**
-1. PLOT-DRIVEN SCENES: Show what is HAPPENING in the story at this exact moment — the real situation, action, or consequence. Never a symbolic substitute. Ask: "What is the character actually doing right now in this narrative?"
-2. EMOTIONAL DELIVERY FIRST: Every technical choice serves the emotional beat target. A scene targeting "dread at 0.8" gets deep shadow, low angle, slow push-in. A scene targeting "joy at 0.7" gets wide shot, warm light, populated world.
-3. NARRATIVE POSITION: Opening (0-15%) — wider, cooler, establishing. Building (15-40%) — medium, warming. Core (40-70%) — tighter, peak contrast. Climax (70-85%) — closest, hottest or darkest. Resolution (85-100%) — wide again, settled.
-4. visual_concept: 2-4 sentences. Environment FIRST (sets the world), character ACTION second (anchors the story beat), atmosphere third (locks the emotion). Every word earns its place.
-5. SHOT DISTRIBUTION: Minimum 50% wide/wider (WS, EWS, MWS, HIGH ANGLE, ESTABLISHING). Mix MS, LOW, OTS, MCU, CU. Never same shot type twice in a row. Close-ups maximum 15% of total.
-6. NAMED PROPS: Use specific objects from the narration — "clutching her iPhone", "staring at the overdue bill". Never describe what is ON a screen or paper — no text, UI, numbers, app names.
-7. NO ABSTRACT METAPHORS: Every visual is a plausible real-world scene from the character's actual life. Never floating symbols, surreal imagery, or impossible visuals.
-8. MOTIF WEAVING: Plant the recurring visual motifs naturally. Not forced, not every scene — but consistently enough that they become the film's visual heartbeat.
-9. SCENE CONTINUITY: Each scene shares at least one visual element with the next — a color shift, matched geometry, motion direction, environmental bridge, or light quality continuation. The continuity_bridge must be specific and actionable, not generic.
-10. POPULATED WORLD: Most scenes include other people. The world breathes.
-11. IMMERSION: Every scene needs at least 2 of: (a) foreground element, (b) sensory texture, (c) character micro-action, (d) background storytelling detail, (e) specific time-of-day light, (f) scale contrast.
-12. TONE SAFETY: No imagery readable as violence, self-harm, or danger in non-horror/thriller content.
+1. PLOT-DRIVEN SCENES: Show what is HAPPENING in the story at this exact moment.
+2. EMOTIONAL DELIVERY FIRST: Every technical choice serves the emotional beat target.
+3. NARRATIVE POSITION: Opening (0-15%) wider/cooler. Building (15-40%) medium/warming. Core (40-70%) tighter/peak. Climax (70-85%) closest/hottest. Resolution (85-100%) wide/settled.
+4. visual_concept: 2-4 sentences. Environment FIRST, character ACTION second, atmosphere third.
+5. SHOT DISTRIBUTION: Minimum 50% wide/wider (WS, EWS, MWS, HIGH ANGLE, ESTABLISHING). Never same shot type twice in a row.
+6. NAMED PROPS: Use specific objects from the narration. Never describe screen/paper text.
+7. NO ABSTRACT METAPHORS: Every visual is a plausible real-world scene.
+8. SCENE CONTINUITY: Each scene shares at least one visual element with the next.
+9. POPULATED WORLD: Most scenes include other people.
+10. TONE SAFETY: No imagery readable as violence/self-harm in non-horror/thriller content.
 
 **RESPONSE FORMAT:**
 {
@@ -885,12 +755,8 @@ ${scriptText}
   ]
 }
 
-CHARACTER PRESENCE: List only characters who physically appear on screen. Pure environment scenes use []. Use exact names from the CHARACTER block above — the image generator uses this field to inject character DNA.
-
 GENERATE EXACTLY ${sceneCount} SCENES. NARRATION TEXT FROM SCRIPT WORDS ONLY.`;
 }
-
-
 
 Deno.serve(async (req) => {
   const callStart = Date.now();
@@ -899,7 +765,14 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, batch_index, selected_hook } = await req.json();
+    const body = await req.json();
+    const { project_id, batch_index, selected_hook } = body;
+
+    // FIX 9: Validate required field up front with clear error
+    if (!project_id) {
+      return Response.json({ error: 'Missing required field: project_id' }, { status: 400 });
+    }
+
     const startBatch = batch_index || 0;
 
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
@@ -909,10 +782,15 @@ Deno.serve(async (req) => {
     const allScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
     const script = allScripts.find(s => s.version === 'final_aggregated');
     if (!script?.full_script) {
-      return Response.json({ error: 'No final script found.' }, { status: 400 });
+      return Response.json({ error: 'No final script found. Please generate a script first.' }, { status: 400 });
     }
 
     const cleanedScript = cleanScriptText(script.full_script);
+    // FIX 10: Guard against empty script after cleaning
+    if (!cleanedScript || cleanedScript.trim().length < 10) {
+      return Response.json({ error: 'Script is empty or too short after cleaning.' }, { status: 400 });
+    }
+
     let finalScript = cleanedScript;
     if (selected_hook) {
       finalScript = `${selected_hook}. ${cleanedScript.replace(selected_hook, "").trim()}`;
@@ -925,19 +803,13 @@ Deno.serve(async (req) => {
     const visualStyle = normalizeStyleKey(rawStyle);
     const styleDirective = getStyleCharacterDirective(visualStyle);
 
-    // Detect if this is a sleep project
     const isSleep = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
 
-    // ═══ DURATION-AWARE SCENE DENSITY ═══
+    // Duration-aware scene density
     const densityAnchors = isSleep
-      ? [
-          // Sleep: much fewer scenes, longer holds (15-35s avg per scene)
-          {m:5,d:15},{m:10,d:20},{m:15,d:22},{m:20,d:25},{m:30,d:28},{m:60,d:32}
-        ]
-      : [
-          {m:1,d:4.2},{m:3,d:5.0},{m:5,d:5.5},{m:8,d:6.0},
-          {m:10,d:6.2},{m:15,d:7.0},{m:30,d:8.0},{m:60,d:9.0}
-        ];
+      ? [{m:5,d:15},{m:10,d:20},{m:15,d:22},{m:20,d:25},{m:30,d:28},{m:60,d:32}]
+      : [{m:1,d:4.2},{m:3,d:5.0},{m:5,d:5.5},{m:8,d:6.0},{m:10,d:6.2},{m:15,d:7.0},{m:30,d:8.0},{m:60,d:9.0}];
+
     function getAvgSceneDuration(mins) {
       if (mins <= densityAnchors[0].m) return densityAnchors[0].d;
       if (mins >= densityAnchors[densityAnchors.length-1].m) return densityAnchors[densityAnchors.length-1].d;
@@ -950,39 +822,52 @@ Deno.serve(async (req) => {
       }
       return isSleep ? 22 : 5.5;
     }
+
     const avgSceneDuration = getAvgSceneDuration(durationMinutes);
     const totalTargetScenes = Math.max(isSleep ? 4 : 8, Math.round((durationMinutes * 60) / avgSceneDuration));
 
-    // Genre-aware phase structure — comedy, horror, romance all get different dramatic shapes
     const projectMode = project.project_mode || '';
     const storyArch   = project.shorts_niche  || '';
     const genrePhases = getGenrePhaseStructure(projectMode, storyArch);
     const cinemaPreset = getGenreCinematographyPreset(projectMode, storyArch);
 
-    // Convert genre phase weights to scene counts
-    const phases = genrePhases.map((phase, index) => {
-      if (index === genrePhases.length - 1) {
-        const usedSoFar = genrePhases.slice(0, index).reduce((sum, p) => {
-          return sum + Math.max(1, Math.round(totalTargetScenes * p.weight));
-        }, 0);
-        return { ...phase, scenes: Math.max(1, totalTargetScenes - usedSoFar) };
-      }
-      return { ...phase, scenes: Math.max(1, Math.round(totalTargetScenes * phase.weight)) };
-    });
+    // FIX 11: Rewritten phase scene-count allocation — deterministic, no floating remainder bug
+    // Old code had a reducer inside the map which closed over the wrong index, leaving
+    // the last phase with a negative or zero scene count when weights didn't sum cleanly.
+    const phases = (() => {
+      let allocated = 0;
+      return genrePhases.map((phase, index) => {
+        if (index === genrePhases.length - 1) {
+          // Last phase gets whatever remains — never zero or negative
+          const remaining = Math.max(1, totalTargetScenes - allocated);
+          return { ...phase, scenes: remaining };
+        }
+        const count = Math.max(1, Math.round(totalTargetScenes * phase.weight));
+        allocated += count;
+        return { ...phase, scenes: count };
+      });
+    })();
+
+    // FIX 12: Validate phases produced at least one scene total
+    const totalAllocatedScenes = phases.reduce((sum, p) => sum + p.scenes, 0);
+    if (totalAllocatedScenes === 0) {
+      return Response.json({ error: 'Phase allocation produced zero scenes. Check video_duration_minutes on the project.' }, { status: 400 });
+    }
 
     const scriptChunks = splitScriptByPhase(finalScript, phases);
 
+    // FIX 13: Guard against empty chunks (e.g. very short script)
+    if (scriptChunks.length === 0) {
+      return Response.json({ error: 'Script could not be split into scene chunks. Script may be too short.' }, { status: 400 });
+    }
+
     console.log(`🎭 Genre: ${projectMode || 'standard'}/${storyArch || 'none'} → ${phases.length} phases: ${phases.map(p => p.name + '(' + p.scenes + ')').join(', ')}`);
     console.log(`🎬 Cinema preset: ${cinemaPreset.reference_directors}`);
+
     const numBatches = scriptChunks.length;
     const nicheProfile = getNicheDirectorProfile(niche);
 
     console.log(`🎯 ${durationMinutes}min → ${totalTargetScenes} scenes (avg ${avgSceneDuration.toFixed(1)}s) | ${numBatches} phases | Style: ${visualStyle || 'default'}`);
-
-    // ══════════════════════════════════════════════════════════════
-    // BATCH 0: Story analysis + all phases in one call
-    // BATCH 1+: Resume from a specific phase (timeout recovery)
-    // ══════════════════════════════════════════════════════════════
 
     let blueprint;
     let freshProject = project;
@@ -992,7 +877,7 @@ Deno.serve(async (req) => {
     let phaseStart = 0;
 
     if (startBatch === 0) {
-      // ── Delete old scenes (parallel batches of 10) ──
+      // Delete old scenes
       const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
       if (oldScenes.length > 0) {
         for (let i = 0; i < oldScenes.length; i += 10) {
@@ -1003,7 +888,7 @@ Deno.serve(async (req) => {
         console.log(`🗑️ Deleted ${oldScenes.length} old scenes`);
       }
 
-      // ── Story Analysis ──
+      // Story Analysis
       const analysisPrompt = `You are a world-class film director. Study this script and respond with JSON.
 ${styleDirective}
 
@@ -1012,44 +897,44 @@ ${finalScript}
 
 **NICHE:** ${niche} | **TOPIC:** ${project.name} | **DURATION:** ~${durationMinutes}min | **SCENES:** ${totalTargetScenes}
 
-Respond with this JSON:
+Respond with this JSON (raw JSON only, no markdown fences):
 {
   "story_analysis": {
-    "plot_summary": "What ACTUALLY HAPPENS in this story from start to finish — the concrete sequence of events, situations, and outcomes. This is the backbone that every scene must connect to.",
+    "plot_summary": "What ACTUALLY HAPPENS — concrete sequence of events, situations, and outcomes.",
     "central_theme": "The deeper human truth (NOT the topic)",
     "narrative_arc_summary": "2-3 sentence emotional journey",
     "emotional_trajectory": ["curiosity","concern","empathy","hope"],
     "key_turning_points": ["Moment 1","Moment 2","Moment 3"],
     "visual_world": "Specific sensory description of this story's visual universe",
     "recurring_visual_motifs": ["Motif 1","Motif 2","Motif 3"],
-    "color_arc": "e.g. cool blues → warm amber → vibrant gold",
+    "color_arc": "e.g. cool blues to warm amber to vibrant gold",
     "characters": [{
       "name": "Name/archetype",
-      "identity_core": "Casting-sheet: exact age, SPECIFIC gender (must be 'male' or 'female' — NEVER 'neutral' or 'any'), skin tone shade, face shape, eye color+shape, nose, lips, hair (color/length/style), build+height, 2-3 distinguishing marks. Must be specific enough for 20 artists to draw the SAME person. GENDER RULE: Analyze the story context, niche, and cultural norms to pick the gender that BEST FITS the narrative. Finance/corporate stories may suit male or female depending on the arc. Parenting stories should match the parent described. Crime/history should match the real subjects. If truly ambiguous, pick the gender that creates the most compelling visual contrast with the story's conflict. NEVER default to female automatically.",
-      "default_clothing": "Typical outfit (can change per scene)",
+      "identity_core": "Casting-sheet: exact age, specific gender (male or female — never neutral), skin tone, face shape, eye color, hair, build, 2-3 distinguishing marks.",
+      "default_clothing": "Typical outfit",
       "emotional_arc": "How they change emotionally"
     }]
   }
 }
 
-NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palette}
-
-**PLOT SUMMARY (use this to ground EVERY scene in the story):**
-Analyze the script above and identify: WHO is the main character? WHAT is their situation? WHAT journey do they go through? Every scene must show a moment from THIS character's journey — not a disconnected visual metaphor.`;
+NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palette}`;
 
       console.log(`🎬 Story analysis...`);
       const analysis = await callClaude(analysisPrompt, 0.6);
       storyAnalysis = analysis.story_analysis || analysis;
 
-      // ── Beat durations ──
+      // FIX 14: Validate story analysis returned something usable
+      if (!storyAnalysis || typeof storyAnalysis !== 'object') {
+        return Response.json({ error: 'Story analysis returned invalid data from Claude. Try again.' }, { status: 500 });
+      }
+
       beatDurations = calculateBeatDurations(phases, durationMinutes, isSleep);
       beatStartTimes = calculateStartTimes(beatDurations);
 
-      console.log(`📊 Beats: ${beatDurations.length} scenes | Range: ${Math.min(...beatDurations).toFixed(1)}s – ${Math.max(...beatDurations).toFixed(1)}s | Total: ${beatDurations.reduce((a,b)=>a+b,0).toFixed(1)}s`);
+      console.log(`📊 Beats: ${beatDurations.length} scenes | Range: ${Math.min(...beatDurations).toFixed(1)}s – ${Math.max(...beatDurations).toFixed(1)}s`);
 
-      // ── Save story analysis + beats to ProductionSettings ──
       const saForSave = { ...storyAnalysis };
-      delete saForSave.characters; // saved separately on Project
+      delete saForSave.characters;
       const psPayload = {
         beat_durations: JSON.stringify(beatDurations),
         beat_start_times: JSON.stringify(beatStartTimes),
@@ -1062,7 +947,6 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
         await base44.asServiceRole.entities.ProductionSettings.create({ project_id, ...psPayload });
       }
 
-      // ── Tiny flag on scene_blueprint (field has ~1000 char limit) ──
       await base44.asServiceRole.entities.Projects.update(project_id, {
         status: "scene_breakdown",
         current_step: 5,
@@ -1072,7 +956,6 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
           : project.character_descriptions
       });
 
-      // Build in-memory blueprint for the phase loop
       blueprint = {
         story_analysis: storyAnalysis,
         phases: phases.map(p => ({ name: p.name, purpose: p.purpose, scene_count: p.scenes })),
@@ -1094,9 +977,7 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
       phaseStart = 0;
 
     } else {
-      // ── Resume from a specific phase (timeout recovery) ──
-      phaseStart = startBatch - 1;
-      if (phaseStart < 0) phaseStart = 0;
+      phaseStart = Math.max(0, startBatch - 1);
 
       const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
       if (!psList[0]?.story_analysis) {
@@ -1122,7 +1003,7 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
       console.log(`⏩ Resuming from phase ${phaseStart}`);
     }
 
-    // ── Character block for prompts ──
+    // Character block for prompts
     let characters = [];
     if (freshProject.character_descriptions) {
       try { characters = JSON.parse(freshProject.character_descriptions); } catch (_) {}
@@ -1135,16 +1016,11 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
         }).join('\n')}`
       : '';
 
-    // ══════════════════════════════════════════════════════════════
-    // PHASE LOOP — all phases in one call, sub-batched if > 20 scenes
-    // ══════════════════════════════════════════════════════════════
-
     let grandTotalCreated = 0;
     const MAX_WALL_MS = 55000;
     const MAX_SCENES_PER_CALL = 20;
 
     for (let batchIdx = phaseStart; batchIdx < scriptChunks.length; batchIdx++) {
-      // ── Timeout safety valve ──
       const elapsed = Date.now() - callStart;
       if (elapsed > MAX_WALL_MS && batchIdx > phaseStart) {
         console.log(`⏱️ ${(elapsed/1000).toFixed(1)}s elapsed — saving progress, returning for resume`);
@@ -1161,10 +1037,16 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
       }
 
       const currentChunk = scriptChunks[batchIdx];
+
+      // FIX 15: Skip chunks that somehow have no text or no scenes (defensive)
+      if (!currentChunk.text || currentChunk.text.trim().length === 0 || currentChunk.scenes <= 0) {
+        console.warn(`⚠️ Skipping empty chunk for phase ${currentChunk.phase}`);
+        continue;
+      }
+
       const existingScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
       const sceneOffset = existingScenes.length;
 
-      // ── Continuity from last 3 existing scenes ──
       const recentScenes = existingScenes
         .sort((a, b) => b.scene_number - a.scene_number)
         .slice(0, 3)
@@ -1185,7 +1067,6 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
         continuityContext = `**LAST ${recentScenes.length} SCENES (for visual continuity):**\n${lines.join('\n')}`;
       }
 
-      // ── Sub-batch if phase has > MAX_SCENES_PER_CALL scenes ──
       const subBatches = [];
       const chunkWords = currentChunk.text.split(/\s+/);
       const wordsPerScene = Math.max(1, Math.ceil(chunkWords.length / currentChunk.scenes));
@@ -1204,17 +1085,27 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
       for (let si = 0; si < subBatches.length; si++) {
         const sub = subBatches[si];
 
-        // Timeout check between sub-batches
         const elapsed2 = Date.now() - callStart;
         if (elapsed2 > MAX_WALL_MS && phaseCreated > 0) {
           console.log(`⏱️ ${(elapsed2/1000).toFixed(1)}s — saving mid-phase progress`);
           break;
         }
 
-        // Slice script text proportionally
         const wordStart = (sub.offset - sceneOffset) * wordsPerScene;
         const wordEnd = Math.min(wordStart + sub.count * wordsPerScene, chunkWords.length);
+
+        // FIX 16: Guard against empty text slice (can happen when wordStart >= chunkWords.length)
+        if (wordStart >= chunkWords.length) {
+          console.warn(`⚠️ Sub-batch ${si+1} has no words — skipping`);
+          continue;
+        }
+
         const subText = chunkWords.slice(wordStart, wordEnd).join(' ');
+        if (!subText || subText.trim().length === 0) {
+          console.warn(`⚠️ Sub-batch ${si+1} produced empty text — skipping`);
+          continue;
+        }
+
         const subBeats = beatDurations.slice(sub.offset, sub.offset + sub.count);
 
         const prompt = buildBreakdownPrompt({
@@ -1242,17 +1133,19 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
           result = await callClaude(prompt, 0.7);
         } catch (err) {
           console.error(`❌ Scenes ${sub.offset+1}-${sub.offset+sub.count} FAILED: ${err.message}`);
-          // Retry with half the scenes
           if (sub.count > 10) {
             console.log(`🔄 Retrying with ${Math.ceil(sub.count/2)} scenes...`);
             try {
+              const halfCount = Math.ceil(sub.count / 2);
+              const halfWordEnd = Math.min(wordStart + halfCount * wordsPerScene, chunkWords.length);
+              const halfText = chunkWords.slice(wordStart, halfWordEnd).join(' ');
               const halfPrompt = buildBreakdownPrompt({
                 styleDirective, storyAnalysis, characterBlock, continuityContext,
                 phaseName: currentChunk.phase, phasePurpose: currentChunk.purpose,
-                sceneCount: Math.ceil(sub.count / 2),
+                sceneCount: halfCount,
                 sceneStart: sub.offset + 1,
-                scriptText: subText,
-                beatDurationsSlice: subBeats.slice(0, Math.ceil(sub.count / 2)),
+                scriptText: halfText,
+                beatDurationsSlice: subBeats.slice(0, halfCount),
                 nicheProfile,
                 cinemaPreset,
                 sceneStartGlobal: sub.offset + 1,
@@ -1268,22 +1161,14 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
           }
         }
 
-        // Extract scenes from result (handle different possible keys)
         let scenesArr = result?.scenes;
         if (!scenesArr || !Array.isArray(scenesArr)) {
           scenesArr = result?.prompts || result?.scene || null;
           if (Array.isArray(scenesArr)) {
-            console.warn(`⚠️ Scenes found under non-standard key (${Object.keys(result).join(',')})`);
+            console.warn(`⚠️ Scenes found under non-standard key`);
           } else {
-            console.error(`❌ No scenes array. Keys: ${JSON.stringify(Object.keys(result || {}))}. Sample: ${JSON.stringify(result).substring(0, 200)}`);
+            console.error(`❌ No scenes array in result. Keys: ${JSON.stringify(Object.keys(result || {}))}`);
             continue;
-          }
-        }
-
-        // Check for duplicate consecutive shot types
-        for (let i = 1; i < scenesArr.length; i++) {
-          if (scenesArr[i].shot_type === scenesArr[i-1].shot_type) {
-            console.warn(`⚠️ Duplicate shot type at scene ${scenesArr[i].scene_number}: ${scenesArr[i].shot_type}`);
           }
         }
 
@@ -1292,7 +1177,6 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
           const cleanedNarration = cleanNarrationText(scene.narration_text);
           const targetDuration = beatDurations[sceneNum - 1] || scene.duration_seconds || 5;
 
-          // Store director notes on the Scene record itself
           const directorNotes = {
             visual_concept: scene.visual_concept,
             shot_type: scene.shot_type,
@@ -1318,7 +1202,6 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
             status: "breakdown_ready"
           });
 
-          // Keep in memory for continuity context
           blueprint.scenes.push({
             scene_number: sceneNum,
             phase: currentChunk.phase,
@@ -1334,21 +1217,18 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
           phaseCreated++;
         }
 
-        // Update continuity context for next sub-batch
         if (si < subBatches.length - 1 && blueprint.scenes.length >= 3) {
           const last3 = blueprint.scenes.slice(-3);
           continuityContext = `**LAST 3 SCENES:**\n${last3.map(s =>
             `  Scene ${s.scene_number}: [${s.shot_type}] ${(s.visual_concept || '').substring(0, 80)} | Mood: ${s.mood}`
           ).join('\n')}`;
         }
-      } // end sub-batch loop
+      }
 
       grandTotalCreated += phaseCreated;
       console.log(`✓ ${currentChunk.phase}: ${phaseCreated} scenes (total: ${grandTotalCreated}/${totalTargetScenes}) [${((Date.now()-callStart)/1000).toFixed(1)}s]`);
+    }
 
-    } // end phase loop
-
-    // ── All phases done ──
     await base44.asServiceRole.entities.Projects.update(project_id, {
       status: "breakdown_complete",
       current_step: 5,
@@ -1369,7 +1249,7 @@ Analyze the script above and identify: WHO is the main character? WHAT is their 
     });
 
   } catch (error) {
-    console.error("❌ generateSceneBreakdown error:", error.message);
+    console.error("❌ generateSceneBreakdown error:", error.message, error.stack);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
