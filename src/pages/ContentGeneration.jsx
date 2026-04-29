@@ -13,7 +13,6 @@ import VisualStyleSelector from '@/components/content/VisualStyleSelector';
 import OrientationSelector from '@/components/content/OrientationSelector';
 import ImageProviderSelector from '@/components/content/ImageProviderSelector';
 import MusicPanel from '@/components/content/MusicPanel';
-
 import AudioMixerPanel from '@/components/content/AudioMixerPanel';
 import ProcessingNotifier from '@/components/content/ProcessingNotifier';
 import DedupButton from '@/components/content/DedupButton';
@@ -27,7 +26,7 @@ import {
 
 
 // ═══════════════════════════════════════════════════════════════════
-// Fix Prompts Button — Module-level component
+// Fix Prompts Button
 // ═══════════════════════════════════════════════════════════════════
 function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }) {
   const [fixing, setFixing] = useState(false);
@@ -41,12 +40,8 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
     setFixing(true);
     setFixType(type);
     setResult(null);
-
     try {
-      const resp = await base44.functions.invoke('fixScenePrompts', {
-        project_id: projectId,
-        fix_type: type
-      });
+      const resp = await base44.functions.invoke('fixScenePrompts', { project_id: projectId, fix_type: type });
       const data = resp.data || resp;
       setResult(data);
       await onComplete();
@@ -54,7 +49,6 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
       console.error('Fix prompts failed:', err);
       setResult({ error: err.message });
     }
-
     setFixing(false);
     setFixType(null);
     setTimeout(() => setResult(null), 5000);
@@ -66,7 +60,6 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
     setFixing(true);
     setFixType('reference');
     setResult(null);
-
     try {
       await base44.entities.Projects.update(projectId, { reference_image_url: imageUrl });
       setResult({ fixed: 1, total: 1, reference_locked: true });
@@ -75,7 +68,6 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
       console.error('Lock reference failed:', err);
       setResult({ error: err.message });
     }
-
     setFixing(false);
     setFixType(null);
     setTimeout(() => setResult(null), 5000);
@@ -91,7 +83,6 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
     setFixing(true);
     setFixType('ai_clean');
     setResult(null);
-
     try {
       const toClean = (scenes || []).filter(s =>
         s.image_prompt && !s.image_prompt.startsWith('DIRECTOR_NOTES:') &&
@@ -118,17 +109,16 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
       console.error('AI Clean failed:', err);
       setResult({ error: err.message });
     }
-
     setFixing(false);
     setFixType(null);
     setTimeout(() => setResult(null), 5000);
   };
 
   const fixOptions = [
-    { type: 'all', label: 'Fix Everything', desc: 'Characters + Cleanup + Quality', icon: '🔧' },
-    { type: 'characters', label: 'Fix Characters', desc: 'Inject identity descriptions', icon: '👤' },
-    { type: 'cleanup', label: 'Clean Metadata', desc: 'Strip orientation/text artifacts', icon: '🧹' },
-    { type: 'quality', label: 'Flag Thin Prompts', desc: 'Reset weak prompts for regen', icon: '⚠️' },
+    { type: 'all',      label: 'Fix Everything',    desc: 'Characters + Cleanup + Quality', icon: '🔧' },
+    { type: 'characters', label: 'Fix Characters',  desc: 'Inject identity descriptions',  icon: '👤' },
+    { type: 'cleanup',  label: 'Clean Metadata',    desc: 'Strip orientation/text artifacts', icon: '🧹' },
+    { type: 'quality',  label: 'Flag Thin Prompts', desc: 'Reset weak prompts for regen',  icon: '⚠️' },
   ];
 
   return (
@@ -140,26 +130,18 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
         className="border-orange-200 text-orange-700 hover:bg-orange-50"
       >
         {fixing ? (
-          <>
-            <Loader2 className="w-4 h-4 animate-spin mr-1" />
-            Fixing {fixType === 'characters' ? 'Characters' : fixType === 'cleanup' ? 'Metadata' : fixType === 'quality' ? 'Quality' : fixType === 'reference' ? 'Reference' : 'All'}...
-          </>
+          <><Loader2 className="w-4 h-4 animate-spin mr-1" />
+          Fixing {fixType === 'characters' ? 'Characters' : fixType === 'cleanup' ? 'Metadata' : fixType === 'quality' ? 'Quality' : fixType === 'reference' ? 'Reference' : 'All'}...</>
         ) : (
-          <>
-            <Wand2 className="w-4 h-4 mr-1" />
-            Fix Prompts ({sceneCount})
-          </>
+          <><Wand2 className="w-4 h-4 mr-1" />Fix Prompts ({sceneCount})</>
         )}
       </Button>
 
       {showMenu && !fixing && !showRefPicker && (
         <div className="absolute top-full mt-1 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-64">
           {fixOptions.map(opt => (
-            <button
-              key={opt.type}
-              onClick={() => handleFix(opt.type)}
-              className="w-full text-left px-4 py-2.5 hover:bg-orange-50 first:rounded-t-lg last:rounded-b-lg flex items-start gap-2"
-            >
+            <button key={opt.type} onClick={() => handleFix(opt.type)}
+              className="w-full text-left px-4 py-2.5 hover:bg-orange-50 first:rounded-t-lg last:rounded-b-lg flex items-start gap-2">
               <span className="text-lg">{opt.icon}</span>
               <div>
                 <p className="text-sm font-medium text-gray-800">{opt.label}</p>
@@ -168,10 +150,8 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
             </button>
           ))}
           <div className="border-t border-gray-100" />
-          <button
-            onClick={handleAIClean}
-            className="w-full text-left px-4 py-2.5 hover:bg-cyan-50 flex items-start gap-2"
-          >
+          <button onClick={handleAIClean}
+            className="w-full text-left px-4 py-2.5 hover:bg-cyan-50 flex items-start gap-2">
             <span className="text-lg">✨</span>
             <div>
               <p className="text-sm font-medium text-gray-800">AI Clean (OpenAI)</p>
@@ -181,10 +161,8 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
           {scenesWithImages.length > 0 && (
             <>
               <div className="border-t border-gray-100" />
-              <button
-                onClick={() => setShowRefPicker(true)}
-                className="w-full text-left px-4 py-2.5 hover:bg-blue-50 last:rounded-b-lg flex items-start gap-2"
-              >
+              <button onClick={() => setShowRefPicker(true)}
+                className="w-full text-left px-4 py-2.5 hover:bg-blue-50 last:rounded-b-lg flex items-start gap-2">
                 <span className="text-lg">🔗</span>
                 <div>
                   <p className="text-sm font-medium text-gray-800">Lock Character Reference</p>
@@ -198,7 +176,6 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
         </div>
       )}
 
-      {/* Reference Image Picker */}
       {showRefPicker && (
         <div className="absolute top-full mt-1 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-80 max-h-96 overflow-y-auto">
           <div className="p-3 border-b border-gray-100 sticky top-0 bg-white z-10">
@@ -209,18 +186,14 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
             <p className="text-[10px] text-gray-500 mt-1">This image will be used as style/character reference for all other scenes via Grok image-to-image</p>
           </div>
           <div className="grid grid-cols-3 gap-1.5 p-2">
-            {scenesWithImages.sort((a,b) => a.scene_number - b.scene_number).map(s => (
-              <button
-                key={s.id}
-                onClick={() => handleLockReference(s.id, s.image_url)}
+            {scenesWithImages.sort((a, b) => a.scene_number - b.scene_number).map(s => (
+              <button key={s.id} onClick={() => handleLockReference(s.id, s.image_url)}
                 className={`relative rounded overflow-hidden border-2 transition-all hover:scale-105 ${
                   currentRefUrl === s.image_url ? 'border-blue-500 ring-2 ring-blue-200' : 'border-transparent hover:border-blue-300'
-                }`}
-              >
+                }`}>
                 <img src={s.image_url} alt={`S${s.scene_number}`} className="w-full aspect-video object-cover" />
                 <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[9px] text-center py-0.5">
-                  S{s.scene_number}
-                  {currentRefUrl === s.image_url && ' ✓'}
+                  S{s.scene_number}{currentRefUrl === s.image_url && ' ✓'}
                 </span>
               </button>
             ))}
@@ -232,11 +205,9 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
         <div className={`absolute top-full mt-1 right-0 z-50 rounded-lg p-3 shadow-lg text-xs w-64 ${
           result.error ? 'bg-red-50 border border-red-200 text-red-700' : 'bg-green-50 border border-green-200 text-green-700'
         }`}>
-          {result.error ? (
-            <p>Failed: {result.error}</p>
-          ) : result.reference_locked ? (
-            <p className="font-medium">🔗 Character reference locked!</p>
-          ) : (
+          {result.error ? <p>Failed: {result.error}</p>
+          : result.reference_locked ? <p className="font-medium">🔗 Character reference locked!</p>
+          : (
             <>
               <p className="font-medium">Fixed {result.fixed}/{result.total} scenes</p>
               {result.character_fixes > 0 && <p>👤 {result.character_fixes} character injections</p>}
@@ -252,7 +223,7 @@ function FixPromptsButton({ projectId, sceneCount, scenes, project, onComplete }
 
 
 // ═══════════════════════════════════════════════════════════════════
-// Audio Assets Download Panel — Module-level component
+// Audio Assets Panel
 // ═══════════════════════════════════════════════════════════════════
 function AudioAssetsPanel({ project }) {
   const [downloading, setDownloading] = useState(null);
@@ -260,7 +231,6 @@ function AudioAssetsPanel({ project }) {
   const [musicTracks, setMusicTracks] = useState([]);
   const projectId = project?.id;
 
-  // Load production settings + music tracks on mount
   useEffect(() => {
     if (!projectId) return;
     (async () => {
@@ -268,7 +238,6 @@ function AudioAssetsPanel({ project }) {
         const ps = await base44.entities.ProductionSettings?.filter({ project_id: projectId });
         if (ps?.length > 0) setProdSettings(ps[0]);
       } catch (_) {}
-
       try {
         const tracks = await base44.entities.MusicTracks?.filter({ project_id: projectId });
         if (tracks?.length > 0) setMusicTracks(tracks);
@@ -276,7 +245,6 @@ function AudioAssetsPanel({ project }) {
     })();
   }, [projectId]);
 
-  // ── Scan ALL fields on project + prodSettings for audio URLs ──
   const allAudioUrls = {};
 
   const categorizeField = (field, url) => {
@@ -288,93 +256,50 @@ function AudioAssetsPanel({ project }) {
     let category = null;
     let label = null;
 
-    if (/elevenlabs|eleven_labs/.test(f)) {
-      category = 'elevenlabs_voiceover';
-      label = 'Voiceover (ElevenLabs)';
-    } else if (/voiceover|narration|voice|narrator|tts/.test(f)) {
-      category = 'voiceover';
-      label = 'Voiceover';
-    } else if (/music|soundtrack|bgm|background_music|bg_music|melody/.test(f)) {
-      category = 'music';
-      label = 'Background Music';
-    } else if (/sfx|sound_effect|effect|foley/.test(f)) {
-      category = 'sfx';
-      label = 'Sound Effects';
-    } else if (/mix|master|final_audio|combined/.test(f)) {
-      category = 'mixed';
-      label = 'Final Mixed Audio';
-    } else if (/audio|\.mp3|\.wav|\.ogg/.test(f) || /\.mp3|\.wav|\.ogg/i.test(url)) {
+    if (/elevenlabs|eleven_labs/.test(f)) { category = 'elevenlabs_voiceover'; label = 'Voiceover (ElevenLabs)'; }
+    else if (/voiceover|narration|voice|narrator|tts/.test(f)) { category = 'voiceover'; label = 'Voiceover'; }
+    else if (/music|soundtrack|bgm|background_music|bg_music|melody/.test(f)) { category = 'music'; label = 'Background Music'; }
+    else if (/sfx|sound_effect|effect|foley/.test(f)) { category = 'sfx'; label = 'Sound Effects'; }
+    else if (/mix|master|final_audio|combined/.test(f)) { category = 'mixed'; label = 'Final Mixed Audio'; }
+    else if (/audio|\.mp3|\.wav|\.ogg/.test(f) || /\.mp3|\.wav|\.ogg/i.test(url)) {
       category = `other_${field}`;
       label = field.replace(/_/g, ' ').replace(/url$/i, '').trim();
       label = label.charAt(0).toUpperCase() + label.slice(1);
     }
 
-    if (category && !allAudioUrls[category]) {
-      allAudioUrls[category] = { url, label, field };
-    }
+    if (category && !allAudioUrls[category]) allAudioUrls[category] = { url, label, field };
   };
 
-  // Scan project fields
   if (project) {
-    for (const [field, value] of Object.entries(project)) {
-      categorizeField(field, value);
-    }
+    for (const [field, value] of Object.entries(project)) categorizeField(field, value);
   }
-
-  // Scan production settings fields
   if (prodSettings) {
-    for (const [field, value] of Object.entries(prodSettings)) {
-      categorizeField(field, value);
-    }
+    for (const [field, value] of Object.entries(prodSettings)) categorizeField(field, value);
   }
-
-  // Add music tracks from MusicTracks entity
   if (musicTracks.length > 0) {
     const sorted = [...musicTracks].sort((a, b) => (b.is_selected ? 1 : 0) - (a.is_selected ? 1 : 0));
     sorted.forEach((track, i) => {
       if (track.audio_url && track.audio_url.startsWith('http')) {
         const key = track.is_selected ? 'music' : `music_alt_${i}`;
-        const label = track.is_selected
-          ? `🎵 ${track.title || 'Background Music'} (Selected)`
-          : `${track.title || `Music Track ${i + 1}`}`;
-        if (!allAudioUrls[key]) {
-          allAudioUrls[key] = { url: track.audio_url, label, field: `MusicTracks.${track.id}` };
-        }
+        const label = track.is_selected ? `🎵 ${track.title || 'Background Music'} (Selected)` : `${track.title || `Music Track ${i + 1}`}`;
+        if (!allAudioUrls[key]) allAudioUrls[key] = { url: track.audio_url, label, field: `MusicTracks.${track.id}` };
       }
     });
   }
 
-// Only log once on mount, not every re-render
   useEffect(() => {
     if (Object.keys(allAudioUrls).length > 0) {
       console.log('🔊 Audio assets found:', Object.entries(allAudioUrls).map(([k, v]) => `${k}: ${v.field}`).join(', '));
     }
   }, [projectId, musicTracks.length, prodSettings]);
-  const iconMap = {
-    voiceover: <Mic className="w-4 h-4" />,
-    elevenlabs_voiceover: <Mic className="w-4 h-4" />,
-    music: <Music className="w-4 h-4" />,
-    sfx: <Volume2 className="w-4 h-4" />,
-    mixed: <Volume2 className="w-4 h-4" />,
-  };
 
-  const colorOrder = {
-    voiceover: 'blue',
-    elevenlabs_voiceover: 'indigo',
-    music: 'purple',
-    sfx: 'amber',
-    mixed: 'emerald',
-  };
+  const iconMap = { voiceover: <Mic className="w-4 h-4" />, elevenlabs_voiceover: <Mic className="w-4 h-4" />, music: <Music className="w-4 h-4" />, sfx: <Volume2 className="w-4 h-4" />, mixed: <Volume2 className="w-4 h-4" /> };
+  const colorOrder = { voiceover: 'blue', elevenlabs_voiceover: 'indigo', music: 'purple', sfx: 'amber', mixed: 'emerald' };
 
   const assets = Object.entries(allAudioUrls).map(([category, { url, label }]) => ({
-    key: category,
-    label,
-    icon: iconMap[category] || <Volume2 className="w-4 h-4" />,
-    url,
-    color: colorOrder[category] || 'blue',
+    key: category, label, icon: iconMap[category] || <Volume2 className="w-4 h-4" />, url, color: colorOrder[category] || 'blue',
   }));
 
-  // Deduplicate by URL
   const seenUrls = new Set();
   const uniqueAssets = assets.filter(a => {
     if (seenUrls.has(a.url)) return false;
@@ -384,17 +309,13 @@ function AudioAssetsPanel({ project }) {
 
   if (uniqueAssets.length === 0) return null;
 
-  const corsBlockedDomains = [
-    'tempfile.aiquickdraw.com', 'aiquickdraw.com', 'kie.ai', 'api.kie.ai',
-  ];
-
+  const corsBlockedDomains = ['tempfile.aiquickdraw.com', 'aiquickdraw.com', 'kie.ai', 'api.kie.ai'];
   const isCorsBocked = (url) => {
     try { return corsBlockedDomains.some(d => new URL(url).hostname.includes(d)); } catch (_) { return false; }
   };
 
   const handleDownload = async (asset) => {
     setDownloading(asset.key);
-
     const { makeFileBase } = await import('@/lib/fileNaming');
     const projectName = makeFileBase(project?.name, project?.niche);
     let ext = 'mp3';
@@ -404,7 +325,6 @@ function AudioAssetsPanel({ project }) {
     else if (asset.url.includes('.jpg') || asset.url.includes('.jpeg')) ext = 'jpg';
     else if (asset.url.includes('.png')) ext = 'png';
 
-    // CORS-blocked domain → go straight to backend proxy
     if (isCorsBocked(asset.url)) {
       try {
         const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url: asset.url });
@@ -416,77 +336,45 @@ function AudioAssetsPanel({ project }) {
           const blob = new Blob([bytes], { type: data.content_type || 'application/octet-stream' });
           const blobUrl = URL.createObjectURL(blob);
           const a = document.createElement('a');
-          a.href = blobUrl;
-          a.download = `${projectName}_${asset.key}.${ext}`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(blobUrl);
-          setDownloading(null);
-          return;
+          a.href = blobUrl; a.download = `${projectName}_${asset.key}.${ext}`;
+          document.body.appendChild(a); a.click(); document.body.removeChild(a);
+          URL.revokeObjectURL(blobUrl); setDownloading(null); return;
         }
-      } catch (err) {
-        console.warn(`Proxy download failed: ${err.message}`);
-        window.open(asset.url, '_blank');
-        setDownloading(null);
-        return;
-      }
+      } catch (err) { console.warn(`Proxy download failed: ${err.message}`); window.open(asset.url, '_blank'); setDownloading(null); return; }
     }
 
-    // Non-blocked domain: try direct fetch
     try {
       const response = await fetch(asset.url, { mode: 'cors' });
-
       if (response.ok) {
         const contentType = response.headers.get('content-type') || '';
         if (contentType.includes('wav')) ext = 'wav';
         else if (contentType.includes('ogg')) ext = 'ogg';
-
         const blob = await response.blob();
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = `${projectName}_${asset.key}.${ext}`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-        setDownloading(null);
-        return;
+        a.href = blobUrl; a.download = `${projectName}_${asset.key}.${ext}`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl); setDownloading(null); return;
       }
-    } catch (_) {
-      console.log(`CORS blocked for ${asset.key} — using direct link`);
-    }
+    } catch (_) { console.log(`CORS blocked for ${asset.key} — using proxy`); }
 
-    // Method 2: Backend proxy (server-side, no CORS)
     try {
       const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url: asset.url });
       const data = proxyRes.data || proxyRes;
       if (data.success && data.data) {
         const binary = atob(data.data);
         const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-          bytes[i] = binary.charCodeAt(i);
-        }
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
         const blob = new Blob([bytes], { type: data.content_type || 'application/octet-stream' });
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = `${projectName}_${asset.key}.${ext}`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-        setDownloading(null);
-        return;
+        a.href = blobUrl; a.download = `${projectName}_${asset.key}.${ext}`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl); setDownloading(null); return;
       }
-    } catch (proxyErr) {
-      console.warn(`Proxy download failed for ${asset.key}: ${proxyErr.message}`);
-    }
+    } catch (proxyErr) { console.warn(`Proxy download failed for ${asset.key}: ${proxyErr.message}`); }
 
-    // Method 3: Last resort — open in new tab
     window.open(asset.url, '_blank');
-
     setDownloading(null);
   };
 
@@ -500,10 +388,10 @@ function AudioAssetsPanel({ project }) {
   };
 
   const colorMap = {
-    blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', badge: 'bg-blue-100 text-blue-800', btn: 'bg-blue-600 hover:bg-blue-700' },
-    indigo: { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700', badge: 'bg-indigo-100 text-indigo-800', btn: 'bg-indigo-600 hover:bg-indigo-700' },
-    purple: { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700', badge: 'bg-purple-100 text-purple-800', btn: 'bg-purple-600 hover:bg-purple-700' },
-    amber: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', badge: 'bg-amber-100 text-amber-800', btn: 'bg-amber-600 hover:bg-amber-700' },
+    blue:    { bg: 'bg-blue-50',    border: 'border-blue-200',    text: 'text-blue-700',    badge: 'bg-blue-100 text-blue-800',    btn: 'bg-blue-600 hover:bg-blue-700' },
+    indigo:  { bg: 'bg-indigo-50',  border: 'border-indigo-200',  text: 'text-indigo-700',  badge: 'bg-indigo-100 text-indigo-800',  btn: 'bg-indigo-600 hover:bg-indigo-700' },
+    purple:  { bg: 'bg-purple-50',  border: 'border-purple-200',  text: 'text-purple-700',  badge: 'bg-purple-100 text-purple-800',  btn: 'bg-purple-600 hover:bg-purple-700' },
+    amber:   { bg: 'bg-amber-50',   border: 'border-amber-200',   text: 'text-amber-700',   badge: 'bg-amber-100 text-amber-800',   btn: 'bg-amber-600 hover:bg-amber-700' },
     emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-700', badge: 'bg-emerald-100 text-emerald-800', btn: 'bg-emerald-600 hover:bg-emerald-700' },
   };
 
@@ -515,17 +403,8 @@ function AudioAssetsPanel({ project }) {
           Audio Assets
           <Badge variant="outline" className="text-[10px] ml-1">{uniqueAssets.length} available</Badge>
           <div className="ml-auto">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleDownloadAll}
-              disabled={downloading === 'all'}
-              className="text-xs gap-1"
-            >
-              {downloading === 'all'
-                ? <Loader2 className="w-3 h-3 animate-spin" />
-                : <Download className="w-3 h-3" />
-              }
+            <Button size="sm" variant="outline" onClick={handleDownloadAll} disabled={downloading === 'all'} className="text-xs gap-1">
+              {downloading === 'all' ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
               Download All Audio
             </Button>
           </div>
@@ -537,37 +416,17 @@ function AudioAssetsPanel({ project }) {
             const c = colorMap[asset.color] || colorMap.blue;
             const isDownloading = downloading === asset.key;
             return (
-              <div
-                key={asset.key}
-                className={`${c.bg} ${c.border} border rounded-lg p-3 flex flex-col gap-2`}
-              >
+              <div key={asset.key} className={`${c.bg} ${c.border} border rounded-lg p-3 flex flex-col gap-2`}>
                 <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-lg ${c.badge} flex items-center justify-center flex-shrink-0`}>
-                    {asset.icon}
-                  </div>
+                  <div className={`w-8 h-8 rounded-lg ${c.badge} flex items-center justify-center flex-shrink-0`}>{asset.icon}</div>
                   <p className={`text-sm font-medium ${c.text} flex-1`}>{asset.label}</p>
-                  <button
-                    onClick={() => handleDownload(asset)}
-                    disabled={isDownloading}
-                    className={`${c.btn} text-white p-1.5 rounded-lg flex-shrink-0 transition-colors`}
-                    title={`Download ${asset.label}`}
-                  >
-                    {isDownloading
-                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      : <Download className="w-3.5 h-3.5" />
-                    }
+                  <button onClick={() => handleDownload(asset)} disabled={isDownloading}
+                    className={`${c.btn} text-white p-1.5 rounded-lg flex-shrink-0 transition-colors`}>
+                    {isDownloading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                   </button>
                 </div>
-                <audio
-                  src={asset.url}
-                  controls
-                  preload="none"
-                  className="w-full h-8"
-                  style={{ maxWidth: '100%' }}
-                />
-                <p className="text-[10px] text-gray-400 truncate" title={asset.url}>
-                  {asset.url.substring(0, 60)}...
-                </p>
+                <audio src={asset.url} controls preload="none" className="w-full h-8" style={{ maxWidth: '100%' }} />
+                <p className="text-[10px] text-gray-400 truncate" title={asset.url}>{asset.url.substring(0, 60)}...</p>
               </div>
             );
           })}
@@ -579,7 +438,7 @@ function AudioAssetsPanel({ project }) {
 
 
 // ═══════════════════════════════════════════════════════════════════
-// MAIN COMPONENT — Content Generation Page
+// MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════
 export default function ContentGeneration() {
   const navigate = useNavigate();
@@ -597,15 +456,9 @@ export default function ContentGeneration() {
   const [exportProgress, setExportProgress] = useState({ current: 0, total: 0, label: '' });
   const [estimatedWordCount, setEstimatedWordCount] = useState(0);
   const [totalExpectedScenes, setTotalExpectedScenes] = useState(0);
-  
 
-  // ── Per-scene generation tracking ─────────────────────────────
   const [imageProgress, setImageProgress] = useState({ current: 0, total: 0, sceneName: '' });
-  const [videoProgress, setVideoProgress] = useState({
-    current: 0, total: 0, sceneName: '',
-    phase: '',
-    sceneStatuses: {}
-  });
+  const [videoProgress, setVideoProgress] = useState({ current: 0, total: 0, sceneName: '', phase: '', sceneStatuses: {} });
   const pollAbortRef = useRef(false);
 
   const { data: project, refetch: refetchProject } = useQuery({
@@ -626,21 +479,16 @@ export default function ContentGeneration() {
     enabled: !!projectId,
   });
 
-  useEffect(() => {
-    return () => { pollAbortRef.current = true; };
-  }, []);
-  
+  useEffect(() => { return () => { pollAbortRef.current = true; }; }, []);
 
-  // ══════════════════════════════════════════════════════════════════
-  // HELPERS
-  // ══════════════════════════════════════════════════════════════════
+  // ── Helpers ────────────────────────────────────────────────────
   const invokeWithTimeout = async (fnName, payload) => {
     try {
       await base44.functions.invoke(fnName, payload);
     } catch (err) {
       const status = err?.response?.status || err?.status;
       if (status === 504) {
-        console.log(`${fnName} returned 504 (timeout) — function still running, will poll for results`);
+        console.log(`${fnName} returned 504 — function still running, will poll for results`);
         return;
       }
       throw err;
@@ -657,7 +505,7 @@ export default function ContentGeneration() {
   };
 
   // ══════════════════════════════════════════════════════════════════
-  // IMPORT: Scene Breakdown → Prompt Generation
+  // IMPORT — routes to the correct breakdown function per project type
   // ══════════════════════════════════════════════════════════════════
   const handleImport = async () => {
     setImporting(true);
@@ -674,13 +522,15 @@ export default function ContentGeneration() {
     } catch (_) {}
 
     try {
-      // ── Phase 1: Scene Breakdown ────────────────────────────────
       setImportPhase('breakdown');
 
       const isSleepProject = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
 
+      // ── KEY FIX: Detect Shorts by project_mode OR portrait orientation ──
+      const isShortsProject = project?.project_mode === 'shorts' || project?.orientation === 'portrait';
+
       if (isSleepProject) {
-        // Sleep projects use the lightweight ambient breakdown (6-12 images)
+        // ── SLEEP: lightweight ambient breakdown (6-12 images) ──
         setImportProgress('Designing ambient sleep visuals...');
         try {
           await base44.functions.invoke('sleepSceneBreakdown', { project_id: projectId });
@@ -695,10 +545,28 @@ export default function ContentGeneration() {
         queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
         setTotalExpectedScenes(freshScenes.length);
         setImportProgress(`Created ${freshScenes.length} ambient image definitions`);
+
+      } else if (isShortsProject) {
+        // ── SHORTS: rapid-cut 40-scene breakdown ──
+        setImportProgress('Breaking Shorts script into 40 rapid-cut scenes...');
+        try {
+          const result = await base44.functions.invoke('shortsSceneBreakdown', { project_id: projectId });
+          const data = result?.data || result;
+          if (data?.error) throw new Error(data.error);
+        } catch (err) {
+          if (err?.response?.status === 504) {
+            await new Promise(r => setTimeout(r, 8000));
+          } else {
+            throw err;
+          }
+        }
+        const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+        queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+        setTotalExpectedScenes(freshScenes.length);
+        setImportProgress(`Created ${freshScenes.length} Shorts scenes`);
+
       } else {
-        // Standard projects use the full cinematic breakdown
-        // ── Pre-step: Extract Character DNA from script ──
-        setImportProgress('Extracting character DNA from script...');
+        // ── STANDARD: full cinematic multi-batch breakdown ──
         try {
           await base44.functions.invoke('extractCharacterDNA', { project_id: projectId });
           console.log('🧬 Character DNA extracted');
@@ -759,38 +627,41 @@ export default function ContentGeneration() {
 
       await refetchScenes();
 
-      // ── Phase 2: Prompt Generation ──────────────────────────────
-      setImportPhase('prompts');
-      setImportProgress('Converting director notes into visual prompts...');
+      // ── Phase 2: Prompt Generation (skipped for Shorts — uses director notes directly) ──
+      if (!isShortsProject) {
+        setImportPhase('prompts');
+        setImportProgress('Converting director notes into visual prompts...');
 
-      let promptsDone = false;
+        let promptsDone = false;
 
-      while (!promptsDone) {
-        try {
-          const prResult = await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
-          const prData = prResult.data || prResult;
-          promptsDone = prData.done === true;
+        while (!promptsDone) {
+          try {
+            const prResult = await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
+            const prData = prResult.data || prResult;
+            promptsDone = prData.done === true;
 
-          const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
-          queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
-          const ready = freshScenes.filter(s => s.status === 'prompts_ready');
-          setImportProgress(`Generating production prompts... ${ready.length}/${freshScenes.length} ready`);
-        } catch (err) {
-          const status = err?.response?.status || err?.status;
-          if (status === 500 || status === 502 || status === 504) {
-            console.log(`Prompts error ${status}, retrying in 8s...`);
-            await new Promise(r => setTimeout(r, 8000));
             const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
             queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
             const ready = freshScenes.filter(s => s.status === 'prompts_ready');
-            setImportProgress(`Recovering... ${ready.length}/${freshScenes.length} prompts ready`);
-            continue;
+            setImportProgress(`Generating production prompts... ${ready.length}/${freshScenes.length} ready`);
+          } catch (err) {
+            const status = err?.response?.status || err?.status;
+            if (status === 500 || status === 502 || status === 504) {
+              console.log(`Prompts error ${status}, retrying in 8s...`);
+              await new Promise(r => setTimeout(r, 8000));
+              const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+              queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+              const ready = freshScenes.filter(s => s.status === 'prompts_ready');
+              setImportProgress(`Recovering... ${ready.length}/${freshScenes.length} prompts ready`);
+              continue;
+            }
+            throw err;
           }
-          throw err;
         }
+
+        await refetchScenes();
       }
 
-      await refetchScenes();
     } catch (err) {
       console.error('Scene generation error:', err);
     } finally {
@@ -805,19 +676,13 @@ export default function ContentGeneration() {
   };
 
   // ══════════════════════════════════════════════════════════════════
-  // GENERATE ALL IMAGES
-  // ══════════════════════════════════════════════════════════════════
-  // ══════════════════════════════════════════════════════════════════
-  // GENERATE ALL IMAGES — Submit-then-Poll architecture
-  // Phase 1: Submit all tasks via generateSceneImage (fast, ~2s per batch)
-  // Phase 2: Poll pollSceneImage every 5s until all resolved
+  // GENERATE ALL IMAGES — Submit-then-Poll
   // ══════════════════════════════════════════════════════════════════
   const handleGenerateImages = async () => {
-    console.log('🚀🚀🚀 NEW handleGenerateImages v2 — submit+poll architecture');
+    console.log('🚀 handleGenerateImages — submit+poll architecture');
     setGeneratingImages(true);
     pollAbortRef.current = false;
 
-    // ── Auto-convert director notes if needed ──
     const pending = scenes.filter(s =>
       (s.status === 'prompts_ready' || !s.image_url) &&
       !s.image_prompt?.startsWith('DIRECTOR_NOTES:')
@@ -833,42 +698,28 @@ export default function ContentGeneration() {
       }
     }
 
-    // ── Refresh scene list ──
     const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
     const readyScenes = freshScenes
       .filter(s => s.status === 'prompts_ready' || s.status === 'image_failed' || (!s.image_url && !s.image_prompt?.startsWith('DIRECTOR_NOTES:')))
       .sort((a, b) => a.scene_number - b.scene_number);
 
     const total = readyScenes.length;
-    if (total === 0) {
-      setGeneratingImages(false);
-      return;
-    }
+    if (total === 0) { setGeneratingImages(false); return; }
 
-    // ════════════════════════════════════════════════════════════
-    // PHASE 1: SUBMIT ALL TASKS (fast — no polling in backend)
-    // ════════════════════════════════════════════════════════════
     setImageProgress({ current: 0, total, sceneName: `Submitting ${total} scenes...` });
 
-    // Check if reference already exists
     const freshProject = (await base44.entities.Projects.filter({ id: projectId }))?.[0];
-    const hasReference = freshProject?.reference_image_url;
     let submitCount = 0;
-
-    // Submit ALL scenes in batches (Scene 1 included — reference lock happens in pollSceneImage)
-    const remainingScenes = [...readyScenes];
     const SUBMIT_BATCH = 8;
 
-    for (let i = 0; i < remainingScenes.length; i += SUBMIT_BATCH) {
+    for (let i = 0; i < readyScenes.length; i += SUBMIT_BATCH) {
       if (pollAbortRef.current) break;
-
-      const batch = remainingScenes.slice(i, i + SUBMIT_BATCH);
+      const batch = readyScenes.slice(i, i + SUBMIT_BATCH);
       const batchNum = Math.floor(i / SUBMIT_BATCH) + 1;
-      const totalBatches = Math.ceil(remainingScenes.length / SUBMIT_BATCH);
+      const totalBatches = Math.ceil(readyScenes.length / SUBMIT_BATCH);
 
       setImageProgress({
-        current: submitCount,
-        total,
+        current: submitCount, total,
         sceneName: `Submitting batch ${batchNum}/${totalBatches} — Scenes ${batch.map(s => s.scene_number).join(', ')}`
       });
 
@@ -882,35 +733,26 @@ export default function ContentGeneration() {
       } catch (err) {
         const status = err?.response?.status || err?.status;
         if (status === 504) {
-          // Function timed out but tasks may have been submitted — continue
-          console.log(`Submit batch ${batchNum} timed out (504) — tasks may still be processing`);
-          submitCount += batch.length; // Assume submitted, poll will verify
+          console.log(`Submit batch ${batchNum} timed out — tasks may still be processing`);
+          submitCount += batch.length;
         } else {
           console.warn(`Submit batch ${batchNum} failed: ${err.message}`);
         }
       }
 
-      // Brief delay between submit batches
-      if (i + SUBMIT_BATCH < remainingScenes.length) {
-        await new Promise(r => setTimeout(r, 1500));
-      }
+      if (i + SUBMIT_BATCH < readyScenes.length) await new Promise(r => setTimeout(r, 1500));
     }
 
     console.log(`📤 Submit phase complete: ${submitCount} tasks submitted`);
-
-    // ════════════════════════════════════════════════════════════
-    // PHASE 2: POLL UNTIL ALL DONE
-    // ════════════════════════════════════════════════════════════
-    console.log('🔍 Entering main poll loop');
     setImageProgress({ current: 0, total, sceneName: 'All submitted — polling for results...' });
 
     let pollCount = 0;
-    const MAX_POLLS = 120; // 120 × 5s = 10 min max wait
+    const MAX_POLLS = 120;
     let lastCompleted = 0;
     let lastFailed = 0;
 
     while (pollCount < MAX_POLLS && !pollAbortRef.current) {
-      await new Promise(r => setTimeout(r, 5000)); // Poll every 5 seconds
+      await new Promise(r => setTimeout(r, 5000));
       pollCount++;
 
       try {
@@ -926,8 +768,7 @@ export default function ContentGeneration() {
         lastFailed = failed;
 
         setImageProgress({
-          current: done + failed + errors,
-          total,
+          current: done + failed + errors, total,
           sceneName: [
             done > 0 ? `${done} generated` : null,
             stillPending > 0 ? `${stillPending} rendering` : null,
@@ -936,80 +777,40 @@ export default function ContentGeneration() {
           ].filter(Boolean).join(' · ')
         });
 
-        // Refresh the scene grid so user sees images appearing
-        if (done > 0 && pollCount % 2 === 0) {
-          await refetchScenes();
-        }
-
-        if (pollData.done) {
-          console.log(`✅ All images complete: ${done} generated, ${failed} failed`);
-          break;
-        }
+        if (done > 0 && pollCount % 2 === 0) await refetchScenes();
+        if (pollData.done) { console.log(`✅ All images complete: ${done} generated, ${failed} failed`); break; }
       } catch (err) {
         console.warn(`Poll #${pollCount} error: ${err.message}`);
-        // Don't break — transient errors are normal, just retry next cycle
       }
     }
 
-    if (pollCount >= MAX_POLLS) {
-      console.warn(`⏱️ Polling timed out after ${MAX_POLLS * 5}s — some images may still be processing`);
-    }
+    if (pollCount >= MAX_POLLS) console.warn(`⏱️ Polling timed out after ${MAX_POLLS * 5}s`);
 
-    // ════════════════════════════════════════════════════════════
-    // PHASE 3: RETRY FAILED SCENES (submit + poll individually)
-    // ════════════════════════════════════════════════════════════
     if (lastFailed > 0 && !pollAbortRef.current) {
       setImageProgress({ current: lastCompleted, total, sceneName: `Retrying ${lastFailed} failed scenes...` });
-
       const retryScenes = await base44.entities.Scenes.filter({ project_id: projectId });
-      const stillFailed = retryScenes
-        .filter(s => s.status === 'image_failed')
-        .sort((a, b) => a.scene_number - b.scene_number);
+      const stillFailed = retryScenes.filter(s => s.status === 'image_failed').sort((a, b) => a.scene_number - b.scene_number);
 
       for (const scene of stillFailed) {
         if (pollAbortRef.current) break;
-
         setImageProgress({ current: lastCompleted, total, sceneName: `Retrying Scene ${scene.scene_number}...` });
-
         try {
-          // Submit
           await base44.functions.invoke('generateSceneImage', { scene_id: scene.id, preferred_provider: freshProject?.image_provider || 'auto' });
-
-          // Poll this single scene until done (max 60s)
           for (let i = 0; i < 12; i++) {
             await new Promise(r => setTimeout(r, 5000));
             try {
               const pollRes = await base44.functions.invoke('pollSceneImage', { scene_id: scene.id });
               const pollData = pollRes.data || pollRes;
               const result = pollData.results?.[0];
-              if (result?.status === 'done') {
-                lastCompleted++;
-                lastFailed--;
-                console.log(`✅ Retry Scene ${scene.scene_number} succeeded`);
-                break;
-              }
-              if (result?.status === 'failed') {
-                console.warn(`❌ Retry Scene ${scene.scene_number} failed again: ${result.error}`);
-                break;
-              }
+              if (result?.status === 'done') { lastCompleted++; lastFailed--; break; }
+              if (result?.status === 'failed') break;
             } catch (_) {}
           }
-        } catch (err) {
-          console.warn(`Retry submit Scene ${scene.scene_number} failed: ${err.message}`);
-        }
-
-        setImageProgress({
-          current: lastCompleted + lastFailed,
-          total,
-          sceneName: `${lastCompleted} generated · ${lastFailed > 0 ? `${lastFailed} failed · ` : ''}retrying...`
-        });
-
-        // 3s gap between retries
+        } catch (err) { console.warn(`Retry submit Scene ${scene.scene_number} failed: ${err.message}`); }
         await new Promise(r => setTimeout(r, 3000));
       }
     }
 
-    // ── Final cleanup ──
     await refetchScenes();
     await refetchProject();
     setGeneratingImages(false);
@@ -1017,72 +818,46 @@ export default function ContentGeneration() {
   };
 
   // ══════════════════════════════════════════════════════════════════
-  // GENERATE & POLL ALL VIDEOS
+  // GENERATE ALL VIDEOS
   // ══════════════════════════════════════════════════════════════════
   const handleGenerateVideos = async () => {
     setGeneratingVideos(true);
     pollAbortRef.current = false;
 
     const ready = scenes.filter(s =>
-      s.image_url &&
-      s.image_url.startsWith('http') &&
+      s.image_url && s.image_url.startsWith('http') &&
       (s.status === 'image_generated' || s.status === 'prompts_ready') &&
       (!s.video_url || s.video_url.startsWith('grok_vid_task:') || s.video_url.startsWith('veo_task:'))
     );
 
-    if (ready.length === 0) {
-      setGeneratingVideos(false);
-      return;
-    }
+    if (ready.length === 0) { setGeneratingVideos(false); return; }
 
     const initialStatuses = {};
     ready.forEach(s => { initialStatuses[s.id] = 'queued'; });
 
-    setVideoProgress({
-      current: 0, total: ready.length,
-      sceneName: '', phase: 'submitting',
-      sceneStatuses: { ...initialStatuses }
-    });
+    setVideoProgress({ current: 0, total: ready.length, sceneName: '', phase: 'submitting', sceneStatuses: { ...initialStatuses } });
 
-    // Phase 1: Submit all
     const pendingPolls = [];
 
     for (let i = 0; i < ready.length; i++) {
       if (pollAbortRef.current) break;
       const scene = ready[i];
 
-      setVideoProgress(prev => ({
-        ...prev,
-        current: i + 1,
-        sceneName: `Submitting Scene ${scene.scene_number}...`,
-        phase: 'submitting',
-        sceneStatuses: { ...prev.sceneStatuses, [scene.id]: 'submitting' }
-      }));
+      setVideoProgress(prev => ({ ...prev, current: i + 1, sceneName: `Submitting Scene ${scene.scene_number}...`, phase: 'submitting', sceneStatuses: { ...prev.sceneStatuses, [scene.id]: 'submitting' } }));
 
       try {
         const response = await base44.functions.invoke('generateSceneVideo', { scene_id: scene.id });
         const result = response.data || response;
         pendingPolls.push({ scene_id: scene.id, task_id: result.task_id, scene_number: scene.scene_number });
-        setVideoProgress(prev => ({
-          ...prev,
-          sceneStatuses: { ...prev.sceneStatuses, [scene.id]: 'polling' }
-        }));
+        setVideoProgress(prev => ({ ...prev, sceneStatuses: { ...prev.sceneStatuses, [scene.id]: 'polling' } }));
       } catch (err) {
         console.warn(`Scene ${scene.scene_number} submit failed:`, err.message);
-        setVideoProgress(prev => ({
-          ...prev,
-          sceneStatuses: { ...prev.sceneStatuses, [scene.id]: 'failed' }
-        }));
+        setVideoProgress(prev => ({ ...prev, sceneStatuses: { ...prev.sceneStatuses, [scene.id]: 'failed' } }));
       }
     }
 
-    // Phase 2: Poll all
     if (pendingPolls.length > 0) {
-      setVideoProgress(prev => ({
-        ...prev,
-        phase: 'polling',
-        sceneName: `${pendingPolls.length} scenes rendering with Grok Imagine...`
-      }));
+      setVideoProgress(prev => ({ ...prev, phase: 'polling', sceneName: `${pendingPolls.length} scenes rendering...` }));
 
       let remaining = [...pendingPolls];
       let pollCount = 0;
@@ -1091,7 +866,6 @@ export default function ContentGeneration() {
       while (remaining.length > 0 && pollCount < MAX_POLLS && !pollAbortRef.current) {
         await new Promise(r => setTimeout(r, 15000));
         pollCount++;
-
         const stillPending = [];
 
         for (const item of remaining) {
@@ -1099,17 +873,10 @@ export default function ContentGeneration() {
           try {
             const pollResponse = await base44.functions.invoke('pollSceneVideo', { scene_id: item.scene_id });
             const pollResult = pollResponse.data || pollResponse;
-
             if (pollResult.status === 'COMPLETED') {
-              setVideoProgress(prev => ({
-                ...prev,
-                sceneStatuses: { ...prev.sceneStatuses, [item.scene_id]: 'done' }
-              }));
+              setVideoProgress(prev => ({ ...prev, sceneStatuses: { ...prev.sceneStatuses, [item.scene_id]: 'done' } }));
             } else if (pollResult.status === 'FAILED' || pollResult.error) {
-              setVideoProgress(prev => ({
-                ...prev,
-                sceneStatuses: { ...prev.sceneStatuses, [item.scene_id]: 'failed' }
-              }));
+              setVideoProgress(prev => ({ ...prev, sceneStatuses: { ...prev.sceneStatuses, [item.scene_id]: 'failed' } }));
             } else {
               stillPending.push(item);
             }
@@ -1126,18 +893,8 @@ export default function ContentGeneration() {
           const s = prev.sceneStatuses;
           const done = Object.values(s).filter(v => v === 'done').length;
           const failed = Object.values(s).filter(v => v === 'failed').length;
-          return {
-            ...prev,
-            current: done + failed,
-            sceneName: remaining.length > 0
-              ? `${done} done · ${remaining.length} still rendering...`
-              : `All complete! ${done} videos generated.`
-          };
+          return { ...prev, current: done + failed, sceneName: remaining.length > 0 ? `${done} done · ${remaining.length} still rendering...` : `All complete! ${done} videos generated.` };
         });
-      }
-
-      if (remaining.length > 0 && pollCount >= MAX_POLLS) {
-        console.warn(`Polling timed out with ${remaining.length} scenes still pending`);
       }
     }
 
@@ -1146,9 +903,7 @@ export default function ContentGeneration() {
     setVideoProgress({ current: 0, total: 0, sceneName: '', phase: '', sceneStatuses: {} });
   };
 
-  // ══════════════════════════════════════════════════════════════════
-  // RETRY PROMPT GENERATION
-  // ══════════════════════════════════════════════════════════════════
+  // ── Retry Prompts ──────────────────────────────────────────────
   const handleRetryPrompts = async () => {
     setRetryingPrompts(true);
     try {
@@ -1158,47 +913,32 @@ export default function ContentGeneration() {
           const result = await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
           const data = result.data || result;
           done = data.done === true;
-
           const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
           queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
-          console.log(`Retry prompts: ${freshScenes.filter(s => s.status === 'prompts_ready').length}/${freshScenes.length} ready`);
         } catch (err) {
           const status = err?.response?.status || err?.status;
           if (status === 500 || status === 502 || status === 504) {
-            console.log(`Prompt retry error ${status}, retrying in 8s...`);
-            await new Promise(r => setTimeout(r, 8000));
-            continue;
+            await new Promise(r => setTimeout(r, 8000)); continue;
           }
           throw err;
         }
       }
-    } catch (err) {
-      console.error('Retry prompts failed:', err);
-    } finally {
-      await refetchScenes();
-      setRetryingPrompts(false);
-    }
+    } catch (err) { console.error('Retry prompts failed:', err); }
+    finally { await refetchScenes(); setRetryingPrompts(false); }
   };
 
-  // ══════════════════════════════════════════════════════════════════
-  // ENHANCE ALL
-  // ══════════════════════════════════════════════════════════════════
+  // ── Enhance All ────────────────────────────────────────────────
   const handleEnhanceAll = async () => {
     setEnhancingAll(true);
     for (const scene of scenes) {
-      try {
-        await base44.functions.invoke('enhanceScenePrompts', { scene_id: scene.id, enhance_type: 'both' });
-      } catch (err) {
-        console.warn(`Scene ${scene.scene_number} enhance failed:`, err.message);
-      }
+      try { await base44.functions.invoke('enhanceScenePrompts', { scene_id: scene.id, enhance_type: 'both' }); }
+      catch (err) { console.warn(`Scene ${scene.scene_number} enhance failed:`, err.message); }
       await refetchScenes();
     }
     setEnhancingAll(false);
   };
 
-  // ══════════════════════════════════════════════════════════════════
-  // EXPORT ZIP
-  // ══════════════════════════════════════════════════════════════════
+  // ── Export ZIP ────────────────────────────────────────────────
   const loadJSZip = async () => {
     if (window.JSZip) return window.JSZip;
     return new Promise((resolve, reject) => {
@@ -1228,19 +968,9 @@ export default function ContentGeneration() {
     return 'resolution';
   };
 
-  // Domains that block CORS — skip direct fetch, go straight to backend proxy
-  const corsBlockedDomains = [
-    'tempfile.aiquickdraw.com',
-    'aiquickdraw.com',
-    'kie.ai',
-    'api.kie.ai',
-  ];
-
+  const corsBlockedDomains = ['tempfile.aiquickdraw.com', 'aiquickdraw.com', 'kie.ai', 'api.kie.ai'];
   const isCorsBocked = (url) => {
-    try {
-      const hostname = new URL(url).hostname;
-      return corsBlockedDomains.some(d => hostname.includes(d));
-    } catch (_) { return false; }
+    try { return corsBlockedDomains.some(d => new URL(url).hostname.includes(d)); } catch (_) { return false; }
   };
 
   const proxyFetch = async (url) => {
@@ -1249,40 +979,18 @@ export default function ContentGeneration() {
     if (data.success && data.data) {
       const binary = atob(data.data);
       const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) {
-        bytes[i] = binary.charCodeAt(i);
-      }
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
       return new Blob([bytes], { type: data.content_type || 'application/octet-stream' });
     }
     return null;
   };
 
   const fetchAsBlob = async (url) => {
-    // Known CORS-blocked domain → skip direct fetch, go straight to proxy
     if (isCorsBocked(url)) {
-      try {
-        console.log(`📥 Proxy fetching (CORS-blocked): ${url.substring(0, 60)}`);
-        return await proxyFetch(url);
-      } catch (err) {
-        console.warn(`Proxy failed: ${url.substring(0, 60)} — ${err.message}`);
-        return null;
-      }
+      try { return await proxyFetch(url); } catch (err) { console.warn(`Proxy failed: ${err.message}`); return null; }
     }
-
-    // Method 1: Direct fetch (works for same-origin or CORS-enabled)
-    try {
-      const res = await fetch(url, { mode: 'cors' });
-      if (res.ok) return await res.blob();
-    } catch (_) {}
-
-    // Method 2: Backend proxy fallback
-    try {
-      console.log(`📥 Proxy fallback: ${url.substring(0, 60)}`);
-      return await proxyFetch(url);
-    } catch (proxyErr) {
-      console.warn(`All fetch methods failed: ${url.substring(0, 60)}`);
-    }
-
+    try { const res = await fetch(url, { mode: 'cors' }); if (res.ok) return await res.blob(); } catch (_) {}
+    try { return await proxyFetch(url); } catch (_) { console.warn(`All fetch methods failed: ${url.substring(0, 60)}`); }
     return null;
   };
 
@@ -1306,7 +1014,6 @@ export default function ContentGeneration() {
       const zip = new JSZip();
       const folder = zip.folder(`${projectName}_assets`);
 
-      // Count total assets
       const totalAssets = scenes.reduce((sum, s) => {
         let count = 0;
         if (s.image_url && s.image_url.startsWith('http')) count++;
@@ -1316,8 +1023,6 @@ export default function ContentGeneration() {
 
       setExportProgress({ current: 0, total: totalAssets, label: 'Preparing...' });
       let downloaded = 0;
-
-      // Adaptive padding
       const padWidth = scenes.length > 999 ? 4 : scenes.length > 99 ? 3 : 2;
 
       for (const scene of scenes) {
@@ -1325,7 +1030,6 @@ export default function ContentGeneration() {
         const arc = getArcLabel(scene);
         const prefix = `S${num}_${arc}`;
 
-        // Download image
         if (scene.image_url && scene.image_url.startsWith('http')) {
           setExportProgress({ current: downloaded, total: totalAssets, label: `${prefix}_image` });
           const ext = getExtension(scene.image_url, 'png');
@@ -1334,7 +1038,6 @@ export default function ContentGeneration() {
           downloaded++;
         }
 
-        // Download video
         if (scene.video_url && !scene.video_url.startsWith('veo_task:') && !scene.video_url.startsWith('grok_vid_task:') && scene.video_url.startsWith('http')) {
           setExportProgress({ current: downloaded, total: totalAssets, label: `${prefix}_video` });
           const ext = getExtension(scene.video_url, 'mp4');
@@ -1344,96 +1047,47 @@ export default function ContentGeneration() {
         }
       }
 
-      // ── Audio assets ──────────────────────────────────────────
       const audioAssets = [];
-      const audioFields = [
-        'voiceover_url', 'narration_url', 'voiceover_audio_url', 'audio_url',
-        'elevenlabs_voiceover_url', 'elevenlabs_audio_url',
-        'music_url', 'background_music_url', 'music_audio_url',
-        'sfx_url', 'sound_effects_url', 'effects_url',
-        'mixed_audio_url', 'final_audio_url'
-      ];
+      const audioFields = ['voiceover_url', 'narration_url', 'voiceover_audio_url', 'audio_url', 'elevenlabs_voiceover_url', 'elevenlabs_audio_url', 'music_url', 'background_music_url', 'music_audio_url', 'sfx_url', 'sound_effects_url', 'effects_url', 'mixed_audio_url', 'final_audio_url'];
 
-      // Scan project fields
       for (const field of audioFields) {
         const url = project?.[field];
         if (url && typeof url === 'string' && url.startsWith('http')) {
-          const label = field.replace(/_url$/, '').replace(/_/g, '-');
-          audioAssets.push({ label, url });
+          audioAssets.push({ label: field.replace(/_url$/, '').replace(/_/g, '-'), url });
         }
       }
 
-      // Scan MusicTracks entity
       try {
         const mt = await base44.entities.MusicTracks?.filter({ project_id: projectId });
         if (mt?.length > 0) {
           mt.forEach((track, i) => {
             if (track.audio_url && track.audio_url.startsWith('http') && !audioAssets.find(a => a.url === track.audio_url)) {
-              const label = track.is_selected ? 'background-music-selected' : `music-track-${i + 1}`;
-              audioAssets.push({ label, url: track.audio_url });
+              audioAssets.push({ label: track.is_selected ? 'background-music-selected' : `music-track-${i + 1}`, url: track.audio_url });
             }
           });
         }
       } catch (_) {}
-
-      // Scan ProductionSettings entity
-      try {
-        const prodSettings = await base44.entities.ProductionSettings?.filter({ project_id: projectId });
-        if (prodSettings?.length > 0) {
-          const ps = prodSettings[0];
-          for (const field of audioFields) {
-            const url = ps?.[field];
-            if (url && typeof url === 'string' && url.startsWith('http') && !audioAssets.find(a => a.url === url)) {
-              const label = `ps-${field.replace(/_url$/, '').replace(/_/g, '-')}`;
-              audioAssets.push({ label, url });
-            }
-          }
-          if (ps.voiceover_parts) {
-            try {
-              const parts = JSON.parse(ps.voiceover_parts);
-              if (Array.isArray(parts)) {
-                parts.forEach((partUrl, i) => {
-                  if (partUrl && partUrl.startsWith('http')) {
-                    audioAssets.push({ label: `voiceover-part-${i + 1}`, url: partUrl });
-                  }
-                });
-              }
-            } catch (_) {}
-          }
-        }
-      } catch (_) {
-        console.log('No ProductionSettings entity or no records found');
-      }
 
       if (audioAssets.length > 0) {
         const audioFolder = folder.folder('audio');
         for (const asset of audioAssets) {
           setExportProgress({ current: downloaded, total: totalAssets + audioAssets.length, label: `Audio: ${asset.label}` });
           const blob = await fetchAsBlob(asset.url);
-          if (blob) {
-            const ext = asset.url.includes('.wav') ? 'wav' : 'mp3';
-            audioFolder.file(`${asset.label}.${ext}`, blob);
-          }
+          if (blob) { const ext = asset.url.includes('.wav') ? 'wav' : 'mp3'; audioFolder.file(`${asset.label}.${ext}`, blob); }
           downloaded++;
         }
       }
 
-      // ── Manifest ──────────────────────────────────────────────
       const manifest = scenes.map(s => ({
         scene_number: s.scene_number,
         arc_position: getArcLabel(s),
         narration: s.narration_text,
         duration: s.duration_seconds,
-        image_file: s.image_url && s.image_url.startsWith('http')
-          ? `S${String(s.scene_number).padStart(padWidth, '0')}_${getArcLabel(s)}_image.${getExtension(s.image_url, 'png')}`
-          : null,
-        video_file: (s.video_url && !s.video_url.startsWith('veo_task:') && !s.video_url.startsWith('grok_vid_task:') && s.video_url.startsWith('http'))
-          ? `S${String(s.scene_number).padStart(padWidth, '0')}_${getArcLabel(s)}_video.${getExtension(s.video_url, 'mp4')}`
-          : null,
+        image_file: s.image_url?.startsWith('http') ? `S${String(s.scene_number).padStart(padWidth, '0')}_${getArcLabel(s)}_image.${getExtension(s.image_url, 'png')}` : null,
+        video_file: (s.video_url && !s.video_url.startsWith('veo_task:') && !s.video_url.startsWith('grok_vid_task:') && s.video_url.startsWith('http')) ? `S${String(s.scene_number).padStart(padWidth, '0')}_${getArcLabel(s)}_video.${getExtension(s.video_url, 'mp4')}` : null,
       }));
       folder.file('manifest.json', JSON.stringify(manifest, null, 2));
 
-      // ── Generate zip ──────────────────────────────────────────
       setExportProgress({ current: totalAssets, total: totalAssets, label: 'Compressing zip...' });
       const zipBlob = await zip.generateAsync({ type: 'blob' }, (meta) => {
         setExportProgress(prev => ({ ...prev, label: `Compressing... ${Math.round(meta.percent)}%` }));
@@ -1441,37 +1095,22 @@ export default function ContentGeneration() {
 
       const url = URL.createObjectURL(zipBlob);
       const a = document.createElement('a');
-      a.href = url;
-      a.download = `${projectName}_assets.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
+      a.href = url; a.download = `${projectName}_assets.zip`;
+      a.click(); URL.revokeObjectURL(url);
 
     } catch (err) {
       console.error('Export failed:', err);
-      const exportData = scenes.map(s => ({
-        scene_number: s.scene_number,
-        arc_position: getArcLabel(s),
-        narration: s.narration_text,
-        image_url: s.image_url,
-        video_url: s.video_url,
-        duration: s.duration_seconds,
-      }));
+      const exportData = scenes.map(s => ({ scene_number: s.scene_number, arc_position: getArcLabel(s), narration: s.narration_text, image_url: s.image_url, video_url: s.video_url, duration: s.duration_seconds }));
       const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${project?.name || 'scenes'}-content.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const a = document.createElement('a'); a.href = url; a.download = `${project?.name || 'scenes'}-content.json`; a.click(); URL.revokeObjectURL(url);
     } finally {
       setExporting(false);
       setExportProgress({ current: 0, total: 0, label: '' });
     }
   };
 
-  const handleContinueToTimeline = () => {
-    navigate(createPageUrl(`TimelineEditor?project_id=${projectId}`));
-  };
+  const handleContinueToTimeline = () => navigate(createPageUrl(`TimelineEditor?project_id=${projectId}`));
 
   const { data: scripts = [] } = useQuery({
     queryKey: ['scripts', projectId],
@@ -1487,18 +1126,17 @@ export default function ContentGeneration() {
   const breakdownReadyCount = scenes.filter(s => s.status === 'breakdown_ready').length;
   const promptsReadyCount = scenes.filter(s => s.status === 'prompts_ready').length;
   const directorNotesCount = scenes.filter(s => s.image_prompt?.startsWith('DIRECTOR_NOTES:')).length;
-
   const brollCount = scenes.filter(s => s.broll_url && s.broll_url.startsWith('http')).length;
 
-  const videoStatusCounts = videoProgress.sceneStatuses
-    ? {
-        queued: Object.values(videoProgress.sceneStatuses).filter(s => s === 'queued').length,
-        submitting: Object.values(videoProgress.sceneStatuses).filter(s => s === 'submitting').length,
-        polling: Object.values(videoProgress.sceneStatuses).filter(s => s === 'polling').length,
-        done: Object.values(videoProgress.sceneStatuses).filter(s => s === 'done').length,
-        failed: Object.values(videoProgress.sceneStatuses).filter(s => s === 'failed').length,
-      }
-    : { queued: 0, submitting: 0, polling: 0, done: 0, failed: 0 };
+  const isShortsProject = project?.project_mode === 'shorts' || project?.orientation === 'portrait';
+
+  const videoStatusCounts = videoProgress.sceneStatuses ? {
+    queued: Object.values(videoProgress.sceneStatuses).filter(s => s === 'queued').length,
+    submitting: Object.values(videoProgress.sceneStatuses).filter(s => s === 'submitting').length,
+    polling: Object.values(videoProgress.sceneStatuses).filter(s => s === 'polling').length,
+    done: Object.values(videoProgress.sceneStatuses).filter(s => s === 'done').length,
+    failed: Object.values(videoProgress.sceneStatuses).filter(s => s === 'failed').length,
+  } : { queued: 0, submitting: 0, polling: 0, done: 0, failed: 0 };
 
   // ══════════════════════════════════════════════════════════════════
   // RENDER
@@ -1521,10 +1159,7 @@ export default function ContentGeneration() {
             {scenes.length > 0 && (
               <Button variant="outline" onClick={handleExport} disabled={exporting}>
                 {exporting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                    {exportProgress.total > 0 ? `${exportProgress.current}/${exportProgress.total}` : 'Preparing...'}
-                  </>
+                  <><Loader2 className="w-4 h-4 mr-1 animate-spin" />{exportProgress.total > 0 ? `${exportProgress.current}/${exportProgress.total}` : 'Preparing...'}</>
                 ) : (
                   <><FolderDown className="w-4 h-4 mr-1" /> Export Zip</>
                 )}
@@ -1544,10 +1179,7 @@ export default function ContentGeneration() {
           <div className="bg-white p-5 rounded-lg shadow-sm border mb-6">
             <OrientationSelector
               selectedOrientation={project.orientation || 'landscape'}
-              onSelect={async (orientation) => {
-                await base44.entities.Projects.update(projectId, { orientation });
-                refetchProject();
-              }}
+              onSelect={async (orientation) => { await base44.entities.Projects.update(projectId, { orientation }); refetchProject(); }}
             />
           </div>
         )}
@@ -1557,22 +1189,16 @@ export default function ContentGeneration() {
           <div className="bg-white p-5 rounded-lg shadow-sm border mb-6 space-y-5">
             <VisualStyleSelector
               selectedStyle={project.visual_style}
-              onSelect={async (style) => {
-                await base44.entities.Projects.update(projectId, { visual_style: style });
-                refetchProject();
-              }}
+              onSelect={async (style) => { await base44.entities.Projects.update(projectId, { visual_style: style }); refetchProject(); }}
             />
             <ImageProviderSelector
               selected={project.image_provider || 'auto'}
-              onSelect={async (provider) => {
-                await base44.entities.Projects.update(projectId, { image_provider: provider });
-                refetchProject();
-              }}
+              onSelect={async (provider) => { await base44.entities.Projects.update(projectId, { image_provider: provider }); refetchProject(); }}
             />
           </div>
         )}
 
-        {/* Voiceover Panel — full width, right after style settings */}
+        {/* Voiceover Panel */}
         {project && latestScript && (
           <div className="mb-6">
             <VoiceoverPanel project={project} script={latestScript} onUpdate={() => refetchProject()} />
@@ -1598,18 +1224,13 @@ export default function ContentGeneration() {
               <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                  <Badge className="bg-emerald-100 text-emerald-800 text-xs">
-                    <ImageIcon className="w-3 h-3 mr-1" /> Generating Images
-                  </Badge>
-                  <span className="text-xs font-medium text-emerald-700">
-                    {imageProgress.current} / {imageProgress.total}
-                  </span>
+                  <Badge className="bg-emerald-100 text-emerald-800 text-xs"><ImageIcon className="w-3 h-3 mr-1" /> Generating Images</Badge>
+                  <span className="text-xs font-medium text-emerald-700">{imageProgress.current} / {imageProgress.total}</span>
                 </div>
                 <div className="w-full bg-emerald-100 rounded-full h-2 mt-2">
-                  <div className="bg-emerald-500 h-2 rounded-full transition-all duration-500"
-                    style={{ width: `${(imageProgress.current / imageProgress.total) * 100}%` }} />
+                  <div className="bg-emerald-500 h-2 rounded-full transition-all duration-500" style={{ width: `${(imageProgress.current / imageProgress.total) * 100}%` }} />
                 </div>
-                <p className="text-xs text-gray-500 mt-1.5">{imageProgress.sceneName} · Grok Imagine via Kie</p>
+                <p className="text-xs text-gray-500 mt-1.5">{imageProgress.sceneName}</p>
               </div>
             </div>
           </div>
@@ -1628,27 +1249,14 @@ export default function ContentGeneration() {
                   </Badge>
                 </div>
                 <div className="w-full bg-violet-100 rounded-full h-2 mb-3">
-                  <div className="bg-violet-500 h-2 rounded-full transition-all duration-700"
-                    style={{ width: `${((videoStatusCounts.done + videoStatusCounts.failed) / videoProgress.total) * 100}%` }} />
+                  <div className="bg-violet-500 h-2 rounded-full transition-all duration-700" style={{ width: `${((videoStatusCounts.done + videoStatusCounts.failed) / videoProgress.total) * 100}%` }} />
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {Object.entries(videoProgress.sceneStatuses).map(([sceneId, status]) => {
                     const scene = scenes.find(s => s.id === sceneId);
                     const num = scene?.scene_number || '?';
-                    const colors = {
-                      done: 'bg-green-100 text-green-700',
-                      failed: 'bg-red-100 text-red-700',
-                      polling: 'bg-amber-100 text-amber-700',
-                      submitting: 'bg-blue-100 text-blue-700',
-                      queued: 'bg-gray-100 text-gray-500',
-                    };
-                    const icons = {
-                      done: <CheckCircle2 className="w-3 h-3" />,
-                      failed: <XCircle className="w-3 h-3" />,
-                      polling: <Clock className="w-3 h-3 animate-pulse" />,
-                      submitting: <Zap className="w-3 h-3" />,
-                      queued: <Clock className="w-3 h-3 opacity-40" />,
-                    };
+                    const colors = { done: 'bg-green-100 text-green-700', failed: 'bg-red-100 text-red-700', polling: 'bg-amber-100 text-amber-700', submitting: 'bg-blue-100 text-blue-700', queued: 'bg-gray-100 text-gray-500' };
+                    const icons = { done: <CheckCircle2 className="w-3 h-3" />, failed: <XCircle className="w-3 h-3" />, polling: <Clock className="w-3 h-3 animate-pulse" />, submitting: <Zap className="w-3 h-3" />, queued: <Clock className="w-3 h-3 opacity-40" /> };
                     return (
                       <span key={sceneId} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${colors[status] || 'bg-gray-100 text-gray-500'}`}>
                         {icons[status]} S{num}
@@ -1675,16 +1283,11 @@ export default function ContentGeneration() {
               <Loader2 className="w-6 h-6 animate-spin text-sky-600" />
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                  <Badge className="bg-sky-100 text-sky-800 text-xs">
-                    <FolderDown className="w-3 h-3 mr-1" /> Exporting Assets
-                  </Badge>
-                  <span className="text-xs font-medium text-sky-700">
-                    {exportProgress.current} / {exportProgress.total}
-                  </span>
+                  <Badge className="bg-sky-100 text-sky-800 text-xs"><FolderDown className="w-3 h-3 mr-1" /> Exporting Assets</Badge>
+                  <span className="text-xs font-medium text-sky-700">{exportProgress.current} / {exportProgress.total}</span>
                 </div>
                 <div className="w-full bg-sky-100 rounded-full h-2 mt-2">
-                  <div className="bg-sky-500 h-2 rounded-full transition-all duration-500"
-                    style={{ width: `${(exportProgress.current / exportProgress.total) * 100}%` }} />
+                  <div className="bg-sky-500 h-2 rounded-full transition-all duration-500" style={{ width: `${(exportProgress.current / exportProgress.total) * 100}%` }} />
                 </div>
                 <p className="text-xs text-gray-500 mt-1.5">{exportProgress.label}</p>
               </div>
@@ -1692,8 +1295,8 @@ export default function ContentGeneration() {
           </div>
         )}
 
-        {/* Director Notes Warning */}
-        {!importing && directorNotesCount > 0 && (
+        {/* Director Notes Warning — only show for non-Shorts */}
+        {!importing && !isShortsProject && directorNotesCount > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
             <div className="flex items-center gap-3">
               <Wand2 className="w-5 h-5 text-amber-600" />
@@ -1703,13 +1306,9 @@ export default function ContentGeneration() {
                 </p>
                 <p className="text-xs text-amber-600 mt-1">Click below to generate visual prompts before creating images.</p>
               </div>
-              <Button
-                size="sm"
-                className="bg-amber-600 hover:bg-amber-700"
+              <Button size="sm" className="bg-amber-600 hover:bg-amber-700"
                 onClick={async () => {
-                  setImporting(true);
-                  setImportPhase('prompts');
-                  setImportProgress('Converting director notes into visual prompts...');
+                  setImporting(true); setImportPhase('prompts'); setImportProgress('Converting director notes into visual prompts...');
                   try {
                     await invokeWithTimeout('generateScenePrompts', { project_id: projectId });
                     await pollForCompletion(async () => {
@@ -1721,14 +1320,9 @@ export default function ContentGeneration() {
                       return pending.length === 0 && ready.length > 0;
                     }, 360, 5000);
                     await refetchScenes();
-                  } catch (err) {
-                    console.error('Prompt generation failed:', err);
-                  }
-                  setImporting(false);
-                  setImportPhase('');
-                  setImportProgress('');
-                }}
-              >
+                  } catch (err) { console.error('Prompt generation failed:', err); }
+                  setImporting(false); setImportPhase(''); setImportProgress('');
+                }}>
                 <Wand2 className="w-4 h-4 mr-1" /> Generate Prompts
               </Button>
             </div>
@@ -1744,7 +1338,8 @@ export default function ContentGeneration() {
                 disabled={importing || !project?.visual_style || !project?.orientation}
                 className="bg-blue-600 hover:bg-blue-700"
               >
-                <Import className="w-4 h-4 mr-2" /> Import Script & Generate Scenes
+                <Import className="w-4 h-4 mr-2" />
+                {isShortsProject ? 'Import & Generate 40 Scenes' : 'Import Script & Generate Scenes'}
               </Button>
               {(!project?.visual_style || !project?.orientation) && (
                 <p className="text-sm text-amber-600 flex items-center gap-1">
@@ -1760,10 +1355,12 @@ export default function ContentGeneration() {
                   {project.orientation === 'portrait' ? '9:16 Portrait' : '16:9 Landscape'}
                 </Badge>
               )}
+              {isShortsProject && (
+                <Badge className="bg-green-100 text-green-800 text-xs">📱 Shorts Mode</Badge>
+              )}
               {project?.visual_style && (
                 <Badge className="bg-purple-100 text-purple-800 text-xs">
-                  <Palette className="w-3 h-3 mr-1" />
-                  {project.visual_style.replace(/_/g, ' ')}
+                  <Palette className="w-3 h-3 mr-1" />{project.visual_style.replace(/_/g, ' ')}
                 </Badge>
               )}
               {project?.image_provider && project.image_provider !== 'auto' && (
@@ -1773,13 +1370,9 @@ export default function ContentGeneration() {
                 </Badge>
               )}
               {project?.reference_image_url ? (
-                <Badge className="bg-blue-100 text-blue-800 text-xs" title="Character reference image is locked — all new scenes use this as style anchor">
-                  🔗 Ref Locked
-                </Badge>
+                <Badge className="bg-blue-100 text-blue-800 text-xs">🔗 Ref Locked</Badge>
               ) : imageCount > 0 ? (
-                <Badge className="bg-amber-100 text-amber-700 text-xs" title="No character reference — scenes may have inconsistent characters">
-                  ⚠️ No Ref
-                </Badge>
+                <Badge className="bg-amber-100 text-amber-700 text-xs">⚠️ No Ref</Badge>
               ) : null}
               <div className="flex items-center gap-2 text-sm font-medium">
                 <Layers className="w-4 h-4 text-blue-600" /> {scenes.length} scenes
@@ -1789,9 +1382,7 @@ export default function ContentGeneration() {
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <Film className="w-4 h-4 text-purple-600" /> {videoCount}/{scenes.length} videos
-                {animatingCount > 0 && (
-                  <span className="text-xs text-amber-600 font-medium">({animatingCount} rendering)</span>
-                )}
+                {animatingCount > 0 && <span className="text-xs text-amber-600 font-medium">({animatingCount} rendering)</span>}
               </div>
               {brollCount > 0 && (
                 <div className="flex items-center gap-2 text-sm">
@@ -1800,7 +1391,8 @@ export default function ContentGeneration() {
               )}
               <div className="flex-1" />
 
-              {breakdownReadyCount > 0 && (
+              {/* Retry prompts — only for non-Shorts */}
+              {!isShortsProject && breakdownReadyCount > 0 && (
                 <Button onClick={handleRetryPrompts} disabled={retryingPrompts} variant="outline" className="border-amber-200 text-amber-700 hover:bg-amber-50">
                   {retryingPrompts ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Wand2 className="w-4 h-4 mr-1" />}
                   {retryingPrompts ? `Generating Prompts... (${breakdownReadyCount} left)` : `Generate Prompts (${breakdownReadyCount})`}
@@ -1820,11 +1412,7 @@ export default function ContentGeneration() {
                 onComplete={async () => { await refetchScenes(); await refetchProject(); }}
               />
 
-<DedupButton
-  projectId={projectId}
-  sceneCount={scenes.length}
-  onComplete={() => refetchScenes()}
-/>
+              <DedupButton projectId={projectId} sceneCount={scenes.length} onComplete={() => refetchScenes()} />
 
               <AutoBrollButton
                 projectId={projectId}
@@ -1845,8 +1433,6 @@ export default function ContentGeneration() {
             </>
           ) : null}
         </div>
-
-
 
         {/* Scene Grid */}
         {scenes.length > 0 && (
