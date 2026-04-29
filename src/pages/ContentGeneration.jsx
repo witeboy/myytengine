@@ -21,7 +21,8 @@ import { Link } from 'react-router-dom';
 import {
   Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film,
   Palette, Sparkles, Monitor, Clapperboard, Wand2, CheckCircle2,
-  XCircle, Clock, Zap, Video, FolderDown, Mic, Music, Volume2, Home
+  XCircle, Clock, Zap, Video, FolderDown, Mic, Music, Volume2, Home,
+  FileText
 } from 'lucide-react';
 
 
@@ -452,6 +453,9 @@ export default function ContentGeneration() {
   const [audioLevels, setAudioLevels] = useState({ narration: 1, music: 0.3, sfx: 0.5 });
   const [enhancingAll, setEnhancingAll] = useState(false);
   const [retryingPrompts, setRetryingPrompts] = useState(false);
+  // ── NEW: dedicated state for converting director notes → prompts ──
+  const [convertingPrompts, setConvertingPrompts] = useState(false);
+  const [convertProgress, setConvertProgress] = useState('');
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState({ current: 0, total: 0, label: '' });
   const [estimatedWordCount, setEstimatedWordCount] = useState(0);
@@ -504,6 +508,79 @@ export default function ContentGeneration() {
     return false;
   };
 
+  // ═══════════════════════════════════════════════════════════════
+  // CONVERT DIRECTOR NOTES → IMAGE PROMPTS
+  // Shared helper used by both auto-import and manual button.
+  // Works for ALL project types (Shorts and standard).
+  // ═══════════════════════════════════════════════════════════════
+  const runPromptGeneration = async ({ onProgress } = {}) => {
+    const notify = onProgress || (() => {});
+    notify('Converting director notes into visual prompts...');
+
+    let promptsDone = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 20; // safety ceiling
+
+    while (!promptsDone && attempts < MAX_ATTEMPTS) {
+      attempts++;
+      try {
+        const prResult = await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
+        const prData = prResult?.data || prResult;
+        promptsDone = prData?.done === true;
+
+        const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+        queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+
+        const ready = freshScenes.filter(s => s.status === 'prompts_ready');
+        const total = freshScenes.length;
+        notify(`Generating prompts... ${ready.length}/${total} ready`);
+
+        // If everything is already prompts_ready, we're done even if backend says not done
+        const stillPending = freshScenes.filter(s => s.status === 'breakdown_ready');
+        if (stillPending.length === 0) promptsDone = true;
+
+      } catch (err) {
+        const status = err?.response?.status || err?.status;
+        if (status === 500 || status === 502 || status === 504) {
+          console.log(`generateScenePrompts error ${status} on attempt ${attempts}, retrying in 8s...`);
+          await new Promise(r => setTimeout(r, 8000));
+
+          const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+          queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+          const ready = freshScenes.filter(s => s.status === 'prompts_ready');
+          notify(`Recovering... ${ready.length}/${freshScenes.length} prompts ready`);
+          continue;
+        }
+        throw err;
+      }
+
+      // Small delay between batches to avoid hammering
+      if (!promptsDone) await new Promise(r => setTimeout(r, 2000));
+    }
+
+    await refetchScenes();
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  // MANUAL BUTTON: Convert Director Notes → Prompts
+  // Visible whenever there are breakdown_ready scenes
+  // ═══════════════════════════════════════════════════════════════
+  const handleConvertDirectorNotes = async () => {
+    setConvertingPrompts(true);
+    setConvertProgress('Starting prompt generation...');
+    try {
+      await runPromptGeneration({ onProgress: setConvertProgress });
+      setConvertProgress('✅ All prompts ready!');
+      setTimeout(() => setConvertProgress(''), 3000);
+    } catch (err) {
+      console.error('Prompt conversion failed:', err);
+      setConvertProgress(`❌ Failed: ${err.message}`);
+      setTimeout(() => setConvertProgress(''), 5000);
+    } finally {
+      setConvertingPrompts(false);
+    }
+  };
+
   // ══════════════════════════════════════════════════════════════════
   // IMPORT — routes to the correct breakdown function per project type
   // ══════════════════════════════════════════════════════════════════
@@ -526,7 +603,7 @@ export default function ContentGeneration() {
 
       const isSleepProject = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
 
-      // ── KEY FIX: Detect Shorts by project_mode OR portrait orientation ──
+      // ── Detect Shorts by project_mode OR portrait orientation ──
       const isShortsProject = project?.project_mode === 'shorts' || project?.orientation === 'portrait';
 
       if (isSleepProject) {
@@ -560,10 +637,17 @@ export default function ContentGeneration() {
             throw err;
           }
         }
+
         const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
         queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
         setTotalExpectedScenes(freshScenes.length);
-        setImportProgress(`Created ${freshScenes.length} Shorts scenes`);
+        setImportProgress(`Created ${freshScenes.length} Shorts scenes — now generating image prompts...`);
+
+        // ── FIX: Shorts MUST also run prompt generation after breakdown ──
+        // The shortsSceneBreakdown saves scenes as breakdown_ready with DIRECTOR_NOTES: prefix.
+        // generateScenePrompts converts those into real image_prompt + animation_prompt strings.
+        setImportPhase('prompts');
+        await runPromptGeneration({ onProgress: setImportProgress });
 
       } else {
         // ── STANDARD: full cinematic multi-batch breakdown ──
@@ -623,43 +707,12 @@ export default function ContentGeneration() {
             throw err;
           }
         }
-      }
-
-      await refetchScenes();
-
-      // ── Phase 2: Prompt Generation (skipped for Shorts — uses director notes directly) ──
-      if (!isShortsProject) {
-        setImportPhase('prompts');
-        setImportProgress('Converting director notes into visual prompts...');
-
-        let promptsDone = false;
-
-        while (!promptsDone) {
-          try {
-            const prResult = await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
-            const prData = prResult.data || prResult;
-            promptsDone = prData.done === true;
-
-            const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
-            queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
-            const ready = freshScenes.filter(s => s.status === 'prompts_ready');
-            setImportProgress(`Generating production prompts... ${ready.length}/${freshScenes.length} ready`);
-          } catch (err) {
-            const status = err?.response?.status || err?.status;
-            if (status === 500 || status === 502 || status === 504) {
-              console.log(`Prompts error ${status}, retrying in 8s...`);
-              await new Promise(r => setTimeout(r, 8000));
-              const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
-              queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
-              const ready = freshScenes.filter(s => s.status === 'prompts_ready');
-              setImportProgress(`Recovering... ${ready.length}/${freshScenes.length} prompts ready`);
-              continue;
-            }
-            throw err;
-          }
-        }
 
         await refetchScenes();
+
+        // ── Phase 2: Prompt Generation (standard pipeline) ──
+        setImportPhase('prompts');
+        await runPromptGeneration({ onProgress: setImportProgress });
       }
 
     } catch (err) {
@@ -691,8 +744,7 @@ export default function ContentGeneration() {
     if (pending.length === 0 && scenes.some(s => s.image_prompt?.startsWith('DIRECTOR_NOTES:'))) {
       setImageProgress({ current: 0, total: 0, sceneName: 'Converting director notes first...' });
       try {
-        await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
-        await refetchScenes();
+        await runPromptGeneration({ onProgress: (msg) => setImageProgress({ current: 0, total: 0, sceneName: msg }) });
       } catch (err) {
         console.error('Auto prompt generation failed:', err);
       }
@@ -907,30 +959,22 @@ export default function ContentGeneration() {
   const handleRetryPrompts = async () => {
     setRetryingPrompts(true);
     try {
-      let done = false;
-      while (!done) {
-        try {
-          const result = await base44.functions.invoke('generateScenePrompts', { project_id: projectId });
-          const data = result.data || result;
-          done = data.done === true;
-          const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
-          queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
-        } catch (err) {
-          const status = err?.response?.status || err?.status;
-          if (status === 500 || status === 502 || status === 504) {
-            await new Promise(r => setTimeout(r, 8000)); continue;
-          }
-          throw err;
-        }
-      }
+      await runPromptGeneration({ onProgress: () => {} });
     } catch (err) { console.error('Retry prompts failed:', err); }
     finally { await refetchScenes(); setRetryingPrompts(false); }
   };
 
   // ── Enhance All ────────────────────────────────────────────────
+  // Guard: skip scenes that still have DIRECTOR_NOTES: (not yet converted) —
+  // these cause enhanceScenePrompts to 500 since there's no real prompt to enhance.
   const handleEnhanceAll = async () => {
     setEnhancingAll(true);
-    for (const scene of scenes) {
+    const enhanceable = scenes.filter(s =>
+      s.image_prompt &&
+      !s.image_prompt.startsWith('DIRECTOR_NOTES:') &&
+      (s.status === 'prompts_ready' || s.status === 'image_generated')
+    );
+    for (const scene of enhanceable) {
       try { await base44.functions.invoke('enhanceScenePrompts', { scene_id: scene.id, enhance_type: 'both' }); }
       catch (err) { console.warn(`Scene ${scene.scene_number} enhance failed:`, err.message); }
       await refetchScenes();
@@ -1217,6 +1261,30 @@ export default function ContentGeneration() {
           wordCount={estimatedWordCount}
         />
 
+        {/* ── Convert Director Notes Progress Banner ── */}
+        {convertingPrompts && (
+          <div className="bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-200 rounded-lg p-4 mb-6">
+            <div className="flex items-center gap-3">
+              <Loader2 className="w-6 h-6 animate-spin text-violet-600" />
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <Badge className="bg-violet-100 text-violet-800 text-xs">
+                    <FileText className="w-3 h-3 mr-1" /> Converting Director Notes → Image Prompts
+                  </Badge>
+                  <span className="text-xs text-violet-600">{breakdownReadyCount} scenes remaining</span>
+                </div>
+                <div className="w-full bg-violet-100 rounded-full h-2 mt-2">
+                  <div
+                    className="bg-violet-500 h-2 rounded-full transition-all duration-500"
+                    style={{ width: scenes.length > 0 ? `${(promptsReadyCount / scenes.length) * 100}%` : '0%' }}
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1.5">{convertProgress}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Image Generation Progress */}
         {generatingImages && imageProgress.total > 0 && (
           <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-lg p-4 mb-6">
@@ -1295,34 +1363,27 @@ export default function ContentGeneration() {
           </div>
         )}
 
-        {/* Director Notes Warning — only show for non-Shorts */}
-        {!importing && !isShortsProject && directorNotesCount > 0 && (
+        {/* Director Notes Warning — shown for ANY project type when notes are unconverted */}
+        {!importing && !convertingPrompts && directorNotesCount > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
             <div className="flex items-center gap-3">
-              <Wand2 className="w-5 h-5 text-amber-600" />
+              <FileText className="w-5 h-5 text-amber-600" />
               <div className="flex-1">
                 <p className="text-sm font-medium text-amber-800">
                   {directorNotesCount} scene{directorNotesCount > 1 ? 's have' : ' has'} director notes that need converting to image prompts
                 </p>
-                <p className="text-xs text-amber-600 mt-1">Click below to generate visual prompts before creating images.</p>
+                <p className="text-xs text-amber-600 mt-1">
+                  {isShortsProject
+                    ? 'Shorts scenes need prompt generation before images can be created.'
+                    : 'Click below to generate visual prompts before creating images.'}
+                </p>
               </div>
-              <Button size="sm" className="bg-amber-600 hover:bg-amber-700"
-                onClick={async () => {
-                  setImporting(true); setImportPhase('prompts'); setImportProgress('Converting director notes into visual prompts...');
-                  try {
-                    await invokeWithTimeout('generateScenePrompts', { project_id: projectId });
-                    await pollForCompletion(async () => {
-                      const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
-                      queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
-                      const pending = freshScenes.filter(s => s.status === 'breakdown_ready');
-                      const ready = freshScenes.filter(s => s.status === 'prompts_ready');
-                      setImportProgress(`Converting prompts... ${ready.length}/${freshScenes.length} ready`);
-                      return pending.length === 0 && ready.length > 0;
-                    }, 360, 5000);
-                    await refetchScenes();
-                  } catch (err) { console.error('Prompt generation failed:', err); }
-                  setImporting(false); setImportPhase(''); setImportProgress('');
-                }}>
+              <Button
+                size="sm"
+                className="bg-amber-600 hover:bg-amber-700 whitespace-nowrap"
+                onClick={handleConvertDirectorNotes}
+                disabled={convertingPrompts}
+              >
                 <Wand2 className="w-4 h-4 mr-1" /> Generate Prompts
               </Button>
             </div>
@@ -1391,11 +1452,26 @@ export default function ContentGeneration() {
               )}
               <div className="flex-1" />
 
-              {/* Retry prompts — only for non-Shorts */}
+              {/* Retry prompts — shown for non-Shorts when scenes are in breakdown_ready */}
               {!isShortsProject && breakdownReadyCount > 0 && (
                 <Button onClick={handleRetryPrompts} disabled={retryingPrompts} variant="outline" className="border-amber-200 text-amber-700 hover:bg-amber-50">
                   {retryingPrompts ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Wand2 className="w-4 h-4 mr-1" />}
                   {retryingPrompts ? `Generating Prompts... (${breakdownReadyCount} left)` : `Generate Prompts (${breakdownReadyCount})`}
+                </Button>
+              )}
+
+              {/* ── NEW: Convert Director Notes button — always visible when notes exist ── */}
+              {directorNotesCount > 0 && (
+                <Button
+                  onClick={handleConvertDirectorNotes}
+                  disabled={convertingPrompts}
+                  variant="outline"
+                  className="border-violet-200 text-violet-700 hover:bg-violet-50"
+                >
+                  {convertingPrompts
+                    ? <><Loader2 className="w-4 h-4 animate-spin mr-1" />Converting... ({breakdownReadyCount} left)</>
+                    : <><FileText className="w-4 h-4 mr-1" />Convert Notes → Prompts ({directorNotesCount})</>
+                  }
                 </Button>
               )}
 
@@ -1420,6 +1496,20 @@ export default function ContentGeneration() {
                 onComplete={() => refetchScenes()}
                 projectMode={project?.project_mode}
               />
+
+              {/* ── Convert Notes button beside Generate Images ── */}
+              <Button
+                onClick={handleConvertDirectorNotes}
+                disabled={convertingPrompts || directorNotesCount === 0}
+                variant="outline"
+                className={`border-violet-300 text-violet-700 hover:bg-violet-50 ${directorNotesCount === 0 ? 'opacity-40' : ''}`}
+                title={directorNotesCount === 0 ? 'All director notes already converted' : `Convert ${directorNotesCount} director notes to image prompts`}
+              >
+                {convertingPrompts
+                  ? <><Loader2 className="w-4 h-4 animate-spin mr-1" />Converting...</>
+                  : <><FileText className="w-4 h-4 mr-1" />Generate Prompts{directorNotesCount > 0 ? ` (${directorNotesCount})` : ''}</>
+                }
+              </Button>
 
               <Button onClick={handleGenerateImages} disabled={generatingImages} variant="outline">
                 {generatingImages ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <ImageIcon className="w-4 h-4 mr-1" />}
