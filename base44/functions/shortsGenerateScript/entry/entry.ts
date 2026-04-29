@@ -1,41 +1,48 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
-// v2 — redeployed
+// v3 — migrated from Gemini to Claude
 
 // ══════════════════════════════════════════════════════════════════
-// SHORTS SCRIPT GENERATION ENGINE v4
+// SHORTS SCRIPT GENERATION ENGINE v5
 // 5 niche-specific storytelling structures for 90-second YouTube Shorts
 // Crime Story | Tech Explainer | Side Hustle | Finance | Book Summary
 // ══════════════════════════════════════════════════════════════════
 
-async function callGemini(prompt, temperature = 0.75) {
-  const apiKey = Deno.env.get("GEMINI_API_KEY");
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt + "\n\nRespond with ONLY valid JSON." }] }],
-        generationConfig: { temperature, maxOutputTokens: 3000, responseMimeType: "application/json" },
-      }),
-    }
-  );
+async function callClaude(prompt, temperature = 0.75) {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01"
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-5",
+      max_tokens: 3000,
+      temperature,
+      messages: [{ role: "user", content: prompt + "\n\nRespond with ONLY valid JSON. No markdown, no backticks, no explanation." }]
+    })
+  });
+
   if (!response.ok) {
-    const errBody = await response.text();
-    throw new Error(`Gemini ${response.status}: ${errBody.substring(0, 200)}`);
+    const err = await response.json();
+    throw new Error(`Claude error: ${err.error?.message || response.status}`);
   }
+
   const data = await response.json();
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+  const rawText = data.content?.[0]?.text;
+  if (!rawText) throw new Error("No response from Claude");
+
   try { return JSON.parse(rawText); } catch (_) {
-    const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
-    return JSON.parse(cleaned); 
+    const match = rawText.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]);
+    throw new Error("Failed to parse Claude JSON");
   }
 }
 
+
 // ══════════════════════════════════════════════════════════════
 // STRUCTURE A: CRIME STORY / TRUE CRIME / MYSTERY
-// Highest retention format. Fight-or-flight.
-// COLD OPEN → SETUP → ESCALATION → TWIST → AFTERMATH → CTA
 // ══════════════════════════════════════════════════════════════
 
 const CRIME_STORY_PROMPT = (topicTitle) => `You are a YouTube Shorts scriptwriter specializing in TRUE CRIME / MYSTERY storytelling.
@@ -47,7 +54,7 @@ STRUCTURE — follow this EXACTLY:
 - Drop the viewer INTO the crime mid-action. Most shocking detail first.
 - Use present tense: "A woman walks into a bank..." / "He stole $400 million..."
 - Include a SPECIFIC detail that makes it REAL (date, city, dollar amount).
-- NEVER start with "Today we're going to talk about..." or ANY preamble. 
+- NEVER start with "Today we're going to talk about..." or ANY preamble.
 - This must feel like opening a movie 30 minutes in.
 Examples:
 - "On March 15th, 2019, a package arrived at a house in Detroit. Inside was $2.3 million. And a severed finger."
@@ -59,7 +66,6 @@ Examples:
 - 1-2 sentences of normalcy: job, family, routine, where they lived.
 - Include one detail that makes them relatable/sympathetic.
 - Then: the FIRST sign something is wrong.
-- This is the "calm before the storm" — the more normal, the more shocking the crime feels.
 
 [ESCALATION] (0:20-0:55, 85-100 words)
 - The crime unfolds. Rapid-fire facts — each sentence reveals something new and WORSE.
@@ -67,11 +73,10 @@ Examples:
 - Build with "but it gets worse" or "and then they discovered..."
 - Include at least ONE moment where the criminal almost got caught but didn't.
 - Structure within escalation:
-  - Beat 1 (0:20-0:30): The crime begins — first incident, first theft, first lie
-  - Beat 2 (0:30-0:40): It gets worse — pattern emerges, stakes rise, more victims
-  - Beat 3 (0:40-0:50): The near-miss — almost caught, but escapes or doubles down
-  - Beat 4 (0:50-0:55): The peak — the worst moment, the biggest revelation
-- The viewer's jaw should drop at least twice.
+  - Beat 1 (0:20-0:30): The crime begins
+  - Beat 2 (0:30-0:40): It gets worse
+  - Beat 3 (0:40-0:50): The near-miss
+  - Beat 4 (0:50-0:55): The peak — worst moment, biggest revelation
 
 [TWIST / RESOLUTION] (0:55-1:10, 35-40 words)
 - The payoff. How did it end? Was there justice?
@@ -92,7 +97,6 @@ CRITICAL RULES:
 - Every sentence must make the viewer NEED to know what happens next.
 - This is pure STORYTELLING. Present tense for immediacy.
 - Do NOT use "Rule #1, Rule #2" or ANY listicle/educational format.
-- Do NOT use "Step 1, Step 2" — this is a NARRATIVE arc, not instructions.
 - NO "today we'll cover" / NO intro / NO preamble.
 
 Return JSON: {"title":"string under 60 chars","script":"full script text with section markers","word_count":number}`;
@@ -100,8 +104,6 @@ Return JSON: {"title":"string under 60 chars","script":"full script text with se
 
 // ══════════════════════════════════════════════════════════════
 // STRUCTURE B: TECH EXPLAINER / "HOW X WORKS" / "WHY X EXISTS"
-// Fireship-style rapid explainers. High RPM.
-// WTF HOOK → CONTEXT BOMB → THE MECHANIC (3 steps) → SO WHAT → CTA
 // ══════════════════════════════════════════════════════════════
 
 const TECH_EXPLAINER_PROMPT = (topicTitle) => `You are a YouTube Shorts scriptwriter in the style of Fireship — rapid, witty, slightly amused tech explainers.
@@ -114,7 +116,6 @@ STRUCTURE — follow this EXACTLY:
 - Lead with the CONSEQUENCE or the ABSURDITY, not the technology name.
 - Make it sound broken, dangerous, or insane.
 - Use "you" or imply the viewer is directly affected.
-- Exaggeration is fine if directionally true.
 Examples:
 - "Your phone listens to 40,000 commands per second and you've never noticed."
 - "The entire internet runs on a protocol invented by a college student in 1991. It was supposed to be temporary."
@@ -125,7 +126,6 @@ Examples:
 - One surprising fact about its scale or impact (use a BIG number).
 - Frame as: "this thing you take for granted is actually insane."
 - Avoid jargon — if you must use a technical term, define it instantly.
-- This section earns CREDIBILITY — be accurate.
 
 [THE MECHANIC — "HOW IT ACTUALLY WORKS"] (0:20-0:55, 85-100 words)
 - Break the technology into exactly 3 STEPS or 3 LAYERS.
@@ -135,11 +135,9 @@ Examples:
 - Step 1: simplest concept (foundation)
 - Step 2: the clever part (the innovation)
 - Step 3: the mind-blowing part (works at scale)
-- Make a 5-year-old understand using these analogies.
 
 [REAL-WORLD PROOF / "SO WHAT"] (0:55-1:10, 35-40 words)
 - Connect the mechanic to something the viewer USES or CARES about.
-- "This is why your Netflix loads in 2 seconds" / "That's why your WiFi slows down when..."
 - 1-2 real-world examples.
 - Include a forward-looking prediction or implication.
 
@@ -150,10 +148,9 @@ Examples:
 
 CRITICAL RULES:
 - 200-240 words MAX. ~2.7 words/sec.
-- Voice tone: fast, confident, slightly amused — Fireship energy. "Let me tell you something wild."
+- Voice tone: fast, confident, slightly amused — Fireship energy.
 - Use specific numbers and scale comparisons throughout.
 - Make complex things simple using analogies.
-- This is NOT a listicle with "Rule #1". It's a 3-step technical deep-dive made fun.
 - NO "today we'll cover" / NO intro / NO preamble.
 
 Return JSON: {"title":"string under 60 chars","script":"full script text with section markers","word_count":number}`;
@@ -161,8 +158,6 @@ Return JSON: {"title":"string under 60 chars","script":"full script text with se
 
 // ══════════════════════════════════════════════════════════════
 // STRUCTURE C: SIDE HUSTLE / HOW-TO / MONEY METHOD
-// Highest RPM format ($15-$40). Actionable steps.
-// PROOF HOOK → MYTH KILL → THE METHOD (3 steps) → PROOF AGAIN → CTA
 // ══════════════════════════════════════════════════════════════
 
 const SIDE_HUSTLE_PROMPT = (topicTitle) => `You are a YouTube Shorts scriptwriter specializing in side hustle / money-making methods.
@@ -183,21 +178,15 @@ Examples:
 [MYTH KILL] (0:05-0:15, 25-30 words)
 - Destroy the viewer's excuses BEFORE they think them.
 - Address the #1 objection directly ("You don't need followers").
-- Contrast with what they've been told ("Forget dropshipping...").
-- Position as DIFFERENT from what they've tried.
 - Use "You don't need X, Y, or Z" structure.
 
 [THE METHOD — 3 STEPS] (0:15-1:00, 110-130 words)
 - Exactly 3 steps — labeled "Step 1, Step 2, Step 3"
-- Step 1: THE SETUP — what to sign up for / what to create / what to find.
-  ~15 seconds. Name SPECIFIC tools or platforms.
-- Step 2: THE WORK — the actual activity that generates money.
-  ~15 seconds. Include specific outreach numbers or metrics.
-- Step 3: THE SCALE — how to go from first dollar to real income.
-  ~15 seconds. Show the math of scaling.
+- Step 1: THE SETUP — what to sign up for / what to create / what to find. Name SPECIFIC tools or platforms.
+- Step 2: THE WORK — the actual activity that generates money. Include specific outreach numbers or metrics.
+- Step 3: THE SCALE — how to go from first dollar to real income. Show the math of scaling.
 - Each step MUST name SPECIFIC tools, platforms, or actions.
 - Include a specific number in each step (dollar amount, time, quantity).
-- Vague advice = instant swipe. "Sign up for Fiverr" beats "find clients."
 - Every step must be DOABLE TONIGHT.
 
 [PROOF AGAIN / REAL NUMBERS] (1:00-1:10, 25-30 words)
@@ -206,17 +195,17 @@ Examples:
 - Show the growth trajectory: Month 1 → Month 3 → Month 6.
 
 [CTA] (1:10-1:25, 30-35 words)
-- "Save this" is CRITICAL — side hustle content gets saved more than any other niche.
+- "Save this" is CRITICAL.
 - "Try Step 1 tonight" — immediacy.
 - Tease next method with a specific dollar amount.
 - Ask "Which step are you starting with?"
-- NEVER "like and subscribe" — ALWAYS "save this and try Step 1 tonight."
+- NEVER "like and subscribe."
 
 CRITICAL RULES:
 - 200-240 words MAX. ~2.7 words/sec.
 - Voice tone: casual, direct, calm confidence — NOT hype-bro energy.
 - Use specific dollar amounts, platform names, and timeframes throughout.
-- Every step must be DOABLE TONIGHT — not "build a brand over 6 months."
+- Every step must be DOABLE TONIGHT.
 - Use "Step 1, Step 2, Step 3" — NOT "Rule #1, Rule #2".
 - NO "today we'll cover" / NO intro / NO preamble.
 
@@ -224,8 +213,7 @@ Return JSON: {"title":"string under 60 chars","script":"full script text with se
 
 
 // ══════════════════════════════════════════════════════════════
-// STRUCTURE D: FINANCE / WEALTH — PAIN → RULES → TRANSFORMATION
-// HOOK → TENSION → PIVOT → VALUE (3 RULES) → TRANSFORMATION → CTA
+// STRUCTURE D: FINANCE / WEALTH
 // ══════════════════════════════════════════════════════════════
 
 const FINANCE_PROMPT = (topicTitle) => `You are a YouTube Shorts scriptwriter specializing in finance and wealth content.
@@ -246,24 +234,20 @@ Examples:
 - Include a specific stat that creates urgency.
 - Describe the PROBLEM or the financial trap most people fall into.
 - Build the pain: "most people do X, and it's costing them Y."
-- This makes the viewer NEED the solution.
 
 [PIVOT] (0:20-0:25, 10-15 words)
 - Single sentence reversal. The secret unlocked.
 - "But here's what nobody tells you..." / "There are 3 rules that change everything."
-- This is the hinge — everything before was the problem, everything after is the solution.
 
 [VALUE — 3 RULES] (0:25-0:55, 75-90 words)
 - Exactly 3 rules. Label: "Rule number one... Rule number two... Rule number three..."
 - Each rule: setup + proof. Include specific numbers.
-- Rule 1: The foundation (the most important habit or principle)
-- Rule 2: The multiplier (the strategy that accelerates wealth)
-- Rule 3: The secret (the counterintuitive move most people miss)
-- Each rule must feel actionable and specific.
+- Rule 1: The foundation (most important habit or principle)
+- Rule 2: The multiplier (strategy that accelerates wealth)
+- Rule 3: The secret (counterintuitive move most people miss)
 
 [TRANSFORMATION] (0:55-1:10, 30-35 words)
-- Show the before/after. What life looks like following these rules.
-- Use specific numbers: "In 5 years, that's $X" / "By 40, you'll have..."
+- Show the before/after with specific numbers: "In 5 years, that's $X" / "By 40, you'll have..."
 - Make the viewer SEE their future self.
 
 [CTA] (1:10-1:25, 30-35 words)
@@ -285,7 +269,6 @@ Return JSON: {"title":"string under 60 chars","script":"full script text with se
 
 // ══════════════════════════════════════════════════════════════
 // STRUCTURE E: BOOK SUMMARY
-// HOOK → CONTEXT → 3 KEY LESSONS → TRANSFORMATION → CTA
 // ══════════════════════════════════════════════════════════════
 
 const BOOK_SUMMARY_PROMPT = (topicTitle) => `You are a YouTube Shorts scriptwriter specializing in book summaries and key takeaways.
@@ -300,11 +283,10 @@ STRUCTURE — follow this EXACTLY:
 Examples:
 - "The richest people in the world all follow the same 3 rules. They're all in one book."
 - "This book predicted the 2008 financial crisis, COVID's economic impact, and the AI revolution. Here's what it says happens next."
-- "One book. Three lessons. They completely rewired how I think about money."
 
 [BOOK CONTEXT] (0:05-0:15, 20-30 words)
 - Book title + author in 1 sentence.
-- Author's credibility: why should anyone listen? (credentials, track record, who recommends it)
+- Author's credibility: why should anyone listen?
 - The core problem the book solves in 1 sentence.
 
 [3 KEY LESSONS] (0:15-0:55, 90-110 words)
@@ -315,15 +297,14 @@ Examples:
 - Lesson 2: The practical application (the actionable takeaway)
 - Lesson 3: The counterintuitive insight (the mind-blowing reframe)
 - Use the author's own stories or examples when possible.
-- Make each lesson feel like it's worth the price of the book alone.
 
 [TRANSFORMATION / SYNTHESIS] (0:55-1:10, 25-35 words)
-- One powerful sentence that synthesizes all 3 lessons into a single insight.
+- One powerful sentence synthesizing all 3 lessons.
 - Show how the book changes behavior: "After reading this, you'll never look at X the same way."
 - Include a quote from the book if there's a powerful one.
 
 [CTA] (1:10-1:25, 30-35 words)
-- "Save this" + recommend sharing ("share with someone who needs to hear this").
+- "Save this" + recommend sharing.
 - Tease next book summary.
 - Ask a reflection question: "Which lesson hit hardest?" / "Have you read this one?"
 
@@ -349,7 +330,6 @@ const NICHE_PROMPTS = {
   book: BOOK_SUMMARY_PROMPT,
 };
 
-// Default fallback for unknown niches
 const DEFAULT_PROMPT = (topicTitle, niche) => `You are a YouTube Shorts scriptwriter. Write a compelling 90-second script for: "${topicTitle}"
 
 The content niche is: ${niche}
@@ -362,7 +342,6 @@ RULES:
 - End with CTA including "save this" and a question to drive comments.
 - Include specific numbers, dates, or facts throughout.
 - Make it punchy, not educational/dry.
-- Do NOT use generic "Rule #1, Rule #2" unless the niche specifically calls for it.
 
 Return JSON: {"title":"string under 60 chars","script":"full formatted script","word_count":number}`;
 
@@ -378,7 +357,7 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const { project_id } = await req.json();
-    console.log(`📱 shortsGenerateScript v4: project=${project_id}`);
+    console.log(`📱 shortsGenerateScript v5 (Claude): project=${project_id}`);
 
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
     const project = projects[0];
@@ -393,14 +372,13 @@ Deno.serve(async (req) => {
 
     const topicTitle = project.name;
 
-    // Build the niche-specific prompt
     const promptBuilder = NICHE_PROMPTS[shortsNiche];
     const prompt = promptBuilder
       ? promptBuilder(topicTitle)
       : DEFAULT_PROMPT(topicTitle, shortsNiche);
 
-    console.log(`📱 Calling Gemini for "${topicTitle}" (niche: ${shortsNiche})...`);
-    const result = await callGemini(prompt, 0.75);
+    console.log(`📱 Calling Claude for "${topicTitle}" (niche: ${shortsNiche})...`);
+    const result = await callClaude(prompt, 0.75);
 
     const rawScript = result.script || '';
     // Strip section headers like [HOOK - 5s], [COLD OPEN], etc.
@@ -413,7 +391,7 @@ Deno.serve(async (req) => {
 
     console.log(`✅ Got script: ${wordCount} words, title: "${title}" (niche: ${shortsNiche})`);
 
-    // Delete old scripts then create new one
+    // Delete old scripts then save new one
     const oldScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
     await Promise.all(oldScripts.map(s => base44.asServiceRole.entities.Scripts.delete(s.id).catch(() => {})));
 
@@ -426,7 +404,6 @@ Deno.serve(async (req) => {
       estimated_duration_sec: 90,
     });
 
-    // Fire project update without awaiting — saves CPU time
     base44.asServiceRole.entities.Projects.update(project_id, {
       status: 'script_complete',
       current_step: 3,
