@@ -1155,18 +1155,124 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
       if (bIdx > 0) await new Promise(r => setTimeout(r, 2000));
 
       const scenesWithNotes = batchScenes.map(scene => {
-        // Priority 1: Blueprint scenes (where phase-based breakdown stores director data)
-        // Priority 2: DIRECTOR_NOTES: prefix in image_prompt (deterministic breakdown format)
-        // Priority 3: null (generate from narration only)
         let director = blueprintSceneMap[scene.scene_number] || null;
         if (!director) {
           director = extractDirectorNotes(scene.image_prompt);
         }
+
+        // ── SHORTS FIELD NORMALIZER ──────────────────────────────────
+        // Shorts director notes use different field names than the long-form
+        // cinematic breakdown. Map them to the same shape so the entire
+        // prompt engine, character injection, style system, and quality
+        // gates all work identically for both formats.
+        if (director?.shorts_format === true) {
+          const section = director.section || 'value';
+          const camDir = director.camera_direction || 'static';
+
+          // Map camera_direction → shot_type (what lens sees)
+          const shotTypeMap = {
+            push_in:   'MCU — Medium Close-Up',
+            zoom_in:   'MCU — Medium Close-Up',
+            zoom_out:  'WS — Wide Shot',
+            pan_left:  'MS — Medium Shot',
+            pan_right: 'MS — Medium Shot',
+            static:    'MS — Medium Shot',
+          };
+
+          // Map camera_direction → camera_angle (physical placement)
+          const cameraAngleMap = {
+            push_in:   'Low angle, 15 degrees, pushing toward subject',
+            zoom_in:   'Eye-level, slow zoom compressing depth',
+            zoom_out:  'Eye-level, pulling back to reveal environment',
+            pan_left:  'Eye-level, lateral pan left tracking action',
+            pan_right: 'Eye-level, lateral pan right tracking action',
+            static:    'Eye-level, locked off, subject fills frame',
+          };
+
+          // Map section → lighting mood
+          const lightingMap = {
+            hook:      'Single hard backlight creating silhouette, cold blue rim, 80% shadow, dramatic contrast',
+            tension:   'Low-key side lighting, harsh single source, red-tinged shadows, urgency in every shadow pool',
+            pivot:     'Hard cut to bright clean key light, color temperature shift from cold to warm',
+            value_1:   'Warm motivated key light from left, clean shadows, authoritative and credible',
+            value_2:   'Warm motivated key light from left, clean shadows, authoritative and credible',
+            value_3:   'Warm motivated key light from left, clean shadows, authoritative and credible',
+            cta:       'Return to hook lighting — high contrast, cold rim, single dramatic source',
+            deadzone:  'Near darkness, single fading ember of light, scene dissolving to black',
+          };
+
+          // Map section → color palette
+          const paletteMap = {
+            hook:      'Deep crimson #1A0005, cold white #E8F4FF, bone white text #F5F5F0, high contrast',
+            tension:   'Dark charcoal #0D0D0D, warning red #CC2200, cold blue #1A2744, numbers in red',
+            pivot:     'Hard shift — dark to bright, cool #1A2744 bleeding into warm amber #D4A574',
+            value_1:   'Deep navy #0A1628, gold accent #D4A574, clean white #F5F5F0, trust and authority',
+            value_2:   'Deep navy #0A1628, emerald accent #2D7A4F, clean white #F5F5F0, growth and progress',
+            value_3:   'Deep navy #0A1628, gold accent #D4A574, clean white #F5F5F0, revelation and clarity',
+            cta:       'Callback to hook palette — deep crimson, cold white, urgent contrast',
+            deadzone:  'Near black #080808, single warm ember #3D1A00, darkness reclaiming the frame',
+          };
+
+          // Map section → depth of field
+          const dofMap = {
+            hook:      'Shallow f/1.4 — subject razor sharp, world dissolving behind',
+            tension:   'Shallow f/1.8 — tight focus on the problem, background blurred urgency',
+            pivot:     'Medium f/4 — both subject and environment readable, bold transition frame',
+            value_1:   'Medium f/2.8 — subject clear, background context visible but soft',
+            value_2:   'Medium f/2.8 — subject clear, background context visible but soft',
+            value_3:   'Medium f/2.8 — subject clear, background context visible but soft',
+            cta:       'Shallow f/1.4 — returns to hook intimacy, world falling away',
+            deadzone:  'Deep f/11 — everything in focus as the scene fades to nothing',
+          };
+
+          // Map section → arc phase (for animation guidance)
+          const phaseMap = {
+            hook:      'cold_open',
+            tension:   'rising_tension',
+            pivot:     'rising_tension',
+            value_1:   'emotional_core',
+            value_2:   'emotional_core',
+            value_3:   'emotional_core',
+            cta:       'resolution',
+            deadzone:  'resolution',
+          };
+
+          director = {
+            // Core content — map visual_description → visual_concept
+            visual_concept:    director.visual_description || '',
+            // Cinematic fields — derived from camera_direction + section
+            shot_type:         shotTypeMap[camDir]    || 'MS — Medium Shot',
+            camera_angle:      cameraAngleMap[camDir] || 'Eye-level, locked off',
+            camera_movement:   `${camDir.replace(/_/g, ' ')} — assertive and deliberate`,
+            lighting:          lightingMap[section]   || lightingMap.value_1,
+            color_palette:     paletteMap[section]    || paletteMap.value_1,
+            depth_of_field:    dofMap[section]        || dofMap.value_1,
+            // Shared fields — pass through unchanged
+            mood:              director.mood          || 'urgent, dramatic',
+            continuity_bridge: `${section} section visual energy carries into next scene`,
+            phase:             phaseMap[section]      || 'emotional_core',
+            characters_present: director.characters_present || [],
+            emotional_intensity: section === 'hook' || section === 'cta' ? 0.9
+              : section === 'tension' ? 0.8
+              : section === 'pivot'   ? 0.7
+              : 0.6,
+            viewer_emotion: section === 'hook'    ? 'shock and curiosity'
+              : section === 'tension' ? 'urgency and concern'
+              : section === 'pivot'   ? 'surprise and anticipation'
+              : section === 'cta'     ? 'motivation and decisiveness'
+              : 'understanding and engagement',
+            // Flag so downstream code knows this was normalized
+            shorts_format: true,
+            section,
+          };
+        }
+        // ── END SHORTS NORMALIZER ────────────────────────────────────
+
         return {
           scene_number: scene.scene_number,
           scene_id: scene.id,
           narration_text: scene.narration_text,
-          duration_seconds: scene.duration_seconds || 5,
+          duration_seconds: scene.duration_seconds || 2.5,
           director
         };
       });
