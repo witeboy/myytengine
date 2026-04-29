@@ -1,5 +1,62 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
+// Robustly extract a JSON object from Claude's raw text output.
+// Handles: markdown fences, preamble text, truncated JSON, trailing commas.
+function extractJSON(rawText) {
+  if (!rawText || typeof rawText !== 'string') return null;
+
+  // Pass 1: direct parse (ideal case)
+  try { return JSON.parse(rawText); } catch (_) {}
+
+  // Pass 2: strip markdown fences (```json ... ``` or ``` ... ```)
+  const fenceMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenceMatch) {
+    try { return JSON.parse(fenceMatch[1].trim()); } catch (_) {}
+  }
+
+  // Pass 3: find the first { and last } and parse what's between
+  const firstBrace = rawText.indexOf('{');
+  const lastBrace  = rawText.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    const slice = rawText.substring(firstBrace, lastBrace + 1);
+    try { return JSON.parse(slice); } catch (_) {}
+
+    // Pass 4: try closing truncated JSON with common suffixes
+    for (const suffix of [']}', '}]}', '"}]}', '"]}', '}} ']) {
+      try {
+        const parsed = JSON.parse(slice + suffix);
+        if (parsed && typeof parsed === 'object') {
+          console.log(`Recovered JSON with suffix: "${suffix}"`);
+          return parsed;
+        }
+      } catch (_) {}
+    }
+
+    // Pass 5: strip trailing commas (a common Claude mistake) then retry
+    const noTrailing = slice
+      .replace(/,\s*}/g, '}')
+      .replace(/,\s*]/g, ']');
+    try { return JSON.parse(noTrailing); } catch (_) {}
+
+    // Pass 6: truncate at last complete object boundary and retry
+    // Walk back from lastBrace looking for a clean closing
+    for (let i = lastBrace; i > firstBrace; i--) {
+      if (rawText[i] === '}') {
+        const candidate = rawText.substring(firstBrace, i + 1);
+        try {
+          const parsed = JSON.parse(candidate);
+          if (parsed && typeof parsed === 'object') {
+            console.log(`Recovered JSON by truncating at position ${i}`);
+            return parsed;
+          }
+        } catch (_) {}
+      }
+    }
+  }
+
+  return null;
+}
+
 async function callClaude(prompt, temperature = 0.7) {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY environment variable");
@@ -12,42 +69,38 @@ async function callClaude(prompt, temperature = 0.7) {
       "anthropic-version": "2023-06-01"
     },
     body: JSON.stringify({
-      // FIX 1: Updated to current valid model string
       model: "claude-sonnet-4-5",
       max_tokens: 8192,
       temperature: temperature,
-      system: "You are a world-class film director and cinematic data extractor. You must return ONLY raw, valid JSON. Do not include markdown formatting like ```json and do not include any conversational text.",
-      messages: [{ role: "user", content: prompt }]
+      // Stronger system prompt — prefill trick forces JSON-first output
+      system: "You are a cinematic data extractor. Output ONLY a single raw JSON object. No markdown fences, no ```json, no preamble, no explanation. Start your response with { and end with }.",
+      messages: [
+        { role: "user", content: prompt },
+        // Assistant prefill forces the model to start mid-JSON — no preamble possible
+        { role: "assistant", content: "{" }
+      ]
     })
   });
 
   if (!response.ok) {
-    const err = await response.json();
-    throw new Error(`Claude error: ${err.error?.message || response.status}`);
+    let errMsg = `HTTP ${response.status}`;
+    try { const e = await response.json(); errMsg = e.error?.message || errMsg; } catch (_) {}
+    throw new Error(`Claude API error: ${errMsg}`);
   }
 
   const data = await response.json();
   if (!data.content || !data.content.length) throw new Error("No content returned from Claude");
 
-  const rawText = data.content[0].text;
+  // The prefill means Claude's actual output is everything AFTER the opening {
+  // We prepend it back to get valid JSON
+  const rawText = "{" + data.content[0].text;
 
-  try { return JSON.parse(rawText); } catch (_) {}
+  const parsed = extractJSON(rawText);
+  if (parsed) return parsed;
 
-  console.log("JSON parse failed, attempting recovery...");
-  const lastBrace = rawText.lastIndexOf('}');
-  if (lastBrace === -1) throw new Error("Cannot recover JSON from Claude response");
-  const trimmed = rawText.substring(0, lastBrace + 1);
-  for (const suffix of [']}', '}]}', '']) {
-    try {
-      const parsed = JSON.parse(trimmed + suffix);
-      if (parsed.scenes && Array.isArray(parsed.scenes)) {
-        console.log(`Recovered ${parsed.scenes.length} scenes from truncated JSON`);
-        return parsed;
-      }
-      if (parsed.story_analysis) return parsed;
-    } catch (_) {}
-  }
-  throw new Error("Failed to parse Claude JSON after recovery");
+  // Last resort: log a sample for debugging and throw a clear error
+  console.error(`❌ All JSON extraction attempts failed. Raw text sample (first 500 chars):\n${rawText.substring(0, 500)}`);
+  throw new Error(`Failed to parse Claude JSON response. Stop reason: ${data.stop_reason || 'unknown'}. Content length: ${rawText.length} chars.`);
 }
 
 function cleanScriptText(text) {
