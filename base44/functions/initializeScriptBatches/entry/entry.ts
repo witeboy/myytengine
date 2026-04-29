@@ -1,8 +1,15 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 import OpenAI from 'npm:openai@4.58.1';
 
+// ═══════════════════════════════════════════════════════════════════
+// CLIENTS
+// ═══════════════════════════════════════════════════════════════════
 const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
+const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 
+// ═══════════════════════════════════════════════════════════════════
+// LLM CALLERS
+// ═══════════════════════════════════════════════════════════════════
 async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
@@ -16,9 +23,7 @@ async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
           { role: 'user', content: prompt },
         ],
       });
-
-      const rawText = response.choices[0].message.content;
-      return JSON.parse(rawText);
+      return JSON.parse(response.choices[0].message.content);
     } catch (error) {
       if (attempt === retries - 1) throw error;
       console.warn(`⚠️ OpenAI attempt ${attempt + 1} failed: ${error.message}, retrying...`);
@@ -27,28 +32,75 @@ async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
   }
 }
 
+async function callClaude(prompt, temperature = 0.7, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 16384,
+        temperature,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (response.status === 429) {
+      const waitMs = Math.pow(2, attempt + 1) * 3000;
+      console.warn(`⏳ Claude rate limited, waiting ${waitMs / 1000}s`);
+      await new Promise(r => setTimeout(r, waitMs));
+      continue;
+    }
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(`Claude error ${response.status}: ${err.error?.message || JSON.stringify(err)}`);
+    }
+
+    const data = await response.json();
+    const rawText = data.content?.[0]?.text || '';
+
+    // Try direct parse
+    try { return JSON.parse(rawText); } catch (_) {}
+    // Strip markdown fences
+    const fenced = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (fenced) { try { return JSON.parse(fenced[1].trim()); } catch (_) {} }
+    // Grab first JSON object
+    const obj = rawText.match(/\{[\s\S]*\}/);
+    if (obj) { try { return JSON.parse(obj[0]); } catch (_) {} }
+
+    if (attempt === retries) throw new Error('Failed to parse Claude JSON after all attempts');
+  }
+}
+
+// Primary: OpenAI  |  Fallback: Claude
+async function callLLM(prompt, temperature = 0.7) {
+  try {
+    const result = await callOpenAI(prompt, temperature);
+    console.log('[initializeScriptBatches] Outline via OpenAI ✅');
+    return result;
+  } catch (err) {
+    console.warn(`[initializeScriptBatches] OpenAI failed: ${err.message} — falling back to Claude`);
+    if (!ANTHROPIC_KEY) throw err;
+    return await callClaude(prompt, temperature);
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════
-// Detect sleep script mode from channel or project
+// HELPERS
 // ═══════════════════════════════════════════════════════════════════
 function detectScriptMode(channel, project) {
-  // 1. Explicit project_mode takes priority
-  if (project?.project_mode && project.project_mode !== 'standard') {
-    return project.project_mode;
-  }
-  // 2. Explicit channel script_mode
-  if (channel?.script_mode && channel.script_mode !== 'standard') {
-    return channel.script_mode;
-  }
-  // 3. Auto-detect from niche/name keywords
+  if (project?.project_mode && project.project_mode !== 'standard') return project.project_mode;
+  if (channel?.script_mode && channel.script_mode !== 'standard') return channel.script_mode;
   const combined = `${channel?.niche || ''} ${channel?.name || ''} ${project?.niche || ''}`.toLowerCase();
   if (/sleep\s*stor|bedtime\s*stor/i.test(combined)) return 'sleep_story';
   if (/sleep|meditation|relax|calm|sooth|asmr|bedtime/i.test(combined)) return 'sleep_meditation';
   return 'standard';
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// Protagonist name picker — keeps sleep stories consistent
-// ═══════════════════════════════════════════════════════════════════
 function pickProtagonistName(topicTitle) {
   const pools = {
     japanese:      ['Yuki', 'Haruki', 'Sora', 'Ren', 'Nao'],
@@ -70,7 +122,27 @@ function pickProtagonistName(topicTitle) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// MEDITATION OUTLINE PROMPT — affirmations/second-person are correct here
+// BATCH MATH — fixed
+// ═══════════════════════════════════════════════════════════════════
+function computeBatchTargets(totalTargetWords, scriptMode) {
+  const WORDS_PER_BATCH = scriptMode === 'sleep_meditation' ? 1100
+    : scriptMode === 'sleep_story' ? 900
+    : 800;
+
+  // Never force 2 batches minimum — let the word count decide
+  const numBatches = Math.max(1, Math.ceil(totalTargetWords / WORDS_PER_BATCH));
+
+  // Distribute evenly; give the remainder to the last batch
+  const baseWords = Math.floor(totalTargetWords / numBatches);
+  const remainder = totalTargetWords - baseWords * numBatches;
+
+  return Array.from({ length: numBatches }, (_, i) =>
+    i === numBatches - 1 ? baseWords + remainder : baseWords
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// OUTLINE PROMPTS
 // ═══════════════════════════════════════════════════════════════════
 function buildMeditationOutlinePrompt({ topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes }) {
   const sectionTemplates = [
@@ -87,14 +159,13 @@ function buildMeditationOutlinePrompt({ topic, project, selectedHook, numBatches
 
   return `You are an expert sleep audio script planner creating a motivational meditation outline.
 
-**CONTENT TYPE**: Motivational Meditation — the narrator speaks directly to the listener with gentle affirmations, nature imagery, and soothing repetition. Think Jason Stephenson, Michael Sealey, The Honest Guys.
+**CONTENT TYPE**: Motivational Meditation — narrator speaks directly to the listener with gentle affirmations, nature imagery, and soothing repetition (Jason Stephenson / Michael Sealey style).
 
-**CRITICAL**: Every synopsis describes WHAT THE NARRATOR WILL SAY — actual words, affirmations, imagery. NEVER include:
+**CRITICAL**: Every synopsis describes WHAT THE NARRATOR WILL SAY. NEVER include:
 ❌ Explaining ASMR, neuroscience, dopamine, or "studies show"
 ❌ Practical sleep tips or educational content
 ❌ References to YouTube, videos, or channels
 ❌ Meta-commentary ("in this section we will...")
-❌ First-person anecdotes from the narrator
 
 **PROJECT**:
 - Topic: ${topic?.title || project.name}
@@ -103,20 +174,15 @@ function buildMeditationOutlinePrompt({ topic, project, selectedHook, numBatches
 ${selectedHook ? `- Opening Hook: "${selectedHook.hook_text}"` : ''}
 
 **MEDITATION PRINCIPLES**:
-- Extremely gentle, monotonous, soothing throughout
+- Extremely gentle, monotonous, soothing
 - Strategic repetition — each concept restated 4-6 times in different words
-- NO excitement, urgency, drama, or tension
 - Second-person "you" throughout — speak directly to the listener
 - Simple vocabulary, short sentences (8-18 words)
 - Progressive deepening: physical → mental → emotional → deep rest
 - Nature metaphors: ocean, mountain, tree, river, moon, stars, forest
-- [PAUSE X SEC] and [BREATHE] markers throughout synopses
 
 **SECTION TEMPLATE IDEAS** (adapt to fit ${numBatches} sections):
-${sectionTemplates.slice(0, numBatches).map((s, i) => `  ${i + 1}. ${s}`).join('\n')}
-
-**EXAMPLE GOOD SYNOPSIS**:
-"The narrator softly says: 'You are enough... just as you are... you are enough.' [PAUSE 5 SEC] Ocean imagery: waves rolling in, each one whispering 'enough.' The listener's breath matches the tide. [BREATHE] 'With every breath... you sink deeper into knowing... you have always been enough.' Repeat with mountain imagery — solid, unmovable, complete. [PAUSE 3 SEC] Return to body: weight of blankets, warmth, safety. 'You are enough... right now... in this moment... you are enough.'"
+${sectionTemplates.slice(0, Math.max(numBatches, sectionTemplates.length)).slice(0, numBatches).map((s, i) => `  ${i + 1}. ${s}`).join('\n')}
 
 Create exactly ${numBatches} sections.
 
@@ -135,88 +201,61 @@ Return JSON:
 Generate exactly ${numBatches} batches.`;
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// SLEEP STORY OUTLINE PROMPT — v2: pure narrative, NO meditation DNA
-// ═══════════════════════════════════════════════════════════════════
 function buildSleepStoryOutlinePrompt({ topic, project, numBatches, totalTargetWords, durationMinutes }) {
   const protagonistName = pickProtagonistName(topic?.title || project.name);
 
-  // Chapter arc: arrival → exploration (middle chapters) → natural rest
   const chapterArcHints = [];
-  chapterArcHints.push(`Chapter 1 — ARRIVAL: ${protagonistName} arrives at or is already within a specific, vividly described setting. Introduce the world immediately, like the opening line of a novel. ${protagonistName} begins a simple, concrete activity.`);
+  chapterArcHints.push(`Chapter 1 — ARRIVAL: ${protagonistName} arrives at or is already within a specific, vividly described setting. Open like the first line of a novel. ${protagonistName} begins a simple, concrete activity.`);
   for (let i = 2; i < numBatches; i++) {
     chapterArcHints.push(`Chapter ${i} — EXPLORATION: ${protagonistName} moves through the world, notices things, completes a gentle task, or discovers a small detail. The world gets quieter and slower with each chapter.`);
   }
-  chapterArcHints.push(`Chapter ${numBatches} — NATURAL REST: ${protagonistName} finds a warm, still place. The world outside is quiet. The narration slows to near-silence. The story simply... stops. No instruction to sleep. No address to any listener. Just stillness.`);
+  if (numBatches > 1) {
+    chapterArcHints.push(`Chapter ${numBatches} — NATURAL REST: ${protagonistName} finds a warm, still place. The world outside is quiet. The narration slows to near-silence. The story dissolves. No instruction to sleep. No address to any listener. Just stillness.`);
+  }
 
   return `You are a creative director planning an adult bedtime story — the kind told on the Calm app or Headspace Sleepcasts. You are writing a STORY OUTLINE, not a meditation plan.
 
-═══════════════════════════════════════
-WHAT THIS IS
-═══════════════════════════════════════
-A sleep story is NARRATIVE FICTION. A named character moves through a beautiful, specific world. The listener falls asleep because the world is so warm and detailed and unhurried that sleep finds them naturally — not because they are instructed to relax or breathe.
-
-Think: a gentle novel read aloud. A lullaby with plot. A nature documentary in prose.
+A sleep story is NARRATIVE FICTION. A named character moves through a beautiful, specific world. The listener falls asleep because the world is so warm and detailed and unhurried that sleep finds them naturally.
 
 ═══════════════════════════════════════
-THE PROTAGONIST
+THE PROTAGONIST: **${protagonistName}**
 ═══════════════════════════════════════
-Name: **${protagonistName}**
-Use this exact name in EVERY chapter synopsis — no exceptions. Never use "the character", "the listener", or "you". Always ${protagonistName}.
-
-Personality: content, gently curious, unhurried, observant. Never anxious, rushed, or conflicted.
+Use this exact name in EVERY chapter synopsis — no exceptions. Personality: content, gently curious, unhurried, observant.
 
 ═══════════════════════════════════════
-ABSOLUTE RULES FOR EVERY SYNOPSIS
+RULES FOR EVERY SYNOPSIS
 ═══════════════════════════════════════
 
 ✅ MUST HAVE:
 - ${protagonistName}'s name used explicitly at least twice
-- A specific, named location ("the stone harbour at Ardmore", "her kitchen in the old mill house" — never just "a peaceful place")
-- Concrete actions ${protagonistName} takes: walks, stirs, ties, folds, lifts, opens, watches, picks up
-- Rich sensory details: what is seen, heard, smelled, touched (and occasionally tasted)
+- A specific, named location (never just "a peaceful place")
+- Concrete actions ${protagonistName} takes: walks, stirs, ties, folds, lifts, watches
+- Rich sensory details: seen, heard, smelled, touched
 - Third-person present tense: "${protagonistName} walks...", "${protagonistName} watches..."
-- Natural micro-narrative: something happens, even if gently
 
-❌ NEVER include:
-- Second-person "you" in any form ("you feel", "you notice", "you breathe", "imagine you're")
-- Affirmations ("you are safe", "you are loved", "you deserve rest", "you are enough")
-- Breathing instructions ("take a deep breath", "breathe in", "inhale slowly")
-- Body scan language ("feel your muscles relax", "your eyelids grow heavy", "sink into your pillow")
-- [PAUSE] or [BREATHE] markers — these belong in the SCRIPT not the outline
-- Chapter titles like "Opening & Welcome", "Settling In", "Body Awareness", "Closing & Fade"
-- "The listener", "the audience", or any reference to someone listening
-- Meta-commentary ("this chapter will...", "we now transition to...")
-- Conflict, danger, tension, urgency, or anything that raises heart rate
+❌ NEVER:
+- Second-person "you" in any form
+- Affirmations ("you are safe", "you are loved", "you are enough")
+- Breathing instructions or body scan language
+- [PAUSE] or [BREATHE] markers in synopses
+- Chapter titles like "Opening & Welcome", "Settling In", "Body Awareness"
+- "The listener", "the audience", or meta-commentary
+- Conflict, danger, tension, or urgency
 
 ═══════════════════════════════════════
 PROJECT DETAILS
 ═══════════════════════════════════════
 - Story topic / setting: ${topic?.title || project.name}
-- Setting description: ${topic?.description || ''}
+- Description: ${topic?.description || ''}
 - Duration: ${durationMinutes} minutes (~${totalTargetWords} words at 150 wpm)
 - Total chapters: ${numBatches}
 
-═══════════════════════════════════════
-CHAPTER ARC (follow this structure)
-═══════════════════════════════════════
+CHAPTER ARC:
 ${chapterArcHints.join('\n')}
 
-═══════════════════════════════════════
-EXAMPLE OF A GOOD SYNOPSIS
-═══════════════════════════════════════
-Chapter: "The Harbour at Low Tide"
-Synopsis: "${protagonistName} walks the harbour wall as the tide retreats, leaving the fishing boats tilted gently on their moorings. The smell of salt and old rope is thick in the evening air. She moves slowly, one hand trailing along the worn stone, watching a heron pick its way between the exposed rocks below. At the far end of the wall there is a wooden bench, warped by years of sea wind, and she sits there watching the light change — the sky shifting from pale gold to a soft, bruised blue above the headland. A lobster fisherman she knows by sight nods as he passes, carrying a coil of rope over one shoulder. She nods back. Two swallows cut low across the water, almost touching the surface, then arrow up into the pale sky. The village bells ring the half-hour from somewhere behind her. She does not count them. She listens to the water moving against the stone below, the occasional soft knock of a hull against a buoy, and feels in no hurry to be anywhere at all."
+EXAMPLE GOOD SYNOPSIS:
+"${protagonistName} walks the harbour wall as the tide retreats, leaving the fishing boats tilted gently on their moorings. The smell of salt and old rope is thick in the evening air. She moves slowly, one hand trailing along the worn stone, watching a heron pick its way between the exposed rocks below. At the far end there is a wooden bench, warped by years of sea wind, and she sits watching the light change — the sky shifting from pale gold to a soft, bruised blue above the headland."
 
-═══════════════════════════════════════
-EXAMPLE OF A BAD SYNOPSIS (never write this)
-═══════════════════════════════════════
-"Opening & Welcome: The narrator invites the listener to settle in and get comfortable. Take a deep breath as we begin tonight's story. You are safe here. Let your body relax as you breathe in... [BREATHE] ... and breathe out. You are loved. Let go of the day..."
-→ WRONG: second-person, affirmations, breathing cues, no protagonist, no setting, no story.
-
-═══════════════════════════════════════
-OUTPUT FORMAT
-═══════════════════════════════════════
 Return only valid JSON:
 {
   "storytelling_format": "sleep story",
@@ -224,9 +263,9 @@ Return only valid JSON:
   "batches": [
     {
       "batch_number": 1,
-      "story_segment": "Evocative chapter title (3-6 words, NOT 'Opening', NOT 'Welcome', NOT 'Settling')",
-      "focus_area": "One sentence: what ${protagonistName} does and where — no affirmations, no meditation language",
-      "synopsis": "200-300 words of specific story content. ${protagonistName} named explicitly. Specific location. Concrete actions. Layered sensory details. Third-person present tense. Zero second-person. Zero affirmations. Zero breathing cues. Zero [PAUSE] markers."
+      "story_segment": "Evocative chapter title (3-6 words, NOT 'Opening', NOT 'Welcome')",
+      "focus_area": "One sentence: what ${protagonistName} does and where",
+      "synopsis": "200-300 words. ${protagonistName} named explicitly. Specific location. Concrete actions. Layered sensory details. Third-person present tense. Zero second-person. Zero affirmations. Zero breathing cues."
     }
   ]
 }
@@ -234,9 +273,6 @@ Return only valid JSON:
 Generate exactly ${numBatches} chapters.`;
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// STANDARD TVF OUTLINE PROMPT — unchanged
-// ═══════════════════════════════════════════════════════════════════
 function buildStandardOutlinePrompt({ topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock }) {
   const TVF_PHASES = [
     { phase: 'HOOK', purpose: 'Open with a powerful attention trigger — shocking statement, contrarian truth, bold question, dramatic result, or hidden secret.' },
@@ -249,23 +285,10 @@ function buildStandardOutlinePrompt({ topic, project, selectedHook, numBatches, 
     { phase: 'CTA', purpose: 'Encourage the audience to continue engaging. Make it feel like a natural extension of the story.' },
   ];
 
-  const formatFlavors = {
-    'Big Lie':    'Frame the HOOK around a widely-believed lie. The TENSION reveals cracks. The INSIGHT exposes the truth.',
-    'Zero to Hero': 'Frame the HOOK around the lowest point. The INSIGHT is the catalyst moment. The TRANSFORMATION is the triumphant rise.',
-    'Timeline':   'Frame the HOOK around a pivotal historical moment. Progress chronologically. The INSIGHT is the turning point.',
-    'Mystery':    'Frame the HOOK as an unsolved puzzle. The TENSION builds through clues. The INSIGHT is the revelation.',
-    'default':    'Use the standard TVF flow. Adapt tone to the niche. Focus on maximum curiosity and retention throughout.',
-  };
-
-  const formatFlavor = formatFlavors[project.storytelling_format] || formatFlavors['default'];
-  const phasesText = TVF_PHASES.map((p, i) => `  ${i + 1}. ${p.phase}: ${p.purpose}`).join('\n');
-
   return `You are an elite viral content strategist and YouTube scriptwriter using the TL VIRAL FORMULA (TVF).
 
 **THE 8 TVF PHASES** (every script MUST hit all 8 in order):
-${phasesText}
-
-**STORYTELLING FLAVOR**: ${formatFlavor}
+${TVF_PHASES.map((p, i) => `  ${i + 1}. ${p.phase}: ${p.purpose}`).join('\n')}
 ${strategyBlock}
 **PROJECT**:
 - Topic: ${topic?.title || project.name}
@@ -290,7 +313,7 @@ Return JSON:
       "story_segment": "Short segment title (3-5 words)",
       "tvf_phases": ["HOOK", "RELATABLE SITUATION"],
       "focus_area": "Brief focus description (1 sentence)",
-      "synopsis": "EXTREMELY DETAILED synopsis (150-250 words). Must cover: exact narrative beats, specific facts/events/anecdotes, emotional triggers, curiosity gaps, pacing rhythm, scroll-stopping moments, how it opens and ends with a cliffhanger."
+      "synopsis": "EXTREMELY DETAILED synopsis (150-250 words). Must cover: exact narrative beats, specific facts/events/anecdotes, emotional triggers, curiosity gaps, pacing rhythm, scroll-stopping moments, how it opens and ends."
     }
   ]
 }
@@ -301,8 +324,7 @@ Return JSON:
 ${selectedHook ? `- Batch 1 MUST open with this hook: "${selectedHook.hook_text}"` : '- Batch 1 MUST open with the most powerful attention trigger possible'}
 - Each synopsis: 150-250 words of SPECIFIC detail
 - Every batch must contain at least ONE curiosity gap
-- Ensure narrative continuity — each batch ends with a hook into the next
-- No filler, no generic buzzwords, no "in today's video"`;
+- Ensure narrative continuity — each batch ends with a hook into the next`;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -320,43 +342,32 @@ Deno.serve(async (req) => {
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-    const topics = await base44.asServiceRole.entities.Topics.filter({ id: project.selected_topic_id });
-    const topic = topics[0];
-
-    // Sleep projects don't use hooks
-    const scriptMode = detectScriptMode(null, project); // channel loaded below
-    const isSleepProject = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
-
-    let selectedHook = null;
-    if (!isSleepProject && project.selected_hook_id) {
-      const hooks = await base44.asServiceRole.entities.Hooks.filter({ id: project.selected_hook_id });
-      selectedHook = hooks[0];
-    }
+    const topics = project.selected_topic_id
+      ? await base44.asServiceRole.entities.Topics.filter({ id: project.selected_topic_id })
+      : [];
+    const topic = topics[0] || null;
 
     let channel = null;
     if (project.channel_id) {
       const channels = await base44.asServiceRole.entities.Channels.filter({ id: project.channel_id });
-      channel = channels[0];
+      channel = channels[0] || null;
     }
 
-    // Re-detect now that we have channel
     const resolvedScriptMode = detectScriptMode(channel, project);
-    const isSleepMode = resolvedScriptMode === 'sleep_meditation' || resolvedScriptMode === 'sleep_story';
-    const isSleepStory = resolvedScriptMode === 'sleep_story';
-    const isMeditation = resolvedScriptMode === 'sleep_meditation';
+    const isSleepMode   = resolvedScriptMode === 'sleep_meditation' || resolvedScriptMode === 'sleep_story';
+    const isSleepStory  = resolvedScriptMode === 'sleep_story';
+    const isMeditation  = resolvedScriptMode === 'sleep_meditation';
 
-    console.log(`[initializeScriptBatches] Script mode: ${resolvedScriptMode} (channel: ${channel?.name || 'none'})`);
+    console.log(`[initializeScriptBatches] mode=${resolvedScriptMode} channel=${channel?.name || 'none'}`);
 
-    // ── Strategy block — ONLY for standard mode ──
-    // Sleep modes intentionally skip channel strategy to prevent
-    // viral/retention writing patterns bleeding into sleep content.
+    // ── Strategy block (standard mode only) ──
     let strategyBlock = '';
     if (!isSleepMode) {
-      const scriptStrategy = project.script_strategy_override || channel?.script_strategy || '';
-      if (scriptStrategy) {
+      const raw = project.script_strategy_override || channel?.script_strategy || '';
+      if (raw) {
         try {
-          const strat = typeof scriptStrategy === 'string' ? JSON.parse(scriptStrategy) : scriptStrategy;
-          strategyBlock = `\n**NICHE-SPECIFIC SCRIPT STRATEGY** (follow this closely):
+          const strat = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          strategyBlock = `\n**NICHE-SPECIFIC SCRIPT STRATEGY**:
 - Hook Formula: ${strat.hook_formula || 'N/A'}
 - Structure: ${Array.isArray(strat.structure) ? strat.structure.join(' → ') : (strat.structure || 'N/A')}
 - Tone: ${strat.tone || 'N/A'}
@@ -364,113 +375,101 @@ Deno.serve(async (req) => {
 - Retention Tricks: ${strat.retention_tricks || strat.retention || 'N/A'}
 - CTA Style: ${strat.cta_style || strat.cta || 'N/A'}\n`;
         } catch (_) {
-          strategyBlock = `\n**NICHE STRATEGY NOTES**: ${scriptStrategy}\n`;
+          strategyBlock = `\n**NICHE STRATEGY NOTES**: ${raw}\n`;
         }
       }
     }
 
-    // Delete existing batches
+    // Sleep projects don't use hooks
+    let selectedHook = null;
+    if (!isSleepMode && project.selected_hook_id) {
+      const hooks = await base44.asServiceRole.entities.Hooks.filter({ id: project.selected_hook_id });
+      selectedHook = hooks[0] || null;
+    }
+
+    // ── Word / batch math (FIXED) ──
+    const durationMinutes   = project.video_duration_minutes || 10;
+    const totalTargetWords  = Math.round(durationMinutes * 150);
+    const batchTargets      = computeBatchTargets(totalTargetWords, resolvedScriptMode);
+    const numBatches        = batchTargets.length;
+
+    console.log(`[initializeScriptBatches] ${durationMinutes}min → ${totalTargetWords}w → ${numBatches} batches → targets: [${batchTargets.join(', ')}]`);
+
+    // ── Delete existing batches ──
     const existingBatches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
-    for (const batch of existingBatches) {
-      await base44.asServiceRole.entities.ScriptBatches.delete(batch.id);
+    for (const b of existingBatches) {
+      await base44.asServiceRole.entities.ScriptBatches.delete(b.id);
     }
-
-    // ── Batch sizing ──
-    const durationMinutes = project.video_duration_minutes || 10;
-    const totalTargetWords = Math.round(durationMinutes * 150);
-    const WORDS_PER_BATCH = isMeditation ? 1100 : isSleepStory ? 900 : 800;
-    const numBatches = Math.max(2, Math.ceil(totalTargetWords / WORDS_PER_BATCH));
-
-    const batchTargets = [];
-    let wordsRemaining = totalTargetWords;
-    for (let i = 0; i < numBatches; i++) {
-      if (i === numBatches - 1) {
-        batchTargets.push(wordsRemaining);
-      } else {
-        batchTargets.push(WORDS_PER_BATCH);
-        wordsRemaining -= WORDS_PER_BATCH;
-      }
-    }
-
-    console.log(`Project: ${durationMinutes} min → ${totalTargetWords} words → ${numBatches} batches (${resolvedScriptMode})`);
 
     // ── Build outline prompt ──
     const promptArgs = { topic, project, channel, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock };
-
     let outlinePrompt;
-    if (isMeditation) {
-      outlinePrompt = buildMeditationOutlinePrompt(promptArgs);
-    } else if (isSleepStory) {
-      outlinePrompt = buildSleepStoryOutlinePrompt(promptArgs);
-    } else {
-      outlinePrompt = buildStandardOutlinePrompt(promptArgs);
-    }
+    if (isMeditation)     outlinePrompt = buildMeditationOutlinePrompt(promptArgs);
+    else if (isSleepStory) outlinePrompt = buildSleepStoryOutlinePrompt(promptArgs);
+    else                   outlinePrompt = buildStandardOutlinePrompt(promptArgs);
 
-    // Temperature: sleep_story slightly higher for narrative variety
     const temperature = isSleepStory ? 0.8 : isMeditation ? 0.6 : 0.7;
-
-    console.log("Generating detailed outline...");
-    const outlineResult = await callOpenAI(outlinePrompt, temperature);
+    const outlineResult = await callLLM(outlinePrompt, temperature);
 
     if (!outlineResult.batches || outlineResult.batches.length === 0) {
-      throw new Error("AI failed to generate outline batches");
+      throw new Error('AI failed to generate outline batches');
     }
 
-    // ── For sleep stories: validate and stamp protagonist name on every batch ──
+    // ── Sleep story: validate + stamp protagonist on every batch ──
     if (isSleepStory) {
       const protagonist = outlineResult.protagonist_name || pickProtagonistName(topic?.title || project.name);
-      for (const batch of outlineResult.batches) {
-        batch.protagonist_name = protagonist;
-        // Inject name hint if synopsis somehow omits it
-        if (!batch.synopsis.includes(protagonist)) {
-          batch.synopsis = `[Protagonist: ${protagonist}] ` + batch.synopsis;
+      for (const b of outlineResult.batches) {
+        b.protagonist_name = protagonist;
+        if (!b.synopsis.includes(protagonist)) {
+          b.synopsis = `[Protagonist: ${protagonist}] ` + b.synopsis;
         }
-        // Strip any [PAUSE] or [BREATHE] markers that leaked into synopses
-        batch.synopsis = batch.synopsis.replace(/\[PAUSE[^\]]*\]/gi, '').replace(/\[BREATHE\]/gi, '').trim();
-        // Strip any second-person fragments
-        batch.synopsis = batch.synopsis.replace(/\byou (feel|notice|breathe|hear|see|sense|are)\b/gi, `${protagonist} $1`);
+        // Strip any meditation markers that leaked into synopses
+        b.synopsis = b.synopsis
+          .replace(/\[PAUSE[^\]]*\]/gi, '')
+          .replace(/\[BREATHE\]/gi, '')
+          .replace(/\byou (feel|notice|breathe|hear|see|sense|are)\b/gi, `${protagonist} $1`)
+          .trim();
       }
     }
 
-    // ── Create batch records ──
+    // ── Create batch records using FIXED batchTargets ──
     const createdBatches = [];
     for (let i = 0; i < numBatches; i++) {
       const aiBatch = outlineResult.batches[i];
-      const fallbackSegment = `Part ${i + 1}`;
-
       const batch = await base44.asServiceRole.entities.ScriptBatches.create({
         project_id,
-        batch_number: i + 1,
-        story_segment: aiBatch?.story_segment || fallbackSegment,
-        focus_area: aiBatch?.focus_area || fallbackSegment,
-        synopsis: aiBatch?.synopsis || `Write approximately ${batchTargets[i]} words for part ${i + 1}.`,
-        target_words: batchTargets[i],
-        status: 'pending',
+        batch_number:  i + 1,
+        story_segment: aiBatch?.story_segment || `Part ${i + 1}`,
+        focus_area:    aiBatch?.focus_area    || `Part ${i + 1}`,
+        synopsis:      aiBatch?.synopsis      || `Write approximately ${batchTargets[i]} words for part ${i + 1}.`,
+        target_words:  batchTargets[i],   // ← always correct, never negative
+        status:        'pending',
       });
       createdBatches.push(batch);
     }
 
-    // Update project — persist resolved script mode for downstream functions
+    // ── Update project ──
     await base44.asServiceRole.entities.Projects.update(project_id, {
-      status: 'scripting',
+      status:       'scripting',
       current_step: 3,
       project_mode: isSleepMode ? resolvedScriptMode : (project.project_mode || ''),
     });
 
-    console.log(`Created ${createdBatches.length} batches (${resolvedScriptMode})`);
+    console.log(`[initializeScriptBatches] ✅ ${createdBatches.length} batches created (${resolvedScriptMode})`);
 
     return Response.json({
-      success: true,
-      batches_created: createdBatches.length,
+      success:          true,
+      batches_created:  createdBatches.length,
       total_target_words: totalTargetWords,
-      duration_minutes: durationMinutes,
-      script_mode: resolvedScriptMode,
-      protagonist_name: isSleepStory ? (outlineResult.protagonist_name || null) : undefined,
-      batches: createdBatches,
+      duration_minutes:   durationMinutes,
+      script_mode:        resolvedScriptMode,
+      batch_targets:      batchTargets,
+      protagonist_name:   isSleepStory ? (outlineResult.protagonist_name || null) : undefined,
+      batches:            createdBatches,
     });
 
   } catch (error) {
-    console.error('Error initializing batches:', error);
+    console.error('[initializeScriptBatches] error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
