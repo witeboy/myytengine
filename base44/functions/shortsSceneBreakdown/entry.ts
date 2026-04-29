@@ -1,36 +1,42 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-// v2 — redeployed
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+// v4 — decoupled narration/visuals, enforces 40 scenes, Claude
 // ══════════════════════════════════════════════════════════════════
 // SHORTS SCENE BREAKDOWN ENGINE
-// Takes a 90-second Shorts script and breaks it into scenes
-// with visual change every 2-3 seconds as specified.
-// Each section maps to multiple scenes with visual/audio specs.
+// Takes a 90-second Shorts script and breaks it into 40 scenes.
+// Narration and visuals are DECOUPLED — one sentence of narration
+// can span multiple visual scenes. Visual cuts every 2-3 seconds.
 // ══════════════════════════════════════════════════════════════════
 
-async function callGemini(prompt, temperature = 0.5) {
-  const apiKey = Deno.env.get("GEMINI_API_KEY");
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: 8192, responseMimeType: "application/json" }
-      })
-    }
-  );
+async function callClaude(prompt, temperature = 0.5) {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01"
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-5",
+      max_tokens: 16000,
+      temperature,
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
+
   if (!response.ok) {
     const err = await response.json();
-    throw new Error(`Gemini error: ${err.error?.message || response.status}`);
+    throw new Error(`Claude error: ${err.error?.message || response.status}`);
   }
+
   const data = await response.json();
-  if (!data.candidates?.length) throw new Error("No candidates from Gemini");
-  const rawText = data.candidates[0].content.parts[0].text;
+  const rawText = data.content?.[0]?.text;
+  if (!rawText) throw new Error("No response from Claude");
+
   try { return JSON.parse(rawText); } catch (_) {
     const match = rawText.match(/\{[\s\S]*\}/);
     if (match) return JSON.parse(match[0]);
-    throw new Error("Failed to parse Gemini JSON");
+    throw new Error("Failed to parse Claude JSON");
   }
 }
 
@@ -62,64 +68,91 @@ Deno.serve(async (req) => {
       shortsNiche = channels[0]?.shorts_niche || 'finance';
     }
 
-    const prompt = `You are a YouTube Shorts visual director. Break this 90-second script into individual SCENES for a faceless video editor.
+    const prompt = `You are a YouTube Shorts video editor breaking a 90-second script into exactly 40 visual scenes.
 
-CRITICAL RULE: Visual must change every 2-3 seconds. Each scene = one visual.
-Total duration: 90 seconds. You MUST generate between 45 and 49 scenes.
-Do not stop early. Every 2 seconds of narration = one scene.
-If you generate fewer than 40 scenes you have failed the task.
+═══════════════════════════════════════════════
+MOST IMPORTANT RULE — READ CAREFULLY:
+═══════════════════════════════════════════════
+Narration and visuals are COMPLETELY DECOUPLED.
+- The script has ~200-240 words spoken over 90 seconds.
+- You must produce EXACTLY 40 scenes regardless of word count.
+- A single sentence of narration MUST be spread across multiple visual scenes.
+- Think like a film editor: the camera cuts every 2-3 seconds even when the same sentence is still being spoken.
+- Many scenes will have the SAME or CONTINUED narration_text — that is correct and expected.
+- Some scenes will have empty narration_text ("") — pure visual cutaways with no voiceover.
 
-SCRIPT:
+EXAMPLE of how ONE sentence becomes FOUR scenes:
+Narration: "He stole $400 million and nobody noticed for 12 years."
+→ Scene 1: narration_text: "He stole $400 million" | visual: man typing at multiple monitors, dark office
+→ Scene 2: narration_text: "" | visual: extreme close-up of hands on keyboard
+→ Scene 3: narration_text: "and nobody noticed" | visual: empty office hallway, security camera
+→ Scene 4: narration_text: "for 12 years." | visual: calendar pages flipping fast, years ticking by
+
+This is how real Shorts are edited. The voice is continuous. The visuals cut constantly.
+═══════════════════════════════════════════════
+
+SCRIPT TO BREAK DOWN:
 ${fullScript}
 
-For each scene, provide:
-- scene_number: sequential number
-- section: which part of the video (hook, tension, pivot, value_rule1, value_rule2, value_rule3, cta, deadzone, context, lessons1, lessons2, lessons3, transformation, loop)
-- narration_text: the exact spoken words for this scene (split the script text across scenes)
-- duration_seconds: 2-3 seconds per scene (hook scenes can be 1.5-2.5s)
-- visual_description: what should be on screen (stock footage description, text overlay, graphic)
-- camera_direction: zoom_in, zoom_out, pan_left, pan_right, static, push_in
-- text_overlay: any text that appears on screen (key numbers, rule labels, etc.)
-- mood: emotional tone of this specific visual
-- audio_note: voice energy and background audio direction
-- characters_present: array of character names who VISUALLY APPEAR in this scene (empty array [] if pure environment/text/graphic shot)
+SECTION STRUCTURE — distribute your 40 scenes across these sections:
+- hook (scenes 1-4): 4 scenes, 2-2.5s each. Kinetic text + dramatic visuals. Most impactful frames.
+- tension (scenes 5-12): 8 scenes, 2-2.5s each. Stock footage montage. Problem escalating.
+- pivot (scenes 13-14): 2 scenes, 2s each. Hard cut. Color or energy shift.
+- value_1 (scenes 15-20): 6 scenes, 2-2.5s each. First key point with supporting visuals.
+- value_2 (scenes 21-26): 6 scenes, 2-2.5s each. Second key point with supporting visuals.
+- value_3 (scenes 27-32): 6 scenes, 2-2.5s each. Third key point with supporting visuals.
+- cta (scenes 33-38): 6 scenes, 2-2.5s each. Return to hook energy. "Save this" moment.
+- deadzone (scenes 39-40): 2 scenes, 2s each. Dark card or loop frame. Silent or near-silent.
 
-VISUAL RULES:
-- Hook (0-5s): 2-3 scenes. Full-screen kinetic text + dramatic background. Word-by-word text animation.
-- Tension (5-20s): 5-7 scenes. Stock footage montage, new clip every 2-3s. Red highlights on numbers.
-- Pivot (20-25s): 2 scenes. HARD CUT transition. Color shift dark→bright. Single bold text line.
-- Value (25-70s): 15-18 scenes. 3 segments of 5-6 scenes each. Rule number appears as header. Numbers in green/gold.
-- CTA (70-85s): 5-6 scenes. Return to hook style. "Save this" text. Tease next video.
-- Dead zone (85-90s): 1-2 scenes. Dark card or loop back to opening frame. No voiceover.
+For each of the 40 scenes provide:
+- scene_number: 1 to 40
+- section: one of [hook, tension, pivot, value_1, value_2, value_3, cta, deadzone]
+- narration_text: the spoken words during this specific 2-3 second clip (can be empty "" for pure visual scenes, can repeat/continue from previous scene)
+- duration_seconds: 2.0 to 2.5 (hook and cta scenes can be 2.0, value scenes 2.5)
+- visual_description: detailed description of what is ON SCREEN — stock footage, graphic, text animation, close-up. Be specific. Different from the previous scene.
+- camera_direction: one of [zoom_in, zoom_out, pan_left, pan_right, static, push_in]
+- text_overlay: bold text on screen if any (key numbers, rule labels, power words) — empty string if none
+- mood: 2-3 words describing the emotional energy of this exact visual
+- audio_note: voice energy and background music direction for this scene
+- characters_present: array of character names who VISUALLY APPEAR (empty array [] for stock/graphic shots)
 
-Return JSON:
+VISUAL RULES PER SECTION:
+- hook: Full-screen bold text animations, dramatic stock footage, word-by-word kinetic text
+- tension: Fast stock footage cuts, red highlights on numbers, urgency visuals
+- pivot: HARD CUT — single bold statement, color shift dark→bright or calm→energetic
+- value_1/2/3: Rule number as header graphic, supporting stock footage, numbers in green/gold
+- cta: Bold "Save This" text frames, callback to hook visual, teaser frame for next video
+- deadzone: Black card with subtle branding or loop back to scene 1 visual. No voice.
+
+Return JSON and nothing else — no markdown, no backticks, no explanation:
 {
   "scenes": [
     {
       "scene_number": 1,
       "section": "hook",
-      "narration_text": "spoken words for this 2-3 second clip",
-      "duration_seconds": 2.5,
-      "visual_description": "detailed stock footage or graphic description",
+      "narration_text": "He stole $400 million",
+      "duration_seconds": 2.0,
+      "visual_description": "extreme close-up of hands rapidly typing on keyboard, dark moody office lighting, shallow depth of field",
       "camera_direction": "push_in",
-      "text_overlay": "bold text on screen if any",
-      "mood": "2-3 words",
-      "audio_note": "voice and background direction",
-      "characters_present": ["Character Name"]
+      "text_overlay": "$400,000,000",
+      "mood": "urgent, shocking, dark",
+      "audio_note": "voice low and deliberate, bass-heavy music sting on this frame",
+      "characters_present": []
     }
   ]
 }`;
 
-    console.log(`📱 Breaking Shorts script into scenes (visual every 2-3s)...`);
-    const result = await callGemini(prompt, 0.5);
+    console.log(`📱 Breaking Shorts script into 40 scenes (decoupled narration/visuals)...`);
+    const result = await callClaude(prompt, 0.5);
 
     let scenesArr = result?.scenes;
     if (!scenesArr || !Array.isArray(scenesArr)) {
       throw new Error('AI failed to generate scene breakdown');
     }
 
-    if (scenesArr.length < 25) {
-      throw new Error(`Too few scenes generated: ${scenesArr.length}. Expected 45-47. Please retry.`);
+    // Hard guard — must have at least 35 scenes
+    if (scenesArr.length < 35) {
+      throw new Error(`Too few scenes generated: ${scenesArr.length}. Expected 40. Please retry.`);
     }
 
     // Delete old scenes in parallel
@@ -129,7 +162,7 @@ Return JSON:
     }
 
     // Calculate beat durations and start times
-    const beatDurations = scenesArr.map(s => s.duration_seconds || 2.5);
+    const beatDurations = scenesArr.map(s => s.duration_seconds || 2.25);
     const beatStartTimes = [];
     let offset = 0;
     beatDurations.forEach(d => { beatStartTimes.push(offset); offset += d; });
@@ -140,8 +173,8 @@ Return JSON:
       beat_start_times: JSON.stringify(beatStartTimes),
       story_analysis: JSON.stringify({
         central_theme: `YouTube Short: ${project.name}`,
-        narrative_arc_summary: 'Hook → Tension → Pivot → 3 Value Points → CTA → Loop',
-        visual_world: `Fast-paced ${shortsNiche} niche with visual change every 2-3 seconds`,
+        narrative_arc_summary: 'Hook → Tension → Pivot → 3 Value Points → CTA → Deadzone',
+        visual_world: `Fast-paced ${shortsNiche} niche — visual cut every 2-3 seconds, narration decoupled from visuals`,
         visual_format: 'shorts_rapid_cut',
       })
     };
@@ -152,7 +185,7 @@ Return JSON:
       await base44.asServiceRole.entities.ProductionSettings.create({ project_id, ...psPayload });
     }
 
-    // Create scene records in bulk
+    // Camera movement map
     const cameraMap = {
       'zoom_in': 'slow_zoom_in',
       'zoom_out': 'slow_zoom_out',
@@ -162,6 +195,7 @@ Return JSON:
       'static': 'static',
     };
 
+    // Build scene records for bulkCreate
     const sceneRecords = scenesArr.map(aiScene => {
       const directorNotes = {
         section: aiScene.section,
@@ -179,7 +213,7 @@ Return JSON:
         narration_text: aiScene.narration_text || '',
         image_prompt: `DIRECTOR_NOTES:${JSON.stringify(directorNotes)}`,
         animation_prompt: aiScene.camera_direction || 'push_in',
-        duration_seconds: aiScene.duration_seconds || 2.5,
+        duration_seconds: aiScene.duration_seconds || 2.25,
         camera_movement: cameraMap[aiScene.camera_direction] || 'slow_zoom_in',
         animation_speed: 'normal',
         status: 'breakdown_ready',
@@ -198,7 +232,7 @@ Return JSON:
     });
 
     const elapsed = ((Date.now() - callStart) / 1000).toFixed(1);
-    console.log(`📱 Created ${scenesCreated} Shorts scenes in ${elapsed}s (avg ${(90/scenesCreated).toFixed(1)}s per scene)`);
+    console.log(`📱 Created ${scenesCreated} Shorts scenes in ${elapsed}s (avg ${(offset / scenesCreated).toFixed(1)}s per scene)`);
 
     return Response.json({
       success: true,
