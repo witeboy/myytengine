@@ -1,10 +1,12 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
-// v3 — switched from Gemini to Claude
+// v4 — migrated to Claude, bulkCreate, max 12 scenes, code-controlled durations
 // ══════════════════════════════════════════════════════════════════
-// SHORTS SCENE BREAKDOWN ENGINE
-// Takes a 90-second Shorts script and breaks it into scenes
-// with visual change every 2-3 seconds as specified.
-// Each section maps to multiple scenes with visual/audio specs.
+// SLEEP VISUAL BREAKDOWN ENGINE (v4)
+// ══════════════════════════════════════════════════════════════════
+// Generates 6-12 ambient environment image definitions.
+// Narration is split in code (not by AI) to avoid timeout.
+// AI only generates visual concepts + image prompts.
+// NO PEOPLE — pure environment/landscape scenes.
 // ══════════════════════════════════════════════════════════════════
 
 async function callClaude(prompt, temperature = 0.5) {
@@ -18,7 +20,7 @@ async function callClaude(prompt, temperature = 0.5) {
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-5",
-      max_tokens: 16000,
+      max_tokens: 6000,
       temperature,
       messages: [{ role: "user", content: prompt }]
     })
@@ -40,6 +42,36 @@ async function callClaude(prompt, temperature = 0.5) {
   }
 }
 
+function cleanNarrationText(text) {
+  if (!text) return text;
+  let cleaned = text;
+  cleaned = cleaned.replace(/\[[^\]]*\]/gi, (match) => {
+    if (/PAUSE|BREATHE/i.test(match)) return match;
+    return '';
+  });
+  cleaned = cleaned.replace(/^(VOICEOVER|NARRATOR|VO|SOUND|MUSIC|SFX|SCENE|V\.?O\.?)\s*:\s*/gim, '');
+  cleaned = cleaned.replace(/^[A-Z\s]+\(V\.?O\.?\)\s*:?\s*/gim, '');
+  cleaned = cleaned.replace(/\*\*[^*]+\*\*:?\s*/g, '');
+  cleaned = cleaned.replace(/\*\*/g, '');
+  cleaned = cleaned.replace(/\*/g, '');
+  cleaned = cleaned.replace(/\n{2,}/g, ' ').replace(/\s{2,}/g, ' ').trim();
+  return cleaned;
+}
+
+// Split script into N roughly-equal chunks, breaking at sentence boundaries
+function splitScriptIntoChunks(scriptText, chunkCount) {
+  const sentences = scriptText.split(/(?<=[.!?…])\s+/).filter(s => s.trim().length > 0);
+  const totalSentences = sentences.length;
+  const perChunk = Math.ceil(totalSentences / chunkCount);
+  const chunks = [];
+  for (let i = 0; i < chunkCount; i++) {
+    const start = i * perChunk;
+    const end = Math.min(start + perChunk, totalSentences);
+    chunks.push(sentences.slice(start, end).join(' '));
+  }
+  return chunks;
+}
+
 Deno.serve(async (req) => {
   const callStart = Date.now();
   try {
@@ -59,90 +91,93 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'No final script found.' }, { status: 400 });
     }
 
-    const fullScript = script.full_script;
+    const isMeditation = project.project_mode === 'sleep_meditation';
+    const finalScript = script.full_script;
+    const wordCount = finalScript.split(/\s+/).filter(w => w.length > 0).length;
+    const durationMinutes = project.video_duration_minutes || Math.ceil(wordCount / 150);
 
-    // Get channel shorts niche
-    let shortsNiche = 'finance';
-    if (project.channel_id) {
-      const channels = await base44.asServiceRole.entities.Channels.filter({ id: project.channel_id });
-      shortsNiche = channels[0]?.shorts_niche || 'finance';
-    }
+    // ── FIX 1: Scene count — 1 per 5 min, floor 6, hard cap 12 ──
+    const imageCount = Math.min(12, Math.max(6, Math.round(durationMinutes / 5)));
 
-    const prompt = `You are a YouTube Shorts visual director. Break this 90-second script into individual SCENES for a faceless video editor.
+    // ── FIX 2: Durations computed purely in code — AI has no say ──
+    const durationSecPerScene = (durationMinutes * 60) / imageCount;
 
-CRITICAL RULE: Visual must change every 2-3 seconds. Each scene = one visual.
-Total duration: 90 seconds. That means approximately 30-45 scenes.
-
-SCRIPT:
-${fullScript}
-
-For each scene, provide:
-- scene_number: sequential number
-- section: which part of the video (hook, tension, pivot, value_rule1, value_rule2, value_rule3, cta, deadzone, context, lessons1, lessons2, lessons3, transformation, loop)
-- narration_text: the exact spoken words for this scene (split the script text across scenes)
-- duration_seconds: 2-3 seconds per scene (hook scenes can be 1.5-2.5s)
-- visual_description: what should be on screen (stock footage description, text overlay, graphic)
-- camera_direction: zoom_in, zoom_out, pan_left, pan_right, static, push_in
-- text_overlay: any text that appears on screen (key numbers, rule labels, etc.)
-- mood: emotional tone of this specific visual
-- audio_note: voice energy and background audio direction
-- characters_present: array of character names who VISUALLY APPEAR in this scene (empty array [] if pure environment/text/graphic shot)
-
-VISUAL RULES:
-- Hook (0-5s): 2-3 scenes. Full-screen kinetic text + dramatic background. Word-by-word text animation.
-- Tension (5-20s): 5-7 scenes. Stock footage montage, new clip every 2-3s. Red highlights on numbers.
-- Pivot (20-25s): 2 scenes. HARD CUT transition. Color shift dark→bright. Single bold text line.
-- Value (25-70s): 15-18 scenes. 3 segments of 5-6 scenes each. Rule number appears as header. Numbers in green/gold.
-- CTA (70-85s): 5-6 scenes. Return to hook style. "Save this" text. Tease next video.
-- Dead zone (85-90s): 1-2 scenes. Dark card or loop back to opening frame. No voiceover.
-
-Return JSON and nothing else — no markdown, no backticks, no explanation:
-{
-  "scenes": [
-    {
-      "scene_number": 1,
-      "section": "hook",
-      "narration_text": "spoken words for this 2-3 second clip",
-      "duration_seconds": 2.5,
-      "visual_description": "detailed stock footage or graphic description",
-      "camera_direction": "push_in",
-      "text_overlay": "bold text on screen if any",
-      "mood": "2-3 words",
-      "audio_note": "voice and background direction",
-      "characters_present": ["Character Name"]
-    }
-  ]
-}`;
-
-    console.log(`📱 Breaking Shorts script into scenes (visual every 2-3s)...`);
-    const result = await callClaude(prompt, 0.5);
-
-    let scenesArr = result?.scenes;
-    if (!scenesArr || !Array.isArray(scenesArr)) {
-      throw new Error('AI failed to generate scene breakdown');
-    }
+    console.log(`🌙 Sleep ambient breakdown: ${durationMinutes}min → ${imageCount} scenes @ ${(durationSecPerScene / 60).toFixed(1)}min each | mode: ${project.project_mode}`);
 
     // Delete old scenes in parallel
     const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
     if (oldScenes.length > 0) {
       await Promise.all(oldScenes.map(s => base44.asServiceRole.entities.Scenes.delete(s.id).catch(() => {})));
+      console.log(`🗑️ Deleted ${oldScenes.length} old scenes`);
     }
 
-    // Calculate beat durations and start times
-    const beatDurations = scenesArr.map(s => s.duration_seconds || 2.5);
-    const beatStartTimes = [];
-    let offset = 0;
-    beatDurations.forEach(d => { beatStartTimes.push(offset); offset += d; });
+    // Split narration in code — don't ask AI to do it
+    const narrationChunks = splitScriptIntoChunks(finalScript, imageCount);
+
+    // ── FIX 3: Claude instead of Gemini ──────────────────────────
+    const prompt = `You are a visual art director for premium sleep content. Design ${imageCount} ambient environment images for a ${durationMinutes}-minute ${isMeditation ? 'guided meditation' : 'sleep story'} about "${project.name}".
+
+RULES:
+- Dark moody oil painting style, Rembrandt chiaroscuro, 70%+ shadow
+- Colors: deep amber, burnt sienna, dark chocolate, midnight navy, warm gold highlights only
+- Light sources: very dim candlelight, very dim moonlight, faint distant glow, dying campfire embers — always warm and VERY DIM
+- Topic-matched to "${project.name}" — every image relates to the topic
+- Progressive darkening: scene 1 has very dim warm glow, final scenes are nearly black
+- ALL light must be described as "very dim" or "faint" — never just "candlelight" or "moonlight" alone
+- Simple compositions with lots of dark negative space
+
+ABSOLUTE PROHIBITION — ZERO TOLERANCE:
+- NEVER include ANY human figures, people, persons, characters, silhouettes, or shadows of people
+- NEVER include ANY body parts: hands, fingers, feet, legs, arms, face, eyes, skin, torso, shoulders, hair, lips, head
+- NEVER include human-occupied furniture: beds, chairs, sofas, desks with items on them
+- NEVER include clothing, shoes, accessories, or any object implying human presence
+- NEVER use words like: person, figure, someone, viewer, listener, character, protagonist, woman, man, child
+- Every scene must be a PURE ENVIRONMENT or LANDSCAPE — nature, architecture, still life, abstract atmosphere
+- If the topic involves people, represent it through SYMBOLIC environments (empty paths, distant lights, weathered doors) — NEVER through human forms
+
+Return JSON with EXACTLY ${imageCount} scenes and nothing else — no markdown, no backticks, no explanation:
+{
+  "scenes": [
+    {
+      "scene_number": 1,
+      "image_prompt_core": "Pure environment/landscape prompt with NO people or body parts. Example: 'A misty forest path at twilight, ancient oak trees with gnarled roots, golden fireflies drifting through heavy fog, dark moody oil painting, Rembrandt chiaroscuro lighting, deep shadow, warm amber rim light, burnt sienna and dark chocolate palette, low-key lighting, masterpiece quality, 70 percent shadow'",
+      "camera_movement": "ultra_slow_zoom_in",
+      "mood": "2-3 words"
+    }
+  ]
+}
+
+camera_movement must be one of: ultra_slow_zoom_in, ultra_slow_zoom_out, ultra_slow_pan_left, ultra_slow_pan_right
+Alternate camera movements across scenes for visual variety.`;
+
+    console.log(`🎨 Generating ${imageCount} ambient image definitions via Claude...`);
+    const result = await callClaude(prompt, 0.6);
+
+    let scenesArr = result?.scenes;
+    if (!scenesArr || !Array.isArray(scenesArr)) {
+      console.error(`No scenes array. Keys: ${Object.keys(result || {}).join(',')}`);
+      return Response.json({ error: 'AI failed to generate ambient images' }, { status: 500 });
+    }
+
+    // Safety net — never exceed imageCount even if Claude returns extras
+    scenesArr = scenesArr.slice(0, imageCount);
+
+    // ── Beat timing — all computed in code, perfectly even ───────
+    const beatDurations = Array(imageCount).fill(durationSecPerScene);
+    const beatStartTimes = beatDurations.map((_, i) => i * durationSecPerScene);
 
     // Save ProductionSettings
     const psPayload = {
       beat_durations: JSON.stringify(beatDurations),
       beat_start_times: JSON.stringify(beatStartTimes),
       story_analysis: JSON.stringify({
-        central_theme: `YouTube Short: ${project.name}`,
-        narrative_arc_summary: 'Hook → Tension → Pivot → 3 Value Points → CTA → Loop',
-        visual_world: `Fast-paced ${shortsNiche} niche with visual change every 2-3 seconds`,
-        visual_format: 'shorts_rapid_cut',
+        central_theme: `${isMeditation ? 'Guided meditation' : 'Sleep story'}: ${project.name}`,
+        narrative_arc_summary: 'Progressive relaxation with topic-matched ambient visuals',
+        emotional_trajectory: ['wonder', 'calm', 'settling', 'deep_rest'],
+        visual_world: `Dreamlike ambient scenes inspired by ${project.name}`,
+        recurring_visual_motifs: ['warm light', 'gentle darkness', 'nature', 'atmosphere'],
+        color_arc: 'warm amber → deep blue → midnight → near-darkness',
+        visual_format: 'ambient_images_with_ken_burns'
       })
     };
     const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
@@ -152,63 +187,56 @@ Return JSON and nothing else — no markdown, no backticks, no explanation:
       await base44.asServiceRole.entities.ProductionSettings.create({ project_id, ...psPayload });
     }
 
-    // Create scene records in bulk
-    const cameraMap = {
-      'zoom_in': 'slow_zoom_in',
-      'zoom_out': 'slow_zoom_out',
-      'pan_left': 'slow_pan',
-      'pan_right': 'slow_pan',
-      'push_in': 'slow_zoom_in',
-      'static': 'static',
-    };
-
-    const sceneRecords = scenesArr.map(aiScene => {
+    // ── FIX 4: bulkCreate instead of sequential creates ──────────
+    const sceneRecords = scenesArr.map((aiScene, i) => {
+      const cleanedNarration = cleanNarrationText(narrationChunks[i] || '');
       const directorNotes = {
-        section: aiScene.section,
-        visual_description: aiScene.visual_description,
-        camera_direction: aiScene.camera_direction || 'push_in',
-        text_overlay: aiScene.text_overlay || '',
-        mood: aiScene.mood || '',
-        audio_note: aiScene.audio_note || '',
-        shorts_format: true,
-        characters_present: aiScene.characters_present || [],
+        image_prompt_core: aiScene.image_prompt_core || '',
+        camera_movement: aiScene.camera_movement || 'ultra_slow_zoom_out',
+        mood: aiScene.mood || 'serene',
+        duration_minutes: parseFloat((durationSecPerScene / 60).toFixed(2)),
+        emotional_intensity: 0.15,
+        sleep_visual_type: 'ambient_image',
+        phase: 'sleep_ambient'
       };
       return {
         project_id,
-        scene_number: aiScene.scene_number,
-        narration_text: aiScene.narration_text || '',
+        scene_number: i + 1,
+        narration_text: cleanedNarration,
         image_prompt: `DIRECTOR_NOTES:${JSON.stringify(directorNotes)}`,
-        animation_prompt: aiScene.camera_direction || 'push_in',
-        duration_seconds: aiScene.duration_seconds || 2.5,
-        camera_movement: cameraMap[aiScene.camera_direction] || 'slow_zoom_in',
-        animation_speed: 'normal',
-        status: 'breakdown_ready',
-        act: aiScene.section || '',
-        notes: aiScene.text_overlay || '',
+        animation_prompt: aiScene.camera_movement || 'ultra_slow_zoom_out',
+        duration_seconds: durationSecPerScene,
+        camera_movement: 'slow_zoom_out',
+        animation_speed: 'very_slow',
+        status: 'breakdown_ready'
       };
     });
 
     await base44.asServiceRole.entities.Scenes.bulkCreate(sceneRecords);
-    const scenesCreated = sceneRecords.length;
 
     await base44.asServiceRole.entities.Projects.update(project_id, {
       status: 'breakdown_complete',
-      current_step: 5,
-      orientation: 'portrait',
+      current_step: 5
     });
 
     const elapsed = ((Date.now() - callStart) / 1000).toFixed(1);
-    console.log(`📱 Created ${scenesCreated} Shorts scenes in ${elapsed}s (avg ${(90/scenesCreated).toFixed(1)}s per scene)`);
+    console.log(`🌙 Created ${sceneRecords.length} ambient scenes in ${elapsed}s`);
+    console.log(`📊 Each scene: ${(durationSecPerScene / 60).toFixed(1)}min | Total: ${durationMinutes}min`);
 
     return Response.json({
       success: true,
       done: true,
-      scenes_created: scenesCreated,
-      total_duration: offset.toFixed(1),
+      scenes_created: sceneRecords.length,
+      total_target: imageCount,
+      scene_duration_minutes: parseFloat((durationSecPerScene / 60).toFixed(2)),
+      total_duration_minutes: durationMinutes,
+      beat_durations: beatDurations,
+      beat_start_times: beatStartTimes,
+      visual_format: 'ambient_images_with_ken_burns'
     });
 
   } catch (error) {
-    console.error('❌ shortsSceneBreakdown error:', error.message);
+    console.error('❌ sleepSceneBreakdown error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
