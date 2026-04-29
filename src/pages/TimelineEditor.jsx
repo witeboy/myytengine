@@ -1573,6 +1573,50 @@ export default function TimelineEditor() {
     setCaptionClips(locked);
   };
  
+
+ const handleDetectBeats = async () => {
+    if (!musicUrl) return;
+    setIsDetectingBeats(true);
+    try {
+      const { detectBeats } = await import('@/lib/beatDetector');
+      const result = await detectBeats(musicUrl, (phase, pct) => {
+        console.log(`[BeatDetect] ${phase} ${pct}%`);
+      });
+      setDetectedBeats(result.beats);
+      setDetectedBpm(result.bpm);
+      console.log(`[BeatDetect] ${result.beats.length} beats at ${result.bpm} BPM`);
+    } catch (err) {
+      console.error('[BeatDetect] failed:', err.message);
+    }
+    setIsDetectingBeats(false);
+  };
+  // Snap all clip boundaries to nearest beat
+  const handleSnapAllToBeats = async () => {
+    if (detectedBeats.length === 0) return;
+    const { snapTimestampsToBeat } = await import('@/lib/beatDetector');
+ 
+    // Collect all clip start times and snap them
+    let cumulativeOffset = 0;
+    const snappedClips = videoClips.map((clip, idx) => {
+      const snappedStart = snapTimestampsToBeat([clip.startTime], detectedBeats, 150)[0];
+      // Adjust duration so next clip starts where this one's snapped start was
+      const nextStart = videoClips[idx + 1]?.startTime ?? (clip.startTime + clip.duration);
+      const snappedNextStart = snapTimestampsToBeat([nextStart], detectedBeats, 150)[0];
+      const newDuration = Math.max(1.0, snappedNextStart - snappedStart);
+      return { ...clip, startTime: snappedStart, duration: newDuration };
+    });
+    setVideoClips(snappedClips);
+  };
+ 
+  // Beat-lock captions
+  const handleBeatLockCaptions = async () => {
+    if (detectedBeats.length === 0 || captionClips.length === 0) return;
+    const { beatLockCaptions } = await import('@/lib/beatDetector');
+    const locked = beatLockCaptions(captionClips, detectedBeats, 80);
+    setCaptionClips(locked);
+  };
+ 
+ 
   const handleUndo   = () => { videoHistory.undo(); captionHistory.undo(); overlayHistory.undo(); musicHistory.undo(); };
   const handleRedo   = () => { videoHistory.redo(); captionHistory.redo(); overlayHistory.redo(); musicHistory.redo(); };
   const handleDelete = () => {
