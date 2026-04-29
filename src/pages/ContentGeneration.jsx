@@ -22,7 +22,7 @@ import {
   Loader2, Download, ArrowRight, Import, Layers, ImageIcon, Film,
   Palette, Sparkles, Monitor, Clapperboard, Wand2, CheckCircle2,
   XCircle, Clock, Zap, Video, FolderDown, Mic, Music, Volume2, Home,
-  FileText
+  FileText, RefreshCw
 } from 'lucide-react';
 
 
@@ -456,6 +456,8 @@ export default function ContentGeneration() {
   // ── NEW: dedicated state for converting director notes → prompts ──
   const [convertingPrompts, setConvertingPrompts] = useState(false);
   const [convertProgress, setConvertProgress] = useState('');
+  const [pollingImages, setPollingImages] = useState(false);
+  const [pollResult, setPollResult] = useState(null);
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState({ current: 0, total: 0, label: '' });
   const [estimatedWordCount, setEstimatedWordCount] = useState(0);
@@ -578,6 +580,46 @@ export default function ContentGeneration() {
       setTimeout(() => setConvertProgress(''), 5000);
     } finally {
       setConvertingPrompts(false);
+    }
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  // MANUAL POLL: Re-trigger polling for any image_pending scenes
+  // ═══════════════════════════════════════════════════════════════
+  const handlePollImages = async () => {
+    setPollingImages(true);
+    setPollResult(null);
+    let totalCompleted = 0;
+    let totalFailed = 0;
+    let rounds = 0;
+    const MAX_ROUNDS = 24; // up to 2 minutes of polling (5s intervals)
+
+    try {
+      // Keep polling until nothing is pending or we hit the ceiling
+      while (rounds < MAX_ROUNDS) {
+        rounds++;
+        const resp = await base44.functions.invoke('pollSceneImage', { project_id: projectId });
+        const data = resp?.data || resp;
+        totalCompleted += data.completed || 0;
+        totalFailed    += data.failed    || 0;
+
+        // Refresh scene cards whenever something resolves
+        if ((data.completed || 0) > 0) await refetchScenes();
+
+        if (data.done) break; // nothing left pending
+        if ((data.pending || 0) === 0) break;
+
+        await new Promise(r => setTimeout(r, 5000));
+      }
+
+      await refetchScenes();
+      setPollResult({ completed: totalCompleted, failed: totalFailed, rounds });
+    } catch (err) {
+      console.error('Poll images failed:', err);
+      setPollResult({ error: err.message });
+    } finally {
+      setPollingImages(false);
+      setTimeout(() => setPollResult(null), 6000);
     }
   };
 
@@ -1515,6 +1557,39 @@ export default function ContentGeneration() {
                 {generatingImages ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <ImageIcon className="w-4 h-4 mr-1" />}
                 {generatingImages ? 'Generating...' : 'Generate All Images'}
               </Button>
+
+              {/* ── Sync Results: re-triggers pollSceneImage for any stuck pending scenes ── */}
+              <div className="relative">
+                <Button
+                  onClick={handlePollImages}
+                  disabled={pollingImages || generatingImages}
+                  variant="outline"
+                  className="border-sky-200 text-sky-700 hover:bg-sky-50"
+                  title="Re-check KIE for any images that finished generating but weren't saved"
+                >
+                  {pollingImages
+                    ? <><Loader2 className="w-4 h-4 animate-spin mr-1" />Syncing...</>
+                    : <><RefreshCw className="w-4 h-4 mr-1" />Sync Results</>
+                  }
+                </Button>
+                {pollResult && (
+                  <div className={`absolute top-full mt-1 right-0 z-50 rounded-lg p-2.5 shadow-lg text-xs w-52 whitespace-nowrap ${
+                    pollResult.error
+                      ? 'bg-red-50 border border-red-200 text-red-700'
+                      : 'bg-sky-50 border border-sky-200 text-sky-800'
+                  }`}>
+                    {pollResult.error
+                      ? `❌ ${pollResult.error}`
+                      : <>
+                          <p className="font-semibold">✅ Sync complete ({pollResult.rounds} poll{pollResult.rounds !== 1 ? 's' : ''})</p>
+                          {pollResult.completed > 0 && <p>🖼️ {pollResult.completed} image{pollResult.completed !== 1 ? 's' : ''} retrieved</p>}
+                          {pollResult.failed > 0    && <p>❌ {pollResult.failed} failed</p>}
+                          {pollResult.completed === 0 && pollResult.failed === 0 && <p>Nothing new — all up to date</p>}
+                        </>
+                    }
+                  </div>
+                )}
+              </div>
 
               <Button onClick={handleGenerateVideos} disabled={generatingVideos || imageCount === 0} variant="outline">
                 {generatingVideos ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Film className="w-4 h-4 mr-1" />}
