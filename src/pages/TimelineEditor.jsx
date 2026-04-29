@@ -895,7 +895,8 @@ export default function TimelineEditor() {
   // ── Audio sync ──────────────────────────────────────────────────
   useEffect(() => {
     if (voiceoverUrl && audioRef.current) {
-      if (Math.abs(audioRef.current.currentTime - currentTime) > 0.3) audioRef.current.currentTime = currentTime;
+      // Tightened to 0.05s — at 120 BPM a beat is 0.5s; 0.3s was half a beat of drift
+      if (Math.abs(audioRef.current.currentTime - currentTime) > 0.05) audioRef.current.currentTime = currentTime;
       audioRef.current.muted = isMuted;
       audioRef.current.volume = voiceoverVol;
       if (isPlaying) audioRef.current.play().catch(() => {});
@@ -910,7 +911,7 @@ export default function TimelineEditor() {
     if (activeClip && isPlaying) {
       const elapsed = currentTime - activeClip.startTime;
       const srcTime = (activeClip.sourceOffset || 0) + elapsed;
-      if (Math.abs(musicRef.current.currentTime - srcTime) > 0.3) musicRef.current.currentTime = srcTime;
+      if (Math.abs(musicRef.current.currentTime - srcTime) > 0.05) musicRef.current.currentTime = srcTime;
       musicRef.current.muted = isMuted;
       musicRef.current.volume = activeClip.volume ?? musicVol;
       musicRef.current.play().catch(() => {});
@@ -1019,13 +1020,45 @@ export default function TimelineEditor() {
         });
 
         const totalWeight = sceneWeights.reduce((s, w) => s + w, 0);
-        newBeatDurations = sceneWeights.map(w => parseFloat(((w / totalWeight) * audioDuration).toFixed(3)));
-        newBeatDurations = newBeatDurations.map(d => Math.max(0.8, d));
-        const scaledSum = newBeatDurations.reduce((s, d) => s + d, 0);
-        const sf = audioDuration / scaledSum;
-        newBeatDurations = newBeatDurations.map(d => parseFloat((d * sf).toFixed(3)));
-        const drift = audioDuration - newBeatDurations.reduce((s, d) => s + d, 0);
-        newBeatDurations[newBeatDurations.length - 1] += drift;
+        // Step 1: proportional raw durations
+        const rawDurations = sceneWeights.map(w => (w / totalWeight) * audioDuration);
+ 
+        // Step 2: per-scene speech span estimate (used as cap reference)
+        const speechSpans = scenes.map(scene => {
+          const text = (scene.narration_text || scene.voiceover_text || '').trim();
+          const wc = text.split(/\s+/).filter(Boolean).length;
+          return Math.max(1.0, wc * 0.42); // 0.42s per word at natural pace
+        });
+ 
+        // Step 3: clamp each scene — max 2.2× its speech span, min 1.5s
+        newBeatDurations = rawDurations.map((d, i) => {
+          const maxAllowed = Math.max(1.5, speechSpans[i] * 2.2);
+          return Math.max(1.5, Math.min(d, maxAllowed));
+        });
+ 
+        // Step 4: redistribute clamped time to neighbours proportionally
+        const cappedSum  = newBeatDurations.reduce((s, d) => s + d, 0);
+        const surplusTime = audioDuration - cappedSum;
+        if (Math.abs(surplusTime) > 0.01) {
+          // Spread surplus across scenes that were NOT capped (have headroom)
+          const headroom = newBeatDurations.map((d, i) => Math.max(0, speechSpans[i] * 2.2 - d));
+          const totalHeadroom = headroom.reduce((s, h) => s + h, 0);
+          if (totalHeadroom > 0.01) {
+            newBeatDurations = newBeatDurations.map((d, i) =>
+              parseFloat((d + (headroom[i] / totalHeadroom) * surplusTime).toFixed(3))
+            );
+          } else {
+            // No headroom anywhere — add surplus to last scene
+            newBeatDurations[newBeatDurations.length - 1] += surplusTime;
+          }
+        }
+ 
+        // Step 5: final drift correction (floating point cleanup)
+        const finalDrift = audioDuration - newBeatDurations.reduce((s, d) => s + d, 0);
+        if (Math.abs(finalDrift) > 0) {
+          newBeatDurations[newBeatDurations.length - 1] =
+            parseFloat((newBeatDurations[newBeatDurations.length - 1] + finalDrift).toFixed(3));
+        }
 
         newStartTimes = [];
         let off = 0;
@@ -1112,8 +1145,22 @@ export default function TimelineEditor() {
         const vidDur = await measureVideoDur(clip.videoUrl);
         const beatDur = clip.duration;
         if (clip.manualSpeed) return { ...clip, videoDuration: vidDur };
-        const rate = beatDur > vidDur ? Math.max(0.25, parseFloat((vidDur / beatDur).toFixed(3))) : 1.0;
-        return { ...clip, playbackRate: rate, videoDuration: vidDur };
+ 
+        if (beatDur <= vidDur) {
+          // Video is longer than or equal to beat — play at 1× (may need trimming)
+          return { ...clip, playbackRate: 1.0, videoLoop: false, videoDuration: vidDur };
+        }
+ 
+        const rate = vidDur / beatDur;
+ 
+        if (rate < 0.6) {
+          // Video is too short to slow-stretch without looking broken
+          // Loop at 1× instead of slow-mo
+          return { ...clip, playbackRate: 1.0, videoLoop: true, videoDuration: vidDur };
+        }
+ 
+        // Safe slow-down range: 0.6× – 1.0×
+        return { ...clip, playbackRate: parseFloat(rate.toFixed(3)), videoLoop: false, videoDuration: vidDur };
       }));
 
       setVideoClips(syncedWithRates);
@@ -1318,21 +1365,55 @@ export default function TimelineEditor() {
     if (scenesWithText.length === 0) return [];
 
     const allWords = [];
-    scenesWithText.forEach((scene) => {
+    // Max seconds a scene can occupy = its speech span + generous buffer
+    // Prevents 3-word scenes from stretching to 10+ seconds
+    const SPEECH_RATE_SECS_PER_WORD = 0.42; // ~143 wpm natural speech
+    const MAX_DENSITY_MULTIPLIER    = 2.2;   // scene can be at most 2.2× its speech span
+    const MIN_SCENE_DURATION        = 1.5;   // never below 1.5s
+    const SCENE_END_MARGIN          = 0.12;
+ 
+    // First pass: compute raw speech span per scene
+    const sceneSpeechSpans = scenesWithText.map((scene) => {
+      const text = (scene.narration_text || scene.voiceover_text).trim();
+      const tokens = text.split(/\s+/).filter(Boolean);
+      if (tokens.length === 0) return MIN_SCENE_DURATION;
+      const rawSum = tokens.reduce((s, t) => s + wordWeight(t) + pauseAfter(t), 0);
+      return Math.max(MIN_SCENE_DURATION, rawSum);
+    });
+ 
+    // Total raw speech time
+    const totalRawSpeech = sceneSpeechSpans.reduce((s, d) => s + d, 0);
+ 
+    // Scale factor — but cap each scene individually first
+    let sf = totalRawSpeech > 0 ? 1.0 : 1.0;
+ 
+    // Second pass: apply per-scene cap BEFORE global scale
+    scenesWithText.forEach((scene, si) => {
       const idx = scenes.findIndex(s => s.id === scene.id);
       const text = (scene.narration_text || scene.voiceover_text).trim();
-      const beatDur = audioBeatDurations[idx] ?? scene.duration_seconds ?? 5;
-      const beatStart = audioStartTimes[idx] ?? 0;
-      const SCENE_END_MARGIN = 0.12;
-      const beatEnd = beatStart + beatDur - SCENE_END_MARGIN;
       const tokens = text.split(/\s+/).filter(Boolean);
+      const beatStart = audioStartTimes[idx] ?? 0;
+ 
+      // Raw speech span for this scene
+      const speechSpan = sceneSpeechSpans[si];
+ 
+      // Proportional share of total audio based on speech weight
+      const proportionalShare = (speechSpan / totalRawSpeech) * (audioBeatDurations.reduce
+        ? audioBeatDurations.reduce((s, d) => s + d, 0)
+        : speechSpan);
+ 
+      // Clamped beat duration — never more than MAX_DENSITY_MULTIPLIER × speech span
+      const maxAllowed = Math.max(MIN_SCENE_DURATION, speechSpan * MAX_DENSITY_MULTIPLIER);
+      const beatDur = Math.min(proportionalShare, maxAllowed);
+      const beatEnd = beatStart + beatDur - SCENE_END_MARGIN;
+ 
       if (tokens.length === 0) return;
-
+ 
       const weights = tokens.map(t => wordWeight(t) + pauseAfter(t));
-      const rawSum = weights.reduce((s, w) => s + w, 0);
+      const rawSum  = weights.reduce((s, w) => s + w, 0);
       const usableDur = beatDur - SCENE_END_MARGIN;
       const scale = rawSum > usableDur ? usableDur / rawSum : 1.0;
-
+ 
       let cursor = beatStart;
       tokens.forEach((token, wi) => {
         const dur = weights[wi] * scale;
@@ -1340,7 +1421,13 @@ export default function TimelineEditor() {
         if (!word) { cursor += dur; return; }
         if (cursor >= beatEnd) return;
         const wordEnd = Math.min(cursor + dur, beatEnd);
-        allWords.push({ word, raw: token, start: parseFloat(cursor.toFixed(3)), end: parseFloat(wordEnd.toFixed(3)), sceneIdx: idx });
+        allWords.push({
+          word,
+          raw: token,
+          start: parseFloat(cursor.toFixed(3)),
+          end: parseFloat(wordEnd.toFixed(3)),
+          sceneIdx: idx,
+        });
         cursor += dur;
       });
     });
