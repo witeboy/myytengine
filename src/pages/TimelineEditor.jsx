@@ -717,8 +717,8 @@ export default function TimelineEditor() {
   const overlayClips    = overlayHistory.state;
   const setOverlayClips = overlayHistory.setState;
   const [isSyncing,         setIsSyncing]         = useState(false);
-  const [isSyncing,         setIsSyncing]         = useState(false);
-  // Beat detection state
+  
+    // Beat detection state
   const [detectedBeats,     setDetectedBeats]     = useState([]);
   const [detectedBpm,       setDetectedBpm]       = useState(0);
   const [isDetectingBeats,  setIsDetectingBeats]  = useState(false);
