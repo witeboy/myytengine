@@ -321,6 +321,11 @@ function TransitionsPanel({ selectedClip, onApplyTransition, onRemoveTransition,
             <div className="flex justify-between text-[9px] text-gray-600 mt-0.5">
               <span>0.1s</span><span>Quick</span><span>Slow</span><span>5.0s</span>
             </div>
+            {selectedClip && currentDuration > selectedClip.duration * 0.4 && (
+              <p className="text-[9px] text-amber-400 mt-1">
+                Clamped to {(selectedClip.duration * 0.4).toFixed(1)}s max (40% of clip)
+              </p>
+            )}
           </div>
         )}
 
@@ -580,15 +585,52 @@ function TransportControls({ isPlaying, onPlayPause, currentTime, totalDuration,
   );
 }
 
-function TimelineRuler({ totalDuration, pps, onSeek }) {
+function TimelineRuler({ totalDuration, pps, onSeek, beats = [], bpm = 0 }) {
   const markers = [];
   const interval = pps >= 15 ? 5 : pps >= 8 ? 10 : 30;
   for (let t = 0; t <= totalDuration; t += interval) markers.push(t);
+ 
+  // Hook zone: first 3 seconds — viral content must hook here
+  const hookEndPx = Math.min(3 * pps, totalDuration * pps);
+ 
   return (
-    <div className="h-5 bg-[#0d0d1a] border-b border-gray-800 relative cursor-pointer"
+    <div className="h-6 bg-[#0d0d1a] border-b border-gray-800 relative cursor-pointer overflow-hidden"
       style={{ width: totalDuration * pps, marginLeft: LABEL_WIDTH }}
       onClick={e => { const r = e.currentTarget.getBoundingClientRect(); onSeek(Math.max(0, Math.min(totalDuration, (e.clientX - r.left) / pps))); }}>
-      {markers.map(t => <div key={t} className="absolute bottom-0" style={{ left: t * pps }}><span className="text-[8px] text-gray-500 font-mono">{formatTime(t)}</span></div>)}
+ 
+      {/* Hook zone overlay — first 3 seconds */}
+      <div
+        className="absolute top-0 bottom-0 pointer-events-none"
+        style={{ left: 0, width: hookEndPx, background: 'rgba(239,68,68,0.10)', borderRight: '1px solid rgba(239,68,68,0.5)' }}
+        title="Hook Zone — first 3s must grab viewer">
+        <span className="text-[7px] text-red-400 absolute top-0.5 left-1 font-bold tracking-wide select-none">HOOK</span>
+      </div>
+ 
+      {/* Beat grid lines */}
+      {beats.map((beat, i) => (
+        <div key={i} className="absolute top-0 bottom-0 pointer-events-none"
+          style={{
+            left: beat * pps,
+            width: 1,
+            // Stronger line on every 4th beat (downbeat)
+            background: i % 4 === 0 ? 'rgba(6,182,212,0.55)' : 'rgba(6,182,212,0.18)',
+          }}
+        />
+      ))}
+ 
+      {/* Time markers */}
+      {markers.map(t => (
+        <div key={t} className="absolute bottom-0" style={{ left: t * pps }}>
+          <span className="text-[8px] text-gray-500 font-mono">{formatTime(t)}</span>
+        </div>
+      ))}
+ 
+      {/* BPM badge */}
+      {bpm > 0 && (
+        <div className="absolute right-1 top-0.5 text-[7px] text-cyan-400 font-mono select-none">
+          {bpm} BPM
+        </div>
+      )}
     </div>
   );
 }
@@ -675,6 +717,12 @@ export default function TimelineEditor() {
   const overlayClips    = overlayHistory.state;
   const setOverlayClips = overlayHistory.setState;
   const [isSyncing,         setIsSyncing]         = useState(false);
+  const [isSyncing,         setIsSyncing]         = useState(false);
+  // Beat detection state
+  const [detectedBeats,     setDetectedBeats]     = useState([]);
+  const [detectedBpm,       setDetectedBpm]       = useState(0);
+  const [isDetectingBeats,  setIsDetectingBeats]  = useState(false);
+  const [beatSnapEnabled,   setBeatSnapEnabled]   = useState(false);
   const [syncStatus,        setSyncStatus]        = useState(null);
   const [isGenCaptions,     setIsGenCaptions]     = useState(false);
   const [captionOffset,     setCaptionOffset]     = useState(0);
@@ -1265,10 +1313,13 @@ export default function TimelineEditor() {
     ];
     setVideoClips(videoClips.map((clip, idx) => {
       const family = families[Math.floor(idx / 2) % families.length];
+      // Ken Burns needs ≥2.0s to complete — pad short clips
+      const safeDuration = clip.duration < 2.0 ? 2.0 : clip.duration;
       return {
         ...clip,
         cinematicMotion: idx % 2 === 0 ? family.inward : family.outward,
         motionIntensity: i,
+        duration: safeDuration, // enforce minimum
       };
     }));
     setIsApplyingZoom(false);
@@ -1477,6 +1528,51 @@ export default function TimelineEditor() {
   };
 
   // ── Misc handlers ───────────────────────────────────────────────
+  
+  // Beat detection handler
+  const handleDetectBeats = async () => {
+    if (!musicUrl) return;
+    setIsDetectingBeats(true);
+    try {
+      const { detectBeats } = await import('@/lib/beatDetector');
+      const result = await detectBeats(musicUrl, (phase, pct) => {
+        console.log(`[BeatDetect] ${phase} ${pct}%`);
+      });
+      setDetectedBeats(result.beats);
+      setDetectedBpm(result.bpm);
+      console.log(`[BeatDetect] ${result.beats.length} beats at ${result.bpm} BPM`);
+    } catch (err) {
+      console.error('[BeatDetect] failed:', err.message);
+    }
+    setIsDetectingBeats(false);
+  };
+ 
+  // Snap all clip boundaries to nearest beat
+  const handleSnapAllToBeats = async () => {
+    if (detectedBeats.length === 0) return;
+    const { snapTimestampsToBeat } = await import('@/lib/beatDetector');
+ 
+    // Collect all clip start times and snap them
+    let cumulativeOffset = 0;
+    const snappedClips = videoClips.map((clip, idx) => {
+      const snappedStart = snapTimestampsToBeat([clip.startTime], detectedBeats, 150)[0];
+      // Adjust duration so next clip starts where this one's snapped start was
+      const nextStart = videoClips[idx + 1]?.startTime ?? (clip.startTime + clip.duration);
+      const snappedNextStart = snapTimestampsToBeat([nextStart], detectedBeats, 150)[0];
+      const newDuration = Math.max(1.0, snappedNextStart - snappedStart);
+      return { ...clip, startTime: snappedStart, duration: newDuration };
+    });
+    setVideoClips(snappedClips);
+  };
+ 
+  // Beat-lock captions
+  const handleBeatLockCaptions = async () => {
+    if (detectedBeats.length === 0 || captionClips.length === 0) return;
+    const { beatLockCaptions } = await import('@/lib/beatDetector');
+    const locked = beatLockCaptions(captionClips, detectedBeats, 80);
+    setCaptionClips(locked);
+  };
+ 
   const handleUndo   = () => { videoHistory.undo(); captionHistory.undo(); overlayHistory.undo(); musicHistory.undo(); };
   const handleRedo   = () => { videoHistory.redo(); captionHistory.redo(); overlayHistory.redo(); musicHistory.redo(); };
   const handleDelete = () => {
@@ -1561,8 +1657,20 @@ export default function TimelineEditor() {
   const handleApplyEffectToAll     = e  => setVideoClips(videoClips.map(c => ({ ...c, effects: [...new Set([...(c.effects || []), e.id])] })));
   const handleApplyTransition      = t  => { if (!selectedVideoId) return; setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transition: t.name } : c)); };
   const handleRemoveTransition     = () => { if (!selectedVideoId) return; setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transition: null } : c)); };
-  const handleSetTransitionDuration = (dur) => { if (!selectedVideoId) return; setVideoClips(videoClips.map(c => c.id === selectedVideoId ? { ...c, transitionDuration: dur } : c)); };
-  const handleApplyTransitionToAll = t  => setVideoClips(videoClips.map(c => ({ ...c, transition: t.name })));
+  const handleSetTransitionDuration = (dur) => {
+    if (!selectedVideoId) return;
+    setVideoClips(videoClips.map(c => {
+      if (c.id !== selectedVideoId) return c;
+      // Never let transition outlast 40% of clip — prevents canvas corruption on export
+      const maxTransition = parseFloat((c.duration * 0.4).toFixed(2));
+      const safeDur = Math.min(dur, maxTransition);
+      return { ...c, transitionDuration: safeDur };
+    }));
+  };  const handleApplyTransitionToAll = (t) => setVideoClips(videoClips.map(c => {
+    const maxTransition = parseFloat((c.duration * 0.4).toFixed(2));
+    const currentDur = c.transitionDuration ?? DEFAULT_TRANSITION_DURATION;
+    return { ...c, transition: t.name, transitionDuration: Math.min(currentDur, maxTransition) };
+  }));
   const handleDeleteCaption        = () => { if (!selectedCaptionId) return; setCaptionClips(captionClips.filter(c => c.id !== selectedCaptionId)); setSelectedCaptionId(null); };
   const handleDuplicateCaption     = () => {
     const cap = captionClips.find(c => c.id === selectedCaptionId);
@@ -1820,10 +1928,33 @@ export default function TimelineEditor() {
              <><Wand2 size={12} /> AutoSync</>}
           </Button>
 
+          {/* Beat Detection + Grid */}
+          {musicUrl && (
+            <div className="flex items-center gap-1">
+              <Button
+                onClick={detectedBeats.length > 0 ? handleSnapAllToBeats : handleDetectBeats}
+                disabled={isDetectingBeats}
+                size="sm"
+                className={`gap-1 text-xs px-3 h-7 ${detectedBeats.length > 0 ? 'bg-cyan-700 hover:bg-cyan-800' : 'bg-[#0e4f5c] hover:bg-[#0e6070] border border-cyan-700/50'}`}
+              >
+                {isDetectingBeats
+                  ? <><Loader2 size={12} className="animate-spin" /> Detecting…</>
+                  : detectedBeats.length > 0
+                  ? <><Music size={12} /> Snap to Beat ({detectedBeats.length})</>
+                  : <><Music size={12} /> Detect Beats</>}
+              </Button>
+              {detectedBeats.length > 0 && captionClips.length > 0 && (
+                <Button onClick={handleBeatLockCaptions} size="sm"
+                  className="gap-1 text-xs px-2 h-7 bg-purple-800 hover:bg-purple-900 border border-purple-600/50">
+                  <Type size={12} /> Lock Captions
+                </Button>
+              )}
+            </div>
+          )}
+ 
           {/* Cinematic Zoom + Intensity */}
           <div className="flex items-center gap-1.5">
-            <Button onClick={motionCount > 0 ? handleRemoveCinematicZoom : () => handleApplyCinematicZoom()} disabled={isApplyingZoom} size="sm"
-              className={`gap-1 text-xs px-3 h-7 ${motionCount > 0 ? 'bg-amber-600 hover:bg-amber-700' : 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700'}`}>
+             <Button onClick={motionCount > 0 ? handleRemoveCinematicZoom : () => handleApplyCinematicZoom(globalZoomIntensity)} disabled={isApplyingZoom} size="sm"      className={`gap-1 text-xs px-3 h-7 ${motionCount > 0 ? 'bg-amber-600 hover:bg-amber-700' : 'bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700'}`}>
               {motionCount > 0 ? <><X size={12} /> Zoom ({motionCount})</> : <><Camera size={12} /> Zoom</>}
             </Button>
             <div className="flex items-center gap-1 bg-gray-800/80 rounded px-2 py-1">
@@ -1904,7 +2035,7 @@ export default function TimelineEditor() {
         style={{ height: effectiveTimelineHeight, overflow: timelineCollapsed ? 'hidden' : undefined }}>
         {!timelineCollapsed && (
           <>
-            <TimelineRuler totalDuration={totalDuration} pps={pps} onSeek={handleSeek} />
+            <TimelineRuler totalDuration={totalDuration} pps={pps} onSeek={handleSeek} beats={detectedBeats} bpm={detectedBpm} />
             {scenes.length === 0
               ? <div className="flex items-center justify-center h-20 text-gray-500 text-xs">No scenes</div>
               : <>
