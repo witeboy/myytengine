@@ -3,22 +3,23 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // ══════════════════════════════════════════════════════════════════
 // POLL SCENE IMAGE — z-image only
 // ══════════════════════════════════════════════════════════════════
-// Called by frontend every 5s after generateSceneImage submits tasks.
-// Resolves zimage_task:{taskId} tokens → real image URLs.
+// Official KIE polling endpoint per docs.kie.ai/market/common/get-task-detail:
 //
-// ROOT CAUSE OF THE BUG:
-//   generateSceneImage saves:   image_url = "zimage_task:{taskId}"
-//   Old poll was checking for:  imageUrl.startsWith('z_image_task:')
-//   That prefix never matched → scenes stayed image_pending forever
-//   even though KIE showed them as "success" in the dashboard.
+//   GET /api/v1/jobs/recordInfo?taskId={taskId}
 //
-// This version fixes the prefix, uses the correct KIE endpoint
-// (queryTask, not recordInfo), and handles all resultJson shapes.
+// Response shape:
+//   { code: 200, data: {
+//       state: "waiting"|"queuing"|"generating"|"success"|"fail",
+//       resultJson: '{"resultUrls":["https://..."]}'
+//       failMsg: "..."
+//   }}
+//
+// generateSceneImage saves tasks as:  image_url = "zimage_task:{taskId}"
 // ══════════════════════════════════════════════════════════════════
 
 const KIE_BASE = "https://api.kie.ai/api/v1/jobs";
 
-// ── Character presence detection for smart reference locking ──
+// ── Character detection for smart reference locking ───────────
 function detectCharacterInScene(scene) {
   if (scene.image_prompt?.startsWith('DIRECTOR_NOTES:')) {
     try {
@@ -30,32 +31,29 @@ function detectCharacterInScene(scene) {
   return /\b(woman|man|person|figure|character|boy|girl|child|worker|doctor|soldier|officer|teacher|scientist|skeleton|people|crowd|couple|family|mother|father|husband|wife|protagonist|narrator)\b/.test(prompt);
 }
 
-// ── Poll a single Z-Image task via KIE queryTask endpoint ────
+// ── Poll one task via the correct KIE unified endpoint ────────
 // Returns { status: 'pending'|'done'|'failed', imageUrl?, error? }
-async function pollZImageTask(kieApiKey, taskId) {
-  const res = await fetch(`${KIE_BASE}/queryTask?taskId=${taskId}`, {
+async function pollOneTask(kieApiKey, taskId) {
+  const res = await fetch(`${KIE_BASE}/recordInfo?taskId=${taskId}`, {
     method: "GET",
-    headers: {
-      "Authorization": `Bearer ${kieApiKey}`,
-      "Content-Type": "application/json"
-    }
+    headers: { "Authorization": `Bearer ${kieApiKey}` }
   });
 
   if (res.status === 429) {
-    console.warn(`⏳ KIE rate limited polling z-image task ${taskId}`);
+    console.warn(`⏳ KIE rate limited — task ${taskId}`);
     return { status: 'pending' };
   }
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    console.warn(`KIE queryTask HTTP ${res.status} for task ${taskId}: ${text.substring(0, 200)}`);
-    return { status: 'pending' }; // treat transient HTTP errors as still-pending
+    console.warn(`KIE recordInfo HTTP ${res.status} for task ${taskId}: ${text.substring(0, 150)}`);
+    return { status: 'pending' }; // transient HTTP errors → keep polling
   }
 
   const result = await res.json();
 
   if (result.code !== 200) {
-    console.warn(`KIE queryTask error code=${result.code} msg="${result.msg}" for task ${taskId}`);
+    console.warn(`KIE recordInfo code=${result.code} msg="${result.msg}" task=${taskId}`);
     if (result.code === 404 || result.code === -1) {
       return { status: 'failed', error: `Task not found (code ${result.code})` };
     }
@@ -63,61 +61,48 @@ async function pollZImageTask(kieApiKey, taskId) {
   }
 
   const data = result.data || {};
+  const state = (data.state || '').toLowerCase();
 
-  // ── State extraction ───────────────────────────────────────
-  // Z-Image: state lives at data.record.state
-  // Fallback to data.state / data.status for safety
-  const recordState  = (data.record?.state || '').toLowerCase();
-  const topState     = (data.state         || '').toLowerCase();
-  const topStatus    = (data.status        || '').toLowerCase();
-  const effectiveState = recordState || topState || topStatus;
-
-  console.log(`🔍 z-image task ${taskId}: state="${effectiveState}" (record.state="${recordState}" data.state="${topState}" data.status="${topStatus}")`);
+  console.log(`🔍 task ${taskId}: state="${state}"`);
 
   // Terminal failure
-  if (['failed', 'failure', 'error', 'cancelled', 'canceled', 'fail'].includes(effectiveState)) {
-    const errMsg = data.record?.failMsg || data.failMsg || data.error || `state=${effectiveState}`;
-    return { status: 'failed', error: errMsg };
+  if (state === 'fail') {
+    return { status: 'failed', error: data.failMsg || 'Task failed' };
   }
 
   // Still running
-  if (!['success', 'succeeded', 'completed', 'done', 'finish', 'finished'].includes(effectiveState)) {
+  if (state !== 'success') {
+    // waiting / queuing / generating → keep polling
     return { status: 'pending' };
   }
 
-  // ── Extract image URL ──────────────────────────────────────
-  // Z-Image primary: data.record.resultJson → parse → images[0]
+  // ── state === 'success' — extract image URL ────────────────
+  // Per docs: resultJson = '{"resultUrls":["https://..."]}'
   let imageUrl = null;
 
-  const resultJsonRaw = data.record?.resultJson || data.resultJson;
-  if (resultJsonRaw) {
+  if (data.resultJson) {
     try {
-      const parsed = typeof resultJsonRaw === 'string' ? JSON.parse(resultJsonRaw) : resultJsonRaw;
-      imageUrl = parsed?.images?.[0]        // Z-Image v1 format
-        || parsed?.resultUrls?.[0]          // older Z-Image format
+      const parsed = typeof data.resultJson === 'string'
+        ? JSON.parse(data.resultJson)
+        : data.resultJson;
+      imageUrl = parsed?.resultUrls?.[0]
+        || parsed?.images?.[0]
         || parsed?.image_url
         || parsed?.url
-        || parsed?.output_url
         || (Array.isArray(parsed) ? parsed[0] : null);
-      if (imageUrl) console.log(`✅ task ${taskId}: URL from resultJson`);
+      if (imageUrl) console.log(`✅ task ${taskId}: URL from resultJson.resultUrls`);
     } catch (e) {
       console.warn(`Failed to parse resultJson for task ${taskId}: ${e.message}`);
     }
   }
 
-  // Fallback: top-level data fields
+  // Fallback: top-level fields
   if (!imageUrl) {
-    imageUrl = data.images?.[0]
-      || data.image_url
-      || data.output_url
-      || data.url
-      || data.record?.imageUrl
-      || data.record?.image_url
-      || data.record?.url;
-    if (imageUrl) console.log(`✅ task ${taskId}: URL from top-level data`);
+    imageUrl = data.imageUrl || data.image_url || data.url || data.output_url;
+    if (imageUrl) console.log(`✅ task ${taskId}: URL from top-level field`);
   }
 
-  // Last resort: regex scan entire response blob for any image URL
+  // Last resort: regex scan the whole data blob
   if (!imageUrl) {
     const str = JSON.stringify(data);
     const match = str.match(/https?:\/\/[^\s"'\\]+\.(?:png|jpg|jpeg|webp)(?:\?[^\s"'\\]*)?/i);
@@ -128,24 +113,23 @@ async function pollZImageTask(kieApiKey, taskId) {
   }
 
   if (!imageUrl) {
-    console.warn(`⚠️ task ${taskId}: status=done but no image URL. data=${JSON.stringify(data).substring(0, 500)}`);
-    return { status: 'failed', error: 'Task completed but no image URL in response' };
+    console.warn(`⚠️ task ${taskId}: state=success but no image URL. data=${JSON.stringify(data).substring(0, 400)}`);
+    return { status: 'failed', error: 'Task succeeded but no image URL in response' };
   }
 
   return { status: 'done', imageUrl };
 }
 
-// ── Re-submit a scene to z-image (for stale/failed tasks) ────
+// ── Re-submit a scene back to z-image (stale/failed recovery) ─
 async function resubmitZImage(kieApiKey, scene, aspectRatio) {
   if (!kieApiKey) return null;
   const prompt = (scene.image_prompt || '').trim();
   if (!prompt || prompt.startsWith('DIRECTOR_NOTES:')) return null;
 
-  // Respect 1000 char hard limit
   let truncated = prompt;
   if (truncated.length > 1000) {
-    const cutAt = truncated.lastIndexOf(',', 950);
-    truncated = (cutAt > 0 ? truncated.substring(0, cutAt) : truncated.substring(0, 950)).trim();
+    const cut = truncated.lastIndexOf(',', 950);
+    truncated = (cut > 0 ? truncated.substring(0, cut) : truncated.substring(0, 950)).trim();
   }
 
   try {
@@ -165,6 +149,7 @@ async function resubmitZImage(kieApiKey, scene, aspectRatio) {
       console.warn(`⚠️ z-image resubmit failed: code=${result.code} msg="${result.msg}"`);
       return null;
     }
+    console.log(`🔄 resubmit OK: new taskId=${result.data.taskId}`);
     return result.data.taskId;
   } catch (err) {
     console.warn(`⚠️ z-image resubmit error: ${err.message}`);
@@ -188,7 +173,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: "KIE_API_KEY not configured" }, { status: 500 });
     }
 
-    // ── Resolve scenes to poll ──────────────────────────────────
+    // ── Resolve pending scenes ──────────────────────────────────
     let scenesToPoll = [];
     let projectForRef = null;
 
@@ -214,23 +199,14 @@ Deno.serve(async (req) => {
         const all = await base44.asServiceRole.entities.Scenes.filter({ project_id });
         totalPending = all.filter(s => s.status === 'image_pending').length;
       }
-      return Response.json({
-        success: true,
-        done: totalPending === 0,
-        results: [],
-        pending: totalPending,
-        completed: 0,
-        failed: 0
-      });
+      return Response.json({ success: true, done: totalPending === 0, results: [], pending: totalPending, completed: 0, failed: 0 });
     }
 
     const aspectRatio = projectForRef?.orientation === 'portrait' ? '9:16' : '16:9';
-
-    // Z-Image completes in ~30-60s. 4 minutes = genuinely stuck.
-    const STALE_THRESHOLD_MS = 4 * 60 * 1000;
+    const STALE_THRESHOLD_MS = 4 * 60 * 1000; // 4 min — z-image typically done in 30-60s
     const now = Date.now();
 
-    console.log(`🔍 Polling ${scenesToPoll.length} pending z-image tasks (aspect: ${aspectRatio})...`);
+    console.log(`🔍 Polling ${scenesToPoll.length} pending scenes (aspect: ${aspectRatio})...`);
 
     const results = [];
 
@@ -238,7 +214,7 @@ Deno.serve(async (req) => {
       const imageUrl = scene.image_url || '';
       const sceneNum = scene.scene_number;
 
-      // ── Already a real URL (edge case) ────────────────────────
+      // ── Already a real URL (edge case cleanup) ─────────────────
       if (imageUrl.startsWith('http')) {
         if (scene.status === 'image_pending') {
           await base44.asServiceRole.entities.Scenes.update(scene.id, { status: 'image_generated' });
@@ -247,10 +223,10 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // ── Accept both the current prefix and the legacy typo ────
-      const isZImageTask = imageUrl.startsWith('zimage_task:')  // ← correct (current)
-        || imageUrl.startsWith('z_image_task:')                  // ← old typo guard
-        || imageUrl.startsWith('kie_task:');                     // ← legacy
+      // ── Extract taskId — accept current and legacy prefixes ────
+      const isZImageTask = imageUrl.startsWith('zimage_task:')
+        || imageUrl.startsWith('z_image_task:')   // old typo guard
+        || imageUrl.startsWith('kie_task:');       // legacy
 
       if (!isZImageTask) {
         console.warn(`Scene ${sceneNum}: unrecognized prefix "${imageUrl.substring(0, 40)}" — skipping`);
@@ -258,7 +234,6 @@ Deno.serve(async (req) => {
         continue;
       }
 
-      // Extract task ID regardless of prefix variant
       const taskId = imageUrl
         .replace('zimage_task:', '')
         .replace('z_image_task:', '')
@@ -266,19 +241,18 @@ Deno.serve(async (req) => {
 
       // ── Staleness check ────────────────────────────────────────
       const updatedAt = scene.updated_date ? new Date(scene.updated_date).getTime() : 0;
-      const age = now - updatedAt;
-      const isStale = updatedAt > 0 && age > STALE_THRESHOLD_MS;
+      const isStale = updatedAt > 0 && (now - updatedAt) > STALE_THRESHOLD_MS;
 
       if (isStale) {
-        console.warn(`⏰ Scene ${sceneNum}: STALE (${Math.round(age / 1000)}s old, task=${taskId}) — resubmitting`);
+        const ageS = Math.round((now - updatedAt) / 1000);
+        console.warn(`⏰ Scene ${sceneNum}: STALE (${ageS}s, task=${taskId}) — resubmitting`);
         const newTaskId = await resubmitZImage(KIE_API_KEY, scene, aspectRatio);
         if (newTaskId) {
           await base44.asServiceRole.entities.Scenes.update(scene.id, {
             image_url: `zimage_task:${newTaskId}`,
             status: 'image_pending'
           });
-          console.log(`🔄 Scene ${sceneNum}: stale → resubmitted (${newTaskId})`);
-          results.push({ scene_number: sceneNum, status: 'processing', fallback: 'zimage_stale_recovery' });
+          results.push({ scene_number: sceneNum, status: 'processing', fallback: 'stale_resubmit' });
         } else {
           await base44.asServiceRole.entities.Scenes.update(scene.id, { status: 'image_failed', image_url: '' });
           results.push({ scene_number: sceneNum, status: 'failed', error: 'Stale, resubmit failed' });
@@ -288,70 +262,64 @@ Deno.serve(async (req) => {
 
       // ── Poll ───────────────────────────────────────────────────
       try {
-        const pollResult = await pollZImageTask(KIE_API_KEY, taskId);
+        const poll = await pollOneTask(KIE_API_KEY, taskId);
 
-        if (pollResult.status === 'done' && pollResult.imageUrl) {
-          // ✅ Save image
+        if (poll.status === 'done') {
+          // ✅ Save image URL
           await base44.asServiceRole.entities.Scenes.update(scene.id, {
-            image_url: pollResult.imageUrl,
+            image_url: poll.imageUrl,
             status: 'image_generated'
           });
 
-          // Smart reference locking: first character-containing scene becomes style anchor
+          // Smart reference locking
           if (projectForRef && !projectForRef.reference_image_url && detectCharacterInScene(scene)) {
             try {
               await base44.asServiceRole.entities.Projects.update(projectForRef.id, {
-                reference_image_url: pollResult.imageUrl
+                reference_image_url: poll.imageUrl
               });
-              projectForRef.reference_image_url = pollResult.imageUrl;
-              console.log(`📌 Scene ${sceneNum}: reference locked → ${pollResult.imageUrl.substring(0, 60)}`);
+              projectForRef.reference_image_url = poll.imageUrl;
+              console.log(`📌 Scene ${sceneNum}: reference locked → ${poll.imageUrl.substring(0, 60)}`);
             } catch (refErr) {
-              console.warn(`⚠️ Failed to lock reference: ${refErr.message}`);
+              console.warn(`⚠️ Reference lock failed: ${refErr.message}`);
             }
           }
 
-          console.log(`✅ Scene ${sceneNum}: done → ${pollResult.imageUrl.substring(0, 80)}`);
-          results.push({ scene_number: sceneNum, status: 'done', image_url: pollResult.imageUrl });
+          console.log(`✅ Scene ${sceneNum}: done → ${poll.imageUrl.substring(0, 80)}`);
+          results.push({ scene_number: sceneNum, status: 'done', image_url: poll.imageUrl });
 
-        } else if (pollResult.status === 'failed') {
-          // ❌ One automatic resubmit before giving up
-          console.warn(`❌ Scene ${sceneNum}: z-image failed (${pollResult.error}) — resubmitting once`);
+        } else if (poll.status === 'failed') {
+          // One automatic resubmit before giving up
+          console.warn(`❌ Scene ${sceneNum}: failed (${poll.error}) — resubmitting once`);
           const newTaskId = await resubmitZImage(KIE_API_KEY, scene, aspectRatio);
           if (newTaskId) {
             await base44.asServiceRole.entities.Scenes.update(scene.id, {
               image_url: `zimage_task:${newTaskId}`,
               status: 'image_pending'
             });
-            console.log(`🔄 Scene ${sceneNum}: failed → resubmitted (${newTaskId})`);
-            results.push({ scene_number: sceneNum, status: 'processing', fallback: 'zimage_retry' });
+            console.log(`🔄 Scene ${sceneNum}: resubmitted (${newTaskId})`);
+            results.push({ scene_number: sceneNum, status: 'processing', fallback: 'auto_resubmit' });
           } else {
-            await base44.asServiceRole.entities.Scenes.update(scene.id, {
-              status: 'image_failed',
-              image_url: ''
-            });
-            results.push({ scene_number: sceneNum, status: 'failed', error: pollResult.error });
+            await base44.asServiceRole.entities.Scenes.update(scene.id, { status: 'image_failed', image_url: '' });
+            results.push({ scene_number: sceneNum, status: 'failed', error: poll.error });
           }
 
         } else {
-          // ⏳ Still pending — normal, keep polling
-          console.log(`⏳ Scene ${sceneNum}: z-image processing (task ${taskId})`);
+          // ⏳ Still pending (waiting / queuing / generating)
+          console.log(`⏳ Scene ${sceneNum}: still processing (task ${taskId})`);
           results.push({ scene_number: sceneNum, status: 'processing' });
         }
 
       } catch (err) {
         console.error(`⚠️ Poll error scene ${sceneNum} (task ${taskId}): ${err.message}`);
-        // Don't fail the scene on a network hiccup — keep it pending
         results.push({ scene_number: sceneNum, status: 'processing', error: err.message });
       }
     }
 
-    // ── Tally ───────────────────────────────────────────────────
-    const pending   = results.filter(r => r.status === 'processing').length;
+    // ── Project-wide tally ──────────────────────────────────────
     const completed = results.filter(r => r.status === 'done').length;
     const failed    = results.filter(r => r.status === 'failed').length;
-    const errors    = results.filter(r => r.status === 'error').length;
+    const pending   = results.filter(r => r.status === 'processing').length;
 
-    // Check project-wide state
     let allProjectPending = 0;
     const pid = project_id || scenesToPoll[0]?.project_id;
     if (pid) {
@@ -371,16 +339,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    const allDone = allProjectPending === 0;
-    console.log(`📊 Poll round: ✅${completed} done | ⏳${pending} pending | ❌${failed} failed | ⚠️${errors} errors | project pending: ${allProjectPending}`);
+    console.log(`📊 ✅${completed} done | ⏳${pending} pending | ❌${failed} failed | project pending: ${allProjectPending}`);
 
     return Response.json({
       success: true,
-      done: allDone,
+      done: allProjectPending === 0,
       pending: allProjectPending,
       completed,
       failed,
-      errors,
       results
     });
 
