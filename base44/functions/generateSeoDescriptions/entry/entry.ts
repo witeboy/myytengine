@@ -109,7 +109,7 @@ DESCRIPTION RULES:
    - Max 3 different long-tail keywords in the body
    - No keyword stuffing — must read naturally
 
-3. STRUCTURE: Hook (150 chars) → Value summary → Timestamps → CTAs
+3. STRUCTURE: Hook (150 chars) → Value summary → 5 SEO KEYWORDS → 4 hIGH VALUE hashtags → CTAs
    - Use line breaks generously — descriptions are scanned
    - 2-3 CTAs: subscribe, comment question, related video
 
@@ -126,7 +126,7 @@ Return ONLY this JSON:
     {
       "label": "Hook-Heavy",
       "style": "hook_heavy",
-      "content": "Full 400-600 word description here...",
+      "content": "Full 200-400 word description here...",
       "word_count": 480,
       "primary_keywords_used": ["kw1", "kw2"],
       "long_tail_keywords_used": ["long kw1", "long kw2", "long kw3"]
@@ -134,7 +134,7 @@ Return ONLY this JSON:
     {
       "label": "SEO-Optimized",
       "style": "seo_optimized",
-      "content": "Full 400-600 word description here...",
+      "content": "Full 200-400 word description here...",
       "word_count": 520,
       "primary_keywords_used": ["kw1", "kw2"],
       "long_tail_keywords_used": ["long kw1", "long kw2", "long kw3"]
@@ -142,7 +142,7 @@ Return ONLY this JSON:
     {
       "label": "Storytelling",
       "style": "storytelling",
-      "content": "Full 400-600 word description here...",
+      "content": "Full 200-400 word description here...",
       "word_count": 500,
       "primary_keywords_used": ["kw1", "kw2"],
       "long_tail_keywords_used": ["long kw1", "long kw2", "long kw3"]
