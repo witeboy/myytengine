@@ -83,7 +83,7 @@ export default function CanvasPreview({
     if (Math.abs(el.playbackRate - rate) > 0.005) el.playbackRate = rate;
     const elapsed = Math.max(0, currentTime - (currentClip.startTime ?? 0));
     const vidPos = Math.min(elapsed * rate, (el.duration && el.duration < Infinity ? el.duration : 99) - 0.05);
-    if (Math.abs(el.currentTime - vidPos) > 0.5) el.currentTime = vidPos;
+    if (Math.abs(el.currentTime - vidPos) > 0.05) el.currentTime = vidPos;
   }, [currentTime, currentClip]);
 
   const { canvasW, canvasH } = useMemo(() => {
@@ -110,7 +110,10 @@ export default function CanvasPreview({
     if (!prevClip?.transition || !currentClip) {
       return { active: false, type: null, progress: 0, duration: DEFAULT_TRANSITION_DURATION };
     }
-    const tDur = prevClip.transitionDuration ?? DEFAULT_TRANSITION_DURATION;
+    // Clamp transition duration to 40% of the SHORTER of the two clips
+    const rawDur = prevClip.transitionDuration ?? DEFAULT_TRANSITION_DURATION;
+    const maxSafe = Math.min(prevClip.duration ?? 99, currentClip.duration ?? 99) * 0.4;
+    const tDur = Math.min(rawDur, Math.max(0.1, maxSafe));
     const timeFromClipStart = currentTime - currentClip.startTime;
     if (timeFromClipStart < 0 || timeFromClipStart >= tDur) {
       return { active: false, type: null, progress: 0, duration: tDur };
@@ -138,8 +141,10 @@ export default function CanvasPreview({
     if (!motion) return {};
     const speed = currentClip.motionSpeed ?? 1.0;
     const intensity = currentClip.motionIntensity ?? 1.0;
-    const activeWindow = currentClip.duration / speed;
-    const elapsed = currentTime - currentClip.startTime;
+    // Enforce 2.0s minimum so Ken Burns completes gracefully on short clips
+    const safeDuration = Math.max(2.0, currentClip.duration);
+    const activeWindow = safeDuration / speed;
+    const elapsed = Math.max(0, currentTime - currentClip.startTime);
     const p = Math.min(1, Math.max(0, elapsed / activeWindow));
     const e = Math.sin((p * Math.PI) / 2);
     const scaleDelta = (motion.endScale - motion.startScale) * intensity;
@@ -148,7 +153,13 @@ export default function CanvasPreview({
     const scale = motion.startScale + scaleDelta * e;
     const tx = motion.startX + txDelta * e;
     const ty = motion.startY + tyDelta * e;
-    return { transform: `scale(${scale.toFixed(4)}) translate(${tx.toFixed(3)}%, ${ty.toFixed(3)}%)`, willChange: 'transform' };
+    return {
+      transform: `scale(${scale.toFixed(4)}) translate(${tx.toFixed(3)}%, ${ty.toFixed(3)}%)`,
+      willChange: 'transform',
+      // GPU-accelerate all motion clips
+      backfaceVisibility: 'hidden',
+      WebkitBackfaceVisibility: 'hidden',
+    };
   }, [currentClip, currentTime]);
 
   // Caption drag handling
@@ -207,10 +218,9 @@ export default function CanvasPreview({
             {/* Incoming scene */}
             <div className="absolute inset-0 overflow-hidden" style={isTransitioning ? getTransitionStyle(false) : {}}>
               {currentClip?.mediaType === 'broll' && currentClip?.brollUrl ? (
-                <video key={`broll-${currentClip.brollUrl}`} ref={videoRef} src={currentClip.brollUrl} className="w-full h-full object-cover" style={motionStyle} muted playsInline autoPlay />
+                <video key={`broll-${currentClip.brollUrl}`} ref={videoRef} src={currentClip.brollUrl} className="w-full h-full object-cover" style={motionStyle} muted playsInline autoPlay loop={currentClip.videoLoop === true} />
               ) : currentClip?.mediaType === 'video' && currentClip?.videoUrl ? (
-                <video key={`${currentClip.videoUrl}-${currentClip.playbackRate ?? 1}`} ref={videoRef} src={currentClip.videoUrl} className="w-full h-full object-cover" style={motionStyle} muted playsInline autoPlay />
-              ) : currentScene?.image_url ? (
+                <video key={`${currentClip.videoUrl}-${currentClip.playbackRate ?? 1}`} ref={videoRef} src={currentClip.videoUrl} className="w-full h-full object-cover" style={motionStyle} muted playsInline autoPlay loop={currentClip.videoLoop === true} />              ) : currentScene?.image_url ? (
                 <img src={currentScene.image_url} className="w-full h-full object-cover" style={motionStyle} alt="" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center"><Film className="w-12 h-12 text-gray-700" /></div>
@@ -346,12 +356,30 @@ export default function CanvasPreview({
               );
             })}
 
+            {/* Hook zone indicator — scene 1, first 3s */}
+            {currentScene?.scene_number === 1 && currentTime < 3 && (
+              <div className="absolute top-0 left-0 right-0 pointer-events-none"
+                style={{ height: 3, background: 'linear-gradient(90deg, rgba(239,68,68,0.9) 0%, rgba(239,68,68,0.4) 100%)' }} />
+            )}
+            {currentScene?.scene_number === 1 && currentTime < 3 && (
+              <div className="absolute top-1 right-2 pointer-events-none">
+                <span className="text-[8px] text-red-400 font-bold tracking-widest opacity-80">HOOK ZONE</span>
+              </div>
+            )}
+ 
             {/* Overlay info */}
             <div className="absolute top-2 left-2 bg-black/60 px-2 py-1 rounded text-[10px] text-white flex items-center gap-2">
               Scene {currentScene?.scene_number || '-'}
               {motionName && <span className="flex items-center gap-1 text-amber-400"><Camera size={10} /> {motionName}</span>}
               {isTransitioning && <span className="flex items-center gap-1 text-purple-300"><Blend size={10} /> {prevClip?.transition}</span>}
             </div>
+           </div>
+        )}
+        {/* Scene 1 duration warning — shown below preview */}
+        {currentScene?.scene_number === 1 && currentClip && currentClip.duration > 3 && (
+          <div className="flex-shrink-0 mt-1 px-3 py-1.5 bg-red-900/40 border border-red-700/50 rounded text-[10px] text-red-300 flex items-center gap-2">
+            <span className="text-red-400 font-bold">⚠ Hook Too Long</span>
+            Scene 1 is {currentClip.duration.toFixed(1)}s — viewers drop off after 3s. Shorten or make it punchy.
           </div>
         )}
       </div>
