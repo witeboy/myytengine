@@ -268,7 +268,7 @@ Return JSON:
       return Response.json({ success: true, deleted: projects.length - filtered.length });
     }
 
-    // ── CLIP_VIDEO — ffmpeg cut + re-upload to Bunny ──────────────
+    // ── CLIP_VIDEO — ffmpeg cut + portrait crop + stream upload to Bunny ─
     if (action === 'clip_video') {
       const { source_url, start, end } = body;
       if (!source_url || start == null || end == null) {
@@ -276,28 +276,44 @@ Return JSON:
       }
       if (!bunnyZone || !bunnyPass) return Response.json({ error: 'Bunny env vars not configured' }, { status: 500 });
 
-      const duration = Math.round(end - start);
+      const duration = Math.ceil(end - start);
       if (duration <= 0) return Response.json({ error: 'Invalid clip range' }, { status: 400 });
 
-      // Download source video to temp
-      const tmpIn  = `/tmp/clip_src_${Date.now()}.mp4`;
-      const tmpOut = `/tmp/clip_out_${Date.now()}.mp4`;
+      const ts      = Date.now();
+      const tmpIn   = `/tmp/clip_src_${ts}.mp4`;
+      const tmpOut  = `/tmp/clip_out_${ts}.mp4`;
 
       try {
-        console.log(`[clip_video] Downloading source: ${source_url.slice(0, 80)}`);
+        // ── Step 1: Stream download source video to disk (no arrayBuffer) ──
+        console.log(`[clip_video] Streaming source to disk: ${source_url.slice(0, 80)}`);
         const srcRes = await fetch(source_url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
         if (!srcRes.ok) throw new Error(`Source download failed: HTTP ${srcRes.status}`);
-        await Deno.writeFile(tmpIn, new Uint8Array(await srcRes.arrayBuffer()));
-        console.log(`[clip_video] Downloaded. Cutting ${start}s → ${end}s (${duration}s)`);
 
-        // ffmpeg: fast stream-copy cut — no re-encode, instant
+        const fileHandle = await Deno.open(tmpIn, { write: true, create: true });
+        const reader = srcRes.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          await fileHandle.write(value);
+        }
+        fileHandle.close();
+        console.log(`[clip_video] Download complete. Cutting ${start}s → ${end}s (${duration}s) with portrait crop`);
+
+        // ── Step 2: ffmpeg — cut + portrait crop 9:16 ─────────────────────
+        // Uses re-encode (needed for crop filter) with fast preset
+        // crop=ih*9/16:ih centres a 9:16 window, then scales to 720x1280
         const cmd = new Deno.Command('ffmpeg', {
           args: [
             '-y',
-            '-ss', String(Math.round(start)),
+            '-ss', String(Math.floor(start)),   // seek before input = fast
             '-i', tmpIn,
             '-t',  String(duration),
-            '-c',  'copy',           // stream copy = fast, no quality loss
+            '-vf', 'crop=ih*9/16:ih,scale=720:1280',
+            '-c:v', 'libx264',
+            '-preset', 'ultrafast',             // fastest encode, good enough for clips
+            '-crf', '26',                       // slightly compressed, keeps file small
+            '-c:a', 'aac',
+            '-b:a', '128k',
             '-movflags', '+faststart',
             '-f', 'mp4',
             tmpOut,
@@ -307,29 +323,58 @@ Return JSON:
         });
 
         const proc = cmd.spawn();
-        // drain stdout
+
+        // Collect stderr for error reporting
+        const stderrChunks = [];
+        const stderrReader = proc.stderr.getReader();
+        const collectStderr = async () => {
+          while (true) {
+            const { done, value } = await stderrReader.read();
+            if (done) break;
+            stderrChunks.push(value);
+          }
+        };
+        collectStderr();
+
+        // Drain stdout
         const stdoutReader = proc.stdout.getReader();
         while (true) { const { done } = await stdoutReader.read(); if (done) break; }
-        const status = await proc.status;
 
-        if (!status.success) {
-          const errText = new TextDecoder().decode((await proc.stderr.getReader().read()).value || new Uint8Array());
-          throw new Error(`ffmpeg failed: ${errText.slice(0, 300)}`);
+        const ffStatus = await proc.status;
+        if (!ffStatus.success) {
+          const errText = new TextDecoder().decode(
+            stderrChunks.reduce((a, b) => { const c = new Uint8Array(a.length + b.length); c.set(a); c.set(b, a.length); return c; }, new Uint8Array())
+          ).slice(-600); // last 600 chars = most relevant ffmpeg error
+          throw new Error(`ffmpeg failed: ${errText}`);
         }
 
-        // Upload cut clip to Bunny
-        const clipName   = `clips/clip_${Date.now()}_${Math.round(start)}s_${duration}s.mp4`;
-        const uploadUrl  = `https://${bunnyHost}/${bunnyZone}/${clipName}`;
-        const clipBytes  = await Deno.readFile(tmpOut);
+        // ── Step 3: Stream upload output file to Bunny (no readFile) ───────
+        const clipName  = `clips/clip_${ts}_${Math.round(start)}s_${duration}s_9x16.mp4`;
+        const uploadUrl = `https://${bunnyHost}/${bunnyZone}/${clipName}`;
 
-        console.log(`[clip_video] Uploading ${(clipBytes.length / 1024 / 1024).toFixed(1)}MB to Bunny`);
+        const outStat = await Deno.stat(tmpOut);
+        console.log(`[clip_video] Uploading ${(outStat.size / 1024 / 1024).toFixed(1)}MB to Bunny`);
+
+        // Open file as a ReadableStream for the fetch body — avoids loading into memory
+        const outFile = await Deno.open(tmpOut, { read: true });
+        const uploadStream = outFile.readable;
+
         const upRes = await fetch(uploadUrl, {
           method: 'PUT',
-          headers: { 'AccessKey': bunnyPass, 'Content-Type': 'video/mp4' },
-          body: clipBytes,
+          headers: {
+            'AccessKey': bunnyPass,
+            'Content-Type': 'video/mp4',
+            'Content-Length': String(outStat.size),
+          },
+          body: uploadStream,
+          duplex: 'half',
         });
+        // Note: outFile is consumed by the stream, no need to close manually
 
-        if (!upRes.ok) throw new Error(`Bunny upload failed: HTTP ${upRes.status}`);
+        if (!upRes.ok) {
+          const upErr = await upRes.text();
+          throw new Error(`Bunny upload failed: HTTP ${upRes.status} — ${upErr.slice(0, 200)}`);
+        }
 
         const clip_url = `${bunnyCdn}/${clipName}`;
         console.log(`[clip_video] Done: ${clip_url}`);
