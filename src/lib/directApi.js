@@ -57,17 +57,11 @@ export const uploadToCloudinary = async (file, { resourceType = 'video', onProgr
 
 export const getCloudinaryConfig = async () => ({ cloudName: 'bunny', cloudPreset: '' });
 
-export const buildCloudinaryClipUrl = (publicId, cloudName, start, end) => {
-  // publicId here is the full Bunny CDN URL of the source video
-  // We use Cloudinary's fetch transformation to cut it on the fly
-  // cloudName comes from localStorage override or env
-  const cn = cloudName && cloudName !== 'bunny' ? cloudName : localStorage.getItem('openshorts_cloud_name') || '';
-  if (!cn) return publicId; // fallback — return full video if no Cloudinary configured
-  const dur = Math.round(end - start);
-  const transform = `so_${Math.round(start)},du_${dur},c_fill,ar_9:16,w_720,q_auto,f_mp4`;
-  // Cloudinary fetch — transforms a remote URL on the fly, no upload needed
-  const encodedUrl = encodeURIComponent(publicId);
-  return `https://res.cloudinary.com/${cn}/video/fetch/${transform}/${encodedUrl}`;
+export const buildCloudinaryClipUrl = (publicId, _cloudName, start, end) => {
+  // Bunny CDN — no transform support. Store start/end as hash fragment.
+  // FileClipCard uses these for seek-based preview.
+  // Real clip cutting happens server-side via clipVideo action on download.
+  return `${publicId}#t=${Math.round(start)},${Math.round(end)}`;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
