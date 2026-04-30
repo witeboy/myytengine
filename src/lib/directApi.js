@@ -17,35 +17,45 @@ export const LS_KEYS = {};
 // 1. BUNNY — upload via bunnyUpload Deno function
 //    Exported as uploadToCloudinary so OpenShorts + QuickPublish need no changes
 // ─────────────────────────────────────────────────────────────────────────────
-const fileToBase64 = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload  = () => resolve(reader.result.split(',')[1]);
-    reader.onerror = () => reject(new Error('FileReader failed'));
-    reader.readAsDataURL(file);
-  });
-
 export const uploadToCloudinary = async (file, { resourceType = 'video', onProgress } = {}) => {
-  if (onProgress) onProgress(5);
-  const file_data_base64 = await fileToBase64(file);
-  if (onProgress) onProgress(30);
+  // Get Bunny config from backend (keeps credentials server-side)
+  const configRes = await base44.functions.invoke('getBunnyConfig', {});
+  if (configRes.data?.error) throw new Error('Could not fetch Bunny config: ' + configRes.data.error);
 
-  const res = await base44.functions.invoke('generateOutline', {
-    file_data_base64,
-    file_name: file.name || 'video.mp4',
-    file_type: file.type || 'video/mp4',
+  const { storage_zone, storage_password, storage_region, cdn_url } = configRes.data;
+  if (!storage_zone || !storage_password || !cdn_url) {
+    throw new Error('Bunny not configured — check BUNNY_STORAGE_ZONE, BUNNY_STORAGE_PASSWORD, BUNNY_CDN_URL env vars');
+  }
+
+  const host       = (storage_region === 'de' || !storage_region || storage_region === 'storage')
+    ? 'storage.bunnycdn.com'
+    : `${storage_region}.storage.bunnycdn.com`;
+  const safeFile   = (file.name || 'video.mp4').replace(/[^a-zA-Z0-9._-]/g, '_');
+  const remotePath = `uploads/${Date.now()}_${safeFile}`;
+  const uploadUrl  = `https://${host}/${storage_zone}/${remotePath}`;
+
+  if (onProgress) onProgress(5);
+
+  await new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 95));
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else reject(new Error(`Bunny upload failed: HTTP ${xhr.status} — ${xhr.responseText}`));
+    };
+    xhr.onerror = () => reject(new Error('Bunny network error'));
+    xhr.open('PUT', uploadUrl);
+    xhr.setRequestHeader('AccessKey', storage_password);
+    xhr.setRequestHeader('Content-Type', file.type || 'video/mp4');
+    xhr.send(file);
   });
 
-  if (onProgress) onProgress(95);
-  if (res.data?.error) throw new Error('Bunny upload error: ' + res.data.error);
-  if (!res.data?.secure_url) throw new Error('Bunny upload failed — full response: ' + JSON.stringify(res.data));
   if (onProgress) onProgress(100);
 
-  return {
-    secure_url: res.data.secure_url,
-    public_id:  res.data.secure_url,
-    cdn_url:    res.data.cdn_url,
-  };
+  const secure_url = `${cdn_url.replace(/\/$/, '')}/${remotePath}`;
+  return { secure_url, public_id: secure_url, cdn_url };
 };
 
 export const getCloudinaryConfig = async () => ({ cloudName: 'bunny', cloudPreset: '' });
