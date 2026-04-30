@@ -368,10 +368,12 @@ function demuxMP4(MP4Box, arrayBuffer, clipStart, clipEnd) {
     file.onSamples = (_id, _user, samples) => {
       for (const s of samples) {
         const timeSec = s.cts / s.timescale;
-        if (timeSec >= clipStart - 1.0 && timeSec <= clipEnd + 0.5) {
+        // Collect everything up to clipEnd — we need samples before clipStart
+        // to find the preceding keyframe for VideoDecoder
+        if (timeSec <= clipEnd + 0.5) {
           const data = new Uint8Array(s.data.byteLength);
           data.set(new Uint8Array(s.data));
-          allSamples.push({ ...s, data });
+          allSamples.push({ ...s, data, timeSec });
         }
       }
     };
@@ -579,19 +581,37 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
       recorder.start(100);
 
       // ── Step 5: Decode frames via VideoDecoder ───────────────────
-      let decodedCount = 0;
-      const totalFrames = samples.length;
+      // Find the last keyframe at or before clipStart so VideoDecoder
+      // has a valid starting point — it requires a keyframe after configure()
+      let keyframeIdx = 0;
+      for (let i = 0; i < samples.length; i++) {
+        if (samples[i].is_sync && samples[i].timeSec <= clipStart) {
+          keyframeIdx = i;
+        }
+      }
+      console.log(`[WebCodecs] keyframe at idx=${keyframeIdx} t=${samples[keyframeIdx]?.timeSec?.toFixed(2)}s, clipStart=${clipStart}s, total=${samples.length} samples`);
+
+      const clipStartUs  = clipStart * 1_000_000;
+      const clipEndUs    = clipEnd   * 1_000_000;
+      const renderFrames = Math.max(1, Math.round((clipEnd - clipStart) * 30));
+      let   renderCount  = 0;
+      let   feedCount    = 0;
 
       await new Promise((resolve, reject) => {
         const decoder = new VideoDecoder({
           output: (frame) => {
-            try {
-              offCtx.drawImage(frame, srcX, 0, srcW, srcH, 0, 0, OUT_W, OUT_H);
-              visCtx.drawImage(offscreen, 0, 0);
-            } catch (_) {}
+            const ts = frame.timestamp;
+            if (ts >= clipStartUs && ts <= clipEndUs) {
+              // Frame is within the clip window — crop and draw it
+              try {
+                offCtx.drawImage(frame, srcX, 0, srcW, srcH, 0, 0, OUT_W, OUT_H);
+                visCtx.drawImage(offscreen, 0, 0);
+                renderCount++;
+                setProgress(25 + Math.min(70, Math.round((renderCount / renderFrames) * 70)));
+              } catch (_) {}
+            }
+            // Always close to free GPU memory
             frame.close();
-            decodedCount++;
-            setProgress(25 + Math.min(70, Math.round((decodedCount / totalFrames) * 70)));
           },
           error: (e) => reject(new Error('VideoDecoder: ' + e.message)),
         });
@@ -605,15 +625,18 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
 
         (async () => {
           try {
-            for (const sample of samples) {
+            // Feed from the preceding keyframe so the decoder has valid state
+            for (let i = keyframeIdx; i < samples.length; i++) {
+              const sample = samples[i];
               decoder.decode(new EncodedVideoChunk({
                 type:      sample.is_sync ? 'key' : 'delta',
                 timestamp: Math.round(sample.cts * 1_000_000 / sample.timescale),
                 duration:  Math.round(sample.duration * 1_000_000 / sample.timescale),
                 data:      sample.data,
               }));
-              // Yield periodically to keep UI responsive
-              if (decodedCount % 30 === 0) await new Promise(r => setTimeout(r, 0));
+              feedCount++;
+              // Yield every 30 frames to keep UI responsive
+              if (feedCount % 30 === 0) await new Promise(r => setTimeout(r, 0));
             }
             await decoder.flush();
             decoder.close();
