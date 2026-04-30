@@ -432,7 +432,14 @@ function FileClipCard({ clip, index }) {
         </div>
         <div className="flex gap-1.5">
           {src && (
-            <a href={src} download={`clip_${index + 1}.mp4`} className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium transition-colors">
+            <a 
+              href={src?.includes('res.cloudinary.com') 
+                ? src.replace('/f_mp4/', '/fl_attachment,f_mp4/') 
+                : src} 
+              target="_blank"
+              rel="noreferrer"
+              className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium transition-colors"
+            >
               <Download size={10} /><span>Download</span>
             </a>
           )}
