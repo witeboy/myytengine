@@ -59,9 +59,10 @@ function pickProtagonistName(topicTitle) {
 Deno.serve(async (req) => {
   try {
     // ── BUNNY CONFIG ROUTE ─────────────────────────────────────────
-    // Detected by header flag — runs before auth, returns env vars so
-    // the browser can upload directly to Bunny Storage via XHR.
-    if (req.headers.get('x-bunny-config') === '1') {
+    // Detected by action field in body — runs before auth, returns
+    // env vars so the browser can upload directly to Bunny via XHR.
+    const url = new URL(req.url);
+    if (url.searchParams.get('action') === 'bunny_config') {
       return Response.json({
         storage_zone:     Deno.env.get('BUNNY_STORAGE_ZONE')     || '',
         storage_password: Deno.env.get('BUNNY_STORAGE_PASSWORD') || '',
