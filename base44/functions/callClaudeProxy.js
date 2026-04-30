@@ -10,7 +10,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // Called from directApi.js via base44.functions.invoke('callClaudeProxy')
 // to avoid browser CORS restrictions on api.anthropic.com.
 // ─────────────────────────────────────────────────────────────────────────────
-
+ 
 Deno.serve(async (req) => {
   try {
     const base44 = createClientFromRequest(req);
