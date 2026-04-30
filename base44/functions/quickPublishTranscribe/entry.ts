@@ -300,18 +300,18 @@ Return JSON:
         console.log(`[clip_video] Download complete. Cutting ${start}s → ${end}s (${duration}s) with portrait crop`);
 
         // ── Step 2: ffmpeg — cut + portrait crop 9:16 ─────────────────────
-        // Uses re-encode (needed for crop filter) with fast preset
-        // crop=ih*9/16:ih centres a 9:16 window, then scales to 720x1280
-        const cmd = new Deno.Command('ffmpeg', {
+        // Uses .output() which collects stdout+stderr and waits for exit cleanly
+        console.log(`[clip_video] Running ffmpeg: ${Math.floor(start)}s → +${duration}s, portrait crop`);
+        const ffOut = await new Deno.Command('ffmpeg', {
           args: [
             '-y',
-            '-ss', String(Math.floor(start)),   // seek before input = fast
+            '-ss', String(Math.floor(start)),
             '-i', tmpIn,
             '-t',  String(duration),
             '-vf', 'crop=ih*9/16:ih,scale=720:1280',
             '-c:v', 'libx264',
-            '-preset', 'ultrafast',             // fastest encode, good enough for clips
-            '-crf', '26',                       // slightly compressed, keeps file small
+            '-preset', 'ultrafast',
+            '-crf', '26',
             '-c:a', 'aac',
             '-b:a', '128k',
             '-movflags', '+faststart',
@@ -320,56 +320,31 @@ Return JSON:
           ],
           stdout: 'piped',
           stderr: 'piped',
-        });
+        }).output();  // .output() waits for completion and collects all output
 
-        const proc = cmd.spawn();
-
-        // Collect stderr for error reporting
-        const stderrChunks = [];
-        const stderrReader = proc.stderr.getReader();
-        const collectStderr = async () => {
-          while (true) {
-            const { done, value } = await stderrReader.read();
-            if (done) break;
-            stderrChunks.push(value);
-          }
-        };
-        collectStderr();
-
-        // Drain stdout
-        const stdoutReader = proc.stdout.getReader();
-        while (true) { const { done } = await stdoutReader.read(); if (done) break; }
-
-        const ffStatus = await proc.status;
-        if (!ffStatus.success) {
-          const errText = new TextDecoder().decode(
-            stderrChunks.reduce((a, b) => { const c = new Uint8Array(a.length + b.length); c.set(a); c.set(b, a.length); return c; }, new Uint8Array())
-          ).slice(-600); // last 600 chars = most relevant ffmpeg error
-          throw new Error(`ffmpeg failed: ${errText}`);
+        if (!ffOut.success) {
+          const errText = new TextDecoder().decode(ffOut.stderr).slice(-800);
+          console.error('[clip_video] ffmpeg stderr:', errText);
+          throw new Error(`ffmpeg failed: ${errText.slice(0, 400)}`);
         }
+        console.log('[clip_video] ffmpeg complete');
 
-        // ── Step 3: Stream upload output file to Bunny (no readFile) ───────
+       // ── Step 3: Upload cut clip to Bunny ──────────────────────
+        // Cut clip is small (20-60MB) — safe to readFile, only the source was huge
         const clipName  = `clips/clip_${ts}_${Math.round(start)}s_${duration}s_9x16.mp4`;
         const uploadUrl = `https://${bunnyHost}/${bunnyZone}/${clipName}`;
 
-        const outStat = await Deno.stat(tmpOut);
-        console.log(`[clip_video] Uploading ${(outStat.size / 1024 / 1024).toFixed(1)}MB to Bunny`);
-
-        // Open file as a ReadableStream for the fetch body — avoids loading into memory
-        const outFile = await Deno.open(tmpOut, { read: true });
-        const uploadStream = outFile.readable;
+        const clipBytes = await Deno.readFile(tmpOut);
+        console.log(`[clip_video] Uploading ${(clipBytes.length / 1024 / 1024).toFixed(1)}MB to Bunny`);
 
         const upRes = await fetch(uploadUrl, {
           method: 'PUT',
           headers: {
             'AccessKey': bunnyPass,
             'Content-Type': 'video/mp4',
-            'Content-Length': String(outStat.size),
           },
-          body: uploadStream,
-          duplex: 'half',
+          body: clipBytes,
         });
-        // Note: outFile is consumed by the stream, no need to close manually
 
         if (!upRes.ok) {
           const upErr = await upRes.text();
