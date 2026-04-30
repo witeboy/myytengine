@@ -1,14 +1,13 @@
 /**
- * ClipExtractor.jsx  —  Fixed + FFmpeg-enhanced
+ * ClipExtractor.jsx  —  Fixed
  *
  * FIXES:
- *   1. Removed the localStorage Cloudinary guard that blocked the pipeline.
- *      uploadToCloudinary reads cloud config from server env via directApi — no localStorage needed.
- *   2. Added FFmpeg Worker clip cutting (same dual-mode pattern as VideoExporter in TimelineEditor).
- *      FFmpeg cuts exact viral segments in the browser, runs non-blocking after analysis completes.
- *
- * YouTube URL path: Cobalt audio extraction → AssemblyAI transcription → Claude analysis → FFmpeg clip
- * File path: Cloudinary upload → AssemblyAI transcription → Claude analysis → FFmpeg + Cloudinary clips
+ *   1. Removed localStorage Cloudinary guard that blocked the pipeline.
+ *      uploadToCloudinary reads openshorts_cloud_name / openshorts_cloud_preset
+ *      from server env via directApi — no localStorage value needed.
+ *   2. Removed dynamic import('@ffmpeg/ffmpeg') — not available in Base44.
+ *      Clip playback/download uses Cloudinary URL transformations (instant CDN clips)
+ *      plus the existing @/lib/clipWithFFmpeg for ShortsClipperPanel.
  */
 
 import React, { useState, useRef } from 'react';
@@ -27,7 +26,7 @@ import {
   Upload, FileVideo, Mic, Brain, Scissors, ArrowLeft,
   Loader2, CheckCircle, AlertCircle, Sparkles, Flame,
   TrendingUp, Clock, ChevronRight, RotateCcw, Zap,
-  Settings2, Cpu,
+  Settings2,
 } from 'lucide-react';
 
 import {
@@ -82,56 +81,6 @@ function StageIndicator({ stages, currentStage, completedStages }) {
   );
 }
 
-// ── FFmpeg clip cutter (mirrors VideoExporter/useFFmpegExport pattern) ──────
-// Cuts the exact viral segment from source video in-browser. No server, no Cloudinary transcode needed.
-// Runs as a background task after analysis — same "off main thread" philosophy as FFmpeg Worker.
-async function cutClipWithFFmpeg(sourceUrl, startSec, endSec, onProgress) {
-  if (!isFFmpegSupported()) return null;
-  try {
-    const { createFFmpeg, fetchFile } = await import('@ffmpeg/ffmpeg');
-    const ffmpeg = createFFmpeg({
-      log: false,
-      progress: ({ ratio }) => onProgress && onProgress(Math.round(ratio * 100)),
-    });
-    if (!ffmpeg.isLoaded()) await ffmpeg.load();
-
-    const inputName  = 'input_clip.mp4';
-    const outputName = 'viral_clip.mp4';
-    const duration   = Math.max(1, endSec - startSec);
-
-    onProgress && onProgress(5);
-    ffmpeg.FS('writeFile', inputName, await fetchFile(sourceUrl));
-    onProgress && onProgress(20);
-
-    // Re-encode for frame accuracy at exact start/end (ultrafast = same speed as WebCodecs path)
-    await ffmpeg.run(
-      '-ss', String(startSec),
-      '-i', inputName,
-      '-t', String(duration),
-      '-c:v', 'libx264',
-      '-c:a', 'aac',
-      '-preset', 'ultrafast',
-      '-crf', '23',
-      '-movflags', '+faststart',
-      outputName,
-    );
-
-    onProgress && onProgress(90);
-    const data = ffmpeg.FS('readFile', outputName);
-    const blob = new Blob([data.buffer], { type: 'video/mp4' });
-
-    // Cleanup MEMFS
-    try { ffmpeg.FS('unlink', inputName); } catch (_) {}
-    try { ffmpeg.FS('unlink', outputName); } catch (_) {}
-
-    onProgress && onProgress(100);
-    return URL.createObjectURL(blob);
-  } catch (err) {
-    console.warn('[ClipExtractor FFmpeg]', err.message);
-    return null;
-  }
-}
-
 export default function ClipExtractor() {
   const [currentStage, setCurrentStage]       = useState(null);
   const [completedStages, setCompletedStages] = useState([]);
@@ -154,8 +103,6 @@ export default function ClipExtractor() {
   const [videoContext, setVideoContext]        = useState('');
   const [showSettings, setShowSettings]       = useState(false);
   const [ffmpegReady, setFfmpegReady]         = useState(false);
-  const [useFfmpegCuts, setUseFfmpegCuts]     = useState(isFFmpegSupported());
-  const [clipCutProgress, setClipCutProgress] = useState({});
 
   const markComplete = (stage) => {
     setCompletedStages(prev => prev.includes(stage) ? prev : [...prev, stage]);
@@ -188,8 +135,11 @@ export default function ClipExtractor() {
   const runTranscription = async (uploadedUrl) => {
     setCurrentStage('transcribe');
     setStatusMessage('Submitting to AssemblyAI for transcription…');
+
     const result = await transcribeFile(uploadedUrl, (msg) => setStatusMessage(msg));
+
     if (!result.words?.length) throw new Error('Transcription returned no words');
+
     setAsrWords(result.words);
     setWordCount(result.words.length);
     setTranscript(result.words.map(w => w.word).join(' '));
@@ -202,6 +152,7 @@ export default function ClipExtractor() {
     setCurrentStage('analyze');
     setStatusMessage('Claude is analyzing for viral moments…');
     setAnalyzing(true);
+
     try {
       const result = await analyzeViralMoments({
         transcript: words.map(w => w.word).join(' '),
@@ -212,6 +163,7 @@ export default function ClipExtractor() {
         maxSeconds: parseInt(maxClipLen) || 90,
         context:    videoContext,
       });
+
       const foundClips = result?.clips || [];
       if (!foundClips.length) {
         setClips([]);
@@ -222,95 +174,65 @@ export default function ClipExtractor() {
       }
       markComplete('analyze');
       setCurrentStage('results');
-      return foundClips;
     } finally {
       setAnalyzing(false);
     }
-  };
-
-  // ── FFmpeg background clip cutting (non-blocking, batched) ──
-  // Mirrors the "FFmpeg Worker" path from VideoExporter — runs after UI is showing results.
-  const runFFmpegCuts = async (foundClips, sourceUrl) => {
-    if (!isFFmpegSupported() || !sourceUrl || !foundClips.length) return;
-    setStatusMessage('FFmpeg cutting clips in browser…');
-    const BATCH = 2; // 2 at a time to avoid OOM
-    const updated = [...foundClips];
-    for (let i = 0; i < foundClips.length; i += BATCH) {
-      const batch = foundClips.slice(i, i + BATCH);
-      await Promise.all(batch.map(async (clip, bi) => {
-        const idx = i + bi;
-        const blobUrl = await cutClipWithFFmpeg(
-          sourceUrl, clip.start, clip.end,
-          (pct) => setClipCutProgress(prev => ({ ...prev, [idx]: pct })),
-        );
-        if (blobUrl) {
-          // Prefer FFmpeg cut for playback/download; keep cloudinary_clip_url as fallback
-          updated[idx] = { ...updated[idx], ffmpeg_clip_url: blobUrl, cloudinary_clip_url: blobUrl };
-        }
-      }));
-      setClips([...updated]);
-    }
-    setStatusMessage('');
   };
 
   // ── Full pipeline ───────────────────────────────────────────
   const runFullPipeline = async () => {
     if (!videoFile) return;
 
-    // FIX: No localStorage guard — uploadToCloudinary reads cloud config from server env via directApi.
-    // The env vars openshorts_cloud_name and openshorts_cloud_preset are server-side; no user action needed.
+    // FIX: Removed localStorage Cloudinary guard.
+    // uploadToCloudinary reads openshorts_cloud_name / openshorts_cloud_preset
+    // from server env via directApi — no localStorage value required.
 
     setError('');
     setClips([]);
     setCompletedStages([]);
-    setClipCutProgress({});
 
     try {
       let uploadedUrl;
       let cloudPublicId = null;
 
       if (videoFile._isUrl) {
+        // YouTube URL mode: audio URL already resolved by YouTubeUrlInput
         uploadedUrl = videoFile._audioUrl || videoFile._streamUrl;
         markComplete('upload');
       } else {
+        // File mode: upload to Cloudinary directly (server env supplies cloud config)
         setCurrentStage('upload');
         setStatusMessage('Uploading to Cloudinary…');
         const cloudResult = await uploadToCloudinary(videoFile, {
           resourceType: 'video',
           onProgress: pct => setStatusMessage(`Uploading… ${pct}%`),
         });
-        uploadedUrl   = cloudResult.secure_url;
-        cloudPublicId = cloudResult.public_id;
+        uploadedUrl    = cloudResult.secure_url;
+        cloudPublicId  = cloudResult.public_id;
         if (!uploadedUrl) throw new Error('Upload returned no URL');
         markComplete('upload');
       }
 
-      const asrResult  = await runTranscription(uploadedUrl);
-      const foundClips = await runViralAnalysis(asrResult.words, asrResult.duration || videoDuration);
+      // Transcribe via AssemblyAI (backend has the key)
+      const asrResult = await runTranscription(uploadedUrl);
 
-      if (foundClips.length > 0) {
-        // Attach Cloudinary transformation URLs (instant preview, no extra upload)
-        let enriched = foundClips;
-        if (cloudPublicId) {
-          const { cloudName } = getCloudinaryConfig();
-          enriched = foundClips.map(clip => ({
-            ...clip,
-            cloudinary_clip_url: buildCloudinaryClipUrl(cloudPublicId, cloudName, clip.start, clip.end),
-          }));
-          setClips(enriched);
-        }
+      // Viral analysis via Claude direct
+      await runViralAnalysis(asrResult.words, asrResult.duration || videoDuration);
 
-        // FFmpeg cuts run non-blocking after results are shown (same pattern as FFmpeg Worker in VideoExporter)
-        if (useFfmpegCuts) {
-          runFFmpegCuts(enriched, uploadedUrl); // intentionally not awaited
-        }
+      // Attach Cloudinary clip URLs to results so ClipCard can play/download them
+      if (cloudPublicId) {
+        const { cloudName } = getCloudinaryConfig();
+        setClips(prev => prev.map(clip => ({
+          ...clip,
+          cloudinary_clip_url: buildCloudinaryClipUrl(cloudPublicId, cloudName, clip.start, clip.end),
+        })));
       }
 
-      // Init FFmpeg for ShortsClipperPanel (non-blocking)
+      // Init FFmpeg for ShortsClipperPanel (non-blocking, uses existing @/lib/clipWithFFmpeg)
       if (isFFmpegSupported() && !ffmpegReady) {
         initFFmpeg(({ message }) => setStatusMessage(message))
           .then(() => setFfmpegReady(true))
-          .catch(() => {});
+          .catch(() => {}); // silent fallback — Cloudinary clips still work
       }
     } catch (err) {
       setError(err.message);
@@ -332,13 +254,10 @@ export default function ClipExtractor() {
     setError('');
     setStatusMessage('');
     setInputMode('file');
-    setClipCutProgress({});
   };
 
-  const isRunning     = currentStage && currentStage !== 'results';
-  const hasVideoReady = !!videoFile;
-  const ffmpegCutsActive = Object.keys(clipCutProgress).length > 0 &&
-    Object.values(clipCutProgress).some(p => p < 100);
+  const isRunning      = currentStage && currentStage !== 'results';
+  const hasVideoReady  = !!videoFile;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
@@ -355,7 +274,7 @@ export default function ClipExtractor() {
               Viral Clip Extractor
             </h1>
             <p className="text-gray-500 text-sm mt-1">
-              Upload or paste a YouTube link → AssemblyAI transcribes → Claude finds viral moments → FFmpeg cuts clips
+              Upload or paste a YouTube link → AssemblyAI transcribes → Claude finds viral moments → Download FYP-ready clips
             </p>
           </div>
           {clips.length > 0 && (
@@ -381,17 +300,6 @@ export default function ClipExtractor() {
           <div className="flex items-center gap-2 text-sm text-blue-600">
             <Loader2 className="w-4 h-4 animate-spin" />
             {statusMessage}
-          </div>
-        )}
-
-        {/* FFmpeg clip cutting progress bar — shows after results appear */}
-        {ffmpegCutsActive && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-purple-50 border border-purple-200 text-sm text-purple-700">
-            <Cpu className="w-4 h-4 animate-pulse" />
-            <span>
-              FFmpeg cutting clips in browser…{' '}
-              {Object.values(clipCutProgress).filter(p => p >= 100).length} / {Object.keys(clipCutProgress).length} done
-            </span>
           </div>
         )}
 
@@ -447,9 +355,7 @@ export default function ClipExtractor() {
                 <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={handleFileSelect} />
                 {videoFile ? (
                   <div className="space-y-3">
-                    <div className="w-14 h-14 rounded-xl bg-emerald-100 flex items-center justify-center mx-auto">
-                      <FileVideo className="w-7 h-7 text-emerald-600" />
-                    </div>
+                    <div className="w-14 h-14 rounded-xl bg-emerald-100 flex items-center justify-center mx-auto"><FileVideo className="w-7 h-7 text-emerald-600" /></div>
                     <div>
                       <p className="font-semibold text-gray-900">{videoFile.name}</p>
                       <p className="text-sm text-gray-500 mt-1">
@@ -460,9 +366,7 @@ export default function ClipExtractor() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center mx-auto">
-                      <Upload className="w-7 h-7 text-gray-400" />
-                    </div>
+                    <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center mx-auto"><Upload className="w-7 h-7 text-gray-400" /></div>
                     <div>
                       <p className="font-semibold text-gray-700">Drop your video here</p>
                       <p className="text-sm text-gray-400 mt-1">MP4, MOV, WebM — podcasts, interviews, streams, lectures</p>
@@ -472,29 +376,14 @@ export default function ClipExtractor() {
               </div>
             )}
 
-            {/* Settings + FFmpeg toggle */}
+            {/* Settings */}
             <div className="flex items-center justify-between">
-              <button
-                onClick={() => setShowSettings(!showSettings)}
-                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-              >
+              <button onClick={() => setShowSettings(!showSettings)} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors">
                 <Settings2 className="w-3.5 h-3.5" />
                 {showSettings ? 'Hide settings' : 'Clip settings'}
               </button>
-              {isFFmpegSupported() ? (
-                <label className="flex items-center gap-1.5 text-xs text-purple-600 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={useFfmpegCuts}
-                    onChange={e => setUseFfmpegCuts(e.target.checked)}
-                    className="rounded border-gray-300"
-                  />
-                  <Cpu className="w-3 h-3" /> FFmpeg browser cuts
-                </label>
-              ) : (
-                <span className="text-[10px] text-amber-500 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" /> Browser capture mode
-                </span>
+              {!isFFmpegSupported() && (
+                <span className="text-[10px] text-amber-500 flex items-center gap-1"><AlertCircle className="w-3 h-3" />Using browser capture mode</span>
               )}
             </div>
 
@@ -530,23 +419,14 @@ export default function ClipExtractor() {
                   </div>
                   <div>
                     <label className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Video context</label>
-                    <Input
-                      className="h-8 text-xs mt-1"
-                      placeholder="e.g. tech podcast, interview…"
-                      value={videoContext}
-                      onChange={e => setVideoContext(e.target.value)}
-                    />
+                    <Input className="h-8 text-xs mt-1" placeholder="e.g. tech podcast, interview…" value={videoContext} onChange={e => setVideoContext(e.target.value)} />
                   </div>
                 </CardContent>
               </Card>
             )}
 
             {hasVideoReady && (
-              <Button
-                onClick={runFullPipeline}
-                disabled={isRunning}
-                className="w-full h-12 text-sm bg-gray-900 hover:bg-gray-800 text-white gap-2"
-              >
+              <Button onClick={runFullPipeline} disabled={isRunning} className="w-full h-12 text-sm bg-gray-900 hover:bg-gray-800 text-white gap-2">
                 <Zap className="w-4 h-4" /> Extract Viral Clips
               </Button>
             )}
@@ -558,9 +438,9 @@ export default function ClipExtractor() {
           <Card className="border-blue-200 bg-blue-50/30">
             <CardContent className="p-6 text-center space-y-4">
               <div className="w-16 h-16 rounded-xl bg-blue-100 flex items-center justify-center mx-auto">
-                {currentStage === 'upload'     && <Upload className="w-8 h-8 text-blue-500 animate-pulse" />}
-                {currentStage === 'transcribe' && <Mic    className="w-8 h-8 text-blue-500 animate-pulse" />}
-                {currentStage === 'analyze'    && <Brain  className="w-8 h-8 text-blue-500 animate-pulse" />}
+                {currentStage === 'upload'    && <Upload  className="w-8 h-8 text-blue-500 animate-pulse" />}
+                {currentStage === 'transcribe'&& <Mic     className="w-8 h-8 text-blue-500 animate-pulse" />}
+                {currentStage === 'analyze'   && <Brain   className="w-8 h-8 text-blue-500 animate-pulse" />}
               </div>
               <div>
                 <p className="font-semibold text-gray-900">
@@ -583,14 +463,7 @@ export default function ClipExtractor() {
                   <Flame className="w-5 h-5 text-red-500" />
                   <h2 className="text-lg font-semibold text-gray-900">{clips.length} Viral Clips Found</h2>
                 </div>
-                <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
-                  Ranked by virality
-                </Badge>
-                {useFfmpegCuts && isFFmpegSupported() && (
-                  <Badge variant="outline" className="text-[10px] bg-purple-50 text-purple-700 border-purple-200 gap-1 flex items-center">
-                    <Cpu className="w-3 h-3" /> FFmpeg cutting
-                  </Badge>
-                )}
+                <Badge variant="outline" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">Ranked by virality</Badge>
               </div>
               <div className="flex items-center gap-2 text-xs text-gray-400">
                 <Clock className="w-3.5 h-3.5" />
@@ -615,29 +488,16 @@ export default function ClipExtractor() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {clips.map((clip, i) => (
-                <div key={i} className="relative">
-                  {/* Per-clip FFmpeg progress badge */}
-                  {clipCutProgress[i] !== undefined && clipCutProgress[i] < 100 && (
-                    <div className="absolute inset-x-0 top-0 z-10 flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-white bg-purple-600/90 rounded-t-xl">
-                      <Cpu className="w-3 h-3 animate-pulse" />
-                      Cutting… {clipCutProgress[i]}%
-                    </div>
-                  )}
-                  {clipCutProgress[i] === 100 && (
-                    <div className="absolute inset-x-0 top-0 z-10 flex items-center gap-1.5 px-3 py-1 text-xs font-medium text-white bg-emerald-600/90 rounded-t-xl">
-                      <CheckCircle className="w-3 h-3" /> FFmpeg clip ready — downloadable MP4
-                    </div>
-                  )}
-                  <ClipCard
-                    clip={clip}
-                    index={i}
-                    videoUrl={videoUrl}
-                    allWords={asrWords}
-                    onClipReady={(idx, blob) => {
-                      console.log(`Clip #${idx + 1} ready: ${(blob.size / 1048576).toFixed(1)}MB`);
-                    }}
-                  />
-                </div>
+                <ClipCard
+                  key={i}
+                  clip={clip}
+                  index={i}
+                  videoUrl={videoUrl}
+                  allWords={asrWords}
+                  onClipReady={(idx, blob) => {
+                    console.log(`Clip #${idx + 1} ready: ${(blob.size / 1048576).toFixed(1)}MB`);
+                  }}
+                />
               ))}
             </div>
 
@@ -649,9 +509,7 @@ export default function ClipExtractor() {
         {completedStages.includes('analyze') && clips.length === 0 && !isRunning && (
           <Card className="border-gray-200">
             <CardContent className="p-8 text-center space-y-3">
-              <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center mx-auto">
-                <Scissors className="w-7 h-7 text-gray-400" />
-              </div>
+              <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center mx-auto"><Scissors className="w-7 h-7 text-gray-400" /></div>
               <p className="font-semibold text-gray-700">No viral moments detected</p>
               <p className="text-sm text-gray-400">The content may be too uniform or quiet. Try a video with more emotional variety.</p>
               <Button variant="outline" size="sm" onClick={resetPipeline} className="gap-1">
@@ -660,7 +518,6 @@ export default function ClipExtractor() {
             </CardContent>
           </Card>
         )}
-
       </div>
     </div>
   );
