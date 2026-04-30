@@ -642,8 +642,8 @@ export default function OpenShorts() {
         onProgress: pct => setMsg(`Uploading… ${pct}%`),
       });
       const cloudUrl  = uploadResult.secure_url;
-      const publicId  = uploadResult.public_id;
-      const cloudName = uploadResult.cloud_name || localStorage.getItem(LS.CLOUD_NAME) || '';
+      const publicId  = uploadResult.secure_url;
+      const cloudName = '';
 
       // Step 2: Transcribe
       setMsg('Transcribing with AssemblyAI…');
@@ -672,8 +672,7 @@ export default function OpenShorts() {
       setProgress(0);
 
       const processed = analysisClips.map((c) => {
-        const clipUrl = buildCloudinaryClipUrl(publicId, cloudName, c.start, c.end);
-        return { ...c, cloudinary_url: clipUrl, blobUrl: clipUrl };
+        return { ...c, cloudinary_url: cloudUrl, blobUrl: cloudUrl };
       });
 
       markDone('clip');
