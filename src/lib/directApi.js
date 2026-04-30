@@ -130,7 +130,8 @@ export const extractYouTubeAudio = async (youtubeUrl) => {
 // api.anthropic.com server-to-server — identical to generateScenePrompts.js.
 // ─────────────────────────────────────────────────────────────────────────────
 const callClaude = async (system, user, { maxTokens = 2000 } = {}) => {
-  const res = await base44.functions.invoke('callClaudeProxy', {
+  const res = await base44.functions.invoke('generateSceneBreakdown', {
+    __claude_passthrough: true,
     system,
     prompt:     user,
     max_tokens: maxTokens,
