@@ -58,62 +58,24 @@ function pickProtagonistName(topicTitle) {
 
 Deno.serve(async (req) => {
   try {
-    // ── BUNNY UPLOAD ROUTE ──────────────────────────────────────────
-    // directApi.js calls base44.functions.invoke('generateOutline', {...})
-    // with file_data_base64 present — handle it here and return early.
-    const contentType = req.headers.get('content-type') || '';
-    let parsedBody = {};
-    try {
-      parsedBody = await req.json();
-    } catch (_) {
-      try {
-        const t = await req.text();
-        parsedBody = t ? JSON.parse(t) : {};
-      } catch (_) {}
-    }
-
-    if (parsedBody.file_data_base64) {
-      const storageZone = Deno.env.get('BUNNY_STORAGE_ZONE');
-      const password    = Deno.env.get('BUNNY_STORAGE_PASSWORD');
-      const region      = Deno.env.get('BUNNY_STORAGE_REGION') || 'storage';
-      const cdnUrl      = (Deno.env.get('BUNNY_CDN_URL') || '').replace(/\/$/, '');
-
-      if (!storageZone || !password || !cdnUrl) {
-        return Response.json({ error: 'Missing Bunny env vars: BUNNY_STORAGE_ZONE, BUNNY_STORAGE_PASSWORD, BUNNY_CDN_URL' }, { status: 500 });
-      }
-
-      const { file_data_base64, file_name, file_type } = parsedBody;
-      if (!file_name) return Response.json({ error: 'Missing file_name' }, { status: 400 });
-
-      const binary     = Uint8Array.from(atob(file_data_base64), c => c.charCodeAt(0));
-      const safeFile   = file_name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const remotePath = `uploads/${Date.now()}_${safeFile}`;
-      const host       = (region === 'de' || region === 'storage') ? 'storage.bunnycdn.com' : `${region}.storage.bunnycdn.com`;
-
-      const uploadRes = await fetch(`https://${host}/${storageZone}/${remotePath}`, {
-        method:  'PUT',
-        headers: { 'AccessKey': password, 'Content-Type': file_type || 'video/mp4' },
-        body:    binary,
-      });
-
-      if (!uploadRes.ok) {
-        const txt = await uploadRes.text();
-        return Response.json({ error: `Bunny upload failed: HTTP ${uploadRes.status} — ${txt}` }, { status: 500 });
-      }
-
+    // ── BUNNY CONFIG ROUTE ─────────────────────────────────────────
+    // Detected by header flag — runs before auth, returns env vars so
+    // the browser can upload directly to Bunny Storage via XHR.
+    if (req.headers.get('x-bunny-config') === '1') {
       return Response.json({
-        secure_url: `${cdnUrl}/${remotePath}`,
-        public_id:  `${cdnUrl}/${remotePath}`,
-        cdn_url:    cdnUrl,
+        storage_zone:     Deno.env.get('BUNNY_STORAGE_ZONE')     || '',
+        storage_password: Deno.env.get('BUNNY_STORAGE_PASSWORD') || '',
+        storage_region:   Deno.env.get('BUNNY_STORAGE_REGION')   || 'ny',
+        cdn_url:          Deno.env.get('BUNNY_CDN_URL')          || '',
       });
     }
-    // ── END BUNNY UPLOAD ROUTE ──────────────────────────────────────
+    // ── END BUNNY CONFIG ROUTE ─────────────────────────────────────
 
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, topic_id, topic_title, niche, duration_minutes } = parsedBody;
+    const { project_id, topic_id, topic_title, niche, duration_minutes } = await req.json();
 
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
     const project = projects[0];
