@@ -139,8 +139,8 @@ const callClaude = async (system, user, { maxTokens = 2000 } = {}) => {
 
   if (res.data?.error) throw new Error('Claude error: ' + res.data.error);
   const text = res.data?.text || res.data?.content || res.data?.result || '';
-  if (!text) throw new Error('callClaudeProxy returned empty response: ' + JSON.stringify(res.data).slice(0, 200));
-  return text;
+  if (!text) throw new Error('Passthrough returned empty response: ' + JSON.stringify(res.data).slice(0, 200));
+  return String(text); // guarantee string before parseJson calls .match()
 };
 
 const parseJson = (raw) => {
