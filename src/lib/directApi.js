@@ -19,13 +19,12 @@ export const LS_KEYS = {};
 // ─────────────────────────────────────────────────────────────────────────────
 export const uploadToCloudinary = async (file, { resourceType = 'video', onProgress } = {}) => {
   // Get Bunny config from backend (keeps credentials server-side)
-  const configRes = await base44.functions.invoke('getBunnyConfig', {});
-  if (configRes.data?.error) throw new Error('Could not fetch Bunny config: ' + configRes.data.error);
+  const configRes = await base44.functions.invoke('generateOutline', {}, {
+    headers: { 'x-bunny-config': '1' },
+  });
+  if (!configRes.data?.storage_zone) throw new Error('Could not fetch Bunny config — check BUNNY_STORAGE_ZONE, BUNNY_STORAGE_PASSWORD, BUNNY_CDN_URL env vars');
 
   const { storage_zone, storage_password, storage_region, cdn_url } = configRes.data;
-  if (!storage_zone || !storage_password || !cdn_url) {
-    throw new Error('Bunny not configured — check BUNNY_STORAGE_ZONE, BUNNY_STORAGE_PASSWORD, BUNNY_CDN_URL env vars');
-  }
 
   const host       = (storage_region === 'de' || !storage_region || storage_region === 'storage')
     ? 'storage.bunnycdn.com'
