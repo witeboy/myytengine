@@ -819,6 +819,39 @@ Deno.serve(async (req) => {
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await req.json();
+
+    // ── Claude passthrough mode for directApi.js ─────────────────────────────
+    if (body.__claude_passthrough) {
+      const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+      if (!apiKey) return Response.json({ error: 'ANTHROPIC_API_KEY not set' }, { status: 500 });
+
+      const { system, prompt, max_tokens = 2000 } = body;
+      if (!prompt) return Response.json({ error: 'prompt is required' }, { status: 400 });
+
+      const claudeBody = {
+        model: 'claude-sonnet-4-6',
+        max_tokens,
+        messages: [{ role: 'user', content: prompt }],
+      };
+      if (system) claudeBody.system = system;
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify(claudeBody),
+      });
+
+      const data = await response.json();
+      const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+      if (!text) return Response.json({ error: 'No text from Claude' }, { status: 500 });
+      return Response.json({ text });
+    }
+    // ── End passthrough ──────────────────────────────────────────────────────
+
     const { project_id, batch_index, selected_hook } = body;
 
     // FIX 9: Validate required field up front with clear error
