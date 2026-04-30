@@ -1,19 +1,14 @@
 /**
- * OpenShorts.jsx  —  Fixed + FFmpeg-enhanced
+ * OpenShorts.jsx  —  Fixed
  *
  * FIXES:
- *   1. Removed `localStorage.getItem(LS.CLOUD_NAME)` guard in runFileMode.
- *      The env vars openshorts_cloud_name / openshorts_cloud_preset are server-side.
- *      uploadToCloudinary in directApi reads them from the Deno backend env — no localStorage needed.
- *   2. Settings panel retains Cloudinary fields ONLY for self-hosted / custom cloud overrides.
- *      The default "use server env" path now works without any user input.
- *   3. Added FFmpeg Worker clip cutting for File mode (same dual-mode pattern as VideoExporter).
- *      - WebCodecs-style path: Cloudinary URL transformations (instant preview, CDN-ready)
- *      - FFmpeg Worker path: browser-side mp4 cut (downloadable, frame-accurate, no CDN needed)
- *      User can toggle between both; they run in parallel.
- *
- * YouTube URL path: Cobalt audio extraction → AssemblyAI transcription → Claude analysis → timestamps shown
- * File mode:        Cloudinary upload → AssemblyAI transcription → Claude analysis → FFmpeg + Cloudinary clips
+ *   1. Removed localStorage.getItem(LS.CLOUD_NAME) guard in runFileMode().
+ *      Server env vars openshorts_cloud_name / openshorts_cloud_preset are read
+ *      by uploadToCloudinary inside directApi — no localStorage value needed.
+ *   2. Removed dynamic import('@ffmpeg/ffmpeg') — not available in Base44.
+ *      Clips use Cloudinary URL transformations for instant CDN preview/download.
+ *   3. Settings panel retains Cloudinary fields as optional overrides only,
+ *      with a note that the server default works without any input.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -27,7 +22,7 @@ import {
   Scissors, Zap, Copy, Check, ChevronDown, ChevronUp,
   Globe, Eye, EyeOff, Flame, Library, Clock,
   Play, Database, TrendingUp, CloudUpload, Star,
-  ExternalLink, Mic, Cpu,
+  ExternalLink, Mic,
 } from 'lucide-react';
 import {
   uploadToCloudinary,
@@ -36,53 +31,18 @@ import {
   transcribeFile,
   analyzeViralMoments,
 } from '@/lib/directApi';
-import { isFFmpegSupported } from '@/lib/clipWithFFmpeg';
 
-// ── localStorage keys — ONLY for optional user-supplied overrides ─────────────
-// Server env handles the default Cloudinary config (openshorts_cloud_name, openshorts_cloud_preset).
-// These localStorage keys are for self-hosted Cloudinary or social posting integrations ONLY.
+// ── localStorage keys ─────────────────────────────────────────────────────────
+// Cloudinary config (openshorts_cloud_name, openshorts_cloud_preset) is server-side env.
+// These LS keys are ONLY for optional user-supplied overrides (custom account / social posting).
 const LS = {
-  CLOUD_NAME:   'openshorts_cloud_name_override',   // optional override only
-  CLOUD_PRESET: 'openshorts_cloud_preset_override', // optional override only
+  CLOUD_NAME:   'openshorts_cloud_name',
+  CLOUD_PRESET: 'openshorts_cloud_preset',
   SUPABASE_URL: 'openshorts_supabase_url',
   SUPABASE_KEY: 'openshorts_supabase_anon_key',
   UP_KEY:       'openshorts_uploadpost_key',
   UP_USER:      'openshorts_uploadpost_user',
 };
-
-// ── FFmpeg clip cutter (mirrors VideoExporter FFmpeg Worker pattern) ──────────
-async function cutClipWithFFmpeg(sourceUrl, startSec, endSec, onProgress) {
-  if (!isFFmpegSupported()) return null;
-  try {
-    const { createFFmpeg, fetchFile } = await import('@ffmpeg/ffmpeg');
-    const ffmpeg = createFFmpeg({
-      log: false,
-      progress: ({ ratio }) => onProgress && onProgress(Math.round(ratio * 100)),
-    });
-    if (!ffmpeg.isLoaded()) await ffmpeg.load();
-    const duration = Math.max(1, endSec - startSec);
-    onProgress && onProgress(5);
-    ffmpeg.FS('writeFile', 'input.mp4', await fetchFile(sourceUrl));
-    onProgress && onProgress(20);
-    await ffmpeg.run(
-      '-ss', String(startSec), '-i', 'input.mp4',
-      '-t', String(duration),
-      '-c:v', 'libx264', '-c:a', 'aac',
-      '-preset', 'ultrafast', '-crf', '23',
-      '-movflags', '+faststart', 'clip.mp4',
-    );
-    onProgress && onProgress(90);
-    const data = ffmpeg.FS('readFile', 'clip.mp4');
-    const blob = new Blob([data.buffer], { type: 'video/mp4' });
-    try { ffmpeg.FS('unlink', 'input.mp4'); } catch (_) {}
-    try { ffmpeg.FS('unlink', 'clip.mp4'); } catch (_) {}
-    onProgress && onProgress(100);
-    return URL.createObjectURL(blob);
-  } catch (err) {
-    console.warn('[OpenShorts FFmpeg]', err.message);
-    return null;
-  }
-}
 
 // ── Helpers ────────────────────────────────────────────────────────────
 const TikTokIcon = ({ size = 14 }) => (
@@ -150,9 +110,9 @@ const saveToSupabase = async (clips) => {
 
 // ── Stage bar ──────────────────────────────────────────────────────────
 const STAGE_DEFS = {
-  transcribe: { label: 'Upload + Transcribe', icon: Mic      },
-  analyze:    { label: 'Find Moments',        icon: Sparkles },
-  clip:       { label: 'Generate Clips',      icon: Scissors },
+  transcribe: { label: 'Upload + Transcribe', icon: Mic        },
+  analyze:    { label: 'Find Moments',        icon: Sparkles   },
+  clip:       { label: 'Generate Clips',      icon: Scissors   },
 };
 
 function StageBar({ stageKeys, current, done }) {
@@ -171,9 +131,12 @@ function StageBar({ stageKeys, current, done }) {
                isCur  ? 'bg-rose-50 text-rose-700 border-rose-200 shadow-sm' :
                         'bg-gray-50 text-gray-400 border-gray-100')
             }>
-              {isDone  ? <CheckCircle size={11} />
-               : isCur ? <Loader2 size={11} className="animate-spin" />
-               : <Icon size={11} />}
+              {isDone
+                ? <CheckCircle size={11} />
+                : isCur
+                  ? <Loader2 size={11} className="animate-spin" />
+                  : <Icon size={11} />
+              }
               <span className="hidden sm:inline">{def.label}</span>
             </div>
             {i < stageKeys.length - 1 && <div className="w-3 h-px bg-gray-200 hidden sm:block" />}
@@ -188,14 +151,14 @@ function StageBar({ stageKeys, current, done }) {
 function SettingsPanel({ onClose }) {
   const FIELDS = [
     {
-      section: 'Cloudinary Override (Optional)',
-      k: LS.CLOUD_NAME, label: 'Custom Cloud Name', pw: false,
-      ph: 'leave blank to use server default',
-      hint: 'Only needed if you want to use your own Cloudinary account instead of the server default',
+      section: 'Cloudinary (Optional Override)',
+      k: LS.CLOUD_NAME, label: 'Cloud Name', pw: false,
+      ph: 'leave blank — server default active',
+      hint: 'Only needed to override the server default with your own Cloudinary account',
     },
     {
-      k: LS.CLOUD_PRESET, label: 'Custom Upload Preset', pw: false,
-      ph: 'leave blank to use server default',
+      k: LS.CLOUD_PRESET, label: 'Upload Preset', pw: false,
+      ph: 'leave blank — server default active',
       hint: 'Cloudinary → Settings → Upload → Add unsigned preset',
     },
     {
@@ -230,11 +193,7 @@ function SettingsPanel({ onClose }) {
   const [saved, setSaved] = useState(false);
 
   const save = () => {
-    FIELDS.forEach(f => {
-      const v = vals[f.k].trim();
-      if (v) localStorage.setItem(f.k, v);
-      else localStorage.removeItem(f.k); // remove blanks so server env takes precedence
-    });
+    FIELDS.forEach(f => localStorage.setItem(f.k, vals[f.k].trim()));
     setSaved(true);
     setTimeout(() => { setSaved(false); onClose(); }, 800);
   };
@@ -250,10 +209,10 @@ function SettingsPanel({ onClose }) {
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={17} /></button>
         </div>
 
-        {/* Server env status */}
-        <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-lg text-xs text-emerald-700">
+        {/* Server env status notice */}
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-100 text-xs text-emerald-700">
           <CheckCircle size={11} />
-          Cloudinary is configured via server environment — no settings required to start clipping.
+          Cloudinary is pre-configured via server environment — no settings needed to start.
         </div>
 
         {FIELDS.map((f, idx) => (
@@ -286,8 +245,8 @@ function SettingsPanel({ onClose }) {
 
         <div className="pt-2 space-y-1.5">
           {[
-            { ok: true,                                                              label: 'Cloudinary — server env active (default)' },
-            { ok: !!(vals[LS.SUPABASE_URL] && vals[LS.SUPABASE_KEY]),               label: 'Supabase — clip library' },
+            { ok: true,                                                                    label: 'Cloudinary — server env active' },
+            { ok: !!(vals[LS.SUPABASE_URL] && vals[LS.SUPABASE_KEY]), label: 'Supabase — clip library' },
           ].map(({ ok, label }) => (
             <div key={label} className={`flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg ${ok ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-50 text-gray-400'}`}>
               {ok ? <CheckCircle size={11} /> : <div className="w-2.5 h-2.5 rounded-full border border-gray-300" />}
@@ -385,15 +344,14 @@ function YouTubeClipCard({ clip, index, ytUrl }) {
 }
 
 // ── FileClipCard ───────────────────────────────────────────────────────
-function FileClipCard({ clip, index, ffmpegProgress }) {
+function FileClipCard({ clip, index }) {
   const [copied, setCopied]   = useState(null);
   const [expanded, setExp]    = useState(false);
   const [posting, setPosting] = useState(false);
   const [postRes, setPostRes] = useState(null);
   const videoRef = useRef(null);
-  const src = clip.ffmpeg_clip_url || clip.cloudinary_url || clip.blobUrl || null;
+  const src = clip.cloudinary_url || clip.blobUrl || null;
   const dur = (clip.end && clip.start) ? Math.round(clip.end - clip.start) : null;
-  const ffmpegDone = ffmpegProgress === 100;
 
   const copy = (text, key) => {
     navigator.clipboard.writeText(text).then(() => { setCopied(key); setTimeout(() => setCopied(null), 2000); });
@@ -424,38 +382,16 @@ function FileClipCard({ clip, index, ffmpegProgress }) {
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-      {/* FFmpeg progress indicator */}
-      {ffmpegProgress !== undefined && !ffmpegDone && (
-        <div className="flex items-center gap-1.5 px-3 py-1 text-xs text-purple-700 bg-purple-50 border-b border-purple-100">
-          <Cpu size={10} className="animate-pulse" />
-          FFmpeg cutting… {ffmpegProgress}%
-        </div>
-      )}
-      {ffmpegDone && clip.ffmpeg_clip_url && (
-        <div className="flex items-center gap-1.5 px-3 py-1 text-xs text-emerald-700 bg-emerald-50 border-b border-emerald-100">
-          <CheckCircle size={10} /> Downloadable MP4 ready
-        </div>
-      )}
-
       <div className="relative bg-zinc-900 overflow-hidden" style={{ aspectRatio: '9/16', maxHeight: 220 }}>
         {src ? (
-          <video
-            ref={videoRef}
-            src={src}
-            className="absolute inset-0 w-full h-full object-cover"
-            muted loop playsInline
-            onMouseEnter={() => videoRef.current?.play()}
-            onMouseLeave={() => videoRef.current?.pause()}
-          />
+          <video ref={videoRef} src={src} className="absolute inset-0 w-full h-full object-cover" muted loop playsInline
+            onMouseEnter={() => videoRef.current?.play()} onMouseLeave={() => videoRef.current?.pause()} />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Loader2 className="w-6 h-6 animate-spin text-zinc-600" />
-          </div>
+          <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-zinc-600" /></div>
         )}
         <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center text-white text-xs font-bold shadow">{index + 1}</div>
         {dur && <div className="absolute top-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 bg-black/80 text-white rounded-full text-xs font-mono"><Clock size={8} /><span>{dur}s</span></div>}
-        {clip.ffmpeg_clip_url && <div className="absolute bottom-2 right-2 px-1.5 py-0.5 bg-purple-600/90 text-white rounded text-xs font-bold flex items-center gap-1"><Cpu size={8} />FFmpeg</div>}
-        {!clip.ffmpeg_clip_url && clip.cloudinary_url && <div className="absolute bottom-2 right-2 px-1.5 py-0.5 bg-blue-600/90 text-white rounded text-xs font-bold">CDN</div>}
+        {clip.cloudinary_url && <div className="absolute bottom-2 right-2 px-1.5 py-0.5 bg-blue-600/90 text-white rounded text-xs font-bold">CDN</div>}
       </div>
       <div className="p-3 space-y-2">
         {clip.viral_hook_text && <div className="flex items-start gap-1.5"><Flame className="w-3 h-3 text-rose-500 shrink-0 mt-0.5" /><p className="text-xs font-semibold text-gray-800 leading-snug">{clip.viral_hook_text}</p></div>}
@@ -486,19 +422,11 @@ function FileClipCard({ clip, index, ffmpegProgress }) {
         </div>
         <div className="flex gap-1.5">
           {src && (
-            <a
-              href={src}
-              download={`clip_${index + 1}.mp4`}
-              className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium transition-colors"
-            >
+            <a href={src} download={`clip_${index + 1}.mp4`} className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium transition-colors">
               <Download size={10} /><span>Download</span>
             </a>
           )}
-          <button
-            onClick={runPost}
-            disabled={posting}
-            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white text-xs font-semibold disabled:opacity-50 transition-all"
-          >
+          <button onClick={runPost} disabled={posting} className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white text-xs font-semibold disabled:opacity-50 transition-all">
             {posting ? <Loader2 size={10} className="animate-spin" /> : <Share2 size={10} />}
             <span>Post</span>
           </button>
@@ -581,10 +509,10 @@ export default function OpenShorts() {
   const [mainTab, setMainTab]           = useState('generate');
   const [inputMode, setInputMode]       = useState('youtube');
 
-  const [ytUrl, setYtUrl]        = useState('');
-  const [file, setFile]          = useState(null);
-  const [vidDuration, setVidDur] = useState(0);
-  const [dragging, setDragging]  = useState(false);
+  const [ytUrl, setYtUrl]         = useState('');
+  const [file, setFile]           = useState(null);
+  const [vidDuration, setVidDur]  = useState(0);
+  const [dragging, setDragging]   = useState(false);
   const fileRef = useRef(null);
 
   const [stage, setStage]       = useState('idle');
@@ -594,9 +522,8 @@ export default function OpenShorts() {
   const [progress, setProgress] = useState(0);
   const [err, setErr]           = useState('');
 
-  const [clips, setClips]             = useState([]);
-  const [clipCutProgress, setClipCutProgress] = useState({});
-  const [useFfmpegCuts, setUseFfmpegCuts]     = useState(isFFmpegSupported());
+  const [clips, setClips]   = useState([]);
+  const [costInfo, setCost] = useState(null);
 
   const [maxClips, setMaxClips] = useState('8');
   const [minSec, setMinSec]     = useState('20');
@@ -614,31 +541,10 @@ export default function OpenShorts() {
     v.src = url;
   };
 
-  // ── FFmpeg background cuts (non-blocking, batched like VideoExporter) ──
-  const runFFmpegCuts = async (foundClips, sourceUrl) => {
-    if (!isFFmpegSupported() || !sourceUrl || !foundClips.length) return;
-    const BATCH = 2;
-    const updated = [...foundClips];
-    for (let i = 0; i < foundClips.length; i += BATCH) {
-      const batch = foundClips.slice(i, i + BATCH);
-      await Promise.all(batch.map(async (clip, bi) => {
-        const idx = i + bi;
-        const blobUrl = await cutClipWithFFmpeg(
-          sourceUrl, clip.start, clip.end,
-          (pct) => setClipCutProgress(prev => ({ ...prev, [idx]: pct })),
-        );
-        if (blobUrl) {
-          updated[idx] = { ...updated[idx], ffmpeg_clip_url: blobUrl };
-        }
-      }));
-      setClips([...updated]);
-    }
-  };
-
   // ── YouTube mode ──────────────────────────────────────────────────────
   const runYouTubeMode = async () => {
     if (!ytUrl.trim()) return setErr('Paste a YouTube URL first');
-    setStage('processing'); setErr(''); setClips([]); setDone([]); setClipCutProgress({});
+    setStage('processing'); setErr(''); setClips([]); setCost(null); setDone([]);
 
     try {
       setStep('transcribe');
@@ -677,15 +583,14 @@ export default function OpenShorts() {
   };
 
   // ── File mode ─────────────────────────────────────────────────────────
-  // FIX: Removed localStorage guard — server env vars handle Cloudinary config.
-  // uploadToCloudinary in directApi reads openshorts_cloud_name / openshorts_cloud_preset
-  // from Deno backend env automatically. No user action needed.
+  // FIX: No localStorage guard. uploadToCloudinary reads cloud config from server env.
   const runFileMode = async () => {
     if (!file) return setErr('Select a video file first');
-    setStage('processing'); setErr(''); setClips([]); setDone([]); setProgress(0); setClipCutProgress({});
+
+    setStage('processing'); setErr(''); setClips([]); setCost(null); setDone([]); setProgress(0);
 
     try {
-      // Step 1: Upload full video to Cloudinary
+      // Step 1: Upload to Cloudinary (server env provides cloud name + preset)
       setStep('transcribe');
       setMsg('Uploading video to Cloudinary…');
       const uploadResult = await uploadToCloudinary(file, {
@@ -694,17 +599,14 @@ export default function OpenShorts() {
       });
       const cloudUrl  = uploadResult.secure_url;
       const publicId  = uploadResult.public_id;
-      // getCloudinaryConfig() provides cloudName from server env
-      const { cloudName } = (await import('@/lib/directApi')).getCloudinaryConfig
-        ? (await import('@/lib/directApi')).getCloudinaryConfig()
-        : { cloudName: localStorage.getItem(LS.CLOUD_NAME) || '' };
+      const cloudName = uploadResult.cloud_name || localStorage.getItem(LS.CLOUD_NAME) || '';
 
       // Step 2: Transcribe
       setMsg('Transcribing with AssemblyAI…');
       const transcript = await transcribeFile(cloudUrl, msg => setMsg(msg));
       markDone('transcribe');
 
-      // Step 3: Analyze viral moments
+      // Step 3: Analyze
       setStep('analyze');
       setMsg('Claude is finding the best viral moments…');
       const result = await analyzeViralMoments({
@@ -720,28 +622,25 @@ export default function OpenShorts() {
       if (!analysisClips.length) throw new Error('No viral moments detected. Try a different video.');
       markDone('analyze');
 
-      // Step 4: Cloudinary URL transformations (instant preview — WebCodecs-equivalent for clips)
+      // Step 4: Cloudinary URL transformations — instant CDN clips, no extra processing needed
       setStep('clip');
       setMsg('Generating clips via Cloudinary…');
-      const processed = analysisClips.map((c) => ({
-        ...c,
-        cloudinary_url: buildCloudinaryClipUrl(publicId, cloudName, c.start, c.end),
-        blobUrl: buildCloudinaryClipUrl(publicId, cloudName, c.start, c.end),
-      }));
+      setProgress(0);
+
+      const processed = analysisClips.map((c) => {
+        const clipUrl = buildCloudinaryClipUrl(publicId, cloudName, c.start, c.end);
+        return { ...c, cloudinary_url: clipUrl, blobUrl: clipUrl };
+      });
+
       markDone('clip');
       setClips(processed);
       setStage('done');
-      setMsg(`${processed.length} clips ready!`);
+      setMsg(`${processed.length} clips ready! Cloudinary is rendering — playback starts in a few seconds.`);
       setProgress(100);
 
+      markDone('upload');
       await saveToSupabase(processed);
       setStep(null);
-
-      // Step 5: FFmpeg Worker cuts in background (same as "FFmpeg Worker" button in VideoExporter)
-      // Produces downloadable local MP4s in parallel with the CDN clips showing in UI
-      if (useFfmpegCuts) {
-        runFFmpegCuts(processed, cloudUrl); // intentionally not awaited
-      }
 
     } catch (e) {
       console.error('OpenShorts file error:', e);
@@ -752,15 +651,12 @@ export default function OpenShorts() {
   };
 
   const handleReset = () => {
-    setStage('idle'); setClips([]); setErr('');
+    setStage('idle'); setClips([]); setCost(null); setErr('');
     setStep(null); setDone([]); setMsg(''); setProgress(0);
     setFile(null); setYtUrl(''); setVidDur(0);
-    setClipCutProgress({});
   };
 
   const isActive = stage === 'processing' || stage === 'done' || stage === 'error';
-  const ffmpegCutsActive = Object.keys(clipCutProgress).length > 0 &&
-    Object.values(clipCutProgress).some(p => p < 100);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-rose-50">
@@ -817,20 +713,12 @@ export default function OpenShorts() {
           {!isActive && (
             <div className="text-center space-y-2">
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-rose-50 border border-rose-100 rounded-full text-rose-600 text-xs font-medium mb-1">
-                <Zap size={11} /><span>AssemblyAI · Claude AI · Cloudinary CDN · FFmpeg Browser Cuts</span>
+                <Zap size={11} /><span>AssemblyAI Transcription · Claude Analysis · Cloudinary CDN Clips</span>
               </div>
               <h1 className="text-3xl font-bold text-gray-900">Open Shorts</h1>
               <p className="text-gray-400 text-sm max-w-lg mx-auto">
-                Upload video → AssemblyAI transcribes → Claude finds viral moments → Cloudinary clips + FFmpeg downloads.
+                Upload video → AssemblyAI transcribes → Claude finds viral moments → Cloudinary generates 9:16 clips instantly.
               </p>
-            </div>
-          )}
-
-          {/* FFmpeg global progress bar */}
-          {ffmpegCutsActive && (
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-purple-50 border border-purple-200 text-sm text-purple-700">
-              <Cpu size={14} className="animate-pulse" />
-              <span>FFmpeg cutting clips in browser… {Object.values(clipCutProgress).filter(p => p >= 100).length} / {Object.keys(clipCutProgress).length} done</span>
             </div>
           )}
 
@@ -839,7 +727,7 @@ export default function OpenShorts() {
               <div className="flex border-b border-gray-100">
                 {[
                   { k: 'youtube', icon: Youtube, label: 'YouTube URL',  desc: 'Extracts audio → transcribes → finds moments' },
-                  { k: 'file',    icon: Upload,  label: 'Upload File',  desc: 'Cloudinary CDN clips + FFmpeg browser downloads' },
+                  { k: 'file',    icon: Upload,  label: 'Upload File',  desc: 'Cloudinary generates 9:16 clips server-side' },
                 ].map(({ k, icon: Icon, label, desc }) => (
                   <button key={k} onClick={() => setInputMode(k)} className={`flex-1 flex flex-col items-center gap-0.5 py-3 text-sm font-medium transition-colors border-b-2 ${inputMode === k ? 'text-rose-600 border-rose-500 bg-rose-50/30' : 'text-gray-500 border-transparent hover:text-gray-700'}`}>
                     <div className="flex items-center gap-1.5"><Icon size={14} /><span>{label}</span></div>
@@ -853,15 +741,9 @@ export default function OpenShorts() {
                   <div className="space-y-3">
                     <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-700 flex items-start gap-2">
                       <Mic size={12} className="shrink-0 mt-0.5 text-blue-500" />
-                      <span>Audio extracted via Cobalt → transcribed by AssemblyAI → Claude identifies viral moments with exact timestamps. Use File Upload to get real 9:16 clips.</span>
+                      <span>Audio extracted via Cobalt, transcribed by AssemblyAI, then Claude identifies the best viral moments with exact timestamps.</span>
                     </div>
-                    <Input
-                      value={ytUrl}
-                      onChange={e => setYtUrl(e.target.value)}
-                      placeholder="https://www.youtube.com/watch?v=…"
-                      className="h-12 text-sm"
-                      onKeyDown={e => { if (e.key === 'Enter') runYouTubeMode(); }}
-                    />
+                    <Input value={ytUrl} onChange={e => setYtUrl(e.target.value)} placeholder="https://www.youtube.com/watch?v=…" className="h-12 text-sm" onKeyDown={e => { if (e.key === 'Enter') runYouTubeMode(); }} />
                     <p className="text-xs text-gray-400">Supports youtube.com and youtu.be links</p>
                   </div>
                 )}
@@ -870,7 +752,7 @@ export default function OpenShorts() {
                   <div className="space-y-3">
                     <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-xs text-emerald-700 flex items-start gap-2">
                       <Scissors size={12} className="shrink-0 mt-0.5 text-emerald-500" />
-                      <span>Video → Cloudinary → AssemblyAI transcription → Claude analysis → Cloudinary CDN clips (instant preview) + FFmpeg browser cuts (downloadable MP4s).</span>
+                      <span>Video uploads to Cloudinary → AssemblyAI transcribes → Claude finds viral moments → Cloudinary generates 9:16 clips server-side instantly.</span>
                     </div>
                     <div
                       className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${dragging ? 'border-rose-400 bg-rose-50' : file ? 'border-rose-300 bg-rose-50/50' : 'border-gray-200 hover:border-rose-300 hover:bg-rose-50/20'}`}
@@ -897,19 +779,6 @@ export default function OpenShorts() {
                         </div>
                       )}
                     </div>
-
-                    {/* FFmpeg toggle — mirrors VideoExporter mode selector */}
-                    {isFFmpegSupported() && (
-                      <label className="flex items-center gap-2 text-xs text-purple-700 cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={useFfmpegCuts}
-                          onChange={e => setUseFfmpegCuts(e.target.checked)}
-                          className="rounded border-gray-300"
-                        />
-                        <Cpu size={12} /> Also cut downloadable MP4s with FFmpeg (browser-side, runs after clips appear)
-                      </label>
-                    )}
                   </div>
                 )}
 
@@ -948,7 +817,7 @@ export default function OpenShorts() {
                     ? <span className="flex items-center gap-2"><Loader2 size={15} className="animate-spin" />Processing…</span>
                     : inputMode === 'youtube'
                       ? <span className="flex items-center gap-2"><Mic size={15} />Transcribe + Analyze</span>
-                      : <span className="flex items-center gap-2"><Scissors size={15} />Generate Clips</span>
+                      : <span className="flex items-center gap-2"><Scissors size={15} />Generate 9:16 Clips</span>
                   }
                 </Button>
               </div>
@@ -975,6 +844,11 @@ export default function OpenShorts() {
             <div className="bg-red-50 border border-red-100 rounded-2xl p-6 space-y-3">
               <p className="font-semibold text-red-700 flex items-center gap-2"><AlertCircle size={16} />Something went wrong</p>
               <p className="text-sm text-red-600">{err}</p>
+              <div className="text-xs text-red-500 space-y-1">
+                {err?.includes('AssemblyAI') && <p>Check your AssemblyAI key in Settings.</p>}
+                {err?.includes('Cloudinary') && <p>Check your Cloudinary Cloud Name and preset in Settings.</p>}
+                {err?.includes('Cobalt')     && <p>Cobalt may be rate-limiting. Try adding a self-hosted Cobalt URL in Settings.</p>}
+              </div>
               <Button onClick={handleReset} className="bg-red-600 hover:bg-red-700 text-white h-9 text-sm">Try Again</Button>
             </div>
           )}
@@ -986,11 +860,6 @@ export default function OpenShorts() {
                 <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                   <Sparkles size={16} className="text-rose-500" />
                   <span>{stage === 'done' ? `${clips.length} Viral Clips Ready` : `Processing… (${clips.length} done)`}</span>
-                  {ffmpegCutsActive && (
-                    <Badge variant="outline" className="text-[10px] bg-purple-50 text-purple-700 border-purple-200 gap-1 flex items-center ml-2">
-                      <Cpu size={10} /> FFmpeg cutting
-                    </Badge>
-                  )}
                 </h2>
                 {stage === 'done' && (
                   <button onClick={handleReset} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 font-medium px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors">
@@ -1002,14 +871,14 @@ export default function OpenShorts() {
               {inputMode === 'youtube' && (
                 <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-xs text-amber-700 flex items-start gap-2">
                   <Youtube size={12} className="shrink-0 mt-0.5 text-amber-500" />
-                  <span>These clips play at exact timestamps in YouTube embeds. Use File Upload mode for downloadable 9:16 MP4s.</span>
+                  <span>These clips play at the exact viral timestamps in embedded YouTube players. Use File Upload mode to get real 9:16 video files.</span>
                 </div>
               )}
 
               <div className={`grid gap-5 ${inputMode === 'youtube' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'}`}>
                 {clips.map((c, i) => inputMode === 'youtube'
                   ? <YouTubeClipCard key={i} clip={c} index={i} ytUrl={ytUrl} />
-                  : <FileClipCard    key={i} clip={c} index={i} ffmpegProgress={clipCutProgress[i]} />
+                  : <FileClipCard    key={i} clip={c} index={i} />
                 )}
               </div>
             </div>
@@ -1020,8 +889,8 @@ export default function OpenShorts() {
               {[
                 { icon: Mic,         label: 'AssemblyAI',    desc: 'Word-level transcription for precise clip boundaries' },
                 { icon: Sparkles,    label: 'Claude AI',     desc: 'Finds the highest-virality moments automatically'     },
-                { icon: Scissors,    label: 'Cloudinary AI', desc: 'Instant CDN clips via URL transformations'            },
-                { icon: Cpu,         label: 'FFmpeg Cuts',   desc: 'Downloadable MP4s cut in your browser, no upload'     },
+                { icon: Scissors,    label: 'Cloudinary AI', desc: 'Crops 9:16 + trims clips server-side, instant'       },
+                { icon: CloudUpload, label: 'CDN Ready',     desc: 'Every clip is a permanent Cloudinary CDN URL'        },
               ].map(({ icon: Icon, label, desc }) => (
                 <div key={label} className="bg-white rounded-xl border border-gray-100 p-3 text-center shadow-sm">
                   <div className="w-7 h-7 rounded-lg bg-rose-50 flex items-center justify-center mx-auto mb-2"><Icon size={13} className="text-rose-500" /></div>
