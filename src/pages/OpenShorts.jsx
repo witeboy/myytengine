@@ -5,7 +5,7 @@
  * Upload:  Bunny CDN (large file support, server env credentials)
  * Clips:   Bunny CDN URLs with timestamp metadata stored as JSON
  * Library: Project folders grouped by job_id, stored on Bunny as JSON manifest
- * Download: Browser-side canvas crop to 9:16 portrait via MediaRecorder
+ * Download: WebCodecs + OffscreenCanvas 9:16 portrait crop, silent audio via WebAudio
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -30,13 +30,11 @@ import {
   analyzeViralMoments,
 } from '@/lib/directApi';
 
-// ── localStorage keys ──────────────────────────────────────────────────
 const LS = {
   UP_KEY:  'openshorts_uploadpost_key',
   UP_USER: 'openshorts_uploadpost_user',
 };
 
-// ── Helpers ────────────────────────────────────────────────────────────
 const TikTokIcon = ({ size = 14 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
     <path d="M19.589 6.686a4.793 4.793 0 0 1-3.77-4.245V2h-3.445v13.672a2.896 2.896 0 0 1-5.201 1.743 2.895 2.895 0 0 1 3.183-4.51v-3.5a6.329 6.329 0 0 0-5.394 10.692 6.33 6.33 0 0 0 10.857-4.424V8.687a8.182 8.182 0 0 0 4.773 1.526V6.79a4.831 4.831 0 0 1-1.003-.104z" />
@@ -56,47 +54,23 @@ const formatTime = (secs) => {
 };
 
 const formatDate = (iso) => {
-  try {
-    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  } catch {
-    return '';
-  }
+  try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
+  catch { return ''; }
 };
 
 // ── Bunny project storage ──────────────────────────────────────────────
 const bunny = {
   async saveProject(project) {
-    try {
-      await base44.functions.invoke('quickPublishTranscribe', {
-        action: 'bunny_save_project',
-        project,
-      });
-    } catch (e) {
-      console.warn('Bunny save project failed:', e.message);
-    }
+    try { await base44.functions.invoke('quickPublishTranscribe', { action: 'bunny_save_project', project }); }
+    catch (e) { console.warn('Bunny save project failed:', e.message); }
   },
-
   async loadProjects() {
-    try {
-      const res = await base44.functions.invoke('quickPublishTranscribe', {
-        action: 'bunny_list_projects',
-      });
-      return res.data?.projects || [];
-    } catch (e) {
-      console.warn('Bunny load projects failed:', e.message);
-      return [];
-    }
+    try { const res = await base44.functions.invoke('quickPublishTranscribe', { action: 'bunny_list_projects' }); return res.data?.projects || []; }
+    catch (e) { console.warn('Bunny load projects failed:', e.message); return []; }
   },
-
   async deleteProject(jobId) {
-    try {
-      await base44.functions.invoke('quickPublishTranscribe', {
-        action: 'bunny_delete_project',
-        job_id: jobId,
-      });
-    } catch (e) {
-      console.warn('Bunny delete project failed:', e.message);
-    }
+    try { await base44.functions.invoke('quickPublishTranscribe', { action: 'bunny_delete_project', job_id: jobId }); }
+    catch (e) { console.warn('Bunny delete project failed:', e.message); }
   },
 };
 
@@ -162,81 +136,38 @@ function StageBar({ stageKeys, current, done }) {
 // ── Settings panel ─────────────────────────────────────────────────────
 function SettingsPanel({ onClose }) {
   const FIELDS = [
-    {
-      section: 'Social Posting (Optional)',
-      k: LS.UP_KEY, label: 'Upload-Post API Key', pw: true,
-      ph: 'up_…', hint: 'uploadpost.com API key',
-    },
-    {
-      k: LS.UP_USER, label: 'Upload-Post Username', pw: false,
-      ph: '@handle', hint: '',
-    },
+    { section: 'Social Posting (Optional)', k: LS.UP_KEY, label: 'Upload-Post API Key', pw: true, ph: 'up_…', hint: 'uploadpost.com API key' },
+    { k: LS.UP_USER, label: 'Upload-Post Username', pw: false, ph: '@handle', hint: '' },
   ];
-
-  const [vals, setVals] = useState(() => {
-    const obj = {};
-    FIELDS.forEach(f => { obj[f.k] = localStorage.getItem(f.k) || ''; });
-    return obj;
-  });
-  const [show, setShow]   = useState({});
+  const [vals, setVals] = useState(() => { const obj = {}; FIELDS.forEach(f => { obj[f.k] = localStorage.getItem(f.k) || ''; }); return obj; });
+  const [show, setShow] = useState({});
   const [saved, setSaved] = useState(false);
-
-  const save = () => {
-    FIELDS.forEach(f => localStorage.setItem(f.k, vals[f.k].trim()));
-    setSaved(true);
-    setTimeout(() => { setSaved(false); onClose(); }, 800);
-  };
-
+  const save = () => { FIELDS.forEach(f => localStorage.setItem(f.k, vals[f.k].trim())); setSaved(true); setTimeout(() => { setSaved(false); onClose(); }, 800); };
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-white border border-gray-100 rounded-2xl p-6 w-full max-w-md shadow-2xl space-y-3 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h2 className="font-bold text-gray-900 flex items-center gap-2">
-            <Settings size={15} className="text-rose-500" /> Open Shorts Settings
-          </h2>
+          <h2 className="font-bold text-gray-900 flex items-center gap-2"><Settings size={15} className="text-rose-500" /> Open Shorts Settings</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={17} /></button>
         </div>
-
         <div className="space-y-1.5">
-          {[
-            { label: 'Bunny CDN — storage active (server env)' },
-            { label: 'AssemblyAI — transcription active (server env)' },
-            { label: 'Claude AI — analysis active (server env)' },
-          ].map(({ label }) => (
-            <div key={label} className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700">
-              <CheckCircle size={11} /> {label}
-            </div>
+          {['Bunny CDN — storage active (server env)', 'AssemblyAI — transcription active (server env)', 'Claude AI — analysis active (server env)'].map(label => (
+            <div key={label} className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700"><CheckCircle size={11} /> {label}</div>
           ))}
         </div>
-
         {FIELDS.map((f, idx) => (
           <div key={f.k}>
-            {f.section && (
-              <div className={'pb-1 ' + (idx > 0 ? 'pt-3 border-t border-gray-100' : '')}>
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{f.section}</span>
-              </div>
-            )}
+            {f.section && <div className={'pb-1 ' + (idx > 0 ? 'pt-3 border-t border-gray-100' : '')}><span className="text-xs font-bold text-gray-400 uppercase tracking-wider">{f.section}</span></div>}
             <div>
               <label className="text-xs font-medium text-gray-700 block mb-1">{f.label}</label>
               <div className="relative">
-                <input
-                  type={(f.pw && !show[f.k]) ? 'password' : 'text'}
-                  value={vals[f.k]}
-                  onChange={e => setVals(p => ({ ...p, [f.k]: e.target.value }))}
-                  placeholder={f.ph}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:border-rose-400 pr-9"
-                />
-                {f.pw && (
-                  <button onClick={() => setShow(p => ({ ...p, [f.k]: !p[f.k] }))} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                    {show[f.k] ? <EyeOff size={13} /> : <Eye size={13} />}
-                  </button>
-                )}
+                <input type={(f.pw && !show[f.k]) ? 'password' : 'text'} value={vals[f.k]} onChange={e => setVals(p => ({ ...p, [f.k]: e.target.value }))} placeholder={f.ph} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 placeholder-gray-300 focus:outline-none focus:border-rose-400 pr-9" />
+                {f.pw && <button onClick={() => setShow(p => ({ ...p, [f.k]: !p[f.k] }))} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">{show[f.k] ? <EyeOff size={13} /> : <Eye size={13} />}</button>}
               </div>
               {f.hint && <p className="text-xs text-gray-400 mt-0.5">{f.hint}</p>}
             </div>
           </div>
         ))}
-
         <Button onClick={save} className={`w-full h-10 text-white transition-all ${saved ? 'bg-emerald-500' : 'bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700'}`}>
           {saved ? <span className="flex items-center gap-1"><Check size={12} /> Saved!</span> : 'Save Settings'}
         </Button>
@@ -249,34 +180,18 @@ function SettingsPanel({ onClose }) {
 function YouTubeClipCard({ clip, index, ytUrl }) {
   const [copied, setCopied] = useState(null);
   const [expanded, setExp]  = useState(false);
-  const ytId = getYouTubeId(ytUrl || clip.youtube_url || '');
-  const dur  = clip.duration_seconds || ((clip.end && clip.start) ? Math.round(clip.end - clip.start) : null);
+  const ytId  = getYouTubeId(ytUrl || clip.youtube_url || '');
+  const dur   = clip.duration_seconds || ((clip.end && clip.start) ? Math.round(clip.end - clip.start) : null);
   const start = clip.start_seconds ?? clip.start ?? 0;
   const end   = clip.end_seconds   ?? clip.end   ?? 0;
-
-  const copy = (text, key) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(key);
-      setTimeout(() => setCopied(null), 2000);
-    });
-  };
-
+  const copy  = (text, key) => { navigator.clipboard.writeText(text).then(() => { setCopied(key); setTimeout(() => setCopied(null), 2000); }); };
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
       <div className="relative bg-black" style={{ aspectRatio: '16/9' }}>
         {ytId ? (
-          <iframe
-            className="w-full h-full"
-            src={`https://www.youtube.com/embed/${ytId}?start=${Math.floor(start)}&rel=0`}
-            title={`Clip ${index + 1}`}
-            frameBorder="0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture"
-            allowFullScreen
-          />
+          <iframe className="w-full h-full" src={`https://www.youtube.com/embed/${ytId}?start=${Math.floor(start)}&rel=0`} title={`Clip ${index + 1}`} frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture" allowFullScreen />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">
-            <Youtube size={28} className="text-zinc-600" />
-          </div>
+          <div className="absolute inset-0 flex items-center justify-center bg-zinc-900"><Youtube size={28} className="text-zinc-600" /></div>
         )}
         <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center text-white text-xs font-bold shadow">{index + 1}</div>
         {dur && <div className="absolute top-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 bg-black/80 text-white rounded-full text-xs font-mono"><Clock size={8} /><span>{Math.round(dur)}s</span></div>}
@@ -285,24 +200,11 @@ function YouTubeClipCard({ clip, index, ytUrl }) {
       <div className="p-3 space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-xs font-mono text-gray-400">{formatTime(start)} → {formatTime(end)}</span>
-          {ytId && (
-            <a href={`https://www.youtube.com/watch?v=${ytId}&t=${Math.floor(start)}s`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-rose-500 hover:text-rose-700 font-medium">
-              <ExternalLink size={9} /><span>Open</span>
-            </a>
-          )}
+          {ytId && <a href={`https://www.youtube.com/watch?v=${ytId}&t=${Math.floor(start)}s`} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-rose-500 hover:text-rose-700 font-medium"><ExternalLink size={9} /><span>Open</span></a>}
         </div>
-        {(clip.hook_text || clip.viral_hook_text) && (
-          <div className="flex items-start gap-1.5">
-            <Flame className="w-3 h-3 text-rose-500 shrink-0 mt-0.5" />
-            <p className="text-xs font-semibold text-gray-800 leading-snug">{clip.hook_text || clip.viral_hook_text}</p>
-          </div>
-        )}
-        {(clip.yt_title || clip.video_title_for_youtube_short) && (
-          <p className="text-xs text-gray-500 line-clamp-2">{clip.yt_title || clip.video_title_for_youtube_short}</p>
-        )}
-        {clip.virality_reason && (
-          <p className="text-xs text-gray-400 italic border-l-2 border-rose-100 pl-2 leading-relaxed line-clamp-2">{clip.virality_reason}</p>
-        )}
+        {(clip.hook_text || clip.viral_hook_text) && <div className="flex items-start gap-1.5"><Flame className="w-3 h-3 text-rose-500 shrink-0 mt-0.5" /><p className="text-xs font-semibold text-gray-800 leading-snug">{clip.hook_text || clip.viral_hook_text}</p></div>}
+        {(clip.yt_title || clip.video_title_for_youtube_short) && <p className="text-xs text-gray-500 line-clamp-2">{clip.yt_title || clip.video_title_for_youtube_short}</p>}
+        {clip.virality_reason && <p className="text-xs text-gray-400 italic border-l-2 border-rose-100 pl-2 leading-relaxed line-clamp-2">{clip.virality_reason}</p>}
         <div>
           <button onClick={() => setExp(!expanded)} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
             <Globe size={9} /><span>Platform captions</span>{expanded ? <ChevronUp size={9} /> : <ChevronDown size={9} />}
@@ -317,9 +219,7 @@ function YouTubeClipCard({ clip, index, ytUrl }) {
                 <div key={key} className="bg-gray-50 rounded-lg p-2 group">
                   <div className="flex items-center justify-between mb-0.5">
                     <div className="flex items-center gap-1 text-xs font-medium text-gray-500">{icon}<span>{label}</span></div>
-                    <button onClick={() => copy(text, key)} className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400">
-                      {copied === key ? <Check size={9} className="text-emerald-500" /> : <Copy size={9} />}
-                    </button>
+                    <button onClick={() => copy(text, key)} className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400">{copied === key ? <Check size={9} className="text-emerald-500" /> : <Copy size={9} />}</button>
                   </div>
                   <p className="text-xs text-gray-400 line-clamp-2">{text}</p>
                 </div>
@@ -348,10 +248,13 @@ async function loadMP4Box() {
 }
 
 // ── MP4 demuxer ────────────────────────────────────────────────────────
+// Returns codec string, all samples up to clipEnd (with timeSec),
+// video dimensions, and the AVC/HEVC description bytes for VideoDecoder.
 function demuxMP4(MP4Box, arrayBuffer, clipStart, clipEnd) {
   return new Promise((resolve, reject) => {
     const file = MP4Box.createFile();
     let codec = null, width = 0, height = 0, videoTrackId = null;
+    let description = null;
 
     file.onReady = (info) => {
       const track = info.tracks.find(t => t.type === 'video');
@@ -360,6 +263,21 @@ function demuxMP4(MP4Box, arrayBuffer, clipStart, clipEnd) {
       codec        = track.codec;
       width        = track.video.width;
       height       = track.video.height;
+
+      // Extract AVC/HEVC decoder description — required for H.264 in AVC format
+      try {
+        const trak  = file.getTrackById(videoTrackId);
+        const entry = trak?.mdia?.minf?.stbl?.stsd?.entries?.[0];
+        const box   = entry?.avcC || entry?.hvcC;
+        if (box) {
+          const ds = new MP4Box.DataStream(undefined, 0, MP4Box.DataStream.BIG_ENDIAN);
+          box.write(ds);
+          description = new Uint8Array(ds.buffer).slice(8); // skip 8-byte box header
+        }
+      } catch (e) {
+        console.warn('[MP4Box] Could not extract description:', e.message);
+      }
+
       file.setExtractionOptions(videoTrackId, null, { nbSamples: 2000 });
       file.start();
     };
@@ -368,8 +286,7 @@ function demuxMP4(MP4Box, arrayBuffer, clipStart, clipEnd) {
     file.onSamples = (_id, _user, samples) => {
       for (const s of samples) {
         const timeSec = s.cts / s.timescale;
-        // Collect everything up to clipEnd — we need samples before clipStart
-        // to find the preceding keyframe for VideoDecoder
+        // Collect everything up to clipEnd — pre-clipStart samples needed for keyframe search
         if (timeSec <= clipEnd + 0.5) {
           const data = new Uint8Array(s.data.byteLength);
           data.set(new Uint8Array(s.data));
@@ -386,25 +303,19 @@ function demuxMP4(MP4Box, arrayBuffer, clipStart, clipEnd) {
       file.appendBuffer(buf);
     } catch (_) {}
 
-    // onFlush is unreliable across MP4Box versions — use a polling approach
-    // after flush() to wait for samples to be extracted
     file.flush();
 
-    // Give MP4Box up to 10s to extract samples, checking every 100ms
+    // Poll for samples — onFlush is unreliable across MP4Box versions
     const waitForSamples = async () => {
       const deadline = Date.now() + 10000;
       while (Date.now() < deadline) {
         await new Promise(r => setTimeout(r, 100));
-        if (allSamples.length > 0 || !videoTrackId) break;
+        if (allSamples.length > 0) break;
       }
-      if (!codec) {
-        reject(new Error('MP4Box: could not find video track — file may not be a valid MP4'));
-        return;
-      }
-      resolve({ codec, samples: allSamples, width, height });
+      if (!codec) { reject(new Error('MP4Box: no video track found — is this a valid MP4?')); return; }
+      resolve({ codec, samples: allSamples, width, height, description });
     };
 
-    // Small delay to let onReady + onSamples fire first
     setTimeout(waitForSamples, 300);
   });
 }
@@ -414,20 +325,12 @@ async function fallbackSilentRecord({ src, clipStart, clipEnd, index, setStatus,
   try {
     const clipDuration = clipEnd - clipStart;
     const video = document.createElement('video');
-    video.src         = src;
-    video.crossOrigin = 'anonymous';
-    video.preload     = 'auto';
-    video.muted       = true;
-    video.volume      = 0;
+    video.src = src; video.crossOrigin = 'anonymous'; video.preload = 'auto';
+    video.muted = true; video.volume = 0;
     video.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;';
     document.body.appendChild(video);
 
-    await new Promise((res, rej) => {
-      video.onloadedmetadata = res;
-      video.onerror = rej;
-      setTimeout(res, 12000);
-    });
-
+    await new Promise((res, rej) => { video.onloadedmetadata = res; video.onerror = rej; setTimeout(res, 12000); });
     video.currentTime = clipStart;
     await new Promise(r => { video.onseeked = r; setTimeout(r, 1500); });
 
@@ -440,30 +343,24 @@ async function fallbackSilentRecord({ src, clipStart, clipEnd, index, setStatus,
     const srcX = Math.round(((video.videoWidth || 1920) - srcW) / 2);
 
     let painting = true;
-    const paint = () => {
-      if (!painting) return;
-      try { ctx.drawImage(video, srcX, 0, srcW, srcH, 0, 0, OUT_W, OUT_H); } catch (_) {}
-      requestAnimationFrame(paint);
-    };
+    const paint = () => { if (!painting) return; try { ctx.drawImage(video, srcX, 0, srcW, srcH, 0, 0, OUT_W, OUT_H); } catch (_) {} requestAnimationFrame(paint); };
     requestAnimationFrame(paint);
 
-    const stream   = canvas.captureStream(30);
-    const mimeType = ['video/webm;codecs=vp9','video/webm'].find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+    const stream = canvas.captureStream(30);
+    const mimeType = ['video/webm;codecs=vp9', 'video/webm'].find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
     const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4_000_000 });
     const recChunks = [];
     recorder.ondataavailable = e => { if (e.data?.size > 0) recChunks.push(e.data); };
     const recDone = new Promise(res => { recorder.onstop = res; });
 
     const stopAll = () => {
-      painting = false;
-      video.pause();
+      painting = false; video.pause();
       if (recorder.state === 'recording') recorder.stop();
       stream.getTracks().forEach(t => t.stop());
       if (document.body.contains(video)) document.body.removeChild(video);
     };
 
-    recorder.start(250);
-    video.play();
+    recorder.start(250); video.play();
 
     await new Promise(resolve => {
       const iv = setInterval(() => {
@@ -474,30 +371,25 @@ async function fallbackSilentRecord({ src, clipStart, clipEnd, index, setStatus,
       setTimeout(() => { clearInterval(iv); stopAll(); resolve(); }, (clipDuration + 8) * 1000);
     });
 
-    await recDone;
-    setProgress(100);
-
+    await recDone; setProgress(100);
     const blob = new Blob(recChunks, { type: mimeType });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
-    a.href = url;
-    a.download = `clip_${index + 1}_${Math.round(clipStart)}s_portrait.webm`;
+    a.href = url; a.download = `clip_${index + 1}_${Math.round(clipStart)}s_portrait.webm`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 15000);
-
-    setStatus('done');
-    setTimeout(() => { setStatus('idle'); setProgress(0); }, 4000);
+    setStatus('done'); setTimeout(() => { setStatus('idle'); setProgress(0); }, 4000);
   } catch (e) {
     console.error('Fallback recorder failed:', e);
-    setStatus('idle');
-    setProgress(0);
+    setStatus('idle'); setProgress(0);
   }
 }
 
-// ── DownloadClipButton — WebCodecs fast decode + portrait crop ─────────
-// Uses VideoDecoder + OffscreenCanvas to decode frames at CPU speed
-// without playing the video. Falls back to silent hidden recorder on
-// Firefox/Safari which lack VideoDecoder support.
+// ── DownloadClipButton ─────────────────────────────────────────────────
+// WebCodecs path: fetch → MP4Box demux → VideoDecoder frames → OffscreenCanvas
+// 9:16 crop → captureStream → MediaRecorder. Audio via WebAudio GainNode (gain=0)
+// so it's captured in the file but never plays through speakers.
+// Falls back to silent real-time recorder on Firefox/Safari.
 function DownloadClipButton({ src, clipStart, clipEnd, index }) {
   const [status, setStatus]     = useState('idle');
   const [progress, setProgress] = useState(0);
@@ -505,96 +397,96 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
   const handleDownload = async () => {
     if (!src || clipEnd == null) return;
 
-    const hasWebCodecs = typeof VideoDecoder !== 'undefined'
-                      && typeof OffscreenCanvas !== 'undefined';
-
+    const hasWebCodecs = typeof VideoDecoder !== 'undefined' && typeof OffscreenCanvas !== 'undefined';
     if (!hasWebCodecs) {
-      setStatus('recording');
-      setProgress(0);
+      setStatus('recording'); setProgress(0);
       await fallbackSilentRecord({ src, clipStart, clipEnd, index, setStatus, setProgress });
       return;
     }
 
-    setStatus('recording');
-    setProgress(0);
+    setStatus('recording'); setProgress(0);
+    let visCanvas = null, audioVideo = null, audioCtx = null;
 
     try {
-      // ── Step 1: Fetch video bytes with progress ──────────────────
+      // Step 1: Fetch video bytes
       const resp = await fetch(src, { mode: 'cors' });
       if (!resp.ok) throw new Error(`Fetch failed: HTTP ${resp.status}`);
-
       const totalBytes = Number(resp.headers.get('content-length') || 0);
-      const reader     = resp.body.getReader();
-      const chunks     = [];
-      let   received   = 0;
-
+      const reader = resp.body.getReader();
+      const fetchChunks = []; let received = 0;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        chunks.push(value);
-        received += value.length;
+        fetchChunks.push(value); received += value.length;
         if (totalBytes > 0) setProgress(2 + Math.round((received / totalBytes) * 16));
       }
       setProgress(18);
-
-      const arrayBuffer = await new Blob(chunks).arrayBuffer();
+      const arrayBuffer = await new Blob(fetchChunks).arrayBuffer();
       setProgress(20);
 
-      // ── Step 2: Demux with MP4Box ────────────────────────────────
+      // Step 2: Demux
       const MP4Box = await loadMP4Box();
-      const { codec, samples, width, height } = await demuxMP4(MP4Box, arrayBuffer, clipStart, clipEnd);
+      const { codec, samples, width, height, description } =
+        await demuxMP4(MP4Box, arrayBuffer, clipStart, clipEnd);
       setProgress(25);
-
       if (!samples.length) throw new Error('No video samples found in clip range');
 
-      // ── Step 3: OffscreenCanvas for portrait crop ────────────────
-      const OUT_W  = 720;
-      const OUT_H  = 1280;
+      // Find last keyframe at or before clipStart
+      let keyframeIdx = 0;
+      for (let i = 0; i < samples.length; i++) {
+        if ((samples[i].is_sync === true || samples[i].is_sync === 1) && samples[i].timeSec <= clipStart) {
+          keyframeIdx = i;
+        }
+      }
+      // Fallback: find first keyframe anywhere
+      if (!(samples[keyframeIdx].is_sync === true || samples[keyframeIdx].is_sync === 1)) {
+        for (let i = 0; i < samples.length; i++) {
+          if (samples[i].is_sync === true || samples[i].is_sync === 1) { keyframeIdx = i; break; }
+        }
+      }
+      console.log(`[WebCodecs] keyframe idx=${keyframeIdx} t=${samples[keyframeIdx]?.timeSec?.toFixed(2)}s clipStart=${clipStart}s`);
+
+      // Step 3: Canvases
+      const OUT_W = 720, OUT_H = 1280;
       const offscreen = new OffscreenCanvas(OUT_W, OUT_H);
       const offCtx    = offscreen.getContext('2d');
-
-      const srcH = height;
-      const srcW = Math.round(srcH * 9 / 16);
+      const srcH = height, srcW = Math.round(srcH * 9 / 16);
       const srcX = Math.round((width - srcW) / 2);
 
-      // Visible canvas for captureStream (OffscreenCanvas can't captureStream)
-      const visCanvas = document.createElement('canvas');
-      visCanvas.width  = OUT_W;
-      visCanvas.height = OUT_H;
+      visCanvas = document.createElement('canvas');
+      visCanvas.width = OUT_W; visCanvas.height = OUT_H;
       visCanvas.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;';
       document.body.appendChild(visCanvas);
       const visCtx = visCanvas.getContext('2d');
 
-      // ── Step 4: MediaRecorder on canvas stream ───────────────────
-      const mimeType = [
-        'video/webm;codecs=vp9,opus',
-        'video/webm;codecs=vp8,opus',
-        'video/webm',
-      ].find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
-
-      // Pipe audio from a hidden video element — WebCodecs decodes video
-      // only; audio needs a separate source synced to the clip window.
-      const audioVideo = document.createElement('video');
-      audioVideo.src         = src;
-      audioVideo.crossOrigin = 'anonymous';
-      audioVideo.muted       = false;
-      audioVideo.volume      = 1;
-      audioVideo.currentTime = clipStart;
+      // Step 4: Silent audio via WebAudio
+      // GainNode with gain=0 sends audio to MediaStreamDestination (captured)
+      // but NOT to AudioContext.destination (speakers). Completely silent.
+      audioVideo = document.createElement('video');
+      audioVideo.src = src; audioVideo.crossOrigin = 'anonymous'; audioVideo.preload = 'auto';
       audioVideo.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;';
       document.body.appendChild(audioVideo);
 
-      // Wait for audio to seek then get its stream
-      await new Promise(r => { audioVideo.onseeked = r; setTimeout(r, 1500); });
-      const audioStream = audioVideo.captureStream
-        ? audioVideo.captureStream()
-        : audioVideo.mozCaptureStream?.();
+      await new Promise(r => { audioVideo.onloadedmetadata = r; setTimeout(r, 4000); });
+      audioVideo.currentTime = clipStart;
+      await new Promise(r => { audioVideo.onseeked = r; setTimeout(r, 2000); });
 
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const mediaSource = audioCtx.createMediaElementSource(audioVideo);
+      const gainNode    = audioCtx.createGain();
+      gainNode.gain.value = 0; // silent to speakers
+      const audioDest   = audioCtx.createMediaStreamDestination();
+      // Connect: source → gain(0) → speakers (nothing heard)
+      //          source → audioDest (captured with full volume)
+      mediaSource.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      mediaSource.connect(audioDest);
+
+      // Step 5: MediaRecorder
+      const mimeType = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm']
+        .find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
       const combinedStream = visCanvas.captureStream(30);
-      // Add audio tracks from the audio video element
-      if (audioStream) {
-        audioStream.getAudioTracks().forEach(t => combinedStream.addTrack(t));
-      }
-
+      audioDest.stream.getAudioTracks().forEach(t => combinedStream.addTrack(t));
       const recorder  = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 4_000_000 });
       const recChunks = [];
       recorder.ondataavailable = e => { if (e.data?.size > 0) recChunks.push(e.data); };
@@ -602,34 +494,20 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
         recorder.onstop  = res;
         recorder.onerror = e => rej(new Error(e.error?.message || 'Recorder error'));
       });
-
       recorder.start(100);
-      // Start playing audio — it runs silently alongside frame decode
-      audioVideo.play().catch(() => {});
+      audioVideo.play().catch(() => {}); // plays through WebAudio graph — silent to speakers
 
-      // ── Step 5: Decode frames via VideoDecoder ───────────────────
-      // Find the last keyframe at or before clipStart so VideoDecoder
-      // has a valid starting point — it requires a keyframe after configure()
-      let keyframeIdx = 0;
-      for (let i = 0; i < samples.length; i++) {
-        if (samples[i].is_sync && samples[i].timeSec <= clipStart) {
-          keyframeIdx = i;
-        }
-      }
-      console.log(`[WebCodecs] keyframe at idx=${keyframeIdx} t=${samples[keyframeIdx]?.timeSec?.toFixed(2)}s, clipStart=${clipStart}s, total=${samples.length} samples`);
-
+      // Step 6: VideoDecoder
       const clipStartUs  = clipStart * 1_000_000;
       const clipEndUs    = clipEnd   * 1_000_000;
       const renderFrames = Math.max(1, Math.round((clipEnd - clipStart) * 30));
-      let   renderCount  = 0;
-      let   feedCount    = 0;
+      let renderCount = 0, feedCount = 0;
 
       await new Promise((resolve, reject) => {
         const decoder = new VideoDecoder({
           output: (frame) => {
             const ts = frame.timestamp;
             if (ts >= clipStartUs && ts <= clipEndUs) {
-              // Frame is within the clip window — crop and draw it
               try {
                 offCtx.drawImage(frame, srcX, 0, srcW, srcH, 0, 0, OUT_W, OUT_H);
                 visCtx.drawImage(offscreen, 0, 0);
@@ -637,27 +515,19 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
                 setProgress(25 + Math.min(70, Math.round((renderCount / renderFrames) * 70)));
               } catch (_) {}
             }
-            // Always close to free GPU memory
             frame.close();
           },
           error: (e) => reject(new Error('VideoDecoder: ' + e.message)),
         });
 
-        decoder.configure({
-          codec,
-          codedWidth:         width,
-          codedHeight:        height,
-          optimizeForLatency: true,
-        });
+        const config = { codec, codedWidth: width, codedHeight: height, optimizeForLatency: true };
+        if (description) config.description = description;
+        decoder.configure(config);
 
         (async () => {
           try {
-            // Feed from the preceding keyframe so the decoder has valid state
             for (let i = keyframeIdx; i < samples.length; i++) {
-              const sample = samples[i];
-              // Force the very first fed chunk to be 'key' type — VideoDecoder
-              // requires this after configure(). MP4Box is_sync can be 0/1 or
-              // true/false depending on version; we trust our keyframeIdx search.
+              const sample  = samples[i];
               const isFirst = (i === keyframeIdx);
               const chunkType = (isFirst || sample.is_sync === true || sample.is_sync === 1) ? 'key' : 'delta';
               decoder.decode(new EncodedVideoChunk({
@@ -667,7 +537,6 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
                 data:      sample.data,
               }));
               feedCount++;
-              // Yield every 30 frames to keep UI responsive
               if (feedCount % 30 === 0) await new Promise(r => setTimeout(r, 0));
             }
             await decoder.flush();
@@ -677,60 +546,44 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
         })();
       });
 
-      // Stop recorder and clean up
+      // Stop audio + recorder
       audioVideo.pause();
       recorder.stop();
       combinedStream.getTracks().forEach(t => t.stop());
-      if (audioStream) audioStream.getTracks().forEach(t => t.stop());
-      if (document.body.contains(visCanvas))    document.body.removeChild(visCanvas);
-      if (document.body.contains(audioVideo))   document.body.removeChild(audioVideo);
 
-      await recDone;
-      setProgress(100);
+      await recDone; setProgress(100);
 
-      // ── Step 6: Trigger download ─────────────────────────────────
+      // Step 7: Download
+      const ext  = mimeType.includes('mp4') ? 'mp4' : 'webm';
       const blob = new Blob(recChunks, { type: mimeType });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
-      a.href     = url;
-      a.download = `clip_${index + 1}_${Math.round(clipStart)}s_portrait.webm`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      a.href = url; a.download = `clip_${index + 1}_${Math.round(clipStart)}s_portrait.${ext}`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 15000);
 
-      setStatus('done');
-      setTimeout(() => { setStatus('idle'); setProgress(0); }, 4000);
+      setStatus('done'); setTimeout(() => { setStatus('idle'); setProgress(0); }, 4000);
 
     } catch (e) {
       console.error('WebCodecs clip failed:', e.message);
-      // Clean up any stray canvas
       document.querySelectorAll('canvas[style*="-9999px"]').forEach(el => el.remove());
-      // Fall back to silent real-time recorder
+      document.querySelectorAll('video[style*="-9999px"]').forEach(el => el.remove());
+      if (audioCtx) audioCtx.close().catch(() => {});
       await fallbackSilentRecord({ src, clipStart, clipEnd, index, setStatus, setProgress });
+    } finally {
+      if (visCanvas  && document.body.contains(visCanvas))  document.body.removeChild(visCanvas);
+      if (audioVideo && document.body.contains(audioVideo)) document.body.removeChild(audioVideo);
+      if (audioCtx && audioCtx.state !== 'closed') audioCtx.close().catch(() => {});
     }
   };
 
-  const label = status === 'recording' ? `${progress}%`
-              : status === 'done'      ? 'Saved!'
-              : 'Download';
-
+  const label = status === 'recording' ? `${progress}%` : status === 'done' ? 'Saved!' : 'Download';
   return (
-    <button
-      onClick={handleDownload}
-      disabled={status === 'recording'}
-      className="flex-1 relative flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium transition-colors disabled:opacity-70 overflow-hidden"
-    >
-      {status === 'recording' && (
-        <div
-          className="absolute inset-0 bg-emerald-200 rounded-xl transition-all duration-200"
-          style={{ width: `${progress}%` }}
-        />
-      )}
+    <button onClick={handleDownload} disabled={status === 'recording'}
+      className="flex-1 relative flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium transition-colors disabled:opacity-70 overflow-hidden">
+      {status === 'recording' && <div className="absolute inset-0 bg-emerald-200 rounded-xl transition-all duration-200" style={{ width: `${progress}%` }} />}
       <span className="relative flex items-center gap-1">
-        {status === 'recording' ? <Loader2 size={10} className="animate-spin" /> :
-         status === 'done'      ? <Check size={10} /> :
-         <Download size={10} />}
+        {status === 'recording' ? <Loader2 size={10} className="animate-spin" /> : status === 'done' ? <Check size={10} /> : <Download size={10} />}
         {label}
       </span>
     </button>
@@ -745,104 +598,48 @@ function FileClipCard({ clip, index }) {
   const [postRes, setPostRes] = useState(null);
   const videoRef = useRef(null);
 
-  const rawSrc    = clip.cdn_url || clip.cloudinary_url || clip.blobUrl || null;
-  const src       = rawSrc ? rawSrc.split('#')[0] : null; // strip any #t= fragment
-  const clipStart = clip.start_seconds ?? clip.start ?? 0;
-  const clipEnd   = clip.end_seconds   ?? clip.end   ?? null;
-  const dur       = clip.duration_seconds || ((clipEnd != null && clipStart != null) ? Math.round(clipEnd - clipStart) : null);
-
+  const rawSrc     = clip.cdn_url || clip.cloudinary_url || clip.blobUrl || null;
+  const src        = rawSrc ? rawSrc.split('#')[0] : null;
+  const clipStart  = clip.start_seconds ?? clip.start ?? 0;
+  const clipEnd    = clip.end_seconds   ?? clip.end   ?? null;
+  const dur        = clip.duration_seconds || ((clipEnd != null && clipStart != null) ? Math.round(clipEnd - clipStart) : null);
   const hookText   = clip.hook_text   || clip.viral_hook_text                || null;
   const ytTitle    = clip.yt_title    || clip.video_title_for_youtube_short  || null;
   const tiktokDesc = clip.tiktok_desc || clip.video_description_for_tiktok  || null;
   const igDesc     = clip.ig_desc     || clip.video_description_for_instagram || null;
 
-  const copy = (text, key) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(key);
-      setTimeout(() => setCopied(null), 2000);
-    });
-  };
-
+  const copy = (text, key) => { navigator.clipboard.writeText(text).then(() => { setCopied(key); setTimeout(() => setCopied(null), 2000); }); };
   const handleMouseEnter = () => { videoRef.current?.play().catch(() => {}); };
-  const handleMouseLeave = () => {
-    if (videoRef.current) {
-      videoRef.current.pause();
-      videoRef.current.currentTime = clipStart || 0;
-    }
-  };
+  const handleMouseLeave = () => { if (videoRef.current) { videoRef.current.pause(); videoRef.current.currentTime = clipStart || 0; } };
 
   const runPost = async () => {
-    const upKey  = localStorage.getItem(LS.UP_KEY);
-    const upUser = localStorage.getItem(LS.UP_USER);
+    const upKey = localStorage.getItem(LS.UP_KEY), upUser = localStorage.getItem(LS.UP_USER);
     if (!upKey) return setPostRes({ error: 'Upload-Post key required — add in Settings' });
     if (!src)   return setPostRes({ error: 'No CDN URL available for this clip' });
-    setPosting(true);
-    setPostRes(null);
+    setPosting(true); setPostRes(null);
     try {
-      const res = await fetch('https://api.upload-post.com/v1/post', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': upKey },
-        body: JSON.stringify({
-          video_url:   src,
-          user_id:     upUser,
-          platforms:   ['tiktok', 'instagram', 'youtube'],
-          title:       ytTitle || 'Viral Short',
-          description: igDesc || '',
-        }),
-      });
+      const res = await fetch('https://api.upload-post.com/v1/post', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': upKey }, body: JSON.stringify({ video_url: src, user_id: upUser, platforms: ['tiktok','instagram','youtube'], title: ytTitle || 'Viral Short', description: igDesc || '' }) });
       setPostRes(await res.json());
-    } catch (e) {
-      setPostRes({ error: e.message });
-    } finally {
-      setPosting(false);
-    }
+    } catch (e) { setPostRes({ error: e.message }); }
+    finally { setPosting(false); }
   };
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-      <div
-        className="relative bg-zinc-900 overflow-hidden cursor-pointer"
-        style={{ aspectRatio: '9/16', maxHeight: 240 }}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      >
+      <div className="relative bg-zinc-900 overflow-hidden cursor-pointer" style={{ aspectRatio: '9/16', maxHeight: 240 }} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
         {src ? (
-          <video
-            ref={videoRef}
-            src={src}
-            className="absolute inset-0 w-full h-full object-cover"
-            muted
-            loop
-            playsInline
-            onLoadedMetadata={() => {
-              if (videoRef.current && clipStart) {
-                videoRef.current.currentTime = clipStart;
-              }
-            }}
-          />
+          <video ref={videoRef} src={src} className="absolute inset-0 w-full h-full object-cover" muted loop playsInline
+            onLoadedMetadata={() => { if (videoRef.current && clipStart) videoRef.current.currentTime = clipStart; }} />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <Loader2 className="w-6 h-6 animate-spin text-zinc-600" />
-          </div>
+          <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-zinc-600" /></div>
         )}
         <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center text-white text-xs font-bold shadow">{index + 1}</div>
-        {dur != null && (
-          <div className="absolute top-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 bg-black/80 text-white rounded-full text-xs font-mono">
-            <Clock size={8} /><span>{Math.round(dur)}s</span>
-          </div>
-        )}
+        {dur != null && <div className="absolute top-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 bg-black/80 text-white rounded-full text-xs font-mono"><Clock size={8} /><span>{Math.round(dur)}s</span></div>}
         {src && <div className="absolute bottom-2 right-2 px-1.5 py-0.5 bg-blue-600/90 text-white rounded text-xs font-bold">CDN</div>}
       </div>
-
       <div className="p-3 space-y-2">
-        {hookText && (
-          <div className="flex items-start gap-1.5">
-            <Flame className="w-3 h-3 text-rose-500 shrink-0 mt-0.5" />
-            <p className="text-xs font-semibold text-gray-800 leading-snug">{hookText}</p>
-          </div>
-        )}
+        {hookText && <div className="flex items-start gap-1.5"><Flame className="w-3 h-3 text-rose-500 shrink-0 mt-0.5" /><p className="text-xs font-semibold text-gray-800 leading-snug">{hookText}</p></div>}
         {ytTitle && <p className="text-xs text-gray-400 line-clamp-2">{ytTitle}</p>}
-
         <div>
           <button onClick={() => setExp(!expanded)} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
             <Globe size={9} /><span>Captions</span>{expanded ? <ChevronUp size={9} /> : <ChevronDown size={9} />}
@@ -857,9 +654,7 @@ function FileClipCard({ clip, index }) {
                 <div key={key} className="bg-gray-50 rounded-lg p-2 group">
                   <div className="flex items-center justify-between mb-0.5">
                     <div className="flex items-center gap-1 text-xs font-medium text-gray-500">{icon}<span>{label}</span></div>
-                    <button onClick={() => copy(text, key)} className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400">
-                      {copied === key ? <Check size={9} className="text-emerald-500" /> : <Copy size={9} />}
-                    </button>
+                    <button onClick={() => copy(text, key)} className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400">{copied === key ? <Check size={9} className="text-emerald-500" /> : <Copy size={9} />}</button>
                   </div>
                   <p className="text-xs text-gray-400 line-clamp-2">{text}</p>
                 </div>
@@ -867,31 +662,13 @@ function FileClipCard({ clip, index }) {
             </div>
           )}
         </div>
-
         <div className="flex gap-1.5">
-          {src && (
-            <DownloadClipButton
-              src={src}
-              clipStart={clipStart}
-              clipEnd={clipEnd}
-              index={index}
-            />
-          )}
-          <button
-            onClick={runPost}
-            disabled={posting}
-            className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white text-xs font-semibold disabled:opacity-50 transition-all"
-          >
-            {posting ? <Loader2 size={10} className="animate-spin" /> : <Share2 size={10} />}
-            <span>Post</span>
+          {src && <DownloadClipButton src={src} clipStart={clipStart} clipEnd={clipEnd} index={index} />}
+          <button onClick={runPost} disabled={posting} className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white text-xs font-semibold disabled:opacity-50 transition-all">
+            {posting ? <Loader2 size={10} className="animate-spin" /> : <Share2 size={10} />}<span>Post</span>
           </button>
         </div>
-
-        {postRes && (
-          <p className={`text-xs rounded px-2 py-1 ${postRes.error ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>
-            {postRes.error || 'Posted!'}
-          </p>
-        )}
+        {postRes && <p className={`text-xs rounded px-2 py-1 ${postRes.error ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>{postRes.error || 'Posted!'}</p>}
       </div>
     </div>
   );
@@ -899,18 +676,15 @@ function FileClipCard({ clip, index }) {
 
 // ── Project Folder ─────────────────────────────────────────────────────
 function ProjectFolder({ project, onDelete }) {
-  const [open, setOpen]    = useState(false);
+  const [open, setOpen] = useState(false);
   const [deleting, setDel] = useState(false);
-
   const isYouTube = project.clips.some(c => c.youtube_url && !c.cdn_url);
-  const ytUrl     = project.clips.find(c => c.youtube_url)?.youtube_url || '';
-  const totalDur  = project.clips.reduce((s, c) => s + (c.duration_seconds || 0), 0);
+  const ytUrl    = project.clips.find(c => c.youtube_url)?.youtube_url || '';
+  const totalDur = project.clips.reduce((s, c) => s + (c.duration_seconds || 0), 0);
 
   const handleDelete = async () => {
     if (!window.confirm(`Delete project "${project.project_name}" and all ${project.clips.length} clips?`)) return;
-    setDel(true);
-    await bunny.deleteProject(project.job_id);
-    onDelete(project.job_id);
+    setDel(true); await bunny.deleteProject(project.job_id); onDelete(project.job_id);
   };
 
   return (
@@ -922,47 +696,27 @@ function ProjectFolder({ project, onDelete }) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-gray-900 truncate">{project.project_name}</p>
-            <p className="text-xs text-gray-400">
-              {project.clips.length} clip{project.clips.length !== 1 ? 's' : ''}
-              {totalDur > 0 ? ` · ${Math.round(totalDur)}s total` : ''}
-              {' · '}{formatDate(project.created_at)}
-              {isYouTube ? ' · YouTube' : ' · File upload'}
-            </p>
+            <p className="text-xs text-gray-400">{project.clips.length} clip{project.clips.length !== 1 ? 's' : ''}{totalDur > 0 ? ` · ${Math.round(totalDur)}s total` : ''}{' · '}{formatDate(project.created_at)}{isYouTube ? ' · YouTube' : ' · File upload'}</p>
           </div>
-          <div className="shrink-0">
-            {open ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
-          </div>
+          <div className="shrink-0">{open ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}</div>
         </button>
-        <button
-          onClick={handleDelete}
-          disabled={deleting}
-          className="shrink-0 flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-50"
-        >
-          {deleting ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
-          <span className="hidden sm:inline">Delete</span>
+        <button onClick={handleDelete} disabled={deleting} className="shrink-0 flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors disabled:opacity-50">
+          {deleting ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}<span className="hidden sm:inline">Delete</span>
         </button>
       </div>
-
       {open && (
         <div className="border-t border-gray-100">
           <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-100">
-            <div className="flex items-center gap-2">
-              <CloudUpload size={11} className="text-blue-500" />
-              <span className="text-xs text-gray-500">
-                {project.clips.filter(c => c.cdn_url).length} CDN clips · hover to preview · Download records portrait crop
-              </span>
-            </div>
+            <div className="flex items-center gap-2"><CloudUpload size={11} className="text-blue-500" /><span className="text-xs text-gray-500">{project.clips.filter(c => c.cdn_url).length} CDN clips · hover to preview · Download = silent 9:16 portrait</span></div>
             <span className="text-xs text-gray-400 font-mono">{project.job_id}</span>
           </div>
           <div className="p-4">
             <div className={`grid gap-4 ${isYouTube ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'}`}>
-              {project.clips
-                .sort((a, b) => (a.clip_index ?? 0) - (b.clip_index ?? 0))
-                .map((c, i) => isYouTube
+              {project.clips.sort((a, b) => (a.clip_index ?? 0) - (b.clip_index ?? 0)).map((c, i) =>
+                isYouTube
                   ? <YouTubeClipCard key={i} clip={c} index={c.clip_index ?? i} ytUrl={ytUrl} />
                   : <FileClipCard    key={i} clip={c} index={c.clip_index ?? i} />
-                )
-              }
+              )}
             </div>
           </div>
         </div>
@@ -977,11 +731,7 @@ function ClipLibrary() {
   const [loading, setLoad]      = useState(true);
   const [filter, setFilter]     = useState('all');
 
-  useEffect(() => {
-    bunny.loadProjects()
-      .then(p => setProjects(Array.isArray(p) ? p : []))
-      .finally(() => setLoad(false));
-  }, []);
+  useEffect(() => { bunny.loadProjects().then(p => setProjects(Array.isArray(p) ? p : [])).finally(() => setLoad(false)); }, []);
 
   const now      = Date.now();
   const filtered = projects.filter(p => {
@@ -989,60 +739,37 @@ function ClipLibrary() {
     if (filter === 'week')  return now - new Date(p.created_at).getTime() < 604800000;
     return true;
   });
-
   const totalClips = projects.reduce((s, p) => s + p.clips.length, 0);
   const cdnClips   = projects.reduce((s, p) => s + p.clips.filter(c => c.cdn_url).length, 0);
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-3 gap-4">
-        {[
-          { label: 'Projects',    val: projects.length, icon: Folder,     color: 'text-rose-500'   },
-          { label: 'Total Clips', val: totalClips,      icon: Scissors,   color: 'text-purple-500' },
-          { label: 'CDN Ready',   val: cdnClips,        icon: CloudUpload, color: 'text-blue-500'  },
-        ].map(({ label, val, icon: Icon, color }) => (
+        {[{ label: 'Projects', val: projects.length, icon: Folder, color: 'text-rose-500' }, { label: 'Total Clips', val: totalClips, icon: Scissors, color: 'text-purple-500' }, { label: 'CDN Ready', val: cdnClips, icon: CloudUpload, color: 'text-blue-500' }].map(({ label, val, icon: Icon, color }) => (
           <div key={label} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-            <Icon size={14} className={color + ' mb-1'} />
-            <div className="text-2xl font-bold text-gray-900">{val}</div>
-            <div className="text-xs text-gray-400">{label}</div>
+            <Icon size={14} className={color + ' mb-1'} /><div className="text-2xl font-bold text-gray-900">{val}</div><div className="text-xs text-gray-400">{label}</div>
           </div>
         ))}
       </div>
-
       <div className="flex items-center gap-3">
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
           {[['all','All time'],['week','This week'],['today','Today']].map(([k, l]) => (
-            <button key={k} onClick={() => setFilter(k)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${filter === k ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
-              {l}
-            </button>
+            <button key={k} onClick={() => setFilter(k)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${filter === k ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>{l}</button>
           ))}
         </div>
         <span className="text-xs text-gray-400">{filtered.length} project{filtered.length !== 1 ? 's' : ''}</span>
       </div>
-
       {loading ? (
-        <div className="flex items-center justify-center py-16 gap-3">
-          <Loader2 className="w-5 h-5 animate-spin text-rose-400" />
-          <span className="text-gray-400 text-sm">Loading projects…</span>
-        </div>
+        <div className="flex items-center justify-center py-16 gap-3"><Loader2 className="w-5 h-5 animate-spin text-rose-400" /><span className="text-gray-400 text-sm">Loading projects…</span></div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-20 space-y-3">
-          <div className="w-14 h-14 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center mx-auto">
-            <Folder size={22} className="text-rose-400" />
-          </div>
+          <div className="w-14 h-14 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center mx-auto"><Folder size={22} className="text-rose-400" /></div>
           <p className="font-semibold text-gray-700">No projects yet</p>
           <p className="text-sm text-gray-400">Generate some clips first — they'll appear here as project folders.</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map(project => (
-            <ProjectFolder
-              key={project.job_id}
-              project={project}
-              onDelete={(jobId) => setProjects(prev => prev.filter(p => p.job_id !== jobId))}
-            />
-          ))}
+          {filtered.map(project => <ProjectFolder key={project.job_id} project={project} onDelete={(jobId) => setProjects(prev => prev.filter(p => p.job_id !== jobId))} />)}
         </div>
       )}
     </div>
@@ -1054,13 +781,11 @@ export default function OpenShorts() {
   const [showSettings, setShowSettings] = useState(false);
   const [mainTab, setMainTab]           = useState('generate');
   const [inputMode, setInputMode]       = useState('youtube');
-
-  const [ytUrl, setYtUrl]        = useState('');
-  const [file, setFile]          = useState(null);
-  const [vidDuration, setVidDur] = useState(0);
-  const [dragging, setDragging]  = useState(false);
+  const [ytUrl, setYtUrl]               = useState('');
+  const [file, setFile]                 = useState(null);
+  const [vidDuration, setVidDur]        = useState(0);
+  const [dragging, setDragging]         = useState(false);
   const fileRef = useRef(null);
-
   const [stage, setStage]       = useState('idle');
   const [currentStep, setStep]  = useState(null);
   const [doneSteps, setDone]    = useState([]);
@@ -1068,7 +793,6 @@ export default function OpenShorts() {
   const [progress, setProgress] = useState(0);
   const [err, setErr]           = useState('');
   const [clips, setClips]       = useState([]);
-
   const [maxClips, setMaxClips] = useState('8');
   const [minSec, setMinSec]     = useState('20');
   const [maxSec, setMaxSec]     = useState('60');
@@ -1085,243 +809,122 @@ export default function OpenShorts() {
     v.src = url;
   };
 
-  // ── YouTube mode ───────────────────────────────────────────────────
   const runYouTubeMode = async () => {
     if (!ytUrl.trim()) return setErr('Paste a YouTube URL first');
     setStage('processing'); setErr(''); setClips([]); setDone([]);
-
     try {
-      setStep('transcribe');
-      setMsg('Extracting audio from YouTube via Cobalt…');
+      setStep('transcribe'); setMsg('Extracting audio from YouTube via Cobalt…');
       const audioUrl = await extractYouTubeAudio(ytUrl.trim());
-
       setMsg('Submitting to AssemblyAI for transcription…');
       const transcript = await transcribeFile(audioUrl, msg => setMsg(msg));
       markDone('transcribe');
-
-      setStep('analyze');
-      setMsg('Claude is finding the best viral moments…');
-      const result = await analyzeViralMoments({
-        transcript: transcript.text,
-        words:      transcript.words,
-        duration:   transcript.duration,
-        maxClips:   parseInt(maxClips) || 8,
-        minSeconds: parseInt(minSec)   || 20,
-        maxSeconds: parseInt(maxSec)   || 60,
-      });
-
+      setStep('analyze'); setMsg('Claude is finding the best viral moments…');
+      const result = await analyzeViralMoments({ transcript: transcript.text, words: transcript.words, duration: transcript.duration, maxClips: parseInt(maxClips)||8, minSeconds: parseInt(minSec)||20, maxSeconds: parseInt(maxSec)||60 });
       if (!result?.clips?.length) throw new Error('No viral moments found. Try a different video.');
       markDone('analyze');
-
       const enriched = result.clips.map(c => ({ ...c, youtube_url: ytUrl }));
-      setClips(enriched);
-      setStage('done');
-      setMsg(`Found ${enriched.length} viral moments!`);
-
-      const videoId = getYouTubeId(ytUrl);
-      await saveProject(enriched, `YouTube — ${videoId || ytUrl.slice(-20)}`);
-
-    } catch (e) {
-      setStage('error');
-      setErr(e.message || 'Something went wrong');
-    } finally {
-      setStep(null);
-    }
+      setClips(enriched); setStage('done'); setMsg(`Found ${enriched.length} viral moments!`);
+      await saveProject(enriched, `YouTube — ${getYouTubeId(ytUrl) || ytUrl.slice(-20)}`);
+    } catch (e) { setStage('error'); setErr(e.message || 'Something went wrong'); }
+    finally { setStep(null); }
   };
 
-  // ── File mode ──────────────────────────────────────────────────────
   const runFileMode = async () => {
     if (!file) return setErr('Select a video file first');
     setStage('processing'); setErr(''); setClips([]); setDone([]); setProgress(0);
-
     try {
-      setStep('transcribe');
-      setMsg('Uploading video to Bunny CDN…');
-      const uploadResult = await uploadToCloudinary(file, {
-        resourceType: 'video',
-        onProgress: pct => { setProgress(pct * 0.4); setMsg(`Uploading… ${pct}%`); },
-      });
-      const cloudUrl = uploadResult.secure_url;
-      setProgress(40);
-
+      setStep('transcribe'); setMsg('Uploading video to Bunny CDN…');
+      const uploadResult = await uploadToCloudinary(file, { resourceType: 'video', onProgress: pct => { setProgress(pct * 0.4); setMsg(`Uploading… ${pct}%`); } });
+      const cloudUrl = uploadResult.secure_url; setProgress(40);
       setMsg('Transcribing with AssemblyAI…');
       const transcript = await transcribeFile(cloudUrl, msg => setMsg(msg));
-      markDone('transcribe');
-      setProgress(70);
-
-      setStep('analyze');
-      setMsg('Claude is finding the best viral moments…');
-      const result = await analyzeViralMoments({
-        transcript: transcript.text,
-        words:      transcript.words,
-        duration:   transcript.duration || vidDuration,
-        maxClips:   parseInt(maxClips) || 8,
-        minSeconds: parseInt(minSec)   || 20,
-        maxSeconds: parseInt(maxSec)   || 60,
-      });
-
+      markDone('transcribe'); setProgress(70);
+      setStep('analyze'); setMsg('Claude is finding the best viral moments…');
+      const result = await analyzeViralMoments({ transcript: transcript.text, words: transcript.words, duration: transcript.duration || vidDuration, maxClips: parseInt(maxClips)||8, minSeconds: parseInt(minSec)||20, maxSeconds: parseInt(maxSec)||60 });
       const analysisClips = result?.clips || [];
       if (!analysisClips.length) throw new Error('No viral moments detected. Try a different video.');
-      markDone('analyze');
-      setProgress(85);
-
-      setStep('clip');
-      setMsg('Building clip URLs…');
-
-      const processed = analysisClips.map(c => ({
-        ...c,
-        cloudinary_url: buildCloudinaryClipUrl(cloudUrl, '', c.start, c.end),
-        blobUrl:        cloudUrl,
-        cdn_url:        buildCloudinaryClipUrl(cloudUrl, '', c.start, c.end),
-      }));
-
-      markDone('clip');
-      setClips(processed);
-      setStage('done');
-      setProgress(100);
-      setMsg(`${processed.length} clips ready!`);
-
-      await saveProject(processed, file.name);
-      setStep(null);
-
-    } catch (e) {
-      console.error('OpenShorts file error:', e);
-      setStage('error');
-      setErr(e.message || 'Unexpected error');
-      setStep(null);
-    }
+      markDone('analyze'); setProgress(85);
+      setStep('clip'); setMsg('Building clip URLs…');
+      const processed = analysisClips.map(c => ({ ...c, cloudinary_url: buildCloudinaryClipUrl(cloudUrl, '', c.start, c.end), blobUrl: cloudUrl, cdn_url: buildCloudinaryClipUrl(cloudUrl, '', c.start, c.end) }));
+      markDone('clip'); setClips(processed); setStage('done'); setProgress(100); setMsg(`${processed.length} clips ready!`);
+      await saveProject(processed, file.name); setStep(null);
+    } catch (e) { console.error('OpenShorts file error:', e); setStage('error'); setErr(e.message || 'Unexpected error'); setStep(null); }
   };
 
-  const handleReset = () => {
-    setStage('idle'); setClips([]); setErr('');
-    setStep(null); setDone([]); setMsg(''); setProgress(0);
-    setFile(null); setYtUrl(''); setVidDur(0);
-  };
-
+  const handleReset = () => { setStage('idle'); setClips([]); setErr(''); setStep(null); setDone([]); setMsg(''); setProgress(0); setFile(null); setYtUrl(''); setVidDur(0); };
   const isActive = stage === 'processing' || stage === 'done' || stage === 'error';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-rose-50">
       {showSettings && <SettingsPanel onClose={() => setShowSettings(false)} />}
 
-      {/* Header */}
       <header className="sticky top-0 z-40 bg-white/80 backdrop-blur border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link to="/" className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 transition-colors">
-              <ArrowLeft size={13} /><span>Dashboard</span>
-            </Link>
+            <Link to="/" className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 transition-colors"><ArrowLeft size={13} /><span>Dashboard</span></Link>
             <div className="w-px h-4 bg-gray-200" />
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center shadow-sm">
-                <Scissors size={13} className="text-white" />
-              </div>
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center shadow-sm"><Scissors size={13} className="text-white" /></div>
               <span className="text-sm font-semibold text-gray-900">Open Shorts</span>
               <Badge className="text-xs px-1.5 py-0 bg-rose-50 text-rose-600 border-rose-100">AI</Badge>
             </div>
             <div className="flex gap-1 ml-3">
-              {[
-                { k: 'generate', label: 'Generate', icon: Sparkles },
-                { k: 'library',  label: 'Library',  icon: Library  },
-              ].map(({ k, label, icon: Icon }) => (
-                <button key={k} onClick={() => setMainTab(k)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${mainTab === k ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'text-gray-500 hover:text-gray-700'}`}>
+              {[{ k: 'generate', label: 'Generate', icon: Sparkles }, { k: 'library', label: 'Library', icon: Library }].map(({ k, label, icon: Icon }) => (
+                <button key={k} onClick={() => setMainTab(k)} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${mainTab === k ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'text-gray-500 hover:text-gray-700'}`}>
                   <Icon size={11} /><span>{label}</span>
                 </button>
               ))}
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {isActive && (
-              <button onClick={handleReset} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium transition-colors">
-                <X size={11} /><span>Reset</span>
-              </button>
-            )}
-            <div className="hidden sm:flex items-center gap-1 px-2 py-1 bg-emerald-50 border border-emerald-100 rounded-lg text-emerald-600 text-xs font-medium">
-              <CloudUpload size={9} /><span>Bunny CDN</span>
-            </div>
-            <button onClick={() => setShowSettings(true)} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
-              <Settings size={15} />
-            </button>
+            {isActive && <button onClick={handleReset} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium transition-colors"><X size={11} /><span>Reset</span></button>}
+            <div className="hidden sm:flex items-center gap-1 px-2 py-1 bg-emerald-50 border border-emerald-100 rounded-lg text-emerald-600 text-xs font-medium"><CloudUpload size={9} /><span>Bunny CDN</span></div>
+            <button onClick={() => setShowSettings(true)} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"><Settings size={15} /></button>
           </div>
         </div>
       </header>
 
-      {/* Generate Tab */}
       {mainTab === 'generate' && (
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 space-y-8">
-
           {!isActive && (
             <div className="text-center space-y-2">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-rose-50 border border-rose-100 rounded-full text-rose-600 text-xs font-medium mb-1">
-                <Zap size={11} /><span>AssemblyAI Transcription · Claude Analysis · Bunny CDN Storage</span>
-              </div>
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-rose-50 border border-rose-100 rounded-full text-rose-600 text-xs font-medium mb-1"><Zap size={11} /><span>AssemblyAI Transcription · Claude Analysis · Bunny CDN Storage</span></div>
               <h1 className="text-3xl font-bold text-gray-900">Open Shorts</h1>
-              <p className="text-gray-400 text-sm max-w-lg mx-auto">
-                Upload video → AssemblyAI transcribes → Claude finds viral moments → clips saved as projects in your library.
-              </p>
+              <p className="text-gray-400 text-sm max-w-lg mx-auto">Upload video → AssemblyAI transcribes → Claude finds viral moments → clips saved as projects in your library.</p>
             </div>
           )}
 
           {!isActive && (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="flex border-b border-gray-100">
-                {[
-                  { k: 'youtube', icon: Youtube, label: 'YouTube URL', desc: 'Extracts audio → transcribes → finds moments' },
-                  { k: 'file',    icon: Upload,  label: 'Upload File', desc: 'Bunny CDN upload → transcribe → find clips'  },
-                ].map(({ k, icon: Icon, label, desc }) => (
-                  <button key={k} onClick={() => setInputMode(k)}
-                    className={`flex-1 flex flex-col items-center gap-0.5 py-3 text-sm font-medium transition-colors border-b-2 ${inputMode === k ? 'text-rose-600 border-rose-500 bg-rose-50/30' : 'text-gray-500 border-transparent hover:text-gray-700'}`}>
+                {[{ k: 'youtube', icon: Youtube, label: 'YouTube URL', desc: 'Extracts audio → transcribes → finds moments' }, { k: 'file', icon: Upload, label: 'Upload File', desc: 'Bunny CDN upload → transcribe → find clips' }].map(({ k, icon: Icon, label, desc }) => (
+                  <button key={k} onClick={() => setInputMode(k)} className={`flex-1 flex flex-col items-center gap-0.5 py-3 text-sm font-medium transition-colors border-b-2 ${inputMode === k ? 'text-rose-600 border-rose-500 bg-rose-50/30' : 'text-gray-500 border-transparent hover:text-gray-700'}`}>
                     <div className="flex items-center gap-1.5"><Icon size={14} /><span>{label}</span></div>
                     <span className="text-xs font-normal text-gray-400">{desc}</span>
                   </button>
                 ))}
               </div>
-
               <div className="p-6 space-y-4">
                 {inputMode === 'youtube' && (
                   <div className="space-y-3">
-                    <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-700 flex items-start gap-2">
-                      <Mic size={12} className="shrink-0 mt-0.5 text-blue-500" />
-                      <span>Audio extracted via Cobalt, transcribed by AssemblyAI, then Claude identifies the best viral moments with exact timestamps.</span>
-                    </div>
-                    <Input
-                      value={ytUrl}
-                      onChange={e => setYtUrl(e.target.value)}
-                      placeholder="https://www.youtube.com/watch?v=…"
-                      className="h-12 text-sm"
-                      onKeyDown={e => { if (e.key === 'Enter') runYouTubeMode(); }}
-                    />
+                    <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-700 flex items-start gap-2"><Mic size={12} className="shrink-0 mt-0.5 text-blue-500" /><span>Audio extracted via Cobalt, transcribed by AssemblyAI, then Claude identifies the best viral moments with exact timestamps.</span></div>
+                    <Input value={ytUrl} onChange={e => setYtUrl(e.target.value)} placeholder="https://www.youtube.com/watch?v=…" className="h-12 text-sm" onKeyDown={e => { if (e.key === 'Enter') runYouTubeMode(); }} />
                     <p className="text-xs text-gray-400">Supports youtube.com and youtu.be links</p>
                   </div>
                 )}
-
                 {inputMode === 'file' && (
                   <div className="space-y-3">
-                    <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-xs text-emerald-700 flex items-start gap-2">
-                      <CloudUpload size={12} className="shrink-0 mt-0.5 text-emerald-500" />
-                      <span>Video uploads to Bunny CDN (handles 1GB+) → AssemblyAI transcribes → Claude finds viral moments → saved to Library. Download creates a portrait 9:16 crop in your browser.</span>
-                    </div>
-                    <div
-                      className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${dragging ? 'border-rose-400 bg-rose-50' : file ? 'border-rose-300 bg-rose-50/50' : 'border-gray-200 hover:border-rose-300 hover:bg-rose-50/20'}`}
+                    <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-xs text-emerald-700 flex items-start gap-2"><CloudUpload size={12} className="shrink-0 mt-0.5 text-emerald-500" /><span>Video uploads to Bunny CDN → AssemblyAI transcribes → Claude finds viral moments → saved to Library. Download = silent 9:16 portrait crop.</span></div>
+                    <div className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${dragging ? 'border-rose-400 bg-rose-50' : file ? 'border-rose-300 bg-rose-50/50' : 'border-gray-200 hover:border-rose-300 hover:bg-rose-50/20'}`}
                       onClick={() => fileRef.current?.click()}
                       onDragOver={e => { e.preventDefault(); setDragging(true); }}
                       onDragLeave={() => setDragging(false)}
-                      onDrop={e => {
-                        e.preventDefault();
-                        setDragging(false);
-                        const f = e.dataTransfer.files?.[0];
-                        if (f?.type.startsWith('video/')) handleFileSelect(f);
-                      }}
-                    >
+                      onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f?.type.startsWith('video/')) handleFileSelect(f); }}>
                       <input ref={fileRef} type="file" accept="video/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }} />
                       {file ? (
                         <div className="flex items-center justify-center gap-3">
                           <FileVideo className="text-rose-500" size={20} />
-                          <div className="text-left">
-                            <p className="text-sm font-medium text-gray-800">{file.name}</p>
-                            <p className="text-xs text-gray-400">{(file.size / 1024 / 1024).toFixed(1)} MB{vidDuration ? ' / ' + formatTime(vidDuration) : ''}</p>
-                          </div>
+                          <div className="text-left"><p className="text-sm font-medium text-gray-800">{file.name}</p><p className="text-xs text-gray-400">{(file.size/1024/1024).toFixed(1)} MB{vidDuration ? ' / ' + formatTime(vidDuration) : ''}</p></div>
                           <button onClick={e => { e.stopPropagation(); setFile(null); setVidDur(0); }} className="ml-auto text-gray-400 hover:text-gray-600"><X size={15} /></button>
                         </div>
                       ) : (
@@ -1334,66 +937,34 @@ export default function OpenShorts() {
                     </div>
                   </div>
                 )}
-
-                {/* Advanced settings */}
                 <div>
-                  <button onClick={() => setShowAdv(!showAdv)} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors">
-                    <Settings size={11} /><span>Advanced settings</span>{showAdv ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-                  </button>
+                  <button onClick={() => setShowAdv(!showAdv)} className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"><Settings size={11} /><span>Advanced settings</span>{showAdv ? <ChevronUp size={10} /> : <ChevronDown size={10} />}</button>
                   {showAdv && (
                     <div className="mt-3 grid grid-cols-3 gap-3">
-                      {[
-                        { label: 'Max clips', val: maxClips, set: setMaxClips, ph: '8'  },
-                        { label: 'Min sec',   val: minSec,   set: setMinSec,   ph: '20' },
-                        { label: 'Max sec',   val: maxSec,   set: setMaxSec,   ph: '60' },
-                      ].map(({ label, val, set, ph }) => (
-                        <div key={label}>
-                          <label className="text-xs text-gray-500 block mb-1">{label}</label>
-                          <Input value={val} onChange={e => set(e.target.value)} placeholder={ph} className="h-9 text-sm" />
-                        </div>
+                      {[{ label: 'Max clips', val: maxClips, set: setMaxClips, ph: '8' }, { label: 'Min sec', val: minSec, set: setMinSec, ph: '20' }, { label: 'Max sec', val: maxSec, set: setMaxSec, ph: '60' }].map(({ label, val, set, ph }) => (
+                        <div key={label}><label className="text-xs text-gray-500 block mb-1">{label}</label><Input value={val} onChange={e => set(e.target.value)} placeholder={ph} className="h-9 text-sm" /></div>
                       ))}
                     </div>
                   )}
                 </div>
-
-                {err && stage === 'idle' && (
-                  <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3">
-                    <AlertCircle size={13} /><span>{err}</span>
-                  </div>
-                )}
-
-                <Button
-                  onClick={inputMode === 'youtube' ? runYouTubeMode : runFileMode}
-                  disabled={stage === 'processing' || (inputMode === 'youtube' && !ytUrl.trim()) || (inputMode === 'file' && !file)}
-                  className="w-full h-12 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-semibold rounded-xl disabled:opacity-50"
-                >
-                  {stage === 'processing'
-                    ? <span className="flex items-center gap-2"><Loader2 size={15} className="animate-spin" />Processing…</span>
-                    : inputMode === 'youtube'
-                      ? <span className="flex items-center gap-2"><Mic size={15} />Transcribe + Analyze</span>
-                      : <span className="flex items-center gap-2"><Scissors size={15} />Upload + Generate Clips</span>
-                  }
+                {err && stage === 'idle' && <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3"><AlertCircle size={13} /><span>{err}</span></div>}
+                <Button onClick={inputMode === 'youtube' ? runYouTubeMode : runFileMode} disabled={stage === 'processing' || (inputMode === 'youtube' && !ytUrl.trim()) || (inputMode === 'file' && !file)} className="w-full h-12 bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white font-semibold rounded-xl disabled:opacity-50">
+                  {stage === 'processing' ? <span className="flex items-center gap-2"><Loader2 size={15} className="animate-spin" />Processing…</span> : inputMode === 'youtube' ? <span className="flex items-center gap-2"><Mic size={15} />Transcribe + Analyze</span> : <span className="flex items-center gap-2"><Scissors size={15} />Upload + Generate Clips</span>}
                 </Button>
               </div>
             </div>
           )}
 
-          {/* Processing status */}
           {stage === 'processing' && (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
-              <StageBar stageKeys={['transcribe', 'analyze', 'clip']} current={currentStep} done={doneSteps} />
+              <StageBar stageKeys={['transcribe','analyze','clip']} current={currentStep} done={doneSteps} />
               <div className="space-y-2">
                 <p className="text-sm text-gray-700 font-medium">{statusMsg}</p>
-                {progress > 0 && (
-                  <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                    <div className="bg-gradient-to-r from-rose-500 to-red-600 h-1.5 rounded-full transition-all duration-500" style={{ width: progress + '%' }} />
-                  </div>
-                )}
+                {progress > 0 && <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden"><div className="bg-gradient-to-r from-rose-500 to-red-600 h-1.5 rounded-full transition-all duration-500" style={{ width: progress + '%' }} /></div>}
               </div>
             </div>
           )}
 
-          {/* Error */}
           {stage === 'error' && (
             <div className="bg-red-50 border border-red-100 rounded-2xl p-6 space-y-3">
               <p className="font-semibold text-red-700 flex items-center gap-2"><AlertCircle size={16} />Something went wrong</p>
@@ -1408,57 +979,36 @@ export default function OpenShorts() {
             </div>
           )}
 
-          {/* Results */}
           {clips.length > 0 && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                  <Sparkles size={16} className="text-rose-500" />
-                  <span>{stage === 'done' ? `${clips.length} Viral Clips Ready` : `Processing… (${clips.length} done)`}</span>
-                </h2>
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2"><Sparkles size={16} className="text-rose-500" /><span>{stage === 'done' ? `${clips.length} Viral Clips Ready` : `Processing… (${clips.length} done)`}</span></h2>
                 {stage === 'done' && (
                   <div className="flex items-center gap-2">
-                    <button onClick={() => setMainTab('library')} className="flex items-center gap-1.5 text-xs text-rose-600 hover:text-rose-800 font-medium px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 transition-colors">
-                      <Library size={11} /><span>View in Library</span>
-                    </button>
-                    <button onClick={handleReset} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 font-medium px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors">
-                      <X size={11} /><span>New video</span>
-                    </button>
+                    <button onClick={() => setMainTab('library')} className="flex items-center gap-1.5 text-xs text-rose-600 hover:text-rose-800 font-medium px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 transition-colors"><Library size={11} /><span>View in Library</span></button>
+                    <button onClick={handleReset} className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 font-medium px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 transition-colors"><X size={11} /><span>New video</span></button>
                   </div>
                 )}
               </div>
-
               {inputMode === 'youtube' && (
-                <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-xs text-amber-700 flex items-start gap-2">
-                  <Youtube size={12} className="shrink-0 mt-0.5 text-amber-500" />
-                  <span>These clips play at the exact viral timestamps in embedded YouTube players. Use File Upload mode to get downloadable 9:16 portrait video files.</span>
-                </div>
+                <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-xs text-amber-700 flex items-start gap-2"><Youtube size={12} className="shrink-0 mt-0.5 text-amber-500" /><span>These clips play at the exact viral timestamps in embedded YouTube players. Use File Upload mode to get downloadable 9:16 portrait video files.</span></div>
               )}
-
               <div className={`grid gap-5 ${inputMode === 'youtube' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'}`}>
-                {clips.map((c, i) => inputMode === 'youtube'
-                  ? <YouTubeClipCard key={i} clip={c} index={i} ytUrl={ytUrl} />
-                  : <FileClipCard    key={i} clip={c} index={i} />
-                )}
+                {clips.map((c, i) => inputMode === 'youtube' ? <YouTubeClipCard key={i} clip={c} index={i} ytUrl={ytUrl} /> : <FileClipCard key={i} clip={c} index={i} />)}
               </div>
-
               {stage === 'done' && (
-                <div className="flex items-center gap-2 px-4 py-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700">
-                  <CheckCircle size={12} />
-                  <span>Project saved to your Library — open the Library tab to re-download anytime. Download records a 9:16 portrait crop in your browser.</span>
-                </div>
+                <div className="flex items-center gap-2 px-4 py-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700"><CheckCircle size={12} /><span>Project saved to your Library — open the Library tab to re-download anytime.</span></div>
               )}
             </div>
           )}
 
-          {/* Feature tiles */}
           {!isActive && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { icon: Mic,         label: 'AssemblyAI',      desc: 'Word-level transcription for precise clip boundaries' },
-                { icon: Sparkles,    label: 'Claude AI',        desc: 'Finds the highest-virality moments automatically'     },
-                { icon: CloudUpload, label: 'Bunny CDN',        desc: 'Handles 1GB+ uploads, instant global delivery'       },
-                { icon: Scissors,    label: '9:16 Portrait',    desc: 'Download crops to portrait in your browser'          },
+                { icon: Mic,         label: 'AssemblyAI',    desc: 'Word-level transcription for precise clip boundaries' },
+                { icon: Sparkles,    label: 'Claude AI',     desc: 'Finds the highest-virality moments automatically'     },
+                { icon: CloudUpload, label: 'Bunny CDN',     desc: 'Handles 1GB+ uploads, instant global delivery'       },
+                { icon: Scissors,    label: '9:16 Portrait', desc: 'Silent browser crop — no playback during download'    },
               ].map(({ icon: Icon, label, desc }) => (
                 <div key={label} className="bg-white rounded-xl border border-gray-100 p-3 text-center shadow-sm">
                   <div className="w-7 h-7 rounded-lg bg-rose-50 flex items-center justify-center mx-auto mb-2"><Icon size={13} className="text-rose-500" /></div>
@@ -1471,16 +1021,11 @@ export default function OpenShorts() {
         </div>
       )}
 
-      {/* Library Tab */}
       {mainTab === 'library' && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-          <div className="mb-6 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <Library size={18} className="text-rose-500" /><span>Clip Library</span>
-              </h2>
-              <p className="text-sm text-gray-400 mt-0.5">All your generated clip projects — open a folder to preview and download</p>
-            </div>
+          <div className="mb-6">
+            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2"><Library size={18} className="text-rose-500" /><span>Clip Library</span></h2>
+            <p className="text-sm text-gray-400 mt-0.5">All your generated clip projects — open a folder to preview and download</p>
           </div>
           <ClipLibrary />
         </div>
