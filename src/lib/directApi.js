@@ -38,7 +38,7 @@ export const uploadToCloudinary = async (file, { resourceType = 'video', onProgr
 
   if (onProgress) onProgress(95);
   if (res.data?.error) throw new Error('Bunny upload error: ' + res.data.error);
-  if (!res.data?.secure_url) throw new Error('Bunny upload returned no URL');
+  if (!res.data?.secure_url) throw new Error('Bunny upload failed — full response: ' + JSON.stringify(res.data));
   if (onProgress) onProgress(100);
 
   return {
