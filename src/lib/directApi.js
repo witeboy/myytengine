@@ -11,69 +11,46 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { base44 } from '@/api/base44Client';
 
-export const LS_KEYS = {
-  CLOUD_NAME:   'openshorts_cloud_name',
-  CLOUD_PRESET: 'openshorts_cloud_preset',
-};
+export const LS_KEYS = {};
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. CLOUDINARY — direct browser upload using cloud name from localStorage
+// 1. BUNNY — upload via bunnyUpload Deno function
+//    Exported as uploadToCloudinary so OpenShorts + QuickPublish need no changes
 // ─────────────────────────────────────────────────────────────────────────────
-let _cloudCache = null;
-export const getCloudinaryConfig = async () => {
-  if (_cloudCache) return _cloudCache;
-  // localStorage override takes priority (user-supplied in Settings)
-  const lsName   = localStorage.getItem(LS_KEYS.CLOUD_NAME);
-  const lsPreset = localStorage.getItem(LS_KEYS.CLOUD_PRESET);
-  if (lsName) {
-    _cloudCache = { cloudName: lsName, cloudPreset: lsPreset || 'openshorts_clips' };
-    return _cloudCache;
-  }
-  // Fall back to server env via getCloudinaryConfig backend function
-  try {
-    const res = await base44.functions.invoke('getCloudinaryConfig', {});
-    _cloudCache = {
-      cloudName:   res.data?.cloudinary_cloud_name || '',
-      cloudPreset: res.data?.cloudinary_preset     || 'openshorts_clips',
-    };
-  } catch (_) {
-    _cloudCache = { cloudName: '', cloudPreset: 'openshorts_clips' };
-  }
-  return _cloudCache;
-};
+const fileToBase64 = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = () => reject(new Error('FileReader failed'));
+    reader.readAsDataURL(file);
+  });
 
 export const uploadToCloudinary = async (file, { resourceType = 'video', onProgress } = {}) => {
-  const { cloudName, cloudPreset } = await getCloudinaryConfig();
-  if (!cloudName) throw new Error('Cloudinary cloud name not configured — add it in Settings or set openshorts_cloud_name env var.');
+  if (onProgress) onProgress(5);
+  const file_data_base64 = await fileToBase64(file);
+  if (onProgress) onProgress(30);
 
-  return new Promise((resolve, reject) => {
-    const fd = new FormData();
-    fd.append('file',          file);
-    fd.append('upload_preset', cloudPreset);
-    fd.append('resource_type', resourceType);
-
-    const xhr = new XMLHttpRequest();
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100));
-    };
-    xhr.onload = () => {
-      try {
-        const res = JSON.parse(xhr.responseText);
-        if (res.error) return reject(new Error(res.error.message || 'Cloudinary upload failed'));
-        resolve(res);
-      } catch (_) { reject(new Error('Cloudinary response parse error')); }
-    };
-    xhr.onerror = () => reject(new Error('Cloudinary network error'));
-    xhr.open('POST', `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`);
-    xhr.send(fd);
+  const res = await base44.functions.invoke('bunnyUpload', {
+    file_data_base64,
+    file_name: file.name || 'video.mp4',
+    file_type: file.type || 'video/mp4',
   });
+
+  if (onProgress) onProgress(95);
+  if (res.data?.error) throw new Error('Bunny upload error: ' + res.data.error);
+  if (!res.data?.secure_url) throw new Error('Bunny upload returned no URL');
+  if (onProgress) onProgress(100);
+
+  return {
+    secure_url: res.data.secure_url,
+    public_id:  res.data.secure_url,
+    cdn_url:    res.data.cdn_url,
+  };
 };
 
-export const buildCloudinaryClipUrl = (publicId, cloudName, start, end) => {
-  const dur       = Math.round(end - start);
-  const transform = `so_${Math.round(start)},du_${dur},c_fill,ar_9:16,w_720,q_auto,f_mp4`;
-  return `https://res.cloudinary.com/${cloudName}/video/upload/${transform}/${publicId}.mp4`;
-};
+export const getCloudinaryConfig = async () => ({ cloudName: 'bunny', cloudPreset: '' });
+
+export const buildCloudinaryClipUrl = (_publicId, _cloudName, _start, _end) => _publicId;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. ASSEMBLYAI — via quickPublishTranscribe backend (ASSEMBLYAI_API_KEY lives there)
