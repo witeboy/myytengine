@@ -19,7 +19,7 @@ export const LS_KEYS = {};
 // ─────────────────────────────────────────────────────────────────────────────
 export const uploadToCloudinary = async (file, { resourceType = 'video', onProgress } = {}) => {
   // Get Bunny config from backend (keeps credentials server-side)
-  const configRes = await base44.functions.invoke('generateOutline?action=bunny_config', {});
+  const configRes = await base44.functions.invoke('generateOutline', { __bunny_config: true });
   if (!configRes.data?.storage_zone) throw new Error('Could not fetch Bunny config — check BUNNY_STORAGE_ZONE, BUNNY_STORAGE_PASSWORD, BUNNY_CDN_URL env vars');
 
   const { storage_zone, storage_password, storage_region, cdn_url } = configRes.data;
