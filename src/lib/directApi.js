@@ -19,14 +19,32 @@ export const LS_KEYS = {
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. CLOUDINARY — direct browser upload using cloud name from localStorage
 // ─────────────────────────────────────────────────────────────────────────────
-export const getCloudinaryConfig = () => ({
-  cloudName:   localStorage.getItem(LS_KEYS.CLOUD_NAME)   || '',
-  cloudPreset: localStorage.getItem(LS_KEYS.CLOUD_PRESET) || 'openshorts_clips',
-});
+let _cloudCache = null;
+export const getCloudinaryConfig = async () => {
+  if (_cloudCache) return _cloudCache;
+  // localStorage override takes priority (user-supplied in Settings)
+  const lsName   = localStorage.getItem(LS_KEYS.CLOUD_NAME);
+  const lsPreset = localStorage.getItem(LS_KEYS.CLOUD_PRESET);
+  if (lsName) {
+    _cloudCache = { cloudName: lsName, cloudPreset: lsPreset || 'openshorts_clips' };
+    return _cloudCache;
+  }
+  // Fall back to server env via getCloudinaryConfig backend function
+  try {
+    const res = await base44.functions.invoke('getCloudinaryConfig', {});
+    _cloudCache = {
+      cloudName:   res.data?.cloudinary_cloud_name || '',
+      cloudPreset: res.data?.cloudinary_preset     || 'openshorts_clips',
+    };
+  } catch (_) {
+    _cloudCache = { cloudName: '', cloudPreset: 'openshorts_clips' };
+  }
+  return _cloudCache;
+};
 
-export const uploadToCloudinary = (file, { resourceType = 'video', onProgress } = {}) => {
-  const { cloudName, cloudPreset } = getCloudinaryConfig();
-  if (!cloudName) throw new Error('Add your Cloudinary Cloud Name in Open Shorts Settings.');
+export const uploadToCloudinary = async (file, { resourceType = 'video', onProgress } = {}) => {
+  const { cloudName, cloudPreset } = await getCloudinaryConfig();
+  if (!cloudName) throw new Error('Cloudinary cloud name not configured — add it in Settings or set openshorts_cloud_name env var.');
 
   return new Promise((resolve, reject) => {
     const fd = new FormData();
