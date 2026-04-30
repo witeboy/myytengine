@@ -58,20 +58,6 @@ function pickProtagonistName(topicTitle) {
 
 Deno.serve(async (req) => {
   try {
-    // ── BUNNY CONFIG ROUTE ─────────────────────────────────────────
-    // Detected by action field in body — runs before auth, returns
-    // env vars so the browser can upload directly to Bunny via XHR.
-    const url = new URL(req.url);
-    if (url.searchParams.get('action') === 'bunny_config') {
-      return Response.json({
-        storage_zone:     Deno.env.get('BUNNY_STORAGE_ZONE')     || '',
-        storage_password: Deno.env.get('BUNNY_STORAGE_PASSWORD') || '',
-        storage_region:   Deno.env.get('BUNNY_STORAGE_REGION')   || 'ny',
-        cdn_url:          Deno.env.get('BUNNY_CDN_URL')          || '',
-      });
-    }
-    // ── END BUNNY CONFIG ROUTE ─────────────────────────────────────
-
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
