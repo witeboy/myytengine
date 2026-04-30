@@ -57,7 +57,18 @@ export const uploadToCloudinary = async (file, { resourceType = 'video', onProgr
 
 export const getCloudinaryConfig = async () => ({ cloudName: 'bunny', cloudPreset: '' });
 
-export const buildCloudinaryClipUrl = (_publicId, _cloudName, _start, _end) => _publicId;
+export const buildCloudinaryClipUrl = (publicId, cloudName, start, end) => {
+  // publicId here is the full Bunny CDN URL of the source video
+  // We use Cloudinary's fetch transformation to cut it on the fly
+  // cloudName comes from localStorage override or env
+  const cn = cloudName && cloudName !== 'bunny' ? cloudName : localStorage.getItem('openshorts_cloud_name') || '';
+  if (!cn) return publicId; // fallback — return full video if no Cloudinary configured
+  const dur = Math.round(end - start);
+  const transform = `so_${Math.round(start)},du_${dur},c_fill,ar_9:16,w_720,q_auto,f_mp4`;
+  // Cloudinary fetch — transforms a remote URL on the fly, no upload needed
+  const encodedUrl = encodeURIComponent(publicId);
+  return `https://res.cloudinary.com/${cn}/video/fetch/${transform}/${encodedUrl}`;
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. ASSEMBLYAI — via quickPublishTranscribe backend (ASSEMBLYAI_API_KEY lives there)
@@ -140,10 +151,13 @@ const callClaude = async (system, user, { maxTokens = 2000 } = {}) => {
   });
 
   if (res.data?.error) throw new Error('Claude error: ' + res.data.error);
-  // Handle nested response shapes
+  // Handle nested response shapes from generateSceneBreakdown passthrough
   const text = res.data?.text || res.data?.content || res.data?.result 
     || res.data?.data?.text || res.data?.data?.content || '';
-  if (!text) throw new Error('Claude passthrough empty: ' + JSON.stringify(res.data).slice(0, 300));
+  if (!text) {
+    console.error('Claude passthrough full response:', JSON.stringify(res).slice(0, 500));
+    throw new Error('Claude passthrough empty: ' + JSON.stringify(res.data).slice(0, 300));
+  }
   return String(text);
 };
 
