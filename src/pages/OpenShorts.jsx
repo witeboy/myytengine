@@ -325,6 +325,51 @@ function YouTubeClipCard({ clip, index, ytUrl }) {
   );
 }
 
+function DownloadClipButton({ src, clipStart, clipEnd, index }) {
+  const [status, setStatus] = useState('idle'); // idle | cutting | done | error
+
+  const handleDownload = async () => {
+    setStatus('cutting');
+    try {
+      const res = await base44.functions.invoke('quickPublishTranscribe', {
+        action:     'clip_video',
+        source_url: src,
+        start:      clipStart,
+        end:        clipEnd,
+      });
+      const url = res.data?.clip_url || res.data?.url;
+      if (!url) throw new Error('No clip URL returned');
+      // Trigger download
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `clip_${index + 1}.mp4`;
+      a.target = '_blank';
+      a.click();
+      setStatus('done');
+      setTimeout(() => setStatus('idle'), 3000);
+    } catch (e) {
+      console.error('Clip cut failed:', e);
+      // Fallback: open full video at timestamp so user can at least access it
+      window.open(`${src}#t=${clipStart}`, '_blank');
+      setStatus('error');
+      setTimeout(() => setStatus('idle'), 3000);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleDownload}
+      disabled={status === 'cutting'}
+      className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium transition-colors disabled:opacity-50"
+    >
+      {status === 'cutting' ? <Loader2 size={10} className="animate-spin" /> :
+       status === 'done'    ? <Check size={10} /> :
+       <Download size={10} />}
+      <span>{status === 'cutting' ? 'Cutting…' : status === 'done' ? 'Saved!' : 'Download'}</span>
+    </button>
+  );
+}
+
 // ── FileClipCard ───────────────────────────────────────────────────────
 function FileClipCard({ clip, index }) {
   const [copied, setCopied]   = useState(null);
@@ -333,8 +378,12 @@ function FileClipCard({ clip, index }) {
   const [postRes, setPostRes] = useState(null);
   const videoRef = useRef(null);
 
-  const src = clip.cdn_url || clip.cloudinary_url || clip.blobUrl || null;
-  const dur = clip.duration_seconds || ((clip.end && clip.start) ? Math.round(clip.end - clip.start) : null);
+  const rawSrc = clip.cdn_url || clip.cloudinary_url || clip.blobUrl || null;
+  // Strip #t= fragment to get the base Bunny URL
+  const src = rawSrc ? rawSrc.split('#')[0] : null;
+  const clipStart = clip.start_seconds ?? clip.start ?? 0;
+  const clipEnd   = clip.end_seconds   ?? clip.end   ?? null;
+  const dur = clip.duration_seconds || ((clipEnd && clipStart != null) ? Math.round(clipEnd - clipStart) : null);
 
   const hookText  = clip.hook_text  || clip.viral_hook_text || null;
   const ytTitle   = clip.yt_title   || clip.video_title_for_youtube_short || null;
@@ -380,7 +429,17 @@ function FileClipCard({ clip, index }) {
         onMouseLeave={handleMouseLeave}
       >
         {src ? (
-          <video ref={videoRef} src={src} className="absolute inset-0 w-full h-full object-cover" muted loop playsInline />
+          <video
+            ref={videoRef}
+            src={src}
+            className="absolute inset-0 w-full h-full object-cover"
+            muted loop playsInline
+            onLoadedMetadata={() => {
+              if (videoRef.current && clipStart) {
+                videoRef.current.currentTime = clipStart;
+              }
+            }}
+          />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-zinc-600" /></div>
         )}
@@ -417,15 +476,12 @@ function FileClipCard({ clip, index }) {
         </div>
         <div className="flex gap-1.5">
           {src && (
-            <a
-              href={src}
-              download
-              target="_blank"
-              rel="noreferrer"
-              className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium transition-colors"
-            >
-              <Download size={10} /><span>Download</span>
-            </a>
+            <DownloadClipButton
+              src={src}
+              clipStart={clipStart}
+              clipEnd={clipEnd}
+              index={index}
+            />
           )}
           <button
             onClick={runPost}
