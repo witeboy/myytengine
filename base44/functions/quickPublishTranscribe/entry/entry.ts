@@ -201,6 +201,146 @@ Return JSON:
       return Response.json({ status: result.status });
     }
 
+    // ── BUNNY PROJECT MANIFEST HELPERS ────────────────────────────
+    const bunnyHost = (() => {
+      const region = (Deno.env.get('BUNNY_STORAGE_REGION') || 'ny').trim();
+      return (region === 'de' || region === 'storage' || !region)
+        ? 'storage.bunnycdn.com'
+        : `${region}.storage.bunnycdn.com`;
+    })();
+    const bunnyZone = (Deno.env.get('BUNNY_STORAGE_ZONE') || '').trim();
+    const bunnyPass = (Deno.env.get('BUNNY_STORAGE_PASSWORD') || '').trim();
+    const bunnyCdn  = (Deno.env.get('BUNNY_CDN_URL') || '').trim().replace(/\/$/, '');
+    const MANIFEST_PATH = `projects/openshorts_manifest.json`;
+    const manifestCdnUrl  = `${bunnyCdn}/${MANIFEST_PATH}`;
+    const manifestUploadUrl = `https://${bunnyHost}/${bunnyZone}/${MANIFEST_PATH}`;
+
+    const bunnyHeaders = { 'AccessKey': bunnyPass, 'Content-Type': 'application/json' };
+
+    const loadManifest = async () => {
+      try {
+        const res = await fetch(manifestCdnUrl + `?_=${Date.now()}`);
+        if (!res.ok) return [];
+        return await res.json();
+      } catch (_) { return []; }
+    };
+
+    const saveManifest = async (projects) => {
+      await fetch(manifestUploadUrl, {
+        method: 'PUT',
+        headers: bunnyHeaders,
+        body: JSON.stringify(projects),
+      });
+    };
+
+    // ── BUNNY_SAVE_PROJECT ────────────────────────────────────────
+    if (action === 'bunny_save_project') {
+      const project = body.project;
+      if (!project?.job_id) return Response.json({ error: 'project.job_id required' }, { status: 400 });
+      if (!bunnyZone || !bunnyPass) return Response.json({ error: 'Bunny env vars not configured' }, { status: 500 });
+
+      const projects = await loadManifest();
+      // Replace if exists, otherwise append
+      const idx = projects.findIndex(p => p.job_id === project.job_id);
+      if (idx >= 0) projects[idx] = project;
+      else projects.unshift(project); // newest first
+
+      await saveManifest(projects);
+      return Response.json({ success: true, project_count: projects.length });
+    }
+
+    // ── BUNNY_LIST_PROJECTS ───────────────────────────────────────
+    if (action === 'bunny_list_projects') {
+      if (!bunnyZone || !bunnyPass) return Response.json({ error: 'Bunny env vars not configured' }, { status: 500 });
+      const projects = await loadManifest();
+      return Response.json({ success: true, projects });
+    }
+
+    // ── BUNNY_DELETE_PROJECT ──────────────────────────────────────
+    if (action === 'bunny_delete_project') {
+      const { job_id } = body;
+      if (!job_id) return Response.json({ error: 'job_id required' }, { status: 400 });
+      if (!bunnyZone || !bunnyPass) return Response.json({ error: 'Bunny env vars not configured' }, { status: 500 });
+
+      const projects = await loadManifest();
+      const filtered = projects.filter(p => p.job_id !== job_id);
+      await saveManifest(filtered);
+      return Response.json({ success: true, deleted: projects.length - filtered.length });
+    }
+
+    // ── CLIP_VIDEO — ffmpeg cut + re-upload to Bunny ──────────────
+    if (action === 'clip_video') {
+      const { source_url, start, end } = body;
+      if (!source_url || start == null || end == null) {
+        return Response.json({ error: 'source_url, start, end required' }, { status: 400 });
+      }
+      if (!bunnyZone || !bunnyPass) return Response.json({ error: 'Bunny env vars not configured' }, { status: 500 });
+
+      const duration = Math.round(end - start);
+      if (duration <= 0) return Response.json({ error: 'Invalid clip range' }, { status: 400 });
+
+      // Download source video to temp
+      const tmpIn  = `/tmp/clip_src_${Date.now()}.mp4`;
+      const tmpOut = `/tmp/clip_out_${Date.now()}.mp4`;
+
+      try {
+        console.log(`[clip_video] Downloading source: ${source_url.slice(0, 80)}`);
+        const srcRes = await fetch(source_url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+        if (!srcRes.ok) throw new Error(`Source download failed: HTTP ${srcRes.status}`);
+        await Deno.writeFile(tmpIn, new Uint8Array(await srcRes.arrayBuffer()));
+        console.log(`[clip_video] Downloaded. Cutting ${start}s → ${end}s (${duration}s)`);
+
+        // ffmpeg: fast stream-copy cut — no re-encode, instant
+        const cmd = new Deno.Command('ffmpeg', {
+          args: [
+            '-y',
+            '-ss', String(Math.round(start)),
+            '-i', tmpIn,
+            '-t',  String(duration),
+            '-c',  'copy',           // stream copy = fast, no quality loss
+            '-movflags', '+faststart',
+            '-f', 'mp4',
+            tmpOut,
+          ],
+          stdout: 'piped',
+          stderr: 'piped',
+        });
+
+        const proc = cmd.spawn();
+        // drain stdout
+        const stdoutReader = proc.stdout.getReader();
+        while (true) { const { done } = await stdoutReader.read(); if (done) break; }
+        const status = await proc.status;
+
+        if (!status.success) {
+          const errText = new TextDecoder().decode((await proc.stderr.getReader().read()).value || new Uint8Array());
+          throw new Error(`ffmpeg failed: ${errText.slice(0, 300)}`);
+        }
+
+        // Upload cut clip to Bunny
+        const clipName   = `clips/clip_${Date.now()}_${Math.round(start)}s_${duration}s.mp4`;
+        const uploadUrl  = `https://${bunnyHost}/${bunnyZone}/${clipName}`;
+        const clipBytes  = await Deno.readFile(tmpOut);
+
+        console.log(`[clip_video] Uploading ${(clipBytes.length / 1024 / 1024).toFixed(1)}MB to Bunny`);
+        const upRes = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: { 'AccessKey': bunnyPass, 'Content-Type': 'video/mp4' },
+          body: clipBytes,
+        });
+
+        if (!upRes.ok) throw new Error(`Bunny upload failed: HTTP ${upRes.status}`);
+
+        const clip_url = `${bunnyCdn}/${clipName}`;
+        console.log(`[clip_video] Done: ${clip_url}`);
+        return Response.json({ success: true, clip_url, duration });
+
+      } finally {
+        try { await Deno.remove(tmpIn);  } catch (_) {}
+        try { await Deno.remove(tmpOut); } catch (_) {}
+      }
+    }
+
     return Response.json({ error: 'Invalid action. Use submit or poll' }, { status: 400 });
 
   } catch (error) {
