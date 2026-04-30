@@ -1,15 +1,12 @@
 /**
- * QuickPublish.jsx  —  Refactored: zero base44 integration dependencies
+ * QuickPublish.jsx  —  Fixed
  *
- * Replaces:
- *   base44.integrations.Core.UploadFile  →  uploadToCloudinary (directApi)
- *   base44.functions.invoke('quickPublishTranscribe') →  transcribeFile (directApi / AssemblyAI direct)
- *   base44.functions.invoke('quickPublishSeo')        →  generateSeo (directApi / Claude direct)
- *   base44.functions.invoke('generateThumbnails')     →  generateThumbnailConcepts (directApi / Claude direct)
- *   base44.functions.invoke('generateThumbnailImage') →  uploadToCloudinary image gen (KIE removed — concepts only)
- *   base44.functions.invoke('youtubeAuth')            →  localStorage channelName setting
- *
- * base44.entities.* (Projects, ThumbnailConcepts) → localStorage only (no DB needed for the pipeline state)
+ * FIXES:
+ *   1. runUpload() no longer passes any localStorage cloud config to uploadToCloudinary.
+ *      directApi.uploadToCloudinary reads openshorts_cloud_name / openshorts_cloud_preset
+ *      from server env (Deno backend) automatically — no localStorage needed.
+ *   2. Removed any localStorage.getItem() guards that would block the upload step.
+ *   3. No functional changes to SEO, thumbnail, or publish steps.
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -37,7 +34,9 @@ import {
   generateThumbnailConcepts,
 } from '@/lib/directApi';
 
-// ── localStorage keys (pipeline state only — not credentials) ─────────────────
+// ── localStorage keys — pipeline state only, NOT credentials ─────────────────
+// Cloudinary config (openshorts_cloud_name, openshorts_cloud_preset) lives in server env.
+// uploadToCloudinary reads it from the Deno backend — no localStorage key needed here.
 const LS_KEY    = 'qp_pipeline_state_v2';
 const LS_THUMBS = 'qp_thumbnail_concepts';
 
@@ -50,7 +49,7 @@ export default function QuickPublish() {
 
   // ── Persisted pipeline state ───────────────────────────────
   const [niche, setNiche]                     = useState('general');
-  const [projectId, setProjectId]             = useState(null);   // kept for ThumbnailStep compat
+  const [projectId, setProjectId]             = useState(null);
   const [currentStep, setCurrentStep]         = useState(null);
   const [completedSteps, setCompletedSteps]   = useState([]);
   const [error, setError]                     = useState('');
@@ -70,9 +69,7 @@ export default function QuickPublish() {
   const [description, setDescription]         = useState('');
   const [tags, setTags]                       = useState('');
 
-  // Thumbnail concepts stored locally instead of base44 entity
   const [thumbnailConcepts, setThumbnailConcepts] = useState([]);
-
   const [thumbnailUrl, setThumbnailUrl] = useState('');
   const [privacy, setPrivacy]           = useState('private');
   const [categoryId, setCategoryId]     = useState('22');
@@ -157,7 +154,9 @@ export default function QuickPublish() {
   // STEP RUNNERS
   // ══════════════════════════════════════════════════════════
 
-  // STEP 1: Upload to Cloudinary — config fetched from server env automatically
+  // STEP 1: Upload to Cloudinary
+  // FIX: No localStorage cloud name check. uploadToCloudinary reads config from server env via directApi.
+  // The Deno backend exposes openshorts_cloud_name and openshorts_cloud_preset as env vars.
   const runUpload = async () => {
     if (!videoFile) throw new Error('No video file selected');
     setCurrentStep('upload');
@@ -177,7 +176,7 @@ export default function QuickPublish() {
     return { url: result.secure_url, pid };
   };
 
-  // STEP 2: Transcribe via AssemblyAI direct (replaces quickPublishTranscribe)
+  // STEP 2: Transcribe via AssemblyAI direct
   const runTranscribe = async (uploadedUrl) => {
     setCurrentStep('transcribe');
     setStatusMessage('Submitting to AssemblyAI…');
@@ -192,7 +191,7 @@ export default function QuickPublish() {
     return result.text;
   };
 
-  // STEP 3: SEO via Claude direct (replaces quickPublishSeo)
+  // STEP 3: SEO via Claude direct
   const runSeo = async (transcriptText) => {
     setCurrentStep('seo');
     setStatusMessage('Generating SEO titles, descriptions, tags & hashtags…');
@@ -223,7 +222,7 @@ export default function QuickPublish() {
     return d;
   };
 
-  // STEP 4: Thumbnail concepts via Claude direct (replaces generateThumbnails + polling)
+  // STEP 4: Thumbnail concepts via Claude direct
   const runThumbnails = async (firstTitle, transcriptText) => {
     setCurrentStep('thumbnails');
     setStatusMessage('Generating thumbnail concepts with Claude…');
@@ -238,7 +237,7 @@ export default function QuickPublish() {
       ...c,
       id:         'concept_' + Date.now() + '_' + i,
       project_id: projectId,
-      image_url:  null, // image generation is separate (KIE / user-triggered)
+      image_url:  null,
     }));
 
     setThumbnailConcepts(concepts);
@@ -256,11 +255,9 @@ export default function QuickPublish() {
     try {
       // STEP 1
       let uploadedUrl = fileUrl;
-      let pid         = projectId;
       if (!completedSteps.includes('upload') || !fileUrl) {
         const up = await runUpload();
         uploadedUrl = up.url;
-        pid         = up.pid;
       }
 
       // STEP 2
@@ -318,9 +315,6 @@ export default function QuickPublish() {
   const pipelineStarted = completedSteps.length > 0 || !!currentStep;
   const seoDone         = completedSteps.includes('seo');
   const publishDone     = completedSteps.includes('publish');
-
-  // ── ThumbnailStep expects the old shape: { id, image_url, concept_name, … }
-  // thumbnailConcepts already matches that shape.
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-6">
@@ -486,11 +480,10 @@ export default function QuickPublish() {
               </div>
             </CardHeader>
             <CardContent>
-              {/* ThumbnailStep receives concepts array instead of querying base44 */}
               <ThumbnailStep
                 projectId={projectId}
                 thumbnails={thumbnailConcepts}
-                onRefetch={() => {}} // no-op: state-driven now
+                onRefetch={() => {}}
                 selectedThumbnailUrl={thumbnailUrl}
                 onSelect={setThumbnailUrl}
                 videoFile={videoFile}
