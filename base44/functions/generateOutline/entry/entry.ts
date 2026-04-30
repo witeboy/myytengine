@@ -59,11 +59,10 @@ function pickProtagonistName(topicTitle) {
 Deno.serve(async (req) => {
   try {
     // ── BUNNY CONFIG ROUTE ─────────────────────────────────────────
-    // Read body once, check for sentinel field before auth.
-    let parsedBody = {};
-    try { parsedBody = await req.json(); } catch (_) {}
-
-    if (parsedBody.__bunny_config === true) {
+    // Detected by action field in body — runs before auth, returns
+    // env vars so the browser can upload directly to Bunny via XHR.
+    const url = new URL(req.url);
+    if (url.searchParams.get('action') === 'bunny_config') {
       return Response.json({
         storage_zone:     Deno.env.get('BUNNY_STORAGE_ZONE')     || '',
         storage_password: Deno.env.get('BUNNY_STORAGE_PASSWORD') || '',
@@ -77,7 +76,7 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, topic_id, topic_title, niche, duration_minutes } = parsedBody;
+    const { project_id, topic_id, topic_title, niche, duration_minutes } = await req.json();
 
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
     const project = projects[0];
