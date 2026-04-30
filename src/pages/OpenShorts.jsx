@@ -332,25 +332,163 @@ function YouTubeClipCard({ clip, index, ytUrl }) {
   );
 }
 
-// ── DownloadClipButton — browser-side canvas portrait crop ─────────────
-// Records the clip by playing it in a hidden video, drawing each frame
-// onto a 720x1280 canvas (centered 9:16 crop), then saves as webm.
-// Real-time: a 35s clip takes 35s to record. Progress bar shows status.
+// ── MP4Box lazy loader ─────────────────────────────────────────────────
+let _mp4boxCache = null;
+async function loadMP4Box() {
+  if (_mp4boxCache) return _mp4boxCache;
+  await new Promise((resolve, reject) => {
+    if (window.MP4Box) { _mp4boxCache = window.MP4Box; resolve(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/mp4box@0.5.2/dist/mp4box.all.min.js';
+    s.onload = () => { _mp4boxCache = window.MP4Box; resolve(); };
+    s.onerror = () => reject(new Error('Failed to load MP4Box'));
+    document.head.appendChild(s);
+  });
+  return _mp4boxCache;
+}
+
+// ── MP4 demuxer ────────────────────────────────────────────────────────
+function demuxMP4(MP4Box, arrayBuffer, clipStart, clipEnd) {
+  return new Promise((resolve, reject) => {
+    const file = MP4Box.createFile();
+    let codec = null, width = 0, height = 0, videoTrackId = null;
+
+    file.onReady = (info) => {
+      const track = info.tracks.find(t => t.type === 'video');
+      if (!track) return reject(new Error('No video track found in file'));
+      videoTrackId = track.id;
+      codec        = track.codec;
+      width        = track.video.width;
+      height       = track.video.height;
+      file.setExtractionOptions(videoTrackId, null, { nbSamples: 2000 });
+      file.start();
+    };
+
+    const allSamples = [];
+    file.onSamples = (_id, _user, samples) => {
+      for (const s of samples) {
+        const timeSec = s.cts / s.timescale;
+        if (timeSec >= clipStart - 1.0 && timeSec <= clipEnd + 0.5) {
+          const data = new Uint8Array(s.data.byteLength);
+          data.set(new Uint8Array(s.data));
+          allSamples.push({ ...s, data });
+        }
+      }
+    };
+
+    file.onFlush = () => resolve({ codec, samples: allSamples, width, height });
+    file.onError = (e) => reject(new Error('MP4Box error: ' + e));
+
+    const buf = arrayBuffer.slice(0);
+    buf.fileStart = 0;
+    file.appendBuffer(buf);
+    file.flush();
+  });
+}
+
+// ── Silent fallback recorder (muted hidden video, real-time) ───────────
+async function fallbackSilentRecord({ src, clipStart, clipEnd, index, setStatus, setProgress }) {
+  try {
+    const clipDuration = clipEnd - clipStart;
+    const video = document.createElement('video');
+    video.src         = src;
+    video.crossOrigin = 'anonymous';
+    video.preload     = 'auto';
+    video.muted       = true;
+    video.volume      = 0;
+    video.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;';
+    document.body.appendChild(video);
+
+    await new Promise((res, rej) => {
+      video.onloadedmetadata = res;
+      video.onerror = rej;
+      setTimeout(res, 12000);
+    });
+
+    video.currentTime = clipStart;
+    await new Promise(r => { video.onseeked = r; setTimeout(r, 1500); });
+
+    const OUT_W = 720, OUT_H = 1280;
+    const canvas = document.createElement('canvas');
+    canvas.width = OUT_W; canvas.height = OUT_H;
+    const ctx  = canvas.getContext('2d');
+    const srcH = video.videoHeight || 1080;
+    const srcW = Math.round(srcH * 9 / 16);
+    const srcX = Math.round(((video.videoWidth || 1920) - srcW) / 2);
+
+    let painting = true;
+    const paint = () => {
+      if (!painting) return;
+      try { ctx.drawImage(video, srcX, 0, srcW, srcH, 0, 0, OUT_W, OUT_H); } catch (_) {}
+      requestAnimationFrame(paint);
+    };
+    requestAnimationFrame(paint);
+
+    const stream   = canvas.captureStream(30);
+    const mimeType = ['video/webm;codecs=vp9','video/webm'].find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4_000_000 });
+    const recChunks = [];
+    recorder.ondataavailable = e => { if (e.data?.size > 0) recChunks.push(e.data); };
+    const recDone = new Promise(res => { recorder.onstop = res; });
+
+    const stopAll = () => {
+      painting = false;
+      video.pause();
+      if (recorder.state === 'recording') recorder.stop();
+      stream.getTracks().forEach(t => t.stop());
+      if (document.body.contains(video)) document.body.removeChild(video);
+    };
+
+    recorder.start(250);
+    video.play();
+
+    await new Promise(resolve => {
+      const iv = setInterval(() => {
+        const elapsed = Math.max(0, video.currentTime - clipStart);
+        setProgress(Math.min(99, Math.round((elapsed / clipDuration) * 100)));
+        if (video.currentTime >= clipEnd - 0.15 || video.ended) { clearInterval(iv); stopAll(); resolve(); }
+      }, 200);
+      setTimeout(() => { clearInterval(iv); stopAll(); resolve(); }, (clipDuration + 8) * 1000);
+    });
+
+    await recDone;
+    setProgress(100);
+
+    const blob = new Blob(recChunks, { type: mimeType });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `clip_${index + 1}_${Math.round(clipStart)}s_portrait.webm`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
+
+    setStatus('done');
+    setTimeout(() => { setStatus('idle'); setProgress(0); }, 4000);
+  } catch (e) {
+    console.error('Fallback recorder failed:', e);
+    setStatus('idle');
+    setProgress(0);
+  }
+}
+
+// ── DownloadClipButton — WebCodecs fast decode + portrait crop ─────────
+// Uses VideoDecoder + OffscreenCanvas to decode frames at CPU speed
+// without playing the video. Falls back to silent hidden recorder on
+// Firefox/Safari which lack VideoDecoder support.
 function DownloadClipButton({ src, clipStart, clipEnd, index }) {
-  const [status, setStatus]     = useState('idle'); // idle | recording | done | error
+  const [status, setStatus]     = useState('idle');
   const [progress, setProgress] = useState(0);
 
   const handleDownload = async () => {
     if (!src || clipEnd == null) return;
 
-    // Check browser support
-    const testVid = document.createElement('video');
-    const hasCaptureStream = !!(testVid.captureStream || testVid.mozCaptureStream);
-    const hasMediaRecorder  = typeof MediaRecorder !== 'undefined';
+    const hasWebCodecs = typeof VideoDecoder !== 'undefined'
+                      && typeof OffscreenCanvas !== 'undefined';
 
-    if (!hasCaptureStream || !hasMediaRecorder) {
-      // Fallback: open full video at timestamp
-      window.open(`${src}#t=${clipStart}`, '_blank');
+    if (!hasWebCodecs) {
+      setStatus('recording');
+      setProgress(0);
+      await fallbackSilentRecord({ src, clipStart, clipEnd, index, setStatus, setProgress });
       return;
     }
 
@@ -358,123 +496,125 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
     setProgress(0);
 
     try {
-      const clipDuration = clipEnd - clipStart;
+      // ── Step 1: Fetch video bytes with progress ──────────────────
+      const resp = await fetch(src, { mode: 'cors' });
+      if (!resp.ok) throw new Error(`Fetch failed: HTTP ${resp.status}`);
 
-      // Create hidden video element
-      const video = document.createElement('video');
-      video.src         = src;
-      video.crossOrigin = 'anonymous';
-      video.preload     = 'auto';
-      video.muted       = false;
+      const totalBytes = Number(resp.headers.get('content-length') || 0);
+      const reader     = resp.body.getReader();
+      const chunks     = [];
+      let   received   = 0;
 
-      // Wait for metadata
-      await new Promise((resolve, reject) => {
-        video.onloadedmetadata = resolve;
-        video.onerror = () => reject(new Error('Video failed to load — CORS may be blocking access'));
-        setTimeout(() => reject(new Error('Metadata load timeout')), 15000);
-      });
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        received += value.length;
+        if (totalBytes > 0) setProgress(2 + Math.round((received / totalBytes) * 16));
+      }
+      setProgress(18);
 
-      // Seek to clip start
-      video.currentTime = clipStart;
-      await new Promise(r => {
-        video.onseeked = r;
-        setTimeout(r, 1500); // fallback if onseeked doesn't fire
-      });
+      const arrayBuffer = await new Blob(chunks).arrayBuffer();
+      setProgress(20);
 
-      // ── Canvas portrait crop: centered 9:16 from 16:9 source ──
-      const OUT_W = 720;
-      const OUT_H = 1280;
+      // ── Step 2: Demux with MP4Box ────────────────────────────────
+      const MP4Box = await loadMP4Box();
+      const { codec, samples, width, height } = await demuxMP4(MP4Box, arrayBuffer, clipStart, clipEnd);
+      setProgress(25);
 
-      const canvas  = document.createElement('canvas');
-      canvas.width  = OUT_W;
-      canvas.height = OUT_H;
-      const ctx     = canvas.getContext('2d');
+      if (!samples.length) throw new Error('No video samples found in clip range');
 
-      // Source crop rect: take center column at 9:16 ratio
-      const srcH = video.videoHeight || 1080;
+      // ── Step 3: OffscreenCanvas for portrait crop ────────────────
+      const OUT_W  = 720;
+      const OUT_H  = 1280;
+      const offscreen = new OffscreenCanvas(OUT_W, OUT_H);
+      const offCtx    = offscreen.getContext('2d');
+
+      const srcH = height;
       const srcW = Math.round(srcH * 9 / 16);
-      const srcX = Math.round(((video.videoWidth || 1920) - srcW) / 2);
-      const srcY = 0;
+      const srcX = Math.round((width - srcW) / 2);
 
-      // Paint frames via rAF
-      let painting = true;
-      const paintFrame = () => {
-        if (!painting) return;
-        try {
-          ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, OUT_W, OUT_H);
-        } catch (_) {}
-        requestAnimationFrame(paintFrame);
-      };
-      requestAnimationFrame(paintFrame);
+      // Visible canvas for captureStream (OffscreenCanvas can't captureStream)
+      const visCanvas = document.createElement('canvas');
+      visCanvas.width  = OUT_W;
+      visCanvas.height = OUT_H;
+      visCanvas.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;';
+      document.body.appendChild(visCanvas);
+      const visCtx = visCanvas.getContext('2d');
 
-      // Capture canvas stream at 30fps
-      const canvasStream = canvas.captureStream(30);
+      // ── Step 4: MediaRecorder on canvas stream ───────────────────
+      const mimeType = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm']
+        .find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
 
-      // Add audio from video
-      const audioStream = video.captureStream
-        ? video.captureStream()
-        : video.mozCaptureStream();
-      audioStream.getAudioTracks().forEach(t => canvasStream.addTrack(t));
-
-      // Pick best mime type
-      const mimeType = [
-        'video/webm;codecs=vp9,opus',
-        'video/webm;codecs=vp8,opus',
-        'video/webm',
-        'video/mp4',
-      ].find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
-
-      const chunks   = [];
-      const recorder = new MediaRecorder(canvasStream, { mimeType });
-      recorder.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
-
-      const recordingDone = new Promise((resolve, reject) => {
-        recorder.onstop  = resolve;
-        recorder.onerror = e => reject(new Error(e.error?.message || 'MediaRecorder error'));
+      const stream    = visCanvas.captureStream(30);
+      const recorder  = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4_000_000 });
+      const recChunks = [];
+      recorder.ondataavailable = e => { if (e.data?.size > 0) recChunks.push(e.data); };
+      const recDone = new Promise((res, rej) => {
+        recorder.onstop  = res;
+        recorder.onerror = e => rej(new Error(e.error?.message || 'Recorder error'));
       });
 
-      const stopAll = () => {
-        painting = false;
-        video.pause();
-        if (recorder.state === 'recording') recorder.stop();
-        canvasStream.getTracks().forEach(t => t.stop());
-        audioStream.getTracks().forEach(t => t.stop());
-      };
+      recorder.start(100);
 
-      recorder.start(250);
-      video.play();
+      // ── Step 5: Decode frames via VideoDecoder ───────────────────
+      let decodedCount = 0;
+      const totalFrames = samples.length;
 
-      // Monitor progress and stop at clipEnd
-      await new Promise((resolve) => {
-        const interval = setInterval(() => {
-          const elapsed = Math.max(0, video.currentTime - clipStart);
-          setProgress(Math.min(99, Math.round((elapsed / clipDuration) * 100)));
+      await new Promise((resolve, reject) => {
+        const decoder = new VideoDecoder({
+          output: (frame) => {
+            try {
+              offCtx.drawImage(frame, srcX, 0, srcW, srcH, 0, 0, OUT_W, OUT_H);
+              visCtx.drawImage(offscreen, 0, 0);
+            } catch (_) {}
+            frame.close();
+            decodedCount++;
+            setProgress(25 + Math.min(70, Math.round((decodedCount / totalFrames) * 70)));
+          },
+          error: (e) => reject(new Error('VideoDecoder: ' + e.message)),
+        });
 
-          if (video.currentTime >= clipEnd - 0.15 || video.ended) {
-            clearInterval(interval);
-            stopAll();
+        decoder.configure({
+          codec,
+          codedWidth:         width,
+          codedHeight:        height,
+          optimizeForLatency: true,
+        });
+
+        (async () => {
+          try {
+            for (const sample of samples) {
+              decoder.decode(new EncodedVideoChunk({
+                type:      sample.is_sync ? 'key' : 'delta',
+                timestamp: Math.round(sample.cts * 1_000_000 / sample.timescale),
+                duration:  Math.round(sample.duration * 1_000_000 / sample.timescale),
+                data:      sample.data,
+              }));
+              // Yield periodically to keep UI responsive
+              if (decodedCount % 30 === 0) await new Promise(r => setTimeout(r, 0));
+            }
+            await decoder.flush();
+            decoder.close();
             resolve();
-          }
-        }, 200);
-
-        // Safety timeout: clip duration + 8s buffer
-        setTimeout(() => {
-          clearInterval(interval);
-          stopAll();
-          resolve();
-        }, (clipDuration + 8) * 1000);
+          } catch (e) { reject(e); }
+        })();
       });
 
-      await recordingDone;
+      // Stop recorder and clean up
+      recorder.stop();
+      stream.getTracks().forEach(t => t.stop());
+      if (document.body.contains(visCanvas)) document.body.removeChild(visCanvas);
+
+      await recDone;
       setProgress(100);
 
-      // Trigger file download
-      const ext  = mimeType.includes('mp4') ? 'mp4' : 'webm';
-      const blob = new Blob(chunks, { type: mimeType });
+      // ── Step 6: Trigger download ─────────────────────────────────
+      const blob = new Blob(recChunks, { type: mimeType });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
       a.href     = url;
-      a.download = `clip_${index + 1}_${Math.round(clipStart)}s_portrait.${ext}`;
+      a.download = `clip_${index + 1}_${Math.round(clipStart)}s_portrait.webm`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -484,17 +624,16 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
       setTimeout(() => { setStatus('idle'); setProgress(0); }, 4000);
 
     } catch (e) {
-      console.error('Portrait clip failed:', e.message);
-      setStatus('error');
-      // Fallback: open full video at timestamp
-      window.open(`${src}#t=${clipStart}`, '_blank');
-      setTimeout(() => { setStatus('idle'); setProgress(0); }, 3000);
+      console.error('WebCodecs clip failed:', e.message);
+      // Clean up any stray canvas
+      document.querySelectorAll('canvas[style*="-9999px"]').forEach(el => el.remove());
+      // Fall back to silent real-time recorder
+      await fallbackSilentRecord({ src, clipStart, clipEnd, index, setStatus, setProgress });
     }
   };
 
   const label = status === 'recording' ? `${progress}%`
               : status === 'done'      ? 'Saved!'
-              : status === 'error'     ? 'Failed'
               : 'Download';
 
   return (
@@ -505,14 +644,13 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
     >
       {status === 'recording' && (
         <div
-          className="absolute inset-0 bg-emerald-200 rounded-xl transition-all duration-300"
+          className="absolute inset-0 bg-emerald-200 rounded-xl transition-all duration-200"
           style={{ width: `${progress}%` }}
         />
       )}
       <span className="relative flex items-center gap-1">
         {status === 'recording' ? <Loader2 size={10} className="animate-spin" /> :
          status === 'done'      ? <Check size={10} /> :
-         status === 'error'     ? <AlertCircle size={10} /> :
          <Download size={10} />}
         {label}
       </span>
