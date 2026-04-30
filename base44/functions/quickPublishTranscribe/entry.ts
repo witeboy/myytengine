@@ -21,6 +21,87 @@ Deno.serve(async (req) => {
         cdn_url:          Deno.env.get('BUNNY_CDN_URL')          || '',
       });
     }
+
+    // ── EXTRACT BEST MOMENTS ROUTE ────────────────────────────────
+    if (body.action === 'extract_best_moments') {
+      const { transcript, words = [], duration = 0, max_clips = 5, clip_min_sec = 15, clip_max_sec = 60 } = body;
+      if (!transcript || transcript.length < 200) {
+        return Response.json({ error: 'Transcript too short' }, { status: 400 });
+      }
+      const GEMINI_KEY = Deno.env.get('GEMINI_API_KEY');
+      if (!GEMINI_KEY) return Response.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 });
+
+      const WINDOW = 10;
+      const blocks = [];
+      let currentStart = 0;
+      let currentText = [];
+      for (const w of words) {
+        if (w.start - currentStart >= WINDOW && currentText.length) {
+          blocks.push({ start: currentStart, end: w.start, text: currentText.join(' ') });
+          currentStart = w.start;
+          currentText = [];
+        }
+        currentText.push(w.word);
+      }
+      if (currentText.length) blocks.push({ start: currentStart, end: duration || currentStart + WINDOW, text: currentText.join(' ') });
+      const timestampedBlock = blocks.map(b => `[${b.start.toFixed(1)}s-${b.end.toFixed(1)}s] ${b.text}`).join('\n')
+        || `(no word timestamps)\n\n${transcript.slice(0, 12000)}`;
+
+      const prompt = `You are a viral Shorts producer. Identify the ${max_clips} BEST moments that could be standalone Shorts. Each clip must be ${clip_min_sec}-${clip_max_sec} seconds long.
+
+TRANSCRIPT WITH TIMESTAMPS:
+"""
+${timestampedBlock.slice(0, 40000)}
+"""
+Total duration: ${duration}s
+
+Score each clip on: hook(1-10), payoff, standalone, quotability, emotional_peak, curiosity_loop, specificity.
+
+Return JSON:
+{
+  "clips": [{
+    "rank": 1, "start_time": 42.3, "end_time": 88.7, "duration": 46.4,
+    "title": "Short title under 60 chars",
+    "hook_sentence": "Exact opening words",
+    "overall_score": 9.2,
+    "scores": { "hook": 9, "payoff": 10, "standalone": 9, "quotability": 9, "emotional_peak": 8, "curiosity_loop": 10, "specificity": 9 },
+    "caption_style": "hormozi",
+    "platform": "all",
+    "viral_reasoning": "One sentence why this goes viral"
+  }]
+}`;
+
+      const geminiRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 8192, responseMimeType: 'application/json' },
+          }),
+        }
+      );
+      if (!geminiRes.ok) throw new Error(`Gemini ${geminiRes.status}: ${(await geminiRes.text()).slice(0, 200)}`);
+      const geminiData = await geminiRes.json();
+      const raw = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+      let parsed;
+      try { parsed = JSON.parse(raw); }
+      catch (_) {
+        const match = raw.match(/\{[\s\S]*\}/);
+        if (match) parsed = JSON.parse(match[0]);
+        else return Response.json({ error: 'Failed to parse Gemini response' }, { status: 500 });
+      }
+
+      const clips = (parsed.clips || [])
+        .map((c, i) => ({ ...c, rank: c.rank || (i + 1), duration: c.duration || (c.end_time - c.start_time) }))
+        .filter(c => { const d = c.end_time - c.start_time; return d >= clip_min_sec - 2 && d <= clip_max_sec + 5; })
+        .sort((a, b) => (b.overall_score || 0) - (a.overall_score || 0));
+
+      return Response.json({ success: true, clips, source_duration: duration });
+    }
+    // ── END EXTRACT BEST MOMENTS ROUTE ───────────────────────────
     // ── END BUNNY CONFIG ROUTE ─────────────────────────────────────
 
     const base44 = createClientFromRequest(req);
