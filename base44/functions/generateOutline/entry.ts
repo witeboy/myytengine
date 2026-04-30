@@ -62,10 +62,15 @@ Deno.serve(async (req) => {
     // directApi.js calls base44.functions.invoke('generateOutline', {...})
     // with file_data_base64 present — handle it here and return early.
     const contentType = req.headers.get('content-type') || '';
-    let bodyText;
-    try { bodyText = await req.text(); } catch (_) { bodyText = '{}'; }
     let parsedBody = {};
-    try { parsedBody = JSON.parse(bodyText); } catch (_) {}
+    try {
+      parsedBody = await req.json();
+    } catch (_) {
+      try {
+        const t = await req.text();
+        parsedBody = t ? JSON.parse(t) : {};
+      } catch (_) {}
+    }
 
     if (parsedBody.file_data_base64) {
       const storageZone = Deno.env.get('BUNNY_STORAGE_ZONE');
