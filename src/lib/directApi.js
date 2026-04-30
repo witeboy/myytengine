@@ -1,9 +1,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // directApi.js
 // - Cloudinary: direct browser upload (cloud name from localStorage/Settings)
-// - AssemblyAI: via existing quickPublishTranscribe backend function (has the key)
-// - Cobalt: via existing cobaltExtract backend function (has the key)  
-// - Claude: direct browser call via artifact proxy (no key needed)
+// - AssemblyAI: via quickPublishTranscribe backend function (has the key)
+// - Cobalt: via cobaltExtract backend function (has the key)
+// - Claude: via callClaudeProxy backend function (reads ANTHROPIC_API_KEY from env)
+//
+// FIX: Removed direct fetch to api.anthropic.com which is blocked by CORS.
+//      Claude calls now go through base44.functions.invoke('callClaudeProxy')
+//      which runs server-side in Deno with the ANTHROPIC_API_KEY env var.
 // ─────────────────────────────────────────────────────────────────────────────
 import { base44 } from '@/api/base44Client';
 
@@ -14,7 +18,6 @@ export const LS_KEYS = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. CLOUDINARY — direct browser upload using cloud name from localStorage
-//    (only credential that must be browser-side for direct XHR upload)
 // ─────────────────────────────────────────────────────────────────────────────
 export const getCloudinaryConfig = () => ({
   cloudName:   localStorage.getItem(LS_KEYS.CLOUD_NAME)   || '',
@@ -56,13 +59,10 @@ export const buildCloudinaryClipUrl = (publicId, cloudName, start, end) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. ASSEMBLYAI — via quickPublishTranscribe backend (ASSEMBLYAI_API_KEY lives there)
-//    submit: pass a public URL → get transcript_id
-//    poll:   pass transcript_id → get completed transcript
 // ─────────────────────────────────────────────────────────────────────────────
 export const transcribeFile = async (fileOrUrl, onStatus) => {
   let audioUrl = fileOrUrl;
 
-  // If given a File/Blob, upload to Cloudinary first to get a public URL
   if (fileOrUrl instanceof File || fileOrUrl instanceof Blob) {
     if (onStatus) onStatus('Uploading to Cloudinary...');
     const uploaded = await uploadToCloudinary(fileOrUrl, {
@@ -74,7 +74,6 @@ export const transcribeFile = async (fileOrUrl, onStatus) => {
 
   if (onStatus) onStatus('Submitting to AssemblyAI...');
 
-  // Submit via backend — it has ASSEMBLYAI_API_KEY in env
   const submitRes = await base44.functions.invoke('quickPublishTranscribe', {
     action:   'submit',
     file_url: audioUrl,
@@ -82,7 +81,6 @@ export const transcribeFile = async (fileOrUrl, onStatus) => {
   const transcriptId = submitRes.data?.transcript_id;
   if (!transcriptId) throw new Error(submitRes.data?.error || 'Transcription submit failed — no transcript ID returned');
 
-  // Poll via backend
   const startedAt = Date.now();
   for (let attempts = 0; attempts < 180; attempts++) {
     const interval = attempts < 12 ? 5000 : attempts < 60 ? 10000 : 15000;
@@ -115,7 +113,7 @@ export const transcribeFile = async (fileOrUrl, onStatus) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. COBALT — via cobaltExtract backend function (COBALT_API_URL lives there)
+// 3. COBALT — via cobaltExtract backend function
 // ─────────────────────────────────────────────────────────────────────────────
 export const extractYouTubeAudio = async (youtubeUrl) => {
   const res = await base44.functions.invoke('cobaltExtract', { url: youtubeUrl });
@@ -125,22 +123,23 @@ export const extractYouTubeAudio = async (youtubeUrl) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 4. ANTHROPIC — direct browser call via artifact proxy (no key needed)
+// 4. CLAUDE — via callClaudeProxy Deno backend function (no CORS)
+//
+// Routes through base44.functions.invoke('callClaudeProxy').
+// That backend reads ANTHROPIC_API_KEY from Deno.env and calls
+// api.anthropic.com server-to-server — identical to generateScenePrompts.js.
 // ─────────────────────────────────────────────────────────────────────────────
 const callClaude = async (system, user, { maxTokens = 2000 } = {}) => {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model:      'claude-sonnet-4-20250514',
-      max_tokens: maxTokens,
-      system,
-      messages:   [{ role: 'user', content: user }],
-    }),
+  const res = await base44.functions.invoke('callClaudeProxy', {
+    system,
+    prompt:     user,
+    max_tokens: maxTokens,
   });
-  const data = await res.json();
-  if (data.error) throw new Error('Claude error: ' + (data.error.message || JSON.stringify(data.error)));
-  return (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+
+  if (res.data?.error) throw new Error('Claude error: ' + res.data.error);
+  const text = res.data?.text || res.data?.content || res.data?.result || '';
+  if (!text) throw new Error('callClaudeProxy returned empty response: ' + JSON.stringify(res.data).slice(0, 200));
+  return text;
 };
 
 const parseJson = (raw) => {
