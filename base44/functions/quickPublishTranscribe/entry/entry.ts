@@ -8,11 +8,25 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 Deno.serve(async (req) => {
   try {
+    // ── BUNNY CONFIG ROUTE ─────────────────────────────────────────
+    // Runs before auth — detected by action: 'bunny_config' in body.
+    let body = {};
+    try { body = await req.json(); } catch (_) {}
+
+    if (body.action === 'bunny_config') {
+      return Response.json({
+        storage_zone:     Deno.env.get('BUNNY_STORAGE_ZONE')     || '',
+        storage_password: Deno.env.get('BUNNY_STORAGE_PASSWORD') || '',
+        storage_region:   Deno.env.get('BUNNY_STORAGE_REGION')   || 'ny',
+        cdn_url:          Deno.env.get('BUNNY_CDN_URL')          || '',
+      });
+    }
+    // ── END BUNNY CONFIG ROUTE ─────────────────────────────────────
+
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const body = await req.json();
     const { action, file_url, transcript_id } = body;
 
     const API_KEY = Deno.env.get('ASSEMBLYAI_API_KEY');
