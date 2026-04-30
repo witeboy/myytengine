@@ -174,35 +174,34 @@ export const analyzeViralMoments = async ({
   transcript, words, duration,
   maxClips = 8, minSeconds = 20, maxSeconds = 60, context = '',
 }) => {
-  const raw = await callClaude(
-    `You are a viral content strategist. Find the most viral moments in a transcript.
-Always respond with valid JSON only — no preamble, no markdown fences.`,
-    `Find the ${maxClips} most viral moments in this video.
-${context ? `Context: ${context}` : ''}
-Duration: ${Math.round(duration)}s. Each clip: ${minSeconds}s-${maxSeconds}s.
+  // Route through the dedicated analyzeViralMoments Deno backend
+  // which calls Claude with max_tokens: 4096 and handles JSON parsing server-side
+  const res = await base44.functions.invoke('analyzeViralMoments', {
+    transcript,
+    words,
+    duration,
+    max_clips:          maxClips,
+    min_clip_seconds:   minSeconds,
+    max_clip_seconds:   maxSeconds,
+    context,
+  });
 
-WORD TIMESTAMPS:
-${JSON.stringify(words.slice(0, 3000))}
+  if (res.data?.error) throw new Error(res.data.error);
 
-TRANSCRIPT:
-${transcript.slice(0, 6000)}
+  const clips = res.data?.clips || [];
+  if (!clips.length) throw new Error('No viral moments found. Try a different video.');
 
-Return JSON:
-{
-  "clips": [{
-    "start": <seconds>, "end": <seconds>, "duration": <seconds>,
-    "virality_score": <1-10>, "virality_reason": "<why>",
-    "viral_hook_text": "<1-line hook>",
-    "category": "<hook|story|insight|controversy|emotional|educational>",
-    "video_title_for_youtube_short": "<title>",
-    "video_description_for_tiktok": "<caption+hashtags>",
-    "video_description_for_instagram": "<caption>"
-  }]
-}
-Sort by virality_score descending.`,
-    { maxTokens: 3000 }
-  );
-  return parseJson(raw);
+  // Normalize field names — backend uses title/hook, frontend expects viral_hook_text etc.
+  return {
+    clips: clips.map(c => ({
+      ...c,
+      viral_hook_text:                   c.hook  || c.viral_hook_text  || '',
+      video_title_for_youtube_short:     c.title || c.video_title_for_youtube_short || '',
+      video_description_for_tiktok:      c.video_description_for_tiktok   || c.title || '',
+      video_description_for_instagram:   c.video_description_for_instagram || c.title || '',
+      virality_reason:                   c.virality_reason || c.transcript_excerpt || '',
+    })),
+  };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
