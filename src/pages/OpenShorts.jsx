@@ -376,13 +376,34 @@ function demuxMP4(MP4Box, arrayBuffer, clipStart, clipEnd) {
       }
     };
 
-    file.onFlush = () => resolve({ codec, samples: allSamples, width, height });
     file.onError = (e) => reject(new Error('MP4Box error: ' + e));
 
-    const buf = arrayBuffer.slice(0);
-    buf.fileStart = 0;
-    file.appendBuffer(buf);
+    try {
+      const buf = arrayBuffer.slice(0);
+      buf.fileStart = 0;
+      file.appendBuffer(buf);
+    } catch (_) {}
+
+    // onFlush is unreliable across MP4Box versions — use a polling approach
+    // after flush() to wait for samples to be extracted
     file.flush();
+
+    // Give MP4Box up to 10s to extract samples, checking every 100ms
+    const waitForSamples = async () => {
+      const deadline = Date.now() + 10000;
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 100));
+        if (allSamples.length > 0 || !videoTrackId) break;
+      }
+      if (!codec) {
+        reject(new Error('MP4Box: could not find video track — file may not be a valid MP4'));
+        return;
+      }
+      resolve({ codec, samples: allSamples, width, height });
+    };
+
+    // Small delay to let onReady + onSamples fire first
+    setTimeout(waitForSamples, 300);
   });
 }
 
