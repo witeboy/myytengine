@@ -284,20 +284,11 @@ Return JSON:
       const tmpOut  = `/tmp/clip_out_${ts}.mp4`;
 
       try {
-        // ── Step 1: Stream download source video to disk (no arrayBuffer) ──
-        console.log(`[clip_video] Streaming source to disk: ${source_url.slice(0, 80)}`);
-        const srcRes = await fetch(source_url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-        if (!srcRes.ok) throw new Error(`Source download failed: HTTP ${srcRes.status}`);
-
-        const fileHandle = await Deno.open(tmpIn, { write: true, create: true });
-        const reader = srcRes.body.getReader();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          await fileHandle.write(value);
-        }
-        fileHandle.close();
-        console.log(`[clip_video] Download complete. Cutting ${start}s → ${end}s (${duration}s) with portrait crop`);
+        // ── Step 1: Feed source URL directly to ffmpeg via HTTP ───
+        // Skip downloading to disk entirely — ffmpeg reads the URL directly.
+        // This avoids all memory and temp file issues with large source videos.
+        console.log(`[clip_video] Source: ${source_url.slice(0, 80)}`);
+        console.log(`[clip_video] Cutting ${start}s → ${end}s (${duration}s) with portrait crop`);
 
         // ── Step 2: ffmpeg — cut + portrait crop 9:16 ─────────────────────
         // Uses .output() which collects stdout+stderr and waits for exit cleanly
@@ -306,7 +297,7 @@ Return JSON:
           args: [
             '-y',
             '-ss', String(Math.floor(start)),
-            '-i', tmpIn,
+            '-i', source_url,
             '-t',  String(duration),
             '-vf', 'crop=ih*9/16:ih,scale=720:1280',
             '-c:v', 'libx264',
@@ -356,7 +347,6 @@ Return JSON:
         return Response.json({ success: true, clip_url, duration });
 
       } finally {
-        try { await Deno.remove(tmpIn);  } catch (_) {}
         try { await Deno.remove(tmpOut); } catch (_) {}
       }
     }
