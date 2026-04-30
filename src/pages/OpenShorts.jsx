@@ -566,11 +566,36 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
       const visCtx = visCanvas.getContext('2d');
 
       // ── Step 4: MediaRecorder on canvas stream ───────────────────
-      const mimeType = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm']
-        .find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+      const mimeType = [
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm',
+      ].find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
 
-      const stream    = visCanvas.captureStream(30);
-      const recorder  = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4_000_000 });
+      // Pipe audio from a hidden video element — WebCodecs decodes video
+      // only; audio needs a separate source synced to the clip window.
+      const audioVideo = document.createElement('video');
+      audioVideo.src         = src;
+      audioVideo.crossOrigin = 'anonymous';
+      audioVideo.muted       = false;
+      audioVideo.volume      = 1;
+      audioVideo.currentTime = clipStart;
+      audioVideo.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;';
+      document.body.appendChild(audioVideo);
+
+      // Wait for audio to seek then get its stream
+      await new Promise(r => { audioVideo.onseeked = r; setTimeout(r, 1500); });
+      const audioStream = audioVideo.captureStream
+        ? audioVideo.captureStream()
+        : audioVideo.mozCaptureStream?.();
+
+      const combinedStream = visCanvas.captureStream(30);
+      // Add audio tracks from the audio video element
+      if (audioStream) {
+        audioStream.getAudioTracks().forEach(t => combinedStream.addTrack(t));
+      }
+
+      const recorder  = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 4_000_000 });
       const recChunks = [];
       recorder.ondataavailable = e => { if (e.data?.size > 0) recChunks.push(e.data); };
       const recDone = new Promise((res, rej) => {
@@ -579,6 +604,8 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
       });
 
       recorder.start(100);
+      // Start playing audio — it runs silently alongside frame decode
+      audioVideo.play().catch(() => {});
 
       // ── Step 5: Decode frames via VideoDecoder ───────────────────
       // Find the last keyframe at or before clipStart so VideoDecoder
@@ -628,8 +655,13 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
             // Feed from the preceding keyframe so the decoder has valid state
             for (let i = keyframeIdx; i < samples.length; i++) {
               const sample = samples[i];
+              // Force the very first fed chunk to be 'key' type — VideoDecoder
+              // requires this after configure(). MP4Box is_sync can be 0/1 or
+              // true/false depending on version; we trust our keyframeIdx search.
+              const isFirst = (i === keyframeIdx);
+              const chunkType = (isFirst || sample.is_sync === true || sample.is_sync === 1) ? 'key' : 'delta';
               decoder.decode(new EncodedVideoChunk({
-                type:      sample.is_sync ? 'key' : 'delta',
+                type:      chunkType,
                 timestamp: Math.round(sample.cts * 1_000_000 / sample.timescale),
                 duration:  Math.round(sample.duration * 1_000_000 / sample.timescale),
                 data:      sample.data,
@@ -646,9 +678,12 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
       });
 
       // Stop recorder and clean up
+      audioVideo.pause();
       recorder.stop();
-      stream.getTracks().forEach(t => t.stop());
-      if (document.body.contains(visCanvas)) document.body.removeChild(visCanvas);
+      combinedStream.getTracks().forEach(t => t.stop());
+      if (audioStream) audioStream.getTracks().forEach(t => t.stop());
+      if (document.body.contains(visCanvas))    document.body.removeChild(visCanvas);
+      if (document.body.contains(audioVideo))   document.body.removeChild(audioVideo);
 
       await recDone;
       setProgress(100);
