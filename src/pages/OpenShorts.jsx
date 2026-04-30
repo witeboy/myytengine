@@ -5,6 +5,7 @@
  * Upload:  Bunny CDN (large file support, server env credentials)
  * Clips:   Bunny CDN URLs with timestamp metadata stored as JSON
  * Library: Project folders grouped by job_id, stored on Bunny as JSON manifest
+ * Download: Browser-side canvas crop to 9:16 portrait via MediaRecorder
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -18,7 +19,7 @@ import {
   AlertCircle, Download, Share2, Instagram, Sparkles, Settings,
   Scissors, Zap, Copy, Check, ChevronDown, ChevronUp,
   Globe, Eye, EyeOff, Flame, Library, Clock,
-  Database, TrendingUp, CloudUpload, Star, Folder, FolderOpen,
+  CloudUpload, Star, Folder, FolderOpen,
   ExternalLink, Mic, Trash2,
 } from 'lucide-react';
 import {
@@ -29,7 +30,7 @@ import {
   analyzeViralMoments,
 } from '@/lib/directApi';
 
-// ── localStorage keys (social posting only — storage is Bunny server-side) ──
+// ── localStorage keys ──────────────────────────────────────────────────
 const LS = {
   UP_KEY:  'openshorts_uploadpost_key',
   UP_USER: 'openshorts_uploadpost_user',
@@ -55,19 +56,19 @@ const formatTime = (secs) => {
 };
 
 const formatDate = (iso) => {
-  try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
-  catch { return ''; }
+  try {
+    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return '';
+  }
 };
 
 // ── Bunny project storage ──────────────────────────────────────────────
-// Projects are stored as a JSON manifest on Bunny CDN via the backend function.
-// Each project = { job_id, project_name, created_at, clips: [...] }
-
 const bunny = {
   async saveProject(project) {
     try {
       await base44.functions.invoke('quickPublishTranscribe', {
-        action:  'bunny_save_project',
+        action: 'bunny_save_project',
         project,
       });
     } catch (e) {
@@ -105,18 +106,18 @@ const saveProject = async (clips, projectName) => {
     job_id:       'os_' + Date.now(),
     project_name: projectName || 'Untitled Project',
     created_at:   new Date().toISOString(),
-    clips:        clips.map((c, i) => ({
-      clip_index:    i,
-      cdn_url:       c.cloudinary_url || c.blobUrl || null,
-      youtube_url:   c.youtube_url    || null,
-      hook_text:     c.viral_hook_text || null,
-      yt_title:      c.video_title_for_youtube_short || null,
-      tiktok_desc:   c.video_description_for_tiktok  || null,
-      ig_desc:       c.video_description_for_instagram || null,
-      virality_score: c.virality_score || null,
-      virality_reason: c.virality_reason || null,
-      start_seconds: c.start ?? null,
-      end_seconds:   c.end   ?? null,
+    clips: clips.map((c, i) => ({
+      clip_index:       i,
+      cdn_url:          c.cloudinary_url || c.blobUrl || null,
+      youtube_url:      c.youtube_url    || null,
+      hook_text:        c.viral_hook_text || null,
+      yt_title:         c.video_title_for_youtube_short || null,
+      tiktok_desc:      c.video_description_for_tiktok  || null,
+      ig_desc:          c.video_description_for_instagram || null,
+      virality_score:   c.virality_score   || null,
+      virality_reason:  c.virality_reason  || null,
+      start_seconds:    c.start ?? null,
+      end_seconds:      c.end   ?? null,
       duration_seconds: (c.end && c.start) ? +(c.end - c.start).toFixed(2) : null,
     })),
   };
@@ -135,8 +136,8 @@ function StageBar({ stageKeys, current, done }) {
   return (
     <div className="flex items-center gap-2 flex-wrap">
       {stageKeys.map((key, i) => {
-        const def   = STAGE_DEFS[key] || { label: key, icon: Sparkles };
-        const Icon  = def.icon;
+        const def    = STAGE_DEFS[key] || { label: key, icon: Sparkles };
+        const Icon   = def.icon;
         const isDone = done.includes(key);
         const isCur  = current === key;
         return (
@@ -198,10 +199,10 @@ function SettingsPanel({ onClose }) {
 
         <div className="space-y-1.5">
           {[
-            { ok: true, label: 'Bunny CDN — storage active (server env)' },
-            { ok: true, label: 'AssemblyAI — transcription active (server env)' },
-            { ok: true, label: 'Claude AI — analysis active (server env)' },
-          ].map(({ ok, label }) => (
+            { label: 'Bunny CDN — storage active (server env)' },
+            { label: 'AssemblyAI — transcription active (server env)' },
+            { label: 'Claude AI — analysis active (server env)' },
+          ].map(({ label }) => (
             <div key={label} className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700">
               <CheckCircle size={11} /> {label}
             </div>
@@ -250,13 +251,15 @@ function YouTubeClipCard({ clip, index, ytUrl }) {
   const [expanded, setExp]  = useState(false);
   const ytId = getYouTubeId(ytUrl || clip.youtube_url || '');
   const dur  = clip.duration_seconds || ((clip.end && clip.start) ? Math.round(clip.end - clip.start) : null);
-
-  const copy = (text, key) => {
-    navigator.clipboard.writeText(text).then(() => { setCopied(key); setTimeout(() => setCopied(null), 2000); });
-  };
-
   const start = clip.start_seconds ?? clip.start ?? 0;
   const end   = clip.end_seconds   ?? clip.end   ?? 0;
+
+  const copy = (text, key) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(key);
+      setTimeout(() => setCopied(null), 2000);
+    });
+  };
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
@@ -294,8 +297,12 @@ function YouTubeClipCard({ clip, index, ytUrl }) {
             <p className="text-xs font-semibold text-gray-800 leading-snug">{clip.hook_text || clip.viral_hook_text}</p>
           </div>
         )}
-        {(clip.yt_title || clip.video_title_for_youtube_short) && <p className="text-xs text-gray-500 line-clamp-2">{clip.yt_title || clip.video_title_for_youtube_short}</p>}
-        {clip.virality_reason && <p className="text-xs text-gray-400 italic border-l-2 border-rose-100 pl-2 leading-relaxed line-clamp-2">{clip.virality_reason}</p>}
+        {(clip.yt_title || clip.video_title_for_youtube_short) && (
+          <p className="text-xs text-gray-500 line-clamp-2">{clip.yt_title || clip.video_title_for_youtube_short}</p>
+        )}
+        {clip.virality_reason && (
+          <p className="text-xs text-gray-400 italic border-l-2 border-rose-100 pl-2 leading-relaxed line-clamp-2">{clip.virality_reason}</p>
+        )}
         <div>
           <button onClick={() => setExp(!expanded)} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
             <Globe size={9} /><span>Platform captions</span>{expanded ? <ChevronUp size={9} /> : <ChevronDown size={9} />}
@@ -303,9 +310,9 @@ function YouTubeClipCard({ clip, index, ytUrl }) {
           {expanded && (
             <div className="mt-2 space-y-1.5">
               {[
-                { icon: <Youtube size={10} className="text-red-500" />,    label: 'YouTube',   text: clip.yt_title || clip.video_title_for_youtube_short,         key: 'yt' },
-                { icon: <TikTokIcon size={10} />,                           label: 'TikTok',    text: clip.tiktok_desc || clip.video_description_for_tiktok,       key: 'tt' },
-                { icon: <Instagram size={10} className="text-pink-500" />, label: 'Instagram', text: clip.ig_desc || clip.video_description_for_instagram,         key: 'ig' },
+                { icon: <Youtube size={10} className="text-red-500" />,    label: 'YouTube',   text: clip.yt_title || clip.video_title_for_youtube_short,   key: 'yt' },
+                { icon: <TikTokIcon size={10} />,                           label: 'TikTok',    text: clip.tiktok_desc || clip.video_description_for_tiktok, key: 'tt' },
+                { icon: <Instagram size={10} className="text-pink-500" />, label: 'Instagram', text: clip.ig_desc || clip.video_description_for_instagram,   key: 'ig' },
               ].filter(x => x.text).map(({ icon, label, text, key }) => (
                 <div key={key} className="bg-gray-50 rounded-lg p-2 group">
                   <div className="flex items-center justify-between mb-0.5">
@@ -325,47 +332,190 @@ function YouTubeClipCard({ clip, index, ytUrl }) {
   );
 }
 
+// ── DownloadClipButton — browser-side canvas portrait crop ─────────────
+// Records the clip by playing it in a hidden video, drawing each frame
+// onto a 720x1280 canvas (centered 9:16 crop), then saves as webm.
+// Real-time: a 35s clip takes 35s to record. Progress bar shows status.
 function DownloadClipButton({ src, clipStart, clipEnd, index }) {
-  const [status, setStatus] = useState('idle'); // idle | cutting | done | error
+  const [status, setStatus]     = useState('idle'); // idle | recording | done | error
+  const [progress, setProgress] = useState(0);
 
   const handleDownload = async () => {
-    setStatus('cutting');
-    try {
-      const res = await base44.functions.invoke('quickPublishTranscribe', {
-        action:     'clip_video',
-        source_url: src,
-        start:      clipStart,
-        end:        clipEnd,
-      });
-      const url = res.data?.clip_url || res.data?.url;
-      if (!url) throw new Error('No clip URL returned');
-      // Trigger download
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `clip_${index + 1}.mp4`;
-      a.target = '_blank';
-      a.click();
-      setStatus('done');
-      setTimeout(() => setStatus('idle'), 3000);
-    } catch (e) {
-      console.error('Clip cut failed:', e);
-      // Fallback: open full video at timestamp so user can at least access it
+    if (!src || clipEnd == null) return;
+
+    // Check browser support
+    const testVid = document.createElement('video');
+    const hasCaptureStream = !!(testVid.captureStream || testVid.mozCaptureStream);
+    const hasMediaRecorder  = typeof MediaRecorder !== 'undefined';
+
+    if (!hasCaptureStream || !hasMediaRecorder) {
+      // Fallback: open full video at timestamp
       window.open(`${src}#t=${clipStart}`, '_blank');
+      return;
+    }
+
+    setStatus('recording');
+    setProgress(0);
+
+    try {
+      const clipDuration = clipEnd - clipStart;
+
+      // Create hidden video element
+      const video = document.createElement('video');
+      video.src         = src;
+      video.crossOrigin = 'anonymous';
+      video.preload     = 'auto';
+      video.muted       = false;
+
+      // Wait for metadata
+      await new Promise((resolve, reject) => {
+        video.onloadedmetadata = resolve;
+        video.onerror = () => reject(new Error('Video failed to load — CORS may be blocking access'));
+        setTimeout(() => reject(new Error('Metadata load timeout')), 15000);
+      });
+
+      // Seek to clip start
+      video.currentTime = clipStart;
+      await new Promise(r => {
+        video.onseeked = r;
+        setTimeout(r, 1500); // fallback if onseeked doesn't fire
+      });
+
+      // ── Canvas portrait crop: centered 9:16 from 16:9 source ──
+      const OUT_W = 720;
+      const OUT_H = 1280;
+
+      const canvas  = document.createElement('canvas');
+      canvas.width  = OUT_W;
+      canvas.height = OUT_H;
+      const ctx     = canvas.getContext('2d');
+
+      // Source crop rect: take center column at 9:16 ratio
+      const srcH = video.videoHeight || 1080;
+      const srcW = Math.round(srcH * 9 / 16);
+      const srcX = Math.round(((video.videoWidth || 1920) - srcW) / 2);
+      const srcY = 0;
+
+      // Paint frames via rAF
+      let painting = true;
+      const paintFrame = () => {
+        if (!painting) return;
+        try {
+          ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, OUT_W, OUT_H);
+        } catch (_) {}
+        requestAnimationFrame(paintFrame);
+      };
+      requestAnimationFrame(paintFrame);
+
+      // Capture canvas stream at 30fps
+      const canvasStream = canvas.captureStream(30);
+
+      // Add audio from video
+      const audioStream = video.captureStream
+        ? video.captureStream()
+        : video.mozCaptureStream();
+      audioStream.getAudioTracks().forEach(t => canvasStream.addTrack(t));
+
+      // Pick best mime type
+      const mimeType = [
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm',
+        'video/mp4',
+      ].find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+
+      const chunks   = [];
+      const recorder = new MediaRecorder(canvasStream, { mimeType });
+      recorder.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+
+      const recordingDone = new Promise((resolve, reject) => {
+        recorder.onstop  = resolve;
+        recorder.onerror = e => reject(new Error(e.error?.message || 'MediaRecorder error'));
+      });
+
+      const stopAll = () => {
+        painting = false;
+        video.pause();
+        if (recorder.state === 'recording') recorder.stop();
+        canvasStream.getTracks().forEach(t => t.stop());
+        audioStream.getTracks().forEach(t => t.stop());
+      };
+
+      recorder.start(250);
+      video.play();
+
+      // Monitor progress and stop at clipEnd
+      await new Promise((resolve) => {
+        const interval = setInterval(() => {
+          const elapsed = Math.max(0, video.currentTime - clipStart);
+          setProgress(Math.min(99, Math.round((elapsed / clipDuration) * 100)));
+
+          if (video.currentTime >= clipEnd - 0.15 || video.ended) {
+            clearInterval(interval);
+            stopAll();
+            resolve();
+          }
+        }, 200);
+
+        // Safety timeout: clip duration + 8s buffer
+        setTimeout(() => {
+          clearInterval(interval);
+          stopAll();
+          resolve();
+        }, (clipDuration + 8) * 1000);
+      });
+
+      await recordingDone;
+      setProgress(100);
+
+      // Trigger file download
+      const ext  = mimeType.includes('mp4') ? 'mp4' : 'webm';
+      const blob = new Blob(chunks, { type: mimeType });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `clip_${index + 1}_${Math.round(clipStart)}s_portrait.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 15000);
+
+      setStatus('done');
+      setTimeout(() => { setStatus('idle'); setProgress(0); }, 4000);
+
+    } catch (e) {
+      console.error('Portrait clip failed:', e.message);
       setStatus('error');
-      setTimeout(() => setStatus('idle'), 3000);
+      // Fallback: open full video at timestamp
+      window.open(`${src}#t=${clipStart}`, '_blank');
+      setTimeout(() => { setStatus('idle'); setProgress(0); }, 3000);
     }
   };
+
+  const label = status === 'recording' ? `${progress}%`
+              : status === 'done'      ? 'Saved!'
+              : status === 'error'     ? 'Failed'
+              : 'Download';
 
   return (
     <button
       onClick={handleDownload}
-      disabled={status === 'cutting'}
-      className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium transition-colors disabled:opacity-50"
+      disabled={status === 'recording'}
+      className="flex-1 relative flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium transition-colors disabled:opacity-70 overflow-hidden"
     >
-      {status === 'cutting' ? <Loader2 size={10} className="animate-spin" /> :
-       status === 'done'    ? <Check size={10} /> :
-       <Download size={10} />}
-      <span>{status === 'cutting' ? 'Cutting…' : status === 'done' ? 'Saved!' : 'Download'}</span>
+      {status === 'recording' && (
+        <div
+          className="absolute inset-0 bg-emerald-200 rounded-xl transition-all duration-300"
+          style={{ width: `${progress}%` }}
+        />
+      )}
+      <span className="relative flex items-center gap-1">
+        {status === 'recording' ? <Loader2 size={10} className="animate-spin" /> :
+         status === 'done'      ? <Check size={10} /> :
+         status === 'error'     ? <AlertCircle size={10} /> :
+         <Download size={10} />}
+        {label}
+      </span>
     </button>
   );
 }
@@ -378,31 +528,39 @@ function FileClipCard({ clip, index }) {
   const [postRes, setPostRes] = useState(null);
   const videoRef = useRef(null);
 
-  const rawSrc = clip.cdn_url || clip.cloudinary_url || clip.blobUrl || null;
-  // Strip #t= fragment to get the base Bunny URL
-  const src = rawSrc ? rawSrc.split('#')[0] : null;
+  const rawSrc    = clip.cdn_url || clip.cloudinary_url || clip.blobUrl || null;
+  const src       = rawSrc ? rawSrc.split('#')[0] : null; // strip any #t= fragment
   const clipStart = clip.start_seconds ?? clip.start ?? 0;
   const clipEnd   = clip.end_seconds   ?? clip.end   ?? null;
-  const dur = clip.duration_seconds || ((clipEnd && clipStart != null) ? Math.round(clipEnd - clipStart) : null);
+  const dur       = clip.duration_seconds || ((clipEnd != null && clipStart != null) ? Math.round(clipEnd - clipStart) : null);
 
-  const hookText  = clip.hook_text  || clip.viral_hook_text || null;
-  const ytTitle   = clip.yt_title   || clip.video_title_for_youtube_short || null;
-  const tiktokDesc = clip.tiktok_desc || clip.video_description_for_tiktok || null;
-  const igDesc    = clip.ig_desc    || clip.video_description_for_instagram || null;
+  const hookText   = clip.hook_text   || clip.viral_hook_text                || null;
+  const ytTitle    = clip.yt_title    || clip.video_title_for_youtube_short  || null;
+  const tiktokDesc = clip.tiktok_desc || clip.video_description_for_tiktok  || null;
+  const igDesc     = clip.ig_desc     || clip.video_description_for_instagram || null;
 
   const copy = (text, key) => {
-    navigator.clipboard.writeText(text).then(() => { setCopied(key); setTimeout(() => setCopied(null), 2000); });
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(key);
+      setTimeout(() => setCopied(null), 2000);
+    });
   };
 
   const handleMouseEnter = () => { videoRef.current?.play().catch(() => {}); };
-  const handleMouseLeave = () => { if (videoRef.current) { videoRef.current.pause(); videoRef.current.currentTime = 0; } };
+  const handleMouseLeave = () => {
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = clipStart || 0;
+    }
+  };
 
   const runPost = async () => {
     const upKey  = localStorage.getItem(LS.UP_KEY);
     const upUser = localStorage.getItem(LS.UP_USER);
     if (!upKey) return setPostRes({ error: 'Upload-Post key required — add in Settings' });
     if (!src)   return setPostRes({ error: 'No CDN URL available for this clip' });
-    setPosting(true); setPostRes(null);
+    setPosting(true);
+    setPostRes(null);
     try {
       const res = await fetch('https://api.upload-post.com/v1/post', {
         method: 'POST',
@@ -416,8 +574,11 @@ function FileClipCard({ clip, index }) {
         }),
       });
       setPostRes(await res.json());
-    } catch (e) { setPostRes({ error: e.message }); }
-    finally { setPosting(false); }
+    } catch (e) {
+      setPostRes({ error: e.message });
+    } finally {
+      setPosting(false);
+    }
   };
 
   return (
@@ -433,7 +594,9 @@ function FileClipCard({ clip, index }) {
             ref={videoRef}
             src={src}
             className="absolute inset-0 w-full h-full object-cover"
-            muted loop playsInline
+            muted
+            loop
+            playsInline
             onLoadedMetadata={() => {
               if (videoRef.current && clipStart) {
                 videoRef.current.currentTime = clipStart;
@@ -441,15 +604,28 @@ function FileClipCard({ clip, index }) {
             }}
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-zinc-600" /></div>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Loader2 className="w-6 h-6 animate-spin text-zinc-600" />
+          </div>
         )}
         <div className="absolute top-2 left-2 w-6 h-6 rounded-full bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center text-white text-xs font-bold shadow">{index + 1}</div>
-        {dur && <div className="absolute top-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 bg-black/80 text-white rounded-full text-xs font-mono"><Clock size={8} /><span>{Math.round(dur)}s</span></div>}
+        {dur != null && (
+          <div className="absolute top-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 bg-black/80 text-white rounded-full text-xs font-mono">
+            <Clock size={8} /><span>{Math.round(dur)}s</span>
+          </div>
+        )}
         {src && <div className="absolute bottom-2 right-2 px-1.5 py-0.5 bg-blue-600/90 text-white rounded text-xs font-bold">CDN</div>}
       </div>
+
       <div className="p-3 space-y-2">
-        {hookText && <div className="flex items-start gap-1.5"><Flame className="w-3 h-3 text-rose-500 shrink-0 mt-0.5" /><p className="text-xs font-semibold text-gray-800 leading-snug">{hookText}</p></div>}
+        {hookText && (
+          <div className="flex items-start gap-1.5">
+            <Flame className="w-3 h-3 text-rose-500 shrink-0 mt-0.5" />
+            <p className="text-xs font-semibold text-gray-800 leading-snug">{hookText}</p>
+          </div>
+        )}
         {ytTitle && <p className="text-xs text-gray-400 line-clamp-2">{ytTitle}</p>}
+
         <div>
           <button onClick={() => setExp(!expanded)} className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
             <Globe size={9} /><span>Captions</span>{expanded ? <ChevronUp size={9} /> : <ChevronDown size={9} />}
@@ -474,6 +650,7 @@ function FileClipCard({ clip, index }) {
             </div>
           )}
         </div>
+
         <div className="flex gap-1.5">
           {src && (
             <DownloadClipButton
@@ -492,7 +669,12 @@ function FileClipCard({ clip, index }) {
             <span>Post</span>
           </button>
         </div>
-        {postRes && <p className={`text-xs rounded px-2 py-1 ${postRes.error ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>{postRes.error || 'Posted!'}</p>}
+
+        {postRes && (
+          <p className={`text-xs rounded px-2 py-1 ${postRes.error ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>
+            {postRes.error || 'Posted!'}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -500,8 +682,8 @@ function FileClipCard({ clip, index }) {
 
 // ── Project Folder ─────────────────────────────────────────────────────
 function ProjectFolder({ project, onDelete }) {
-  const [open, setOpen]       = useState(false);
-  const [deleting, setDel]    = useState(false);
+  const [open, setOpen]    = useState(false);
+  const [deleting, setDel] = useState(false);
 
   const isYouTube = project.clips.some(c => c.youtube_url && !c.cdn_url);
   const ytUrl     = project.clips.find(c => c.youtube_url)?.youtube_url || '';
@@ -516,12 +698,8 @@ function ProjectFolder({ project, onDelete }) {
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      {/* Folder header */}
       <div className="flex items-center gap-3 px-4 py-3">
-        <button
-          onClick={() => setOpen(!open)}
-          className="flex items-center gap-3 flex-1 min-w-0 text-left"
-        >
+        <button onClick={() => setOpen(!open)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center shrink-0 shadow-sm">
             {open ? <FolderOpen size={16} className="text-white" /> : <Folder size={16} className="text-white" />}
           </div>
@@ -548,14 +726,13 @@ function ProjectFolder({ project, onDelete }) {
         </button>
       </div>
 
-      {/* Folder contents */}
       {open && (
         <div className="border-t border-gray-100">
           <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-100">
             <div className="flex items-center gap-2">
               <CloudUpload size={11} className="text-blue-500" />
               <span className="text-xs text-gray-500">
-                {project.clips.filter(c => c.cdn_url).length} CDN clips ready · hover to preview
+                {project.clips.filter(c => c.cdn_url).length} CDN clips · hover to preview · Download records portrait crop
               </span>
             </div>
             <span className="text-xs text-gray-400 font-mono">{project.job_id}</span>
@@ -589,7 +766,7 @@ function ClipLibrary() {
       .finally(() => setLoad(false));
   }, []);
 
-  const now = Date.now();
+  const now      = Date.now();
   const filtered = projects.filter(p => {
     if (filter === 'today') return now - new Date(p.created_at).getTime() < 86400000;
     if (filter === 'week')  return now - new Date(p.created_at).getTime() < 604800000;
@@ -597,12 +774,10 @@ function ClipLibrary() {
   });
 
   const totalClips = projects.reduce((s, p) => s + p.clips.length, 0);
-  const thisWeek   = projects.filter(p => now - new Date(p.created_at).getTime() < 604800000).length;
   const cdnClips   = projects.reduce((s, p) => s + p.clips.filter(c => c.cdn_url).length, 0);
 
   return (
     <div className="space-y-6">
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
         {[
           { label: 'Projects',    val: projects.length, icon: Folder,     color: 'text-rose-500'   },
@@ -617,7 +792,6 @@ function ClipLibrary() {
         ))}
       </div>
 
-      {/* Filter */}
       <div className="flex items-center gap-3">
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
           {[['all','All time'],['week','This week'],['today','Today']].map(([k, l]) => (
@@ -630,7 +804,6 @@ function ClipLibrary() {
         <span className="text-xs text-gray-400">{filtered.length} project{filtered.length !== 1 ? 's' : ''}</span>
       </div>
 
-      {/* Projects */}
       {loading ? (
         <div className="flex items-center justify-center py-16 gap-3">
           <Loader2 className="w-5 h-5 animate-spin text-rose-400" />
@@ -671,10 +844,10 @@ export default function OpenShorts() {
   const [dragging, setDragging]  = useState(false);
   const fileRef = useRef(null);
 
-  const [stage, setStage]      = useState('idle');
-  const [currentStep, setStep] = useState(null);
-  const [doneSteps, setDone]   = useState([]);
-  const [statusMsg, setMsg]    = useState('');
+  const [stage, setStage]       = useState('idle');
+  const [currentStep, setStep]  = useState(null);
+  const [doneSteps, setDone]    = useState([]);
+  const [statusMsg, setMsg]     = useState('');
   const [progress, setProgress] = useState(0);
   const [err, setErr]           = useState('');
   const [clips, setClips]       = useState([]);
@@ -695,7 +868,7 @@ export default function OpenShorts() {
     v.src = url;
   };
 
-  // ── YouTube mode ──────────────────────────────────────────────────────
+  // ── YouTube mode ───────────────────────────────────────────────────
   const runYouTubeMode = async () => {
     if (!ytUrl.trim()) return setErr('Paste a YouTube URL first');
     setStage('processing'); setErr(''); setClips([]); setDone([]);
@@ -706,7 +879,7 @@ export default function OpenShorts() {
       const audioUrl = await extractYouTubeAudio(ytUrl.trim());
 
       setMsg('Submitting to AssemblyAI for transcription…');
-      const transcript = await transcribeFile(audioUrl, (msg) => setMsg(msg));
+      const transcript = await transcribeFile(audioUrl, msg => setMsg(msg));
       markDone('transcribe');
 
       setStep('analyze');
@@ -728,7 +901,6 @@ export default function OpenShorts() {
       setStage('done');
       setMsg(`Found ${enriched.length} viral moments!`);
 
-      // Save to Bunny as project
       const videoId = getYouTubeId(ytUrl);
       await saveProject(enriched, `YouTube — ${videoId || ytUrl.slice(-20)}`);
 
@@ -740,7 +912,7 @@ export default function OpenShorts() {
     }
   };
 
-  // ── File mode ─────────────────────────────────────────────────────────
+  // ── File mode ──────────────────────────────────────────────────────
   const runFileMode = async () => {
     if (!file) return setErr('Select a video file first');
     setStage('processing'); setErr(''); setClips([]); setDone([]); setProgress(0);
@@ -878,8 +1050,8 @@ export default function OpenShorts() {
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="flex border-b border-gray-100">
                 {[
-                  { k: 'youtube', icon: Youtube, label: 'YouTube URL',  desc: 'Extracts audio → transcribes → finds moments' },
-                  { k: 'file',    icon: Upload,  label: 'Upload File',  desc: 'Bunny CDN upload → transcribe → find clips'   },
+                  { k: 'youtube', icon: Youtube, label: 'YouTube URL', desc: 'Extracts audio → transcribes → finds moments' },
+                  { k: 'file',    icon: Upload,  label: 'Upload File', desc: 'Bunny CDN upload → transcribe → find clips'  },
                 ].map(({ k, icon: Icon, label, desc }) => (
                   <button key={k} onClick={() => setInputMode(k)}
                     className={`flex-1 flex flex-col items-center gap-0.5 py-3 text-sm font-medium transition-colors border-b-2 ${inputMode === k ? 'text-rose-600 border-rose-500 bg-rose-50/30' : 'text-gray-500 border-transparent hover:text-gray-700'}`}>
@@ -896,7 +1068,13 @@ export default function OpenShorts() {
                       <Mic size={12} className="shrink-0 mt-0.5 text-blue-500" />
                       <span>Audio extracted via Cobalt, transcribed by AssemblyAI, then Claude identifies the best viral moments with exact timestamps.</span>
                     </div>
-                    <Input value={ytUrl} onChange={e => setYtUrl(e.target.value)} placeholder="https://www.youtube.com/watch?v=…" className="h-12 text-sm" onKeyDown={e => { if (e.key === 'Enter') runYouTubeMode(); }} />
+                    <Input
+                      value={ytUrl}
+                      onChange={e => setYtUrl(e.target.value)}
+                      placeholder="https://www.youtube.com/watch?v=…"
+                      className="h-12 text-sm"
+                      onKeyDown={e => { if (e.key === 'Enter') runYouTubeMode(); }}
+                    />
                     <p className="text-xs text-gray-400">Supports youtube.com and youtu.be links</p>
                   </div>
                 )}
@@ -905,14 +1083,19 @@ export default function OpenShorts() {
                   <div className="space-y-3">
                     <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-xs text-emerald-700 flex items-start gap-2">
                       <CloudUpload size={12} className="shrink-0 mt-0.5 text-emerald-500" />
-                      <span>Video uploads to Bunny CDN (handles 1GB+) → AssemblyAI transcribes → Claude finds viral moments → saved to your Library.</span>
+                      <span>Video uploads to Bunny CDN (handles 1GB+) → AssemblyAI transcribes → Claude finds viral moments → saved to Library. Download creates a portrait 9:16 crop in your browser.</span>
                     </div>
                     <div
                       className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${dragging ? 'border-rose-400 bg-rose-50' : file ? 'border-rose-300 bg-rose-50/50' : 'border-gray-200 hover:border-rose-300 hover:bg-rose-50/20'}`}
                       onClick={() => fileRef.current?.click()}
                       onDragOver={e => { e.preventDefault(); setDragging(true); }}
                       onDragLeave={() => setDragging(false)}
-                      onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f?.type.startsWith('video/')) handleFileSelect(f); }}
+                      onDrop={e => {
+                        e.preventDefault();
+                        setDragging(false);
+                        const f = e.dataTransfer.files?.[0];
+                        if (f?.type.startsWith('video/')) handleFileSelect(f);
+                      }}
                     >
                       <input ref={fileRef} type="file" accept="video/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }} />
                       {file ? (
@@ -1031,7 +1214,7 @@ export default function OpenShorts() {
               {inputMode === 'youtube' && (
                 <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-xs text-amber-700 flex items-start gap-2">
                   <Youtube size={12} className="shrink-0 mt-0.5 text-amber-500" />
-                  <span>These clips play at the exact viral timestamps in embedded YouTube players. Use File Upload mode to get downloadable 9:16 video files.</span>
+                  <span>These clips play at the exact viral timestamps in embedded YouTube players. Use File Upload mode to get downloadable 9:16 portrait video files.</span>
                 </div>
               )}
 
@@ -1045,7 +1228,7 @@ export default function OpenShorts() {
               {stage === 'done' && (
                 <div className="flex items-center gap-2 px-4 py-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700">
                   <CheckCircle size={12} />
-                  <span>Project saved to your Library — open the Library tab to re-download anytime.</span>
+                  <span>Project saved to your Library — open the Library tab to re-download anytime. Download records a 9:16 portrait crop in your browser.</span>
                 </div>
               )}
             </div>
@@ -1055,10 +1238,10 @@ export default function OpenShorts() {
           {!isActive && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { icon: Mic,         label: 'AssemblyAI',   desc: 'Word-level transcription for precise clip boundaries' },
-                { icon: Sparkles,    label: 'Claude AI',    desc: 'Finds the highest-virality moments automatically'     },
-                { icon: CloudUpload, label: 'Bunny CDN',    desc: 'Handles 1GB+ uploads, instant global delivery'       },
-                { icon: Folder,      label: 'Project Library', desc: 'Every generation saved — re-download anytime'     },
+                { icon: Mic,         label: 'AssemblyAI',      desc: 'Word-level transcription for precise clip boundaries' },
+                { icon: Sparkles,    label: 'Claude AI',        desc: 'Finds the highest-virality moments automatically'     },
+                { icon: CloudUpload, label: 'Bunny CDN',        desc: 'Handles 1GB+ uploads, instant global delivery'       },
+                { icon: Scissors,    label: '9:16 Portrait',    desc: 'Download crops to portrait in your browser'          },
               ].map(({ icon: Icon, label, desc }) => (
                 <div key={label} className="bg-white rounded-xl border border-gray-100 p-3 text-center shadow-sm">
                   <div className="w-7 h-7 rounded-lg bg-rose-50 flex items-center justify-center mx-auto mb-2"><Icon size={13} className="text-rose-500" /></div>
