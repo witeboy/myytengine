@@ -88,6 +88,16 @@ const sb = {
       return r.ok ? r.json() : [];
     } catch { return []; }
   },
+  async delete(t, id) {
+    if (!this.ready()) return null;
+    try {
+      const r = await fetch(this._u(t, `?id=eq.${id}`), {
+        method: 'DELETE',
+        headers: { ...this._h(), Prefer: 'return=minimal' },
+      });
+      return r.ok;
+    } catch { return null; }
+  },
 };
 
 const saveToSupabase = async (clips) => {
@@ -495,8 +505,42 @@ function ClipLibrary() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-16"><Library size={28} className="text-gray-200 mx-auto mb-3" /><p className="text-gray-400 text-sm">No clips yet.</p></div>
       ) : (
-        <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {filtered.map(c => <FileClipCard key={c.id} clip={c} index={c.clip_index} />)}
+        <div className="space-y-8">
+          {Object.entries(
+            filtered.reduce((acc, c) => {
+              const key = c.job_id || 'ungrouped';
+              if (!acc[key]) acc[key] = [];
+              acc[key].push(c);
+              return acc;
+            }, {})
+          ).map(([jobId, jobClips]) => (
+            <div key={jobId} className="space-y-3">
+              <div className="flex items-center justify-between py-2 border-b border-gray-100">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Scissors size={13} className="text-rose-400 shrink-0" />
+                  <span className="text-xs font-semibold text-gray-700 truncate">
+                    {jobClips[0]?.yt_title || jobClips[0]?.hook_text || 'Clip Project'}
+                  </span>
+                  <span className="text-xs text-gray-400 shrink-0">
+                    · {jobClips.length} clip{jobClips.length !== 1 ? 's' : ''} · {new Date(jobClips[0]?.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!window.confirm('Delete this project and all its clips?')) return;
+                    await Promise.all(jobClips.map(c => sb.delete('clip_library', c.id).catch(() => {})));
+                    setClips(prev => prev.filter(c => c.job_id !== jobId));
+                  }}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors shrink-0 ml-2"
+                >
+                  <X size={10} /> Delete
+                </button>
+              </div>
+              <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                {jobClips.map(c => <FileClipCard key={c.id} clip={c} index={c.clip_index} />)}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
