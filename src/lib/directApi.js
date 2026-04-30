@@ -30,7 +30,7 @@ export const uploadToCloudinary = async (file, { resourceType = 'video', onProgr
   const file_data_base64 = await fileToBase64(file);
   if (onProgress) onProgress(30);
 
-  const res = await base44.functions.invoke('bunnyUpload', {
+  const res = await base44.functions.invoke('generateOutline', {
     file_data_base64,
     file_name: file.name || 'video.mp4',
     file_type: file.type || 'video/mp4',
