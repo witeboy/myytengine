@@ -265,14 +265,52 @@ function demuxMP4(MP4Box, arrayBuffer, clipStart, clipEnd) {
       height       = track.video.height;
 
       // Extract AVC/HEVC decoder description — required for H.264 in AVC format
+      // MP4Box.DataStream may not be exposed; use window.DataStream or box.data directly
       try {
         const trak  = file.getTrackById(videoTrackId);
         const entry = trak?.mdia?.minf?.stbl?.stsd?.entries?.[0];
         const box   = entry?.avcC || entry?.hvcC;
         if (box) {
-          const ds = new MP4Box.DataStream(undefined, 0, MP4Box.DataStream.BIG_ENDIAN);
-          box.write(ds);
-          description = new Uint8Array(ds.buffer).slice(8); // skip 8-byte box header
+          // Try DataStream serialization first
+          const DS = window.DataStream || (window.MP4Box && window.MP4Box.DataStream);
+          if (DS) {
+            const ds = new DS(undefined, 0, DS.BIG_ENDIAN ?? 0);
+            box.write(ds);
+            description = new Uint8Array(ds.buffer).slice(8);
+          } else {
+            // Fallback: manually build description from avcC fields
+            // avcC structure: configurationVersion(1) + profile(1) + compatibility(1) +
+            //                 level(1) + lengthSize(1) + numSPS(1) + SPS[] + numPPS(1) + PPS[]
+            const avcC = entry?.avcC;
+            if (avcC?.SPS?.length) {
+              const spsList = avcC.SPS;
+              const ppsList = avcC.PPS || [];
+              let size = 6; // header bytes
+              spsList.forEach(s => { size += 2 + s.length; });
+              ppsList.forEach(p => { size += 2 + p.length; });
+              const buf = new Uint8Array(size);
+              let off = 0;
+              buf[off++] = 1; // configurationVersion
+              buf[off++] = spsList[0]?.[1] ?? avcC.AVCProfileIndication ?? 100;
+              buf[off++] = spsList[0]?.[2] ?? avcC.profile_compatibility ?? 0;
+              buf[off++] = spsList[0]?.[3] ?? avcC.AVCLevelIndication ?? 31;
+              buf[off++] = 0xff; // lengthSizeMinusOne = 3 (4-byte NAL lengths)
+              buf[off++] = 0xe0 | spsList.length;
+              for (const sps of spsList) {
+                buf[off++] = (sps.length >> 8) & 0xff;
+                buf[off++] = sps.length & 0xff;
+                buf.set(sps, off); off += sps.length;
+              }
+              buf[off++] = ppsList.length;
+              for (const pps of ppsList) {
+                buf[off++] = (pps.length >> 8) & 0xff;
+                buf[off++] = pps.length & 0xff;
+                buf.set(pps, off); off += pps.length;
+              }
+              description = buf;
+            }
+          }
+          console.log('[MP4Box] description extracted, length:', description?.length);
         }
       } catch (e) {
         console.warn('[MP4Box] Could not extract description:', e.message);
@@ -432,19 +470,34 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
       if (!samples.length) throw new Error('No video samples found in clip range');
 
       // Find last keyframe at or before clipStart
-      let keyframeIdx = 0;
+      // MP4Box marks keyframes with is_sync=1 (number) OR flags where bit 24 is NOT set.
+      // We check both to be safe.
+      const isKeyframe = (s) => {
+        if (s.is_sync === 1 || s.is_sync === true) return true;
+        // flags field: non-keyframes have 0x1 in low bits (depends on MP4Box version)
+        if (typeof s.flags === 'number') return (s.flags & 0x0001) === 0;
+        return false;
+      };
+
+      // Log the first few samples so we can see what is_sync looks like
+      console.log('[WebCodecs] sample[0]:', { is_sync: samples[0]?.is_sync, flags: samples[0]?.flags, timeSec: samples[0]?.timeSec?.toFixed(2) });
+      console.log('[WebCodecs] sample[1]:', { is_sync: samples[1]?.is_sync, flags: samples[1]?.flags });
+
+      let keyframeIdx = -1;
+      // Search for last keyframe at or before clipStart
       for (let i = 0; i < samples.length; i++) {
-        if ((samples[i].is_sync === true || samples[i].is_sync === 1) && samples[i].timeSec <= clipStart) {
-          keyframeIdx = i;
-        }
+        if (isKeyframe(samples[i]) && samples[i].timeSec <= clipStart) keyframeIdx = i;
       }
-      // Fallback: find first keyframe anywhere
-      if (!(samples[keyframeIdx].is_sync === true || samples[keyframeIdx].is_sync === 1)) {
+      // If none found before clipStart, find first keyframe anywhere
+      if (keyframeIdx === -1) {
         for (let i = 0; i < samples.length; i++) {
-          if (samples[i].is_sync === true || samples[i].is_sync === 1) { keyframeIdx = i; break; }
+          if (isKeyframe(samples[i])) { keyframeIdx = i; break; }
         }
       }
-      console.log(`[WebCodecs] keyframe idx=${keyframeIdx} t=${samples[keyframeIdx]?.timeSec?.toFixed(2)}s clipStart=${clipStart}s`);
+      // Last resort: start from 0 regardless
+      if (keyframeIdx === -1) keyframeIdx = 0;
+
+      console.log(`[WebCodecs] keyframe idx=${keyframeIdx} t=${samples[keyframeIdx]?.timeSec?.toFixed(2)}s is_sync=${samples[keyframeIdx]?.is_sync} flags=${samples[keyframeIdx]?.flags} clipStart=${clipStart}s`);
 
       // Step 3: Canvases
       const OUT_W = 720, OUT_H = 1280;
