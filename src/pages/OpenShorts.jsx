@@ -1,13 +1,14 @@
 /**
- * OpenShorts.jsx — Clean rewrite (FIXED)
+ * OpenShorts.jsx — Clean rewrite
  *
- * Fixes applied:
- *  1. Added missing `function FileClipCard({ clip, index })` declaration
- *  2. Declared `let _mp4boxCache = null` at module scope
- *  3. Removed duplicate DownloadClipButton (kept the full WebCodecs version)
- *  4. Moved loadMP4Box / demuxMP4 / fallbackSilentRecord helpers to module scope
- *     (outside any component) so all components can access them
- *  5. Ensured FileClipCard is declared before ProjectFolder which references it
+ * Storage: Bunny CDN (via quickPublishTranscribe bunny_config + bunny_save_project)
+ * Upload:  Bunny CDN (large file support, server env credentials)
+ * Clips:   Bunny CDN URLs with timestamp metadata stored as JSON
+ * Library: Project folders grouped by job_id, stored on Bunny as JSON manifest
+ * Download: Server-side FFmpeg via quickPublishTranscribe clip_video action.
+ *           FFmpeg cuts start→end, crops to 9:16 portrait, encodes H.264+AAC,
+ *           uploads to Bunny CDN, returns a clean clip URL for direct download.
+ *           No WebCodecs, no MediaRecorder, no browser-side demuxing.
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -234,400 +235,129 @@ function YouTubeClipCard({ clip, index, ytUrl }) {
   );
 }
 
-// ── MP4Box loader (module-scope, shared cache) ─────────────────────────
-// FIX #2: Declare _mp4boxCache at module scope (was never declared in original)
-let _mp4boxCache = null;
-
-async function loadMP4Box() {
-  // FIX: This was orphaned code floating outside any function in the original
-  if (_mp4boxCache) return _mp4boxCache;
-  await new Promise((resolve, reject) => {
-    if (window.MP4Box) { _mp4boxCache = window.MP4Box; resolve(); return; }
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/mp4box@0.5.2/dist/mp4box.all.min.js';
-    s.onload = () => { _mp4boxCache = window.MP4Box; resolve(); };
-    s.onerror = () => reject(new Error('Failed to load MP4Box'));
-    document.head.appendChild(s);
-  });
-  return _mp4boxCache;
-}
-
-// ── MP4 demuxer ────────────────────────────────────────────────────────
-function demuxMP4(MP4Box, arrayBuffer, clipStart, clipEnd) {
-  return new Promise((resolve, reject) => {
-    const file = MP4Box.createFile();
-    let codec = null, width = 0, height = 0, videoTrackId = null;
-    let description = null;
-
-    file.onReady = (info) => {
-      const track = info.tracks.find(t => t.type === 'video');
-      if (!track) return reject(new Error('No video track found in file'));
-      videoTrackId = track.id;
-      codec        = track.codec;
-      width        = track.video.width;
-      height       = track.video.height;
-
-      try {
-        const trak  = file.getTrackById(videoTrackId);
-        const entry = trak?.mdia?.minf?.stbl?.stsd?.entries?.[0];
-        const box   = entry?.avcC || entry?.hvcC;
-        if (box) {
-          const DS = window.DataStream || (window.MP4Box && window.MP4Box.DataStream);
-          if (DS) {
-            const ds = new DS(undefined, 0, DS.BIG_ENDIAN ?? 0);
-            box.write(ds);
-            description = new Uint8Array(ds.buffer).slice(8);
-          } else {
-            const avcC = entry?.avcC;
-            if (avcC?.SPS?.length) {
-              const spsList = avcC.SPS;
-              const ppsList = avcC.PPS || [];
-              let size = 6;
-              spsList.forEach(s => { size += 2 + s.length; });
-              ppsList.forEach(p => { size += 2 + p.length; });
-              const buf = new Uint8Array(size);
-              let off = 0;
-              buf[off++] = 1;
-              buf[off++] = spsList[0]?.[1] ?? avcC.AVCProfileIndication ?? 100;
-              buf[off++] = spsList[0]?.[2] ?? avcC.profile_compatibility ?? 0;
-              buf[off++] = spsList[0]?.[3] ?? avcC.AVCLevelIndication ?? 31;
-              buf[off++] = 0xff;
-              buf[off++] = 0xe0 | spsList.length;
-              for (const sps of spsList) {
-                buf[off++] = (sps.length >> 8) & 0xff;
-                buf[off++] = sps.length & 0xff;
-                buf.set(sps, off); off += sps.length;
-              }
-              buf[off++] = ppsList.length;
-              for (const pps of ppsList) {
-                buf[off++] = (pps.length >> 8) & 0xff;
-                buf[off++] = pps.length & 0xff;
-                buf.set(pps, off); off += pps.length;
-              }
-              description = buf;
-            }
-          }
-          console.log('[MP4Box] description extracted, length:', description?.length);
-        }
-      } catch (e) {
-        console.warn('[MP4Box] Could not extract description:', e.message);
-      }
-
-      file.setExtractionOptions(videoTrackId, null, { nbSamples: 2000 });
-      file.start();
-    };
-
-    const allSamples = [];
-    file.onSamples = (_id, _user, samples) => {
-      for (const s of samples) {
-        const timeSec = s.cts / s.timescale;
-        if (timeSec <= clipEnd + 0.5) {
-          const data = new Uint8Array(s.data.byteLength);
-          data.set(new Uint8Array(s.data));
-          allSamples.push({ ...s, data, timeSec });
-        }
-      }
-    };
-
-    file.onError = (e) => reject(new Error('MP4Box error: ' + e));
-
-    try {
-      const buf = arrayBuffer.slice(0);
-      buf.fileStart = 0;
-      file.appendBuffer(buf);
-    } catch (_) {}
-
-    file.flush();
-
-    const waitForSamples = async () => {
-      const deadline = Date.now() + 10000;
-      while (Date.now() < deadline) {
-        await new Promise(r => setTimeout(r, 100));
-        if (allSamples.length > 0) break;
-      }
-      if (!codec) { reject(new Error('MP4Box: no video track found — is this a valid MP4?')); return; }
-      resolve({ codec, samples: allSamples, width, height, description });
-    };
-
-    setTimeout(waitForSamples, 300);
-  });
-}
-
-// ── Silent fallback recorder ───────────────────────────────────────────
-async function fallbackSilentRecord({ src, clipStart, clipEnd, index, setStatus, setProgress }) {
-  try {
-    const clipDuration = clipEnd - clipStart;
-    const video = document.createElement('video');
-    video.src = src; video.crossOrigin = 'anonymous'; video.preload = 'auto';
-    video.muted = true; video.volume = 0;
-    video.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;';
-    document.body.appendChild(video);
-
-    await new Promise((res, rej) => { video.onloadedmetadata = res; video.onerror = rej; setTimeout(res, 12000); });
-    video.currentTime = clipStart;
-    await new Promise(r => { video.onseeked = r; setTimeout(r, 1500); });
-
-    const OUT_W = 720, OUT_H = 1280;
-    const canvas = document.createElement('canvas');
-    canvas.width = OUT_W; canvas.height = OUT_H;
-    const ctx  = canvas.getContext('2d');
-    const srcH = video.videoHeight || 1080;
-    const srcW = Math.round(srcH * 9 / 16);
-    const srcX = Math.round(((video.videoWidth || 1920) - srcW) / 2);
-
-    let painting = true;
-    const paint = () => { if (!painting) return; try { ctx.drawImage(video, srcX, 0, srcW, srcH, 0, 0, OUT_W, OUT_H); } catch (_) {} requestAnimationFrame(paint); };
-    requestAnimationFrame(paint);
-
-    const stream = canvas.captureStream(30);
-    const mimeType = ['video/webm;codecs=vp9', 'video/webm'].find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 4_000_000 });
-    const recChunks = [];
-    recorder.ondataavailable = e => { if (e.data?.size > 0) recChunks.push(e.data); };
-    const recDone = new Promise(res => { recorder.onstop = res; });
-
-    const stopAll = () => {
-      painting = false; video.pause();
-      if (recorder.state === 'recording') recorder.stop();
-      stream.getTracks().forEach(t => t.stop());
-      if (document.body.contains(video)) document.body.removeChild(video);
-    };
-
-    recorder.start(250); video.play();
-
-    await new Promise(resolve => {
-      const iv = setInterval(() => {
-        const elapsed = Math.max(0, video.currentTime - clipStart);
-        setProgress(Math.min(99, Math.round((elapsed / clipDuration) * 100)));
-        if (video.currentTime >= clipEnd - 0.15 || video.ended) { clearInterval(iv); stopAll(); resolve(); }
-      }, 200);
-      setTimeout(() => { clearInterval(iv); stopAll(); resolve(); }, (clipDuration + 8) * 1000);
-    });
-
-    await recDone; setProgress(100);
-    const blob = new Blob(recChunks, { type: mimeType });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url; a.download = `clip_${index + 1}_${Math.round(clipStart)}s_portrait.webm`;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 15000);
-    setStatus('done'); setTimeout(() => { setStatus('idle'); setProgress(0); }, 4000);
-  } catch (e) {
-    console.error('Fallback recorder failed:', e);
-    setStatus('idle'); setProgress(0);
-  }
-}
-
-// ── DownloadClipButton ─────────────────────────────────────────────────
-// FIX #3: Removed the first (incomplete) duplicate. Keeping only the full
-// WebCodecs version with fallback. The original had two function declarations
-// with the same name — a parse error in strict mode / bundlers.
+// ── DownloadClipButton ─────────────────────────────────────────────────────
+// Delegates to the quickPublishTranscribe Deno backend (clip_video action).
+// FFmpeg runs server-side: seeks to start, cuts duration, crops to 9:16
+// portrait (crop=ih*9/16:ih,scale=720:1280), encodes H.264+AAC, uploads
+// the finished clip to Bunny CDN, and returns a clean clip_url.
+// The browser fetches that URL as a blob and triggers a native download.
+// No WebCodecs, no MediaRecorder, no MP4Box — nothing can break in-browser.
+//
+// src may be either:
+//   • a plain Bunny CDN URL  →  https://cdn.example.com/uploads/video.mp4
+//   • a hash-fragment URL    →  https://cdn.example.com/uploads/video.mp4#t=20,45
+// clipStart / clipEnd are always passed explicitly from the clip object.
 function DownloadClipButton({ src, clipStart, clipEnd, index }) {
-  const [status, setStatus]     = useState('idle');
+  const [status,   setStatus]   = useState('idle');   // idle | processing | done | error
   const [progress, setProgress] = useState(0);
+  const [errMsg,   setErrMsg]   = useState('');
 
   const handleDownload = async () => {
     if (!src || clipEnd == null) return;
 
-    const hasWebCodecs = typeof VideoDecoder !== 'undefined' && typeof OffscreenCanvas !== 'undefined';
-    if (!hasWebCodecs) {
-      setStatus('recording'); setProgress(0);
-      await fallbackSilentRecord({ src, clipStart, clipEnd, index, setStatus, setProgress });
+    // Strip any hash fragment to get the clean source URL
+    const sourceUrl = src.split('#')[0];
+    if (!sourceUrl.startsWith('http')) {
+      setErrMsg('No valid source URL for this clip');
+      setStatus('error');
       return;
     }
 
-    setStatus('recording'); setProgress(0);
-    let visCanvas = null, audioVideo = null, audioCtx = null;
+    setStatus('processing');
+    setProgress(5);
+    setErrMsg('');
 
     try {
-      // Step 1: Fetch video bytes
-      const resp = await fetch(src, { mode: 'cors' });
-      if (!resp.ok) throw new Error(`Fetch failed: HTTP ${resp.status}`);
-      const totalBytes = Number(resp.headers.get('content-length') || 0);
-      const reader = resp.body.getReader();
-      const fetchChunks = []; let received = 0;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        fetchChunks.push(value); received += value.length;
-        if (totalBytes > 0) setProgress(2 + Math.round((received / totalBytes) * 16));
-      }
-      setProgress(18);
-      const arrayBuffer = await new Blob(fetchChunks).arrayBuffer();
-      setProgress(20);
-
-      // Step 2: Demux
-      const MP4Box = await loadMP4Box();
-      const { codec, samples, width, height, description } =
-        await demuxMP4(MP4Box, arrayBuffer, clipStart, clipEnd);
-      setProgress(25);
-      if (!samples.length) throw new Error('No video samples found in clip range');
-
-      const isKeyframe = (s) => {
-        if (s.is_sync === 1 || s.is_sync === true) return true;
-        if (typeof s.flags === 'number') return (s.flags & 0x0001) === 0;
-        return false;
-      };
-
-      console.log('[WebCodecs] sample[0]:', { is_sync: samples[0]?.is_sync, flags: samples[0]?.flags, timeSec: samples[0]?.timeSec?.toFixed(2) });
-      console.log('[WebCodecs] sample[1]:', { is_sync: samples[1]?.is_sync, flags: samples[1]?.flags });
-
-      let keyframeIdx = -1;
-      for (let i = 0; i < samples.length; i++) {
-        if (isKeyframe(samples[i]) && samples[i].timeSec <= clipStart) keyframeIdx = i;
-      }
-      if (keyframeIdx === -1) {
-        for (let i = 0; i < samples.length; i++) {
-          if (isKeyframe(samples[i])) { keyframeIdx = i; break; }
-        }
-      }
-      if (keyframeIdx === -1) keyframeIdx = 0;
-
-      console.log(`[WebCodecs] keyframe idx=${keyframeIdx} t=${samples[keyframeIdx]?.timeSec?.toFixed(2)}s is_sync=${samples[keyframeIdx]?.is_sync} flags=${samples[keyframeIdx]?.flags} clipStart=${clipStart}s`);
-
-      // Step 3: Canvases
-      const OUT_W = 720, OUT_H = 1280;
-      const offscreen = new OffscreenCanvas(OUT_W, OUT_H);
-      const offCtx    = offscreen.getContext('2d');
-      const srcH = height, srcW = Math.round(srcH * 9 / 16);
-      const srcX = Math.round((width - srcW) / 2);
-
-      visCanvas = document.createElement('canvas');
-      visCanvas.width = OUT_W; visCanvas.height = OUT_H;
-      visCanvas.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;';
-      document.body.appendChild(visCanvas);
-      const visCtx = visCanvas.getContext('2d');
-
-      // Step 4: Silent audio via WebAudio
-      audioVideo = document.createElement('video');
-      audioVideo.src = src; audioVideo.crossOrigin = 'anonymous'; audioVideo.preload = 'auto';
-      audioVideo.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;';
-      document.body.appendChild(audioVideo);
-
-      await new Promise(r => { audioVideo.onloadedmetadata = r; setTimeout(r, 4000); });
-      audioVideo.currentTime = clipStart;
-      await new Promise(r => { audioVideo.onseeked = r; setTimeout(r, 2000); });
-
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const mediaSource = audioCtx.createMediaElementSource(audioVideo);
-      const gainNode    = audioCtx.createGain();
-      gainNode.gain.value = 0;
-      const audioDest   = audioCtx.createMediaStreamDestination();
-      mediaSource.connect(gainNode);
-      gainNode.connect(audioCtx.destination);
-      mediaSource.connect(audioDest);
-
-      // Step 5: MediaRecorder
-      const mimeType = ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm']
-        .find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
-      const combinedStream = visCanvas.captureStream(30);
-      audioDest.stream.getAudioTracks().forEach(t => combinedStream.addTrack(t));
-      const recorder  = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 4_000_000 });
-      const recChunks = [];
-      recorder.ondataavailable = e => { if (e.data?.size > 0) recChunks.push(e.data); };
-      const recDone = new Promise((res, rej) => {
-        recorder.onstop  = res;
-        recorder.onerror = e => rej(new Error(e.error?.message || 'Recorder error'));
-      });
-      recorder.start(100);
-      audioVideo.play().catch(() => {});
-
-      // Step 6: VideoDecoder
-      const clipStartUs  = clipStart * 1_000_000;
-      const clipEndUs    = clipEnd   * 1_000_000;
-      const renderFrames = Math.max(1, Math.round((clipEnd - clipStart) * 30));
-      let renderCount = 0, feedCount = 0;
-
-      await new Promise((resolve, reject) => {
-        const decoder = new VideoDecoder({
-          output: (frame) => {
-            const ts = frame.timestamp;
-            if (ts >= clipStartUs && ts <= clipEndUs) {
-              try {
-                offCtx.drawImage(frame, srcX, 0, srcW, srcH, 0, 0, OUT_W, OUT_H);
-                visCtx.drawImage(offscreen, 0, 0);
-                renderCount++;
-                setProgress(25 + Math.min(70, Math.round((renderCount / renderFrames) * 70)));
-              } catch (_) {}
-            }
-            frame.close();
-          },
-          error: (e) => reject(new Error('VideoDecoder: ' + e.message)),
-        });
-
-        const config = { codec, codedWidth: width, codedHeight: height, optimizeForLatency: true };
-        if (description) config.description = description;
-        decoder.configure(config);
-
-        (async () => {
-          try {
-            for (let i = keyframeIdx; i < samples.length; i++) {
-              const sample  = samples[i];
-              const isFirst = (i === keyframeIdx);
-              const chunkType = (isFirst || sample.is_sync === true || sample.is_sync === 1) ? 'key' : 'delta';
-              decoder.decode(new EncodedVideoChunk({
-                type:      chunkType,
-                timestamp: Math.round(sample.cts * 1_000_000 / sample.timescale),
-                duration:  Math.round(sample.duration * 1_000_000 / sample.timescale),
-                data:      sample.data,
-              }));
-              feedCount++;
-              if (feedCount % 30 === 0) await new Promise(r => setTimeout(r, 0));
-            }
-            await decoder.flush();
-            decoder.close();
-            resolve();
-          } catch (e) { reject(e); }
-        })();
+      // Step 1 — ask the backend to cut + crop + encode the clip
+      setProgress(10);
+      const res = await base44.functions.invoke('quickPublishTranscribe', {
+        action:     'clip_video',
+        source_url: sourceUrl,
+        start:      clipStart,
+        end:        clipEnd,
       });
 
-      audioVideo.pause();
-      recorder.stop();
-      combinedStream.getTracks().forEach(t => t.stop());
+      if (!res.data?.clip_url) {
+        throw new Error(res.data?.error || 'No clip URL returned from server');
+      }
 
-      await recDone; setProgress(100);
+      const clipUrl = res.data.clip_url;
+      setProgress(80);
 
-      // Step 7: Download
-      const ext  = mimeType.includes('mp4') ? 'mp4' : 'webm';
-      const blob = new Blob(recChunks, { type: mimeType });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href = url; a.download = `clip_${index + 1}_${Math.round(clipStart)}s_portrait.${ext}`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 15000);
+      // Step 2 — fetch the finished clip from Bunny CDN as a blob
+      // (blob fetch lets the browser stream it to disk without CORS issues)
+      const fetchRes = await fetch(clipUrl);
+      if (!fetchRes.ok) throw new Error(`Download failed: HTTP ${fetchRes.status}`);
+      const blob = await fetchRes.blob();
+      setProgress(95);
 
-      setStatus('done'); setTimeout(() => { setStatus('idle'); setProgress(0); }, 4000);
+      // Step 3 — trigger native browser download
+      const duration = Math.round(clipEnd - clipStart);
+      const filename = `clip_${index + 1}_${Math.round(clipStart)}s_${duration}s_portrait.mp4`;
+      const blobUrl  = URL.createObjectURL(blob);
+      const a        = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
+
+      setProgress(100);
+      setStatus('done');
+      setTimeout(() => { setStatus('idle'); setProgress(0); }, 4000);
 
     } catch (e) {
-      console.error('WebCodecs clip failed:', e.message);
-      document.querySelectorAll('canvas[style*="-9999px"]').forEach(el => el.remove());
-      document.querySelectorAll('video[style*="-9999px"]').forEach(el => el.remove());
-      if (audioCtx) audioCtx.close().catch(() => {});
-      await fallbackSilentRecord({ src, clipStart, clipEnd, index, setStatus, setProgress });
-    } finally {
-      if (visCanvas  && document.body.contains(visCanvas))  document.body.removeChild(visCanvas);
-      if (audioVideo && document.body.contains(audioVideo)) document.body.removeChild(audioVideo);
-      if (audioCtx && audioCtx.state !== 'closed') audioCtx.close().catch(() => {});
+      console.error('[DownloadClipButton]', e.message);
+      setErrMsg(e.message || 'Export failed');
+      setStatus('error');
+      setTimeout(() => { setStatus('idle'); setProgress(0); setErrMsg(''); }, 5000);
     }
   };
 
-  const label = status === 'recording' ? `${progress}%` : status === 'done' ? 'Saved!' : 'Download';
+  const label =
+    status === 'processing' ? (progress < 80 ? `Encoding… ${progress}%` : `Downloading…`) :
+    status === 'done'       ? 'Saved!' :
+    status === 'error'      ? 'Failed' :
+    'Download';
+
+  const btnClass =
+    status === 'error'
+      ? 'bg-red-50 hover:bg-red-100 text-red-600'
+      : status === 'done'
+      ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'
+      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700';
+
   return (
-    <button onClick={handleDownload} disabled={status === 'recording'}
-      className="flex-1 relative flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium transition-colors disabled:opacity-70 overflow-hidden">
-      {status === 'recording' && <div className="absolute inset-0 bg-emerald-200 rounded-xl transition-all duration-200" style={{ width: `${progress}%` }} />}
-      <span className="relative flex items-center gap-1">
-        {status === 'recording' ? <Loader2 size={10} className="animate-spin" /> : status === 'done' ? <Check size={10} /> : <Download size={10} />}
-        {label}
-      </span>
-    </button>
+    <div className="flex-1 flex flex-col gap-0.5">
+      <button
+        onClick={handleDownload}
+        disabled={status === 'processing'}
+        title={status === 'error' ? errMsg : 'Download as portrait MP4 (server-side FFmpeg)'}
+        className={`relative flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl text-xs font-medium transition-colors disabled:opacity-70 overflow-hidden ${btnClass}`}>
+        {status === 'processing' && (
+          <div
+            className="absolute inset-0 bg-emerald-200 rounded-xl transition-all duration-300"
+            style={{ width: `${progress}%` }}
+          />
+        )}
+        <span className="relative flex items-center gap-1">
+          {status === 'processing' ? <Loader2 size={10} className="animate-spin" /> :
+           status === 'done'       ? <Check    size={10} /> :
+           status === 'error'      ? <AlertCircle size={10} /> :
+                                     <Download  size={10} />}
+          {label}
+        </span>
+      </button>
+      {status === 'error' && errMsg && (
+        <p className="text-[9px] text-red-500 text-center leading-tight px-1 truncate" title={errMsg}>{errMsg}</p>
+      )}
+    </div>
   );
 }
 
+
 // ── FileClipCard ───────────────────────────────────────────────────────
-// FIX #1: This function declaration was completely missing in the original.
-// The hooks and JSX below it were floating at module scope, causing
-// "React Hook called outside a component" and "Unexpected token" errors.
 function FileClipCard({ clip, index }) {
   const [copied, setCopied]   = useState(null);
   const [expanded, setExp]    = useState(false);
