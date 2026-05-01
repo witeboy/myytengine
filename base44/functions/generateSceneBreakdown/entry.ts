@@ -700,6 +700,91 @@ function splitScriptByPhase(script, phases) {
   return chunks;
 }
 
+function getPhaseCinematicEnergy(phaseName) {
+  const energyMap = {
+    cold_open: {
+      camera_mandate: "Camera is ALREADY MOVING when the scene opens — mid-push, mid-track, zero ease-in. Assert the world immediately. No slow reveals. No establishing-then-finding.",
+      shot_bias: "MCU or LOW ANGLE or POV — intimate or imposing, never neutral",
+      movement_speed: "FAST — assertive, deliberate, no drift",
+      cut_style: "SMASH CUT — no hold at end of scene",
+      forbidden: "slow pans, gentle drifts, wide establishing without immediate subject"
+    },
+    hook: {
+      camera_mandate: "Single most arresting image possible. Camera locked or single decisive move. One thing, perfectly framed.",
+      shot_bias: "ECU or LOW ANGLE — make it feel too close or too powerful",
+      movement_speed: "LOCKED or single decisive push",
+      cut_style: "HARD CUT on the beat",
+      forbidden: "busy compositions, multiple subjects, decorative movement"
+    },
+    rising_tension: {
+      camera_mandate: "Camera grows bolder each scene. Each push-in slightly faster, each angle slightly more extreme than the last. The escalation is PHYSICAL — the camera itself gets more aggressive.",
+      shot_bias: "MS to MCU progression — tightening across the phase",
+      movement_speed: "BUILDING — each scene 10% faster than previous",
+      cut_style: "CUT ON MOTION — never cut when subject is at rest",
+      forbidden: "pull-backs, static locked shots (unless for shock contrast), wide establishing"
+    },
+    the_problem: {
+      camera_mandate: "Show the problem at HUMAN SCALE — not wide and abstract, but close enough to feel the weight. Camera at eye-level or slightly below, looking up at what's impossible.",
+      shot_bias: "MS or LOW ANGLE — make the problem feel bigger than the person",
+      movement_speed: "SLOW deliberate push toward the problem",
+      cut_style: "HOLD — let the problem land before cutting",
+      forbidden: "bird's-eye (removes humanity), comedy angles, fast movement"
+    },
+    emotional_core: {
+      camera_mandate: "Camera slows to a crawl. Every millimeter of movement earns its place. HOLD longer than feels comfortable — the silence IS the scene.",
+      shot_bias: "CU or MCU — face and hands are the subject",
+      movement_speed: "NEAR STILL — micro-movements only, meaningful holds",
+      cut_style: "HOLD 6-8 frames past peak emotion. Then cut.",
+      forbidden: "fast movement, wide shots, busy compositions, rack focus for drama (rack focus only if already close)"
+    },
+    climax: {
+      camera_mandate: "RACK FOCUS snap to subject's eyes or hands. Everything else blurs. Camera goes still after the snap — let the subject move, not the camera.",
+      shot_bias: "CU or ECU — the face IS the climax",
+      movement_speed: "STILL after the initial snap — stillness IS the tension",
+      cut_style: "CUT TO BLACK for 8 frames — then smash to next scene",
+      forbidden: "camera movement during the peak moment, wide shots"
+    },
+    resolution: {
+      camera_mandate: "Camera exhales. Pull back slowly — character becomes smaller against the world they've changed or been changed by. Wide reveals context that wasn't visible before.",
+      shot_bias: "WS or EWS — the world is bigger than the person again, and that's okay",
+      movement_speed: "SLOW pull-back or slow lateral drift",
+      cut_style: "LONG HOLD — let breathing return to normal",
+      forbidden: "push-ins, tight close-ups, fast movement"
+    },
+    investigation: {
+      camera_mandate: "Camera moves like a detective — purposeful, observant, finding details. Insert shots on evidence. OTS during conversation. Never wide when a close-up would reveal more.",
+      shot_bias: "INSERT (evidence) + OTS (interrogation) + MCU (realization)",
+      movement_speed: "DELIBERATE — each move has a reason",
+      cut_style: "CUT ON DISCOVERY — the cut IS the find",
+      forbidden: "decorative movement, shots without a clear investigative purpose"
+    },
+    revelation: {
+      camera_mandate: "HOLD on the face during the reveal — don't cut away to show what's revealed, show the CHARACTER learning it. The face IS the revelation.",
+      shot_bias: "CU — hold on the reaction, not the information",
+      movement_speed: "STILL — let the information hit",
+      cut_style: "LONG HOLD before any cut",
+      forbidden: "cutting to show the information before the reaction"
+    },
+    confrontation: {
+      camera_mandate: "Dutch angle OR rapid alternation between LOW (power) and HIGH (vulnerability). Camera is unstable because the world is unstable.",
+      shot_bias: "DUTCH ANGLE or alternating LOW/HIGH",
+      movement_speed: "ERRATIC — controlled chaos, not smooth",
+      cut_style: "FAST — cuts on beats, never between them",
+      forbidden: "eye-level neutral shots, smooth camera movement"
+    },
+  };
+
+  const defaultEnergy = {
+    camera_mandate: "Camera movement serves the emotional beat. Push toward conflict, pull away from resolution. Never move the camera without a dramatic reason.",
+    shot_bias: "MS or MCU — human scale, emotionally readable",
+    movement_speed: "MODERATE — deliberate, purposeful",
+    cut_style: "CUT ON BEAT — land on the emotional moment",
+    forbidden: "unmotivated camera movement, static shots during action"
+  };
+
+  return energyMap[phaseName] || defaultEnergy;
+}
+
 function buildBreakdownPrompt({
   styleDirective, storyAnalysis, characterBlock, continuityContext,
   phaseName, phasePurpose, sceneCount, sceneStart, scriptText,
@@ -719,9 +804,14 @@ function buildBreakdownPrompt({
       : (narrativeStart + narrativeEnd) / 2;
     emotionalBeats.push(getEmotionalBeat(phaseName, i, sceneCount, posPct));
   }
-  const beatTable = emotionalBeats.map((b, i) =>
-    `Scene ${sceneStart + i}: viewer feels "${b.viewer_emotion}" | intensity ${b.emotional_intensity}`
-  ).join('\n');
+  const beatTable = emotionalBeats.map((b, i) => {
+    const intensity = b.emotional_intensity;
+    const cameraRule = intensity >= 0.85 ? 'TIGHT (CU/ECU) — handheld if tension genre, locked if drama. Long hold.'
+      : intensity >= 0.65 ? 'MEDIUM-CLOSE (MCU/MS) — deliberate push-in. Cut on the beat.'
+      : intensity >= 0.40 ? 'MEDIUM (MS/WS) — motivated movement. World visible around character.'
+      : 'WIDE (WS/EWS) — camera distant, world establishing, slow or static.';
+    return `Scene ${sceneStart + i}: viewer feels "${b.viewer_emotion}" | intensity ${b.emotional_intensity} → CAMERA RULE: ${cameraRule}`;
+  }).join('\n');
 
   const motifs = storyAnalysis.recurring_visual_motifs || [];
   const motifLine = motifs.length > 0
@@ -737,6 +827,16 @@ function buildBreakdownPrompt({
 - Emotional tools: ${preset.emotional_tools}
 - FORBIDDEN: ${preset.forbidden}
 Every scene must feel like it belongs to this specific visual world. No generic cinema.` : '';
+
+  const phaseEnergy = getPhaseCinematicEnergy(phaseName);
+  const phaseEnergyBlock = `
+**PHASE CINEMATIC ENERGY — ${phaseName.toUpperCase().replace(/_/g, ' ')} (overrides defaults):**
+- Camera mandate: ${phaseEnergy.camera_mandate}
+- Shot bias for this phase: ${phaseEnergy.shot_bias}
+- Movement speed: ${phaseEnergy.movement_speed}
+- Cut style: ${phaseEnergy.cut_style}
+- FORBIDDEN in this phase: ${phaseEnergy.forbidden}
+Every scene in this phase must feel cinematically distinct from the previous phase. The camera behavior IS the phase transition.`;
 
   const positionLabel = narrativeStart < 15 ? 'OPENING — establish the world, set the hook'
     : narrativeStart < 40 ? 'BUILDING — escalate stakes, deepen complexity'
@@ -766,6 +866,7 @@ Scene ${sceneStartGlobal || sceneStart} of ${totalScenes || '?'} — approximate
 Dramatic purpose: ${phasePurpose}
 Scenes to create: ${sceneCount} (numbers ${sceneStart} through ${sceneStart + sceneCount - 1})
 ${durLine}
+${phaseEnergyBlock}
 
 **EMOTIONAL BEAT TARGETS:**
 ${beatTable}
@@ -774,16 +875,26 @@ ${beatTable}
 ${scriptText}
 
 **DIRECTOR'S LAWS:**
-1. PLOT-DRIVEN SCENES: Show what is HAPPENING in the story at this exact moment.
-2. EMOTIONAL DELIVERY FIRST: Every technical choice serves the emotional beat target.
-3. NARRATIVE POSITION: Opening (0-15%) wider/cooler. Building (15-40%) medium/warming. Core (40-70%) tighter/peak. Climax (70-85%) closest/hottest. Resolution (85-100%) wide/settled.
-4. visual_concept: 2-4 sentences. Environment FIRST, character ACTION second, atmosphere third.
-5. SHOT DISTRIBUTION: Minimum 50% wide/wider (WS, EWS, MWS, HIGH ANGLE, ESTABLISHING). Never same shot type twice in a row.
-6. NAMED PROPS: Use specific objects from the narration. Never describe screen/paper text.
-7. NO ABSTRACT METAPHORS: Every visual is a plausible real-world scene.
-8. SCENE CONTINUITY: Each scene shares at least one visual element with the next.
-9. POPULATED WORLD: Most scenes include other people.
-10. TONE SAFETY: No imagery readable as violence/self-harm in non-horror/thriller content.
+1. PLOT-DRIVEN SCENES: Show what is HAPPENING in the story at this exact moment. Real action, real location, real stakes.
+2. EMOTIONAL DELIVERY FIRST: Every technical choice — shot type, angle, lighting, movement — serves the emotional beat target for that scene. "urgency 0.8" means handheld shake, fast push-in, cut on motion. "melancholy 0.6" means slow pull-back, dim key, long hold.
+3. NARRATIVE POSITION RULES:
+   - Opening (0-15%): WIDE shots, cooler tones, camera discovering the world — assertive but not intimate.
+   - Building (15-40%): MEDIUM shots warming up, camera growing bolder, push-ins becoming deliberate.
+   - Core (40-70%): CLOSE shots, peak warmth or peak cold (per genre), camera earning every inch.
+   - Climax (70-85%): TIGHTEST shots, highest contrast, camera still but world moving OR camera moving toward stillness.
+   - Resolution (85-100%): WIDE pull-backs, settled warmth, camera exhaling.
+4. SHOT SEQUENCE GRAMMAR — MANDATORY: Before choosing each shot type, state the previous shot. The new shot MUST:
+   - Be a DIFFERENT shot type from the immediately preceding scene.
+   - Shift camera angle by minimum 30 degrees (e.g. eye-level → low angle, OTS → bird's-eye, MS → POV).
+   - FORBIDDEN: two consecutive MS eye-level shots. FORBIDDEN: same angle twice in a row.
+5. POV SHOT MANDATE: Every video MUST include at least one Point-of-View shot — looking through the character's eyes. Best placed at a moment of discovery, confrontation, or interaction. Skeleton protagonist: bone hands visible at bottom of frame. All others: first-person embodied perspective.
+6. SHOT DISTRIBUTION: Minimum 40% wide or wider (WS, EWS, MWS, HIGH ANGLE, ESTABLISHING). These are not "filler" — they are the scenes where the world breathes.
+7. visual_concept: Camera-first shot description (see format above). NEVER a prose caption.
+8. NAMED PROPS: Use specific objects from the narration. Never describe readable text on screens or paper.
+9. NO ABSTRACT METAPHORS: Every visual is a plausible real-world scene a film crew could actually shoot.
+10. CONTINUITY BRIDGE: The continuity_bridge must name a SPECIFIC PHYSICAL OBJECT or LIGHT QUALITY that will appear in the NEXT scene — not a mood or feeling.
+11. POPULATED WORLD: Most scenes include other people. The character lives in a world with reactions, crowds, witnesses.
+12. TONE SAFETY: No imagery readable as violence or self-harm in non-horror/thriller content.
 
 **RESPONSE FORMAT:**
 {
@@ -994,6 +1105,8 @@ Respond with this JSON (raw JSON only, no markdown fences):
     "visual_world": "Specific sensory description of this story's visual universe",
     "recurring_visual_motifs": ["Motif 1","Motif 2","Motif 3"],
     "color_arc": "e.g. cool blues to warm amber to vibrant gold",
+    "pov_moment": "Identify the ONE scene in the story where a POV shot (looking through the character's eyes) would be most powerful — the moment of discovery, confrontation, or first contact. Describe what the character would SEE in that moment.",
+    "shot_motif": "One recurring compositional motif that defines this story visually — e.g. 'always find the character through a foreground object', 'hands are always visible and active', 'world always slightly too big for the character'.",
     "characters": [{
       "name": "Name/archetype",
       "identity_core": "Casting-sheet: exact age, specific gender (male or female — never neutral), skin tone, face shape, eye color, hair, build, 2-3 distinguishing marks.",
