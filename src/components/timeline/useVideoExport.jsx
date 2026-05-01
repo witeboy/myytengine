@@ -362,28 +362,20 @@ export default function useVideoExport() {
       });
     } catch {}
 
-    // Third try: load without crossOrigin — canvas will be tainted but image shows
-    // We create an OffscreenCanvas snapshot to un-taint it via drawImage
+    // Third try: load without crossOrigin — return img element directly.
+    // drawImage() accepts tainted images fine; only getImageData() would throw,
+    // and we never call that in the export pipeline.
     return new Promise((resolve) => {
       const img = new Image();
-      img.onload = async () => {
-        try {
-          // Draw into offscreen canvas to get a bitmap we can use
-          const oc = new OffscreenCanvas(img.naturalWidth || 1280, img.naturalHeight || 720);
-          const octx = oc.getContext('2d');
-          octx.drawImage(img, 0, 0);
-          const bm = await createImageBitmap(oc);
-          resolve(bm);
-        } catch {
-          // Last resort — return the img element itself (canvas will be tainted but won't crash)
-          resolve(img);
-        }
+      img.onload = () => {
+        console.log(`[Export] Direct img load succeeded (tainted ok): ${url.substring(0,60)}`);
+        resolve(img);
       };
       img.onerror = () => {
         console.warn(`[Export] All load strategies failed for: ${url.substring(0,60)}`);
-        resolve(null); // resolve null so clip renders black instead of crashing
+        resolve(null);
       };
-      img.src = url;
+      img.src = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
     });
   };
 
