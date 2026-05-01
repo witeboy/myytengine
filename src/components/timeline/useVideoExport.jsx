@@ -279,52 +279,70 @@ export default function useVideoExport() {
     return { supported: true, warning: true, reason: `${quality} H.264 encoding may not be fully supported.`, codec: profiles[0] };
   }, []);
 
+  // Removed r2.dev to allow Cloudflare voiceovers to be fetched directly via GET
   const CORS_BLOCKED_DOMAINS = [
     'tempfile.aiquickdraw.com', 'file.aiquickdraw.com', 'aiquickdraw.com',
-    'api.kie.ai', 'ideogram.ai',
-    'storage.googleapis.com', 'r2.dev', 'r2.cloudflarestorage.com',
+    'api.kie.ai', 'ideogram.ai', 'storage.googleapis.com'
   ];
 
   const fetchAsBlob = async (url) => {
     if (!url || !url.startsWith('http')) throw new Error('Invalid URL');
     const hostname = new URL(url).hostname;
     const isKnownBlocked = CORS_BLOCKED_DOMAINS.some(d => hostname.includes(d));
+    
+    // 1. Direct fetch if not explicitly blocked
     if (!isKnownBlocked) {
       try {
         const resp = await fetch(url, { mode: 'cors' });
         if (resp.ok) return URL.createObjectURL(await resp.blob());
       } catch {}
     }
+    
+    // 2. Try the primary Base44 API proxy
     try {
-      console.log(`[Export] Proxying: ${url.substring(0, 80)}…`);
-      const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url });
-      const data = proxyRes.data || proxyRes;
-      if (data.success && data.data) {
+      console.log(`[Export] Proxying (Base44): ${url.substring(0, 80)}…`);
+      const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url }).catch(() => null);
+      const data = proxyRes?.data || proxyRes;
+      if (data?.success && data?.data) {
         const bytes = Uint8Array.from(atob(data.data), c => c.charCodeAt(0));
-        return URL.createObjectURL(new Blob([bytes], { type: data.content_type || 'image/jpeg' }));
+        return URL.createObjectURL(new Blob([bytes], { type: data.content_type || 'application/octet-stream' }));
       }
-      if (data.success && data.file_url) {
+      if (data?.success && data?.file_url) {
         try {
-          const resp2 = await fetch(data.file_url, { mode: 'cors' });
-          if (resp2.ok) return URL.createObjectURL(await resp2.blob());
-        } catch {}
-        try {
-          const reProxy = await base44.functions.invoke('proxyFetchAsset', { url: data.file_url, return_base64: true });
-          const rd = reProxy.data || reProxy;
-          if (rd.success && rd.data) {
-            const bytes = Uint8Array.from(atob(rd.data), c => c.charCodeAt(0));
-            return URL.createObjectURL(new Blob([bytes], { type: rd.content_type || 'image/jpeg' }));
-          }
+          const resp2 = await fetch(data.file_url, { mode: 'cors' }).catch(() => null);
+          if (resp2?.ok) return URL.createObjectURL(await resp2.blob());
         } catch {}
       }
-    } catch (e) {
-      console.warn(`[Export] Proxy failed: ${url.substring(0, 60)} — ${e.message}`);
-    }
+    } catch (e) {}
+
+    // 3. Fallback to base64 explicit return via Base44
+    try {
+      console.log(`[Export] Proxying (Base44 Base64): ${url.substring(0, 80)}…`);
+      const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url, return_base64: true }).catch(() => null);
+      const data = proxyRes?.data || proxyRes;
+      if (data?.success && data?.data) {
+        const bytes = Uint8Array.from(atob(data.data), c => c.charCodeAt(0));
+        return URL.createObjectURL(new Blob([bytes], { type: data.content_type || 'application/octet-stream' }));
+      }
+    } catch (e) {}
+
+    // 4. Fallback to public proxies
+    try {
+      console.log(`[Export] Proxying (corsproxy.io): ${url.substring(0, 80)}…`);
+      const resp = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`, { mode: 'cors' });
+      if (resp.ok) return URL.createObjectURL(await resp.blob());
+    } catch (e) {}
+
+    try {
+      console.log(`[Export] Proxying (allorigins.win): ${url.substring(0, 80)}…`);
+      const resp = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, { mode: 'cors' });
+      if (resp.ok) return URL.createObjectURL(await resp.blob());
+    } catch (e) {}
+
     throw new Error(`CORS_BLOCKED: ${url.substring(0, 80)}`);
   };
 
   const loadImage = async (url) => {
-    // First try: fetch as blob via CORS proxy
     try {
       const blobUrl = await fetchAsBlob(url);
       try {
@@ -339,10 +357,9 @@ export default function useVideoExport() {
         });
       }
     } catch (proxyErr) {
-      console.warn(`[Export] Proxy failed for ${url.substring(0,60)}, trying direct img load…`);
+      console.warn(`[Export] Proxy chain failed for ${url.substring(0,60)}, trying direct img load…`);
     }
 
-    // Second try: load directly as <img> with crossOrigin (works if server allows *)
     try {
       return await new Promise((resolve, reject) => {
         const img = new Image();
@@ -353,7 +370,6 @@ export default function useVideoExport() {
       });
     } catch {}
 
-    // Third try: load without crossOrigin — return img element directly.
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
@@ -383,7 +399,6 @@ export default function useVideoExport() {
     });
   };
 
-  // FIX #2: requestVideoFrameCallback ensures the GPU has actually painted the requested frame texture
   const seekVideo = (video, time) => new Promise(resolve => {
     const target = Math.max(0, Math.min(time, (video.duration||0) > 0 ? video.duration-0.01 : 0));
     
@@ -391,18 +406,16 @@ export default function useVideoExport() {
       if ('requestVideoFrameCallback' in video) {
         video.requestVideoFrameCallback(() => resolve());
       } else {
-        // Fallback buffer time for browsers without RVFC to allow texture upload
         setTimeout(resolve, 25);
       }
     };
 
-    // If we're already at the requested time, don't seek (saves overhead)
     if (Math.abs(video.currentTime - target) < 0.04) { 
       finalizeSeek();
       return; 
     }
     
-    const t = setTimeout(resolve, 500); // 500ms safety timeout
+    const t = setTimeout(resolve, 500);
     video.onseeked = () => { 
       clearTimeout(t); 
       finalizeSeek(); 
@@ -410,16 +423,23 @@ export default function useVideoExport() {
     video.currentTime = target;
   });
 
+  // Removed the HEAD request completely to prevent fatal CORS exceptions
   const decodeAudio = async (url) => {
-    let audioUrl = url;
+    let buf;
     try {
-      const testResp = await fetch(url, { method: 'HEAD', mode: 'cors' });
-      if (!testResp.ok) throw new Error('not ok');
-    } catch {
-      try { audioUrl = await fetchAsBlob(url); } catch { audioUrl = url; }
+      // 1. Try to fetch securely through our unified Proxy/Direct Blob pipeline
+      const blobUrl = await fetchAsBlob(url);
+      const resp = await fetch(blobUrl);
+      buf = await resp.arrayBuffer();
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.warn(`[Export] Audio proxy chain failed, attempting raw fallback fetch: ${err.message}`);
+      // 2. Last resort raw GET attempt
+      const resp = await fetch(url, { mode: 'cors' });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      buf = await resp.arrayBuffer();
     }
-    const resp = await fetch(audioUrl, { mode: 'cors' });
-    const buf  = await resp.arrayBuffer();
+
     const actx = new AudioContext({ sampleRate: 48000 });
     const dec  = await actx.decodeAudioData(buf);
     await actx.close();
@@ -575,18 +595,14 @@ export default function useVideoExport() {
           mixedR[i] = Math.max(-1, Math.min(1, mixedR[i]));
         }
 
-        // FIX #1: Decouple Audio Processing
-        // Encode the complete audio track in large, contiguous chunks BEFORE the video loop.
-        // This ensures the AAC encoder does not desync, glitch, or miss timestamps.
         setPhase('audio');
-        const CHUNK_SIZE = sampleRate; // Process audio in exactly 1-second frames 
+        const CHUNK_SIZE = sampleRate; 
         for (let offset = 0; offset < totalSamples; offset += CHUNK_SIZE) {
           const len = Math.min(CHUNK_SIZE, totalSamples - offset);
           const planar = new Float32Array(len * 2);
           planar.set(mixedL.subarray(offset, offset + len), 0);
           planar.set(mixedR.subarray(offset, offset + len), len);
 
-          // Absolute strict sample-based timestamps (prevent float drift vs video FPS)
           const timestamp = Math.round((offset / sampleRate) * 1_000_000); 
           const ad = new AudioData({
             format: 'f32-planar', sampleRate,
@@ -597,10 +613,9 @@ export default function useVideoExport() {
           audioEncoder.encode(ad);
           ad.close();
 
-          // Yield occasionally to maintain UI reactivity
           if (offset % (CHUNK_SIZE * 5) === 0) await yieldToMain();
         }
-        await audioEncoder.flush(); // Only flush ONCE at the very end of the stream
+        await audioEncoder.flush();
       }
 
       const lastVideoFrame = new Map();
@@ -638,8 +653,6 @@ export default function useVideoExport() {
         if (cancelledRef.current) throw new Error('cancelled');
         if (encodeError) throw encodeError;
 
-        // FIX #3: Backpressure
-        // Wait gracefully if the queue is overloaded (prevents memory spikes & dropped frames)
         if (videoEncoder.encodeQueueSize > 30) {
           await yieldToMain();
           while(videoEncoder.encodeQueueSize > 15) {
@@ -679,12 +692,11 @@ export default function useVideoExport() {
         const timestamp = Math.round(f * (1_000_000 / fps));
         const vframe    = new VideoFrame(canvas, { timestamp });
         
-        // Keyframes strictly every 2 seconds. No manual flushes mid-stream.
         videoEncoder.encode(vframe, { keyFrame: f % (fps*2) === 0 });
         vframe.close();
 
         if (f % 8 === 0) {
-          setProgress(15 + Math.round((f / totalFrames) * 80)); // scale out of remaining 80%
+          setProgress(15 + Math.round((f / totalFrames) * 80)); 
           await yieldToMain();
         }
       }
