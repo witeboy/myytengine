@@ -5,10 +5,10 @@
  * Upload:  Bunny CDN (large file support, server env credentials)
  * Clips:   Bunny CDN URLs with timestamp metadata stored as JSON
  * Library: Project folders grouped by job_id, stored on Bunny as JSON manifest
- * Download: Server-side FFmpeg via quickPublishTranscribe clip_video action.
- *           FFmpeg cuts start→end, crops to 9:16 portrait, encodes H.264+AAC,
- *           uploads to Bunny CDN, returns a clean clip URL for direct download.
- *           No WebCodecs, no MediaRecorder, no browser-side demuxing.
+ * Download: Browser-side VideoEncoder + mp4-muxer (same as timeline export).
+ *           Seeks source video frame-by-frame, crops to 9:16 portrait,
+ *           encodes H.264+AAC, produces a clean MP4 blob for download.
+ *           No server round-trip. No WebCodecs VideoDecoder. No MediaRecorder.
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -32,6 +32,7 @@ import {
   transcribeFile,
   analyzeViralMoments,
 } from '@/lib/directApi';
+import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 
 const LS = {
   UP_KEY:  'openshorts_uploadpost_key',
@@ -236,65 +237,218 @@ function YouTubeClipCard({ clip, index, ytUrl }) {
 }
 
 // ── DownloadClipButton ─────────────────────────────────────────────────────
-// Delegates to the quickPublishTranscribe Deno backend (clip_video action).
-// FFmpeg runs server-side: seeks to start, cuts duration, crops to 9:16
-// portrait (crop=ih*9/16:ih,scale=720:1280), encodes H.264+AAC, uploads
-// the finished clip to Bunny CDN, and returns a clean clip_url.
-// The browser fetches that URL as a blob and triggers a native download.
-// No WebCodecs, no MediaRecorder, no MP4Box — nothing can break in-browser.
+// Browser-side export using VideoEncoder + mp4-muxer (same pattern as the
+// timeline's useVideoExport hook). No server round-trip needed.
 //
-// src may be either:
-//   • a plain Bunny CDN URL  →  https://cdn.example.com/uploads/video.mp4
-//   • a hash-fragment URL    →  https://cdn.example.com/uploads/video.mp4#t=20,45
-// clipStart / clipEnd are always passed explicitly from the clip object.
+// Pipeline:
+//  1. Load source video into a <video> element (Bunny CDN is CORS-open)
+//  2. Seek frame-by-frame from clipStart → clipEnd, draw each frame to
+//     an OffscreenCanvas cropped to 9:16 portrait (720×1280)
+//  3. Feed each frame as a VideoFrame into VideoEncoder → mp4-muxer
+//  4. Decode audio via AudioContext.decodeAudioData, slice the PCM window
+//     clipStart → clipEnd, feed into AudioEncoder → mp4-muxer
+//  5. muxer.finalize() → Blob → native download
+//
+// Falls back gracefully: if VideoEncoder is unsupported (Firefox/Safari),
+// shows a clear error instead of a silent broken file.
+
+const EASE_OUT_SINE = t => Math.sin((t * Math.PI) / 2);
+
+// Seek a video element and wait for it to settle
+const seekTo = (video, time) => new Promise(resolve => {
+  const target = Math.max(0, Math.min(time, (video.duration || 9999) - 0.02));
+  if (Math.abs(video.currentTime - target) < 0.04) { resolve(); return; }
+  const t = setTimeout(resolve, 600);
+  video.onseeked = () => { clearTimeout(t); resolve(); };
+  video.currentTime = target;
+});
+
 function DownloadClipButton({ src, clipStart, clipEnd, index }) {
-  const [status,   setStatus]   = useState('idle');   // idle | processing | done | error
+  const [status,   setStatus]   = useState('idle');
   const [progress, setProgress] = useState(0);
   const [errMsg,   setErrMsg]   = useState('');
 
   const handleDownload = async () => {
     if (!src || clipEnd == null) return;
 
-    // Strip any hash fragment to get the clean source URL
-    const sourceUrl = src.split('#')[0];
-    if (!sourceUrl.startsWith('http')) {
-      setErrMsg('No valid source URL for this clip');
+    // ── Browser support check ──────────────────────────────────────
+    if (typeof VideoEncoder === 'undefined' || typeof OffscreenCanvas === 'undefined') {
+      setErrMsg('Chrome/Edge required for export');
       setStatus('error');
+      setTimeout(() => { setStatus('idle'); setErrMsg(''); }, 5000);
       return;
     }
 
+    const sourceUrl = src.split('#')[0];
+    const clipDur   = clipEnd - clipStart;
+    const FPS       = 30;
+    const OUT_W     = 720;
+    const OUT_H     = 1280;
+    const BITRATE   = 4_000_000;
+    const totalFrames = Math.ceil(clipDur * FPS);
+
     setStatus('processing');
-    setProgress(5);
+    setProgress(2);
     setErrMsg('');
 
+    let video = null;
+
     try {
-      // Step 1 — ask the backend to cut + crop + encode the clip
-      setProgress(10);
-      const res = await base44.functions.invoke('quickPublishTranscribe', {
-        action:     'clip_video',
-        source_url: sourceUrl,
-        start:      clipStart,
-        end:        clipEnd,
+      // ── Step 1: Load video element ─────────────────────────────
+      video = document.createElement('video');
+      video.src         = sourceUrl;
+      video.crossOrigin = 'anonymous';
+      video.muted       = true;
+      video.playsInline = true;
+      video.preload     = 'auto';
+      video.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;';
+      document.body.appendChild(video);
+
+      await new Promise((res, rej) => {
+        video.onloadedmetadata = res;
+        video.onerror = () => rej(new Error('Video failed to load — check CORS on Bunny CDN'));
+        setTimeout(res, 15000);
       });
 
-      if (!res.data?.clip_url) {
-        throw new Error(res.data?.error || 'No clip URL returned from server');
+      // Compute 9:16 portrait crop from the source dimensions
+      const srcW = video.videoWidth  || 1920;
+      const srcH = video.videoHeight || 1080;
+      // Crop: take full height, center-crop width to 9:16
+      const cropW = Math.round(srcH * 9 / 16);
+      const cropX = Math.round((srcW - cropW) / 2);
+
+      setProgress(8);
+
+      // ── Step 2: Set up VideoEncoder + Muxer ───────────────────
+      // Find best supported H.264 profile
+      let videoCodec = 'avc1.42001e';
+      for (const c of ['avc1.42001e', 'avc1.4d001e', 'avc1.640028']) {
+        try {
+          const s = await VideoEncoder.isConfigSupported({ codec: c, width: OUT_W, height: OUT_H, bitrate: BITRATE });
+          if (s.supported) { videoCodec = c; break; }
+        } catch (_) {}
       }
 
-      const clipUrl = res.data.clip_url;
-      setProgress(80);
+      const muxer = new Muxer({
+        target: new ArrayBufferTarget(),
+        video:  { codec: 'avc', width: OUT_W, height: OUT_H },
+        audio:  { codec: 'aac', sampleRate: 48000, numberOfChannels: 2 },
+        fastStart: 'in-memory',
+      });
 
-      // Step 2 — fetch the finished clip from Bunny CDN as a blob
-      // (blob fetch lets the browser stream it to disk without CORS issues)
-      const fetchRes = await fetch(clipUrl);
-      if (!fetchRes.ok) throw new Error(`Download failed: HTTP ${fetchRes.status}`);
-      const blob = await fetchRes.blob();
-      setProgress(95);
+      let encodeError = null;
+      const videoEncoder = new VideoEncoder({
+        output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+        error:  e => { encodeError = e; },
+      });
+      videoEncoder.configure({ codec: videoCodec, width: OUT_W, height: OUT_H, bitrate: BITRATE, framerate: FPS });
 
-      // Step 3 — trigger native browser download
-      const duration = Math.round(clipEnd - clipStart);
-      const filename = `clip_${index + 1}_${Math.round(clipStart)}s_${duration}s_portrait.mp4`;
+      const audioEncoder = new AudioEncoder({
+        output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+        error:  e => console.warn('[OpenShorts] Audio encode error:', e),
+      });
+      audioEncoder.configure({ codec: 'mp4a.40.2', sampleRate: 48000, numberOfChannels: 2, bitrate: 128_000 });
+
+      const offscreen = new OffscreenCanvas(OUT_W, OUT_H);
+      const ctx       = offscreen.getContext('2d');
+
+      // ── Step 3: Encode video frames ────────────────────────────
+      // Seek to each frame timestamp, draw cropped 9:16 frame, encode
+      setProgress(10);
+
+      for (let f = 0; f < totalFrames; f++) {
+        if (encodeError) throw encodeError;
+
+        const elapsed  = f / FPS;
+        const srcTime  = clipStart + elapsed;
+
+        await seekTo(video, srcTime);
+
+        // Draw: crop landscape source to portrait 9:16
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, OUT_W, OUT_H);
+        ctx.drawImage(video, cropX, 0, cropW, srcH, 0, 0, OUT_W, OUT_H);
+
+        const timestamp = Math.round(elapsed * 1_000_000); // microseconds
+        const vframe    = new VideoFrame(offscreen, { timestamp });
+        videoEncoder.encode(vframe, { keyFrame: f % (FPS * 2) === 0 });
+        vframe.close();
+
+        // Flush every 2s of video to prevent codec reclaim on long clips
+        if (f > 0 && f % (FPS * 2) === 0) await videoEncoder.flush();
+
+        // Update progress: frames are 10% → 75%
+        if (f % 6 === 0) {
+          setProgress(10 + Math.round((f / totalFrames) * 65));
+          // Yield to keep UI responsive
+          await new Promise(r => setTimeout(r, 0));
+        }
+      }
+
+      await videoEncoder.flush();
+      videoEncoder.close();
+      setProgress(76);
+
+      // ── Step 4: Decode + slice audio ──────────────────────────
+      // Fetch audio from the same source URL, decode to raw PCM,
+      // then slice out just the clipStart → clipEnd window
+      try {
+        const audioResp = await fetch(sourceUrl, { mode: 'cors' });
+        if (audioResp.ok) {
+          const audioArrayBuffer = await audioResp.arrayBuffer();
+          const actx = new AudioContext({ sampleRate: 48000 });
+          const decoded = await actx.decodeAudioData(audioArrayBuffer);
+          await actx.close();
+
+          const sr         = decoded.sampleRate;
+          const startSamp  = Math.round(clipStart * sr);
+          const clipSamps  = Math.round(clipDur   * sr);
+          const chCount    = Math.min(decoded.numberOfChannels, 2);
+
+          // Build planar float32 for the clip window
+          const planar = new Float32Array(clipSamps * 2);
+          for (let ch = 0; ch < 2; ch++) {
+            const srcCh = decoded.getChannelData(Math.min(ch, chCount - 1));
+            for (let i = 0; i < clipSamps; i++) {
+              const srcIdx = startSamp + i;
+              planar[ch * clipSamps + i] = srcIdx < srcCh.length ? srcCh[srcIdx] : 0;
+            }
+          }
+
+          // Feed audio in 1s chunks
+          const CHUNK = sr;
+          for (let o = 0; o < clipSamps; o += CHUNK) {
+            const len     = Math.min(CHUNK, clipSamps - o);
+            const chunk   = new Float32Array(len * 2);
+            chunk.set(planar.subarray(o,            o + len),            0);
+            chunk.set(planar.subarray(clipSamps + o, clipSamps + o + len), len);
+            const ad = new AudioData({
+              format:           'f32-planar',
+              sampleRate:       48000,
+              numberOfFrames:   len,
+              numberOfChannels: 2,
+              timestamp:        Math.round((o / sr) * 1_000_000),
+              data:             chunk,
+            });
+            audioEncoder.encode(ad);
+            ad.close();
+          }
+        }
+      } catch (audioErr) {
+        // Audio decode failure is non-fatal — video still exports
+        console.warn('[OpenShorts] Audio decode failed, exporting video-only:', audioErr.message);
+      }
+
+      await audioEncoder.flush();
+      audioEncoder.close();
+      setProgress(92);
+
+      // ── Step 5: Finalize + download ────────────────────────────
+      muxer.finalize();
+      const blob     = new Blob([muxer.target.buffer], { type: 'video/mp4' });
       const blobUrl  = URL.createObjectURL(blob);
+      const duration = Math.round(clipDur);
+      const filename = `clip_${index + 1}_${Math.round(clipStart)}s_${duration}s_portrait.mp4`;
       const a        = document.createElement('a');
       a.href = blobUrl;
       a.download = filename;
@@ -308,53 +462,54 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
       setTimeout(() => { setStatus('idle'); setProgress(0); }, 4000);
 
     } catch (e) {
-      console.error('[DownloadClipButton]', e.message);
+      console.error('[OpenShorts] Export failed:', e.message);
       setErrMsg(e.message || 'Export failed');
       setStatus('error');
-      setTimeout(() => { setStatus('idle'); setProgress(0); setErrMsg(''); }, 5000);
+      setTimeout(() => { setStatus('idle'); setProgress(0); setErrMsg(''); }, 6000);
+    } finally {
+      if (video && document.body.contains(video)) document.body.removeChild(video);
     }
   };
 
   const label =
-    status === 'processing' ? (progress < 80 ? `Encoding… ${progress}%` : `Downloading…`) :
+    status === 'processing' ? (progress < 76 ? `Encoding ${progress}%` : progress < 92 ? 'Audio…' : 'Saving…') :
     status === 'done'       ? 'Saved!' :
     status === 'error'      ? 'Failed' :
-    'Download';
+    'Download MP4';
 
   const btnClass =
-    status === 'error'
-      ? 'bg-red-50 hover:bg-red-100 text-red-600'
-      : status === 'done'
-      ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700'
-      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700';
+    status === 'error'      ? 'bg-red-50 hover:bg-red-100 text-red-600' :
+    status === 'done'       ? 'bg-emerald-100 text-emerald-700' :
+                              'bg-emerald-50 hover:bg-emerald-100 text-emerald-700';
 
   return (
     <div className="flex-1 flex flex-col gap-0.5">
       <button
         onClick={handleDownload}
         disabled={status === 'processing'}
-        title={status === 'error' ? errMsg : 'Download as portrait MP4 (server-side FFmpeg)'}
+        title="Export as 9:16 portrait MP4 with audio"
         className={`relative flex items-center justify-center gap-1 px-2 py-1.5 rounded-xl text-xs font-medium transition-colors disabled:opacity-70 overflow-hidden ${btnClass}`}>
         {status === 'processing' && (
-          <div
-            className="absolute inset-0 bg-emerald-200 rounded-xl transition-all duration-300"
-            style={{ width: `${progress}%` }}
-          />
+          <div className="absolute inset-0 bg-emerald-200 rounded-xl transition-all duration-300"
+               style={{ width: `${progress}%` }} />
         )}
         <span className="relative flex items-center gap-1">
           {status === 'processing' ? <Loader2 size={10} className="animate-spin" /> :
-           status === 'done'       ? <Check    size={10} /> :
+           status === 'done'       ? <Check size={10} /> :
            status === 'error'      ? <AlertCircle size={10} /> :
-                                     <Download  size={10} />}
+                                     <Download size={10} />}
           {label}
         </span>
       </button>
       {status === 'error' && errMsg && (
-        <p className="text-[9px] text-red-500 text-center leading-tight px-1 truncate" title={errMsg}>{errMsg}</p>
+        <p className="text-[9px] text-red-500 text-center leading-tight px-1 truncate" title={errMsg}>
+          {errMsg}
+        </p>
       )}
     </div>
   );
 }
+
 
 
 // ── FileClipCard ───────────────────────────────────────────────────────
