@@ -279,22 +279,52 @@ export default function useVideoExport() {
     return { supported: true, warning: true, reason: `${quality} H.264 encoding may not be fully supported.`, codec: profiles[0] };
   }, []);
 
+  const CORS_BLOCKED_DOMAINS = [
+    'tempfile.aiquickdraw.com', 'file.aiquickdraw.com', 'aiquickdraw.com',
+    'api.kie.ai', 'ideogram.ai',
+    'storage.googleapis.com', 'r2.dev', 'r2.cloudflarestorage.com',
+  ];
+
   const fetchAsBlob = async (url) => {
-    // Proxies omitted for brevity, ensure your original CORS blocks are maintained
+    if (!url || !url.startsWith('http')) throw new Error('Invalid URL');
+    const hostname = new URL(url).hostname;
+    const isKnownBlocked = CORS_BLOCKED_DOMAINS.some(d => hostname.includes(d));
+    if (!isKnownBlocked) {
+      try {
+        const resp = await fetch(url, { mode: 'cors' });
+        if (resp.ok) return URL.createObjectURL(await resp.blob());
+      } catch {}
+    }
     try {
-      const resp = await fetch(url, { mode: 'cors' });
-      if (resp.ok) return URL.createObjectURL(await resp.blob());
-    } catch {}
-    // Fallback to proxy
-    const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url, return_base64: true });
-    if (proxyRes?.data?.data) {
-      const bytes = Uint8Array.from(atob(proxyRes.data.data), c => c.charCodeAt(0));
-      return URL.createObjectURL(new Blob([bytes], { type: proxyRes.data.content_type || 'image/jpeg' }));
+      console.log(`[Export] Proxying: ${url.substring(0, 80)}…`);
+      const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url });
+      const data = proxyRes.data || proxyRes;
+      if (data.success && data.data) {
+        const bytes = Uint8Array.from(atob(data.data), c => c.charCodeAt(0));
+        return URL.createObjectURL(new Blob([bytes], { type: data.content_type || 'image/jpeg' }));
+      }
+      if (data.success && data.file_url) {
+        try {
+          const resp2 = await fetch(data.file_url, { mode: 'cors' });
+          if (resp2.ok) return URL.createObjectURL(await resp2.blob());
+        } catch {}
+        try {
+          const reProxy = await base44.functions.invoke('proxyFetchAsset', { url: data.file_url, return_base64: true });
+          const rd = reProxy.data || reProxy;
+          if (rd.success && rd.data) {
+            const bytes = Uint8Array.from(atob(rd.data), c => c.charCodeAt(0));
+            return URL.createObjectURL(new Blob([bytes], { type: rd.content_type || 'image/jpeg' }));
+          }
+        } catch {}
+      }
+    } catch (e) {
+      console.warn(`[Export] Proxy failed: ${url.substring(0, 60)} — ${e.message}`);
     }
     throw new Error(`CORS_BLOCKED: ${url.substring(0, 80)}`);
   };
 
   const loadImage = async (url) => {
+    // First try: fetch as blob via CORS proxy
     try {
       const blobUrl = await fetchAsBlob(url);
       try {
@@ -308,15 +338,34 @@ export default function useVideoExport() {
           img.src = blobUrl;
         });
       }
-    } catch {
-      return new Promise((resolve) => {
+    } catch (proxyErr) {
+      console.warn(`[Export] Proxy failed for ${url.substring(0,60)}, trying direct img load…`);
+    }
+
+    // Second try: load directly as <img> with crossOrigin (works if server allows *)
+    try {
+      return await new Promise((resolve, reject) => {
         const img = new Image();
         img.crossOrigin = 'anonymous';
-        img.onload = () => resolve(img);
-        img.onerror = () => resolve(null);
-        img.src = url;
+        img.onload  = () => resolve(img);
+        img.onerror = () => reject(new Error('crossOrigin load failed'));
+        img.src = url + (url.includes('?') ? '&' : '?') + '_cb=' + Date.now();
       });
-    }
+    } catch {}
+
+    // Third try: load without crossOrigin — return img element directly.
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        console.log(`[Export] Direct img load succeeded (tainted ok): ${url.substring(0,60)}`);
+        resolve(img);
+      };
+      img.onerror = () => {
+        console.warn(`[Export] All load strategies failed for: ${url.substring(0,60)}`);
+        resolve(null);
+      };
+      img.src = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
+    });
   };
 
   const loadVideoElement = async (url) => {
@@ -363,7 +412,12 @@ export default function useVideoExport() {
 
   const decodeAudio = async (url) => {
     let audioUrl = url;
-    try { audioUrl = await fetchAsBlob(url); } catch { audioUrl = url; }
+    try {
+      const testResp = await fetch(url, { method: 'HEAD', mode: 'cors' });
+      if (!testResp.ok) throw new Error('not ok');
+    } catch {
+      try { audioUrl = await fetchAsBlob(url); } catch { audioUrl = url; }
+    }
     const resp = await fetch(audioUrl, { mode: 'cors' });
     const buf  = await resp.arrayBuffer();
     const actx = new AudioContext({ sampleRate: 48000 });
