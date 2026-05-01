@@ -315,7 +315,7 @@ export default function useVideoExport() {
       }
     } catch (e) {}
 
-    // 3. Fallback to base64 explicit return via Base44
+    // 3. Fallback to base64 explicit return via Base44 (if regular fails or 403s)
     try {
       console.log(`[Export] Proxying (Base44 Base64): ${url.substring(0, 80)}…`);
       const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url, return_base64: true }).catch(() => null);
