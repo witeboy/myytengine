@@ -752,7 +752,7 @@ await drainEncoder(videoEncoder, 8);
           const planar = new Float32Array(len * 2);
           planar.set(mixedL.subarray(o, o+len), 0);
           planar.set(mixedR.subarray(o, o+len), len);
-          const ad = new AudioData({ format:'f32-planar', sampleRate, numberOfFrames:len, numberOfChannels:2, timestamp:Math.round((o/sampleRate)*1_000_000), data:planar });
+          const ad = new AudioData({ format:'f32-planar', sampleRate, numberOfFrames:len, numberOfChannels:2, timestamp:Math.floor((o * 1_000_000) / sampleRate), data:planar });
           audioEncoder.encode(ad);
           ad.close();
         }
