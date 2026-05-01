@@ -2,11 +2,13 @@ import { useState, useRef, useCallback } from 'react';
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
 import { base44 } from '@/api/base44Client';
 
+
 const QUALITY_PRESETS = {
   '1080p': { width: 1920, height: 1080, bitrate: 5_000_000 },
   '720p':  { width: 1280, height: 720,  bitrate: 3_000_000 },
   '480p':  { width: 854,  height: 480,  bitrate: 1_500_000 },
 };
+
 
 const PORTRAIT_PRESETS = {
   '1080p': { width: 1080, height: 1920, bitrate: 5_000_000 },
@@ -14,7 +16,9 @@ const PORTRAIT_PRESETS = {
   '480p':  { width: 480,  height: 854,  bitrate: 1_500_000 },
 };
 
+
 const DEFAULT_TRANSITION_DURATION = 0.6;
+
 
 const ease = {
   easeInOutQuad:  t => t < 0.5 ? 2*t*t : -1+(4-2*t)*t,
@@ -23,6 +27,7 @@ const ease = {
   easeInOutCubic: t => t < 0.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2,
   easeOutSine:    t => Math.sin((t*Math.PI)/2),
 };
+
 
 const CINEMATIC_MOTIONS = [
   { id: 'zoom_in_center',  startScale:1.0,  endScale:1.10, startX:0,    startY:0,    endX:0,    endY:0    },
@@ -35,11 +40,13 @@ const CINEMATIC_MOTIONS = [
   { id: 'diagonal_tr_bl',  startScale:1.0,  endScale:1.08, startX:-1.5, startY:1.0,  endX:1.5,  endY:-1.0 },
 ];
 
+
 const yieldToMain = () => new Promise(r => {
   const ch = new MessageChannel();
   ch.port1.onmessage = r;
   ch.port2.postMessage(null);
 });
+
 
 function getMotionTransform(clip, elapsedInClip, W, H) {
   if (!clip?.cinematicMotion) return null;
@@ -55,6 +62,7 @@ function getMotionTransform(clip, elapsedInClip, W, H) {
   const ty_px   = ((motion.startY + (motion.endY - motion.startY) * intensity * eased) / 100) * H;
   return { scale, tx_px, ty_px };
 }
+
 
 function drawMediaFrame(ctx, W, H, media, mediaType, mxform) {
   const sw = mediaType === 'video' ? (media.videoWidth  || media.width  || 1) : (media.naturalWidth  || media.width  || 1);
@@ -72,6 +80,7 @@ function drawMediaFrame(ctx, W, H, media, mediaType, mxform) {
   ctx.restore();
 }
 
+
 function compositeTransitionFrame(ctx, W, H, outBitmap, inBitmap, type, progress) {
   ctx.clearRect(0, 0, W, H);
   let easeFn = ease.easeInOutQuad;
@@ -79,6 +88,7 @@ function compositeTransitionFrame(ctx, W, H, outBitmap, inBitmap, type, progress
   if (type === 'Expand Fade')  easeFn = ease.easeOutQuad;
   if (type === 'Overlap Fade') easeFn = ease.easeInOutQuad;
   const e2 = easeFn(progress);
+
 
   if (type === 'Gradual Fade') {
     ctx.globalAlpha = 1 - e2;
@@ -127,30 +137,43 @@ function compositeTransitionFrame(ctx, W, H, outBitmap, inBitmap, type, progress
   ctx.filter = 'none';
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CAPTION RENDERER — bakes captions into exported video frames
+// ═══════════════════════════════════════════════════════════════════════════
 function drawCaptions(ctx, W, H, captions, absTime) {
   if (!captions || captions.length === 0) return;
+
 
   const active = captions.filter(c =>
     absTime >= c.startTime && absTime < c.startTime + c.duration
   );
 
+
   for (const cap of active) {
     const text = cap.text || '';
     if (!text.trim()) continue;
+
 
     const baseScale = H / 1080;
     const fontSize = Math.round((cap.fontSize || 20) * baseScale);
     const fontFamily = cap.fontFamily || 'Arial, sans-serif';
     const fontWeight = cap.fontWeight || 'bold';
 
+
     ctx.save();
+
+
     const x = (cap.x || 50) / 100 * W;
     const y = (cap.y || 85) / 100 * H;
+
 
     ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
+
+    // Word-wrap
     const maxWidth = W * 0.85;
     const lines = [];
     const words = text.split(' ');
@@ -167,10 +190,12 @@ function drawCaptions(ctx, W, H, captions, absTime) {
     }
     if (currentLine) lines.push(currentLine);
 
+
     const lineHeight = fontSize * 1.3;
     const totalTextHeight = lines.length * lineHeight;
     const paddingX = fontSize * 0.6;
     const paddingY = fontSize * 0.4;
+
 
     let maxLineWidth = 0;
     for (const line of lines) {
@@ -178,16 +203,20 @@ function drawCaptions(ctx, W, H, captions, absTime) {
       if (lw > maxLineWidth) maxLineWidth = lw;
     }
 
+
     const bgX = x - maxLineWidth / 2 - paddingX;
     const bgY = y - totalTextHeight / 2 - paddingY;
     const bgW = maxLineWidth + paddingX * 2;
     const bgH = totalTextHeight + paddingY * 2;
 
+
+    // Fade in/out animation
     let alpha = 1;
     const fadeInDur = 0.15;
     const fadeOutDur = 0.15;
     const elapsed = absTime - cap.startTime;
     const remaining = (cap.startTime + cap.duration) - absTime;
+
 
     if (cap.animation === 'pop') {
       if (elapsed < fadeInDur) {
@@ -200,12 +229,16 @@ function drawCaptions(ctx, W, H, captions, absTime) {
       }
       if (remaining < fadeOutDur) alpha = Math.min(alpha, remaining / fadeOutDur);
     } else {
+      // Default fade
       if (elapsed < fadeInDur) alpha = elapsed / fadeInDur;
       if (remaining < fadeOutDur) alpha = Math.min(alpha, remaining / fadeOutDur);
     }
 
+
     ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
 
+
+    // Background
     if (cap.bgColor) {
       ctx.fillStyle = cap.bgColor;
       const radius = fontSize * 0.25;
@@ -214,6 +247,8 @@ function drawCaptions(ctx, W, H, captions, absTime) {
       ctx.fill();
     }
 
+
+    // Text stroke
     if (cap.strokeColor && (cap.strokeWidth || 0) > 0) {
       ctx.strokeStyle = cap.strokeColor;
       ctx.lineWidth = (cap.strokeWidth || 2) * baseScale;
@@ -224,14 +259,19 @@ function drawCaptions(ctx, W, H, captions, absTime) {
       });
     }
 
+
+    // Text fill
     ctx.fillStyle = cap.color || '#FFFFFF';
     lines.forEach((line, i) => {
       const ly = y - totalTextHeight / 2 + lineHeight * (i + 0.5);
       ctx.fillText(line, x, ly);
     });
+
+
     ctx.restore();
   }
 }
+
 
 export default function useVideoExport() {
   const [exporting,  setExporting]  = useState(false);
@@ -242,6 +282,7 @@ export default function useVideoExport() {
   const encoderRef   = useRef(null);
   const wakeLockRef  = useRef(null);
 
+
   const acquireWakeLock = async () => {
     try {
       if ('wakeLock' in navigator) {
@@ -250,18 +291,17 @@ export default function useVideoExport() {
       }
     } catch {}
   };
-  
   const reacquireWakeLock = async () => {
     if (wakeLockRef.current !== null && document.visibilityState === 'visible') {
       try { wakeLockRef.current = await navigator.wakeLock.request('screen'); } catch {}
     }
   };
-  
   const releaseWakeLock = () => {
     document.removeEventListener('visibilitychange', reacquireWakeLock);
     try { wakeLockRef.current?.release(); } catch {}
     wakeLockRef.current = null;
   };
+
 
   const checkSupport = useCallback(async (quality, orientation) => {
     if (!('VideoEncoder' in window)) {
@@ -279,110 +319,67 @@ export default function useVideoExport() {
     return { supported: true, warning: true, reason: `${quality} H.264 encoding may not be fully supported.`, codec: profiles[0] };
   }, []);
 
-  // Removed r2.dev to allow Cloudflare voiceovers to be fetched directly via GET
+
   const CORS_BLOCKED_DOMAINS = [
-    'tempfile.aiquickdraw.com', 'file.aiquickdraw.com', 'aiquickdraw.com',
-    'api.kie.ai', 'ideogram.ai', 'storage.googleapis.com'
+    'tempfile.aiquickdraw.com', 'api.kie.ai', 'ideogram.ai',
+    'storage.googleapis.com', 'r2.dev', 'r2.cloudflarestorage.com',
   ];
+
 
   const fetchAsBlob = async (url) => {
     if (!url || !url.startsWith('http')) throw new Error('Invalid URL');
     const hostname = new URL(url).hostname;
     const isKnownBlocked = CORS_BLOCKED_DOMAINS.some(d => hostname.includes(d));
-    
-    // 1. Direct fetch if not explicitly blocked
     if (!isKnownBlocked) {
       try {
         const resp = await fetch(url, { mode: 'cors' });
         if (resp.ok) return URL.createObjectURL(await resp.blob());
       } catch {}
     }
-    
-    // 2. Try the primary Base44 API proxy
     try {
-      console.log(`[Export] Proxying (Base44): ${url.substring(0, 80)}…`);
-      const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url }).catch(() => null);
-      const data = proxyRes?.data || proxyRes;
-      if (data?.success && data?.data) {
+      console.log(`[Export] Proxying: ${url.substring(0, 80)}…`);
+      const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url });
+      const data = proxyRes.data || proxyRes;
+      if (data.success && data.data) {
         const bytes = Uint8Array.from(atob(data.data), c => c.charCodeAt(0));
-        return URL.createObjectURL(new Blob([bytes], { type: data.content_type || 'application/octet-stream' }));
+        return URL.createObjectURL(new Blob([bytes], { type: data.content_type || 'image/jpeg' }));
       }
-      if (data?.success && data?.file_url) {
+      if (data.success && data.file_url) {
         try {
-          const resp2 = await fetch(data.file_url, { mode: 'cors' }).catch(() => null);
-          if (resp2?.ok) return URL.createObjectURL(await resp2.blob());
+          const resp2 = await fetch(data.file_url, { mode: 'cors' });
+          if (resp2.ok) return URL.createObjectURL(await resp2.blob());
+        } catch {}
+        try {
+          const reProxy = await base44.functions.invoke('proxyFetchAsset', { url: data.file_url, return_base64: true });
+          const rd = reProxy.data || reProxy;
+          if (rd.success && rd.data) {
+            const bytes = Uint8Array.from(atob(rd.data), c => c.charCodeAt(0));
+            return URL.createObjectURL(new Blob([bytes], { type: rd.content_type || 'image/jpeg' }));
+          }
         } catch {}
       }
-    } catch (e) {}
-
-    // 3. Fallback to base64 explicit return via Base44 (if regular fails or 403s)
-    try {
-      console.log(`[Export] Proxying (Base44 Base64): ${url.substring(0, 80)}…`);
-      const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url, return_base64: true }).catch(() => null);
-      const data = proxyRes?.data || proxyRes;
-      if (data?.success && data?.data) {
-        const bytes = Uint8Array.from(atob(data.data), c => c.charCodeAt(0));
-        return URL.createObjectURL(new Blob([bytes], { type: data.content_type || 'application/octet-stream' }));
-      }
-    } catch (e) {}
-
-    // 4. Fallback to public proxies
-    try {
-      console.log(`[Export] Proxying (corsproxy.io): ${url.substring(0, 80)}…`);
-      const resp = await fetch(`https://corsproxy.io/?${encodeURIComponent(url)}`, { mode: 'cors' });
-      if (resp.ok) return URL.createObjectURL(await resp.blob());
-    } catch (e) {}
-
-    try {
-      console.log(`[Export] Proxying (allorigins.win): ${url.substring(0, 80)}…`);
-      const resp = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, { mode: 'cors' });
-      if (resp.ok) return URL.createObjectURL(await resp.blob());
-    } catch (e) {}
-
+    } catch (e) {
+      console.warn(`[Export] Proxy failed: ${url.substring(0, 60)} — ${e.message}`);
+    }
     throw new Error(`CORS_BLOCKED: ${url.substring(0, 80)}`);
   };
 
+
   const loadImage = async (url) => {
+    const blobUrl = await fetchAsBlob(url);
     try {
-      const blobUrl = await fetchAsBlob(url);
-      try {
-        const resp = await fetch(blobUrl);
-        return await createImageBitmap(await resp.blob());
-      } catch {
-        return new Promise((resolve, reject) => {
-          const img = new Image();
-          img.onload  = () => resolve(img);
-          img.onerror = () => reject(new Error('Image bitmap creation failed'));
-          img.src = blobUrl;
-        });
-      }
-    } catch (proxyErr) {
-      console.warn(`[Export] Proxy chain failed for ${url.substring(0,60)}, trying direct img load…`);
-    }
-
-    try {
-      return await new Promise((resolve, reject) => {
+      const resp = await fetch(blobUrl);
+      return await createImageBitmap(await resp.blob());
+    } catch {
+      return new Promise((resolve, reject) => {
         const img = new Image();
-        img.crossOrigin = 'anonymous';
         img.onload  = () => resolve(img);
-        img.onerror = () => reject(new Error('crossOrigin load failed'));
-        img.src = url + (url.includes('?') ? '&' : '?') + '_cb=' + Date.now();
+        img.onerror = () => reject(new Error('Image bitmap creation failed'));
+        img.src = blobUrl;
       });
-    } catch {}
-
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => {
-        console.log(`[Export] Direct img load succeeded (tainted ok): ${url.substring(0,60)}`);
-        resolve(img);
-      };
-      img.onerror = () => {
-        console.warn(`[Export] All load strategies failed for: ${url.substring(0,60)}`);
-        resolve(null);
-      };
-      img.src = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
-    });
+    }
   };
+
 
   const loadVideoElement = async (url) => {
     let blobUrl = null;
@@ -399,53 +396,36 @@ export default function useVideoExport() {
     });
   };
 
+
   const seekVideo = (video, time) => new Promise(resolve => {
     const target = Math.max(0, Math.min(time, (video.duration||0) > 0 ? video.duration-0.01 : 0));
-    
-    const finalizeSeek = () => {
-      if ('requestVideoFrameCallback' in video) {
-        video.requestVideoFrameCallback(() => resolve());
-      } else {
-        setTimeout(resolve, 25);
-      }
-    };
-
-    if (Math.abs(video.currentTime - target) < 0.04) { 
-      finalizeSeek();
-      return; 
-    }
-    
+    if (Math.abs(video.currentTime - target) < 0.04) { resolve(); return; }
     const t = setTimeout(resolve, 500);
-    video.onseeked = () => { 
-      clearTimeout(t); 
-      finalizeSeek(); 
-    };
+    video.onseeked = () => { clearTimeout(t); resolve(); };
     video.currentTime = target;
   });
 
-  // Removed the HEAD request completely to prevent fatal CORS exceptions
-  const decodeAudio = async (url) => {
-    let buf;
-    try {
-      // 1. Try to fetch securely through our unified Proxy/Direct Blob pipeline
-      const blobUrl = await fetchAsBlob(url);
-      const resp = await fetch(blobUrl);
-      buf = await resp.arrayBuffer();
-      URL.revokeObjectURL(blobUrl);
-    } catch (err) {
-      console.warn(`[Export] Audio proxy chain failed, attempting raw fallback fetch: ${err.message}`);
-      // 2. Last resort raw GET attempt
-      const resp = await fetch(url, { mode: 'cors' });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      buf = await resp.arrayBuffer();
-    }
 
+  const decodeAudio = async (url) => {
+    let audioUrl = url;
+    try {
+      const testResp = await fetch(url, { method: 'HEAD', mode: 'cors' });
+      if (!testResp.ok) throw new Error('not ok');
+    } catch {
+      try { audioUrl = await fetchAsBlob(url); } catch { audioUrl = url; }
+    }
+    const resp = await fetch(audioUrl, { mode: 'cors' });
+    const buf  = await resp.arrayBuffer();
     const actx = new AudioContext({ sampleRate: 48000 });
     const dec  = await actx.decodeAudioData(buf);
     await actx.close();
     return dec;
   };
 
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // MAIN EXPORT — accepts captions via opts.captions
+  // ═══════════════════════════════════════════════════════════════════════
   const exportVideo = useCallback(async (scenes, opts) => {
     const {
       quality='720p', orientation='landscape', fps=30,
@@ -454,13 +434,16 @@ export default function useVideoExport() {
       captions = [],
     } = opts||{};
 
+
     cancelledRef.current = false;
     setExporting(true); setProgress(0); setPhase('checking'); setError(null);
     await acquireWakeLock();
 
+
     try {
       const presets = orientation === 'portrait' ? PORTRAIT_PRESETS : QUALITY_PRESETS;
       const { width: W, height: H, bitrate: BR } = presets[quality];
+
 
       const clips = scenes.map((s, i) => ({
         index: i,
@@ -478,11 +461,18 @@ export default function useVideoExport() {
         startTime: 0,
       }));
 
+
       let off = 0;
       clips.forEach(c => { c.startTime = off; off += c.duration; });
+
+
       const totalDuration = off;
       const totalFrames   = Math.ceil(totalDuration * fps);
       const hasAudio      = !!(voiceoverUrl || musicUrl);
+
+
+      console.log(`[Export] ${clips.length} clips, ${captions.length} captions, ${totalFrames} frames @ ${quality}`);
+
 
       let videoCodec = 'avc1.42001e';
       for (const c of ['avc1.42001e','avc1.4d001e','avc1.640028']) {
@@ -492,9 +482,11 @@ export default function useVideoExport() {
         } catch {}
       }
 
+
       const muxCfg = { target: new ArrayBufferTarget(), video: { codec:'avc', width:W, height:H }, fastStart:'in-memory' };
       if (hasAudio) muxCfg.audio = { codec:'aac', sampleRate:48000, numberOfChannels:2 };
       const muxer = new Muxer(muxCfg);
+
 
       let encodeError = null;
       const videoEncoder = new VideoEncoder({
@@ -503,6 +495,7 @@ export default function useVideoExport() {
       });
       encoderRef.current = videoEncoder;
       videoEncoder.configure({ codec: videoCodec, width: W, height: H, bitrate: BR, framerate: fps });
+
 
       let audioEncoder = null;
       if (hasAudio) {
@@ -513,9 +506,14 @@ export default function useVideoExport() {
         audioEncoder.configure({ codec:'mp4a.40.2', sampleRate:48000, numberOfChannels:2, bitrate:128_000 });
       }
 
-      const canvas = new OffscreenCanvas(W, H);
-      const ctx    = canvas.getContext('2d', { willReadFrequently: true });
 
+      const canvas = new OffscreenCanvas(W, H);
+      const ctx    = canvas.getContext('2d');
+
+
+      // ─── Load ALL media BEFORE creating encoder ─────────────────
+      // CRITICAL: Load media first so the encoder doesn't sit idle during
+      // slow network fetches (which causes "Codec reclaimed due to inactivity")
       setPhase('loading');
       const clipMedia = [];
       for (let i = 0; i < clips.length; i++) {
@@ -536,89 +534,19 @@ export default function useVideoExport() {
         } else if (hasImg) {
           try { media = await loadImage(clip.imageUrl); } catch {}
         }
+        if (!media) console.warn(`[Export] ⚠️ Clip ${i} — no media`);
         clipMedia.push({ media, mediaType, measuredVideoDur });
       }
 
-      const sampleRate   = 48000;
-      const totalSamples = Math.ceil(totalDuration * sampleRate);
-      let mixedL = null;
-      let mixedR = null;
 
-      if (hasAudio && audioEncoder) {
-        mixedL = new Float32Array(totalSamples);
-        mixedR = new Float32Array(totalSamples);
+      console.log(`[Export] All ${clipMedia.length} media loaded, creating encoder...`);
 
-        if (voiceoverUrl) {
-          try {
-            const voBuf = await decodeAudio(voiceoverUrl);
-            const chN = Math.min(voBuf.numberOfChannels, 2);
-            const ch = Array.from({length:chN}, (_,i) => voBuf.getChannelData(i));
-            for (let i = 0; i < Math.min(totalSamples, voBuf.length); i++) {
-              mixedL[i] += ch[0][i];
-              mixedR[i] += ch[Math.min(1,chN-1)][i];
-            }
-          } catch(e) { console.warn('VO decode failed:', e); }
-        }
 
-        if (musicUrl) {
-          try {
-            const musicBuf = await decodeAudio(musicUrl);
-            const chN = Math.min(musicBuf.numberOfChannels, 2);
-            const ch = Array.from({length:chN}, (_,i) => musicBuf.getChannelData(i));
-            if (editedMusicClips.length > 0) {
-              for (const mc of editedMusicClips) {
-                const clipVol = mc.volume ?? musicVolume;
-                const srcOffset = Math.round((mc.sourceOffset || 0) * sampleRate);
-                const destStart = Math.round(mc.startTime * sampleRate);
-                const clipSamples = Math.round(mc.duration * sampleRate);
-                for (let i = 0; i < clipSamples; i++) {
-                  const di = destStart + i;
-                  if (di >= totalSamples) break;
-                  const si = srcOffset + i;
-                  const srcIdx = si < musicBuf.length ? si : (si % musicBuf.length);
-                  mixedL[di] += ch[0][srcIdx] * clipVol;
-                  mixedR[di] += ch[Math.min(1,chN-1)][srcIdx] * clipVol;
-                }
-              }
-            } else {
-              for (let i = 0; i < totalSamples; i++) {
-                const si = i % musicBuf.length;
-                mixedL[i] += ch[0][si] * musicVolume;
-                mixedR[i] += ch[Math.min(1,chN-1)][si] * musicVolume;
-              }
-            }
-          } catch(e) { console.warn('Music decode failed:', e); }
-        }
+      setPhase('encoding');
 
-        for (let i = 0; i < totalSamples; i++) {
-          mixedL[i] = Math.max(-1, Math.min(1, mixedL[i]));
-          mixedR[i] = Math.max(-1, Math.min(1, mixedR[i]));
-        }
-
-        setPhase('audio');
-        const CHUNK_SIZE = sampleRate; 
-        for (let offset = 0; offset < totalSamples; offset += CHUNK_SIZE) {
-          const len = Math.min(CHUNK_SIZE, totalSamples - offset);
-          const planar = new Float32Array(len * 2);
-          planar.set(mixedL.subarray(offset, offset + len), 0);
-          planar.set(mixedR.subarray(offset, offset + len), len);
-
-          const timestamp = Math.round((offset / sampleRate) * 1_000_000); 
-          const ad = new AudioData({
-            format: 'f32-planar', sampleRate,
-            numberOfFrames: len, numberOfChannels: 2,
-            timestamp,
-            data: planar,
-          });
-          audioEncoder.encode(ad);
-          ad.close();
-
-          if (offset % (CHUNK_SIZE * 5) === 0) await yieldToMain();
-        }
-        await audioEncoder.flush();
-      }
 
       const lastVideoFrame = new Map();
+
 
       const drawClipFrame = async (ci, elapsedInClip) => {
         const clip = clips[ci];
@@ -646,19 +574,21 @@ export default function useVideoExport() {
         }
       };
 
-      setPhase('encoding');
 
-      // ─── Video Frames Loop ───────────────────────────────────────
+      // ─── Encode frames ────────────────────────────────────────
+      // Flush frequently to prevent "Codec reclaimed due to inactivity"
+      // For long videos (15min+), the browser may reclaim the codec if
+      // the encoder queue gets too deep without being flushed.
+      let framesSinceFlush = 0;
+      const FLUSH_EVERY    = fps * 2; // flush every 2 seconds of video
+      let lastFlushWallTime = Date.now();
+      const MAX_WALL_GAP_MS = 8000; // force flush if 8s wall time passes without one
+
+
       for (let f = 0; f < totalFrames; f++) {
         if (cancelledRef.current) throw new Error('cancelled');
         if (encodeError) throw encodeError;
 
-        if (videoEncoder.encodeQueueSize > 30) {
-          await yieldToMain();
-          while(videoEncoder.encodeQueueSize > 15) {
-             await new Promise(r => setTimeout(r, 10));
-          }
-        }
 
         const absTime = f / fps;
         let ci = clips.length - 1;
@@ -669,10 +599,12 @@ export default function useVideoExport() {
         const elapsed  = absTime - clip.startTime;
         const prevClip = ci > 0 ? clips[ci-1] : null;
 
+
         const tType   = prevClip?.transition || null;
         const tDur    = prevClip?.transitionDuration ?? DEFAULT_TRANSITION_DURATION;
         const tProg   = tType ? Math.min(1, elapsed / tDur) : 0;
         const inTrans = tType && elapsed < tDur;
+
 
         if (inTrans) {
           await drawClipFrame(ci, elapsed);
@@ -687,19 +619,32 @@ export default function useVideoExport() {
           await drawClipFrame(ci, elapsed);
         }
 
+
+        // ══ DRAW CAPTIONS on top of every frame ══════════════════
         drawCaptions(ctx, W, H, captions, absTime);
+
 
         const timestamp = Math.round(f * (1_000_000 / fps));
         const vframe    = new VideoFrame(canvas, { timestamp });
-        
         videoEncoder.encode(vframe, { keyFrame: f % (fps*2) === 0 });
         vframe.close();
+        framesSinceFlush++;
 
+
+        // Flush based on frame count OR wall-clock gap (whichever comes first)
+        const wallNow = Date.now();
+        const wallGap = wallNow - lastFlushWallTime;
+        if (framesSinceFlush >= FLUSH_EVERY || wallGap >= MAX_WALL_GAP_MS) {
+          await videoEncoder.flush();
+          framesSinceFlush = 0;
+          lastFlushWallTime = Date.now();
+        }
         if (f % 8 === 0) {
-          setProgress(15 + Math.round((f / totalFrames) * 80)); 
+          setProgress(15 + Math.round((f / totalFrames) * 60));
           await yieldToMain();
         }
       }
+
 
       for (const bm of lastVideoFrame.values()) bm.close();
       lastVideoFrame.clear();
@@ -707,19 +652,99 @@ export default function useVideoExport() {
         if (media?._blobUrl) URL.revokeObjectURL(media._blobUrl);
       }
 
+
       if (cancelledRef.current) throw new Error('cancelled');
 
-      setPhase('finalizing'); setProgress(98);
+
+      // ─── Audio ────────────────────────────────────────────────
+      if (hasAudio && audioEncoder) {
+        setPhase('audio'); setProgress(78);
+        const sampleRate   = 48000;
+        const totalSamples = Math.ceil(totalDuration * sampleRate);
+        const mixedL = new Float32Array(totalSamples);
+        const mixedR = new Float32Array(totalSamples);
+        // Mix voiceover — full timeline, no loop
+        if (voiceoverUrl) {
+          try {
+            const voBuf = await decodeAudio(voiceoverUrl);
+            const chN = Math.min(voBuf.numberOfChannels, 2);
+            const ch = Array.from({length:chN}, (_,i) => voBuf.getChannelData(i));
+            for (let i = 0; i < Math.min(totalSamples, voBuf.length); i++) {
+              mixedL[i] += ch[0][i];
+              mixedR[i] += ch[Math.min(1,chN-1)][i];
+            }
+          } catch(e) { console.warn('VO decode failed:', e); }
+        }
+
+
+        // Mix music — respect edited music clips (position, trim, volume per clip)
+        if (musicUrl) {
+          try {
+            const musicBuf = await decodeAudio(musicUrl);
+            const chN = Math.min(musicBuf.numberOfChannels, 2);
+            const ch = Array.from({length:chN}, (_,i) => musicBuf.getChannelData(i));
+
+
+            if (editedMusicClips.length > 0) {
+              // Use edited clip positions for precise placement
+              for (const mc of editedMusicClips) {
+                const clipVol = mc.volume ?? musicVolume;
+                const srcOffset = Math.round((mc.sourceOffset || 0) * sampleRate);
+                const destStart = Math.round(mc.startTime * sampleRate);
+                const clipSamples = Math.round(mc.duration * sampleRate);
+                for (let i = 0; i < clipSamples; i++) {
+                  const di = destStart + i;
+                  if (di >= totalSamples) break;
+                  const si = srcOffset + i;
+                  const srcIdx = si < musicBuf.length ? si : (si % musicBuf.length); // loop within clip if needed
+                  mixedL[di] += ch[0][srcIdx] * clipVol;
+                  mixedR[di] += ch[Math.min(1,chN-1)][srcIdx] * clipVol;
+                }
+              }
+            } else {
+              // Fallback: loop music across full timeline at musicVolume
+              for (let i = 0; i < totalSamples; i++) {
+                const si = i % musicBuf.length;
+                mixedL[i] += ch[0][si] * musicVolume;
+                mixedR[i] += ch[Math.min(1,chN-1)][si] * musicVolume;
+              }
+            }
+          } catch(e) { console.warn('Music decode failed:', e); }
+        }
+        for (let i = 0; i < totalSamples; i++) {
+          mixedL[i] = Math.max(-1, Math.min(1, mixedL[i]));
+          mixedR[i] = Math.max(-1, Math.min(1, mixedR[i]));
+        }
+        const CHUNK = sampleRate;
+        for (let o = 0; o < totalSamples; o += CHUNK) {
+          if (cancelledRef.current) throw new Error('cancelled');
+          const len = Math.min(CHUNK, totalSamples - o);
+          const planar = new Float32Array(len * 2);
+          planar.set(mixedL.subarray(o, o+len), 0);
+          planar.set(mixedR.subarray(o, o+len), len);
+          const ad = new AudioData({ format:'f32-planar', sampleRate, numberOfFrames:len, numberOfChannels:2, timestamp:Math.round((o/sampleRate)*1_000_000), data:planar });
+          audioEncoder.encode(ad);
+          ad.close();
+        }
+        setProgress(90);
+      }
+
+
+      // ─── Finalise ─────────────────────────────────────────────
+      setPhase('finalizing'); setProgress(95);
       await videoEncoder.flush();
+      if (audioEncoder) await audioEncoder.flush();
       muxer.finalize();
       videoEncoder.close();
       audioEncoder?.close();
       encoderRef.current = null;
 
+
       const blob = new Blob([muxer.target.buffer], { type:'video/mp4' });
       setProgress(100); setPhase('done'); setExporting(false);
       releaseWakeLock();
       return blob;
+
 
     } catch (e) {
       try { encoderRef.current?.close(); } catch {}
@@ -736,6 +761,7 @@ export default function useVideoExport() {
     }
   }, []);
 
+
   const cancel = useCallback(() => {
     cancelledRef.current = true;
     try { encoderRef.current?.close(); } catch {}
@@ -744,5 +770,7 @@ export default function useVideoExport() {
     setExporting(false); setPhase(''); setProgress(0); setError(null);
   }, []);
 
+
   return { exporting, progress, phase, error, exportVideo, checkSupport, cancel, QUALITY_PRESETS, PORTRAIT_PRESETS };
 }
+
