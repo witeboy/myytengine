@@ -536,17 +536,76 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
 // ARC-AWARE ANIMATION DYNAMICS
 // ══════════════════════════════════════════════════════════════════
 
-function getArcAnimationGuidance(arcPosition) {
-  const map = {
-    setup: "SLOW, RESTRAINED. Gentle drift or creeping pan. Camera discovers the world — parallax depth as foreground drifts past background. Settling motion like arriving somewhere.",
-    rising: "BUILDING energy. Gradual push-ins with purpose. Handheld micro-shake emerging. Parallax intensifying. Elements in frame start responding — curtains shift, papers flutter, light quickens.",
-    climax: "PEAK intensity but CONTROLLED. Deliberate slow push-in to subject's eyes or hands. Everything else stills. Rack focus snaps. Single dramatic light shift. Hold the moment — let it land.",
-    resolution: "EXHALE. Slow pull-back revealing wider context. Settling dust, calming light, softening focus. Motion decelerates like a heartbeat returning to rest. Warmth enters the frame.",
-    cold_open: "IMMEDIATE and ASSERTIVE. Camera already moving when scene starts — mid-track or mid-push. No easing in. Foreground whips past. Light cuts sharp. Grab the eye in the first frame.",
-    rising_tension: "ESCALATING rhythm. Each motion slightly faster or tighter than the last. Push-ins grow bolder, tracking grows more urgent. Environmental motion picks up — wind, flickering light, shifting shadows. Building toward something.",
-    emotional_core: "DELIBERATE POWER. Camera slows to meaningful crawl. Every inch of movement earns its place. Subject micro-expressions amplified — a swallow, a blink, fingers tightening. Shallow DOF breathes. Light pools and shifts like it's alive. This is the frame viewers remember.",
+function getArcAnimationGuidance(arcPosition, sceneDuration, visualStyle) {
+  const duration = sceneDuration || 2.5;
+  const budget = duration <= 2.0 ? 1 : duration <= 4.0 ? 2 : 3;
+  const isSkeleton = visualStyle === 'skeleton_protagonist';
+
+  const skeletonPhysics = isSkeleton
+    ? "SKELETON PHYSICS: bone joints have mechanical lag — limbs trail torso by 2 frames. Cloth floats slightly out of sync with skeleton frame. Skull tilts with exaggerated curiosity, wider range than a human neck. Big round eyeballs DART quickly to stimulus then HOLD in wide stare — no blinking. CROWD REACTION 3-BEAT: Beat1 — background humans haven't noticed yet, normal activity. Beat2 — one person freezes, taps neighbor. Beat3 — cascade: mouths drop, bodies recoil, children point, some lean in fascinated. "
+    : "";
+
+  const arcs = {
+    setup: {
+      camera: "Ultra-slow push in (8% zoom over full duration), starting wide to establish world",
+      atmos: "Dust motes drift in a single foreground shaft of light. Nothing hurries. Ambient sounds settle.",
+      subject: "Subject completely still — one breath, one weight shift, no more. Let the world breathe.",
+      crowd: "Background figures move naturally and unaware. Life continues around the moment.",
+      cut: "HOLD three frames past the emotion before cutting. Let silence land."
+    },
+    cold_open: {
+      camera: "Camera ALREADY MOVING when scene opens — mid-push or mid-track, zero ease-in. Assert the world immediately.",
+      atmos: "Hard foreground element whips past lens in first 10 frames. Light cuts sharp on subject.",
+      subject: "Subject caught fully mid-action — never posed, never waiting for camera.",
+      crowd: "Background crowd ALREADY reacting — don't build to it, start inside the chaos.",
+      cut: "SMASH CUT — zero hold, zero ease-out. Maximum editorial impact."
+    },
+    rising: {
+      camera: "Deliberate push in with growing purpose — 15% zoom over duration. Camera grows bolder each second.",
+      atmos: "Environmental motion picks up — fabric shifts, loose objects stir, light quickens.",
+      subject: "Subject micro-expressions intensify across the shot. Fingers tighten. Jaw sets. Breath shortens.",
+      crowd: "Crowd begins leaning forward, exchanging glances, one person points.",
+      cut: "END on a physical beat — cut lands ON the gesture or sound, never between them."
+    },
+    rising_tension: {
+      camera: "Handheld micro-shake emerges and grows. Each movement 10% faster than the last. PUSH IN with urgency.",
+      atmos: "Unstable light source — flicker, shift, stutter. Wind picks up. Something is wrong with the air.",
+      subject: "Rapid small gestures. Eyes dart to multiple points. Chest visible breathing. Hands can't be still.",
+      crowd: "Crowd steps back in unison. Murmurs. One person shouts silently. Children pulled behind adults.",
+      cut: "CUT ON MOTION — editor cuts while subject is mid-movement, never at rest. Momentum carries through."
+    },
+    emotional_core: {
+      camera: "Camera slows to meaningful crawl — every millimeter earns its place. HOLD at peak emotional frame.",
+      atmos: "Everything else in the world stills. A single light pool shifts toward the subject's face.",
+      subject: "One micro-expression tells everything. A swallow. Fingers loosening. The slight wet of an eye.",
+      crowd: "Crowd goes completely still — then one person slowly covers their mouth.",
+      cut: "HOLD 6-8 frames longer than feels comfortable. The silence IS the scene. Then cut."
+    },
+    climax: {
+      camera: "RAPID rack focus snap — pulls from background to subject's eyes in 4 frames. Hold perfectly still after.",
+      atmos: "Single dramatic light shift — shadow swings, contrast doubles, color temperature drops or rises.",
+      subject: "Stillness after the storm. Peak has passed. Body settles, weight releases, face resolves.",
+      crowd: "Mass reaction — mouths open simultaneously, arms raise, collective shock or collective joy.",
+      cut: "CUT TO BLACK for 8 frames — then smash to next scene. The black IS the punctuation."
+    },
+    resolution: {
+      camera: "Slow pull back — character becomes small against the world again. Wide breathes in around them.",
+      atmos: "Settling dust. Calming light. Warmth creeps into frame from the edges. The world exhales.",
+      subject: "Shoulders drop. Hands open. Face softens. The body lets go of what it was carrying.",
+      crowd: "Crowd disperses slowly — people shaking heads, talking quietly, still processing what happened.",
+      cut: "LONG HOLD — let breathing return to normal before any transition."
+    }
   };
-  return map[arcPosition] || map.rising;
+
+  const arc = arcs[arcPosition] || arcs.rising;
+
+  const layer1 = `Camera: ${arc.camera}.`;
+  const layer2 = budget >= 2 ? ` World: ${arc.atmos} ${arc.crowd}` : "";
+  const layer3 = budget >= 3 ? ` Subject: ${arc.subject}` : "";
+  const cutNote = ` ${arc.cut}`;
+  const skelNote = isSkeleton ? ` ${skeletonPhysics}` : "";
+
+  return `${layer1}${layer2}${layer3}${cutNote}${skelNote}`.trim();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1280,7 +1339,7 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
       const sceneDirections = scenesWithNotes.map(s => {
         // Resolve arc position: prefer director.phase (from breakdown), fall back to arc_position, then 'rising'
         const arcPosition = s.director?.phase || s.director?.arc_position || 'rising';
-        const arcAnim = getArcAnimationGuidance(arcPosition);
+        const arcAnim = getArcAnimationGuidance(arcPosition, s.duration_seconds, visualStyle);
         const sceneDuration = s.duration_seconds;
         
         // Extract named props from narration for prop fidelity
@@ -1295,8 +1354,13 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
 
         const bodyDirective = getBodyProportionDirective(s.director?.shot_type || 'MS — Medium Shot');
 
+        const isPOVShot = /\bpov\b|point[\s-]of[\s-]view/i.test(s.director?.shot_type || '');
+        const povDirective = isPOVShot
+          ? `\n  POV ANIMATION: Camera IS the character's eyes. Bone hands visible at bottom of frame. Head-bob on movement. Eyes drift to stimulus then lock. Environment sways with each step. Crowd reactions fill the periphery.`
+          : '';
+
         if (!s.director) {
-          return `Scene ${s.scene_number}: (No director notes — generate from narration)\n  Narration: "${s.narration_text}"\n  Duration: ${sceneDuration}s\n  Character Detail Level: ${identityTier.toUpperCase()} (match description depth to this)\n  Camera Feel: ${bodyDirective}\n  Arc Phase: ${arcPosition}\n  Arc Animation: ${arcAnim}${propsLine}`;
+          return `Scene ${s.scene_number}: (No director notes — generate from narration)\n  Narration: "${s.narration_text}"\n  Duration: ${sceneDuration}s\n  Character Detail Level: ${identityTier.toUpperCase()} (match description depth to this)\n  Camera Feel: ${bodyDirective}\n  Arc Phase: ${arcPosition}\n  Arc Animation: ${arcAnim}${propsLine}${povDirective}`;
         }
         // Build narrative position label for this scene
         const sceneTotal = allScenes.length || 1;
@@ -1326,7 +1390,8 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
   Niche Element: ${s.director.niche_visual_element || 'N/A'}
   Continuity: ${s.director.continuity_bridge || 'N/A'}
   Arc Phase: ${arcPosition}
-  Arc Animation: ${arcAnim}${propsLine}`;
+  Duration: ${sceneDuration}s (motion budget: ${sceneDuration <= 2.0 ? 'ONE layer only — snap' : sceneDuration <= 4.0 ? 'TWO layers — build' : 'THREE layers — breathe'})
+  Arc Animation: ${arcAnim}${propsLine}${povDirective}`;
       }).join('\n\n');
 
       const styleBodyRules = getStyleSceneBodyRules(visualStyle);
@@ -1894,7 +1959,24 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
                 : 'very faint mist drifting slowly through the still scene';
               animationPrompt = `Ultra-slow ${movement} over ${sceneDuration} seconds. ${sleepEnv}. Completely still atmosphere, no changes in lighting or brightness.`;
             } else {
-              animationPrompt = `${movement} over ${sceneDuration} seconds. ${getArcAnimationGuidance(arcPosition)} Camera reveals the scene through parallax — foreground elements drift at different speed than background, creating cinematic depth. Subject exhibits natural micro-motion: breathing rhythm visible in chest and shoulders, weight shifts, small involuntary gestures. Environmental physics respond to the world: ${vc.includes('rain') ? 'water streaks surfaces, reflections ripple in puddles, droplets catch light' : vc.includes('wind') ? 'fabric ripples, hair lifts and settles, loose objects shift' : vc.includes('crowd') ? 'background figures move at varied speeds, creating depth layers' : 'ambient textures evolve — light creeps across surfaces, shadows rotate, particles drift through beams'}. Light is alive — ${mood.includes('tense') || mood.includes('anxiety') ? 'flickering, unstable, casting nervous shadows' : mood.includes('warm') || mood.includes('hope') ? 'gradually warming, golden rays expanding across frame' : 'shifting slowly, painting the scene with evolving tones'}. Shallow DOF breathes between planes, drawing focus where emotion lives.`;
+              const durationTier = sceneDuration <= 2.0 ? 'snap' : sceneDuration <= 4.0 ? 'build' : 'breathe';
+          const arcGuidance = getArcAnimationGuidance(arcPosition, sceneDuration, visualStyle);
+          const envLayer = vc.includes('rain') ? 'Rain streaks every surface — droplets catch rim light, puddles ripple outward in rings.'
+            : vc.includes('wind') ? 'Wind is constant and directional — fabric streams, hair lifts and falls, dust moves with purpose.'
+            : vc.includes('crowd') ? 'Background crowd moves at three different speeds — foreground still, mid-ground flowing, far background a blur of life.'
+            : 'Ambient world physics are alive — light creeps across surfaces as clouds shift, a single falling particle catches the beam.';
+          const moodLayer = mood.includes('tense') || mood.includes('anxiety') ? 'Light source flickers — shadows jump, never settle, always threatening.'
+            : mood.includes('warm') || mood.includes('hope') ? 'Golden warmth expands from one edge — the light is arriving, not leaving.'
+            : mood.includes('sad') || mood.includes('despair') ? 'Light recedes — the frame grows darker toward the cut as if the world is dimming.'
+            : 'Light shifts once, deliberately — painting the scene with a single evolving tone.';
+          const povNote = /\bpov\b|point[\s-]of[\s-]view/i.test(s.director?.shot_type || '')
+            ? ' POV SHOT: camera IS the character — slight head-bob on movement, natural eye-drift to points of interest, hands entering frame from below. Environment sways gently with each step.'
+            : '';
+          animationPrompt = durationTier === 'snap'
+            ? `${arcGuidance}${povNote} ONE motion only — commit fully. No competing layers.`
+            : durationTier === 'build'
+            ? `${arcGuidance} ${envLayer}${povNote}`
+            : `${arcGuidance} ${envLayer} ${moodLayer}${povNote} Shallow DOF breathes toward the emotional focal point across the full duration.`;
             }
           }
         } else {
@@ -1956,7 +2038,24 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
               : 'very faint mist drifting slowly through the still scene';
             animationPrompt = `Ultra-slow ${movement} over ${sceneDuration} seconds. ${sleepEnv}. Completely still atmosphere, no changes in lighting or brightness.`;
           } else {
-            animationPrompt = `${movement} over ${sceneDuration} seconds. ${getArcAnimationGuidance(arcPosition)} Camera reveals the scene through parallax — foreground elements drift at different speed than background, creating cinematic depth. Subject exhibits natural micro-motion: breathing rhythm visible in chest and shoulders, weight shifts, small involuntary gestures. Environmental physics respond to the world: ${vc.includes('rain') ? 'water streaks surfaces, reflections ripple in puddles, droplets catch light' : vc.includes('wind') ? 'fabric ripples, hair lifts and settles, loose objects shift' : vc.includes('crowd') ? 'background figures move at varied speeds, creating depth layers' : 'ambient textures evolve — light creeps across surfaces, shadows rotate, particles drift through beams'}. Light is alive — ${mood.includes('tense') || mood.includes('anxiety') ? 'flickering, unstable, casting nervous shadows' : mood.includes('warm') || mood.includes('hope') ? 'gradually warming, golden rays expanding across frame' : 'shifting slowly, painting the scene with evolving tones'}. Shallow DOF breathes between planes, drawing focus where emotion lives.`;
+            const fbDurationTier = sceneDuration <= 2.0 ? 'snap' : sceneDuration <= 4.0 ? 'build' : 'breathe';
+          const fbArcGuidance = getArcAnimationGuidance(arcPosition, sceneDuration, visualStyle);
+          const fbEnvLayer = vc.includes('rain') ? 'Rain streaks every surface — droplets catch rim light, puddles ripple outward in rings.'
+            : vc.includes('wind') ? 'Wind is constant and directional — fabric streams, hair lifts and falls, dust moves with purpose.'
+            : vc.includes('crowd') ? 'Background crowd moves at three different speeds — foreground still, mid-ground flowing, far background a blur of life.'
+            : 'Ambient world physics are alive — light creeps across surfaces as clouds shift, a single falling particle catches the beam.';
+          const fbMoodLayer = mood.includes('tense') || mood.includes('anxiety') ? 'Light source flickers — shadows jump, never settle, always threatening.'
+            : mood.includes('warm') || mood.includes('hope') ? 'Golden warmth expands from one edge — the light is arriving, not leaving.'
+            : mood.includes('sad') || mood.includes('despair') ? 'Light recedes — the frame grows darker toward the cut as if the world is dimming.'
+            : 'Light shifts once, deliberately — painting the scene with a single evolving tone.';
+          const fbPovNote = /\bpov\b|point[\s-]of[\s-]view/i.test(s.director?.shot_type || '')
+            ? ' POV SHOT: camera IS the character — slight head-bob on movement, natural eye-drift to points of interest, hands entering frame from below. Environment sways gently with each step.'
+            : '';
+          animationPrompt = fbDurationTier === 'snap'
+            ? `${fbArcGuidance}${fbPovNote} ONE motion only — commit fully. No competing layers.`
+            : fbDurationTier === 'build'
+            ? `${fbArcGuidance} ${fbEnvLayer}${fbPovNote}`
+            : `${fbArcGuidance} ${fbEnvLayer} ${fbMoodLayer}${fbPovNote} Shallow DOF breathes toward the emotional focal point across the full duration.`;
           }
         }
 
