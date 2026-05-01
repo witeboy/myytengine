@@ -492,6 +492,64 @@ export default function useVideoExport() {
 
       setPhase('encoding');
 
+      // ─── Pre-mix audio before frame loop so we can interleave A/V ──
+      const sampleRate   = 48000;
+      const totalSamples = Math.ceil(totalDuration * sampleRate);
+      let mixedL = null;
+      let mixedR = null;
+
+      if (hasAudio && audioEncoder) {
+        mixedL = new Float32Array(totalSamples);
+        mixedR = new Float32Array(totalSamples);
+
+        if (voiceoverUrl) {
+          try {
+            const voBuf = await decodeAudio(voiceoverUrl);
+            const chN = Math.min(voBuf.numberOfChannels, 2);
+            const ch = Array.from({length:chN}, (_,i) => voBuf.getChannelData(i));
+            for (let i = 0; i < Math.min(totalSamples, voBuf.length); i++) {
+              mixedL[i] += ch[0][i];
+              mixedR[i] += ch[Math.min(1,chN-1)][i];
+            }
+          } catch(e) { console.warn('VO decode failed:', e); }
+        }
+
+        if (musicUrl) {
+          try {
+            const musicBuf = await decodeAudio(musicUrl);
+            const chN = Math.min(musicBuf.numberOfChannels, 2);
+            const ch = Array.from({length:chN}, (_,i) => musicBuf.getChannelData(i));
+            if (editedMusicClips.length > 0) {
+              for (const mc of editedMusicClips) {
+                const clipVol = mc.volume ?? musicVolume;
+                const srcOffset = Math.round((mc.sourceOffset || 0) * sampleRate);
+                const destStart = Math.round(mc.startTime * sampleRate);
+                const clipSamples = Math.round(mc.duration * sampleRate);
+                for (let i = 0; i < clipSamples; i++) {
+                  const di = destStart + i;
+                  if (di >= totalSamples) break;
+                  const si = srcOffset + i;
+                  const srcIdx = si < musicBuf.length ? si : (si % musicBuf.length);
+                  mixedL[di] += ch[0][srcIdx] * clipVol;
+                  mixedR[di] += ch[Math.min(1,chN-1)][srcIdx] * clipVol;
+                }
+              }
+            } else {
+              for (let i = 0; i < totalSamples; i++) {
+                const si = i % musicBuf.length;
+                mixedL[i] += ch[0][si] * musicVolume;
+                mixedR[i] += ch[Math.min(1,chN-1)][si] * musicVolume;
+              }
+            }
+          } catch(e) { console.warn('Music decode failed:', e); }
+        }
+
+        for (let i = 0; i < totalSamples; i++) {
+          mixedL[i] = Math.max(-1, Math.min(1, mixedL[i]));
+          mixedR[i] = Math.max(-1, Math.min(1, mixedR[i]));
+        }
+      }
+
       const lastVideoFrame = new Map();
 
       const drawClipFrame = async (ci, elapsedInClip) => {
@@ -567,6 +625,27 @@ export default function useVideoExport() {
         const vframe    = new VideoFrame(canvas, { timestamp });
         videoEncoder.encode(vframe, { keyFrame: f % (fps*2) === 0 });
         vframe.close();
+
+        // ── Interleaved audio: submit the audio chunk for this frame ──
+        if (hasAudio && audioEncoder && mixedL && mixedR) {
+          const aStart = Math.round((f / fps) * sampleRate);
+          const aEnd   = Math.round(((f + 1) / fps) * sampleRate);
+          const aLen   = aEnd - aStart;
+          if (aStart < totalSamples && aLen > 0) {
+            const planar = new Float32Array(aLen * 2);
+            planar.set(mixedL.subarray(aStart, aStart + aLen), 0);
+            planar.set(mixedR.subarray(aStart, aStart + aLen), aLen);
+            const ad = new AudioData({
+              format: 'f32-planar', sampleRate,
+              numberOfFrames: aLen, numberOfChannels: 2,
+              timestamp,
+              data: planar,
+            });
+            audioEncoder.encode(ad);
+            ad.close();
+          }
+        }
+
         framesSinceFlush++;
 
         // Flush based on frame count OR wall-clock gap (whichever comes first)
@@ -592,76 +671,6 @@ export default function useVideoExport() {
       if (cancelledRef.current) throw new Error('cancelled');
 
       // ─── Audio ────────────────────────────────────────────────
-      if (hasAudio && audioEncoder) {
-        setPhase('audio'); setProgress(78);
-        const sampleRate   = 48000;
-        const totalSamples = Math.ceil(totalDuration * sampleRate);
-        const mixedL = new Float32Array(totalSamples);
-        const mixedR = new Float32Array(totalSamples);
-        // Mix voiceover — full timeline, no loop
-        if (voiceoverUrl) {
-          try {
-            const voBuf = await decodeAudio(voiceoverUrl);
-            const chN = Math.min(voBuf.numberOfChannels, 2);
-            const ch = Array.from({length:chN}, (_,i) => voBuf.getChannelData(i));
-            for (let i = 0; i < Math.min(totalSamples, voBuf.length); i++) {
-              mixedL[i] += ch[0][i];
-              mixedR[i] += ch[Math.min(1,chN-1)][i];
-            }
-          } catch(e) { console.warn('VO decode failed:', e); }
-        }
-
-        // Mix music — respect edited music clips (position, trim, volume per clip)
-        if (musicUrl) {
-          try {
-            const musicBuf = await decodeAudio(musicUrl);
-            const chN = Math.min(musicBuf.numberOfChannels, 2);
-            const ch = Array.from({length:chN}, (_,i) => musicBuf.getChannelData(i));
-
-            if (editedMusicClips.length > 0) {
-              // Use edited clip positions for precise placement
-              for (const mc of editedMusicClips) {
-                const clipVol = mc.volume ?? musicVolume;
-                const srcOffset = Math.round((mc.sourceOffset || 0) * sampleRate);
-                const destStart = Math.round(mc.startTime * sampleRate);
-                const clipSamples = Math.round(mc.duration * sampleRate);
-                for (let i = 0; i < clipSamples; i++) {
-                  const di = destStart + i;
-                  if (di >= totalSamples) break;
-                  const si = srcOffset + i;
-                  const srcIdx = si < musicBuf.length ? si : (si % musicBuf.length); // loop within clip if needed
-                  mixedL[di] += ch[0][srcIdx] * clipVol;
-                  mixedR[di] += ch[Math.min(1,chN-1)][srcIdx] * clipVol;
-                }
-              }
-            } else {
-              // Fallback: loop music across full timeline at musicVolume
-              for (let i = 0; i < totalSamples; i++) {
-                const si = i % musicBuf.length;
-                mixedL[i] += ch[0][si] * musicVolume;
-                mixedR[i] += ch[Math.min(1,chN-1)][si] * musicVolume;
-              }
-            }
-          } catch(e) { console.warn('Music decode failed:', e); }
-        }
-        for (let i = 0; i < totalSamples; i++) {
-          mixedL[i] = Math.max(-1, Math.min(1, mixedL[i]));
-          mixedR[i] = Math.max(-1, Math.min(1, mixedR[i]));
-        }
-        const CHUNK = sampleRate;
-        for (let o = 0; o < totalSamples; o += CHUNK) {
-          if (cancelledRef.current) throw new Error('cancelled');
-          const len = Math.min(CHUNK, totalSamples - o);
-          const planar = new Float32Array(len * 2);
-          planar.set(mixedL.subarray(o, o+len), 0);
-          planar.set(mixedR.subarray(o, o+len), len);
-          const ad = new AudioData({ format:'f32-planar', sampleRate, numberOfFrames:len, numberOfChannels:2, timestamp:Math.round((o/sampleRate)*1_000_000), data:planar });
-          audioEncoder.encode(ad);
-          ad.close();
-        }
-        setProgress(90);
-      }
-
       // ─── Finalise ─────────────────────────────────────────────
       setPhase('finalizing'); setProgress(95);
       await videoEncoder.flush();
