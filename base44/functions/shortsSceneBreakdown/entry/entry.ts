@@ -104,17 +104,36 @@ SECTION STRUCTURE — distribute your 40 scenes across these sections:
 - cta (scenes 33-38): 6 scenes, 2-2.5s each. Return to hook energy. "Save this" moment.
 - deadzone (scenes 39-40): 2 scenes, 2s each. Dark card or loop frame. Silent or near-silent.
 
-For each of the 40 scenes provide:
+For each of the 40 scenes provide ALL of these fields:
 - scene_number: 1 to 40
 - section: one of [hook, tension, pivot, value_1, value_2, value_3, cta, deadzone]
 - narration_text: the spoken words during this specific 2-3 second clip (can be empty "" for pure visual scenes, can repeat/continue from previous scene)
 - duration_seconds: 2.0 to 2.5 (hook and cta scenes can be 2.0, value scenes 2.5)
-- visual_description: detailed description of what is ON SCREEN — stock footage, graphic, text animation, close-up. Be specific. Different from the previous scene.
-- camera_direction: one of [zoom_in, zoom_out, pan_left, pan_right, static, push_in]
-- text_overlay: bold text on screen if any (key numbers, rule labels, power words) — empty string if none
-- mood: 2-3 words describing the emotional energy of this exact visual
-- audio_note: voice energy and background music direction for this scene
-- characters_present: array of character names who VISUALLY APPEAR (empty array [] for stock/graphic shots)
+- visual_concept: DIRECTOR'S SHOT DESCRIPTION — lead with WHERE THE CAMERA IS. Pattern: "[Camera position] — [what the lens discovers as it moves]. [Subject caught mid-action, woven into environment]. [One atmosphere detail serving the emotion]." NOT a caption. A cinematographer's briefing.
+- shot_type: one of [ECU — Extreme Close-Up, CU — Close-Up, MCU — Medium Close-Up, MS — Medium Shot, WS — Wide Shot, EWS — Extreme Wide Shot, OTS — Over the Shoulder, POV — Point of View, HIGH ANGLE, LOW ANGLE, DUTCH ANGLE]
+- camera_angle: physical camera placement e.g. "Low angle 15 degrees, shooting upward" or "Eye-level, locked off" or "Dutch angle 20 degrees right"
+- camera_movement: specific motion e.g. "Hard push-in 20% zoom over 2s" or "Static locked" or "Slow pan right tracking subject"
+- lighting: specific lighting setup e.g. "Single hard backlight, cold blue rim, 80% shadow" or "Warm motivated key left, clean shadows"
+- color_palette: dominant colors e.g. "Deep navy #0A1628, gold accent #D4A574, high contrast" or "Dark charcoal #0D0D0D, warning red #CC2200"
+- depth_of_field: e.g. "Shallow f/1.4 — subject sharp, world dissolving" or "Deep f/8 — everything in focus"
+- mood: 2-3 words describing emotional energy
+- continuity_bridge: ONE specific physical object or light quality that will also appear in the NEXT scene
+- emotional_intensity: number 0.0 to 1.0 (hook=0.9, tension=0.8, pivot=0.7, value=0.6, cta=0.85, deadzone=0.1)
+- viewer_emotion: the exact feeling the viewer should have during this scene
+- text_overlay: bold text on screen if any (key numbers, power words) — empty string if none
+- audio_note: voice energy and music direction for this scene
+- characters_present: array of character names who VISUALLY APPEAR (empty [] for stock/graphic shots)
+- camera_direction: one of [zoom_in, zoom_out, pan_left, pan_right, static, push_in] (kept for animation system compatibility)
+
+SHOT SEQUENCING LAW: Before each shot, mentally state the previous shot type. The new shot MUST be a different type and shift angle by minimum 30 degrees. Never two consecutive MS eye-level shots.
+
+SECTION CAMERA ENERGY:
+- hook: Camera ALREADY MOVING when scene opens. ECU or LOW ANGLE. Assertive, no drift.
+- tension: Each scene tighter than the last. MCU → CU progression. Cut on motion.
+- pivot: HARD CUT energy. Single bold composition. Dutch angle or extreme low.
+- value_1/2/3: MS to MCU. Deliberate push. World visible, subject clear.
+- cta: Returns to hook energy. ECU or LOW ANGLE. Assertive and urgent.
+- deadzone: WIDE or static. World without the character.
 
 VISUAL RULES PER SECTION:
 - hook: Full-screen bold text animations, dramatic stock footage, word-by-word kinetic text
@@ -132,12 +151,21 @@ Return JSON and nothing else — no markdown, no backticks, no explanation:
       "section": "hook",
       "narration_text": "He stole $400 million",
       "duration_seconds": 2.0,
-      "visual_description": "extreme close-up of hands rapidly typing on keyboard, dark moody office lighting, shallow depth of field",
-      "camera_direction": "push_in",
-      "text_overlay": "$400,000,000",
+      "visual_concept": "ECU from below the keyboard — fingers slam keys in the dark, the glow of multiple monitors catching knuckle edges. Camera holds perfectly still as the typing stops mid-word.",
+      "shot_type": "ECU — Extreme Close-Up",
+      "camera_angle": "Low angle, 20 degrees below hands, shooting upward",
+      "camera_movement": "Static locked — tension lives in stillness",
+      "lighting": "Single cold blue backlight from monitors, 85% shadow, no fill",
+      "color_palette": "Deep charcoal #0D0D0D, cold blue #1A2744, single amber key glint #C8A46E",
+      "depth_of_field": "Shallow f/1.4 — fingertips razor sharp, keyboard dissolving into dark",
       "mood": "urgent, shocking, dark",
+      "continuity_bridge": "cold blue monitor light carries into scene 2",
+      "emotional_intensity": 0.9,
+      "viewer_emotion": "shock and dread",
+      "text_overlay": "$400,000,000",
       "audio_note": "voice low and deliberate, bass-heavy music sting on this frame",
-      "characters_present": []
+      "characters_present": [],
+      "camera_direction": "push_in"
     }
   ]
 }`;
@@ -198,14 +226,27 @@ Return JSON and nothing else — no markdown, no backticks, no explanation:
     // Build scene records for bulkCreate
     const sceneRecords = scenesArr.map(aiScene => {
       const directorNotes = {
+        // Full cinematic fields — now generated natively by Shorts breakdown
+        visual_concept: aiScene.visual_concept || aiScene.visual_description || '',
+        shot_type: aiScene.shot_type || 'MS — Medium Shot',
+        camera_angle: aiScene.camera_angle || 'Eye-level, locked off',
+        camera_movement: aiScene.camera_movement || 'static',
+        lighting: aiScene.lighting || 'Motivated practical lighting',
+        color_palette: aiScene.color_palette || 'High contrast, saturated',
+        depth_of_field: aiScene.depth_of_field || 'Shallow f/1.8',
+        mood: aiScene.mood || '',
+        continuity_bridge: aiScene.continuity_bridge || '',
+        emotional_intensity: aiScene.emotional_intensity || 0.7,
+        viewer_emotion: aiScene.viewer_emotion || '',
+        phase: aiScene.section || 'hook',
+        characters_present: aiScene.characters_present || [],
+        // Shorts-specific fields kept for animation system and UI compatibility
         section: aiScene.section,
-        visual_description: aiScene.visual_description,
+        visual_description: aiScene.visual_description || '',
         camera_direction: aiScene.camera_direction || 'push_in',
         text_overlay: aiScene.text_overlay || '',
-        mood: aiScene.mood || '',
         audio_note: aiScene.audio_note || '',
         shorts_format: true,
-        characters_present: aiScene.characters_present || [],
       };
       return {
         project_id,
