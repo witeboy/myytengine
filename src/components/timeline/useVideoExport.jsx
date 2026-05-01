@@ -289,7 +289,8 @@ export default function useVideoExport() {
   }, []);
 
   const CORS_BLOCKED_DOMAINS = [
-    'tempfile.aiquickdraw.com', 'api.kie.ai', 'ideogram.ai',
+    'tempfile.aiquickdraw.com', 'file.aiquickdraw.com', 'aiquickdraw.com',
+    'api.kie.ai', 'ideogram.ai',
     'storage.googleapis.com', 'r2.dev', 'r2.cloudflarestorage.com',
   ];
 
@@ -332,18 +333,58 @@ export default function useVideoExport() {
   };
 
   const loadImage = async (url) => {
-    const blobUrl = await fetchAsBlob(url);
+    // First try: fetch as blob via CORS proxy
     try {
-      const resp = await fetch(blobUrl);
-      return await createImageBitmap(await resp.blob());
-    } catch {
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload  = () => resolve(img);
-        img.onerror = () => reject(new Error('Image bitmap creation failed'));
-        img.src = blobUrl;
-      });
+      const blobUrl = await fetchAsBlob(url);
+      try {
+        const resp = await fetch(blobUrl);
+        return await createImageBitmap(await resp.blob());
+      } catch {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload  = () => resolve(img);
+          img.onerror = () => reject(new Error('Image bitmap creation failed'));
+          img.src = blobUrl;
+        });
+      }
+    } catch (proxyErr) {
+      console.warn(`[Export] Proxy failed for ${url.substring(0,60)}, trying direct img load…`);
     }
+
+    // Second try: load directly as <img> with crossOrigin (works if server allows *)
+    try {
+      return await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload  = () => resolve(img);
+        img.onerror = () => reject(new Error('crossOrigin load failed'));
+        img.src = url + (url.includes('?') ? '&' : '?') + '_cb=' + Date.now();
+      });
+    } catch {}
+
+    // Third try: load without crossOrigin — canvas will be tainted but image shows
+    // We create an OffscreenCanvas snapshot to un-taint it via drawImage
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = async () => {
+        try {
+          // Draw into offscreen canvas to get a bitmap we can use
+          const oc = new OffscreenCanvas(img.naturalWidth || 1280, img.naturalHeight || 720);
+          const octx = oc.getContext('2d');
+          octx.drawImage(img, 0, 0);
+          const bm = await createImageBitmap(oc);
+          resolve(bm);
+        } catch {
+          // Last resort — return the img element itself (canvas will be tainted but won't crash)
+          resolve(img);
+        }
+      };
+      img.onerror = () => {
+        console.warn(`[Export] All load strategies failed for: ${url.substring(0,60)}`);
+        resolve(null); // resolve null so clip renders black instead of crashing
+      };
+      img.src = url;
+    });
   };
 
   const loadVideoElement = async (url) => {
@@ -484,7 +525,7 @@ export default function useVideoExport() {
         } else if (hasImg) {
           try { media = await loadImage(clip.imageUrl); } catch {}
         }
-        if (!media) console.warn(`[Export] ⚠️ Clip ${i} — no media`);
+        if (!media) console.warn(`[Export] ⚠️ Clip ${i} — no media loaded, will render black`);
         clipMedia.push({ media, mediaType, measuredVideoDur });
       }
 
