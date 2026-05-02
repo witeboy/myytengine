@@ -1,6 +1,18 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 Deno.serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      },
+    });
+  }
+
   try {
     const body = await req.json();
 
@@ -8,42 +20,59 @@ Deno.serve(async (req) => {
       var url = body.url;
 
       if (!url || url.indexOf('http') !== 0) {
-        return Response.json({ success: false, error: 'Invalid URL' }, { status: 400 });
+        return Response.json(
+          { success: false, error: 'Invalid URL' },
+          { 
+            status: 400,
+            headers: { 'Access-Control-Allow-Origin': '*' }
+          }
+        );
       }
 
-      var allowedDomains = [ 
-  'pub-aafc308ff5954f7187e75e4d90948e91.r2.dev', 
-  '*.r2.dev',
-  '://aiquickdraw.com', 
-  'temp://aiquickdraw.com', 
-  '://googleapis.com', 
-  'r2.dev', 
-  '://cloudflarestorage.com', 
-  '://aiquickdraw.com', 
-  'api.kie.ai', 
-  'ideogram.ai', 
-  'oaidalleapiprodscus.blob.core.windows.net', 
-  'replicate.delivery', 
-  'pbxt.replicate.delivery' 
-];
+      var allowedDomains = [
+        'file.aiquickdraw.com',
+        'tempfile.aiquickdraw.com',
+        'storage.googleapis.com',
+        'r2.dev',
+        'r2.cloudflarestorage.com',
+        'cdn.aiquickdraw.com',
+        'api.kie.ai',
+        'ideogram.ai',
+        'oaidalleapiprodscus.blob.core.windows.net',
+        'replicate.delivery',
+        'pbxt.replicate.delivery',
+        'pub-aafc308ff5954f7187e75e4d90948e91.r2.dev'
+      ];
 
       var hostname;
       try {
         hostname = new URL(url).hostname;
       } catch (e) {
-        return Response.json({ success: false, error: 'Malformed URL' }, { status: 400 });
+        return Response.json(
+          { success: false, error: 'Malformed URL' },
+          { 
+            status: 400,
+            headers: { 'Access-Control-Allow-Origin': '*' }
+          }
+        );
       }
 
       var isAllowed = false;
       for (var i = 0; i < allowedDomains.length; i++) {
-        if (hostname.indexOf(allowedDomains[i]) !== -1) {
+        if (hostname.indexOf(allowedDomains[i]) !== -1 || hostname.endsWith(allowedDomains[i])) {
           isAllowed = true;
           break;
         }
       }
 
       if (!isAllowed) {
-        return Response.json({ success: false, error: 'Domain not in allowlist: ' + hostname }, { status: 403 });
+        return Response.json(
+          { success: false, error: 'Domain not in allowlist: ' + hostname },
+          { 
+            status: 403,
+            headers: { 'Access-Control-Allow-Origin': '*' }
+          }
+        );
       }
 
       try {
@@ -54,7 +83,13 @@ Deno.serve(async (req) => {
         });
 
         if (!response.ok) {
-          return Response.json({ success: false, error: 'Upstream returned ' + response.status }, { status: 502 });
+          return Response.json(
+            { success: false, error: 'Upstream returned ' + response.status },
+            { 
+              status: 502,
+              headers: { 'Access-Control-Allow-Origin': '*' }
+            }
+          );
         }
 
         var arrayBuffer = await response.arrayBuffer();
@@ -69,22 +104,40 @@ Deno.serve(async (req) => {
 
         var contentType = response.headers.get('content-type') || 'application/octet-stream';
 
-        return Response.json({
-          success: true,
-          data: base64Data,
-          content_type: contentType
-        });
+        return Response.json(
+          {
+            success: true,
+            data: base64Data,
+            content_type: contentType
+          },
+          {
+            headers: { 'Access-Control-Allow-Origin': '*' }
+          }
+        );
 
       } catch (fetchError) {
-        return Response.json({ success: false, error: 'Fetch failed: ' + fetchError.message }, { status: 502 });
+        return Response.json(
+          { success: false, error: 'Fetch failed: ' + fetchError.message },
+          { 
+            status: 502,
+            headers: { 'Access-Control-Allow-Origin': '*' }
+          }
+        );
       }
     }
 
+    // Handle selectHook action
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
 
     if (!user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      return Response.json(
+        { error: 'Unauthorized' },
+        { 
+          status: 401,
+          headers: { 'Access-Control-Allow-Origin': '*' }
+        }
+      );
     }
 
     const { project_id, hook_id } = body;
@@ -100,8 +153,20 @@ Deno.serve(async (req) => {
 
     await base44.entities.Hooks.update(hook_id, { is_selected: true });
 
-    return Response.json({ success: true });
+    return Response.json(
+      { success: true },
+      {
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      }
+    );
+
   } catch (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+    return Response.json(
+      { error: error.message },
+      { 
+        status: 500,
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      }
+    );
   }
 });
