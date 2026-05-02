@@ -516,17 +516,18 @@ export default function useVideoExport() {
       var H = preset.height;
       var BR = preset.bitrate;
 
-       var clips = scenes.map(function(s) {
+        var clips = scenes.map(function(s) {
         var dur = Math.max(0.1, s.duration || s.duration_seconds || 8);
-        var explicitStart = (s.startTime !== undefined && s.startTime !== null) ? s.startTime : -1;
+        var hasExplicitStart = s.startTime !== undefined && s.startTime !== null && s.startTime >= 0;
         return {
           duration: dur,
-          startTime: explicitStart,
+          startTime: hasExplicitStart ? s.startTime : -1,
           mediaType: s.mediaType || (s.video_url && s.video_url.indexOf('http') === 0 ? 'video' : 'image'),
           videoUrl: s.videoUrl || s.video_url || '',
           imageUrl: s.imageUrl || s.image_url || '',
           playbackRate: s.playbackRate !== undefined ? s.playbackRate : 1.0,
           videoDuration: s.videoDuration !== undefined ? s.videoDuration : null,
+          videoStartOffset: s.videoStartOffset !== undefined ? s.videoStartOffset : 0,
           cinematicMotion: s.cinematicMotion || null,
           motionSpeed: s.motionSpeed !== undefined ? s.motionSpeed : 1.0,
           motionIntensity: s.motionIntensity !== undefined ? s.motionIntensity : 1.0,
@@ -534,6 +535,16 @@ export default function useVideoExport() {
           transitionDuration: s.transitionDuration !== undefined ? s.transitionDuration : DEFAULT_TRANSITION_DURATION
         };
       });
+
+      var off = 0;
+      for (var i = 0; i < clips.length; i++) {
+        if (clips[i].startTime < 0) {
+          clips[i].startTime = off;
+        }
+        off = clips[i].startTime + clips[i].duration;
+      }
+
+      var clipsDuration = off;
 
       var runningOffset = 0;
       for (var i = 0; i < clips.length; i++) {
@@ -556,12 +567,17 @@ export default function useVideoExport() {
           if (measuredDur > 0 && isFinite(measuredDur)) {
             totalDuration = measuredDur;
             console.log('[Export] Voiceover measured: ' + measuredDur.toFixed(3) + 's (clips sum: ' + clipsDuration.toFixed(3) + 's)');
-            var scale = measuredDur / clipsDuration;
-            var newOff = 0;
-            for (var ci = 0; ci < clips.length; ci++) {
-              clips[ci].startTime = newOff;
-              clips[ci].duration = parseFloat((clips[ci].duration * scale).toFixed(6));
-              newOff += clips[ci].duration;
+            var hasTimelineSync = clips.some(function(c) { return c.startTime !== undefined && c.startTime >= 0; });
+            if (!hasTimelineSync) {
+              var scale = measuredDur / clipsDuration;
+              var newOff = 0;
+              for (var ci = 0; ci < clips.length; ci++) {
+                clips[ci].startTime = newOff;
+                clips[ci].duration = parseFloat((clips[ci].duration * scale).toFixed(6));
+                newOff += clips[ci].duration;
+              }
+            } else {
+              console.log('[Export] Using timeline-synced clip positions (ASR aligned)');
             }
           }
         } catch (e) {
@@ -705,10 +721,11 @@ export default function useVideoExport() {
         if (mediaType === 'image') {
           drawMediaFrame(ctx, W, H, media, false, mxform);
           if (!lastFrame.has(ci)) lastFrame.set(ci, media);
-        } else {
+         } else {
           var maxSrc = (measuredVideoDur || clip.videoDuration || 999) - 0.02;
           var playbackRate = clip.playbackRate || 1.0;
-          var srcTime = Math.min(elapsedInClip * playbackRate, maxSrc);
+          var videoStartOffset = clip.videoStartOffset || 0;
+          var srcTime = Math.min(videoStartOffset + (elapsedInClip * playbackRate), maxSrc);
           if (srcTime >= maxSrc) {
             var frozen = lastFrame.get(ci);
             if (frozen) drawMediaFrame(ctx, W, H, frozen, false, mxform);
