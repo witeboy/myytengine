@@ -25,8 +25,8 @@ Deno.serve(async (req) => {
   'oaidalleapiprodscus.blob.core.windows.net', 
   'replicate.delivery', 
   'pbxt.replicate.delivery' 
-
 ];
+
 var allowedDomains = [ 
 'file.aiquickdraw.com', 
 'tempfile.aiquickdraw.com', 
@@ -37,7 +37,8 @@ var allowedDomains = [
 'api.kie.ai', 'ideogram.ai', 
 'oaidalleapiprodscus.blob.core.windows.net', 
 'replicate.delivery', 
-'pbxt.replicate.delivery' ];
+'pbxt.replicate.delivery' 
+];
 
 
 
