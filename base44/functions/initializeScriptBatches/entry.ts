@@ -443,7 +443,7 @@ Deno.serve(async (req) => {
     for (let i = 0; i < numBatches; i++) {
       const aiBatch = outlineResult.batches[i];
 
-      const batchData: Record<string, any> = {
+      const batchData = {
         project_id,
         batch_number:  i + 1,
         story_segment: aiBatch?.story_segment || `Part ${i + 1}`,
