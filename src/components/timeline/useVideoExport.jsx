@@ -294,7 +294,7 @@ async function fetchAsBlob(url) {
 
   console.log('[Export] Proxying ' + url.substring(0, 70) + '...');
   try {
-    var res = await base44.functions.invoke('callClaudeProxy', { action: 'proxyAsset', url: url });
+    var res = await base44.functions.invoke('selectHook', { action: 'proxyAsset', url: url });
     var pd = res && res.data ? res.data : res;
 
     if (pd && pd.success && pd.data) {
