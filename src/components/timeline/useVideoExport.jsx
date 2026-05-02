@@ -289,14 +289,53 @@ async function fetchAsBlob(url) {
   throw new Error(`CORS_BLOCKED: ${url.substring(0,70)}`);
 }
 
-// Load and GPU-cache an image as ImageBitmap (decoded once, drawn many times)
+// Load image as ImageBitmap using two-tier strategy:
+//
+// TIER 1 — <img> element WITHOUT crossOrigin (no CORS restrictions at all).
+//   The browser loads it like a webpage image. We draw it to a hidden <canvas>,
+//   call canvas.toBlob(), then createImageBitmap(blob). This works for ANY URL
+//   including file.aiquickdraw.com which blocks fetch() and the proxy.
+//   The canvas is thrown away immediately — no taint leaks into the export canvas.
+//
+// TIER 2 — fetchAsBlob (direct CORS or proxy) as fallback for edge cases.
+//
 async function loadImageBitmap(url) {
+  // TIER 1: img element — bypasses CORS entirely
+  try {
+    const bm = await new Promise((resolve, reject) => {
+      const img = new Image();
+      // NO crossOrigin set — allows credentialed/non-CORS loads
+      const timeout = setTimeout(() => reject(new Error('img timeout')), 12000);
+      img.onload = () => {
+        clearTimeout(timeout);
+        try {
+          // Use a throwaway DOM canvas — NOT the export OffscreenCanvas
+          const tc = document.createElement('canvas');
+          tc.width  = img.naturalWidth  || img.width  || 1;
+          tc.height = img.naturalHeight || img.height || 1;
+          const tcx = tc.getContext('2d');
+          tcx.drawImage(img, 0, 0);
+          tc.toBlob(blob => {
+            if (!blob) { reject(new Error('toBlob failed')); return; }
+            createImageBitmap(blob).then(resolve).catch(reject);
+          }, 'image/png');
+        } catch (e) { reject(e); }
+      };
+      img.onerror = () => { clearTimeout(timeout); reject(new Error('img onerror')); };
+      img.src = url;
+    });
+    return bm;
+  } catch (e) {
+    console.log(`[Export] img element failed for ${url.substring(0,60)}, trying fetch: ${e.message}`);
+  }
+
+  // TIER 2: fetchAsBlob (works for tempfile.aiquickdraw.com and R2 via proxy)
   const bu = await fetchAsBlob(url);
   try { return await createImageBitmap(await (await fetch(bu)).blob()); } catch {}
   return new Promise((res, rej) => {
     const img = new Image();
-    img.onload  = () => createImageBitmap(img).then(res).catch(()=>res(img));
-    img.onerror = () => rej(new Error('Image load failed'));
+    img.onload  = () => createImageBitmap(img).then(res).catch(() => res(img));
+    img.onerror = () => rej(new Error('Image load failed (tier 2)'));
     img.src = bu;
   });
 }
