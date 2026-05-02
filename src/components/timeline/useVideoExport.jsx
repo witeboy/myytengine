@@ -398,20 +398,11 @@ export default function useVideoExport() {
 
 
   const seekVideo = (video, time) => new Promise(resolve => {
-    const target = Math.max(0, Math.min(time, (video.duration||0) > 0 ? video.duration-0.02 : 0));
-    if (Math.abs(video.currentTime - target) < 0.02) { resolve(); return; }
-    let attempts = 0;
-    const trySeek = () => {
-      attempts++;
-      const t = setTimeout(() => {
-        video.onseeked = null;
-        if (attempts < 3) trySeek();
-        else resolve();
-      }, 400);
-      video.onseeked = () => { clearTimeout(t); video.onseeked = null; resolve(); };
-      video.currentTime = target;
-    };
-    trySeek();
+    const target = Math.max(0, Math.min(time, (video.duration||0) > 0 ? video.duration-0.01 : 0));
+    if (Math.abs(video.currentTime - target) < 0.04) { resolve(); return; }
+    const t = setTimeout(resolve, 500);
+    video.onseeked = () => { clearTimeout(t); resolve(); };
+    video.currentTime = target;
   });
 
 
@@ -492,7 +483,7 @@ export default function useVideoExport() {
       }
 
 
-      const muxCfg = { target: new ArrayBufferTarget(), video: { codec:'avc', width:W, height:H }, fastStart:'fragmented' };
+      const muxCfg = { target: new ArrayBufferTarget(), video: { codec:'avc', width:W, height:H }, fastStart:'in-memory' };
       if (hasAudio) muxCfg.audio = { codec:'aac', sampleRate:48000, numberOfChannels:2 };
       const muxer = new Muxer(muxCfg);
 
@@ -516,13 +507,8 @@ export default function useVideoExport() {
       }
 
 
-      const canvas    = new OffscreenCanvas(W, H);
-      const ctx       = canvas.getContext('2d');
-      const auxCanvas = new OffscreenCanvas(W, H);
-      const auxCtx    = auxCanvas.getContext('2d');
-      const drainEncoder = async (enc, maxQ = 8) => {
-        while (enc.encodeQueueSize > maxQ) await yieldToMain();
-      };
+      const canvas = new OffscreenCanvas(W, H);
+      const ctx    = canvas.getContext('2d');
 
 
       // ─── Load ALL media BEFORE creating encoder ─────────────────
@@ -593,11 +579,10 @@ export default function useVideoExport() {
       // Flush frequently to prevent "Codec reclaimed due to inactivity"
       // For long videos (15min+), the browser may reclaim the codec if
       // the encoder queue gets too deep without being flushed.
-      let framesSinceFlush  = 0;
-      const FLUSH_EVERY     = Math.max(10, Math.floor(fps / 2));
+      let framesSinceFlush = 0;
+      const FLUSH_EVERY    = fps * 2; // flush every 2 seconds of video
       let lastFlushWallTime = Date.now();
-      const MAX_WALL_GAP_MS = 5000;
-      let prevCiForBoundary = -1;
+      const MAX_WALL_GAP_MS = 8000; // force flush if 8s wall time passes without one
 
 
       for (let f = 0; f < totalFrames; f++) {
@@ -610,16 +595,6 @@ export default function useVideoExport() {
         for (let i = 0; i < clips.length; i++) {
           if (absTime < clips[i].startTime + clips[i].duration) { ci = i; break; }
         }
-
-        const isClipBoundary = prevCiForBoundary !== -1 && ci !== prevCiForBoundary;
-        if (isClipBoundary) {
-          await videoEncoder.flush();
-          framesSinceFlush  = 0;
-          lastFlushWallTime = Date.now();
-          await yieldToMain();
-        }
-        prevCiForBoundary = ci;
-
         const clip     = clips[ci];
         const elapsed  = absTime - clip.startTime;
         const prevClip = ci > 0 ? clips[ci-1] : null;
@@ -633,10 +608,8 @@ export default function useVideoExport() {
 
         if (inTrans) {
           await drawClipFrame(ci, elapsed);
-          auxCtx.clearRect(0, 0, W, H);
-          auxCtx.drawImage(canvas, 0, 0);
-          const inBitmap  = await createImageBitmap(auxCanvas);
-          await drawClipFrame(ci - 1, prevClip.duration);
+          const inBitmap = await createImageBitmap(canvas);
+          await drawClipFrame(ci-1, prevClip.duration);
           const outBitmap = await createImageBitmap(canvas);
           ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
           compositeTransitionFrame(ctx, W, H, outBitmap, inBitmap, tType, tProg);
@@ -651,12 +624,9 @@ export default function useVideoExport() {
         drawCaptions(ctx, W, H, captions, absTime);
 
 
-        const frameTimestamp     = Math.floor((f * 1_000_000) / fps);
-await drainEncoder(videoEncoder, 8);
-        const vframe = new VideoFrame(canvas, { timestamp: frameTimestamp });
-        videoEncoder.encode(vframe, {
-          keyFrame: f === 0 || isClipBoundary || (f % (fps * 2) === 0),
-        });
+        const timestamp = Math.round(f * (1_000_000 / fps));
+        const vframe    = new VideoFrame(canvas, { timestamp });
+        videoEncoder.encode(vframe, { keyFrame: f % (fps*2) === 0 });
         vframe.close();
         framesSinceFlush++;
 
@@ -669,7 +639,7 @@ await drainEncoder(videoEncoder, 8);
           framesSinceFlush = 0;
           lastFlushWallTime = Date.now();
         }
-        if (f % 4 === 0) {
+        if (f % 8 === 0) {
           setProgress(15 + Math.round((f / totalFrames) * 60));
           await yieldToMain();
         }
@@ -752,7 +722,7 @@ await drainEncoder(videoEncoder, 8);
           const planar = new Float32Array(len * 2);
           planar.set(mixedL.subarray(o, o+len), 0);
           planar.set(mixedR.subarray(o, o+len), len);
-          const ad = new AudioData({ format:'f32-planar', sampleRate, numberOfFrames:len, numberOfChannels:2, timestamp:Math.floor((o * 1_000_000) / sampleRate), data:planar });
+          const ad = new AudioData({ format:'f32-planar', sampleRate, numberOfFrames:len, numberOfChannels:2, timestamp:Math.round((o/sampleRate)*1_000_000), data:planar });
           audioEncoder.encode(ad);
           ad.close();
         }
