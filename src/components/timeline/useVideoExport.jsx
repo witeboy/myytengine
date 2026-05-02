@@ -230,36 +230,62 @@ function drawCaptions(ctx, W, H, captions, absTime) {
 }
 
 // ─── CORS fetcher with in-session URL cache ───────────────────────────────────
+// R2 (.r2.dev, pub-*.r2.dev), GCS, and other known-blocked CDNs go straight
+// to proxy — no wasted direct fetch attempt that triggers a CORS error log.
 const CORS_BLOCKED = [
   'tempfile.aiquickdraw.com','api.kie.ai','ideogram.ai',
-  'storage.googleapis.com','r2.dev','r2.cloudflarestorage.com',
+  // Cloudflare R2 — all subdomains (pub-*.r2.dev, *.r2.cloudflarestorage.com)
+  '.r2.dev','r2.cloudflarestorage.com',
+  // Google Cloud Storage
+  'storage.googleapis.com',
+  // Common CDN patterns that block CORS
+  'cdn.aiquickdraw.com','pub-',
 ];
 const _blobCache = new Map();
+
+// Returns true if this hostname is known to block CORS
+function isKnownCorsBlocked(hostname) {
+  return CORS_BLOCKED.some(d => hostname.includes(d));
+}
 
 async function fetchAsBlob(url) {
   if (!url?.startsWith('http')) throw new Error('Invalid URL');
   if (_blobCache.has(url)) return _blobCache.get(url);
   const hostname = new URL(url).hostname;
-  if (!CORS_BLOCKED.some(d => hostname.includes(d))) {
+
+  // Only attempt direct fetch for domains NOT on the blocked list
+  if (!isKnownCorsBlocked(hostname)) {
     try {
       const r = await fetch(url, { mode: 'cors' });
-      if (r.ok) { const bu = URL.createObjectURL(await r.blob()); _blobCache.set(url, bu); return bu; }
+      if (r.ok) {
+        const bu = URL.createObjectURL(await r.blob());
+        _blobCache.set(url, bu); return bu;
+      }
     } catch {}
+    // Direct failed — fall through to proxy
   }
+
+  // Proxy path (handles R2, GCS, and any direct-fetch failure)
   try {
     console.log(`[Export] Proxying ${url.substring(0,70)}…`);
-    const pd = (await base44.functions.invoke('proxyFetchAsset', { url })).data;
+    const res  = await base44.functions.invoke('proxyFetchAsset', { url });
+    const pd   = res?.data || res;
     if (pd?.success && pd?.data) {
-      const bu = URL.createObjectURL(new Blob([Uint8Array.from(atob(pd.data),c=>c.charCodeAt(0))],{type:pd.content_type||'image/jpeg'}));
+      const bytes = Uint8Array.from(atob(pd.data), c => c.charCodeAt(0));
+      const bu = URL.createObjectURL(new Blob([bytes], { type: pd.content_type || 'application/octet-stream' }));
       _blobCache.set(url, bu); return bu;
     }
     if (pd?.success && pd?.file_url) {
       try {
-        const r2 = await fetch(pd.file_url,{mode:'cors'});
-        if (r2.ok) { const bu = URL.createObjectURL(await r2.blob()); _blobCache.set(url,bu); return bu; }
+        const r2 = await fetch(pd.file_url, { mode: 'cors' });
+        if (r2.ok) {
+          const bu = URL.createObjectURL(await r2.blob());
+          _blobCache.set(url, bu); return bu;
+        }
       } catch {}
     }
-  } catch (e) { console.warn(`[Export] Proxy failed: ${e.message}`); }
+  } catch (e) { console.warn(`[Export] Proxy failed for ${url.substring(0,60)}: ${e.message}`); }
+
   throw new Error(`CORS_BLOCKED: ${url.substring(0,70)}`);
 }
 
@@ -302,14 +328,16 @@ function seekVideo(video, time) {
   });
 }
 
-// Decode audio to 48kHz Float32 AudioBuffer
+// Decode audio — always routes through fetchAsBlob so R2/GCS gets proxied.
+// The old version did a raw HEAD fetch first which triggered the CORS error log.
 async function decodeAudio(url) {
-  let au = url;
-  try { if (!(await fetch(url,{method:'HEAD',mode:'cors'})).ok) throw 0; } catch { try{au=await fetchAsBlob(url);}catch{} }
-  const buf = await (await fetch(au,{mode:'cors'})).arrayBuffer();
-  const ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
-  const dec = await ctx.decodeAudioData(buf);
-  await ctx.close(); return dec;
+  const blobUrl = await fetchAsBlob(url);       // proxy fallback built-in
+  const resp    = await fetch(blobUrl);          // safe — blob: URLs have no CORS
+  const buf     = await resp.arrayBuffer();
+  const actx    = new AudioContext({ sampleRate: SAMPLE_RATE });
+  const dec     = await actx.decodeAudioData(buf);
+  await actx.close();
+  return dec;
 }
 
 // Parallel batch executor — runs tasks in parallel with concurrency cap
@@ -395,11 +423,44 @@ export default function useVideoExport() {
         off+=dur; return c;
       });
 
-      const totalDuration = off;
-      // ★ MASTER INTEGER GRID — everything else derives from these two values
+      const clipsDuration = off; // sum of all clip durations from timeline
+      const hasAudio      = !!(voiceoverUrl||musicUrl);
+
+      // ─── AUDIO-ANCHORED TOTAL DURATION ───────────────────────────────────
+      // The video MUST be exactly as long as the voiceover audio.
+      // We decode the voiceover up-front to get its EXACT decoded length,
+      // then use that as totalDuration. This fixes "video longer than audio"
+      // caused by beat-sync rounding making clipsDuration != audio length.
+      // If no voiceover, fall back to clipsDuration (music-only / silent).
+      let totalDuration = clipsDuration;
+      let _voiceBuf = null; // keep decoded buffer to reuse in Phase 3
+
+      if (voiceoverUrl) {
+        setPhase('measuring');
+        try {
+          _voiceBuf = await decodeAudio(voiceoverUrl);
+          const measuredDur = _voiceBuf.duration;
+          if (measuredDur > 0 && isFinite(measuredDur)) {
+            totalDuration = measuredDur;
+            console.log('[Export] Voiceover measured: ' + measuredDur.toFixed(3) + 's (clips sum: ' + clipsDuration.toFixed(3) + 's)');
+            // Re-scale clip durations to fill exactly measuredDur.
+            // Prevents gaps or overruns from beat-sync rounding.
+            const scale = measuredDur / clipsDuration;
+            let newOff = 0;
+            for (const clip of clips) {
+              clip.startTime = newOff;
+              clip.duration  = parseFloat((clip.duration * scale).toFixed(6));
+              newOff += clip.duration;
+            }
+          }
+        } catch (e) {
+          console.warn('[Export] Could not measure voiceover, using clip sum:', e.message);
+        }
+      }
+
+      // ★ MASTER INTEGER GRID
       const totalFrames  = Math.ceil(totalDuration * fps);
       const totalSamples = Math.round((totalFrames / fps) * SAMPLE_RATE);
-      const hasAudio     = !!(voiceoverUrl||musicUrl);
 
       console.log(`[Export] ${clips.length} clips | ${totalFrames}fr | ${totalDuration.toFixed(3)}s | ${fps}fps | ${quality} | ${totalSamples} audio samples`);
 
@@ -453,19 +514,40 @@ export default function useVideoExport() {
           const hasImg     = clip.imageUrl?.startsWith('http');
           if (wantsVideo) {
             try {
-              const el=await loadVideoElement(clip.videoUrl);
-              const dur=(el.duration&&isFinite(el.duration))?el.duration:(clip.videoDuration??6);
-              return {media:el,mediaType:'video',measuredVideoDur:dur};
+              const el = await loadVideoElement(clip.videoUrl);
+              const dur = (el.duration && isFinite(el.duration)) ? el.duration : (clip.videoDuration ?? 6);
+              return { media:el, mediaType:'video', measuredVideoDur:dur };
             } catch(e) {
-              console.warn(`[Export] Clip ${i} video failed (${e.message})${hasImg?' → image fallback':''}`);
-              if (hasImg) try{return{media:await loadImageBitmap(clip.imageUrl),mediaType:'image',measuredVideoDur:null};}catch{}
+              console.warn('[Export] Clip ' + i + ' video failed (' + e.message + ')' + (hasImg ? ' — falling back to image' : ''));
+              // ALWAYS try image fallback when video fails — this fixes dark frames
+              if (hasImg) {
+                try {
+                  const bm = await loadImageBitmap(clip.imageUrl);
+                  console.log('[Export] Clip ' + i + ' using image fallback');
+                  return { media:bm, mediaType:'image', measuredVideoDur:null };
+                } catch(imgErr) {
+                  console.warn('[Export] Clip ' + i + ' image fallback also failed:', imgErr.message);
+                }
+              }
             }
           } else if (hasImg) {
-            try{return{media:await loadImageBitmap(clip.imageUrl),mediaType:'image',measuredVideoDur:null};}
-            catch(e){console.warn(`[Export] Clip ${i} image failed:`,e.message);}
+            try {
+              return { media: await loadImageBitmap(clip.imageUrl), mediaType:'image', measuredVideoDur:null };
+            } catch(e) {
+              console.warn('[Export] Clip ' + i + ' image failed:', e.message);
+            }
           }
-          console.warn(`[Export] ⚠️  Clip ${i} — no media, black frame`);
-          return {media:null,mediaType:'image',measuredVideoDur:null};
+          // Last resort: try any available URL regardless of mediaType
+          const anyUrl = clip.imageUrl || clip.videoUrl;
+          if (anyUrl && anyUrl.startsWith('http')) {
+            try {
+              const bm = await loadImageBitmap(anyUrl);
+              console.log('[Export] Clip ' + i + ' rescued via last-resort URL');
+              return { media:bm, mediaType:'image', measuredVideoDur:null };
+            } catch {}
+          }
+          console.warn('[Export] ⚠️  Clip ' + i + ' — no media at all, will render black');
+          return { media:null, mediaType:'image', measuredVideoDur:null };
         }),
         PRELOAD_CONCURRENCY,
         (done,total)=>setProgress(Math.round((done/total)*15))
@@ -591,12 +673,14 @@ export default function useVideoExport() {
 
         if (voiceoverUrl) {
           try {
-            const buf=await decodeAudio(voiceoverUrl);
-            const chN=Math.min(buf.numberOfChannels,2);
-            const ch=Array.from({length:chN},(_,i)=>buf.getChannelData(i));
-            const len=Math.min(totalSamples,buf.length);
-            for(let i=0;i<len;i++){L[i]=ch[0][i];R[i]=ch[Math.min(1,chN-1)][i];}
-          } catch(e){console.warn('[Export] VO decode failed:',e);}
+            // Reuse the buffer we already decoded in the measuring phase.
+            // If it failed there, try once more now.
+            const buf = _voiceBuf || await decodeAudio(voiceoverUrl);
+            const chN = Math.min(buf.numberOfChannels, 2);
+            const ch  = Array.from({length:chN}, (_,i) => buf.getChannelData(i));
+            const len = Math.min(totalSamples, buf.length);
+            for (let i=0;i<len;i++) { L[i]=ch[0][i]; R[i]=ch[Math.min(1,chN-1)][i]; }
+          } catch(e) { console.warn('[Export] VO mix failed:',e); }
         }
 
         if (musicUrl) {
