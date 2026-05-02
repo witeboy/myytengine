@@ -11,19 +11,21 @@ Deno.serve(async (req) => {
         return Response.json({ success: false, error: 'Invalid URL' }, { status: 400 });
       }
 
-      var allowedDomains = [
-        'file.aiquickdraw.com',
-        'tempfile.aiquickdraw.com',
-        'storage.googleapis.com',
-        'r2.dev',
-        'r2.cloudflarestorage.com',
-        'cdn.aiquickdraw.com',
-        'api.kie.ai',
-        'ideogram.ai',
-        'oaidalleapiprodscus.blob.core.windows.net',
-        'replicate.delivery',
-        'pbxt.replicate.delivery'
-      ];
+      var allowedDomains = [ 
+  'pub-aafc308ff5954f7187e75e4d90948e91.r2.dev', 
+  '*.r2.dev',
+  '://aiquickdraw.com', 
+  'temp://aiquickdraw.com', 
+  '://googleapis.com', 
+  'r2.dev', 
+  '://cloudflarestorage.com', 
+  '://aiquickdraw.com', 
+  'api.kie.ai', 
+  'ideogram.ai', 
+  'oaidalleapiprodscus.blob.core.windows.net', 
+  'replicate.delivery', 
+  'pbxt.replicate.delivery' 
+];
 
       var hostname;
       try {
