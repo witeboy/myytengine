@@ -516,11 +516,12 @@ export default function useVideoExport() {
       var H = preset.height;
       var BR = preset.bitrate;
 
-      var off = 0;
-      var clips = scenes.map(function(s) {
+       var clips = scenes.map(function(s) {
         var dur = Math.max(0.1, s.duration || s.duration_seconds || 8);
-        var c = {
+        var explicitStart = (s.startTime !== undefined && s.startTime !== null) ? s.startTime : -1;
+        return {
           duration: dur,
+          startTime: explicitStart,
           mediaType: s.mediaType || (s.video_url && s.video_url.indexOf('http') === 0 ? 'video' : 'image'),
           videoUrl: s.videoUrl || s.video_url || '',
           imageUrl: s.imageUrl || s.image_url || '',
@@ -530,14 +531,19 @@ export default function useVideoExport() {
           motionSpeed: s.motionSpeed !== undefined ? s.motionSpeed : 1.0,
           motionIntensity: s.motionIntensity !== undefined ? s.motionIntensity : 1.0,
           transition: s.transition || null,
-          transitionDuration: s.transitionDuration !== undefined ? s.transitionDuration : DEFAULT_TRANSITION_DURATION,
-          startTime: off
+          transitionDuration: s.transitionDuration !== undefined ? s.transitionDuration : DEFAULT_TRANSITION_DURATION
         };
-        off += dur;
-        return c;
       });
 
-      var clipsDuration = off;
+      var runningOffset = 0;
+      for (var i = 0; i < clips.length; i++) {
+        if (clips[i].startTime < 0) {
+          clips[i].startTime = runningOffset;
+        }
+        runningOffset = clips[i].startTime + clips[i].duration;
+      }
+
+      var clipsDuration = runningOffset;
       var hasAudio = !!(voiceoverUrl || musicUrl);
       var totalDuration = clipsDuration;
       var voiceBuf = null;
