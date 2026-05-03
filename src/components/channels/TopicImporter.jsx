@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Loader2, Upload, FileText, Sparkles, AlertTriangle, Trash2, Check } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 
 export default function TopicImporter({ open, onOpenChange, channel, onImported }) {
   const [text, setText] = useState('');
@@ -54,8 +55,41 @@ export default function TopicImporter({ open, onOpenChange, channel, onImported 
 
     // Use AI to find duplicates: both within new list AND against existing
     setPhase('AI is scanning for duplicates...');
-    const result = await base44.integrations.Core.InvokeLLM({
-      prompt: `You are a strict duplicate detector for YouTube video topics. You must perform TWO checks:
+    
+    // Fallback logic to grab the API key depending on your framework (Next.js, Vite, or CRA)
+    const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.REACT_APP_GEMINI_API_KEY || import.meta.env?.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+    const genAI = new GoogleGenerativeAI(apiKey);
+    
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash", // Extremely fast and cheap for this type of parsing
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: SchemaType.OBJECT,
+          properties: {
+            auto_removed_internal: {
+              type: SchemaType.ARRAY,
+              items: { type: SchemaType.OBJECT, properties: { kept: { type: SchemaType.STRING }, removed: { type: SchemaType.STRING }, reason: { type: SchemaType.STRING } } }
+            },
+            auto_removed_existing: {
+              type: SchemaType.ARRAY,
+              items: { type: SchemaType.OBJECT, properties: { new_title: { type: SchemaType.STRING }, existing_title: { type: SchemaType.STRING }, existing_id: { type: SchemaType.STRING }, reason: { type: SchemaType.STRING } } }
+            },
+            flagged_existing: {
+              type: SchemaType.ARRAY,
+              items: { type: SchemaType.OBJECT, properties: { new_title: { type: SchemaType.STRING }, existing_title: { type: SchemaType.STRING }, existing_id: { type: SchemaType.STRING }, reason: { type: SchemaType.STRING } } }
+            },
+            flagged_internal: {
+              type: SchemaType.ARRAY,
+              items: { type: SchemaType.OBJECT, properties: { title_a: { type: SchemaType.STRING }, title_b: { type: SchemaType.STRING }, reason: { type: SchemaType.STRING } } }
+            },
+            unique: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
+          }
+        }
+      }
+    });
+
+    const promptText = `You are a strict duplicate detector for YouTube video topics. You must perform TWO checks:
 
 CHECK 1 — DUPLICATES WITHIN THE NEW IMPORT LIST:
 Compare all new topics against each other. 
@@ -73,39 +107,10 @@ ${existingTitles.length > 0 ? existingTitles.map((t, i) => `${i + 1}. "${t.title
 NEW TOPICS being imported (in order):
 ${titles.map((t, i) => `${i + 1}. "${t}"`).join('\n')}
 
-IMPORTANT: Topics about different aspects of the same broad niche are NOT duplicates. Only flag truly redundant topics.
+IMPORTANT: Topics about different aspects of the same broad niche are NOT duplicates. Only flag truly redundant topics.`;
 
-Return JSON:
-{
-  "auto_removed_internal": [{"kept": "title kept", "removed": "title auto-removed", "reason": "why"}],
-  "auto_removed_existing": [{"new_title": "...", "existing_title": "...", "existing_id": "...", "reason": "why"}],
-  "flagged_existing": [{"new_title": "...", "existing_title": "...", "existing_id": "...", "reason": "why"}],
-  "flagged_internal": [{"title_a": "...", "title_b": "...", "reason": "why"}],
-  "unique": ["list of new titles that passed all checks and are not auto-removed"]
-}`,
-      response_json_schema: {
-        type: "object",
-        properties: {
-          auto_removed_internal: {
-            type: "array",
-            items: { type: "object", properties: { kept: { type: "string" }, removed: { type: "string" }, reason: { type: "string" } } }
-          },
-          auto_removed_existing: {
-            type: "array",
-            items: { type: "object", properties: { new_title: { type: "string" }, existing_title: { type: "string" }, existing_id: { type: "string" }, reason: { type: "string" } } }
-          },
-          flagged_existing: {
-            type: "array",
-            items: { type: "object", properties: { new_title: { type: "string" }, existing_title: { type: "string" }, existing_id: { type: "string" }, reason: { type: "string" } } }
-          },
-          flagged_internal: {
-            type: "array",
-            items: { type: "object", properties: { title_a: { type: "string" }, title_b: { type: "string" }, reason: { type: "string" } } }
-          },
-          unique: { type: "array", items: { type: "string" } }
-        }
-      }
-    });
+    const aiResponse = await model.generateContent(promptText);
+    const result = JSON.parse(aiResponse.response.text());
 
     setImporting(false);
     setPhase('');
