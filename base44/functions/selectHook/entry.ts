@@ -28,13 +28,26 @@ Deno.serve(async (req) => {
       }
 
       const allowedDomains = [
+        // AIQuickDraw domains
         'file.aiquickdraw.com',
         'tempfile.aiquickdraw.com',
         'cdn.aiquickdraw.com',
+        
+        // MyVoicify custom domains (R2)
+        'myvoicify.app',
+        'media.myvoicify.app',
+        'files.myvoicify.app',
+        'cdn.myvoicify.app',
+        
+        // R2/Cloudflare storage (fallback)
         'r2.dev',
         'r2.cloudflarestorage.com',
         'pub-aafc308ff5954f7187e75e4d90948e91.r2.dev',
+        
+        // Google storage
         'storage.googleapis.com',
+        
+        // AI service providers
         'api.kie.ai',
         'ideogram.ai',
         'oaidalleapiprodscus.blob.core.windows.net',
@@ -118,9 +131,8 @@ Deno.serve(async (req) => {
       }
     }
 
-// ════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════
     // ACTION: proxyAudio — stream audio directly with CORS headers
-    // Use this for audio playback and duration measurement
     // ════════════════════════════════════════════════════════════
     if (body.action === 'proxyAudio') {
       const url = body.url;
@@ -150,7 +162,6 @@ Deno.serve(async (req) => {
         const arrayBuffer = await response.arrayBuffer();
         const contentType = response.headers.get('content-type') || 'audio/wav';
 
-        // Return raw audio bytes with CORS headers
         return new Response(arrayBuffer, {
           status: 200,
           headers: {
@@ -160,56 +171,6 @@ Deno.serve(async (req) => {
             'Content-Type': contentType,
             'Content-Length': arrayBuffer.byteLength.toString(),
             'Cache-Control': 'public, max-age=31536000',
-          }
-        });
-
-      } catch (fetchError) {
-        return Response.json(
-          { success: false, error: 'Fetch failed: ' + fetchError.message },
-          { status: 502, headers: corsHeaders }
-        );
-      }
-    }
-
-    // ════════════════════════════════════════════════════════════
-    // ACTION: proxyAudioDirect — return raw audio with CORS headers
-    // For audio duration measurement, return the actual audio bytes
-    // ════════════════════════════════════════════════════════════
-    if (body.action === 'proxyAudioDirect') {
-      const url = body.url;
-
-      if (!url || !url.startsWith('http')) {
-        return Response.json(
-          { success: false, error: 'Invalid URL' },
-          { status: 400, headers: corsHeaders }
-        );
-      }
-
-      try {
-        const response = await fetch(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'audio/*,*/*',
-          }
-        });
-
-        if (!response.ok) {
-          return Response.json(
-            { success: false, error: 'Upstream returned ' + response.status },
-            { status: 502, headers: corsHeaders }
-          );
-        }
-
-        const arrayBuffer = await response.arrayBuffer();
-        const contentType = response.headers.get('content-type') || 'audio/wav';
-
-        // Return raw audio with CORS headers
-        return new Response(arrayBuffer, {
-          status: 200,
-          headers: {
-            ...corsHeaders,
-            'Content-Type': contentType,
-            'Content-Length': arrayBuffer.byteLength.toString(),
           }
         });
 
