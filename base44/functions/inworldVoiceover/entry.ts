@@ -1,25 +1,15 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 import { S3Client, PutObjectCommand, GetObjectCommand } from 'npm:@aws-sdk/client-s3@3.600.0';
 
-// ══════════════════════════════════════════════════════════════════
-// INWORLD AI TTS — Chunked voiceover generation (v2)
-//
-// Inworld API: POST https://api.inworld.ai/tts/v1/voice
-// Auth: Basic <INWORLD_API_KEY>
-// Limit: 2000 chars per request → chunk at 1500 chars
-// Returns: base64 audio (WAV) synchronously
-//
-// Actions:
-//   start   → chunk script, save metadata, process first batch
-//   process → process next batch of chunks
-//   status  → return progress
-//
-// Frontend calls start once, then process every 3-5 seconds until done.
-// ══════════════════════════════════════════════════════════════════
-
 const CHUNK_SIZE = 1500;
-const CHUNKS_PER_CALL = 3; // process 3 chunks per function call to stay within Deno limits
-const DELAY_BETWEEN_CHUNKS = 200; // ms between API calls to avoid rate limiting
+const CHUNKS_PER_CALL = 3;
+const DELAY_BETWEEN_CHUNKS = 200;
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+};
 
 function getR2Client() {
   return new S3Client({
@@ -48,10 +38,6 @@ async function uploadToR2(audioBytes, fileName) {
     Body: audioBytes,
     ContentType: 'audio/wav',
     CacheControl: 'public, max-age=31536000',
-    Metadata: {
-      'access-control-allow-origin': '*',
-      'access-control-allow-methods': 'GET, HEAD',
-    }
   }));
   return `${getR2PublicUrl()}/${fileName}`;
 }
@@ -95,10 +81,8 @@ function chunkText(text, maxLen = CHUNK_SIZE) {
       break;
     }
 
-    // Find a good break point: sentence end, then paragraph, then word
     let breakAt = -1;
 
-    // Try sentence break (. ! ?) within range
     for (let i = maxLen; i >= maxLen * 0.5; i--) {
       if ('.!?'.includes(remaining[i]) && (i + 1 >= remaining.length || remaining[i + 1] === ' ' || remaining[i + 1] === '\n')) {
         breakAt = i + 1;
@@ -106,7 +90,6 @@ function chunkText(text, maxLen = CHUNK_SIZE) {
       }
     }
 
-    // Try newline break
     if (breakAt === -1) {
       for (let i = maxLen; i >= maxLen * 0.5; i--) {
         if (remaining[i] === '\n') {
@@ -116,7 +99,6 @@ function chunkText(text, maxLen = CHUNK_SIZE) {
       }
     }
 
-    // Try space break
     if (breakAt === -1) {
       for (let i = maxLen; i >= maxLen * 0.5; i--) {
         if (remaining[i] === ' ') {
@@ -126,7 +108,6 @@ function chunkText(text, maxLen = CHUNK_SIZE) {
       }
     }
 
-    // Hard cut as last resort
     if (breakAt === -1) breakAt = maxLen;
 
     chunks.push(remaining.substring(0, breakAt).trim());
@@ -167,7 +148,6 @@ async function synthesizeChunk(text, voiceId, apiKey, modelId = 'inworld-tts-1.5
     throw new Error('Inworld returned no audioContent');
   }
 
-  // Decode base64 to bytes
   const binaryString = atob(data.audioContent);
   const bytes = new Uint8Array(binaryString.length);
   for (let i = 0; i < binaryString.length; i++) {
@@ -182,12 +162,6 @@ function sleep(ms) {
 }
 
 Deno.serve(async (req) => {
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-  };
-
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -213,7 +187,6 @@ Deno.serve(async (req) => {
     if (action === 'start') {
       if (!voice_id) return Response.json({ error: 'Missing voice_id' }, { status: 400, headers: corsHeaders });
 
-      // Load script
       const [projects, allScripts] = await Promise.all([
         base44.asServiceRole.entities.Projects.filter({ id: project_id }),
         base44.asServiceRole.entities.Scripts.filter({ project_id }),
@@ -230,15 +203,13 @@ Deno.serve(async (req) => {
 
       console.log(`🎙 Inworld: ${cleanedText.length} chars → ${chunks.length} chunks, voice=${voice_id}`);
 
-      // Build chunk metadata (no text stored — re-chunk from script each time)
       const chunkMeta = chunks.map((_, i) => ({
         index: i,
-        status: 'pending', // pending | done | failed
+        status: 'pending',
         r2_key: null,
         error: null,
       }));
 
-      // Save initial state
       const payload = {
         project_id,
         selected_voice_id: voice_id,
@@ -270,7 +241,7 @@ Deno.serve(async (req) => {
     // ACTION: process — process next batch of chunks
     // ════════════════════════════════════════════════════════════
     if (action === 'process') {
-       if (!settings) return Response.json({ error: 'No production settings' }, { status: 404, headers: corsHeaders });
+      if (!settings) return Response.json({ error: 'No production settings' }, { status: 404, headers: corsHeaders });
       if (!settings.generation_task_id?.startsWith('inworld:')) {
         return Response.json({ error: 'No active Inworld task' }, { status: 400, headers: corsHeaders });
       }
@@ -280,7 +251,6 @@ Deno.serve(async (req) => {
 
       if (chunkMeta.length === 0) return Response.json({ error: 'No chunk metadata' }, { status: 400, headers: corsHeaders });
 
-      // Re-chunk script to get text for each chunk
       const allScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
       const script = allScripts.find(s => s.version === 'final_aggregated');
       if (!script?.full_script) return Response.json({ error: 'Script not found' }, { status: 400, headers: corsHeaders });
@@ -294,14 +264,12 @@ Deno.serve(async (req) => {
       const voiceId = settings.selected_voice_id;
       const selectedModel = model_id || 'inworld-tts-1.5-mini';
 
-      // Find next pending chunks
       const pendingIndices = chunkMeta
         .filter(c => c.status === 'pending')
         .map(c => c.index)
         .slice(0, CHUNKS_PER_CALL);
 
       if (pendingIndices.length === 0) {
-        // All chunks processed — check if we need to concatenate
         const doneChunks = chunkMeta.filter(c => c.status === 'done');
         const failedChunks = chunkMeta.filter(c => c.status === 'failed');
 
@@ -310,7 +278,6 @@ Deno.serve(async (req) => {
           return Response.json({ status: 'failed', error: 'All chunks failed' }, { headers: corsHeaders });
         }
 
-        // Concatenate all chunk audio files
         console.log(`🔗 Concatenating ${doneChunks.length} chunks...`);
 
         try {
@@ -319,15 +286,13 @@ Deno.serve(async (req) => {
 
           for (const chunk of sortedChunks) {
             const bytes = await downloadFromR2(chunk.r2_key);
-            // Skip WAV header (44 bytes) for all chunks except the first
             if (audioBuffers.length === 0) {
-              audioBuffers.push(bytes); // keep header from first chunk
+              audioBuffers.push(bytes);
             } else {
-              audioBuffers.push(bytes.slice(44)); // skip header for subsequent chunks
+              audioBuffers.push(bytes.slice(44));
             }
           }
 
-          // Combine all buffers
           const totalSize = audioBuffers.reduce((s, b) => s + b.length, 0);
           const combined = new Uint8Array(totalSize);
           let offset = 0;
@@ -336,14 +301,12 @@ Deno.serve(async (req) => {
             offset += buf.length;
           }
 
-          // Fix WAV header with correct file size
           if (combined.length > 44) {
             const dataView = new DataView(combined.buffer);
-            dataView.setUint32(4, combined.length - 8, true); // ChunkSize
-            dataView.setUint32(40, combined.length - 44, true); // Subchunk2Size
+            dataView.setUint32(4, combined.length - 8, true);
+            dataView.setUint32(40, combined.length - 44, true);
           }
 
-          // Upload final concatenated file
           const finalKey = `voiceover/${project_id}_inworld_${Date.now()}.wav`;
           const voiceoverUrl = await uploadToR2(combined, finalKey);
 
@@ -353,7 +316,12 @@ Deno.serve(async (req) => {
             voiceover_url: voiceoverUrl,
             voiceover_status: 'completed',
           });
-          try { await base44.asServiceRole.entities.Projects.update(project_id, { voiceover_url: voiceoverUrl }); } catch (e) {}
+          
+          try { 
+            await base44.asServiceRole.entities.Projects.update(project_id, { voiceover_url: voiceoverUrl }); 
+          } catch (e) {
+            console.log('Could not update project voiceover_url:', e.message);
+          }
 
           return Response.json({
             status: 'ready',
@@ -365,7 +333,6 @@ Deno.serve(async (req) => {
 
         } catch (concatErr) {
           console.error('Concatenation failed:', concatErr.message);
-          // Fallback: use first chunk as voiceover
           const firstDone = doneChunks.sort((a, b) => a.index - b.index)[0];
           const fallbackUrl = `${getR2PublicUrl()}/${firstDone.r2_key}`;
           await base44.asServiceRole.entities.ProductionSettings.update(settings.id, {
@@ -376,13 +343,12 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Process this batch
       let newCompleted = 0;
       let newFailed = 0;
 
       for (const idx of pendingIndices) {
-        const chunkText = textChunks[idx];
-        if (!chunkText) {
+        const chunkTextContent = textChunks[idx];
+        if (!chunkTextContent) {
           chunkMeta[idx].status = 'failed';
           chunkMeta[idx].error = 'Chunk text missing';
           newFailed++;
@@ -390,11 +356,10 @@ Deno.serve(async (req) => {
         }
 
         try {
-          console.log(`🔊 Chunk ${idx + 1}/${chunkMeta.length}: ${chunkText.length} chars`);
+          console.log(`🔊 Chunk ${idx + 1}/${chunkMeta.length}: ${chunkTextContent.length} chars`);
 
-          const audioBytes = await synthesizeChunk(chunkText, voiceId, INWORLD_KEY, selectedModel);
+          const audioBytes = await synthesizeChunk(chunkTextContent, voiceId, INWORLD_KEY, selectedModel);
 
-          // Upload chunk audio to R2
           const chunkKey = `voiceover/chunks/${project_id}_inworld_${idx}.wav`;
           await uploadToR2(audioBytes, chunkKey);
 
@@ -402,7 +367,6 @@ Deno.serve(async (req) => {
           chunkMeta[idx].r2_key = chunkKey;
           newCompleted++;
 
-          // Delay between chunks to avoid rate limiting
           if (pendingIndices.indexOf(idx) < pendingIndices.length - 1) {
             await sleep(DELAY_BETWEEN_CHUNKS);
           }
@@ -415,7 +379,6 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Update progress
       const completedTotal = chunkMeta.filter(c => c.status === 'done').length;
       const failedTotal = chunkMeta.filter(c => c.status === 'failed').length;
       const pendingTotal = chunkMeta.filter(c => c.status === 'pending').length;
@@ -468,6 +431,6 @@ Deno.serve(async (req) => {
 
   } catch (error) {
     console.error(`❌ inworldVoiceover: ${error.message}`);
-    return Response.json({ error: error.message }, { status: 500, headers: { 'Access-Control-Allow-Origin': '*' } });
+    return Response.json({ error: error.message }, { status: 500, headers: corsHeaders });
   }
 });
