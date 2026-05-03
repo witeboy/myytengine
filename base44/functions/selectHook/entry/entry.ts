@@ -28,13 +28,26 @@ Deno.serve(async (req) => {
       }
 
       const allowedDomains = [
+        // AIQuickDraw domains
         'file.aiquickdraw.com',
         'tempfile.aiquickdraw.com',
         'cdn.aiquickdraw.com',
+        
+        // MyVoicify custom domains (R2)
+        'myvoicify.app',
+        'media.myvoicify.app',
+        'files.myvoicify.app',
+        'cdn.myvoicify.app',
+        
+        // R2/Cloudflare storage (fallback)
         'r2.dev',
         'r2.cloudflarestorage.com',
         'pub-aafc308ff5954f7187e75e4d90948e91.r2.dev',
+        
+        // Google storage
         'storage.googleapis.com',
+        
+        // AI service providers
         'api.kie.ai',
         'ideogram.ai',
         'oaidalleapiprodscus.blob.core.windows.net',
@@ -119,10 +132,9 @@ Deno.serve(async (req) => {
     }
 
     // ════════════════════════════════════════════════════════════
-    // ACTION: proxyAudioDirect — return raw audio with CORS headers
-    // For audio duration measurement, return the actual audio bytes
+    // ACTION: proxyAudio — stream audio directly with CORS headers
     // ════════════════════════════════════════════════════════════
-    if (body.action === 'proxyAudioDirect') {
+    if (body.action === 'proxyAudio') {
       const url = body.url;
 
       if (!url || !url.startsWith('http')) {
@@ -150,13 +162,15 @@ Deno.serve(async (req) => {
         const arrayBuffer = await response.arrayBuffer();
         const contentType = response.headers.get('content-type') || 'audio/wav';
 
-        // Return raw audio with CORS headers
         return new Response(arrayBuffer, {
           status: 200,
           headers: {
-            ...corsHeaders,
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': '*',
             'Content-Type': contentType,
             'Content-Length': arrayBuffer.byteLength.toString(),
+            'Cache-Control': 'public, max-age=31536000',
           }
         });
 
