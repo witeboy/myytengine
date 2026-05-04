@@ -23,71 +23,78 @@ async function callClaude(prompt, temperature = 0.7, maxTokens = 8192, retries =
     throw new Error("Missing ANTHROPIC_API_KEY environment variable");
   }
 
-  for (let attempt = 0; attempt < retries; attempt++) {
-    try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01"
-        },
-        body: JSON.stringify({
+  // Create batch
+  const batchRes = await fetch("https://api.anthropic.com/v1/messages/batches", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-beta": "message-batches-1"
+    },
+    body: JSON.stringify({
+      requests: [{
+        custom_id: "scene-prompts",
+        params: {
           model: "claude-sonnet-4-5",
           max_tokens: maxTokens,
           temperature: temperature,
           system: "You are a world-class film director and cinematic data extractor. You must return ONLY raw, valid JSON. Do not include markdown formatting like ```json and do not include any conversational text.",
-          messages: [
-            { role: "user", content: prompt }
-          ]
-        })
-      });
-
-      if (response.status === 429) {
-        const waitMs = Math.pow(2, attempt + 1) * 5000;
-        console.log(`Rate limited, waiting ${waitMs / 1000}s...`);
-        await new Promise(r => setTimeout(r, waitMs));
-        continue;
-      }
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(`Claude ${response.status}: ${err.error?.message || "Unknown"}`);
-      }
-
-      const data = await response.json();
-      if (!data.content || !data.content.length) throw new Error("No content returned from Claude");
-      
-      const rawText = data.content[0].text;
-
-      try { return JSON.parse(rawText); } catch (_) {}
-      try { return JSON.parse(repairJSON(rawText)); } catch (_) {}
-
-      let jsonStr = rawText;
-      if (rawText.includes("```json")) jsonStr = rawText.split("```json")[1].split("```")[0].trim();
-      else if (rawText.includes("```")) jsonStr = rawText.split("```")[1].split("```")[0].trim();
-      try { return JSON.parse(repairJSON(jsonStr)); } catch (_) {}
-
-      const objMatch = jsonStr.match(/\{[\s\S]*\}/);
-      if (objMatch) { try { return JSON.parse(objMatch[0]); } catch (_) {} }
-
-      const lastBrace = rawText.lastIndexOf('}');
-      if (lastBrace > 0) {
-        const trimmed = rawText.substring(0, lastBrace + 1);
-        for (const suffix of [']}', '}]}', '']) {
-          try {
-            const parsed = JSON.parse(trimmed + suffix);
-            if (parsed.prompts && Array.isArray(parsed.prompts)) return parsed;
-          } catch (_) {}
+          messages: [{ role: "user", content: prompt }]
         }
-      }
+      }]
+    })
+  });
 
-      throw new Error("Failed to parse Claude JSON after recovery");
-    } catch (error) {
-      if (attempt === retries - 1) throw error;
-      console.warn(`Attempt ${attempt + 1} failed: ${error.message}, retrying...`);
-      await new Promise(r => setTimeout(r, 2000));
+  if (!batchRes.ok) {
+    const err = await batchRes.json();
+    throw new Error(`Batch create failed: ${err.error?.message || batchRes.status}`);
+  }
+
+  const batch = await batchRes.json();
+  const batchId = batch.id;
+
+  // Poll until done
+  while (true) {
+    await new Promise(r => setTimeout(r, 3000));
+    const pollRes = await fetch(`https://api.anthropic.com/v1/messages/batches/${batchId}`, {
+      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-beta": "message-batches-1" }
+    });
+    const status = await pollRes.json();
+    if (status.processing_status !== "ended") continue;
+
+    // Fetch results
+    const resultsRes = await fetch(`https://api.anthropic.com/v1/messages/batches/${batchId}/results`, {
+      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-beta": "message-batches-1" }
+    });
+    const resultsText = await resultsRes.text();
+    const lines = resultsText.trim().split("\n");
+    const result = JSON.parse(lines[0]);
+    const rawText = result.result.message.content[0].text;
+
+    try { return JSON.parse(rawText); } catch (_) {}
+    try { return JSON.parse(repairJSON(rawText)); } catch (_) {}
+
+    let jsonStr = rawText;
+    if (rawText.includes("```json")) jsonStr = rawText.split("```json")[1].split("```")[0].trim();
+    else if (rawText.includes("```")) jsonStr = rawText.split("```")[1].split("```")[0].trim();
+    try { return JSON.parse(repairJSON(jsonStr)); } catch (_) {}
+
+    const objMatch = jsonStr.match(/\{[\s\S]*\}/);
+    if (objMatch) { try { return JSON.parse(objMatch[0]); } catch (_) {} }
+
+    const lastBrace = rawText.lastIndexOf('}');
+    if (lastBrace > 0) {
+      const trimmed = rawText.substring(0, lastBrace + 1);
+      for (const suffix of [']}', '}]}', '']) {
+        try {
+          const parsed = JSON.parse(trimmed + suffix);
+          if (parsed.prompts && Array.isArray(parsed.prompts)) return parsed;
+        } catch (_) {}
+      }
     }
+
+    throw new Error("Failed to parse Claude JSON after recovery");
   }
 }
 
@@ -548,7 +555,7 @@ function getArcAnimationGuidance(arcPosition, sceneDuration, visualStyle) {
   const arcs = {
     setup: {
       camera: "Ultra-slow push in (8% zoom over full duration), starting wide to establish world",
-      atmos: "Atmosphere is still and natural. Nothing hurries. Ambient sounds settle.",
+      atmos: "Dust motes drift in a single foreground shaft of light. Nothing hurries. Ambient sounds settle.",
       subject: "Subject completely still — one breath, one weight shift, no more. Let the world breathe.",
       crowd: "Background figures move naturally and unaware. Life continues around the moment.",
       cut: "HOLD three frames past the emotion before cutting. Let silence land."
@@ -971,14 +978,14 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
         .replace(/\bshown full body in the scene\b/gi, '')
         // Force a concrete gender — image gen can't render "neutral"
         // Detect best gender from surrounding identity context instead of defaulting female
-        .replace(/\bgender[\s:]*neutral\b/gi, match => {
+        .replace(/\bgender[\s:]*neutral\b/gi, (match) => {
           // Check if surrounding text gives clues
           const ctx = identityDesc.toLowerCase();
           if (/\b(father|husband|king|prince|brother|uncle|nephew|grandson|sir|mr|beard|mustache)\b/.test(ctx)) return 'male';
           if (/\b(mother|wife|queen|princess|sister|aunt|niece|granddaughter|ms|mrs|miss|pregnant|headwrap|braids)\b/.test(ctx)) return 'female';
           return 'male'; // truly ambiguous — pick based on visual contrast
         })
-        .replace(/\bgender[\s:]*any\b/gi, match => {
+        .replace(/\bgender[\s:]*any\b/gi, (match) => {
           const ctx = identityDesc.toLowerCase();
           if (/\b(mother|wife|queen|princess|sister|aunt|niece|ms|mrs|miss)\b/.test(ctx)) return 'female';
           return 'male';
@@ -1234,7 +1241,7 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
             zoom_in:   'MCU — Medium Close-Up',
             zoom_out:  'WS — Wide Shot',
             pan_left:  'MS — Medium Shot',
-            pan_right:  'MS — Medium Shot',
+            pan_right: 'MS — Medium Shot',
             static:    'MS — Medium Shot',
           };
 
@@ -1244,7 +1251,7 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
             zoom_in:   'Eye-level, slow zoom compressing depth',
             zoom_out:  'Eye-level, pulling back to reveal environment',
             pan_left:  'Eye-level, lateral pan left tracking action',
-            pan_right:  'Eye-level, lateral pan right tracking action',
+            pan_right: 'Eye-level, lateral pan right tracking action',
             static:    'Eye-level, locked off, subject fills frame',
           };
 
@@ -1571,15 +1578,11 @@ ${useSleepStyle ? `   **🌙 SLEEP MODE ANIMATION — STRICT RULES:**
    - Keep it to 1-2 calm sentences. Example: "Ultra-slow pan right across the misty forest, gentle breeze rustling distant leaves, soft fog drifting between trees."
    - The animation should feel like a screensaver — peaceful, unchanging, meditative.` : `   - NOT a simple camera instruction — a FULL MOTION POEM describing everything that moves over the scene's duration.
    - **IMPORTANT: Each scene has its own duration.** A 3.5s scene needs TIGHT, PUNCHY motion. A 7s scene can BREATHE. Match the motion density to the seconds available.
-   - **STRICT PROHIBITIONS (CRITICAL):**
-     * **NO TALKING:** Characters DO NOT speak. No lip-syncing or rhythmic mouth movements for dialogue. Characters can open their mouths for natural expressions (smiling, gasping, breathing) but must NEVER appear to be talking.
-     * **NO DUST OR SPARKLES:** Do NOT describe random floating dust motes, magical sparkles, or floating particles unless it is explicitly a fantasy genre. Keep the air clean and natural.
-     * **NATURAL PHYSICS ONLY:** Movements must have weight and realistic physics. No random floating objects or unnatural jittering.
    - **Include ALL layers:**
      a) **CAMERA MOTION**: Specific movement with speed, direction, framing change
-     b) **ATMOSPHERIC MOTION**: Fog, natural light shifting, rain, leaves rustling, fabric rippling, steam
-     c) **SUBJECT MOTION**: Breathing, hair shifting, fingers tightening, eyes darting, fabric settling (NO TALKING)
-     d) **LIGHT DYNAMICS**: Natural sun shifting, firelight dancing, shadows drifting
+     b) **ATMOSPHERIC MOTION**: Dust motes, fog, light shifting, rain, leaves, fabric rippling, steam
+     c) **SUBJECT MOTION**: Breathing, hair shifting, fingers tightening, eyes darting, fabric settling
+     d) **LIGHT DYNAMICS**: Rays creeping across surfaces, firelight dancing, shadows drifting
      e) **DEPTH SHIFTS**: Rack focus, DOF breathing, focus pulls revealing detail
      f) **EMOTIONAL QUALITY**: "heavy and reluctant" vs "urgent and searching" vs "tender and hesitant"
    - **ARC POSITION**: ${orientationConfig.animation}
@@ -1609,7 +1612,7 @@ ${useSleepStyle ? `   **🌙 SLEEP MODE ANIMATION — STRICT RULES:**
         continue;
       }
 
-      const updatePromises = scenesWithNotes.map(async s => {
+      const updatePromises = scenesWithNotes.map(async (s) => {
         const generated = result.prompts.find(p => p.scene_number === s.scene_number);
 
         let imagePrompt, animationPrompt;
@@ -1968,7 +1971,7 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
           const envLayer = vc.includes('rain') ? 'Rain streaks every surface — droplets catch rim light, puddles ripple outward in rings.'
             : vc.includes('wind') ? 'Wind is constant and directional — fabric streams, hair lifts and falls, dust moves with purpose.'
             : vc.includes('crowd') ? 'Background crowd moves at three different speeds — foreground still, mid-ground flowing, far background a blur of life.'
-            : 'Ambient world physics are alive — light creeps across surfaces as clouds shift, leaves rustle gently in the background.';
+            : 'Ambient world physics are alive — light creeps across surfaces as clouds shift, a single falling particle catches the beam.';
           const moodLayer = mood.includes('tense') || mood.includes('anxiety') ? 'Light source flickers — shadows jump, never settle, always threatening.'
             : mood.includes('warm') || mood.includes('hope') ? 'Golden warmth expands from one edge — the light is arriving, not leaving.'
             : mood.includes('sad') || mood.includes('despair') ? 'Light recedes — the frame grows darker toward the cut as if the world is dimming.'
@@ -1977,10 +1980,10 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
             ? ' POV SHOT: camera IS the character — slight head-bob on movement, natural eye-drift to points of interest, hands entering frame from below. Environment sways gently with each step.'
             : '';
           animationPrompt = durationTier === 'snap'
-            ? `${arcGuidance}${povNote} ONE motion only — commit fully. No competing layers. Natural facial expressions only, absolutely no talking or lip-syncing.`
+            ? `${arcGuidance}${povNote} ONE motion only — commit fully. No competing layers.`
             : durationTier === 'build'
-            ? `${arcGuidance} ${envLayer}${povNote} Natural facial expressions only, absolutely no talking or lip-syncing.`
-            : `${arcGuidance} ${envLayer} ${moodLayer}${povNote} Shallow DOF breathes toward the emotional focal point across the full duration. Natural facial expressions only, absolutely no talking or lip-syncing.`;
+            ? `${arcGuidance} ${envLayer}${povNote}`
+            : `${arcGuidance} ${envLayer} ${moodLayer}${povNote} Shallow DOF breathes toward the emotional focal point across the full duration.`;
             }
           }
         } else {
@@ -2047,7 +2050,7 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
           const fbEnvLayer = vc.includes('rain') ? 'Rain streaks every surface — droplets catch rim light, puddles ripple outward in rings.'
             : vc.includes('wind') ? 'Wind is constant and directional — fabric streams, hair lifts and falls, dust moves with purpose.'
             : vc.includes('crowd') ? 'Background crowd moves at three different speeds — foreground still, mid-ground flowing, far background a blur of life.'
-            : 'Ambient world physics are alive — light creeps across surfaces as clouds shift, leaves rustle gently in the background.';
+            : 'Ambient world physics are alive — light creeps across surfaces as clouds shift, a single falling particle catches the beam.';
           const fbMoodLayer = mood.includes('tense') || mood.includes('anxiety') ? 'Light source flickers — shadows jump, never settle, always threatening.'
             : mood.includes('warm') || mood.includes('hope') ? 'Golden warmth expands from one edge — the light is arriving, not leaving.'
             : mood.includes('sad') || mood.includes('despair') ? 'Light recedes — the frame grows darker toward the cut as if the world is dimming.'
@@ -2056,10 +2059,10 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
             ? ' POV SHOT: camera IS the character — slight head-bob on movement, natural eye-drift to points of interest, hands entering frame from below. Environment sways gently with each step.'
             : '';
           animationPrompt = fbDurationTier === 'snap'
-            ? `${fbArcGuidance}${fbPovNote} ONE motion only — commit fully. No competing layers. Natural facial expressions only, absolutely no talking or lip-syncing.`
+            ? `${fbArcGuidance}${fbPovNote} ONE motion only — commit fully. No competing layers.`
             : fbDurationTier === 'build'
-            ? `${fbArcGuidance} ${fbEnvLayer}${fbPovNote} Natural facial expressions only, absolutely no talking or lip-syncing.`
-            : `${fbArcGuidance} ${fbEnvLayer} ${fbMoodLayer}${fbPovNote} Shallow DOF breathes toward the emotional focal point across the full duration. Natural facial expressions only, absolutely no talking or lip-syncing.`;
+            ? `${fbArcGuidance} ${fbEnvLayer}${fbPovNote}`
+            : `${fbArcGuidance} ${fbEnvLayer} ${fbMoodLayer}${fbPovNote} Shallow DOF breathes toward the emotional focal point across the full duration.`;
           }
         }
 
