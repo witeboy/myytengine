@@ -75,7 +75,7 @@ ${titles.map((t, i) => `${i + 1}. "${t}"`).join('\n')}
 
 IMPORTANT: Topics about different aspects of the same broad niche are NOT duplicates. Only flag truly redundant topics.`;
 
-    const apiKey = import.meta.env?.VITE_GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.REACT_APP_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
+    const apiKey = import.meta.env?. process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
       console.error("Gemini API Key is missing!");
