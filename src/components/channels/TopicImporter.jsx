@@ -12,7 +12,7 @@ export default function TopicImporter({ open, onOpenChange, channel, onImported 
   const [text, setText] = useState('');
   const [importing, setImporting] = useState(false);
   const [phase, setPhase] = useState('');
-  const [duplicates, setDuplicates] = useState(null); // { matches: [{new_title, existing_title, existing_id, similarity}], unique: [string] }
+  const [duplicates, setDuplicates] = useState(null); // { autoInternal, autoExisting, flaggedExisting, flaggedInternal, unique }
   const [selectedDupes, setSelectedDupes] = useState(new Set()); // indices of dupes to delete
   const [step, setStep] = useState('input'); // 'input' | 'review' | 'importing'
 
@@ -52,7 +52,6 @@ export default function TopicImporter({ open, onOpenChange, channel, onImported 
       return;
     }
 
-    // Use AI to find duplicates: both within new list AND against existing
     setPhase('AI is scanning for duplicates...');
 
     const promptText = `You are a strict duplicate detector for YouTube video topics. You must perform TWO checks:
@@ -73,62 +72,30 @@ ${existingTitles.length > 0 ? existingTitles.map((t, i) => `${i + 1}. "${t.title
 NEW TOPICS being imported (in order):
 ${titles.map((t, i) => `${i + 1}. "${t}"`).join('\n')}
 
-IMPORTANT: Topics about different aspects of the same broad niche are NOT duplicates. Only flag truly redundant topics.`;
+IMPORTANT: Topics about different aspects of the same broad niche are NOT duplicates. Only flag truly redundant topics.
 
-    const apiKey = import.meta.env?. process.env.GEMINI_API_KEY;
-
-    if (!apiKey) {
-      console.error("Gemini API Key is missing!");
-      setImporting(false);
-      setPhase('');
-      return;
-    }
+Return JSON:
+{
+  "auto_removed_internal": [{"kept": "title kept", "removed": "title auto-removed", "reason": "why"}],
+  "auto_removed_existing": [{"new_title": "...", "existing_title": "...", "existing_id": "...", "reason": "why"}],
+  "flagged_existing": [{"new_title": "...", "existing_title": "...", "existing_id": "...", "reason": "why"}],
+  "flagged_internal": [{"title_a": "...", "title_b": "...", "reason": "why"}],
+  "unique": ["list of new titles that passed all checks and are not auto-removed"]
+}`;
 
     try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: promptText }] }],
-            generationConfig: {
-              temperature: 0.2, // Low temp for more deterministic duplicate checking
-              responseMimeType: 'application/json',
-              responseSchema: {
-                type: "object",
-                properties: {
-                  auto_removed_internal: {
-                    type: "array",
-                    items: { type: "object", properties: { kept: { type: "string" }, removed: { type: "string" }, reason: { type: "string" } } }
-                  },
-                  auto_removed_existing: {
-                    type: "array",
-                    items: { type: "object", properties: { new_title: { type: "string" }, existing_title: { type: "string" }, existing_id: { type: "string" }, reason: { type: "string" } } }
-                  },
-                  flagged_existing: {
-                    type: "array",
-                    items: { type: "object", properties: { new_title: { type: "string" }, existing_title: { type: "string" }, existing_id: { type: "string" }, reason: { type: "string" } } }
-                  },
-                  flagged_internal: {
-                    type: "array",
-                    items: { type: "object", properties: { title_a: { type: "string" }, title_b: { type: "string" }, reason: { type: "string" } } }
-                  },
-                  unique: { type: "array", items: { type: "string" } }
-                }
-              }
-            },
-          }),
-        }
-      );
+      // Secure call to your backend function
+      const response = await base44.functions.invoke('safeGeminiCall', {
+        prompt: promptText,
+        temperature: 0.2 // Low temp for structured JSON response
+      });
 
-      if (!res.ok) {
-        throw new Error(`Gemini API Error ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      if (!response.success) {
+        throw new Error(response.error || "Failed to process AI request");
       }
 
-      const data = await res.json();
-      const rawAiText = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-      const result = JSON.parse(rawAiText);
+      // Your backend safeGeminiCall function already parses the JSON into response.data
+      const result = response.data;
 
       setImporting(false);
       setPhase('');
@@ -174,6 +141,7 @@ IMPORTANT: Topics about different aspects of the same broad niche are NOT duplic
         existingIdsToDelete.push(m.existing_id);
       }
     });
+    
     // Also delete auto-removed existing matches
     d.autoExisting.forEach(m => {
       if (m.existing_id) existingIdsToDelete.push(m.existing_id);
