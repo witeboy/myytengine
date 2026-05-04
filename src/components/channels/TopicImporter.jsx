@@ -7,7 +7,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Loader2, Upload, FileText, Sparkles, AlertTriangle, Trash2, Check } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 
 export default function TopicImporter({ open, onOpenChange, channel, onImported }) {
   const [text, setText] = useState('');
@@ -55,39 +54,6 @@ export default function TopicImporter({ open, onOpenChange, channel, onImported 
 
     // Use AI to find duplicates: both within new list AND against existing
     setPhase('AI is scanning for duplicates...');
-    
-    // Fallback logic to grab the API key depending on your framework (Next.js, Vite, or CRA)
-    const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.REACT_APP_GEMINI_API_KEY || import.meta.env?.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-    const genAI = new GoogleGenerativeAI(apiKey);
-    
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash", // Extremely fast and cheap for this type of parsing
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: SchemaType.OBJECT,
-          properties: {
-            auto_removed_internal: {
-              type: SchemaType.ARRAY,
-              items: { type: SchemaType.OBJECT, properties: { kept: { type: SchemaType.STRING }, removed: { type: SchemaType.STRING }, reason: { type: SchemaType.STRING } } }
-            },
-            auto_removed_existing: {
-              type: SchemaType.ARRAY,
-              items: { type: SchemaType.OBJECT, properties: { new_title: { type: SchemaType.STRING }, existing_title: { type: SchemaType.STRING }, existing_id: { type: SchemaType.STRING }, reason: { type: SchemaType.STRING } } }
-            },
-            flagged_existing: {
-              type: SchemaType.ARRAY,
-              items: { type: SchemaType.OBJECT, properties: { new_title: { type: SchemaType.STRING }, existing_title: { type: SchemaType.STRING }, existing_id: { type: SchemaType.STRING }, reason: { type: SchemaType.STRING } } }
-            },
-            flagged_internal: {
-              type: SchemaType.ARRAY,
-              items: { type: SchemaType.OBJECT, properties: { title_a: { type: SchemaType.STRING }, title_b: { type: SchemaType.STRING }, reason: { type: SchemaType.STRING } } }
-            },
-            unique: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
-          }
-        }
-      }
-    });
 
     const promptText = `You are a strict duplicate detector for YouTube video topics. You must perform TWO checks:
 
@@ -109,32 +75,89 @@ ${titles.map((t, i) => `${i + 1}. "${t}"`).join('\n')}
 
 IMPORTANT: Topics about different aspects of the same broad niche are NOT duplicates. Only flag truly redundant topics.`;
 
-    const aiResponse = await model.generateContent(promptText);
-    const result = JSON.parse(aiResponse.response.text());
+    const apiKey = import.meta.env?.VITE_GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.REACT_APP_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
 
-    setImporting(false);
-    setPhase('');
+    if (!apiKey) {
+      console.error("Gemini API Key is missing!");
+      setImporting(false);
+      setPhase('');
+      return;
+    }
 
-    const autoInternal = result.auto_removed_internal || [];
-    const autoExisting = result.auto_removed_existing || [];
-    const flaggedExisting = result.flagged_existing || [];
-    const flaggedInternal = result.flagged_internal || [];
-    const unique = result.unique || [];
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: promptText }] }],
+            generationConfig: {
+              temperature: 0.2, // Low temp for more deterministic duplicate checking
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: "object",
+                properties: {
+                  auto_removed_internal: {
+                    type: "array",
+                    items: { type: "object", properties: { kept: { type: "string" }, removed: { type: "string" }, reason: { type: "string" } } }
+                  },
+                  auto_removed_existing: {
+                    type: "array",
+                    items: { type: "object", properties: { new_title: { type: "string" }, existing_title: { type: "string" }, existing_id: { type: "string" }, reason: { type: "string" } } }
+                  },
+                  flagged_existing: {
+                    type: "array",
+                    items: { type: "object", properties: { new_title: { type: "string" }, existing_title: { type: "string" }, existing_id: { type: "string" }, reason: { type: "string" } } }
+                  },
+                  flagged_internal: {
+                    type: "array",
+                    items: { type: "object", properties: { title_a: { type: "string" }, title_b: { type: "string" }, reason: { type: "string" } } }
+                  },
+                  unique: { type: "array", items: { type: "string" } }
+                }
+              }
+            },
+          }),
+        }
+      );
 
-    const hasFlags = flaggedExisting.length > 0 || flaggedInternal.length > 0;
-    const hasAutoRemoved = autoInternal.length > 0 || autoExisting.length > 0;
+      if (!res.ok) {
+        throw new Error(`Gemini API Error ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      }
 
-    if (hasFlags || hasAutoRemoved) {
-      setDuplicates({ autoInternal, autoExisting, flaggedExisting, flaggedInternal, unique });
-      // Pre-select all flagged for deletion by default
-      const allFlags = [
-        ...flaggedExisting.map((_, i) => `existing_${i}`),
-        ...flaggedInternal.map((_, i) => `internal_${i}`),
-      ];
-      setSelectedDupes(new Set(allFlags));
-      setStep('review');
-    } else {
-      await doImport(unique.length > 0 ? unique : titles);
+      const data = await res.json();
+      const rawAiText = data.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+      const result = JSON.parse(rawAiText);
+
+      setImporting(false);
+      setPhase('');
+
+      const autoInternal = result.auto_removed_internal || [];
+      const autoExisting = result.auto_removed_existing || [];
+      const flaggedExisting = result.flagged_existing || [];
+      const flaggedInternal = result.flagged_internal || [];
+      const unique = result.unique || [];
+
+      const hasFlags = flaggedExisting.length > 0 || flaggedInternal.length > 0;
+      const hasAutoRemoved = autoInternal.length > 0 || autoExisting.length > 0;
+
+      if (hasFlags || hasAutoRemoved) {
+        setDuplicates({ autoInternal, autoExisting, flaggedExisting, flaggedInternal, unique });
+        // Pre-select all flagged for deletion by default
+        const allFlags = [
+          ...flaggedExisting.map((_, i) => `existing_${i}`),
+          ...flaggedInternal.map((_, i) => `internal_${i}`),
+        ];
+        setSelectedDupes(new Set(allFlags));
+        setStep('review');
+      } else {
+        await doImport(unique.length > 0 ? unique : titles);
+      }
+    } catch (error) {
+      console.error("Error checking duplicates:", error);
+      setImporting(false);
+      setPhase('');
     }
   };
 
