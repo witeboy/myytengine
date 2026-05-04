@@ -1062,12 +1062,17 @@ export default function ContentGeneration() {
   const proxyFetch = async (url) => {
     const proxyRes = await base44.functions.invoke('proxyFetchAsset', { url });
     const data = proxyRes.data || proxyRes;
+    if (data.success && data.file_url) {
+      const r2Res = await fetch(data.file_url, { mode: 'cors' });
+      if (r2Res.ok) return await r2Res.blob();
+    }
     if (data.success && data.data) {
       const binary = atob(data.data);
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
       return new Blob([bytes], { type: data.content_type || 'application/octet-stream' });
     }
+    console.warn('proxyFetch: no usable data in response', data);
     return null;
   };
 
