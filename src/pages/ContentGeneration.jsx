@@ -1154,7 +1154,7 @@ export default function ContentGeneration() {
       }
 
       const audioAssets = [];
-      const audioFields = ['voiceover_url', 'narration_url', 'voiceover_audio_url', 'audio_url', 'elevenlabs_voiceover_url', 'elevenlabs_audio_url', 'music_url', 'background_music_url', 'music_audio_url', 'sfx_url', 'sound_effects_url', 'effects_url', 'mixed_audio_url', 'final_audio_url'];
+      const audioFields = ['voiceover_url', 'narration_url', 'voiceover_audio_url', 'audio_url', 'elevenlabs_voiceover_url', 'elevenlabs_audio_url', 'inworld_voiceover_url', 'inworld_audio_url', 'music_url', 'background_music_url', 'music_audio_url', 'sfx_url', 'sound_effects_url', 'effects_url', 'mixed_audio_url', 'final_audio_url'];
 
       for (const field of audioFields) {
         const url = project?.[field];
@@ -1162,6 +1162,21 @@ export default function ContentGeneration() {
           audioAssets.push({ label: field.replace(/_url$/, '').replace(/_/g, '-'), url });
         }
       }
+
+      // Also pull from ProductionSettings entity
+      try {
+        const ps = await base44.entities.ProductionSettings?.filter({ project_id: projectId });
+        if (ps?.length > 0) {
+          const prodSettings = ps[0];
+          for (const [field, value] of Object.entries(prodSettings)) {
+            if (typeof value === 'string' && value.startsWith('http') && value.includes('myvoicify')) {
+              if (!audioAssets.find(a => a.url === value)) {
+                audioAssets.push({ label: field.replace(/_url$/, '').replace(/_/g, '-'), url: value });
+              }
+            }
+          }
+        }
+      } catch (e) { console.warn('Could not fetch ProductionSettings for export:', e.message); }
 
       try {
         const mt = await base44.entities.MusicTracks?.filter({ project_id: projectId });
