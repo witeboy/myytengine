@@ -1077,11 +1077,26 @@ export default function ContentGeneration() {
   };
 
   const fetchAsBlob = async (url) => {
-    if (isCorsBocked(url)) {
-      try { return await proxyFetch(url); } catch (err) { console.warn(`Proxy failed: ${err.message}`); return null; }
+    try {
+      const res = await fetch(url, { mode: 'cors' });
+      if (res.ok) {
+        console.log(`✅ Direct fetch OK: ${url.substring(0, 60)}`);
+        return await res.blob();
+      }
+      console.warn(`Direct fetch non-OK status ${res.status}: ${url.substring(0, 60)}`);
+    } catch (e) {
+      console.log(`Direct fetch failed (${e.message}), trying proxy...`);
     }
-    try { const res = await fetch(url, { mode: 'cors' }); if (res.ok) return await res.blob(); } catch (_) {}
-    try { return await proxyFetch(url); } catch (_) { console.warn(`All fetch methods failed: ${url.substring(0, 60)}`); }
+    try {
+      const blob = await proxyFetch(url);
+      if (blob) {
+        console.log(`✅ Proxy fetch OK: ${url.substring(0, 60)}`);
+        return blob;
+      }
+    } catch (e) {
+      console.warn(`Proxy fetch threw: ${e.message} for ${url.substring(0, 60)}`);
+    }
+    console.warn(`❌ All fetch methods failed for: ${url.substring(0, 60)}`);
     return null;
   };
 
