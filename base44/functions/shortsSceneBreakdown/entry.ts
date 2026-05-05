@@ -12,7 +12,7 @@ async function callClaude(prompt, temperature = 0.5) {
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-5",
-      max_tokens: 3000,
+      max_tokens: 8000,
       temperature,
       messages: [{ role: "user", content: prompt }]
     })
@@ -29,8 +29,23 @@ async function callClaude(prompt, temperature = 0.5) {
 
   try { return JSON.parse(rawText); } catch (_) {
     const match = rawText.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]);
-    throw new Error("Failed to parse Claude JSON");
+    if (match) {
+      try { return JSON.parse(match[0]); } catch (_2) {
+        // Truncated JSON repair: close the last complete object in the scenes array
+        let text = match[0];
+        // Remove trailing incomplete object (no closing brace)
+        text = text.replace(/,\s*\{[^}]*$/, '');
+        // Ensure array and object are closed
+        if (!text.endsWith(']}')) {
+          if (!text.endsWith(']')) text += ']';
+          if (!text.endsWith('}')) text += '}';
+        }
+        try { return JSON.parse(text); } catch (_3) {
+          throw new Error("Failed to parse Claude JSON after repair attempt");
+        }
+      }
+    }
+    throw new Error("Failed to parse Claude JSON — no object found");
   }
 }
 
