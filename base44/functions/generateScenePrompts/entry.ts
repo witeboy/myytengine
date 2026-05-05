@@ -1973,7 +1973,7 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
             .replace(/\s{2,}/g, ' ')
             .replace(/,\s*,/g, ',')
             .replace(/\.\s*\./g, '.');
-          imagePrompt = validateAndEnhancePrompt(fallback, styleConfig, orientationConfig, s.scene_number, visualStyle, legendNameClean);
+          imagePrompt = validateAndEnhancePrompt(rawPrompt, styleConfig, orientationConfig, s.scene_number, visualStyle, legendNameClean);
           animationPrompt = generated.animation_prompt || '';
 
           // ═══ SLEEP MODE: sanitize animation prompt — strip all light/shine animation ═══
@@ -2066,7 +2066,7 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
             }
           }
 
-          imagePrompt = validateAndEnhancePrompt(rawPrompt, styleConfig, orientationConfig, s.scene_number, visualStyle, legendNameClean);
+          imagePrompt = validateAndEnhancePrompt(fallback, styleConfig, orientationConfig, s.scene_number, visualStyle, legendNameClean);
           const arcPosition = s.director?.phase || s.director?.arc_position || 'rising';
           const mood = s.director?.mood || 'contemplative';
           const movement = s.director?.camera_movement || 'slow drift forward';
