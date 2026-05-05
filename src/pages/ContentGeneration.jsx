@@ -673,14 +673,33 @@ export default function ContentGeneration() {
           const data = result?.data || result;
           if (data?.error) throw new Error(data.error);
         } catch (err) {
-          if (err?.response?.status === 504) {
-            await new Promise(r => setTimeout(r, 8000));
+          const status = err?.response?.status || err?.status;
+          if (status === 502 || status === 504) {
+            setImportProgress('Scene generation is taking longer than expected, checking results...');
+            await new Promise(r => setTimeout(r, 10000));
           } else {
             throw err;
           }
         }
 
-        const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+        let freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+
+        if (freshScenes.length === 0) {
+          setImportProgress('No scenes found yet — retrying breakdown...');
+          try {
+            await base44.functions.invoke('shortsSceneBreakdown', { project_id: projectId });
+          } catch (retryErr) {
+            const status = retryErr?.response?.status || retryErr?.status;
+            if (status !== 502 && status !== 504) throw retryErr;
+            await new Promise(r => setTimeout(r, 12000));
+          }
+          freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+        }
+
+        if (freshScenes.length === 0) {
+          throw new Error('Scene breakdown failed after retry. Please try again.');
+        }
+
         queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
         setTotalExpectedScenes(freshScenes.length);
         setImportProgress(`Created ${freshScenes.length} Shorts scenes — now generating image prompts...`);
