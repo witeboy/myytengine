@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { createPageUrl } from '@/utils';
 import {
   Loader2, Sparkles, Film, Users, RefreshCw, ArrowRight,
-  ArrowLeft, Search, Shield, Lightbulb, Pencil, Image
+  ArrowLeft, Search, Shield, Lightbulb, Pencil, Image, ClipboardPaste
 } from 'lucide-react';
 import ProjectTemplates from '@/components/templates/ProjectTemplates';
 import MakeThumbnail from '@/components/production/MakeThumbnail';
@@ -92,6 +92,9 @@ export default function NewProject() {
   const [tone, setTone] = useState('dramatic');
   const [targetAudience, setTargetAudience] = useState('');
   const [loading, setLoading] = useState(false);
+  const [pasteScript, setPasteScript] = useState('');
+  const [pastePipeline, setPastePipeline] = useState('');
+  const [pasteName, setPasteName] = useState('');
 
   const handleCreateFromNiche = async () => {
     if (!niche.trim()) return;
@@ -223,7 +226,7 @@ export default function NewProject() {
               <h2 className="text-2xl font-bold">New Faceless Video</h2>
               <p className="text-gray-500 text-sm mt-1">How would you like to start?</p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Card
                 className="cursor-pointer border-2 border-gray-200 hover:border-blue-400 hover:shadow-lg transition-all group"
                 onClick={() => setMode('topic')}
@@ -250,6 +253,21 @@ export default function NewProject() {
                   <h3 className="text-lg font-bold">Suggest Topics</h3>
                   <p className="text-sm text-gray-500">Enter a niche and AI will generate 5 viral topic ideas for you to choose from.</p>
                   <div className="flex items-center justify-center gap-1 text-sm font-medium text-gray-400 group-hover:text-purple-600 transition-colors">
+                    Start <ArrowRight className="w-4 h-4" />
+                  </div>
+                </CardContent>
+              </Card>
+              <Card
+                className="cursor-pointer border-2 border-gray-200 hover:border-green-400 hover:shadow-lg transition-all group"
+                onClick={() => setMode('paste')}
+              >
+                <CardContent className="p-6 text-center space-y-3">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center mx-auto">
+                    <ClipboardPaste className="w-7 h-7 text-white" />
+                  </div>
+                  <h3 className="text-lg font-bold">I Have a Script</h3>
+                  <p className="text-sm text-gray-500">Paste your ready-made script. Skip AI generation and go straight to content.</p>
+                  <div className="flex items-center justify-center gap-1 text-sm font-medium text-gray-400 group-hover:text-green-600 transition-colors">
                     Start <ArrowRight className="w-4 h-4" />
                   </div>
                 </CardContent>
@@ -335,6 +353,106 @@ export default function NewProject() {
                 <Button variant="outline" onClick={() => setMode(null)} disabled={loading}>Back</Button>
                 <Button onClick={handleCreateFromNiche} disabled={!niche.trim() || loading} className="flex-1 bg-purple-600 hover:bg-purple-700" size="lg">
                   {loading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Generating Topics...</> : 'Generate 5 Topic Ideas'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Paste own script flow */}
+        {mode === 'paste' && (
+          <Card className="w-full max-w-lg mx-auto">
+            <CardHeader className="text-center">
+              <ClipboardPaste className="w-10 h-10 text-green-600 mx-auto mb-2" />
+              <CardTitle className="text-2xl">Paste Your Script</CardTitle>
+              <p className="text-gray-500 text-sm mt-1">Skip AI script generation — paste your ready-made script and go straight to content</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Project Name</label>
+                <Input
+                  placeholder="e.g. Your Attention is Worth $200 Billion"
+                  value={pasteName}
+                  onChange={e => setPasteName(e.target.value)}
+                  disabled={loading}
+                  className="text-base"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Pipeline Type</label>
+                <Select value={pastePipeline} onValueChange={setPastePipeline}>
+                  <SelectTrigger><SelectValue placeholder="Select pipeline..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="standard">🎭 Standard (Viral)</SelectItem>
+                    <SelectItem value="explainer">📚 Explainer Video</SelectItem>
+                    <SelectItem value="story">📖 Story / Fiction</SelectItem>
+                    <SelectItem value="youtube_shorts">📱 YouTube Shorts</SelectItem>
+                    <SelectItem value="long_viral">🎬 Long Viral</SelectItem>
+                    <SelectItem value="sleep_meditation">🧘 Sleep Meditation</SelectItem>
+                    <SelectItem value="sleep_story">🌙 Sleep Story</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Your Script</label>
+                <Textarea
+                  placeholder="Paste your full script here..."
+                  value={pasteScript}
+                  onChange={e => setPasteScript(e.target.value)}
+                  disabled={loading}
+                  className="text-sm min-h-[200px] font-mono"
+                />
+                {pasteScript && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    {pasteScript.split(/\s+/).filter(w => w.length > 0).length} words · ~{Math.round(pasteScript.split(/\s+/).filter(w => w.length > 0).length / 150)} min
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setMode(null)} disabled={loading}>Back</Button>
+                <Button
+                  onClick={async () => {
+                    if (!pasteScript.trim() || !pastePipeline || !pasteName.trim()) return;
+                    setLoading(true);
+                    try {
+                      const wordCount = pasteScript.split(/\s+/).filter(w => w.length > 0).length;
+                      const isShorts = pastePipeline === 'youtube_shorts';
+                      const durationMin = isShorts ? 1.5 : Math.max(1, Math.round(wordCount / 150));
+
+                      // 1. Create the project
+                      const project = await base44.entities.Projects.create({
+                        name: pasteName.trim(),
+                        niche: pasteName.trim(),
+                        tone: 'dramatic',
+                        status: 'script_complete',
+                        current_step: 2,
+                        project_mode: pastePipeline === 'standard' ? '' : pastePipeline,
+                        orientation: isShorts ? 'portrait' : 'landscape',
+                        video_duration_minutes: durationMin,
+                      });
+
+                      // 2. Create the script entity directly as final_aggregated
+                      await base44.entities.Scripts.create({
+                        project_id: project.id,
+                        version: 'final_aggregated',
+                        full_script: pasteScript.trim(),
+                        word_count: wordCount,
+                        estimated_duration_sec: Math.round((wordCount / 150) * 60),
+                        editor_notes: 'User-pasted script (no AI generation)',
+                      });
+
+                      // 3. Navigate to ContentGeneration
+                      navigate(createPageUrl(`ContentGeneration?project_id=${project.id}`));
+                    } catch (err) {
+                      console.error('Paste script error:', err);
+                      setLoading(false);
+                    }
+                  }}
+                  disabled={!pasteScript.trim() || !pastePipeline || !pasteName.trim() || loading}
+                  className="flex-1 bg-green-600 hover:bg-green-700"
+                  size="lg"
+                >
+                  {loading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Creating Project...</> : 'Save & Continue to Content'}
                 </Button>
               </div>
             </CardContent>
