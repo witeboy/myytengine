@@ -32,7 +32,8 @@ function getRoute(project) {
   if (s === 'created' || s === 'topics_ready') return `StoryTopics?project_id=${project.id}`;
   if (s === 'topic_selected') return `StoryDuration?project_id=${project.id}`;
   if (s === 'outline_ready') return `StoryHooks?project_id=${project.id}`;
-  if (['hooks_ready', 'scripting', 'script_complete'].includes(s)) return `StoryScript?project_id=${project.id}`;
+  if (['hooks_ready', 'scripting'].includes(s)) return `StoryScript?project_id=${project.id}`;
+  if (s === 'script_complete') return `ContentGeneration?project_id=${project.id}`;
   if (['voiceover_ready', 'scene_breakdown', 'breakdown_complete', 'content_generation', 'scenes_ready'].includes(s)) return `ContentGeneration?project_id=${project.id}`;
   if (['timeline_editing', 'compiled'].includes(s)) return `TimelineEditor?project_id=${project.id}`;
   if (['post_production', 'published'].includes(s)) return `PostProduction?project_id=${project.id}`;
