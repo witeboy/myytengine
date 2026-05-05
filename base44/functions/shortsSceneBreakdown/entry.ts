@@ -1,6 +1,13 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 // v5 — 4 parallel Claude calls of 10 scenes each to avoid timeout
 
+function repairJSON(str) {
+  return str
+    .replace(/[\x00-\x1F\x7F]/g, c => c === '\n' || c === '\r' || c === '\t' ? c : ' ')
+    .replace(/,\s*([}\]])/g, '$1')
+    .replace(/(["\w\d])\s*\n\s*"/g, '$1, "');
+}
+
 async function callClaude(prompt, temperature = 0.5) {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -14,6 +21,7 @@ async function callClaude(prompt, temperature = 0.5) {
       model: "claude-sonnet-4-5",
       max_tokens: 8000,
       temperature,
+      system: "You are a YouTube Shorts video editor. Return ONLY raw valid JSON. No markdown, no backticks, no conversational text.",
       messages: [{ role: "user", content: prompt }]
     })
   });
@@ -27,26 +35,52 @@ async function callClaude(prompt, temperature = 0.5) {
   const rawText = data.content?.[0]?.text;
   if (!rawText) throw new Error("No response from Claude");
 
-  try { return JSON.parse(rawText); } catch (_) {
-    const match = rawText.match(/\{[\s\S]*\}/);
-    if (match) {
-      try { return JSON.parse(match[0]); } catch (_2) {
-        // Truncated JSON repair: close the last complete object in the scenes array
-        let text = match[0];
-        // Remove trailing incomplete object (no closing brace)
-        text = text.replace(/,\s*\{[^}]*$/, '');
-        // Ensure array and object are closed
-        if (!text.endsWith(']}')) {
-          if (!text.endsWith(']')) text += ']';
-          if (!text.endsWith('}')) text += '}';
-        }
-        try { return JSON.parse(text); } catch (_3) {
-          throw new Error("Failed to parse Claude JSON after repair attempt");
-        }
-      }
-    }
-    throw new Error("Failed to parse Claude JSON — no object found");
+  // Layer 1: direct parse
+  try { return JSON.parse(rawText); } catch (_) {}
+
+  // Layer 2: repair control chars and trailing commas
+  try { return JSON.parse(repairJSON(rawText)); } catch (_) {}
+
+  // Layer 3: strip markdown fences
+  let jsonStr = rawText;
+  if (rawText.includes("```json")) jsonStr = rawText.split("```json")[1].split("```")[0].trim();
+  else if (rawText.includes("```")) jsonStr = rawText.split("```")[1].split("```")[0].trim();
+  try { return JSON.parse(repairJSON(jsonStr)); } catch (_) {}
+
+  // Layer 4: extract outermost JSON object
+  const match = jsonStr.match(/\{[\s\S]*\}/);
+  if (match) {
+    try { return JSON.parse(match[0]); } catch (_) {}
+    try { return JSON.parse(repairJSON(match[0])); } catch (_) {}
   }
+
+  // Layer 5: truncation repair — find last complete scene object
+  const text = match ? match[0] : rawText;
+  let repaired = text.replace(/,\s*\{[^}]*$/, '');
+  repaired = repaired.replace(/,\s*\{[^}]*"[^"]*$/, '');
+  repaired = repaired.replace(/,\s*$/, '');
+  if (!repaired.endsWith(']}')) {
+    if (!repaired.endsWith(']')) repaired += ']';
+    if (!repaired.endsWith('}')) repaired += '}';
+  }
+  try {
+    const result = JSON.parse(repaired);
+    console.log(`🔧 JSON truncation repair recovered ${result.scenes?.length || 0} scenes`);
+    return result;
+  } catch (_) {}
+
+  // Layer 6: find last complete }, then close
+  const lastComplete = text.lastIndexOf('},');
+  if (lastComplete > 0) {
+    const finalAttempt = text.substring(0, lastComplete + 1) + ']}';
+    try {
+      const result = JSON.parse(finalAttempt);
+      console.log(`🔧 JSON deep repair recovered ${result.scenes?.length || 0} scenes`);
+      return result;
+    } catch (_) {}
+  }
+
+  throw new Error("Failed to parse Claude JSON after all repair attempts");
 }
 
 const makeBatchPrompt = (startScene, endScene, sections, fullScript, shortsNiche) =>
@@ -120,28 +154,34 @@ Deno.serve(async (req) => {
       shortsNiche = channels[0]?.shorts_niche || 'finance';
     }
 
-    console.log(`📱 Generating 40 scenes in 4 parallel batches of 10...`);
+    console.log(`📱 Generating 40 scenes in 6 parallel batches of 7...`);
 
-    const [result1, result2, result3, result4] = await Promise.all([
-      callClaude(makeBatchPrompt(1, 10,
+    const [result1, result2, result3, result4, result5, result6] = await Promise.all([
+      callClaude(makeBatchPrompt(1, 7,
         `- hook (scenes 1-4): ECU/LOW ANGLE, camera already moving, kinetic text, most impactful frames. emotional_intensity=0.9
-- tension (scenes 5-10): MCU→CU progression, urgency visuals, problem escalating. emotional_intensity=0.8`,
+- tension (scenes 5-7): MCU→CU progression, urgency visuals, problem escalating. emotional_intensity=0.8`,
         fullScript, shortsNiche), 0.5),
 
-      callClaude(makeBatchPrompt(11, 20,
-        `- tension continued (scenes 11-12): tightest tension shots, cut on motion. emotional_intensity=0.8
-- pivot (scenes 13-14): HARD CUT, dutch angle or extreme low, color/energy shift. emotional_intensity=0.7
-- value_1 (scenes 15-20): MS to MCU, first key point with supporting visuals. emotional_intensity=0.6`,
+      callClaude(makeBatchPrompt(8, 14,
+        `- tension (scenes 8-12): MCU→CU progression, tightest tension shots, cut on motion. emotional_intensity=0.8
+- pivot (scenes 13-14): HARD CUT, dutch angle or extreme low, color/energy shift. emotional_intensity=0.7`,
         fullScript, shortsNiche), 0.5),
 
-      callClaude(makeBatchPrompt(21, 30,
-        `- value_2 (scenes 21-26): MS to MCU, second key point with supporting visuals. emotional_intensity=0.6
-- value_3 (scenes 27-30): third key point begins, supporting visuals. emotional_intensity=0.6`,
+      callClaude(makeBatchPrompt(15, 21,
+        `- value_1 (scenes 15-21): MS to MCU, first key point with supporting visuals. emotional_intensity=0.6`,
         fullScript, shortsNiche), 0.5),
 
-      callClaude(makeBatchPrompt(31, 40,
-        `- value_3 continued (scenes 31-32): conclude third key point. emotional_intensity=0.6
-- cta (scenes 33-38): hook energy returns, ECU/LOW ANGLE, bold Save This text, callback to hook visual. emotional_intensity=0.85
+      callClaude(makeBatchPrompt(22, 28,
+        `- value_2 (scenes 22-28): MS to MCU, second key point with supporting visuals. emotional_intensity=0.6`,
+        fullScript, shortsNiche), 0.5),
+
+      callClaude(makeBatchPrompt(29, 35,
+        `- value_3 (scenes 29-32): third key point, supporting visuals. emotional_intensity=0.6
+- cta (scenes 33-35): hook energy returns, ECU/LOW ANGLE, bold Save This text. emotional_intensity=0.85`,
+        fullScript, shortsNiche), 0.5),
+
+      callClaude(makeBatchPrompt(36, 40,
+        `- cta (scenes 36-38): callback to hook visual, urgency. emotional_intensity=0.85
 - deadzone (scenes 39-40): WIDE or static, dark card, no voice, subtle branding. emotional_intensity=0.1`,
         fullScript, shortsNiche), 0.5),
     ]);
@@ -151,10 +191,12 @@ Deno.serve(async (req) => {
       ...(result2?.scenes || []),
       ...(result3?.scenes || []),
       ...(result4?.scenes || []),
+      ...(result5?.scenes || []),
+      ...(result6?.scenes || []),
     ].sort((a, b) => a.scene_number - b.scene_number);
 
     if (!scenesArr.length) throw new Error('AI failed to generate scene breakdown');
-    if (scenesArr.length < 35) throw new Error(`Too few scenes: ${scenesArr.length}. Expected 40.`);
+    if (scenesArr.length < 28) throw new Error(`Too few scenes: ${scenesArr.length}. Expected ~40.`);
 
     // Delete old scenes
     const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
