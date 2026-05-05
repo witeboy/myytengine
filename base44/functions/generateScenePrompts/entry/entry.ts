@@ -23,71 +23,78 @@ async function callClaude(prompt, temperature = 0.7, maxTokens = 8192, retries =
     throw new Error("Missing ANTHROPIC_API_KEY environment variable");
   }
 
-  for (let attempt = 0; attempt < retries; attempt++) {
-    try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01"
-        },
-        body: JSON.stringify({
+  // Create batch
+  const batchRes = await fetch("https://api.anthropic.com/v1/messages/batches", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-beta": "message-batches-1"
+    },
+    body: JSON.stringify({
+      requests: [{
+        custom_id: "scene-prompts",
+        params: {
           model: "claude-sonnet-4-5",
           max_tokens: maxTokens,
           temperature: temperature,
           system: "You are a world-class film director and cinematic data extractor. You must return ONLY raw, valid JSON. Do not include markdown formatting like ```json and do not include any conversational text.",
-          messages: [
-            { role: "user", content: prompt }
-          ]
-        })
-      });
-
-      if (response.status === 429) {
-        const waitMs = Math.pow(2, attempt + 1) * 5000;
-        console.log(`Rate limited, waiting ${waitMs / 1000}s...`);
-        await new Promise(r => setTimeout(r, waitMs));
-        continue;
-      }
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(`Claude ${response.status}: ${err.error?.message || "Unknown"}`);
-      }
-
-      const data = await response.json();
-      if (!data.content || !data.content.length) throw new Error("No content returned from Claude");
-      
-      const rawText = data.content[0].text;
-
-      try { return JSON.parse(rawText); } catch (_) {}
-      try { return JSON.parse(repairJSON(rawText)); } catch (_) {}
-
-      let jsonStr = rawText;
-      if (rawText.includes("```json")) jsonStr = rawText.split("```json")[1].split("```")[0].trim();
-      else if (rawText.includes("```")) jsonStr = rawText.split("```")[1].split("```")[0].trim();
-      try { return JSON.parse(repairJSON(jsonStr)); } catch (_) {}
-
-      const objMatch = jsonStr.match(/\{[\s\S]*\}/);
-      if (objMatch) { try { return JSON.parse(objMatch[0]); } catch (_) {} }
-
-      const lastBrace = rawText.lastIndexOf('}');
-      if (lastBrace > 0) {
-        const trimmed = rawText.substring(0, lastBrace + 1);
-        for (const suffix of [']}', '}]}', '']) {
-          try {
-            const parsed = JSON.parse(trimmed + suffix);
-            if (parsed.prompts && Array.isArray(parsed.prompts)) return parsed;
-          } catch (_) {}
+          messages: [{ role: "user", content: prompt }]
         }
-      }
+      }]
+    })
+  });
 
-      throw new Error("Failed to parse Claude JSON after recovery");
-    } catch (error) {
-      if (attempt === retries - 1) throw error;
-      console.warn(`Attempt ${attempt + 1} failed: ${error.message}, retrying...`);
-      await new Promise(r => setTimeout(r, 2000));
+  if (!batchRes.ok) {
+    const err = await batchRes.json();
+    throw new Error(`Batch create failed: ${err.error?.message || batchRes.status}`);
+  }
+
+  const batch = await batchRes.json();
+  const batchId = batch.id;
+
+  // Poll until done
+  while (true) {
+    await new Promise(r => setTimeout(r, 3000));
+    const pollRes = await fetch(`https://api.anthropic.com/v1/messages/batches/${batchId}`, {
+      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-beta": "message-batches-1" }
+    });
+    const status = await pollRes.json();
+    if (status.processing_status !== "ended") continue;
+
+    // Fetch results
+    const resultsRes = await fetch(`https://api.anthropic.com/v1/messages/batches/${batchId}/results`, {
+      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-beta": "message-batches-1" }
+    });
+    const resultsText = await resultsRes.text();
+    const lines = resultsText.trim().split("\n");
+    const result = JSON.parse(lines[0]);
+    const rawText = result.result.message.content[0].text;
+
+    try { return JSON.parse(rawText); } catch (_) {}
+    try { return JSON.parse(repairJSON(rawText)); } catch (_) {}
+
+    let jsonStr = rawText;
+    if (rawText.includes("```json")) jsonStr = rawText.split("```json")[1].split("```")[0].trim();
+    else if (rawText.includes("```")) jsonStr = rawText.split("```")[1].split("```")[0].trim();
+    try { return JSON.parse(repairJSON(jsonStr)); } catch (_) {}
+
+    const objMatch = jsonStr.match(/\{[\s\S]*\}/);
+    if (objMatch) { try { return JSON.parse(objMatch[0]); } catch (_) {} }
+
+    const lastBrace = rawText.lastIndexOf('}');
+    if (lastBrace > 0) {
+      const trimmed = rawText.substring(0, lastBrace + 1);
+      for (const suffix of [']}', '}]}', '']) {
+        try {
+          const parsed = JSON.parse(trimmed + suffix);
+          if (parsed.prompts && Array.isArray(parsed.prompts)) return parsed;
+        } catch (_) {}
+      }
     }
+
+    throw new Error("Failed to parse Claude JSON after recovery");
   }
 }
 
@@ -454,10 +461,27 @@ function subjectTypeSanityCheck(prompt, sceneNumber) {
   return cleaned;
 }
 
-function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, sceneNumber, visualStyle) {
+function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, sceneNumber, visualStyle, legendName = '') {
   let enhanced = imagePrompt;
 
-  // ═══ SUBJECT-TYPE SANITY CHECK (Prompt Engine Rulebook) ═══
+  // ═══ LEGEND NAME ENFORCEMENT ═══
+  if (legendName) {
+    enhanced = enhanced
+      .replace(/\byou(?:'re| are)\b/gi, `${legendName} is`)
+      .replace(/\byour\b/gi, `${legendName}'s`)
+      .replace(/\byou\b/gi, legendName)
+      .replace(/\bthe protagonist\b/gi, legendName)
+      .replace(/\bthe figure\b/gi, legendName)
+      .replace(/\bthe character\b/gi, legendName)
+      .replace(/\bthe subject\b/gi, legendName);
+
+    if (!enhanced.toLowerCase().includes(legendName.toLowerCase())) {
+      enhanced = `${legendName} — ${enhanced}`;
+      console.log(`🔧 Scene ${sceneNumber}: legend name force-prepended`);
+    }
+  }
+
+   // ═══ SUBJECT-TYPE SANITY CHECK (Prompt Engine Rulebook) ═══
   enhanced = subjectTypeSanityCheck(enhanced, sceneNumber);
 
   enhanced = enhanced.replace(/\b\d{3,4}\s*[x×]\s*\d{3,4}\s*(pixels?|px)?\s*\.?\s*/gi, '');
@@ -646,6 +670,15 @@ Deno.serve(async (req) => {
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
     const rawStyle = project.visual_style || 'cinematic_realistic';
+    // ═══ LEGEND NAME — injected into every scene prompt ═══
+// Prevents image gen from rendering a generic person instead of the specific figure.
+// This is the single source of truth — used in sceneDirections and the LLM system prompt.
+const legendName = project.legend_name 
+  || project.name 
+  || project.protagonist_name 
+  || '';
+const legendNameClean = legendName.trim();
+console.log(`🧑 Legend name: "${legendNameClean}"`);
     const isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
     const isSleepAmbient = rawStyle === 'sleep_ambient';
     const useSleepStyle = isSleepProject || isSleepAmbient;
@@ -1377,7 +1410,7 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
         return `Scene ${s.scene_number} [${posLabel} — ${scenePct}% through]:
   Narration: "${s.narration_text}"
   Duration: ${sceneDuration}s${emotionLine}
-  Visual Concept: ${s.director.visual_concept}
+  Visual Concept: ${s.director.visual_concept}${legendNameClean ? ` — SUBJECT IS ${legendNameClean.toUpperCase()} (use this exact name, never "you", "he", "the figure")` : ''}
   Shot Type: ${s.director.shot_type}
   Character Detail Level: ${identityTier.toUpperCase()} (${identityTier === 'minimal' ? 'character is distant — silhouette only, NO face details' : identityTier === 'moderate' ? 'character shares frame with world — weave identity into action' : 'face is the subject — full identity woven with emotion'})
   Camera Feel: ${bodyDirective}
@@ -1422,6 +1455,17 @@ ${storyContext}
 ${characterBlock}
 ${styleReinforcement}
 ${qualityAnchors}
+
+${legendNameClean ? `**═══════════════════════════════════════════════════════════════**
+**LEGEND IDENTITY LOCK — NON-NEGOTIABLE:**
+The subject of EVERY image_prompt is: ${legendNameClean}
+- Use "${legendNameClean}" by full name in every single prompt
+- NEVER write "you", "he", "she", "the figure", "the character", "the subject"
+- NEVER write "a man" or "a person" when the legend should be present
+- The image generator has ZERO memory — "${legendNameClean}" must appear in EVERY prompt
+- If the scene has no human figure, describe the environment only — no pronoun substitutes
+**═══════════════════════════════════════════════════════════════**
+` : ''}
 
 **VISUAL STYLE: ${visualStyle.replace(/_/g, ' ')}**
 **ORIENTATION:** ${orientationConfig.format}
@@ -1929,9 +1973,7 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
             .replace(/\s{2,}/g, ' ')
             .replace(/,\s*,/g, ',')
             .replace(/\.\s*\./g, '.');
-          imagePrompt = validateAndEnhancePrompt(
-            rawPrompt, styleConfig, orientationConfig, s.scene_number, visualStyle
-          );
+          imagePrompt = validateAndEnhancePrompt(rawPrompt, styleConfig, orientationConfig, s.scene_number, visualStyle, legendNameClean);
           animationPrompt = generated.animation_prompt || '';
 
           // ═══ SLEEP MODE: sanitize animation prompt — strip all light/shine animation ═══
@@ -2024,7 +2066,7 @@ Minimum 80 words. Respond with ONLY the image_prompt text, no JSON.`;
             }
           }
 
-          imagePrompt = validateAndEnhancePrompt(fallback, styleConfig, orientationConfig, s.scene_number, visualStyle);
+          imagePrompt = validateAndEnhancePrompt(fallback, styleConfig, orientationConfig, s.scene_number, visualStyle, legendNameClean);
           const arcPosition = s.director?.phase || s.director?.arc_position || 'rising';
           const mood = s.director?.mood || 'contemplative';
           const movement = s.director?.camera_movement || 'slow drift forward';
