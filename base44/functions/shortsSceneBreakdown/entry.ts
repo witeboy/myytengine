@@ -18,7 +18,7 @@ async function callClaude(prompt, temperature = 0.5) {
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-5",
-      max_tokens: 8000,
+      max_tokens: 16000,
       temperature,
       messages: [{ role: "user", content: prompt }]
     })
@@ -149,21 +149,21 @@ Return JSON and nothing else — no markdown, no backticks, no explanation:
     {
       "scene_number": 1,
       "section": "hook",
-      "narration_text": "He stole $400 million",
+      "narration_text": "...",
       "duration_seconds": 2.0,
-      "visual_concept": "ECU from below the keyboard — fingers slam keys in the dark, the glow of multiple monitors catching knuckle edges. Camera holds perfectly still as the typing stops mid-word.",
+      "visual_concept": "...",
       "shot_type": "ECU — Extreme Close-Up",
-      "camera_angle": "Low angle, 20 degrees below hands, shooting upward",
-      "camera_movement": "Static locked — tension lives in stillness",
-      "lighting": "Single cold blue backlight from monitors, 85% shadow, no fill",
-      "color_palette": "Deep charcoal #0D0D0D, cold blue #1A2744, single amber key glint #C8A46E",
-      "depth_of_field": "Shallow f/1.4 — fingertips razor sharp, keyboard dissolving into dark",
-      "mood": "urgent, shocking, dark",
-      "continuity_bridge": "cold blue monitor light carries into scene 2",
+      "camera_angle": "...",
+      "camera_movement": "...",
+      "lighting": "...",
+      "color_palette": "...",
+      "depth_of_field": "...",
+      "mood": "...",
+      "continuity_bridge": "...",
       "emotional_intensity": 0.9,
-      "viewer_emotion": "shock and dread",
-      "text_overlay": "$400,000,000",
-      "audio_note": "voice low and deliberate, bass-heavy music sting on this frame",
+      "viewer_emotion": "...",
+      "text_overlay": "...",
+      "audio_note": "...",
       "characters_present": [],
       "camera_direction": "push_in"
     }
