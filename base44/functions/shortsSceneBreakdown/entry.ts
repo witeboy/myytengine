@@ -9,55 +9,37 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 async function callClaude(prompt, temperature = 0.5) {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY");
 
-  const batchRes = await fetch("https://api.anthropic.com/v1/messages/batches", {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "x-api-key": apiKey,
       "anthropic-version": "2023-06-01",
-      "anthropic-beta": "message-batches-1"
     },
     body: JSON.stringify({
-      requests: [{
-        custom_id: "scene-breakdown",
-        params: {
-          model: "claude-sonnet-4-5",
-          max_tokens: 16000,
-          temperature,
-          messages: [{ role: "user", content: prompt }]
-        }
-      }]
-    })
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 16000,
+      temperature,
+      messages: [{ role: "user", content: prompt }],
+    }),
   });
 
-  const batch = await batchRes.json();
-  const batchId = batch.id;
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(`Claude API ${response.status}: ${err.error?.message || "Unknown"}`);
+  }
 
-  while (true) {
-    await new Promise(r => setTimeout(r, 3000));
-    const pollRes = await fetch(`https://api.anthropic.com/v1/messages/batches/${batchId}`, {
-      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-beta": "message-batches-1" }
-    });
-    const status = await pollRes.json();
-    if (status.processing_status !== "ended") continue;
+  const data = await response.json();
+  const rawText = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
 
-    const resultsRes = await fetch(`https://api.anthropic.com/v1/messages/batches/${batchId}/results`, {
-      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-beta": "message-batches-1" }
-    });
-    const resultsText = await resultsRes.text();
-    const lines = resultsText.trim().split("\n");
-    const result = JSON.parse(lines[0]);
-    const rawText = result.result.message.content[0].text;
-
-    try { return JSON.parse(rawText); } catch (_) {
-      const match = rawText.match(/\{[\s\S]*\}/);
-      if (match) return JSON.parse(match[0]);
-      throw new Error("Failed to parse Claude JSON");
-    }
+  try { return JSON.parse(rawText); } catch (_) {
+    const match = rawText.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]);
+    throw new Error("Failed to parse Claude JSON");
   }
 }
-
 Deno.serve(async (req) => {
   const callStart = Date.now();
   try {
