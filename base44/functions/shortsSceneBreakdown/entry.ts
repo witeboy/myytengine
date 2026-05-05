@@ -9,30 +9,29 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 async function callClaude(prompt, temperature = 0.5) {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY");
-
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
+      "anthropic-version": "2023-06-01"
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 16000,
+      model: "claude-sonnet-4-5",
+      max_tokens: 8000,
       temperature,
-      messages: [{ role: "user", content: prompt }],
-    }),
+      messages: [{ role: "user", content: prompt }]
+    })
   });
 
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(`Claude API ${response.status}: ${err.error?.message || "Unknown"}`);
+    const err = await response.json();
+    throw new Error(`Claude error: ${err.error?.message || response.status}`);
   }
 
   const data = await response.json();
-  const rawText = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
+  const rawText = data.content?.[0]?.text;
+  if (!rawText) throw new Error("No response from Claude");
 
   try { return JSON.parse(rawText); } catch (_) {
     const match = rawText.match(/\{[\s\S]*\}/);
@@ -40,6 +39,7 @@ async function callClaude(prompt, temperature = 0.5) {
     throw new Error("Failed to parse Claude JSON");
   }
 }
+
 Deno.serve(async (req) => {
   const callStart = Date.now();
   try {
