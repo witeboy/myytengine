@@ -646,7 +646,7 @@ export default function ContentGeneration() {
       const isSleepProject = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
 
       // ── Detect Shorts by project_mode OR portrait orientation ──
-      const isShortsProject = project?.project_mode === 'shorts' || project?.orientation === 'portrait';
+      const isShortsProject = project?.project_mode === 'shorts' || project?.project_mode === 'youtube_shorts' || project?.orientation === 'portrait';
 
       if (isSleepProject) {
         // ── SLEEP: lightweight ambient breakdown (6-12 images) ──
@@ -1249,7 +1249,7 @@ export default function ContentGeneration() {
   const directorNotesCount = scenes.filter(s => s.image_prompt?.startsWith('DIRECTOR_NOTES:')).length;
   const brollCount = scenes.filter(s => s.broll_url && s.broll_url.startsWith('http')).length;
 
-  const isShortsProject = project?.project_mode === 'shorts' || project?.orientation === 'portrait';
+  const isShortsProject = project?.project_mode === 'shorts' || project?.project_mode === 'youtube_shorts' || project?.orientation === 'portrait';
 
   const videoStatusCounts = videoProgress.sceneStatuses ? {
     queued: Object.values(videoProgress.sceneStatuses).filter(s => s === 'queued').length,
