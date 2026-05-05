@@ -15,6 +15,7 @@ export default function TopicImporter({ open, onOpenChange, channel, onImported 
   const [duplicates, setDuplicates] = useState(null); // { autoInternal, autoExisting, flaggedExisting, flaggedInternal, unique }
   const [selectedDupes, setSelectedDupes] = useState(new Set()); // indices of dupes to delete
   const [step, setStep] = useState('input'); // 'input' | 'review' | 'importing'
+  const [skipDedupe, setSkipDedupe] = useState(false);
 
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -289,13 +290,23 @@ Return JSON:
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => { resetState(); onOpenChange(false); }} disabled={importing}>Cancel</Button>
+              <div className="flex items-center gap-2 mb-3">
+                <Checkbox
+                  id="skip-dedupe"
+                  checked={skipDedupe}
+                  onCheckedChange={(v) => setSkipDedupe(!!v)}
+                />
+                <label htmlFor="skip-dedupe" className="text-xs text-gray-600 cursor-pointer select-none">
+                  Skip duplicate check — import titles exactly as entered
+                </label>
+              </div>
               <Button
-                onClick={checkDuplicates}
+                onClick={skipDedupe ? () => doImport(parseTopics(text)) : checkDuplicates}
                 disabled={importing || parsedCount === 0}
                 className="bg-blue-600 hover:bg-blue-700"
               >
                 {importing ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Sparkles className="w-4 h-4 mr-1" />}
-                Import {parsedCount} Topics
+                {skipDedupe ? `Import ${parsedCount} Topics (Direct)` : `Import ${parsedCount} Topics`}
               </Button>
             </DialogFooter>
           </>
