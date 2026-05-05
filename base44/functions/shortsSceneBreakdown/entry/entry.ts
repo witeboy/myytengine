@@ -1,11 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
-// v4 — decoupled narration/visuals, enforces 40 scenes, Claude
-// ══════════════════════════════════════════════════════════════════
-// SHORTS SCENE BREAKDOWN ENGINE
-// Takes a 90-second Shorts script and breaks it into 40 scenes.
-// Narration and visuals are DECOUPLED — one sentence of narration
-// can span multiple visual scenes. Visual cuts every 2-3 seconds.
-// ══════════════════════════════════════════════════════════════════
+// v5 — 4 parallel Claude calls of 10 scenes each to avoid timeout
 
 async function callClaude(prompt, temperature = 0.5) {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
@@ -18,7 +12,7 @@ async function callClaude(prompt, temperature = 0.5) {
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-5",
-      max_tokens: 16000,
+      max_tokens: 3000,
       temperature,
       messages: [{ role: "user", content: prompt }]
     })
@@ -39,6 +33,50 @@ async function callClaude(prompt, temperature = 0.5) {
     throw new Error("Failed to parse Claude JSON");
   }
 }
+
+const makeBatchPrompt = (startScene, endScene, sections, fullScript, shortsNiche) =>
+`You are a YouTube Shorts video editor. Generate exactly ${endScene - startScene + 1} scenes numbered ${startScene} to ${endScene}.
+
+SCRIPT:
+${fullScript}
+
+NICHE: ${shortsNiche}
+
+KEY RULE — DECOUPLED NARRATION/VISUALS:
+- Camera cuts every 2-3 seconds even mid-sentence.
+- Many scenes share the same narration_text — correct and expected.
+- Some scenes have empty narration_text ("") — pure visual cutaways.
+
+YOUR ASSIGNED SCENES: ${startScene} to ${endScene} ONLY. Do not generate outside this range.
+
+SECTIONS FOR YOUR BATCH:
+${sections}
+
+For each scene provide ALL fields:
+- scene_number: integer (${startScene} to ${endScene})
+- section: one of [hook, tension, pivot, value_1, value_2, value_3, cta, deadzone]
+- narration_text: spoken words during this clip (can be "" or same as previous)
+- duration_seconds: 2.0 to 2.5
+- visual_concept: director shot — camera position, subject, movement, atmosphere
+- shot_type: one of [ECU — Extreme Close-Up, CU — Close-Up, MCU — Medium Close-Up, MS — Medium Shot, WS — Wide Shot, EWS — Extreme Wide Shot, POV — Point of View, HIGH ANGLE, LOW ANGLE, DUTCH ANGLE]
+- camera_angle: e.g. "Low angle 15 degrees shooting upward"
+- camera_movement: e.g. "Hard push-in 20% zoom over 2s" or "Static locked"
+- lighting: e.g. "Single hard backlight, cold blue rim, 80% shadow"
+- color_palette: dominant colors with hex codes
+- depth_of_field: e.g. "Shallow f/1.4 — subject sharp, background dissolving"
+- mood: 2-3 words
+- continuity_bridge: one object or light quality linking to next scene
+- emotional_intensity: 0.0 to 1.0
+- viewer_emotion: feeling the viewer should have
+- text_overlay: bold on-screen text or ""
+- audio_note: voice energy and music direction
+- characters_present: [] for stock shots
+- camera_direction: one of [zoom_in, zoom_out, pan_left, pan_right, static, push_in]
+
+SHOT LAW: Never two consecutive same shot types. Shift angle minimum 30 degrees.
+
+Return JSON only — no markdown, no backticks:
+{"scenes": [...]}`;
 
 Deno.serve(async (req) => {
   const callStart = Date.now();
@@ -61,141 +99,61 @@ Deno.serve(async (req) => {
 
     const fullScript = script.full_script;
 
-    // Get channel shorts niche
     let shortsNiche = 'finance';
     if (project.channel_id) {
       const channels = await base44.asServiceRole.entities.Channels.filter({ id: project.channel_id });
       shortsNiche = channels[0]?.shorts_niche || 'finance';
     }
 
-    const prompt = `You are a YouTube Shorts video editor breaking a 90-second script into exactly 40 visual scenes.
+    console.log(`📱 Generating 40 scenes in 4 parallel batches of 10...`);
 
-═══════════════════════════════════════════════
-MOST IMPORTANT RULE — READ CAREFULLY:
-═══════════════════════════════════════════════
-Narration and visuals are COMPLETELY DECOUPLED.
-- The script has ~200-240 words spoken over 90 seconds.
-- You must produce EXACTLY 40 scenes regardless of word count.
-- A single sentence of narration MUST be spread across multiple visual scenes.
-- Think like a film editor: the camera cuts every 2-3 seconds even when the same sentence is still being spoken.
-- Many scenes will have the SAME or CONTINUED narration_text — that is correct and expected.
-- Some scenes will have empty narration_text ("") — pure visual cutaways with no voiceover.
+    const [result1, result2, result3, result4] = await Promise.all([
+      callClaude(makeBatchPrompt(1, 10,
+        `- hook (scenes 1-4): ECU/LOW ANGLE, camera already moving, kinetic text, most impactful frames. emotional_intensity=0.9
+- tension (scenes 5-10): MCU→CU progression, urgency visuals, problem escalating. emotional_intensity=0.8`,
+        fullScript, shortsNiche), 0.5),
 
-EXAMPLE of how ONE sentence becomes FOUR scenes:
-Narration: "He stole $400 million and nobody noticed for 12 years."
-→ Scene 1: narration_text: "He stole $400 million" | visual: man typing at multiple monitors, dark office
-→ Scene 2: narration_text: "" | visual: extreme close-up of hands on keyboard
-→ Scene 3: narration_text: "and nobody noticed" | visual: empty office hallway, security camera
-→ Scene 4: narration_text: "for 12 years." | visual: calendar pages flipping fast, years ticking by
+      callClaude(makeBatchPrompt(11, 20,
+        `- tension continued (scenes 11-12): tightest tension shots, cut on motion. emotional_intensity=0.8
+- pivot (scenes 13-14): HARD CUT, dutch angle or extreme low, color/energy shift. emotional_intensity=0.7
+- value_1 (scenes 15-20): MS to MCU, first key point with supporting visuals. emotional_intensity=0.6`,
+        fullScript, shortsNiche), 0.5),
 
-This is how real Shorts are edited. The voice is continuous. The visuals cut constantly.
-═══════════════════════════════════════════════
+      callClaude(makeBatchPrompt(21, 30,
+        `- value_2 (scenes 21-26): MS to MCU, second key point with supporting visuals. emotional_intensity=0.6
+- value_3 (scenes 27-30): third key point begins, supporting visuals. emotional_intensity=0.6`,
+        fullScript, shortsNiche), 0.5),
 
-SCRIPT TO BREAK DOWN:
-${fullScript}
+      callClaude(makeBatchPrompt(31, 40,
+        `- value_3 continued (scenes 31-32): conclude third key point. emotional_intensity=0.6
+- cta (scenes 33-38): hook energy returns, ECU/LOW ANGLE, bold Save This text, callback to hook visual. emotional_intensity=0.85
+- deadzone (scenes 39-40): WIDE or static, dark card, no voice, subtle branding. emotional_intensity=0.1`,
+        fullScript, shortsNiche), 0.5),
+    ]);
 
-SECTION STRUCTURE — distribute your 40 scenes across these sections:
-- hook (scenes 1-4): 4 scenes, 2-2.5s each. Kinetic text + dramatic visuals. Most impactful frames.
-- tension (scenes 5-12): 8 scenes, 2-2.5s each. Stock footage montage. Problem escalating.
-- pivot (scenes 13-14): 2 scenes, 2s each. Hard cut. Color or energy shift.
-- value_1 (scenes 15-20): 6 scenes, 2-2.5s each. First key point with supporting visuals.
-- value_2 (scenes 21-26): 6 scenes, 2-2.5s each. Second key point with supporting visuals.
-- value_3 (scenes 27-32): 6 scenes, 2-2.5s each. Third key point with supporting visuals.
-- cta (scenes 33-38): 6 scenes, 2-2.5s each. Return to hook energy. "Save this" moment.
-- deadzone (scenes 39-40): 2 scenes, 2s each. Dark card or loop frame. Silent or near-silent.
+    let scenesArr = [
+      ...(result1?.scenes || []),
+      ...(result2?.scenes || []),
+      ...(result3?.scenes || []),
+      ...(result4?.scenes || []),
+    ].sort((a, b) => a.scene_number - b.scene_number);
 
-For each of the 40 scenes provide ALL of these fields:
-- scene_number: 1 to 40
-- section: one of [hook, tension, pivot, value_1, value_2, value_3, cta, deadzone]
-- narration_text: the spoken words during this specific 2-3 second clip (can be empty "" for pure visual scenes, can repeat/continue from previous scene)
-- duration_seconds: 2.0 to 2.5 (hook and cta scenes can be 2.0, value scenes 2.5)
-- visual_concept: DIRECTOR'S SHOT DESCRIPTION — lead with WHERE THE CAMERA IS. Pattern: "[Camera position] — [what the lens discovers as it moves]. [Subject caught mid-action, woven into environment]. [One atmosphere detail serving the emotion]." NOT a caption. A cinematographer's briefing.
-- shot_type: one of [ECU — Extreme Close-Up, CU — Close-Up, MCU — Medium Close-Up, MS — Medium Shot, WS — Wide Shot, EWS — Extreme Wide Shot, OTS — Over the Shoulder, POV — Point of View, HIGH ANGLE, LOW ANGLE, DUTCH ANGLE]
-- camera_angle: physical camera placement e.g. "Low angle 15 degrees, shooting upward" or "Eye-level, locked off" or "Dutch angle 20 degrees right"
-- camera_movement: specific motion e.g. "Hard push-in 20% zoom over 2s" or "Static locked" or "Slow pan right tracking subject"
-- lighting: specific lighting setup e.g. "Single hard backlight, cold blue rim, 80% shadow" or "Warm motivated key left, clean shadows"
-- color_palette: dominant colors e.g. "Deep navy #0A1628, gold accent #D4A574, high contrast" or "Dark charcoal #0D0D0D, warning red #CC2200"
-- depth_of_field: e.g. "Shallow f/1.4 — subject sharp, world dissolving" or "Deep f/8 — everything in focus"
-- mood: 2-3 words describing emotional energy
-- continuity_bridge: ONE specific physical object or light quality that will also appear in the NEXT scene
-- emotional_intensity: number 0.0 to 1.0 (hook=0.9, tension=0.8, pivot=0.7, value=0.6, cta=0.85, deadzone=0.1)
-- viewer_emotion: the exact feeling the viewer should have during this scene
-- text_overlay: bold text on screen if any (key numbers, power words) — empty string if none
-- audio_note: voice energy and music direction for this scene
-- characters_present: array of character names who VISUALLY APPEAR (empty [] for stock/graphic shots)
-- camera_direction: one of [zoom_in, zoom_out, pan_left, pan_right, static, push_in] (kept for animation system compatibility)
+    if (!scenesArr.length) throw new Error('AI failed to generate scene breakdown');
+    if (scenesArr.length < 35) throw new Error(`Too few scenes: ${scenesArr.length}. Expected 40.`);
 
-SHOT SEQUENCING LAW: Before each shot, mentally state the previous shot type. The new shot MUST be a different type and shift angle by minimum 30 degrees. Never two consecutive MS eye-level shots.
-
-SECTION CAMERA ENERGY:
-- hook: Camera ALREADY MOVING when scene opens. ECU or LOW ANGLE. Assertive, no drift.
-- tension: Each scene tighter than the last. MCU → CU progression. Cut on motion.
-- pivot: HARD CUT energy. Single bold composition. Dutch angle or extreme low.
-- value_1/2/3: MS to MCU. Deliberate push. World visible, subject clear.
-- cta: Returns to hook energy. ECU or LOW ANGLE. Assertive and urgent.
-- deadzone: WIDE or static. World without the character.
-
-VISUAL RULES PER SECTION:
-- hook: Full-screen bold text animations, dramatic stock footage, word-by-word kinetic text
-- tension: Fast stock footage cuts, red highlights on numbers, urgency visuals
-- pivot: HARD CUT — single bold statement, color shift dark→bright or calm→energetic
-- value_1/2/3: Rule number as header graphic, supporting stock footage, numbers in green/gold
-- cta: Bold "Save This" text frames, callback to hook visual, teaser frame for next video
-- deadzone: Black card with subtle branding or loop back to scene 1 visual. No voice.
-
-Return JSON and nothing else — no markdown, no backticks, no explanation:
-{
-  "scenes": [
-    {
-      "scene_number": 1,
-      "section": "hook",
-      "narration_text": "He stole $400 million",
-      "duration_seconds": 2.0,
-      "visual_concept": "ECU from below the keyboard — fingers slam keys in the dark, the glow of multiple monitors catching knuckle edges. Camera holds perfectly still as the typing stops mid-word.",
-      "shot_type": "ECU — Extreme Close-Up",
-      "camera_angle": "Low angle, 20 degrees below hands, shooting upward",
-      "camera_movement": "Static locked — tension lives in stillness",
-      "lighting": "Single cold blue backlight from monitors, 85% shadow, no fill",
-      "color_palette": "Deep charcoal #0D0D0D, cold blue #1A2744, single amber key glint #C8A46E",
-      "depth_of_field": "Shallow f/1.4 — fingertips razor sharp, keyboard dissolving into dark",
-      "mood": "urgent, shocking, dark",
-      "continuity_bridge": "cold blue monitor light carries into scene 2",
-      "emotional_intensity": 0.9,
-      "viewer_emotion": "shock and dread",
-      "text_overlay": "$400,000,000",
-      "audio_note": "voice low and deliberate, bass-heavy music sting on this frame",
-      "characters_present": [],
-      "camera_direction": "push_in"
-    }
-  ]
-}`;
-
-    console.log(`📱 Breaking Shorts script into 40 scenes (decoupled narration/visuals)...`);
-    const result = await callClaude(prompt, 0.5);
-
-    let scenesArr = result?.scenes;
-    if (!scenesArr || !Array.isArray(scenesArr)) {
-      throw new Error('AI failed to generate scene breakdown');
-    }
-
-    // Hard guard — must have at least 35 scenes
-    if (scenesArr.length < 35) {
-      throw new Error(`Too few scenes generated: ${scenesArr.length}. Expected 40. Please retry.`);
-    }
-
-    // Delete old scenes in parallel
+    // Delete old scenes
     const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
     if (oldScenes.length > 0) {
       await Promise.all(oldScenes.map(s => base44.asServiceRole.entities.Scenes.delete(s.id).catch(() => {})));
     }
 
-    // Calculate beat durations and start times
+    // Beat timings
     const beatDurations = scenesArr.map(s => s.duration_seconds || 2.25);
     const beatStartTimes = [];
     let offset = 0;
     beatDurations.forEach(d => { beatStartTimes.push(offset); offset += d; });
 
-    // Save ProductionSettings
+    // ProductionSettings
     const psPayload = {
       beat_durations: JSON.stringify(beatDurations),
       beat_start_times: JSON.stringify(beatStartTimes),
@@ -213,21 +171,15 @@ Return JSON and nothing else — no markdown, no backticks, no explanation:
       await base44.asServiceRole.entities.ProductionSettings.create({ project_id, ...psPayload });
     }
 
-    // Camera movement map
     const cameraMap = {
-      'zoom_in': 'slow_zoom_in',
-      'zoom_out': 'slow_zoom_out',
-      'pan_left': 'slow_pan',
-      'pan_right': 'slow_pan',
-      'push_in': 'slow_zoom_in',
-      'static': 'static',
+      zoom_in: 'slow_zoom_in', zoom_out: 'slow_zoom_out',
+      pan_left: 'slow_pan', pan_right: 'slow_pan',
+      push_in: 'slow_zoom_in', static: 'static',
     };
 
-    // Build scene records for bulkCreate
     const sceneRecords = scenesArr.map(aiScene => {
       const directorNotes = {
-        // Full cinematic fields — now generated natively by Shorts breakdown
-        visual_concept: aiScene.visual_concept || aiScene.visual_description || '',
+        visual_concept: aiScene.visual_concept || '',
         shot_type: aiScene.shot_type || 'MS — Medium Shot',
         camera_angle: aiScene.camera_angle || 'Eye-level, locked off',
         camera_movement: aiScene.camera_movement || 'static',
@@ -240,7 +192,6 @@ Return JSON and nothing else — no markdown, no backticks, no explanation:
         viewer_emotion: aiScene.viewer_emotion || '',
         phase: aiScene.section || 'hook',
         characters_present: aiScene.characters_present || [],
-        // Shorts-specific fields kept for animation system and UI compatibility
         section: aiScene.section,
         visual_description: aiScene.visual_description || '',
         camera_direction: aiScene.camera_direction || 'push_in',
@@ -264,7 +215,6 @@ Return JSON and nothing else — no markdown, no backticks, no explanation:
     });
 
     await base44.asServiceRole.entities.Scenes.bulkCreate(sceneRecords);
-    const scenesCreated = sceneRecords.length;
 
     await base44.asServiceRole.entities.Projects.update(project_id, {
       status: 'breakdown_complete',
@@ -273,12 +223,12 @@ Return JSON and nothing else — no markdown, no backticks, no explanation:
     });
 
     const elapsed = ((Date.now() - callStart) / 1000).toFixed(1);
-    console.log(`📱 Created ${scenesCreated} Shorts scenes in ${elapsed}s (avg ${(offset / scenesCreated).toFixed(1)}s per scene)`);
+    console.log(`📱 Created ${scenesArr.length} scenes in ${elapsed}s`);
 
     return Response.json({
       success: true,
       done: true,
-      scenes_created: scenesCreated,
+      scenes_created: scenesArr.length,
       total_duration: offset.toFixed(1),
     });
 
