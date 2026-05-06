@@ -23,79 +23,77 @@ async function callClaude(prompt, temperature = 0.7, maxTokens = 8192, retries =
     throw new Error("Missing ANTHROPIC_API_KEY environment variable");
   }
 
-  // Create batch
-  const batchRes = await fetch("https://api.anthropic.com/v1/messages/batches", {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "anthropic-beta": "message-batches-2024-09-24"
+      "anthropic-version": "2023-06-01"
     },
     body: JSON.stringify({
-      requests: [{
-        custom_id: "scene-prompts",
-        params: {
-          model: "claude-sonnet-4-5",
-          max_tokens: maxTokens,
-          temperature: temperature,
-          system: "You are a world-class film director and cinematic data extractor. You must return ONLY raw, valid JSON. Do not include markdown formatting like ```json and do not include any conversational text.",
-          messages: [{ role: "user", content: prompt }]
-        }
-      }]
+      model: "claude-sonnet-4-5",
+      max_tokens: maxTokens,
+      temperature,
+      system: "You are a world-class film director and cinematic data extractor. You must return ONLY raw, valid JSON. Do not include markdown formatting like ```json and do not include any conversational text.",
+      messages: [{ role: "user", content: prompt }]
     })
   });
 
-  if (!batchRes.ok) {
-    const err = await batchRes.json();
-    throw new Error(`Batch create failed: ${err.error?.message || batchRes.status}`);
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(`Claude error: ${err.error?.message || response.status}`);
   }
 
-  const batch = await batchRes.json();
-  const batchId = batch.id;
+  const data = await response.json();
+  const rawText = data.content?.[0]?.text;
+  if (!rawText) throw new Error("No response from Claude");
 
-  // Poll until done
-  while (true) {
-    await new Promise(r => setTimeout(r, 3000));
-    const pollRes = await fetch(`https://api.anthropic.com/v1/messages/batches/${batchId}`, {
-      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-beta": "message-batches-2024-09-24" }
-    });
-    const status = await pollRes.json();
-    if (status.processing_status !== "ended") continue;
+  // Layer 1: direct parse
+  try { return JSON.parse(rawText); } catch (_) {}
 
-    // Fetch results
-    const resultsRes = await fetch(`https://api.anthropic.com/v1/messages/batches/${batchId}/results`, {
-      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-beta": "message-batches-2024-09-24" }
-    });
-    const resultsText = await resultsRes.text();
-    const lines = resultsText.trim().split("\n");
-    const result = JSON.parse(lines[0]);
-    const rawText = result.result.message.content[0].text;
+  // Layer 2: repair control chars and trailing commas
+  try { return JSON.parse(repairJSON(rawText)); } catch (_) {}
 
-    try { return JSON.parse(rawText); } catch (_) {}
-    try { return JSON.parse(repairJSON(rawText)); } catch (_) {}
+  // Layer 3: strip markdown fences
+  let jsonStr = rawText;
+  if (rawText.includes("```json")) jsonStr = rawText.split("```json")[1].split("```")[0].trim();
+  else if (rawText.includes("```")) jsonStr = rawText.split("```")[1].split("```")[0].trim();
+  try { return JSON.parse(repairJSON(jsonStr)); } catch (_) {}
 
-    let jsonStr = rawText;
-    if (rawText.includes("```json")) jsonStr = rawText.split("```json")[1].split("```")[0].trim();
-    else if (rawText.includes("```")) jsonStr = rawText.split("```")[1].split("```")[0].trim();
-    try { return JSON.parse(repairJSON(jsonStr)); } catch (_) {}
-
-    const objMatch = jsonStr.match(/\{[\s\S]*\}/);
-    if (objMatch) { try { return JSON.parse(objMatch[0]); } catch (_) {} }
-
-    const lastBrace = rawText.lastIndexOf('}');
-    if (lastBrace > 0) {
-      const trimmed = rawText.substring(0, lastBrace + 1);
-      for (const suffix of [']}', '}]}', '']) {
-        try {
-          const parsed = JSON.parse(trimmed + suffix);
-          if (parsed.prompts && Array.isArray(parsed.prompts)) return parsed;
-        } catch (_) {}
-      }
-    }
-
-    throw new Error("Failed to parse Claude JSON after recovery");
+  // Layer 4: extract outermost JSON object
+  const match = jsonStr.match(/\{[\s\S]*\}/);
+  if (match) {
+    try { return JSON.parse(match[0]); } catch (_) {}
+    try { return JSON.parse(repairJSON(match[0])); } catch (_) {}
   }
+
+  // Layer 5: truncation repair
+  const text = match ? match[0] : rawText;
+  let repaired = text.replace(/,\s*\{[^}]*$/, '');
+  repaired = repaired.replace(/,\s*\{[^}]*"[^"]*$/, '');
+  repaired = repaired.replace(/,\s*$/, '');
+  if (!repaired.endsWith(']}')) {
+    if (!repaired.endsWith(']')) repaired += ']';
+    if (!repaired.endsWith('}')) repaired += '}';
+  }
+  try {
+    const result = JSON.parse(repaired);
+    console.log(`🔧 JSON truncation repair recovered ${result.prompts?.length || 0} prompts`);
+    return result;
+  } catch (_) {}
+
+  // Layer 6: find last complete }, then close
+  const lastComplete = text.lastIndexOf('},');
+  if (lastComplete > 0) {
+    const finalAttempt = text.substring(0, lastComplete + 1) + ']}';
+    try {
+      const result = JSON.parse(finalAttempt);
+      console.log(`🔧 JSON deep repair recovered ${result.prompts?.length || 0} prompts`);
+      return result;
+    } catch (_) {}
+  }
+
+  throw new Error("Failed to parse Claude JSON after all repair attempts");
 }
 
 // ══════════════════════════════════════════════════════════════════
