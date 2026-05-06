@@ -41,47 +41,44 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
 
   console.log(`[ASR Sync] ${totalScriptWords} script words, ${totalAsrWords} ASR words, ${scenes.length} scenes, ${totalAudioDuration.toFixed(1)}s audio`);
 
-  // ── Step 2: Calculate the ratio ────────────────────────────────
-  // ASR might have slightly more or fewer words than the script
-  // (filler words, contractions split differently, etc.)
-  // We use a ratio to proportionally distribute ASR words to scenes.
+  // ── Step 2: Cumulative word boundaries ─────────────────────────
+  // Instead of rounding per-scene (which compounds errors), we use
+  // cumulative fractions to find exact ASR word boundaries.
+  // Scene i owns ASR words from cumFraction[i] to cumFraction[i+1].
   const ratio = totalAsrWords / Math.max(1, totalScriptWords);
 
   console.log(`[ASR Sync] Word ratio: ${ratio.toFixed(3)} (ASR/script) — ${ratio > 1 ? 'ASR has more words' : 'ASR has fewer words'}`);
 
-  // ── Step 3: Map ASR words to scenes sequentially ───────────────
-  // Each scene gets `round(wordCount * ratio)` ASR words
-  let asrCursor = 0;
+  // ── Step 3: Map ASR words to scenes via cumulative fractions ───
+  // Build cumulative script word counts, then map to ASR indices
+  // using the cumulative total. This prevents rounding drift.
+  const cumScriptWords = [0];
+  for (let i = 0; i < sceneWordCounts.length; i++) {
+    cumScriptWords.push(cumScriptWords[i] + sceneWordCounts[i]);
+  }
+
   const sceneAsrRanges = [];
 
   for (let i = 0; i < scenes.length; i++) {
     const wc = sceneWordCounts[i];
 
     if (wc === 0) {
-      // Empty scene — no words
       sceneAsrRanges.push({ firstIdx: -1, lastIdx: -1, asrCount: 0 });
       continue;
     }
 
-    // How many ASR words this scene gets
-    let asrCount;
-    if (i === scenes.length - 1) {
-      // Last scene gets all remaining ASR words
-      asrCount = totalAsrWords - asrCursor;
-    } else {
-      // Proportional allocation
-      asrCount = Math.round(wc * ratio);
-      // Don't overshoot
-      asrCount = Math.min(asrCount, totalAsrWords - asrCursor);
-      // At least 1 word if scene has text
-      asrCount = Math.max(1, asrCount);
-    }
+    // Map cumulative script boundaries to ASR indices
+    const asrStart = Math.round((cumScriptWords[i] / totalScriptWords) * totalAsrWords);
+    const asrEnd = i === scenes.length - 1
+      ? totalAsrWords  // last scene gets everything remaining
+      : Math.round((cumScriptWords[i + 1] / totalScriptWords) * totalAsrWords);
 
-    const firstIdx = asrCursor;
-    const lastIdx = asrCursor + asrCount - 1;
+    // Clamp and ensure at least 1 word
+    const firstIdx = Math.min(asrStart, totalAsrWords - 1);
+    const lastIdx = Math.max(firstIdx, Math.min(asrEnd - 1, totalAsrWords - 1));
+    const asrCount = lastIdx - firstIdx + 1;
 
     sceneAsrRanges.push({ firstIdx, lastIdx, asrCount });
-    asrCursor += asrCount;
   }
 
   // ── Step 4: Extract timestamps from ASR word ranges ────────────
@@ -146,12 +143,14 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     const gap = nextSpeechStart - currSpeechEnd;
 
     if (gap > 0) {
-      // Split the gap at the midpoint
-      const mid = currSpeechEnd + gap / 2;
-      curr.endTime = mid;
-      next.startTime = mid;
+      // Bias gap toward the scene that just finished speaking (70/30).
+      // Natural speech pauses happen at the END of a thought, so the
+      // outgoing scene should "own" more of the silence.
+      const boundary = currSpeechEnd + gap * 0.7;
+      curr.endTime = boundary;
+      next.startTime = boundary;
     } else {
-      // Overlap or no gap — butt them together
+      // Overlap or no gap — split at the midpoint of the overlap
       const boundary = (currSpeechEnd + nextSpeechStart) / 2;
       curr.endTime = boundary;
       next.startTime = boundary;
