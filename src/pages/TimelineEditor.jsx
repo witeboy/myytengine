@@ -943,8 +943,9 @@ export default function TimelineEditor() {
   // ── Audio sync ──────────────────────────────────────────────────
   useEffect(() => {
     if (voiceoverUrl && audioRef.current) {
-      // Tightened to 0.05s — at 120 BPM a beat is 0.5s; 0.3s was half a beat of drift
-      if (Math.abs(audioRef.current.currentTime - currentTime) > 0.05) audioRef.current.currentTime = currentTime;
+      // 0.08s threshold: tight enough for beat alignment, loose enough to avoid
+      // constant re-seeking that causes audible pops during smooth playback
+      if (Math.abs(audioRef.current.currentTime - currentTime) > 0.08) audioRef.current.currentTime = currentTime;
       audioRef.current.muted = isMuted;
       audioRef.current.volume = voiceoverVol;
       if (isPlaying) audioRef.current.play().catch(() => {});
