@@ -1085,11 +1085,11 @@ export default function TimelineEditor() {
           return Math.max(1.5, Math.min(d, maxAllowed));
         });
  
-        // Step 4: redistribute clamped time to neighbours proportionally
+        // Step 4: redistribute clamped time proportionally to ALL scenes
         const cappedSum  = newBeatDurations.reduce((s, d) => s + d, 0);
         const surplusTime = audioDuration - cappedSum;
         if (Math.abs(surplusTime) > 0.01) {
-          // Spread surplus across scenes that were NOT capped (have headroom)
+          // First try scenes with headroom
           const headroom = newBeatDurations.map((d, i) => Math.max(0, speechSpans[i] * 2.2 - d));
           const totalHeadroom = headroom.reduce((s, h) => s + h, 0);
           if (totalHeadroom > 0.01) {
@@ -1097,8 +1097,12 @@ export default function TimelineEditor() {
               parseFloat((d + (headroom[i] / totalHeadroom) * surplusTime).toFixed(3))
             );
           } else {
-            // No headroom anywhere — add surplus to last scene
-            newBeatDurations[newBeatDurations.length - 1] += surplusTime;
+            // No headroom anywhere — distribute evenly across ALL scenes
+            // instead of dumping everything on the last scene
+            const perScene = surplusTime / newBeatDurations.length;
+            newBeatDurations = newBeatDurations.map(d =>
+              parseFloat((d + perScene).toFixed(3))
+            );
           }
         }
  
