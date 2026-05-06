@@ -30,7 +30,7 @@ async function callClaude(prompt, temperature = 0.7, maxTokens = 8192, retries =
       "Content-Type": "application/json",
       "x-api-key": apiKey,
       "anthropic-version": "2023-06-01",
-      "anthropic-beta": "message-batches-1"
+      "anthropic-beta": "message-batches-2024-09-24"
     },
     body: JSON.stringify({
       requests: [{
@@ -58,14 +58,14 @@ async function callClaude(prompt, temperature = 0.7, maxTokens = 8192, retries =
   while (true) {
     await new Promise(r => setTimeout(r, 3000));
     const pollRes = await fetch(`https://api.anthropic.com/v1/messages/batches/${batchId}`, {
-      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-beta": "message-batches-1" }
+      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-beta": "message-batches-2024-09-24" }
     });
     const status = await pollRes.json();
     if (status.processing_status !== "ended") continue;
 
     // Fetch results
     const resultsRes = await fetch(`https://api.anthropic.com/v1/messages/batches/${batchId}/results`, {
-      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-beta": "message-batches-1" }
+      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-beta": "message-batches-2024-09-24" }
     });
     const resultsText = await resultsRes.text();
     const lines = resultsText.trim().split("\n");
@@ -571,36 +571,36 @@ function getArcAnimationGuidance(arcPosition, sceneDuration, visualStyle) {
 
   const arcs = {
     setup: {
-      camera: "Slow gentle camera drift. Establishing the space calmly. Gradual push-in, slightly faster than setup. Building tension through proximity.",
-      atmos: " Nothing hurries. Ambient sounds settle.",
+      camera: "Ultra-slow push in (8% zoom over full duration), starting wide to establish world",
+      atmos: "Dust motes drift in a single foreground shaft of light. Nothing hurries. Ambient sounds settle.",
       subject: "Subject completely still — one breath, one weight shift, no more. Let the world breathe.",
       crowd: "Background figures move naturally and unaware. Life continues around the moment.",
       cut: "HOLD three frames past the emotion before cutting. Let silence land."
     },
     cold_open: {
       camera: "Camera ALREADY MOVING when scene opens — mid-push or mid-track, zero ease-in. Assert the world immediately.",
-      atmos: "Hard foreground element whips past lens in first 10 frames. ",
+      atmos: "Hard foreground element whips past lens in first 10 frames. Light cuts sharp on subject.",
       subject: "Subject caught fully mid-action — never posed, never waiting for camera.",
       crowd: "Background crowd ALREADY reacting — don't build to it, start inside the chaos.",
       cut: "SMASH CUT — zero hold, zero ease-out. Maximum editorial impact."
     },
     rising: {
       camera: "Deliberate push in with growing purpose — 15% zoom over duration. Camera grows bolder each second.",
-      atmos: "Environmental motion picks up — fabric shifts.",
+      atmos: "Environmental motion picks up — fabric shifts, loose objects stir, light quickens.",
       subject: "Subject micro-expressions intensify across the shot. Fingers tighten. Jaw sets. Breath shortens.",
       crowd: "Crowd begins leaning forward, exchanging glances, one person points.",
       cut: "END on a physical beat — cut lands ON the gesture or sound, never between them."
     },
     rising_tension: {
       camera: "Handheld micro-shake emerges and grows. Each movement 10% faster than the last. PUSH IN with urgency.",
-      atmos: "Something is wrong with the air.",
+      atmos: "Unstable light source — flicker, shift, stutter. Wind picks up. Something is wrong with the air.",
       subject: "Rapid small gestures. Eyes dart to multiple points. Chest visible breathing. Hands can't be still.",
       crowd: "Crowd steps back in unison. Murmurs. One person shouts silently. Children pulled behind adults.",
       cut: "CUT ON MOTION — editor cuts while subject is mid-movement, never at rest. Momentum carries through."
     },
     emotional_core: {
       camera: "Camera slows to meaningful crawl — every millimeter earns its place. HOLD at peak emotional frame.",
-      atmos: "Everything else in the world stills.",
+      atmos: "Everything else in the world stills. A single light pool shifts toward the subject's face.",
       subject: "One micro-expression tells everything. A swallow. Fingers loosening. The slight wet of an eye.",
       crowd: "Crowd goes completely still — then one person slowly covers their mouth.",
       cut: "HOLD 6-8 frames longer than feels comfortable. The silence IS the scene. Then cut."
@@ -614,7 +614,7 @@ function getArcAnimationGuidance(arcPosition, sceneDuration, visualStyle) {
     },
     resolution: {
       camera: "Slow pull back — character becomes small against the world again. Wide breathes in around them.",
-      atmos: "Warmth creeps into frame from the edges.",
+      atmos: "Settling dust. Calming light. Warmth creeps into frame from the edges. The world exhales.",
       subject: "Shoulders drop. Hands open. Face softens. The body lets go of what it was carrying.",
       crowd: "Crowd disperses slowly — people shaking heads, talking quietly, still processing what happened.",
       cut: "LONG HOLD — let breathing return to normal before any transition."
@@ -755,7 +755,7 @@ This is a SLEEP video. Every image must be DARK, DIM, and WARM — safe for slee
 These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, calming.
 
 **⛔ ABSOLUTE PROHIBITION — ZERO TOLERANCE:**
-- NEVER include ANY human figures, people, persons, characters, silhouettes, or shadows of people not referenced in the story
+- NEVER include ANY human figures, people, persons, characters, silhouettes, or shadows of people
 - NEVER include ANY body parts: hands, fingers, feet, legs, arms, face, eyes, skin, torso, shoulders, hair, lips, head
 - NEVER include human-occupied furniture shown in use: beds with someone in them, occupied chairs
 - NEVER include clothing, shoes, accessories, or any object implying human presence
@@ -1613,24 +1613,21 @@ ${useSleepStyle ? `   **🌙 SLEEP MODE ANIMATION — STRICT RULES:**
      - ANY rack focus snaps, DOF shifts, or focus pulls
      - ANY emotional intensity language ("urgent", "dramatic", "peak", "assertive")
    - Keep it to 1-2 calm sentences. Example: "Ultra-slow pan right across the misty forest, gentle breeze rustling distant leaves, soft fog drifting between trees."
-   - The animation should feel like a screensaver — peaceful, unchanging, meditative.` : `   - A GROUNDED, PRACTICAL motion direction for this scene's exact duration.
-   - **PHYSICALLY POSSIBLE ONLY:** Describe motion that could happen in the real world during this timeframe. A 2-3s scene = ONE camera move + ONE subject action. A 7s scene = camera move + secondary motion.
-   - **Structure (2-3 concise sentences max):**
-     a) **CAMERA**: One specific movement — "slow push-in", "steady pan left", "static locked-off". Include speed.
-     b) **SUBJECT**: What the character physically DOES — "turns head", "clenches fist", "leans forward". Must match image_prompt.
-   - **STRICTLY FORBIDDEN in animation prompts:**
-     - Weather appearing from nowhere (storms, lightning, wind gusts not in the scene)
-     - Supernatural light (bursts of light, god rays appearing, light "coming alive")
-     - Impossible physics (objects floating, ground cracking, explosions without cause)
-     - Purple prose ("light is alive", "DOF breathes", "motion weight carries emotion")
-     - More than 2 motions per scene under 4 seconds
-   - **RULE: Person pointing angrily in a room → "slow push-in, hand gesture emphasizing the point" — NOT "storm clouds gather, light bursts through window, floor trembles"**
-   - **ARC affects SPEED not complexity**: ${orientationConfig.animation}
-     • SETUP: Slow gentle moves. Settling in.
-     • RISING: Slightly faster push-ins. Energy through speed not effects.
-     • CLIMAX: Deliberate slow movement. Minimal motion, maximum impact.
-     • RESOLUTION: Slow pull-back. Calm.`}
-   - **2-3 sentences max** — clear and practical
+   - The animation should feel like a screensaver — peaceful, unchanging, meditative.` : `   - NOT a simple camera instruction — a FULL MOTION POEM describing everything that moves over the scene's duration.
+   - **IMPORTANT: Each scene has its own duration.** A 3.5s scene needs TIGHT, PUNCHY motion. A 7s scene can BREATHE. Match the motion density to the seconds available.
+   - **Include ALL layers:**
+     a) **CAMERA MOTION**: Specific movement with speed, direction, framing change
+     b) **ATMOSPHERIC MOTION**: Dust motes, fog, light shifting, rain, leaves, fabric rippling, steam
+     c) **SUBJECT MOTION**: Breathing, hair shifting, fingers tightening, eyes darting, fabric settling
+     d) **LIGHT DYNAMICS**: Rays creeping across surfaces, firelight dancing, shadows drifting
+     e) **DEPTH SHIFTS**: Rack focus, DOF breathing, focus pulls revealing detail
+     f) **EMOTIONAL QUALITY**: "heavy and reluctant" vs "urgent and searching" vs "tender and hesitant"
+   - **ARC POSITION**: ${orientationConfig.animation}
+     • COLD_OPEN / SETUP: Sharp, immediate. Camera grabs attention — quick cuts, assertive angles.
+     • RISING_TENSION / RISING: Building momentum. Camera grows bolder. Push-ins, tracking.
+     • EMOTIONAL_CORE / CLIMAX: Peak intensity but DELIBERATE. Camera lingers. Meaningful holds. Let moments breathe.
+     • RESOLUTION: Exhale. Camera pulls back gently. Peace settles.`}
+   - **MINIMUM 3-4 rich sentences** — NEVER generic "slow pan right"
 
 **RESPONSE:**
 {
