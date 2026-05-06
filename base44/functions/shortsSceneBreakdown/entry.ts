@@ -1,5 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
-// v5 — 4 parallel Claude calls of 10 scenes each to avoid timeout
+// v6 — Gemini 1.5 Pro primary, Claude Sonnet 3.5 fallback
+// 6 parallel AI calls of 7 scenes each to avoid timeout
 
 function repairJSON(str) {
   return str
@@ -8,32 +9,8 @@ function repairJSON(str) {
     .replace(/(["\w\d])\s*\n\s*"/g, '$1, "');
 }
 
-async function callClaude(prompt, temperature = 0.5) {
-  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01"
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-3-5",
-      max_tokens: 8000,
-      temperature,
-      system: "You are a YouTube Shorts video editor. Return ONLY raw valid JSON. No markdown, no backticks, no conversational text.",
-      messages: [{ role: "user", content: prompt }]
-    })
-  });
-
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(`Claude error: ${err.error?.message || response.status}`);
-  }
-
-  const data = await response.json();
-  const rawText = data.content?.[0]?.text;
-  if (!rawText) throw new Error("No response from Claude");
+function extractJSON(rawText) {
+  if (!rawText || typeof rawText !== 'string') return null;
 
   // Layer 1: direct parse
   try { return JSON.parse(rawText); } catch (_) {}
@@ -80,7 +57,104 @@ async function callClaude(prompt, temperature = 0.5) {
     } catch (_) {}
   }
 
+  return null;
+}
+
+// ── Gemini 1.5 Pro ──────────────────────────────────────────────────────────
+async function callGemini(prompt, systemText, temperature = 0.5) {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemText }] },
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature,
+          maxOutputTokens: 8192,
+          responseMimeType: "application/json",
+        },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    let errMsg = `HTTP ${response.status}`;
+    try { const e = await response.json(); errMsg = e.error?.message || errMsg; } catch (_) {}
+    throw new Error(`Gemini API error: ${errMsg}`);
+  }
+
+  const data = await response.json();
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!rawText) {
+    const finishReason = data.candidates?.[0]?.finishReason || 'unknown';
+    throw new Error(`Gemini returned no text. finishReason: ${finishReason}`);
+  }
+
+  const parsed = extractJSON(rawText);
+  if (parsed) return parsed;
+
+  throw new Error(`Failed to parse Gemini JSON. Length: ${rawText.length} chars.`);
+}
+
+// ── Claude Sonnet 3.5 (fallback) ────────────────────────────────────────────
+async function callClaudeFallback(prompt, systemText, temperature = 0.5) {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY");
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01"
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-3-5",
+      max_tokens: 8000,
+      temperature,
+      system: systemText,
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
+
+  if (!response.ok) {
+    let errMsg = `HTTP ${response.status}`;
+    try { const e = await response.json(); errMsg = e.error?.message || errMsg; } catch (_) {}
+    throw new Error(`Claude API error: ${errMsg}`);
+  }
+
+  const data = await response.json();
+  const rawText = data.content?.[0]?.text;
+  if (!rawText) throw new Error("No response from Claude");
+
+  const parsed = extractJSON(rawText);
+  if (parsed) return parsed;
+
   throw new Error("Failed to parse Claude JSON after all repair attempts");
+}
+
+// ── Unified AI caller: Gemini first → Claude fallback ───────────────────────
+async function callAI(prompt, temperature = 0.5) {
+  const systemText = "You are a YouTube Shorts video editor. Return ONLY raw valid JSON. No markdown, no backticks, no conversational text.";
+
+  // Try Gemini first
+  try {
+    const result = await callGemini(prompt, systemText, temperature);
+    console.log(`✅ Gemini succeeded`);
+    return result;
+  } catch (geminiErr) {
+    console.warn(`⚠️ Gemini failed: ${geminiErr.message} — falling back to Claude`);
+  }
+
+  // Fallback to Claude Sonnet 3.5
+  const result = await callClaudeFallback(prompt, systemText, temperature);
+  console.log(`✅ Claude fallback succeeded`);
+  return result;
 }
 
 const makeBatchPrompt = (startScene, endScene, sections, fullScript, shortsNiche) =>
@@ -154,33 +228,33 @@ Deno.serve(async (req) => {
       shortsNiche = channels[0]?.shorts_niche || 'finance';
     }
 
-    console.log(`📱 Generating 40 scenes in 6 parallel batches of 7...`);
+    console.log(`📱 Generating 40 scenes in 6 parallel batches of 7 (Gemini primary, Claude fallback)...`);
 
     const [result1, result2, result3, result4, result5, result6] = await Promise.all([
-      callClaude(makeBatchPrompt(1, 7,
+      callAI(makeBatchPrompt(1, 7,
         `- hook (scenes 1-4): ECU/LOW ANGLE, camera already moving, kinetic text, most impactful frames. emotional_intensity=0.9
 - tension (scenes 5-7): MCU→CU progression, urgency visuals, problem escalating. emotional_intensity=0.8`,
         fullScript, shortsNiche), 0.5),
 
-      callClaude(makeBatchPrompt(8, 14,
+      callAI(makeBatchPrompt(8, 14,
         `- tension (scenes 8-12): MCU→CU progression, tightest tension shots, cut on motion. emotional_intensity=0.8
 - pivot (scenes 13-14): HARD CUT, dutch angle or extreme low, color/energy shift. emotional_intensity=0.7`,
         fullScript, shortsNiche), 0.5),
 
-      callClaude(makeBatchPrompt(15, 21,
+      callAI(makeBatchPrompt(15, 21,
         `- value_1 (scenes 15-21): MS to MCU, first key point with supporting visuals. emotional_intensity=0.6`,
         fullScript, shortsNiche), 0.5),
 
-      callClaude(makeBatchPrompt(22, 28,
+      callAI(makeBatchPrompt(22, 28,
         `- value_2 (scenes 22-28): MS to MCU, second key point with supporting visuals. emotional_intensity=0.6`,
         fullScript, shortsNiche), 0.5),
 
-      callClaude(makeBatchPrompt(29, 35,
+      callAI(makeBatchPrompt(29, 35,
         `- value_3 (scenes 29-32): third key point, supporting visuals. emotional_intensity=0.6
 - cta (scenes 33-35): hook energy returns, ECU/LOW ANGLE, bold Save This text. emotional_intensity=0.85`,
         fullScript, shortsNiche), 0.5),
 
-      callClaude(makeBatchPrompt(36, 40,
+      callAI(makeBatchPrompt(36, 40,
         `- cta (scenes 36-38): callback to hook visual, urgency. emotional_intensity=0.85
 - deadzone (scenes 39-40): WIDE or static, dark card, no voice, subtle branding. emotional_intensity=0.1`,
         fullScript, shortsNiche), 0.5),
