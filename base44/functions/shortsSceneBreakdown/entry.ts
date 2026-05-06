@@ -18,7 +18,7 @@ async function callClaude(prompt, temperature = 0.5) {
       "anthropic-version": "2023-06-01"
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-3-5",
       max_tokens: 8000,
       temperature,
       system: "You are a YouTube Shorts video editor. Return ONLY raw valid JSON. No markdown, no backticks, no conversational text.",
