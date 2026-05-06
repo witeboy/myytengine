@@ -1,27 +1,23 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+// v6 — Gemini 1.5 Pro primary, Claude Sonnet 3.5 fallback
 
-// Robustly extract a JSON object from Claude's raw text output.
-// Handles: markdown fences, preamble text, truncated JSON, trailing commas.
+// ── JSON extraction (shared by both providers) ──────────────────────────────
 function extractJSON(rawText) {
   if (!rawText || typeof rawText !== 'string') return null;
 
-  // Pass 1: direct parse (ideal case)
   try { return JSON.parse(rawText); } catch (_) {}
 
-  // Pass 2: strip markdown fences (```json ... ``` or ``` ... ```)
   const fenceMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenceMatch) {
     try { return JSON.parse(fenceMatch[1].trim()); } catch (_) {}
   }
 
-  // Pass 3: find the first { and last } and parse what's between
   const firstBrace = rawText.indexOf('{');
   const lastBrace  = rawText.lastIndexOf('}');
   if (firstBrace !== -1 && lastBrace > firstBrace) {
     const slice = rawText.substring(firstBrace, lastBrace + 1);
     try { return JSON.parse(slice); } catch (_) {}
 
-    // Pass 4: try closing truncated JSON with common suffixes
     for (const suffix of [']}', '}]}', '"}]}', '"]}', '}} ']) {
       try {
         const parsed = JSON.parse(slice + suffix);
@@ -32,14 +28,11 @@ function extractJSON(rawText) {
       } catch (_) {}
     }
 
-    // Pass 5: strip trailing commas (a common Claude mistake) then retry
     const noTrailing = slice
       .replace(/,\s*}/g, '}')
       .replace(/,\s*]/g, ']');
     try { return JSON.parse(noTrailing); } catch (_) {}
 
-    // Pass 6: truncate at last complete object boundary and retry
-    // Walk back from lastBrace looking for a clean closing
     for (let i = lastBrace; i > firstBrace; i--) {
       if (rawText[i] === '}') {
         const candidate = rawText.substring(firstBrace, i + 1);
@@ -57,9 +50,52 @@ function extractJSON(rawText) {
   return null;
 }
 
-async function callClaude(prompt, temperature = 0.7) {
+// ── Gemini 1.5 Pro (primary) ────────────────────────────────────────────────
+async function callGemini(prompt, systemText, temperature = 0.7) {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemText }] },
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature,
+          maxOutputTokens: 8192,
+          responseMimeType: "application/json",
+        },
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    let errMsg = `HTTP ${response.status}`;
+    try { const e = await response.json(); errMsg = e.error?.message || errMsg; } catch (_) {}
+    throw new Error(`Gemini API error: ${errMsg}`);
+  }
+
+  const data = await response.json();
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!rawText) {
+    const finishReason = data.candidates?.[0]?.finishReason || 'unknown';
+    throw new Error(`Gemini returned no text. finishReason: ${finishReason}`);
+  }
+
+  const parsed = extractJSON(rawText);
+  if (parsed) return parsed;
+
+  console.error(`❌ Gemini JSON parse failed. Sample: ${rawText.substring(0, 500)}`);
+  throw new Error(`Failed to parse Gemini JSON. Length: ${rawText.length} chars.`);
+}
+
+// ── Claude Sonnet 3.5 (fallback) ────────────────────────────────────────────
+async function callClaudeFallback(prompt, systemText, temperature = 0.7) {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY environment variable");
+  if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY");
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -69,14 +105,12 @@ async function callClaude(prompt, temperature = 0.7) {
       "anthropic-version": "2023-06-01"
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-5",
+      model: "claude-sonnet-3-5",
       max_tokens: 8192,
-      temperature: temperature,
-      // Stronger system prompt — prefill trick forces JSON-first output
-      system: "You are a cinematic data extractor. Output ONLY a single raw JSON object. No markdown fences, no ```json, no preamble, no explanation. Start your response with { and end with }.",
+      temperature,
+      system: systemText,
       messages: [
         { role: "user", content: prompt },
-        // Assistant prefill forces the model to start mid-JSON — no preamble possible
         { role: "assistant", content: "{" }
       ]
     })
@@ -91,16 +125,33 @@ async function callClaude(prompt, temperature = 0.7) {
   const data = await response.json();
   if (!data.content || !data.content.length) throw new Error("No content returned from Claude");
 
-  // The prefill means Claude's actual output is everything AFTER the opening {
-  // We prepend it back to get valid JSON
+  // Prefill means Claude's output starts after the opening {
   const rawText = "{" + data.content[0].text;
 
   const parsed = extractJSON(rawText);
   if (parsed) return parsed;
 
-  // Last resort: log a sample for debugging and throw a clear error
-  console.error(`❌ All JSON extraction attempts failed. Raw text sample (first 500 chars):\n${rawText.substring(0, 500)}`);
-  throw new Error(`Failed to parse Claude JSON response. Stop reason: ${data.stop_reason || 'unknown'}. Content length: ${rawText.length} chars.`);
+  console.error(`❌ Claude JSON parse failed. Sample: ${rawText.substring(0, 500)}`);
+  throw new Error(`Failed to parse Claude JSON. stop_reason: ${data.stop_reason || 'unknown'}. Length: ${rawText.length} chars.`);
+}
+
+// ── Unified AI caller: Gemini first → Claude fallback ───────────────────────
+async function callAI(prompt, temperature = 0.7) {
+  const systemText = "You are a cinematic data extractor. Output ONLY a single raw JSON object. No markdown fences, no ```json, no preamble, no explanation. Start your response with { and end with }.";
+
+  // Try Gemini first
+  try {
+    const result = await callGemini(prompt, systemText, temperature);
+    console.log(`✅ Gemini succeeded`);
+    return result;
+  } catch (geminiErr) {
+    console.warn(`⚠️ Gemini failed: ${geminiErr.message} — falling back to Claude`);
+  }
+
+  // Fallback to Claude Sonnet 3.5
+  const result = await callClaudeFallback(prompt, systemText, temperature);
+  console.log(`✅ Claude fallback succeeded`);
+  return result;
 }
 
 function cleanScriptText(text) {
@@ -234,7 +285,6 @@ function calculateSleepBeatDurations(phases, durationMinutes) {
 
   const totalCurrent = durations.reduce((a, b) => a + b, 0);
   const totalTarget = durationMinutes * 60;
-  // FIX 2: Guard against divide-by-zero if no scenes
   if (totalCurrent === 0) return durations;
   const scaleFactor = totalTarget / totalCurrent;
   return durations.map(d => Math.round(d * scaleFactor * 10) / 10);
@@ -650,20 +700,13 @@ function getNarrativePosition(sceneNumber, totalScenes) {
   return Math.round(((sceneNumber - 1) / (totalScenes - 1)) * 100);
 }
 
-// FIX 3: Replaced the old fixed-weight calculatePhaseAllocation with
-// the genre-aware version used everywhere else. The old version was a dead
-// code path that produced a mismatched 4-phase structure for non-standard
-// genres and was never called — removing to prevent accidental future use.
-
 function splitScriptByPhase(script, phases) {
-  // FIX 4: Guard — if script is empty or phases is empty, return empty array
   if (!script || !script.trim() || !phases || phases.length === 0) return [];
 
   const sentences = script.match(/[^.!?]+[.!?]+[\s]*/g) || [script];
   const totalSentences = sentences.length;
   const totalPhaseScenes = phases.reduce((a, b) => a + b.scenes, 0);
 
-  // FIX 5: Guard against zero total scenes (would cause divide-by-zero)
   if (totalPhaseScenes === 0) return [];
 
   let cursor = 0;
@@ -671,7 +714,6 @@ function splitScriptByPhase(script, phases) {
 
   for (let i = 0; i < phases.length; i++) {
     const phase = phases[i];
-    // FIX 6: Skip phases with 0 scenes (can occur from rounding)
     if (!phase.scenes || phase.scenes <= 0) continue;
 
     const proportion = phase.scenes / totalPhaseScenes;
@@ -679,7 +721,6 @@ function splitScriptByPhase(script, phases) {
     const isLast = i === phases.length - 1;
     const endCursor = isLast ? totalSentences : Math.min(cursor + sentenceCount, totalSentences);
 
-    // FIX 7: Only push chunk if there is actually text in this segment
     if (endCursor > cursor) {
       const segment = sentences.slice(cursor, endCursor).join("").trim();
       if (segment.length > 0) {
@@ -693,7 +734,6 @@ function splitScriptByPhase(script, phases) {
     }
     cursor = endCursor;
 
-    // FIX 8: Don't advance cursor past end of sentences
     if (cursor >= totalSentences) break;
   }
 
@@ -931,16 +971,45 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
 
-    // ── Claude passthrough mode for directApi.js ─────────────────────────────
+    // ── Passthrough mode for directApi.js (Gemini primary, Claude fallback) ──
     if (body.__claude_passthrough) {
-      const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
-      if (!apiKey) return Response.json({ error: 'ANTHROPIC_API_KEY not set' }, { status: 500 });
-
       const { system, prompt, max_tokens = 2000 } = body;
       if (!prompt) return Response.json({ error: 'prompt is required' }, { status: 400 });
 
+      let text = '';
+
+      // Try Gemini first
+      const geminiKey = Deno.env.get('GEMINI_API_KEY');
+      if (geminiKey) {
+        try {
+          const geminiBody = {
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { maxOutputTokens: max_tokens, temperature: 0.7 },
+          };
+          if (system) geminiBody.systemInstruction = { parts: [{ text: system }] };
+
+          const gRes = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${geminiKey}`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(geminiBody) }
+          );
+          const gData = await gRes.json();
+          text = gData.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          if (text) {
+            console.log(`✅ Passthrough: Gemini succeeded`);
+            return Response.json({ text });
+          }
+          throw new Error('Gemini returned empty text');
+        } catch (gErr) {
+          console.warn(`⚠️ Passthrough Gemini failed: ${gErr.message} — falling back to Claude`);
+        }
+      }
+
+      // Fallback to Claude
+      const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
+      if (!apiKey) return Response.json({ error: 'Neither GEMINI_API_KEY nor ANTHROPIC_API_KEY available' }, { status: 500 });
+
       const claudeBody = {
-        model: 'claude-sonnet-4-6',
+        model: 'claude-sonnet-3-5',
         max_tokens,
         messages: [{ role: 'user', content: prompt }],
       };
@@ -957,15 +1026,15 @@ Deno.serve(async (req) => {
       });
 
       const data = await response.json();
-      const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
-      if (!text) return Response.json({ error: 'No text from Claude' }, { status: 500 });
+      text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+      if (!text) return Response.json({ error: 'No text from Claude fallback' }, { status: 500 });
+      console.log(`✅ Passthrough: Claude fallback succeeded`);
       return Response.json({ text });
     }
     // ── End passthrough ──────────────────────────────────────────────────────
 
     const { project_id, batch_index, selected_hook } = body;
 
-    // FIX 9: Validate required field up front with clear error
     if (!project_id) {
       return Response.json({ error: 'Missing required field: project_id' }, { status: 400 });
     }
@@ -983,7 +1052,6 @@ Deno.serve(async (req) => {
     }
 
     const cleanedScript = cleanScriptText(script.full_script);
-    // FIX 10: Guard against empty script after cleaning
     if (!cleanedScript || cleanedScript.trim().length < 10) {
       return Response.json({ error: 'Script is empty or too short after cleaning.' }, { status: 400 });
     }
@@ -1002,7 +1070,6 @@ Deno.serve(async (req) => {
 
     const isSleep = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
 
-    // Duration-aware scene density
     const densityAnchors = isSleep
       ? [{m:5,d:15},{m:10,d:20},{m:15,d:22},{m:20,d:25},{m:30,d:28},{m:60,d:32}]
       : [{m:1,d:4.2},{m:3,d:5.0},{m:5,d:5.5},{m:8,d:6.0},{m:10,d:6.2},{m:15,d:7.0},{m:30,d:8.0},{m:60,d:9.0}];
@@ -1028,14 +1095,10 @@ Deno.serve(async (req) => {
     const genrePhases = getGenrePhaseStructure(projectMode, storyArch);
     const cinemaPreset = getGenreCinematographyPreset(projectMode, storyArch);
 
-    // FIX 11: Rewritten phase scene-count allocation — deterministic, no floating remainder bug
-    // Old code had a reducer inside the map which closed over the wrong index, leaving
-    // the last phase with a negative or zero scene count when weights didn't sum cleanly.
     const phases = (() => {
       let allocated = 0;
       return genrePhases.map((phase, index) => {
         if (index === genrePhases.length - 1) {
-          // Last phase gets whatever remains — never zero or negative
           const remaining = Math.max(1, totalTargetScenes - allocated);
           return { ...phase, scenes: remaining };
         }
@@ -1045,7 +1108,6 @@ Deno.serve(async (req) => {
       });
     })();
 
-    // FIX 12: Validate phases produced at least one scene total
     const totalAllocatedScenes = phases.reduce((sum, p) => sum + p.scenes, 0);
     if (totalAllocatedScenes === 0) {
       return Response.json({ error: 'Phase allocation produced zero scenes. Check video_duration_minutes on the project.' }, { status: 400 });
@@ -1053,7 +1115,6 @@ Deno.serve(async (req) => {
 
     const scriptChunks = splitScriptByPhase(finalScript, phases);
 
-    // FIX 13: Guard against empty chunks (e.g. very short script)
     if (scriptChunks.length === 0) {
       return Response.json({ error: 'Script could not be split into scene chunks. Script may be too short.' }, { status: 400 });
     }
@@ -1064,7 +1125,7 @@ Deno.serve(async (req) => {
     const numBatches = scriptChunks.length;
     const nicheProfile = getNicheDirectorProfile(niche);
 
-    console.log(`🎯 ${durationMinutes}min → ${totalTargetScenes} scenes (avg ${avgSceneDuration.toFixed(1)}s) | ${numBatches} phases | Style: ${visualStyle || 'default'}`);
+    console.log(`🎯 ${durationMinutes}min → ${totalTargetScenes} scenes (avg ${avgSceneDuration.toFixed(1)}s) | ${numBatches} phases | Style: ${visualStyle || 'default'} | AI: Gemini→Claude`);
 
     let blueprint;
     let freshProject = project;
@@ -1074,7 +1135,6 @@ Deno.serve(async (req) => {
     let phaseStart = 0;
 
     if (startBatch === 0) {
-      // Delete old scenes
       const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
       if (oldScenes.length > 0) {
         for (let i = 0; i < oldScenes.length; i += 10) {
@@ -1085,7 +1145,6 @@ Deno.serve(async (req) => {
         console.log(`🗑️ Deleted ${oldScenes.length} old scenes`);
       }
 
-      // Story Analysis
       const analysisPrompt = `You are a world-class film director. Study this script and respond with JSON.
 ${styleDirective}
 
@@ -1118,13 +1177,12 @@ Respond with this JSON (raw JSON only, no markdown fences):
 
 NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palette}`;
 
-      console.log(`🎬 Story analysis...`);
-      const analysis = await callClaude(analysisPrompt, 0.6);
+      console.log(`🎬 Story analysis (Gemini primary)...`);
+      const analysis = await callAI(analysisPrompt, 0.6);
       storyAnalysis = analysis.story_analysis || analysis;
 
-      // FIX 14: Validate story analysis returned something usable
       if (!storyAnalysis || typeof storyAnalysis !== 'object') {
-        return Response.json({ error: 'Story analysis returned invalid data from Claude. Try again.' }, { status: 500 });
+        return Response.json({ error: 'Story analysis returned invalid data. Try again.' }, { status: 500 });
       }
 
       beatDurations = calculateBeatDurations(phases, durationMinutes, isSleep);
@@ -1202,7 +1260,6 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
       console.log(`⏩ Resuming from phase ${phaseStart}`);
     }
 
-    // Character block for prompts
     let characters = [];
     if (freshProject.character_descriptions) {
       try { characters = JSON.parse(freshProject.character_descriptions); } catch (_) {}
@@ -1237,7 +1294,6 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
 
       const currentChunk = scriptChunks[batchIdx];
 
-      // FIX 15: Skip chunks that somehow have no text or no scenes (defensive)
       if (!currentChunk.text || currentChunk.text.trim().length === 0 || currentChunk.scenes <= 0) {
         console.warn(`⚠️ Skipping empty chunk for phase ${currentChunk.phase}`);
         continue;
@@ -1293,7 +1349,6 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
         const wordStart = (sub.offset - sceneOffset) * wordsPerScene;
         const wordEnd = Math.min(wordStart + sub.count * wordsPerScene, chunkWords.length);
 
-        // FIX 16: Guard against empty text slice (can happen when wordStart >= chunkWords.length)
         if (wordStart >= chunkWords.length) {
           console.warn(`⚠️ Sub-batch ${si+1} has no words — skipping`);
           continue;
@@ -1329,7 +1384,7 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
 
         let result;
         try {
-          result = await callClaude(prompt, 0.7);
+          result = await callAI(prompt, 0.7);
         } catch (err) {
           console.error(`❌ Scenes ${sub.offset+1}-${sub.offset+sub.count} FAILED: ${err.message}`);
           if (sub.count > 10) {
@@ -1350,7 +1405,7 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
                 sceneStartGlobal: sub.offset + 1,
                 totalScenes: totalTargetScenes
               });
-              result = await callClaude(halfPrompt, 0.7);
+              result = await callAI(halfPrompt, 0.7);
             } catch (retryErr) {
               console.error(`❌ Retry also failed: ${retryErr.message} — skipping`);
               continue;
