@@ -56,7 +56,7 @@ async function callGemini(prompt, systemText, temperature = 0.7) {
   if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -989,7 +989,7 @@ Deno.serve(async (req) => {
           if (system) geminiBody.systemInstruction = { parts: [{ text: system }] };
 
           const gRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
             { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(geminiBody) }
           );
           const gData = await gRes.json();
