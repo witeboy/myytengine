@@ -1,6 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
-// v3 — Gemini Primary, Claude Backup
+// v4 — OpenAI Primary, Gemini + Claude Backup
 // ══════════════════════════════════════════════════════════════════
 // CHARACTER DNA EXTRACTOR
 // ══════════════════════════════════════════════════════════════════
@@ -9,7 +9,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // 
 // Pipeline: Script Complete → [THIS] → Scene Breakdown → Prompts → Image Gen
 // 
-// AI Strategy: Gemini 2.5 Pro (primary) → Claude Sonnet (fallback)
+// AI Strategy: OpenAI GPT-4o (primary) → Gemini 2.5 Pro (fallback 1) → Claude Sonnet (fallback 2)
 // 
 // Output saved to Project.character_descriptions as JSON:
 // [
@@ -29,7 +29,55 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 const SYSTEM_INSTRUCTION = "You are a casting director and data extraction system. You must return ONLY raw, valid JSON. Do not include markdown formatting like ```json and do not include any conversational text.";
 
-// ═══ GEMINI 2.5 PRO — PRIMARY ═══
+// ═══ OPENAI GPT-4o — PRIMARY ═══
+async function callOpenAI(prompt, temperature = 0.4) {
+  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  
+  if (!apiKey) {
+    throw new Error("Missing OPENAI_API_KEY environment variable");
+  }
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { 
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: "gpt-4o",
+      temperature: temperature,
+      max_tokens: 4096,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: SYSTEM_INSTRUCTION },
+        { role: "user", content: prompt }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    const msg = err?.error?.message || `HTTP ${response.status}`;
+    throw new Error(`OpenAI error: ${msg}`);
+  }
+
+  const data = await response.json();
+  const rawText = data?.choices?.[0]?.message?.content;
+  
+  if (!rawText) {
+    throw new Error("No content returned from OpenAI");
+  }
+
+  try { 
+    return JSON.parse(rawText); 
+  } catch (_) {
+    const match = rawText.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]);
+    throw new Error("Failed to parse OpenAI JSON response");
+  }
+}
+
+// ═══ GEMINI 2.5 PRO — FALLBACK 1 ═══
 async function callGemini(prompt, temperature = 0.4) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   
@@ -70,7 +118,6 @@ async function callGemini(prompt, temperature = 0.4) {
 
   const data = await response.json();
 
-  // Gemini response structure: candidates[0].content.parts[0].text
   const candidate = data?.candidates?.[0];
   if (!candidate?.content?.parts?.length) {
     throw new Error("No content returned from Gemini");
@@ -81,14 +128,13 @@ async function callGemini(prompt, temperature = 0.4) {
   try { 
     return JSON.parse(rawText); 
   } catch (_) {
-    // Fallback: extract JSON object from text
     const match = rawText.match(/\{[\s\S]*\}/);
     if (match) return JSON.parse(match[0]);
     throw new Error("Failed to parse Gemini JSON response");
   }
 }
 
-// ═══ CLAUDE — BACKUP ═══
+// ═══ CLAUDE — FALLBACK 2 ═══
 async function callClaude(prompt, temperature = 0.4) {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   
@@ -133,16 +179,30 @@ async function callClaude(prompt, temperature = 0.4) {
   }
 }
 
-// ═══ UNIFIED CALLER: Gemini first → Claude fallback ═══
+// ═══ UNIFIED CALLER: OpenAI first → Gemini fallback → Claude fallback ═══
 async function callAI(prompt, temperature = 0.4) {
-  // Try Gemini first
+  const errors = [];
+
+  // Try OpenAI first
   try {
-    console.log("🤖 Attempting Gemini 2.5 Pro...");
+    console.log("🤖 Attempting OpenAI GPT-4o...");
+    const result = await callOpenAI(prompt, temperature);
+    console.log("✅ OpenAI GPT-4o succeeded");
+    return { result, model: "gpt-4o" };
+  } catch (openaiError) {
+    console.warn(`⚠️ OpenAI failed: ${openaiError.message}`);
+    errors.push(`OpenAI: ${openaiError.message}`);
+  }
+
+  // Fallback to Gemini
+  try {
+    console.log("🔄 Falling back to Gemini 2.5 Pro...");
     const result = await callGemini(prompt, temperature);
-    console.log("✅ Gemini 2.5 Pro succeeded");
+    console.log("✅ Gemini 2.5 Pro fallback succeeded");
     return { result, model: "gemini-2.5-pro" };
   } catch (geminiError) {
     console.warn(`⚠️ Gemini failed: ${geminiError.message}`);
+    errors.push(`Gemini: ${geminiError.message}`);
   }
 
   // Fallback to Claude
@@ -153,7 +213,8 @@ async function callAI(prompt, temperature = 0.4) {
     return { result, model: "claude-sonnet-4-5" };
   } catch (claudeError) {
     console.error(`❌ Claude also failed: ${claudeError.message}`);
-    throw new Error(`Both AI providers failed. Gemini: ${claudeError.message}`);
+    errors.push(`Claude: ${claudeError.message}`);
+    throw new Error(`All 3 AI providers failed. ${errors.join(' | ')}`);
   }
 }
 
