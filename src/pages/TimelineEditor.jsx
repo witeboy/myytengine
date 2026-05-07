@@ -684,7 +684,6 @@ export default function TimelineEditor() {
 
   const [activePanel,    setActivePanel]    = useState('media');
   const [isPlaying,      setIsPlaying]      = useState(false);
-  const [currentTime,    setCurrentTime]    = useState(0);
   const [pps,            setPps]            = useState(15);
   const [isMuted,        setIsMuted]        = useState(false);
   const [musicVol,       setMusicVol]       = useState(0.3);
@@ -716,6 +715,25 @@ export default function TimelineEditor() {
   const overlayHistory  = useHistory([]);
   const overlayClips    = overlayHistory.state;
   const setOverlayClips = overlayHistory.setState;
+
+  // Refs that mirror clip arrays — engine reads these without triggering renders
+  const videoClipsRef = useRef(videoClips);
+  const captionClipsRef = useRef(captionClips);
+  const overlayClipsRef = useRef(overlayClips);
+  const musicClipsRef = useRef([]);
+  useEffect(() => { videoClipsRef.current = videoClips; }, [videoClips]);
+  useEffect(() => { captionClipsRef.current = captionClips; }, [captionClips]);
+  useEffect(() => { overlayClipsRef.current = overlayClips; }, [overlayClips]);
+
+  // Engine-driven state: only updated when visible content changes
+  const [displayTime, setDisplayTime] = useState(0);
+  const [activeClipState, setActiveClipState] = useState({ current: null, prev: null });
+  const [activeCaptions, setActiveCaptions] = useState([]);
+  const [activeOverlays, setActiveOverlays] = useState([]);
+
+  // Ref to CanvasPreview's video element
+  const previewVideoRef = useRef(null);
+
   const [isSyncing,         setIsSyncing]         = useState(false);
   
     // Beat detection state
@@ -857,6 +875,9 @@ export default function TimelineEditor() {
   const setMusicClips = musicHistory.setState;
   const [selectedMusicId, setSelectedMusicId] = useState(null);
 
+  // Keep musicClipsRef in sync
+  useEffect(() => { musicClipsRef.current = musicClips; }, [musicClips]);
+
   // Auto-initialize music clip when a music track is selected
   useEffect(() => {
     if (!musicUrl || !selectedMusic || musicClips.length > 0) return;
@@ -927,10 +948,18 @@ export default function TimelineEditor() {
   // ── Playback Engine ─────────────────────────────────────────────
   const playbackEngine = usePlaybackEngine({
     totalDuration,
-    onTimeUpdate: useCallback((t) => setCurrentTime(t), []),
-    onPlaybackEnd: useCallback(() => setIsPlaying(false), []),
     audioRef,
     musicRef,
+    videoClipsRef,
+    captionClipsRef,
+    overlayClipsRef,
+    musicClipsRef,
+    previewVideoRef,
+    onTimeDisplay: useCallback((t) => setDisplayTime(t), []),
+    onClipChange: useCallback((clip, prev) => setActiveClipState({ current: clip, prev }), []),
+    onCaptionsChange: useCallback((caps) => setActiveCaptions(caps), []),
+    onOverlaysChange: useCallback((ovs) => setActiveOverlays(ovs), []),
+    onPlaybackEnd: useCallback(() => setIsPlaying(false), []),
   });
 
   useEffect(() => {
@@ -939,7 +968,7 @@ export default function TimelineEditor() {
   }, [isPlaying]);
 
   useEffect(() => {
-    if (currentTime > totalDuration) { playbackEngine.seek(0); setCurrentTime(0); }
+    if (playbackEngine.getTime() > totalDuration) { playbackEngine.seek(0); }
   }, [totalDuration]);
 
   // ── Audio properties (mute + volume only — engine controls playback) ──
@@ -950,33 +979,15 @@ export default function TimelineEditor() {
     }
   }, [isMuted, voiceoverVol]);
 
-  // ── Music sync — engine handles play/pause, we handle position + volume ──
+  // ── Music mute only — engine handles play/pause/seek/volume per-clip ──
   useEffect(() => {
-    if (!musicUrl || !musicRef.current) return;
-    const activeClip = musicClips.find(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration);
-    if (activeClip && isPlaying) {
-      const elapsed = currentTime - activeClip.startTime;
-      const srcTime = (activeClip.sourceOffset || 0) + elapsed;
-      if (Math.abs(musicRef.current.currentTime - srcTime) > 0.03) {
-        musicRef.current.currentTime = srcTime;
-      }
+    if (musicRef.current) {
       musicRef.current.muted = isMuted;
-      musicRef.current.volume = activeClip.volume ?? musicVol;
-      musicRef.current.play().catch(() => {});
-    } else {
-      musicRef.current.pause();
     }
-  }, [isPlaying, currentTime, musicUrl, isMuted, musicVol, musicClips]);
+  }, [isMuted]);
 
-  const currentClip = useMemo(() =>
-    videoClips.find(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration)
-  , [videoClips, currentTime]);
-
-  const prevClip = useMemo(() => {
-    if (!currentClip) return null;
-    const idx = videoClips.findIndex(c => c.id === currentClip.id);
-    return idx > 0 ? videoClips[idx - 1] : null;
-  }, [videoClips, currentClip]);
+  const currentClip = activeClipState.current;
+  const prevClip = activeClipState.prev;
 
   const currentScene = useMemo(() =>
     currentClip ? scenes.find(s => s.id === currentClip.sceneId) : null
@@ -1594,15 +1605,16 @@ export default function TimelineEditor() {
 
   // ── Music: split at playhead ─────────────────────────────────────
   const handleSplitMusicAtPlayhead = () => {
-    const clip = musicClips.find(c => currentTime > c.startTime && currentTime < c.startTime + c.duration);
+    const t = playbackEngine.getTime();
+    const clip = musicClips.find(c => t > c.startTime && t < c.startTime + c.duration);
     if (!clip) return;
-    const splitPoint = currentTime - clip.startTime;
+    const splitPoint = t - clip.startTime;
     const sourceOffsetBase = clip.sourceOffset || 0;
     const left = { ...clip, duration: splitPoint };
     const right = {
       ...clip,
       id: `music-split-${Date.now()}`,
-      startTime: currentTime,
+      startTime: t,
       duration: clip.duration - splitPoint,
       sourceOffset: sourceOffsetBase + splitPoint,
     };
@@ -1623,14 +1635,7 @@ export default function TimelineEditor() {
   const handleDownloadAssets = () => alert('Download Assets coming soon!');
   const handleSeek           = t  => {
     const ct = Math.max(0, Math.min(totalDuration, t));
-    setCurrentTime(ct);
     playbackEngine.seek(ct);
-    if (musicRef.current) {
-      const activeClip = musicClips.find(c => ct >= c.startTime && ct < c.startTime + c.duration);
-      if (activeClip) {
-        musicRef.current.currentTime = (activeClip.sourceOffset || 0) + (ct - activeClip.startTime);
-      }
-    }
   };
   const handleNext           = () => navigate(createPageUrl('PostProduction') + `?project_id=${projectId}`);
   const [isSaving, setIsSaving] = useState(false);
@@ -1770,7 +1775,7 @@ export default function TimelineEditor() {
               overlayClips={overlayClips}
               onAddOverlay={(clip) => { setOverlayClips([...overlayClips, clip]); setSelectedOverlayId(clip.id); setSelectedVideoId(null); setSelectedCaptionId(null); }}
               onRemoveOverlay={(id) => { setOverlayClips(overlayClips.filter(c => c.id !== id)); if (selectedOverlayId === id) setSelectedOverlayId(null); }}
-              currentTime={currentTime} totalDuration={totalDuration}
+              currentTime={displayTime} totalDuration={totalDuration}
               projectId={projectId}
             />
           )}
@@ -1795,7 +1800,8 @@ export default function TimelineEditor() {
         <div className="flex-1 min-w-0 flex flex-col border-r border-gray-800">
           <div className="flex-1 min-h-0">
             <CanvasPreview
-              currentScene={currentScene} currentTime={currentTime} currentClip={currentClip} prevClip={prevClip}
+              currentScene={currentScene} currentTime={displayTime} currentClip={currentClip} prevClip={prevClip}
+              videoRef={previewVideoRef}
               captions={captionClips} selectedCaption={selectedCaption}
               onSelectCaption={c => { setSelectedCaptionId(c?.id || null); setSelectedVideoId(null); setSelectedOverlayId(null); }}
               onUpdateCaption={c => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))}
@@ -1806,7 +1812,7 @@ export default function TimelineEditor() {
               onUpdateOverlay={c => setOverlayClips(overlayClips.map(x => x.id === c.id ? c : x))}
             />
           </div>
-          <TransportControls isPlaying={isPlaying} onPlayPause={() => setIsPlaying(!isPlaying)} currentTime={currentTime} totalDuration={totalDuration} onSeek={handleSeek} />
+          <TransportControls isPlaying={isPlaying} onPlayPause={() => setIsPlaying(!isPlaying)} currentTime={displayTime} totalDuration={totalDuration} onSeek={handleSeek} />
         </div>
 
         {/* Right panel */}
@@ -1838,7 +1844,7 @@ export default function TimelineEditor() {
               onDelete={() => { setMusicClips(musicClips.filter(c => c.id !== selectedMusicId)); setSelectedMusicId(null); }}
               onDuplicate={handleDuplicateMusic}
               onSplit={handleSplitMusicAtPlayhead}
-              currentTime={currentTime}
+              currentTime={displayTime}
             />
           ) : selectedVideo ? (
             <ClipPropertiesPanel clip={selectedVideo} audioBeatDuration={audioBeatDurations[selectedVideoIdx]} onUpdate={c => setVideoClips(videoClips.map(x => x.id === c.id ? c : x))} onApplyToAll={handleApplyToAll} />
@@ -2048,23 +2054,23 @@ export default function TimelineEditor() {
             {scenes.length === 0
               ? <div className="flex items-center justify-center h-20 text-gray-500 text-xs">No scenes</div>
               : <>
-                  <SnapTimelineTrack type="overlay" clips={overlayClips} allClips={[...videoClips, ...overlayClips, ...captionClips]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={selectedOverlayId}
+                  <SnapTimelineTrack type="overlay" clips={overlayClips} allClips={[...videoClips, ...overlayClips, ...captionClips]} pps={pps} totalDuration={totalDuration} currentTime={displayTime} selectedId={selectedOverlayId}
                     onSelect={id => { setSelectedOverlayId(id); setSelectedVideoId(null); setSelectedCaptionId(null); }}
                     onUpdate={c => setOverlayClips(overlayClips.map(x => x.id === c.id ? c : x))}
                     editable snappingEnabled={snappingEnabled} onSnapLine={setSnapLinePx} />
-                  <SnapTimelineTrack type="video" clips={videoClips} allClips={[...videoClips, ...overlayClips, ...captionClips]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={selectedVideoId}
+                  <SnapTimelineTrack type="video" clips={videoClips} allClips={[...videoClips, ...overlayClips, ...captionClips]} pps={pps} totalDuration={totalDuration} currentTime={displayTime} selectedId={selectedVideoId}
                     onSelect={id => { setSelectedVideoId(id); setSelectedCaptionId(null); setSelectedOverlayId(null); }}
                     onUpdate={c => { let updated = videoClips.map(x => x.id === c.id ? c : x); if (magneticMode) updated = closeGaps(updated); setVideoClips(updated); }}
                     editable snappingEnabled={snappingEnabled} onSnapLine={setSnapLinePx} />
-                  <SnapTimelineTrack type="audio" clips={audioClips} allClips={[]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={null}
+                  <SnapTimelineTrack type="audio" clips={audioClips} allClips={[]} pps={pps} totalDuration={totalDuration} currentTime={displayTime} selectedId={null}
                     onSelect={() => {}} onUpdate={() => {}} editable={false} snappingEnabled={false} />
                   {musicClips.length > 0 && (
-                    <SnapTimelineTrack type="music" clips={musicClips} allClips={[...musicClips, ...videoClips]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={selectedMusicId}
+                    <SnapTimelineTrack type="music" clips={musicClips} allClips={[...musicClips, ...videoClips]} pps={pps} totalDuration={totalDuration} currentTime={displayTime} selectedId={selectedMusicId}
                       onSelect={id => { setSelectedMusicId(id); setSelectedVideoId(null); setSelectedCaptionId(null); setSelectedOverlayId(null); }}
                       onUpdate={c => setMusicClips(musicClips.map(x => x.id === c.id ? c : x))}
                       editable snappingEnabled={snappingEnabled} onSnapLine={setSnapLinePx} />
                   )}
-                  <SnapTimelineTrack type="caption" clips={captionClips} allClips={[...videoClips, ...overlayClips, ...captionClips]} pps={pps} totalDuration={totalDuration} currentTime={currentTime} selectedId={selectedCaptionId}
+                  <SnapTimelineTrack type="caption" clips={captionClips} allClips={[...videoClips, ...overlayClips, ...captionClips]} pps={pps} totalDuration={totalDuration} currentTime={displayTime} selectedId={selectedCaptionId}
                     onSelect={id => { setSelectedCaptionId(id); setSelectedVideoId(null); setSelectedOverlayId(null); }}
                     onUpdate={c => setCaptionClips(captionClips.map(x => x.id === c.id ? c : x))}
                     editable snappingEnabled={snappingEnabled} onSnapLine={setSnapLinePx} />
