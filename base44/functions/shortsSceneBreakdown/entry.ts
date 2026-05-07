@@ -1,6 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
-// v6 — Gemini 1.5 Pro primary, Claude Sonnet 3.5 fallback
-// 6 parallel AI calls of 7 scenes each to avoid timeout
+// v5 — 4 parallel Claude calls of 10 scenes each to avoid timeout
 
 function repairJSON(str) {
   return str
@@ -9,8 +8,32 @@ function repairJSON(str) {
     .replace(/(["\w\d])\s*\n\s*"/g, '$1, "');
 }
 
-function extractJSON(rawText) {
-  if (!rawText || typeof rawText !== 'string') return null;
+async function callClaude(prompt, temperature = 0.5) {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01"
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-5",
+      max_tokens: 8000,
+      temperature,
+      system: "You are a YouTube Shorts video editor. Return ONLY raw valid JSON. No markdown, no backticks, no conversational text.",
+      messages: [{ role: "user", content: prompt }]
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(`Claude error: ${err.error?.message || response.status}`);
+  }
+
+  const data = await response.json();
+  const rawText = data.content?.[0]?.text;
+  if (!rawText) throw new Error("No response from Claude");
 
   // Layer 1: direct parse
   try { return JSON.parse(rawText); } catch (_) {}
@@ -57,108 +80,11 @@ function extractJSON(rawText) {
     } catch (_) {}
   }
 
-  return null;
-}
-
-// ── Gemini 1.5 Pro ──────────────────────────────────────────────────────────
-async function callGemini(prompt, systemText, temperature = 0.5) {
-  const apiKey = Deno.env.get("GEMINI_API_KEY");
-  if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
-
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemText }] },
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature,
-          maxOutputTokens: 8192,
-          responseMimeType: "application/json",
-        },
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    let errMsg = `HTTP ${response.status}`;
-    try { const e = await response.json(); errMsg = e.error?.message || errMsg; } catch (_) {}
-    throw new Error(`Gemini API error: ${errMsg}`);
-  }
-
-  const data = await response.json();
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!rawText) {
-    const finishReason = data.candidates?.[0]?.finishReason || 'unknown';
-    throw new Error(`Gemini returned no text. finishReason: ${finishReason}`);
-  }
-
-  const parsed = extractJSON(rawText);
-  if (parsed) return parsed;
-
-  throw new Error(`Failed to parse Gemini JSON. Length: ${rawText.length} chars.`);
-}
-
-// ── Claude Sonnet 3.5 (fallback) ────────────────────────────────────────────
-async function callClaudeFallback(prompt, systemText, temperature = 0.5) {
-  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY");
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01"
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-3-5",
-      max_tokens: 8000,
-      temperature,
-      system: systemText,
-      messages: [{ role: "user", content: prompt }]
-    })
-  });
-
-  if (!response.ok) {
-    let errMsg = `HTTP ${response.status}`;
-    try { const e = await response.json(); errMsg = e.error?.message || errMsg; } catch (_) {}
-    throw new Error(`Claude API error: ${errMsg}`);
-  }
-
-  const data = await response.json();
-  const rawText = data.content?.[0]?.text;
-  if (!rawText) throw new Error("No response from Claude");
-
-  const parsed = extractJSON(rawText);
-  if (parsed) return parsed;
-
   throw new Error("Failed to parse Claude JSON after all repair attempts");
 }
 
-// ── Unified AI caller: Gemini first → Claude fallback ───────────────────────
-async function callAI(prompt, temperature = 0.5) {
-  const systemText = "You are a YouTube Shorts video editor. Return ONLY raw valid JSON. No markdown, no backticks, no conversational text.";
-
-  // Try Gemini first
-  try {
-    const result = await callGemini(prompt, systemText, temperature);
-    console.log(`✅ Gemini succeeded`);
-    return result;
-  } catch (geminiErr) {
-    console.warn(`⚠️ Gemini failed: ${geminiErr.message} — falling back to Claude`);
-  }
-
-  // Fallback to Claude Sonnet 3.5
-  const result = await callClaudeFallback(prompt, systemText, temperature);
-  console.log(`✅ Claude fallback succeeded`);
-  return result;
-}
-
 const makeBatchPrompt = (startScene, endScene, sections, fullScript, shortsNiche) =>
-`You are a YouTube Shorts video editor. Generate exactly ${endScene - startScene + 1} scenes numbered ${startScene} to ${endScene}.
+`You are a YouTube Shorts video editor. Every scene is exactly 2.0 seconds long — this is a hard rule for shorts pacing. Generate exactly ${endScene - startScene + 1} scenes numbered ${startScene} to ${endScene}.
 
 SCRIPT:
 ${fullScript}
@@ -228,49 +154,66 @@ Deno.serve(async (req) => {
       shortsNiche = channels[0]?.shorts_niche || 'finance';
     }
 
-    console.log(`📱 Generating 40 scenes in 6 parallel batches of 7 (Gemini primary, Claude fallback)...`);
+    // ── Dynamic scene count: 2 seconds per scene ──
+    const SCENE_DURATION = 2.0;
+    const wordCount = fullScript.split(/\s+/).filter(w => w.length > 0).length;
+    const estimatedDurationSec = Math.max(15, Math.ceil(wordCount / 3.5)); // ~3.5 words/sec for shorts pacing
+    const totalScenes = Math.max(8, Math.round(estimatedDurationSec / SCENE_DURATION));
+    const BATCH_CAP = 7; // max scenes per AI call for quality
 
-    const [result1, result2, result3, result4, result5, result6] = await Promise.all([
-      callAI(makeBatchPrompt(1, 7,
-        `- hook (scenes 1-4): ECU/LOW ANGLE, camera already moving, kinetic text, most impactful frames. emotional_intensity=0.9
-- tension (scenes 5-7): MCU→CU progression, urgency visuals, problem escalating. emotional_intensity=0.8`,
-        fullScript, shortsNiche), 0.5),
+    // ── Phase allocation: percentage-based ──
+    const phaseAlloc = [
+      { name: 'hook',     weight: 0.10, intensity: 0.9, sections: `ECU/LOW ANGLE, camera already moving, kinetic text, most impactful frames. emotional_intensity=0.9` },
+      { name: 'tension',  weight: 0.20, intensity: 0.8, sections: `MCU→CU progression, tightest tension shots, urgency visuals, problem escalating, cut on motion. emotional_intensity=0.8` },
+      { name: 'pivot',    weight: 0.05, intensity: 0.7, sections: `HARD CUT, dutch angle or extreme low, color/energy shift. emotional_intensity=0.7` },
+      { name: 'value_1',  weight: 0.15, intensity: 0.6, sections: `MS to MCU, first key point with supporting visuals. emotional_intensity=0.6` },
+      { name: 'value_2',  weight: 0.15, intensity: 0.6, sections: `MS to MCU, second key point with supporting visuals. emotional_intensity=0.6` },
+      { name: 'value_3',  weight: 0.10, intensity: 0.6, sections: `third key point, supporting visuals. emotional_intensity=0.6` },
+      { name: 'cta',      weight: 0.15, intensity: 0.85, sections: `hook energy returns, ECU/LOW ANGLE, bold Save This text, callback to hook visual, urgency. emotional_intensity=0.85` },
+      { name: 'deadzone', weight: 0.10, intensity: 0.1, sections: `WIDE or static, dark card, no voice, subtle branding. emotional_intensity=0.1` },
+    ];
 
-      callAI(makeBatchPrompt(8, 14,
-        `- tension (scenes 8-12): MCU→CU progression, tightest tension shots, cut on motion. emotional_intensity=0.8
-- pivot (scenes 13-14): HARD CUT, dutch angle or extreme low, color/energy shift. emotional_intensity=0.7`,
-        fullScript, shortsNiche), 0.5),
+    let allocated = 0;
+    const phases = phaseAlloc.map((p, i) => {
+      const count = i === phaseAlloc.length - 1
+        ? Math.max(1, totalScenes - allocated)
+        : Math.max(1, Math.round(totalScenes * p.weight));
+      allocated += count;
+      return { ...p, count };
+    });
 
-      callAI(makeBatchPrompt(15, 21,
-        `- value_1 (scenes 15-21): MS to MCU, first key point with supporting visuals. emotional_intensity=0.6`,
-        fullScript, shortsNiche), 0.5),
+    // ── Build batches from phases ──
+    const batches = [];
+    let sceneCounter = 1;
+    for (const phase of phases) {
+      let remaining = phase.count;
+      while (remaining > 0) {
+        const batchSize = Math.min(remaining, BATCH_CAP);
+        const start = sceneCounter;
+        const end = sceneCounter + batchSize - 1;
+        batches.push({
+          start, end,
+          sections: `- ${phase.name} (scenes ${start}-${end}): ${phase.sections}`,
+        });
+        sceneCounter += batchSize;
+        remaining -= batchSize;
+      }
+    }
 
-      callAI(makeBatchPrompt(22, 28,
-        `- value_2 (scenes 22-28): MS to MCU, second key point with supporting visuals. emotional_intensity=0.6`,
-        fullScript, shortsNiche), 0.5),
+    console.log(`📱 Generating ${totalScenes} scenes (${estimatedDurationSec}s script ÷ ${SCENE_DURATION}s/scene) in ${batches.length} parallel batches...`);
 
-      callAI(makeBatchPrompt(29, 35,
-        `- value_3 (scenes 29-32): third key point, supporting visuals. emotional_intensity=0.6
-- cta (scenes 33-35): hook energy returns, ECU/LOW ANGLE, bold Save This text. emotional_intensity=0.85`,
-        fullScript, shortsNiche), 0.5),
+    // ── Parallel execution ──
+    const batchResults = await Promise.all(
+      batches.map(b => callClaude(makeBatchPrompt(b.start, b.end, b.sections, fullScript, shortsNiche), 0.5))
+    );
 
-      callAI(makeBatchPrompt(36, 40,
-        `- cta (scenes 36-38): callback to hook visual, urgency. emotional_intensity=0.85
-- deadzone (scenes 39-40): WIDE or static, dark card, no voice, subtle branding. emotional_intensity=0.1`,
-        fullScript, shortsNiche), 0.5),
-    ]);
-
-    let scenesArr = [
-      ...(result1?.scenes || []),
-      ...(result2?.scenes || []),
-      ...(result3?.scenes || []),
-      ...(result4?.scenes || []),
-      ...(result5?.scenes || []),
-      ...(result6?.scenes || []),
-    ].sort((a, b) => a.scene_number - b.scene_number);
+    let scenesArr = batchResults
+      .flatMap(r => r?.scenes || [])
+      .sort((a, b) => a.scene_number - b.scene_number);
 
     if (!scenesArr.length) throw new Error('AI failed to generate scene breakdown');
-    if (scenesArr.length < 28) throw new Error(`Too few scenes: ${scenesArr.length}. Expected ~40.`);
+    const minExpected = Math.max(8, Math.floor(totalScenes * 0.7));
+    if (scenesArr.length < minExpected) throw new Error(`Too few scenes: ${scenesArr.length}. Expected ~${totalScenes} (min ${minExpected}).`);
 
     // Delete old scenes
     const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
@@ -279,7 +222,7 @@ Deno.serve(async (req) => {
     }
 
     // Beat timings
-    const beatDurations = scenesArr.map(s => s.duration_seconds || 2.25);
+    const beatDurations = scenesArr.map(s => 2.0);
     const beatStartTimes = [];
     let offset = 0;
     beatDurations.forEach(d => { beatStartTimes.push(offset); offset += d; });
@@ -336,7 +279,7 @@ Deno.serve(async (req) => {
         narration_text: aiScene.narration_text || '',
         image_prompt: `DIRECTOR_NOTES:${JSON.stringify(directorNotes)}`,
         animation_prompt: aiScene.camera_direction || 'push_in',
-        duration_seconds: aiScene.duration_seconds || 2.25,
+        duration_seconds: 2.0,
         camera_movement: cameraMap[aiScene.camera_direction] || 'slow_zoom_in',
         animation_speed: 'normal',
         status: 'breakdown_ready',
@@ -354,7 +297,7 @@ Deno.serve(async (req) => {
     });
 
     const elapsed = ((Date.now() - callStart) / 1000).toFixed(1);
-    console.log(`📱 Created ${scenesArr.length} scenes in ${elapsed}s`);
+    console.log(`📱 Created ${scenesArr.length}/${totalScenes} target scenes in ${elapsed}s (${SCENE_DURATION}s each)`);
 
     return Response.json({
       success: true,
