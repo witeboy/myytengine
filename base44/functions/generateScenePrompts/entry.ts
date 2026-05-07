@@ -6,7 +6,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // v2 — OpenAI GPT-4o primary, Claude Sonnet 3.5 fallback
 // ══════════════════════════════════════════════════════════════════
 
-const BASE_BATCH_SIZE = 12;
+const BASE_BATCH_SIZE = 10;
 
 const PARALLEL_PROMPT_BATCHES = 3;
 
@@ -1317,6 +1317,10 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
         if (!s.director) {
           return `Scene ${s.scene_number}: (No director notes — generate from narration)\n  Narration: "${s.narration_text}"\n  Duration: ${sceneDuration}s\n  Character Detail Level: ${identityTier.toUpperCase()} (match description depth to this)\n  Camera Feel: ${bodyDirective}\n  Arc Phase: ${arcPosition}\n  Arc Animation: ${arcAnim}${propsLine}${povDirective}`;
         }
+        const visualDesc = s.director.visual_description || '';
+        const textOverlay = s.director.text_overlay || '';
+        const audioNote = s.director.audio_note || '';
+        const camDirection = s.director.camera_direction || '';
         const sceneTotal = allScenes.length || 1;
         const scenePct = Math.round(((s.scene_number - 1) / Math.max(sceneTotal - 1, 1)) * 100);
         const posLabel = scenePct < 15 ? 'OPENING' : scenePct < 40 ? 'BUILDING' : scenePct < 70 ? 'CORE' : scenePct < 85 ? 'CLIMAX' : 'RESOLUTION';
@@ -1330,16 +1334,16 @@ animation_prompt: ${(s.animation_prompt || '').substring(0, 200)}
         return `Scene ${s.scene_number} [${posLabel} — ${scenePct}% through]:
   Narration: "${s.narration_text}"
   Duration: ${sceneDuration}s${emotionLine}
-  Visual Concept: ${s.director.visual_concept}${legendNameClean ? ` — SUBJECT IS ${legendNameClean.toUpperCase()} (use this exact name, never "you", "he", "the figure")` : ''}
+  Visual Concept: ${s.director.visual_concept}${legendNameClean ? ` — SUBJECT IS ${legendNameClean.toUpperCase()} (use this exact name, never "you", "he", "the figure")` : ''}${visualDesc ? `\n  Visual Description: ${visualDesc}` : ''}
   Shot Type: ${s.director.shot_type}
   Character Detail Level: ${identityTier.toUpperCase()} (${identityTier === 'minimal' ? 'character is distant — silhouette only, NO face details' : identityTier === 'moderate' ? 'character shares frame with world — weave identity into action' : 'face is the subject — full identity woven with emotion'})
   Camera Feel: ${bodyDirective}
   Camera Angle: ${s.director.camera_angle}
-  Camera Movement: ${s.director.camera_movement}
+  Camera Movement: ${s.director.camera_movement}${camDirection ? `\n  Camera Direction: ${camDirection}` : ''}
   Lighting: ${s.director.lighting || genreLightingMandate}
   Color Palette: ${s.director.color_palette || genreColorGrade}
   Mood: ${s.director.mood}
-  DOF: ${s.director.depth_of_field}
+  DOF: ${s.director.depth_of_field}${textOverlay ? `\n  Text Overlay: ${textOverlay}` : ''}${audioNote ? `\n  Audio Note: ${audioNote}` : ''}
   Niche Element: ${s.director.niche_visual_element || 'N/A'}
   Continuity: ${s.director.continuity_bridge || 'N/A'}
   Arc Phase: ${arcPosition}
@@ -1748,7 +1752,9 @@ Minimum 80 words. Respond with JSON: {"image_prompt": "..."}`;
           if (animationPrompt.length < 80) {
             const arcPosition = s.director?.phase || s.director?.arc_position || 'rising';
             const mood = s.director?.mood || 'contemplative';
-            const movement = s.director?.camera_movement || 'slow drift forward';
+            const camDir = s.director?.camera_direction || '';
+            const camDirToMovement = { zoom_in: 'slow push-in', zoom_out: 'slow pull-back', pan_left: 'slow lateral pan left', pan_right: 'slow lateral pan right', push_in: 'deliberate push forward', static: 'locked static hold' };
+            const movement = camDirToMovement[camDir] || s.director?.camera_movement || 'slow drift forward';
             const vc = s.director?.visual_concept || s.narration_text || '';
 
             if (useSleepStyle) {
