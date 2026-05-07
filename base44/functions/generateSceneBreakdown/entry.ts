@@ -56,7 +56,7 @@ async function callGemini(prompt, systemText, temperature = 0.7) {
   if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
