@@ -75,15 +75,32 @@ export default function CanvasPreview({
     return () => ro.disconnect();
   }, []);
 
-  // Sync video element to timeline
+  // Sync video element to timeline — tight threshold, scene-change aware
+  const prevClipIdRef = useRef(null);
   useEffect(() => {
     if (!videoRef.current || !currentClip?.videoUrl) return;
     const el = videoRef.current;
     const rate = currentClip.playbackRate ?? 1.0;
     if (Math.abs(el.playbackRate - rate) > 0.005) el.playbackRate = rate;
+
     const elapsed = Math.max(0, currentTime - (currentClip.startTime ?? 0));
-    const vidPos = Math.min(elapsed * rate, (el.duration && el.duration < Infinity ? el.duration : 99) - 0.05);
-    if (Math.abs(el.currentTime - vidPos) > 0.05) el.currentTime = vidPos;
+    const vidPos = Math.min(
+      elapsed * rate,
+      (el.duration && el.duration < Infinity ? el.duration : 99) - 0.05
+    );
+
+    // On scene change: force-seek immediately (no threshold)
+    const sceneChanged = currentClip.id !== prevClipIdRef.current;
+    if (sceneChanged) {
+      prevClipIdRef.current = currentClip.id;
+      el.currentTime = vidPos;
+      return;
+    }
+
+    // During playback: 30ms threshold (tighter — master clock is accurate now)
+    if (Math.abs(el.currentTime - vidPos) > 0.03) {
+      el.currentTime = vidPos;
+    }
   }, [currentTime, currentClip]);
 
   const { canvasW, canvasH } = useMemo(() => {
