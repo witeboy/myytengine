@@ -929,6 +929,8 @@ export default function TimelineEditor() {
     totalDuration,
     onTimeUpdate: useCallback((t) => setCurrentTime(t), []),
     onPlaybackEnd: useCallback(() => setIsPlaying(false), []),
+    audioRef,
+    musicRef,
   });
 
   useEffect(() => {
@@ -940,27 +942,24 @@ export default function TimelineEditor() {
     if (currentTime > totalDuration) { playbackEngine.seek(0); setCurrentTime(0); }
   }, [totalDuration]);
 
-  // ── Audio sync ──────────────────────────────────────────────────
+  // ── Audio properties (mute + volume only — engine controls playback) ──
   useEffect(() => {
-    if (voiceoverUrl && audioRef.current) {
-      // 0.08s threshold: tight enough for beat alignment, loose enough to avoid
-      // constant re-seeking that causes audible pops during smooth playback
-      if (Math.abs(audioRef.current.currentTime - currentTime) > 0.08) audioRef.current.currentTime = currentTime;
+    if (audioRef.current) {
       audioRef.current.muted = isMuted;
       audioRef.current.volume = voiceoverVol;
-      if (isPlaying) audioRef.current.play().catch(() => {});
-      else audioRef.current.pause();
     }
-  }, [isPlaying, currentTime, voiceoverUrl, isMuted, voiceoverVol]);
+  }, [isMuted, voiceoverVol]);
 
-  // ── Music sync — respect edited clip positions ──────────────────
+  // ── Music sync — engine handles play/pause, we handle position + volume ──
   useEffect(() => {
     if (!musicUrl || !musicRef.current) return;
     const activeClip = musicClips.find(c => currentTime >= c.startTime && currentTime < c.startTime + c.duration);
     if (activeClip && isPlaying) {
       const elapsed = currentTime - activeClip.startTime;
       const srcTime = (activeClip.sourceOffset || 0) + elapsed;
-      if (Math.abs(musicRef.current.currentTime - srcTime) > 0.05) musicRef.current.currentTime = srcTime;
+      if (Math.abs(musicRef.current.currentTime - srcTime) > 0.03) {
+        musicRef.current.currentTime = srcTime;
+      }
       musicRef.current.muted = isMuted;
       musicRef.current.volume = activeClip.volume ?? musicVol;
       musicRef.current.play().catch(() => {});
@@ -1626,8 +1625,12 @@ export default function TimelineEditor() {
     const ct = Math.max(0, Math.min(totalDuration, t));
     setCurrentTime(ct);
     playbackEngine.seek(ct);
-    if (audioRef.current) audioRef.current.currentTime = ct;
-    if (musicRef.current) musicRef.current.currentTime = ct;
+    if (musicRef.current) {
+      const activeClip = musicClips.find(c => ct >= c.startTime && ct < c.startTime + c.duration);
+      if (activeClip) {
+        musicRef.current.currentTime = (activeClip.sourceOffset || 0) + (ct - activeClip.startTime);
+      }
+    }
   };
   const handleNext           = () => navigate(createPageUrl('PostProduction') + `?project_id=${projectId}`);
   const [isSaving, setIsSaving] = useState(false);
