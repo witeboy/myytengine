@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-// v6 — Gemini 1.5 Pro primary, Claude Sonnet 3.5 fallback
+// v6 — Gemini 2.5 Pro primary, Claude Sonnet 3.5 fallback
 
 // ── JSON extraction (shared by both providers) ──────────────────────────────
 function extractJSON(rawText) {
@@ -56,7 +56,7 @@ async function callGemini(prompt, systemText, temperature = 0.7) {
   if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -989,7 +989,7 @@ Deno.serve(async (req) => {
           if (system) geminiBody.systemInstruction = { parts: [{ text: system }] };
 
           const gRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${geminiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiKey}`,
             { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(geminiBody) }
           );
           const gData = await gRes.json();
