@@ -989,7 +989,7 @@ Deno.serve(async (req) => {
           if (system) geminiBody.systemInstruction = { parts: [{ text: system }] };
 
           const gRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${geminiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro-latest:generateContent?key=${geminiKey}`,
             { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(geminiBody) }
           );
           const gData = await gRes.json();
