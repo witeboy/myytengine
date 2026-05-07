@@ -56,7 +56,7 @@ async function callGemini(prompt, systemText, temperature = 0.7) {
   if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -935,6 +935,9 @@ ${scriptText}
 10. CONTINUITY BRIDGE: The continuity_bridge must name a SPECIFIC PHYSICAL OBJECT or LIGHT QUALITY that will appear in the NEXT scene — not a mood or feeling.
 11. POPULATED WORLD: Most scenes include other people. The character lives in a world with reactions, crowds, witnesses.
 12. TONE SAFETY: No imagery readable as violence or self-harm in non-horror/thriller content.
+13. EMOTION-TO-VISUAL LAW: The lighting, color_palette, and depth_of_field MUST directly serve the viewer_emotion target. High intensity (0.8+) = shallow DOF, high contrast lighting, tight camera. Low intensity (0.3-) = deep DOF, soft even lighting, wide camera. Medium = motivated practical lighting, medium DOF. The color palette must SHIFT with emotion — warm for hope/relief, cold for dread/tension, desaturated for numbness/defeat, saturated for joy/revelation.
+14. AUDIO-VISUAL SYNC: The audio_note must match the visual energy. A whispered narration over a wide establishing shot = intimate. An urgent voice over a tight close-up = peak tension. Music direction should build ACROSS the phase, not repeat.
+15. CAMERA DIRECTION CONSISTENCY: camera_direction must be the single-word enum that best matches camera_movement. If camera_movement says "slow push-in" then camera_direction MUST be "push_in". If "pulling back to reveal" then "zoom_out". If "lateral tracking" then "pan_left" or "pan_right". If locked/static then "static".
 
 **RESPONSE FORMAT:**
 {
@@ -942,22 +945,48 @@ ${scriptText}
     {
       "scene_number": ${sceneStart},
       "narration_text": "EXACT words from script only — never paraphrase.",
-      "visual_concept": "2-4 sentences. Environment first, character action second, atmosphere third.",
-      "viewer_emotion": "The target emotion from the beat table above.",
+      "visual_concept": "A CINEMATOGRAPHER'S shot description — lead with WHERE THE CAMERA IS and what the lens discovers. Environment first, character action woven in, atmosphere third. Write it like a DP describing the shot to crew. NEVER start with 'Medium shot of'. 2-4 sentences.",
+      "visual_description": "1-2 sentences: what the viewer literally SEES — the core visual image stripped of camera language. Used downstream for image generation.",
+      "viewer_emotion": "The EXACT target emotion word from the beat table above.",
       "emotional_intensity": 0.7,
       "shot_type": "e.g. WS — Wide Shot",
       "camera_angle": "e.g. Low angle, 15 degrees",
       "camera_movement": "e.g. Slow push-in over 5 seconds",
-      "lighting": "e.g. Single hard side light, 80 percent shadow, cold blue",
-      "color_palette": "e.g. Deep navy #1A2744, amber accent #D4A574",
-      "mood": "2-3 words",
+      "camera_direction": "EXACTLY ONE OF: zoom_in, zoom_out, pan_left, pan_right, static, push_in",
+      "lighting": "SPECIFIC: source + direction + mood — e.g. Single hard side light from camera-left, 80 percent shadow, cold blue rim separating subject from background",
+      "color_palette": "2-3 dominant colors WITH hex codes — e.g. Deep navy #1A2744, amber accent #D4A574, warm skin #C4956A",
+      "mood": "2-3 words — the FEELING the frame radiates",
       "depth_of_field": "e.g. Shallow f/1.4, subject sharp, world soft",
       "continuity_bridge": "Specific visual element linking this scene to the next.",
+      "text_overlay": "Bold on-screen text if needed for emphasis, or empty string",
+      "audio_note": "Voice energy (whisper/conversational/urgent/commanding) and music direction (building/silence/swelling/percussive)",
       "duration_seconds": 5,
       "characters_present": ["Name1"]
     }
   ]
 }
+
+**PHASE-SPECIFIC VISUAL ENERGY MAPPING (use these as DEFAULTS for this phase — override only if the emotional beat demands it):**
+${phaseName === 'cold_open' || phaseName === 'hook' || phaseName === 'cold_open_crime' ? `- lighting: Single hard backlight creating silhouette, cold blue rim, 80% shadow, dramatic contrast
+- color_palette: Deep crimson #1A0005, cold white #E8F4FF, bone white #F5F5F0, high contrast
+- depth_of_field: Shallow f/1.4 — subject razor sharp, world dissolving behind
+- camera_direction: push_in` :
+phaseName === 'rising_tension' || phaseName === 'investigation' || phaseName === 'the_problem' || phaseName === 'pursuit_begins' ? `- lighting: Low-key side lighting, harsh single source, tension in every shadow pool
+- color_palette: Dark charcoal #0D0D0D, warning amber #CC8800, cold blue #1A2744
+- depth_of_field: Shallow f/1.8 — tight focus on the problem
+- camera_direction: zoom_in` :
+phaseName === 'emotional_core' || phaseName === 'the_mechanism' || phaseName === 'growing_closer' || phaseName === 'deeper_mystery' ? `- lighting: Warm motivated key light from left, clean shadows, emotionally legible
+- color_palette: Deep navy #0A1628, gold accent #D4A574, clean white #F5F5F0
+- depth_of_field: Medium f/2.8 — subject clear, background context visible but soft
+- camera_direction: push_in` :
+phaseName === 'resolution' || phaseName === 'aftermath' || phaseName === 'callback' || phaseName === 'happy_ending' ? `- lighting: Warm golden wrap light, soft fill, settled and peaceful
+- color_palette: Warm amber #D4A574, soft cream #F5F0E8, settled gold #B8941F
+- depth_of_field: Deep f/5.6 — everything in focus, world at peace
+- camera_direction: zoom_out` :
+`- lighting: Motivated practical lighting appropriate to the scene emotion
+- color_palette: Colors that serve the viewer_emotion target
+- depth_of_field: DOF that matches emotional_intensity
+- camera_direction: pick the best match for the camera_movement`}
 
 GENERATE EXACTLY ${sceneCount} SCENES. NARRATION TEXT FROM SCRIPT WORDS ONLY.`;
 }
@@ -989,7 +1018,7 @@ Deno.serve(async (req) => {
           if (system) geminiBody.systemInstruction = { parts: [{ text: system }] };
 
           const gRes = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiKey}`,
             { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(geminiBody) }
           );
           const gData = await gRes.json();
@@ -1156,7 +1185,7 @@ ${finalScript}
 Respond with this JSON (raw JSON only, no markdown fences):
 {
   "story_analysis": {
-    "plot_summary": "What ACTUALLY HAPPENS — concrete sequence of events, situations, and outcomes.",
+    "plot_summary": "A 3-5 sentence blow-by-blow of what ACTUALLY HAPPENS in this story — the concrete sequence of events, situations, actions, consequences, and outcomes. NOT the theme or message. The PLOT. Who does what, where, when, and what results. This is what every scene must visualize.",
     "central_theme": "The deeper human truth (NOT the topic)",
     "narrative_arc_summary": "2-3 sentence emotional journey",
     "emotional_trajectory": ["curiosity","concern","empathy","hope"],
@@ -1274,7 +1303,7 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
 
     let grandTotalCreated = 0;
     const MAX_WALL_MS = 55000;
-    const MAX_SCENES_PER_CALL = 20;
+    const MAX_SCENES_PER_CALL = 10;
 
     for (let batchIdx = phaseStart; batchIdx < scriptChunks.length; batchIdx++) {
       const elapsed = Date.now() - callStart;
@@ -1307,7 +1336,7 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
         .slice(0, 3)
         .reverse();
 
-      let continuityContext = '**This is the OPENING — establish the visual world with a strong first impression.**';
+      let continuityContext = '**This is the OPENING — establish the visual world with a strong first impression. First scene must HOOK — use the most arresting camera angle and highest contrast lighting.**';
       if (recentScenes.length > 0) {
         const lines = recentScenes.map(s => {
           let d = null;
@@ -1315,11 +1344,14 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
             try { d = JSON.parse(s.image_prompt.substring(15)); } catch (_) {}
           }
           const shot = d?.shot_type || 'MS';
-          const vc = (d?.visual_concept || s.narration_text || '').substring(0, 80);
+          const angle = d?.camera_angle || 'eye-level';
+          const vc = (d?.visual_concept || s.narration_text || '').substring(0, 120);
           const mood = d?.mood || '';
-          return `  Scene ${s.scene_number}: [${shot}] ${vc} | Mood: ${mood}`;
+          const palette = d?.color_palette || '';
+          const bridge = d?.continuity_bridge || '';
+          return `  Scene ${s.scene_number}: [${shot} | ${angle}] ${vc} | Mood: ${mood} | Palette: ${palette} | Bridge→: ${bridge}`;
         });
-        continuityContext = `**LAST ${recentScenes.length} SCENES (for visual continuity):**\n${lines.join('\n')}`;
+        continuityContext = `**LAST ${recentScenes.length} SCENES (for visual continuity — your first scene MUST connect to the last bridge element):**\n${lines.join('\n')}`;
       }
 
       const subBatches = [];
@@ -1431,19 +1463,30 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
           const cleanedNarration = cleanNarrationText(scene.narration_text);
           const targetDuration = beatDurations[sceneNum - 1] || scene.duration_seconds || 5;
 
+          const cameraMap = {
+            zoom_in: 'slow_zoom_in', zoom_out: 'slow_zoom_out',
+            pan_left: 'slow_pan', pan_right: 'slow_pan',
+            push_in: 'slow_zoom_in', static: 'static',
+          };
+
           const directorNotes = {
             visual_concept: scene.visual_concept,
+            visual_description: scene.visual_description || '',
             shot_type: scene.shot_type,
             camera_angle: scene.camera_angle,
             camera_movement: scene.camera_movement,
+            camera_direction: scene.camera_direction || 'push_in',
             lighting: scene.lighting,
             color_palette: scene.color_palette,
             mood: scene.mood,
             depth_of_field: scene.depth_of_field,
             continuity_bridge: scene.continuity_bridge,
             emotional_intensity: scene.emotional_intensity || 0.5,
+            viewer_emotion: scene.viewer_emotion || '',
             phase: currentChunk.phase,
-            characters_present: scene.characters_present || []
+            characters_present: scene.characters_present || [],
+            text_overlay: scene.text_overlay || '',
+            audio_note: scene.audio_note || ''
           };
 
           await base44.asServiceRole.entities.Scenes.create({
@@ -1451,20 +1494,29 @@ NICHE SENSIBILITY: ${nicheProfile.visual_world} | ${nicheProfile.emotional_palet
             scene_number: sceneNum,
             narration_text: cleanedNarration,
             image_prompt: `DIRECTOR_NOTES:${JSON.stringify(directorNotes)}`,
-            animation_prompt: "",
+            animation_prompt: scene.camera_direction || 'push_in',
             duration_seconds: targetDuration,
-            status: "breakdown_ready"
+            camera_movement: cameraMap[scene.camera_direction] || 'slow_zoom_in',
+            animation_speed: 'normal',
+            status: "breakdown_ready",
+            notes: scene.text_overlay || ''
           });
 
           blueprint.scenes.push({
             scene_number: sceneNum,
             phase: currentChunk.phase,
             visual_concept: scene.visual_concept,
+            visual_description: scene.visual_description || '',
             shot_type: scene.shot_type,
+            camera_angle: scene.camera_angle,
+            camera_direction: scene.camera_direction || 'push_in',
+            lighting: scene.lighting,
             mood: scene.mood,
             color_palette: scene.color_palette,
+            depth_of_field: scene.depth_of_field,
             continuity_bridge: scene.continuity_bridge,
             emotional_intensity: scene.emotional_intensity || 0.5,
+            viewer_emotion: scene.viewer_emotion || '',
             duration_seconds: targetDuration
           });
 
