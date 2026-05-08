@@ -1,15 +1,74 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
-// ANALYZE VIRAL MOMENTS — Claude-powered clip detection
-// v2 — adopts video-use clipping strategy:
-//   1. Silence gap detection: finds pauses >=0.5s, surfaces as [GAP] markers
-//   2. Word-boundary snapping: cuts land on ASR word edges, never mid-word
-//   3. 150ms pre-roll + 200ms post-roll padding (video-use spec)
+// ANALYZE VIRAL MOMENTS — Gemini-powered clip detection (Claude fallback)
+//
+// Input:  { transcript, words, duration, max_clips?, min_clip_seconds?, max_clip_seconds?, context? }
+//   - transcript: full text of the video
+//   - words: [{word, start, end}, ...] from ASR with timestamps
+//   - duration: total video duration in seconds
+//   - max_clips: max number of clips to extract (default 8)
+//   - min_clip_seconds: minimum clip length (default 15)
+//   - max_clip_seconds: maximum clip length (default 90)
+//   - context: optional context about the video (niche, topic)
+//
+// Output: { clips: [{ title, hook, start, end, duration, virality_score,
+//           virality_reason, category, transcript_excerpt }], model_used }
 // ══════════════════════════════════════════════════════════════════
 
+const GEMINI_MODEL = 'gemini-3.1-pro-preview';
 const CLAUDE_MODEL = 'claude-sonnet-4-20250514';
 
+// ── Gemini (primary) ────────────────────────────────────────────
+async function callGemini(systemPrompt, userPrompt) {
+  const apiKey = Deno.env.get('GEMINI_API_KEY');
+  if (!apiKey) throw new Error('GEMINI_API_KEY not configured');
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
+  const response = await fetch(`${url}?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: {
+        parts: [{ text: systemPrompt }],
+      },
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: userPrompt }],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        maxOutputTokens: 4096,
+        temperature: 0.7,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    const msg = err.error?.message || JSON.stringify(err);
+    throw new Error(`Gemini API Error ${response.status}: ${msg}`);
+  }
+
+  const data = await response.json();
+
+  // Gemini response: candidates[0].content.parts[0].text
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Gemini returned empty response');
+
+  // responseMimeType:"application/json" should give clean JSON, but parse defensively
+  let jsonStr = text.trim();
+  if (jsonStr.startsWith('```')) {
+    jsonStr = jsonStr.replace(/^```json?\s*/, '').replace(/```\s*$/, '').trim();
+  }
+
+  return JSON.parse(jsonStr);
+}
+
+// ── Claude (fallback) ───────────────────────────────────────────
 async function callClaude(systemPrompt, userPrompt) {
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured');
@@ -37,6 +96,7 @@ async function callClaude(systemPrompt, userPrompt) {
   const data = await response.json();
   const text = data.content?.[0]?.text || '';
 
+  // Parse JSON from response
   let jsonStr = text;
   if (text.includes('```json')) {
     jsonStr = text.split('```json')[1].split('```')[0].trim();
@@ -47,41 +107,40 @@ async function callClaude(systemPrompt, userPrompt) {
   return JSON.parse(jsonStr);
 }
 
-// Silence gap detection — video-use strategy:
-// "candidate cuts come from speech boundaries and silence gaps"
-function findSilenceGaps(words, minGapSec) {
-  const gaps = [];
-  for (let i = 1; i < words.length; i++) {
-    const gap = words[i].start - words[i - 1].end;
-    if (gap >= minGapSec) {
-      gaps.push({
-        at: words[i - 1].end + gap / 2,
-        duration: gap,
-        wordIdxBefore: i - 1,
-      });
-    }
+// ── Unified caller with fallback ────────────────────────────────
+async function callAI(systemPrompt, userPrompt) {
+  let geminiErrMsg = '';
+
+  // Try Gemini first
+  try {
+    console.log(`🟢 Trying Gemini (${GEMINI_MODEL})...`);
+    const result = await callGemini(systemPrompt, userPrompt);
+    console.log(`✅ Gemini succeeded`);
+    return { result, model_used: GEMINI_MODEL };
+  } catch (geminiErr) {
+    geminiErrMsg = geminiErr.message;
+    console.warn(`⚠️ Gemini failed: ${geminiErrMsg}`);
   }
-  return gaps;
+
+  // Fall back to Claude
+  try {
+    console.log(`🔵 Falling back to Claude (${CLAUDE_MODEL})...`);
+    const result = await callClaude(systemPrompt, userPrompt);
+    console.log(`✅ Claude fallback succeeded`);
+    return { result, model_used: CLAUDE_MODEL };
+  } catch (claudeErr) {
+    console.error(`❌ Claude fallback also failed: ${claudeErr.message}`);
+    throw new Error(`Both AI providers failed. Gemini: ${geminiErrMsg}. Claude: ${claudeErr.message}`);
+  }
 }
 
-// Build transcript with [GAP] markers at silence boundaries
-// Claude uses these as preferred cut points
-function buildTimestampedTranscript(words, silenceGaps) {
+function buildTimestampedTranscript(words) {
+  // Build paragraph-style transcript with timestamp markers every ~10 seconds
   const chunks = [];
   let currentChunk = '';
   let lastMarker = -10;
-  let gapIdx = 0;
 
   for (const w of words) {
-    while (gapIdx < silenceGaps.length && silenceGaps[gapIdx].at <= w.start) {
-      const g = silenceGaps[gapIdx];
-      if (currentChunk) chunks.push(currentChunk.trim());
-      chunks.push(`[GAP ${g.duration.toFixed(1)}s — natural cut point]`);
-      currentChunk = '';
-      lastMarker = -10;
-      gapIdx++;
-    }
-
     if (w.start - lastMarker >= 10) {
       if (currentChunk) chunks.push(currentChunk.trim());
       const mins = Math.floor(w.start / 60);
@@ -92,29 +151,8 @@ function buildTimestampedTranscript(words, silenceGaps) {
     currentChunk += w.word + ' ';
   }
   if (currentChunk) chunks.push(currentChunk.trim());
+
   return chunks.join('\n');
-}
-
-// Snap time to nearest word START — video-use: "never cut inside a word"
-function snapToWordStart(targetTime, words) {
-  let bestIdx = 0;
-  let bestDist = Infinity;
-  for (let i = 0; i < words.length; i++) {
-    const dist = Math.abs(words[i].start - targetTime);
-    if (dist < bestDist) { bestDist = dist; bestIdx = i; }
-  }
-  return words[bestIdx].start;
-}
-
-// Snap time to nearest word END
-function snapToWordEnd(targetTime, words) {
-  let bestIdx = 0;
-  let bestDist = Infinity;
-  for (let i = 0; i < words.length; i++) {
-    const dist = Math.abs(words[i].end - targetTime);
-    if (dist < bestDist) { bestDist = dist; bestIdx = i; }
-  }
-  return words[bestIdx].end;
 }
 
 Deno.serve(async (req) => {
@@ -131,16 +169,14 @@ Deno.serve(async (req) => {
       min_clip_seconds = 15,
       max_clip_seconds = 90,
       context = '',
-      silence_gaps: incomingSilenceGaps = null,
     } = await req.json();
 
     if (!words?.length) {
       return Response.json({ error: 'words array required (from ASR)' }, { status: 400 });
     }
 
-    const silenceGaps = incomingSilenceGaps ?? findSilenceGaps(words, 0.5);
-    const naturalCutCount = silenceGaps.length;
-    const timestampedTranscript = buildTimestampedTranscript(words, silenceGaps);
+    // Build timestamped transcript for AI
+    const timestampedTranscript = buildTimestampedTranscript(words);
 
     const systemPrompt = `You are a viral content strategist and video editor with deep expertise in YouTube Shorts, TikTok, and Instagram Reels. Your job is to analyze a long-form video transcript and identify the most "clippable" viral moments.
 
@@ -155,22 +191,23 @@ You understand what makes content go viral:
 - Relatable pain points with satisfying resolutions
 - "Wait, what?" moments that stop the scroll
 
-CUT POINT RULES (non-negotiable):
-- [GAP Xs] markers are natural silence boundaries — PREFER these as clip start/end points
-- Clip START should land just before a strong hook — aim for a [GAP] or start of a new thought
-- Clip END should land just after the punchline completes — aim for a [GAP] or natural pause
-- Never aim for a mid-word or mid-sentence time
-- Each clip MUST be self-contained without context from the rest of the video
+CRITICAL RULES:
+- Each clip MUST be self-contained — it should make sense WITHOUT context from the rest of the video
+- Prefer moments with natural energy/emotion shifts over flat monologues
+- The clip's START should be a natural hook (question, bold claim, surprising fact)
+- The clip's END should feel complete (punchline, conclusion, revelation) — no mid-sentence cuts
+- Use the [M:SS] timestamp markers in the transcript to determine accurate start/end times
+- Timestamps are in SECONDS in your output (convert from M:SS format)
 - Clips must be between ${min_clip_seconds}s and ${max_clip_seconds}s
-- Return at most ${max_clips} clips, ranked by virality_score descending
+- Return at most ${max_clips} clips
+- Rank by virality_score (0-100) based on likely engagement
 
 Return ONLY valid JSON.`;
 
     const userPrompt = `Analyze this ${Math.round(duration / 60)}-minute video transcript and find the top viral clip moments.
 ${context ? `\nVideo context: ${context}` : ''}
-${naturalCutCount > 0 ? `\nNatural silence gaps: ${naturalCutCount} — [GAP] markers are your preferred cut points.` : ''}
 
-TIMESTAMPED TRANSCRIPT (with silence gap markers):
+TIMESTAMPED TRANSCRIPT:
 ${timestampedTranscript}
 
 Return JSON in this exact format:
@@ -178,57 +215,77 @@ Return JSON in this exact format:
   "clips": [
     {
       "title": "Short punchy title for this clip (max 60 chars)",
-      "hook": "The opening line that grabs attention (first 10 words of the clip)",
+      "hook": "The opening line/hook that grabs attention (first 10 words of the clip)",
       "start": 45.0,
       "end": 78.5,
       "duration": 33.5,
       "virality_score": 92,
       "virality_reason": "Why this moment is viral-worthy (1-2 sentences)",
       "category": "one of: hot_take | story | humor | insight | emotional | dramatic | quotable | controversial",
-      "transcript_excerpt": "Key 1-2 sentence excerpt representing the peak moment"
+      "transcript_excerpt": "Key 1-2 sentence excerpt from this clip that represents the peak moment"
     }
   ]
 }
 
 Sort clips by virality_score descending (best first).`;
 
-    console.log(`Analyzing ${words.length} words, ${Math.round(duration)}s video, ${naturalCutCount} silence gaps...`);
+    console.log(`🧠 Analyzing ${words.length} words, ${Math.round(duration)}s video for viral moments...`);
 
-    const result = await callClaude(systemPrompt, userPrompt);
+    const { result, model_used } = await callAI(systemPrompt, userPrompt);
 
     if (!result?.clips?.length) {
-      return Response.json({ success: true, clips: [], message: 'No strong viral moments found' });
+      return Response.json({
+        success: true,
+        clips: [],
+        message: 'No strong viral moments found in this content',
+        model_used,
+      });
     }
 
-    // Snap every clip to word boundaries — video-use: "never cut inside a word"
-    // 150ms pre-roll + 200ms post-roll absorbs ASR timestamp drift
-    const PRE_ROLL = 0.15;
-    const POST_ROLL = 0.20;
-
+    // Post-process: snap start/end to nearest word boundaries for precision
     const snappedClips = result.clips.map((clip) => {
-      const wordStart = snapToWordStart(clip.start, words);
-      const wordEnd = snapToWordEnd(clip.end, words);
-      const snappedStart = Math.max(0, wordStart - PRE_ROLL);
-      const snappedEnd = Math.min(duration, wordEnd + POST_ROLL);
-      const snappedDuration = snappedEnd - snappedStart;
+      // Find the closest ASR word to the start timestamp
+      const startWord = words.reduce((best, w) =>
+        Math.abs(w.start - clip.start) < Math.abs(best.start - clip.start) ? w : best
+      , words[0]);
 
-      if (snappedDuration < min_clip_seconds || snappedDuration > max_clip_seconds + 5) {
-        return null;
-      }
+      // Find the closest ASR word to the end timestamp
+      const endWord = words.reduce((best, w) =>
+        Math.abs(w.end - clip.end) < Math.abs(best.end - clip.end) ? w : best
+      , words[words.length - 1]);
+
+      // Add 0.3s padding before start and 0.5s after end for natural feel
+      const snappedStart = Math.max(0, startWord.start - 0.3);
+      const snappedEnd = Math.min(duration, endWord.end + 0.5);
 
       return {
         ...clip,
-        start: Math.round(snappedStart * 1000) / 1000,
-        end: Math.round(snappedEnd * 1000) / 1000,
-        duration: Math.round(snappedDuration * 1000) / 1000,
+        start: Math.round(snappedStart * 100) / 100,
+        end: Math.round(snappedEnd * 100) / 100,
+        duration: Math.round((snappedEnd - snappedStart) * 100) / 100,
       };
-    }).filter(Boolean);
+    });
 
+    // Enforce hard minimum — drop clips shorter than 30s
+    const HARD_MIN = 30;
+    const beforeFilter = snappedClips.length;
+    const filtered = snappedClips.filter((c) => {
+      if (c.duration < HARD_MIN) {
+        console.warn(`⚠️  Dropping clip "${c.title}" — ${c.duration}s is below ${HARD_MIN}s hard minimum`);
+        return false;
+      }
+      return true;
+    });
+    snappedClips.length = 0;
+    snappedClips.push(...filtered);
+    console.log(`🔍 Length filter: ${beforeFilter} → ${snappedClips.length} clips (min ${HARD_MIN}s)`);
+
+    // Sort by virality score descending
     snappedClips.sort((a, b) => (b.virality_score || 0) - (a.virality_score || 0));
 
-    console.log(`Found ${snappedClips.length} viral clips`);
+    console.log(`✅ Found ${snappedClips.length} viral clips (via ${model_used})`);
     snappedClips.forEach((c, i) => {
-      console.log(`  #${i + 1} [${c.virality_score}] ${c.start.toFixed(2)}s to ${c.end.toFixed(2)}s "${c.title}"`);
+      console.log(`  #${i + 1} [${c.virality_score}] ${c.start.toFixed(1)}s → ${c.end.toFixed(1)}s "${c.title}"`);
     });
 
     return Response.json({
@@ -236,11 +293,11 @@ Sort clips by virality_score descending (best first).`;
       clips: snappedClips,
       total_found: snappedClips.length,
       video_duration: duration,
-      silence_gaps_used: naturalCutCount,
+      model_used,
     });
 
   } catch (error) {
-    console.error('analyzeViralMoments error:', error.message);
+    console.error('❌ analyzeViralMoments error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
