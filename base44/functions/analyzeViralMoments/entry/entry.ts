@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
-// ANALYZE VIRAL MOMENTS — Claude-powered clip detection
+// ANALYZE VIRAL MOMENTS — Gemini-powered clip detection (Claude fallback)
 //
 // Input:  { transcript, words, duration, max_clips?, min_clip_seconds?, max_clip_seconds?, context? }
 //   - transcript: full text of the video
@@ -13,12 +13,63 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 //   - context: optional context about the video (niche, topic)
 //
 // Output: { clips: [{ title, hook, start, end, duration, virality_score,
-//           virality_reason, category, transcript_excerpt }] }
+//           virality_reason, category, transcript_excerpt }], model_used }
 // ══════════════════════════════════════════════════════════════════
 
+const GEMINI_MODEL = 'gemini-3.1-pro-preview';
 const CLAUDE_MODEL = 'claude-sonnet-4-20250514';
 
-async function callClaude(systemPrompt: string, userPrompt: string) {
+// ── Gemini (primary) ────────────────────────────────────────────
+async function callGemini(systemPrompt, userPrompt) {
+  const apiKey = Deno.env.get('GEMINI_API_KEY');
+  if (!apiKey) throw new Error('GEMINI_API_KEY not configured');
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
+  const response = await fetch(`${url}?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: {
+        parts: [{ text: systemPrompt }],
+      },
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: userPrompt }],
+        },
+      ],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        maxOutputTokens: 4096,
+        temperature: 0.7,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    const msg = err.error?.message || JSON.stringify(err);
+    throw new Error(`Gemini API Error ${response.status}: ${msg}`);
+  }
+
+  const data = await response.json();
+
+  // Gemini response: candidates[0].content.parts[0].text
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Gemini returned empty response');
+
+  // responseMimeType:"application/json" should give clean JSON, but parse defensively
+  let jsonStr = text.trim();
+  if (jsonStr.startsWith('```')) {
+    jsonStr = jsonStr.replace(/^```json?\s*/, '').replace(/```\s*$/, '').trim();
+  }
+
+  return JSON.parse(jsonStr);
+}
+
+// ── Claude (fallback) ───────────────────────────────────────────
+async function callClaude(systemPrompt, userPrompt) {
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY');
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not configured');
 
@@ -56,9 +107,36 @@ async function callClaude(systemPrompt: string, userPrompt: string) {
   return JSON.parse(jsonStr);
 }
 
-function buildTimestampedTranscript(words: Array<{word: string, start: number, end: number}>) {
+// ── Unified caller with fallback ────────────────────────────────
+async function callAI(systemPrompt, userPrompt) {
+  let geminiErrMsg = '';
+
+  // Try Gemini first
+  try {
+    console.log(`🟢 Trying Gemini (${GEMINI_MODEL})...`);
+    const result = await callGemini(systemPrompt, userPrompt);
+    console.log(`✅ Gemini succeeded`);
+    return { result, model_used: GEMINI_MODEL };
+  } catch (geminiErr) {
+    geminiErrMsg = geminiErr.message;
+    console.warn(`⚠️ Gemini failed: ${geminiErrMsg}`);
+  }
+
+  // Fall back to Claude
+  try {
+    console.log(`🔵 Falling back to Claude (${CLAUDE_MODEL})...`);
+    const result = await callClaude(systemPrompt, userPrompt);
+    console.log(`✅ Claude fallback succeeded`);
+    return { result, model_used: CLAUDE_MODEL };
+  } catch (claudeErr) {
+    console.error(`❌ Claude fallback also failed: ${claudeErr.message}`);
+    throw new Error(`Both AI providers failed. Gemini: ${geminiErrMsg}. Claude: ${claudeErr.message}`);
+  }
+}
+
+function buildTimestampedTranscript(words) {
   // Build paragraph-style transcript with timestamp markers every ~10 seconds
-  const chunks: string[] = [];
+  const chunks = [];
   let currentChunk = '';
   let lastMarker = -10;
 
@@ -97,7 +175,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'words array required (from ASR)' }, { status: 400 });
     }
 
-    // Build timestamped transcript for Claude
+    // Build timestamped transcript for AI
     const timestampedTranscript = buildTimestampedTranscript(words);
 
     const systemPrompt = `You are a viral content strategist and video editor with deep expertise in YouTube Shorts, TikTok, and Instagram Reels. Your job is to analyze a long-form video transcript and identify the most "clippable" viral moments.
@@ -153,25 +231,26 @@ Sort clips by virality_score descending (best first).`;
 
     console.log(`🧠 Analyzing ${words.length} words, ${Math.round(duration)}s video for viral moments...`);
 
-    const result = await callClaude(systemPrompt, userPrompt);
+    const { result, model_used } = await callAI(systemPrompt, userPrompt);
 
     if (!result?.clips?.length) {
       return Response.json({
         success: true,
         clips: [],
         message: 'No strong viral moments found in this content',
+        model_used,
       });
     }
 
     // Post-process: snap start/end to nearest word boundaries for precision
-    const snappedClips = result.clips.map((clip: any) => {
+    const snappedClips = result.clips.map((clip) => {
       // Find the closest ASR word to the start timestamp
-      let startWord = words.reduce((best: any, w: any) =>
+      const startWord = words.reduce((best, w) =>
         Math.abs(w.start - clip.start) < Math.abs(best.start - clip.start) ? w : best
       , words[0]);
 
       // Find the closest ASR word to the end timestamp
-      let endWord = words.reduce((best: any, w: any) =>
+      const endWord = words.reduce((best, w) =>
         Math.abs(w.end - clip.end) < Math.abs(best.end - clip.end) ? w : best
       , words[words.length - 1]);
 
@@ -190,7 +269,7 @@ Sort clips by virality_score descending (best first).`;
     // Enforce hard minimum — drop clips shorter than 30s
     const HARD_MIN = 30;
     const beforeFilter = snappedClips.length;
-    const filtered = snappedClips.filter((c: any) => {
+    const filtered = snappedClips.filter((c) => {
       if (c.duration < HARD_MIN) {
         console.warn(`⚠️  Dropping clip "${c.title}" — ${c.duration}s is below ${HARD_MIN}s hard minimum`);
         return false;
@@ -202,10 +281,10 @@ Sort clips by virality_score descending (best first).`;
     console.log(`🔍 Length filter: ${beforeFilter} → ${snappedClips.length} clips (min ${HARD_MIN}s)`);
 
     // Sort by virality score descending
-    snappedClips.sort((a: any, b: any) => (b.virality_score || 0) - (a.virality_score || 0));
+    snappedClips.sort((a, b) => (b.virality_score || 0) - (a.virality_score || 0));
 
-    console.log(`✅ Found ${snappedClips.length} viral clips`);
-    snappedClips.forEach((c: any, i: number) => {
+    console.log(`✅ Found ${snappedClips.length} viral clips (via ${model_used})`);
+    snappedClips.forEach((c, i) => {
       console.log(`  #${i + 1} [${c.virality_score}] ${c.start.toFixed(1)}s → ${c.end.toFixed(1)}s "${c.title}"`);
     });
 
@@ -214,6 +293,7 @@ Sort clips by virality_score descending (best first).`;
       clips: snappedClips,
       total_found: snappedClips.length,
       video_duration: duration,
+      model_used,
     });
 
   } catch (error) {
