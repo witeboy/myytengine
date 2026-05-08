@@ -4,7 +4,34 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // Migrated from Gemini → Claude Sonnet 4.5
 // Fixes: 429 rate limits, parallel execution, robust JSON parsing
 
+const OPENAI_MODEL = 'gpt-4o';
 const CLAUDE_MODEL = 'claude-sonnet-4-5';
+
+async function callOpenAI(apiKey, systemPrompt, userPrompt, maxTokens = 4096) {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      max_tokens: maxTokens,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`OpenAI API ${res.status}: ${err.substring(0, 300)}`);
+  }
+
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || '';
+}
 
 async function callClaude(apiKey, systemPrompt, userPrompt, maxTokens = 4096) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -29,6 +56,20 @@ async function callClaude(apiKey, systemPrompt, userPrompt, maxTokens = 4096) {
 
   const data = await res.json();
   return data.content?.[0]?.text || '';
+}
+
+async function callAI(openaiKey, claudeKey, systemPrompt, userPrompt, maxTokens = 4096) {
+  if (openaiKey) {
+    try {
+      return await callOpenAI(openaiKey, systemPrompt, userPrompt, maxTokens);
+    } catch (err) {
+      console.warn('OpenAI failed, falling back to Claude:', err.message);
+    }
+  }
+  if (claudeKey) {
+    return await callClaude(claudeKey, systemPrompt, userPrompt, maxTokens);
+  }
+  throw new Error('No AI API keys configured');
 }
 
 function parseJson(text) {
@@ -83,7 +124,7 @@ Return ONLY this JSON:
   "all_tags_comma_separated": "all tags as one comma-separated string ready for YouTube Studio"
 }`;
 
-  const raw = await callClaude(apiKey, system, user, 2000);
+  const raw = await callAI(apiKey.openai, apiKey.claude, system, user, 2000);
   return parseJson(raw);
 }
 
@@ -119,7 +160,7 @@ Return ONLY this JSON:
   "hashtag_string": "#Tag1 #Tag2 #Tag3 #Tag4 #Tag5"
 }`;
 
-  const raw = await callClaude(apiKey, system, user, 800);
+  const raw = await callAI(apiKey.openai, apiKey.claude, system, user, 800);
   return parseJson(raw);
 }
 
@@ -132,8 +173,12 @@ Deno.serve(async (req) => {
     const { project_id } = await req.json();
     if (!project_id) return Response.json({ error: 'Missing project_id' }, { status: 400 });
 
-    const CLAUDE_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
-    if (!CLAUDE_API_KEY) return Response.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 });
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') || '';
+    const CLAUDE_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') || '';
+    if (!OPENAI_API_KEY && !CLAUDE_API_KEY) {
+      return Response.json({ error: 'No AI API key configured (need OPENAI_API_KEY or ANTHROPIC_API_KEY)' }, { status: 500 });
+    }
+    const AI_KEYS = { openai: OPENAI_API_KEY, claude: CLAUDE_API_KEY };
 
     // Load project
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
@@ -151,7 +196,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'No final script found. Please generate a final script first.' }, { status: 400 });
     }
 
-    // Load topic — require selected topic
+    // Load topic — fallback to project name instead of hard-failing
     let topicTitle = '';
     let topicDescription = '';
     if (project.selected_topic_id) {
@@ -162,7 +207,9 @@ Deno.serve(async (req) => {
       }
     }
     if (!topicTitle) {
-      return Response.json({ error: 'No selected topic found. Please select a topic first.' }, { status: 400 });
+      topicTitle = project.name || 'Untitled Video';
+      topicDescription = fullScript.substring(0, 300);
+      console.warn('No selected topic — using project name as fallback:', topicTitle);
     }
 
     // Load channel name
@@ -247,7 +294,7 @@ Return ONLY this JSON:
   "pinned_comment": "Engaging question or CTA to boost comments. 2-3 sentences."
 }`;
 
-    const titleResponseText = await callClaude(CLAUDE_API_KEY, titleSystem, titleUser, 4096);
+    const titleResponseText = await callAI(AI_KEYS.openai, AI_KEYS.claude, titleSystem, titleUser, 4096);
     const titleParsed = parseJson(titleResponseText);
 
     if (!titleParsed?.titles?.length) {
@@ -270,8 +317,8 @@ Return ONLY this JSON:
     // ── STEP 2+3: TAGS + HASHTAGS IN PARALLEL ───────────────────
     console.log(`🚀 Generating tags + hashtags in parallel...`);
     const [tagResult, hashResult] = await Promise.allSettled([
-      generateTagsFromScript(CLAUDE_API_KEY, fullScript, niche, titles[0]?.title || videoTitle, seoAnalysis),
-      generateHashtagsFromScript(CLAUDE_API_KEY, fullScript, niche, titles[0]?.title || videoTitle, channelName),
+      generateTagsFromScript(AI_KEYS, fullScript, niche, titles[0]?.title || videoTitle, seoAnalysis),
+      generateHashtagsFromScript(AI_KEYS, fullScript, niche, titles[0]?.title || videoTitle, channelName),
     ]);
 
     // Process tags
