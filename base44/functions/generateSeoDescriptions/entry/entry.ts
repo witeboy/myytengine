@@ -4,7 +4,34 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // Migrated from Gemini → Claude Sonnet 4.5
 // Fixes: responseMimeType removal, robust JSON parsing, clear error messages
 
+const OPENAI_MODEL = 'gpt-4o';
 const CLAUDE_MODEL = 'claude-sonnet-4-5';
+
+async function callOpenAI(apiKey, systemPrompt, userPrompt, maxTokens = 6000) {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      max_tokens: maxTokens,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`OpenAI API ${res.status}: ${err.substring(0, 300)}`);
+  }
+
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content || '';
+}
 
 async function callClaude(apiKey, systemPrompt, userPrompt, maxTokens = 6000) {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -31,6 +58,20 @@ async function callClaude(apiKey, systemPrompt, userPrompt, maxTokens = 6000) {
   return data.content?.[0]?.text || '';
 }
 
+async function callAI(openaiKey, claudeKey, systemPrompt, userPrompt, maxTokens = 6000) {
+  if (openaiKey) {
+    try {
+      return await callOpenAI(openaiKey, systemPrompt, userPrompt, maxTokens);
+    } catch (err) {
+      console.warn('OpenAI failed, falling back to Claude:', err.message);
+    }
+  }
+  if (claudeKey) {
+    return await callClaude(claudeKey, systemPrompt, userPrompt, maxTokens);
+  }
+  throw new Error('No AI API keys configured');
+}
+
 function parseJson(text) {
   if (!text) return null;
   let cleaned = text.replace(/```(?:json)?\s*/gi, '').replace(/```\s*$/gi, '').trim();
@@ -53,8 +94,11 @@ Deno.serve(async (req) => {
     const { project_id } = await req.json();
     if (!project_id) return Response.json({ error: 'Missing project_id' }, { status: 400 });
 
-    const CLAUDE_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
-    if (!CLAUDE_API_KEY) return Response.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 });
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') || '';
+    const CLAUDE_API_KEY = Deno.env.get('ANTHROPIC_API_KEY') || '';
+    if (!OPENAI_API_KEY && !CLAUDE_API_KEY) {
+      return Response.json({ error: 'No AI API key configured (need OPENAI_API_KEY or ANTHROPIC_API_KEY)' }, { status: 500 });
+    }
 
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
     const project = projects[0];
@@ -150,7 +194,7 @@ Return ONLY this JSON:
   ]
 }`;
 
-    const responseText = await callClaude(CLAUDE_API_KEY, system, userPrompt, 6000);
+    const responseText = await callAI(OPENAI_API_KEY, CLAUDE_API_KEY, system, userPrompt, 6000);
     const parsed = parseJson(responseText);
 
     if (!parsed?.descriptions?.length) {
