@@ -1,16 +1,55 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
-// v4 — migrated to Claude, bulkCreate, max 12 scenes, code-controlled durations
+// v5 — Gemini 2.5 Pro primary, Claude fallback, bulkCreate, max 12 scenes, code-controlled durations
 // ══════════════════════════════════════════════════════════════════
-// SLEEP VISUAL BREAKDOWN ENGINE (v4)
+// SLEEP VISUAL BREAKDOWN ENGINE (v5)
 // ══════════════════════════════════════════════════════════════════
 // Generates 6-12 ambient environment image definitions.
 // Narration is split in code (not by AI) to avoid timeout.
 // AI only generates visual concepts + image prompts.
 // NO PEOPLE — pure environment/landscape scenes.
+// Primary: Gemini 2.5 Pro | Fallback: Claude Sonnet
 // ══════════════════════════════════════════════════════════════════
+
+async function callGemini(prompt, temperature = 0.5) {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!apiKey) throw new Error("GEMINI_API_KEY not set");
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature,
+          maxOutputTokens: 6000,
+          responseMimeType: "application/json"
+        }
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(`Gemini error: ${err.error?.message || response.status}`);
+  }
+
+  const data = await response.json();
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!rawText) throw new Error("No response from Gemini");
+
+  try { return JSON.parse(rawText); } catch (_) {
+    const match = rawText.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]);
+    throw new Error("Failed to parse Gemini JSON");
+  }
+}
 
 async function callClaude(prompt, temperature = 0.5) {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
+
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -39,6 +78,25 @@ async function callClaude(prompt, temperature = 0.5) {
     const match = rawText.match(/\{[\s\S]*\}/);
     if (match) return JSON.parse(match[0]);
     throw new Error("Failed to parse Claude JSON");
+  }
+}
+
+// Call Gemini first, fall back to Claude on any error
+async function callAI(prompt, temperature = 0.5) {
+  try {
+    console.log("🤖 Calling Gemini 2.5 Pro...");
+    const result = await callGemini(prompt, temperature);
+    console.log("✅ Gemini succeeded");
+    return { result, provider: "gemini" };
+  } catch (geminiErr) {
+    console.warn(`⚠️ Gemini failed: ${geminiErr.message} — falling back to Claude...`);
+    try {
+      const result = await callClaude(prompt, temperature);
+      console.log("✅ Claude fallback succeeded");
+      return { result, provider: "claude" };
+    } catch (claudeErr) {
+      throw new Error(`Both AI providers failed. Gemini: ${geminiErr.message} | Claude: ${claudeErr.message}`);
+    }
   }
 }
 
@@ -96,10 +154,10 @@ Deno.serve(async (req) => {
     const wordCount = finalScript.split(/\s+/).filter(w => w.length > 0).length;
     const durationMinutes = project.video_duration_minutes || Math.ceil(wordCount / 150);
 
-    // ── FIX 1: Scene count — 1 per 5 min, floor 6, hard cap 12 ──
+    // Scene count — 1 per 5 min, floor 6, hard cap 12
     const imageCount = Math.min(12, Math.max(6, Math.round(durationMinutes / 5)));
 
-    // ── FIX 2: Durations computed purely in code — AI has no say ──
+    // Durations computed purely in code — AI has no say
     const durationSecPerScene = (durationMinutes * 60) / imageCount;
 
     console.log(`🌙 Sleep ambient breakdown: ${durationMinutes}min → ${imageCount} scenes @ ${(durationSecPerScene / 60).toFixed(1)}min each | mode: ${project.project_mode}`);
@@ -114,7 +172,6 @@ Deno.serve(async (req) => {
     // Split narration in code — don't ask AI to do it
     const narrationChunks = splitScriptIntoChunks(finalScript, imageCount);
 
-    // ── FIX 3: Claude instead of Gemini ──────────────────────────
     const prompt = `You are a visual art director for premium sleep content. Design ${imageCount} ambient environment images for a ${durationMinutes}-minute ${isMeditation ? 'guided meditation' : 'sleep story'} about "${project.name}".
 
 RULES:
@@ -150,8 +207,8 @@ Return JSON with EXACTLY ${imageCount} scenes and nothing else — no markdown, 
 camera_movement must be one of: ultra_slow_zoom_in, ultra_slow_zoom_out, ultra_slow_pan_left, ultra_slow_pan_right
 Alternate camera movements across scenes for visual variety.`;
 
-    console.log(`🎨 Generating ${imageCount} ambient image definitions via Claude...`);
-    const result = await callClaude(prompt, 0.6);
+    console.log(`🎨 Generating ${imageCount} ambient image definitions...`);
+    const { result, provider } = await callAI(prompt, 0.6);
 
     let scenesArr = result?.scenes;
     if (!scenesArr || !Array.isArray(scenesArr)) {
@@ -159,10 +216,10 @@ Alternate camera movements across scenes for visual variety.`;
       return Response.json({ error: 'AI failed to generate ambient images' }, { status: 500 });
     }
 
-    // Safety net — never exceed imageCount even if Claude returns extras
+    // Safety net — never exceed imageCount even if AI returns extras
     scenesArr = scenesArr.slice(0, imageCount);
 
-    // ── Beat timing — all computed in code, perfectly even ───────
+    // Beat timing — all computed in code, perfectly even
     const beatDurations = Array(imageCount).fill(durationSecPerScene);
     const beatStartTimes = beatDurations.map((_, i) => i * durationSecPerScene);
 
@@ -177,7 +234,8 @@ Alternate camera movements across scenes for visual variety.`;
         visual_world: `Dreamlike ambient scenes inspired by ${project.name}`,
         recurring_visual_motifs: ['warm light', 'gentle darkness', 'nature', 'atmosphere'],
         color_arc: 'warm amber → deep blue → midnight → near-darkness',
-        visual_format: 'ambient_images_with_ken_burns'
+        visual_format: 'ambient_images_with_ken_burns',
+        ai_provider: provider
       })
     };
     const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
@@ -187,7 +245,7 @@ Alternate camera movements across scenes for visual variety.`;
       await base44.asServiceRole.entities.ProductionSettings.create({ project_id, ...psPayload });
     }
 
-    // ── FIX 4: bulkCreate instead of sequential creates ──────────
+    // bulkCreate instead of sequential creates
     const sceneRecords = scenesArr.map((aiScene, i) => {
       const cleanedNarration = cleanNarrationText(narrationChunks[i] || '');
       const directorNotes = {
@@ -220,7 +278,7 @@ Alternate camera movements across scenes for visual variety.`;
     });
 
     const elapsed = ((Date.now() - callStart) / 1000).toFixed(1);
-    console.log(`🌙 Created ${sceneRecords.length} ambient scenes in ${elapsed}s`);
+    console.log(`🌙 Created ${sceneRecords.length} ambient scenes in ${elapsed}s via ${provider}`);
     console.log(`📊 Each scene: ${(durationSecPerScene / 60).toFixed(1)}min | Total: ${durationMinutes}min`);
 
     return Response.json({
@@ -232,7 +290,8 @@ Alternate camera movements across scenes for visual variety.`;
       total_duration_minutes: durationMinutes,
       beat_durations: beatDurations,
       beat_start_times: beatStartTimes,
-      visual_format: 'ambient_images_with_ken_burns'
+      visual_format: 'ambient_images_with_ken_burns',
+      ai_provider: provider
     });
 
   } catch (error) {
