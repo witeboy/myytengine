@@ -63,9 +63,12 @@ async function callClaude(prompt, temperature = 0.7, retries = 2) {
     const data = await response.json();
     const rawText = data.content?.[0]?.text || '';
 
+    // Try direct parse
     try { return JSON.parse(rawText); } catch (_) {}
+    // Strip markdown fences
     const fenced = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (fenced) { try { return JSON.parse(fenced[1].trim()); } catch (_) {} }
+    // Grab first JSON object
     const obj = rawText.match(/\{[\s\S]*\}/);
     if (obj) { try { return JSON.parse(obj[0]); } catch (_) {} }
 
@@ -73,7 +76,7 @@ async function callClaude(prompt, temperature = 0.7, retries = 2) {
   }
 }
 
-// Primary: OpenAI | Fallback: Claude
+// Primary: OpenAI  |  Fallback: Claude
 async function callLLM(prompt, temperature = 0.7) {
   try {
     const result = await callOpenAI(prompt, temperature);
@@ -106,27 +109,30 @@ function pickProtagonistName(topicTitle) {
     mediterranean: ['Elena', 'Marco', 'Sofia', 'Luca', 'Aria'],
     english:       ['Thomas', 'Clara', 'Oliver', 'Mara', 'James'],
     african:       ['Amara', 'Kofi', 'Zara', 'Seun', 'Nia'],
-    default:       ['Mara', 'Thomas', 'Elena', 'Rowan', 'Luca', 'Clara', 'Finn', 'Aria'],
+    default:       ['Thomas', 'Elena', 'Rowan', 'Luca', 'Clara', 'Finn', 'Aria'],
   };
   const t = (topicTitle || '').toLowerCase();
-  if (/japan|kyoto|tokyo|zen|sakura|bamboo|shrine/i.test(t))         return pools.japanese[Math.floor(Math.random() * pools.japanese.length)];
-  if (/norse|viking|nordic|fjord|scandinav/i.test(t))                return pools.nordic[Math.floor(Math.random() * pools.nordic.length)];
+  if (/japan|kyoto|tokyo|zen|sakura|bamboo|shrine/i.test(t))          return pools.japanese[Math.floor(Math.random() * pools.japanese.length)];
+  if (/norse|viking|nordic|fjord|scandinav/i.test(t))                 return pools.nordic[Math.floor(Math.random() * pools.nordic.length)];
   if (/ireland|scottish|celtic|highland|loch|druid/i.test(t))        return pools.celtic[Math.floor(Math.random() * pools.celtic.length)];
-  if (/italy|greek|tuscany|mediterranean|provence|spain/i.test(t))   return pools.mediterranean[Math.floor(Math.random() * pools.mediterranean.length)];
-  if (/africa|ghana|nigeria|kenya|savanna/i.test(t))                 return pools.african[Math.floor(Math.random() * pools.african.length)];
-  if (/england|english|cottage|village|countryside|british/i.test(t))return pools.english[Math.floor(Math.random() * pools.english.length)];
+  if (/italy|greek|tuscany|mediterranean|provence|spain/i.test(t))    return pools.mediterranean[Math.floor(Math.random() * pools.mediterranean.length)];
+  if (/africa|ghana|nigeria|kenya|savanna/i.test(t))                  return pools.african[Math.floor(Math.random() * pools.african.length)];
+  if (/england|english|cottage|village|countryside|british/i.test(t)) return pools.english[Math.floor(Math.random() * pools.english.length)];
   return pools.default[Math.floor(Math.random() * pools.default.length)];
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// BATCH MATH
+// BATCH MATH — fixed
 // ═══════════════════════════════════════════════════════════════════
 function computeBatchTargets(totalTargetWords, scriptMode) {
   const WORDS_PER_BATCH = scriptMode === 'sleep_meditation' ? 1100
     : scriptMode === 'sleep_story' ? 900
     : 800;
 
+  // Never force 2 batches minimum — let the word count decide
   const numBatches = Math.max(1, Math.ceil(totalTargetWords / WORDS_PER_BATCH));
+
+  // Distribute evenly; give the remainder to the last batch
   const baseWords = Math.floor(totalTargetWords / numBatches);
   const remainder = totalTargetWords - baseWords * numBatches;
 
@@ -176,7 +182,7 @@ ${selectedHook ? `- Opening Hook: "${selectedHook.hook_text}"` : ''}
 - Nature metaphors: ocean, mountain, tree, river, moon, stars, forest
 
 **SECTION TEMPLATE IDEAS** (adapt to fit ${numBatches} sections):
-${sectionTemplates.slice(0, numBatches).map((s, i) => `  ${i + 1}. ${s}`).join('\n')}
+${sectionTemplates.slice(0, Math.max(numBatches, sectionTemplates.length)).slice(0, numBatches).map((s, i) => `  ${i + 1}. ${s}`).join('\n')}
 
 Create exactly ${numBatches} sections.
 
@@ -199,12 +205,12 @@ function buildSleepStoryOutlinePrompt({ topic, project, numBatches, totalTargetW
   const protagonistName = pickProtagonistName(topic?.title || project.name);
 
   const chapterArcHints = [];
-  chapterArcHints.push(`Chapter 1 — ARRIVAL: ${protagonistName} is already present in a specific, named location — not arriving, already there. Open like the first sentence of a novel. The first word is NOT "Welcome" or any greeting. ${protagonistName} is doing something concrete and unhurried.`);
+  chapterArcHints.push(`Chapter 1 — ARRIVAL: ${protagonistName} arrives at or is already within a specific, vividly described setting. Open like the first line of a novel. ${protagonistName} begins a simple, concrete activity.`);
   for (let i = 2; i < numBatches; i++) {
-    chapterArcHints.push(`Chapter ${i} — EXPLORATION: ${protagonistName} moves slowly through the world, notices things, completes a gentle task, or discovers a small detail. The world gets quieter and slower with each chapter.`);
+    chapterArcHints.push(`Chapter ${i} — EXPLORATION: ${protagonistName} moves through the world, notices things, completes a gentle task, or discovers a small detail. The world gets quieter and slower with each chapter.`);
   }
   if (numBatches > 1) {
-    chapterArcHints.push(`Chapter ${numBatches} — NATURAL REST: ${protagonistName} finds a warm, still place. The narration slows to near-silence. The story simply becomes stillness. No instruction to sleep. No address to any listener. Just the world going quiet.`);
+    chapterArcHints.push(`Chapter ${numBatches} — NATURAL REST: ${protagonistName} finds a warm, still place. The world outside is quiet. The narration slows to near-silence. The story dissolves. No instruction to sleep. No address to any listener. Just stillness.`);
   }
 
   return `You are a creative director planning an adult bedtime story — the kind told on the Calm app or Headspace Sleepcasts. You are writing a STORY OUTLINE, not a meditation plan.
@@ -214,27 +220,26 @@ A sleep story is NARRATIVE FICTION. A named character moves through a beautiful,
 ═══════════════════════════════════════
 THE PROTAGONIST: **${protagonistName}**
 ═══════════════════════════════════════
-Use this exact name in EVERY chapter synopsis. Personality: content, gently curious, unhurried, observant.
+Use this exact name in EVERY chapter synopsis — no exceptions. Personality: content, gently curious, unhurried, observant.
 
 ═══════════════════════════════════════
-RULES FOR EVERY SYNOPSIS — NON-NEGOTIABLE
+RULES FOR EVERY SYNOPSIS
 ═══════════════════════════════════════
 
 ✅ MUST HAVE:
-- ${protagonistName}'s name used explicitly at least twice per synopsis
-- A specific, named location (never just "a peaceful place" or "a calm setting")
-- Concrete actions ${protagonistName} takes: walks, stirs, ties, folds, lifts, watches, listens
+- ${protagonistName}'s name used explicitly at least twice
+- A specific, named location (never just "a peaceful place")
+- Concrete actions ${protagonistName} takes: walks, stirs, ties, folds, lifts, watches
 - Rich sensory details: seen, heard, smelled, touched
 - Third-person present tense: "${protagonistName} walks...", "${protagonistName} watches..."
 
-❌ NEVER — these will cause the script to fail:
-- Any form of welcome or greeting in Chapter 1 (no "Welcome", "Hello", "Good evening")
-- Second-person "you" in any form — not even once
-- Affirmations ("you are safe", "you are loved", "you are enough" — any variant)
+❌ NEVER:
+- Second-person "you" in any form
+- Affirmations ("you are safe", "you are loved", "you are enough")
 - Breathing instructions or body scan language
 - [PAUSE] or [BREATHE] markers in synopses
-- Chapter titles like "Opening & Welcome", "Settling In", "Body Awareness", "Drift State"
-- "The listener", "the audience", or any meta-commentary
+- Chapter titles like "Opening & Welcome", "Settling In", "Body Awareness"
+- "The listener", "the audience", or meta-commentary
 - Conflict, danger, tension, or urgency
 
 ═══════════════════════════════════════
@@ -248,11 +253,8 @@ PROJECT DETAILS
 CHAPTER ARC:
 ${chapterArcHints.join('\n')}
 
-EXAMPLE GOOD SYNOPSIS (study this carefully):
-"${protagonistName} walks the harbour wall as the tide retreats, leaving the fishing boats tilted gently on their moorings. The smell of salt and old rope is thick in the evening air. ${protagonistName} moves slowly, one hand trailing along the worn stone, watching a heron pick its way between the exposed rocks below. At the far end there is a wooden bench, warped by years of sea wind, and ${protagonistName} sits watching the light change — the sky shifting from pale gold to a soft, bruised blue above the headland. The water is perfectly still now. Somewhere behind the harbour wall, a door closes softly."
-
-EXAMPLE BAD SYNOPSIS (do not do this):
-"Welcome to our sleep story. Tonight we find ourselves in a peaceful harbour. You feel your body relaxing as you listen. Take a deep breath and let go of the day. You are safe here. [BREATHE] Allow yourself to drift..."
+EXAMPLE GOOD SYNOPSIS:
+"${protagonistName} walks the harbour wall as the tide retreats, leaving the fishing boats tilted gently on their moorings. The smell of salt and old rope is thick in the evening air. She moves slowly, one hand trailing along the worn stone, watching a heron pick its way between the exposed rocks below. At the far end there is a wooden bench, warped by years of sea wind, and she sits watching the light change — the sky shifting from pale gold to a soft, bruised blue above the headland."
 
 Return only valid JSON:
 {
@@ -261,9 +263,9 @@ Return only valid JSON:
   "batches": [
     {
       "batch_number": 1,
-      "story_segment": "Evocative chapter title (3-6 words — NOT 'Opening', NOT 'Welcome', NOT 'Settling')",
+      "story_segment": "Evocative chapter title (3-6 words, NOT 'Opening', NOT 'Welcome')",
       "focus_area": "One sentence: what ${protagonistName} does and where",
-      "synopsis": "200-300 words. ${protagonistName} named explicitly. Specific named location. Concrete actions. Layered sensory details. Third-person present tense. Zero second-person. Zero affirmations. Zero breathing cues. Chapter 1 must NOT begin with any greeting."
+      "synopsis": "200-300 words. ${protagonistName} named explicitly. Specific location. Concrete actions. Layered sensory details. Third-person present tense. Zero second-person. Zero affirmations. Zero breathing cues."
     }
   ]
 }
@@ -358,7 +360,7 @@ Deno.serve(async (req) => {
 
     console.log(`[initializeScriptBatches] mode=${resolvedScriptMode} channel=${channel?.name || 'none'}`);
 
-    // Strategy block (standard mode only)
+    // ── Strategy block (standard mode only) ──
     let strategyBlock = '';
     if (!isSleepMode) {
       const raw = project.script_strategy_override || channel?.script_strategy || '';
@@ -378,14 +380,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Hooks not used for sleep modes
+    // Sleep projects don't use hooks
     let selectedHook = null;
     if (!isSleepMode && project.selected_hook_id) {
       const hooks = await base44.asServiceRole.entities.Hooks.filter({ id: project.selected_hook_id });
       selectedHook = hooks[0] || null;
     }
 
-    // Word / batch math
+    // ── Word / batch math (FIXED) ──
     const durationMinutes   = project.video_duration_minutes || 10;
     const totalTargetWords  = Math.round(durationMinutes * 150);
     const batchTargets      = computeBatchTargets(totalTargetWords, resolvedScriptMode);
@@ -393,16 +395,16 @@ Deno.serve(async (req) => {
 
     console.log(`[initializeScriptBatches] ${durationMinutes}min → ${totalTargetWords}w → ${numBatches} batches → targets: [${batchTargets.join(', ')}]`);
 
-    // Delete existing batches
+    // ── Delete existing batches ──
     const existingBatches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
     for (const b of existingBatches) {
       await base44.asServiceRole.entities.ScriptBatches.delete(b.id);
     }
 
-    // Build outline prompt
+    // ── Build outline prompt ──
     const promptArgs = { topic, project, channel, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock };
     let outlinePrompt;
-    if (isMeditation)      outlinePrompt = buildMeditationOutlinePrompt(promptArgs);
+    if (isMeditation)     outlinePrompt = buildMeditationOutlinePrompt(promptArgs);
     else if (isSleepStory) outlinePrompt = buildSleepStoryOutlinePrompt(promptArgs);
     else                   outlinePrompt = buildStandardOutlinePrompt(promptArgs);
 
@@ -413,74 +415,57 @@ Deno.serve(async (req) => {
       throw new Error('AI failed to generate outline batches');
     }
 
-    // Determine protagonist name for sleep story (used on every batch record)
-    const protagonistName = isSleepStory
-      ? (outlineResult.protagonist_name || pickProtagonistName(topic?.title || project.name))
-      : null;
-
-    // Sleep story: validate + sanitise every synopsis
+    // ── Sleep story: validate + stamp protagonist on every batch ──
     if (isSleepStory) {
+      const protagonist = outlineResult.protagonist_name || pickProtagonistName(topic?.title || project.name);
       for (const b of outlineResult.batches) {
-        // Ensure protagonist appears in synopsis
-        if (!b.synopsis.includes(protagonistName)) {
-          b.synopsis = `${protagonistName} ${b.synopsis}`;
+        b.protagonist_name = protagonist;
+        if (!b.synopsis.includes(protagonist)) {
+          b.synopsis = `[Protagonist: ${protagonist}] ` + b.synopsis;
         }
-        // Strip meditation markers that leaked into synopses
+        // Strip any meditation markers that leaked into synopses
         b.synopsis = b.synopsis
           .replace(/\[PAUSE[^\]]*\]/gi, '')
           .replace(/\[BREATHE\]/gi, '')
-          .replace(/\byou (feel|notice|breathe|hear|see|sense|are)\b/gi, `${protagonistName} $1`)
-          .replace(/\bWelcome[,.]?\s*/gi, '')
-          .replace(/\bGood evening[,.]?\s*/gi, '')
+          .replace(/\byou (feel|notice|breathe|hear|see|sense|are)\b/gi, `${protagonist} $1`)
           .trim();
       }
     }
 
-    // Create batch records
-    // NOTE: protagonist_name is stored on each sleep story batch so generateScriptBatches
-    // can read it directly from the batch record without needing to re-fetch the outline.
+    // ── Create batch records using FIXED batchTargets ──
     const createdBatches = [];
     for (let i = 0; i < numBatches; i++) {
       const aiBatch = outlineResult.batches[i];
-
-      const batchData = {
+      const batch = await base44.asServiceRole.entities.ScriptBatches.create({
         project_id,
         batch_number:  i + 1,
         story_segment: aiBatch?.story_segment || `Part ${i + 1}`,
         focus_area:    aiBatch?.focus_area    || `Part ${i + 1}`,
         synopsis:      aiBatch?.synopsis      || `Write approximately ${batchTargets[i]} words for part ${i + 1}.`,
-        target_words:  batchTargets[i],
+        target_words:  batchTargets[i],   // ← always correct, never negative
         status:        'pending',
-      };
-
-      // Store protagonist name on batch so the writing step can use it without extra lookups
-      if (isSleepStory && protagonistName) {
-        batchData.protagonist_name = protagonistName;
-      }
-
-      const batch = await base44.asServiceRole.entities.ScriptBatches.create(batchData);
+      });
       createdBatches.push(batch);
     }
 
-    // Update project — persist the resolved script mode so generateScriptBatches
-    // always reads project_mode correctly even if channel detection was used
+    // ── Update project ──
     await base44.asServiceRole.entities.Projects.update(project_id, {
       status:       'scripting',
       current_step: 3,
-      project_mode: resolvedScriptMode,
+      project_mode: isSleepMode ? resolvedScriptMode : (project.project_mode || ''),
     });
 
     console.log(`[initializeScriptBatches] ✅ ${createdBatches.length} batches created (${resolvedScriptMode})`);
 
     return Response.json({
-      success:             true,
-      batches_created:     createdBatches.length,
-      total_target_words:  totalTargetWords,
-      duration_minutes:    durationMinutes,
-      script_mode:         resolvedScriptMode,
-      batch_targets:       batchTargets,
-      protagonist_name:    protagonistName,
-      batches:             createdBatches,
+      success:          true,
+      batches_created:  createdBatches.length,
+      total_target_words: totalTargetWords,
+      duration_minutes:   durationMinutes,
+      script_mode:        resolvedScriptMode,
+      batch_targets:      batchTargets,
+      protagonist_name:   isSleepStory ? (outlineResult.protagonist_name || null) : undefined,
+      batches:            createdBatches,
     });
 
   } catch (error) {
