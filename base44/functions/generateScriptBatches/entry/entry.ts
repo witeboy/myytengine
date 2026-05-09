@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-// v5 — Claude primary + Gemini fallback | sleep story separated from meditation
+// v5 — Gemini primary + Claude fallback | sleep story separated from meditation
 
 const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
@@ -111,18 +111,18 @@ async function callGemini(prompt, temperature = 0.85, retries = 2) {
 
 async function callLLM(prompt, temperature = 0.85) {
   try {
-    const result = await callClaude(prompt, temperature);
-    return { result, provider: 'claude' };
-  } catch (claudeErr) {
-    const msg = claudeErr.message || '';
-    const isFatal = /credit balance|billing|purchase credits|api key|unauthorized/i.test(msg);
-    console.warn(`[LLM] Claude failed${isFatal ? ' (fatal — switching to Gemini)' : ''}: ${msg.substring(0, 120)}`);
-
-    if (!GEMINI_KEY) throw claudeErr;
-
-    console.log('[LLM] Falling back to Gemini 2.5 Pro...');
     const result = await callGemini(prompt, temperature);
     return { result, provider: 'gemini' };
+  } catch (geminiErr) {
+    const msg = geminiErr.message || '';
+    const isFatal = /credit balance|billing|purchase credits|api key|unauthorized/i.test(msg);
+    console.warn(`[LLM] Gemini failed${isFatal ? ' (fatal — switching to Claude)' : ''}: ${msg.substring(0, 120)}`);
+
+    if (!ANTHROPIC_KEY) throw geminiErr;
+
+    console.log('[LLM] Falling back to Claude...');
+    const result = await callClaude(prompt, temperature);
+    return { result, provider: 'claude' };
   }
 }
 
@@ -235,7 +235,6 @@ Return JSON:
 // SLEEP STORY WRITING PROMPT — pure narrative, no meditation language
 // ═══════════════════════════════════════════════════════════════════
 function buildSleepStoryWritingPrompt({ batch, project, topic, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch }) {
-  // Extract protagonist name from synopsis (stamped by initializeScriptBatches)
   const protagonistMatch = batch.synopsis?.match(/\[Protagonist:\s*([^\]]+)\]/) ||
                            batch.synopsis?.match(/^Protagonist:\s*(.+?)[\.\n]/);
   const protagonist = batch.protagonist_name ||
@@ -501,13 +500,13 @@ Deno.serve(async (req) => {
         batch,
         project,
         topic,
-        selectedHook: isSleepMode ? null : selectedHook,  // hooks not used in sleep modes
+        selectedHook: isSleepMode ? null : selectedHook,
         sortedBatches,
         previousContent,
         outlineContext,
         isFirstBatch,
         isLastBatch,
-        strategyBlock,  // empty string for sleep modes — ignored by sleep builders
+        strategyBlock,
       };
 
       const prompt = buildWritingPrompt(scriptMode, promptArgs);
@@ -578,7 +577,6 @@ Return JSON:
           .replace(/\bWelcome[,.]?\s*/gi, '')
           .replace(/\bGood evening[,.]?\s*/gi, '')
           .replace(/\bHello[,.]?\s*/gi, '');
-        // Recount after cleanup
         wordCount = content.split(/\s+/).filter(w => w.length > 0).length;
       }
 
