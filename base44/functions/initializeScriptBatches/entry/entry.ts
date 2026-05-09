@@ -101,38 +101,16 @@ function detectScriptMode(channel, project) {
   return 'standard';
 }
 
-function pickProtagonistName(topicTitle) {
-  const pools = {
-    japanese:      ['Yuki', 'Haruki', 'Sora', 'Ren', 'Nao'],
-    nordic:        ['Astrid', 'Sven', 'Freya', 'Bjorn', 'Saga'],
-    celtic:        ['Rowan', 'Niamh', 'Callum', 'Isla', 'Finn'],
-    mediterranean: ['Elena', 'Marco', 'Sofia', 'Luca', 'Aria'],
-    english:       ['Thomas', 'Clara', 'Oliver', 'Mara', 'James'],
-    african:       ['Amara', 'Kofi', 'Zara', 'Seun', 'Nia'],
-    default:       ['Mara', 'Thomas', 'Elena', 'Rowan', 'Luca', 'Clara', 'Finn', 'Aria'],
-  };
-  const t = (topicTitle || '').toLowerCase();
-  if (/japan|kyoto|tokyo|zen|sakura|bamboo|shrine/i.test(t))          return pools.japanese[Math.floor(Math.random() * pools.japanese.length)];
-  if (/norse|viking|nordic|fjord|scandinav/i.test(t))                 return pools.nordic[Math.floor(Math.random() * pools.nordic.length)];
-  if (/ireland|scottish|celtic|highland|loch|druid/i.test(t))        return pools.celtic[Math.floor(Math.random() * pools.celtic.length)];
-  if (/italy|greek|tuscany|mediterranean|provence|spain/i.test(t))    return pools.mediterranean[Math.floor(Math.random() * pools.mediterranean.length)];
-  if (/africa|ghana|nigeria|kenya|savanna/i.test(t))                  return pools.african[Math.floor(Math.random() * pools.african.length)];
-  if (/england|english|cottage|village|countryside|british/i.test(t)) return pools.english[Math.floor(Math.random() * pools.english.length)];
-  return pools.default[Math.floor(Math.random() * pools.default.length)];
-}
-
 // ═══════════════════════════════════════════════════════════════════
-// BATCH MATH — fixed
+// BATCH MATH
 // ═══════════════════════════════════════════════════════════════════
 function computeBatchTargets(totalTargetWords, scriptMode) {
   const WORDS_PER_BATCH = scriptMode === 'sleep_meditation' ? 1100
     : scriptMode === 'sleep_story' ? 900
     : 800;
 
-  // Never force 2 batches minimum — let the word count decide
   const numBatches = Math.max(1, Math.ceil(totalTargetWords / WORDS_PER_BATCH));
 
-  // Distribute evenly; give the remainder to the last batch
   const baseWords = Math.floor(totalTargetWords / numBatches);
   const remainder = totalTargetWords - baseWords * numBatches;
 
@@ -201,51 +179,61 @@ Return JSON:
 Generate exactly ${numBatches} batches.`;
 }
 
+// ─────────────────────────────────────────────────────────────────
+// SLEEP STORY — second-person immersive, no named protagonist
+// ─────────────────────────────────────────────────────────────────
 function buildSleepStoryOutlinePrompt({ topic, project, numBatches, totalTargetWords, durationMinutes }) {
-  const protagonistName = pickProtagonistName(topic?.title || project.name);
 
   const chapterArcHints = [];
-  chapterArcHints.push(`Chapter 1 — ARRIVAL: ${protagonistName} arrives at or is already within a specific, vividly described setting. Open like the first line of a novel. ${protagonistName} begins a simple, concrete activity.`);
+  chapterArcHints.push(`Chapter 1 — ARRIVAL: The listener arrives at or is already within a specific, vividly described setting. Open like the first line of a novel — ground them in place immediately with sensory detail. Begin a simple, unhurried activity.`);
   for (let i = 2; i < numBatches; i++) {
-    chapterArcHints.push(`Chapter ${i} — EXPLORATION: ${protagonistName} moves through the world, notices things, completes a gentle task, or discovers a small detail. The world gets quieter and slower with each chapter.`);
+    chapterArcHints.push(`Chapter ${i} — DRIFTING DEEPER: The listener moves through the world — noticing things, completing a gentle task, following a sound or a light. The world grows quieter and slower with each chapter. "You" appears sparingly; the scene carries them.`);
   }
   if (numBatches > 1) {
-    chapterArcHints.push(`Chapter ${numBatches} — NATURAL REST: ${protagonistName} finds a warm, still place. The world outside is quiet. The narration slows to near-silence. The story dissolves. No instruction to sleep. No address to any listener. Just stillness.`);
+    chapterArcHints.push(`Chapter ${numBatches} — DISSOLVING: The listener finds a warm, still place. Sound fades. Movement slows to almost nothing. The narration thins to texture and silence. No instruction to sleep. No affirmations. Just the world, breathing.`);
   }
 
-  return `You are a creative director planning an adult bedtime story — the kind told on the Calm app or Headspace Sleepcasts. You are writing a STORY OUTLINE, not a meditation plan.
+  return `You are a creative director planning an adult bedtime story — the kind told on the Calm app or Headspace Sleepcasts. This is IMMERSIVE SECOND-PERSON NARRATIVE FICTION.
 
-A sleep story is NARRATIVE FICTION. A named character moves through a beautiful, specific world. The listener falls asleep because the world is so warm and detailed and unhurried that sleep finds them naturally.
+There is no named protagonist. The LISTENER is the protagonist — addressed as "you" — but sparingly. The world is described so richly that the listener slips into it naturally. "You" appears roughly once every 3-4 sentences. The rest is pure scene: light, texture, smell, sound, movement.
 
 ═══════════════════════════════════════
-THE PROTAGONIST: **${protagonistName}**
+THE GOLDEN RATIO: 80% WORLD / 20% YOU
 ═══════════════════════════════════════
-Use this exact name in EVERY chapter synopsis — no exceptions. Personality: content, gently curious, unhurried, observant.
+Most sentences paint the environment. A few gently place the listener inside it.
+
+✅ GOOD EXAMPLE:
+"The cobblestones are still warm from the afternoon sun. A cat stretches along a low wall, watching nothing. The smell of jasmine drifts down from a window somewhere above — and something cooking slowly, garlic and oil. You turn down a narrower lane. A hand finds yours, warm and unhurried. Neither of you speaks."
+
+❌ BAD EXAMPLE (too much "you", too meditation-like):
+"You notice your breathing slowing. You feel the warmth beneath your feet. You are safe here. You are at peace. Let yourself relax deeper with every step you take."
 
 ═══════════════════════════════════════
 RULES FOR EVERY SYNOPSIS
 ═══════════════════════════════════════
 
 ✅ MUST HAVE:
-- ${protagonistName}'s name used explicitly at least twice
 - A specific, named location (never just "a peaceful place")
-- Concrete actions ${protagonistName} takes: walks, stirs, ties, folds, lifts, watches
-- Rich sensory details: seen, heard, smelled, touched
-- Third-person present tense: "${protagonistName} walks...", "${protagonistName} watches..."
+- Rich layered sensory detail: what is seen, heard, smelled, felt
+- Concrete things happening in the world: water moving, a fire settling, bread cooling, wind in leaves
+- "You" used sparingly — to place the listener, not to instruct them
+- Present tense throughout
+- Pacing that slows chapter by chapter
 
 ❌ NEVER:
-- Second-person "you" in any form
-- Affirmations ("you are safe", "you are loved", "you are enough")
+- Named protagonist (no Thomas, Elena, Rowan, or any name)
+- Affirmations: "you are safe", "you are loved", "you are enough"
 - Breathing instructions or body scan language
 - [PAUSE] or [BREATHE] markers in synopses
-- Chapter titles like "Opening & Welcome", "Settling In", "Body Awareness"
-- "The listener", "the audience", or meta-commentary
+- Chapter titles like "Opening & Welcome" or "Settling In"
+- "The listener", "the audience", or any meta-commentary
 - Conflict, danger, tension, or urgency
+- Overuse of "you" — never more than once every 3 sentences
 
 ═══════════════════════════════════════
 PROJECT DETAILS
 ═══════════════════════════════════════
-- Story topic / setting: ${topic?.title || project.name}
+- Story setting / topic: ${topic?.title || project.name}
 - Description: ${topic?.description || ''}
 - Duration: ${durationMinutes} minutes (~${totalTargetWords} words at 150 wpm)
 - Total chapters: ${numBatches}
@@ -253,19 +241,19 @@ PROJECT DETAILS
 CHAPTER ARC:
 ${chapterArcHints.join('\n')}
 
-EXAMPLE GOOD SYNOPSIS:
-"${protagonistName} walks the harbour wall as the tide retreats, leaving the fishing boats tilted gently on their moorings. The smell of salt and old rope is thick in the evening air. She moves slowly, one hand trailing along the worn stone, watching a heron pick its way between the exposed rocks below. At the far end there is a wooden bench, warped by years of sea wind, and she sits watching the light change — the sky shifting from pale gold to a soft, bruised blue above the headland."
+EXAMPLE GOOD SYNOPSIS (Alexandria, evening):
+"The harbour has grown quiet. The last fishing boats rock gently on their moorings, their reflections fractured on the dark water below. The air carries salt and something faintly sweet — jasmine from the terraces above the old seawall. You walk slowly along the edge, one hand trailing the worn stone. A lantern hangs at the end of a jetty, swaying very slightly in a breeze you can barely feel. Somewhere behind you, the city hums softly — voices, the clink of glass, music from an open door. But out here it is almost still. The water makes small sounds against the hull of a wooden boat. You stop and watch the light move on the surface."
 
 Return only valid JSON:
 {
   "storytelling_format": "sleep story",
-  "protagonist_name": "${protagonistName}",
+  "pov": "second_person",
   "batches": [
     {
       "batch_number": 1,
-      "story_segment": "Evocative chapter title (3-6 words, NOT 'Opening', NOT 'Welcome')",
-      "focus_area": "One sentence: what ${protagonistName} does and where",
-      "synopsis": "200-300 words. ${protagonistName} named explicitly. Specific location. Concrete actions. Layered sensory details. Third-person present tense. Zero second-person. Zero affirmations. Zero breathing cues."
+      "story_segment": "Evocative chapter title (3-6 words — NOT 'Opening', NOT 'Welcome', NOT 'Settling In')",
+      "focus_area": "One sentence: where the listener is and what is happening around them",
+      "synopsis": "200-300 words. Specific named location. Rich layered sensory detail. 'You' used sparingly — no more than once every 3-4 sentences. Present tense. Zero affirmations. Zero breathing cues. Zero named protagonist."
     }
   ]
 }
@@ -387,7 +375,7 @@ Deno.serve(async (req) => {
       selectedHook = hooks[0] || null;
     }
 
-    // ── Word / batch math (FIXED) ──
+    // ── Word / batch math ──
     const durationMinutes   = project.video_duration_minutes || 10;
     const totalTargetWords  = Math.round(durationMinutes * 150);
     const batchTargets      = computeBatchTargets(totalTargetWords, resolvedScriptMode);
@@ -404,35 +392,33 @@ Deno.serve(async (req) => {
     // ── Build outline prompt ──
     const promptArgs = { topic, project, channel, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock };
     let outlinePrompt;
-    if (isMeditation)     outlinePrompt = buildMeditationOutlinePrompt(promptArgs);
+    if (isMeditation)      outlinePrompt = buildMeditationOutlinePrompt(promptArgs);
     else if (isSleepStory) outlinePrompt = buildSleepStoryOutlinePrompt(promptArgs);
     else                   outlinePrompt = buildStandardOutlinePrompt(promptArgs);
 
-    const temperature = isSleepStory ? 0.8 : isMeditation ? 0.6 : 0.7;
+    const temperature = isSleepStory ? 0.85 : isMeditation ? 0.6 : 0.7;
     const outlineResult = await callLLM(outlinePrompt, temperature);
 
     if (!outlineResult.batches || outlineResult.batches.length === 0) {
       throw new Error('AI failed to generate outline batches');
     }
 
-    // ── Sleep story: validate + stamp protagonist on every batch ──
+    // ── Sleep story: sanitize synopses — strip any named protagonist or meditation bleed-through ──
     if (isSleepStory) {
-      const protagonist = outlineResult.protagonist_name || pickProtagonistName(topic?.title || project.name);
       for (const b of outlineResult.batches) {
-        b.protagonist_name = protagonist;
-        if (!b.synopsis.includes(protagonist)) {
-          b.synopsis = `[Protagonist: ${protagonist}] ` + b.synopsis;
-        }
-        // Strip any meditation markers that leaked into synopses
         b.synopsis = b.synopsis
+          // Remove any [PAUSE] / [BREATHE] markers that leaked in
           .replace(/\[PAUSE[^\]]*\]/gi, '')
           .replace(/\[BREATHE\]/gi, '')
-          .replace(/\byou (feel|notice|breathe|hear|see|sense|are)\b/gi, `${protagonist} $1`)
+          // Strip accidental affirmation clusters
+          .replace(/you are (safe|loved|enough|at peace|where you need to be)[.,]?/gi, '')
+          // Collapse double spaces left behind
+          .replace(/  +/g, ' ')
           .trim();
       }
     }
 
-    // ── Create batch records using FIXED batchTargets ──
+    // ── Create batch records ──
     const createdBatches = [];
     for (let i = 0; i < numBatches; i++) {
       const aiBatch = outlineResult.batches[i];
@@ -442,7 +428,7 @@ Deno.serve(async (req) => {
         story_segment: aiBatch?.story_segment || `Part ${i + 1}`,
         focus_area:    aiBatch?.focus_area    || `Part ${i + 1}`,
         synopsis:      aiBatch?.synopsis      || `Write approximately ${batchTargets[i]} words for part ${i + 1}.`,
-        target_words:  batchTargets[i],   // ← always correct, never negative
+        target_words:  batchTargets[i],
         status:        'pending',
       });
       createdBatches.push(batch);
@@ -458,14 +444,14 @@ Deno.serve(async (req) => {
     console.log(`[initializeScriptBatches] ✅ ${createdBatches.length} batches created (${resolvedScriptMode})`);
 
     return Response.json({
-      success:          true,
-      batches_created:  createdBatches.length,
+      success:           true,
+      batches_created:   createdBatches.length,
       total_target_words: totalTargetWords,
-      duration_minutes:   durationMinutes,
-      script_mode:        resolvedScriptMode,
-      batch_targets:      batchTargets,
-      protagonist_name:   isSleepStory ? (outlineResult.protagonist_name || null) : undefined,
-      batches:            createdBatches,
+      duration_minutes:  durationMinutes,
+      script_mode:       resolvedScriptMode,
+      batch_targets:     batchTargets,
+      pov:               isSleepStory ? 'second_person' : undefined,
+      batches:           createdBatches,
     });
 
   } catch (error) {
