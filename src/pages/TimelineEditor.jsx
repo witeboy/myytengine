@@ -742,6 +742,7 @@ export default function TimelineEditor() {
   const [isDetectingBeats,  setIsDetectingBeats]  = useState(false);
   const [beatSnapEnabled,   setBeatSnapEnabled]   = useState(false);
   const [syncStatus,        setSyncStatus]        = useState(null);
+  const [syncSource,        setSyncSource]        = useState(null);
   const [isGenCaptions,     setIsGenCaptions]     = useState(false);
   const [captionOffset,     setCaptionOffset]     = useState(0);
   const [isApplyingZoom,    setIsApplyingZoom]    = useState(false);
@@ -1232,6 +1233,7 @@ export default function TimelineEditor() {
         } catch (e) { console.warn('Could not save beat data to DB:', e.message); }
       }
 
+      setSyncSource(syncSource);
       setSyncStatus(syncSource === 'saved' ? 'saved' : syncSource === 'asr' ? 'audio' : 'words');
     } catch (err) {
       console.error('AutoSync failed:', err);
