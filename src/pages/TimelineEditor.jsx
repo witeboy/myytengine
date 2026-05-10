@@ -903,7 +903,9 @@ export default function TimelineEditor() {
       try {
         const savedVideo = JSON.parse(prodSettings.timeline_video_clips);
         const savedCaptions = prodSettings.timeline_caption_clips ? JSON.parse(prodSettings.timeline_caption_clips) : [];
-        if (Array.isArray(savedVideo) && savedVideo.length > 0) {
+        // Only restore saved clips if they match the current scene count exactly
+        // Mismatch means scenes were added/removed since last save — rebuild from scratch
+        if (Array.isArray(savedVideo) && savedVideo.length === scenes.length) {
           videoHistory.reset(savedVideo);
           if (savedCaptions.length > 0) captionHistory.reset(savedCaptions);
           if (prodSettings.timeline_overlay_clips) {
@@ -914,6 +916,8 @@ export default function TimelineEditor() {
           }
           setInitialized(true);
           return;
+        } else {
+          console.warn(`[Timeline] Saved clips (${savedVideo?.length}) ≠ scenes (${scenes.length}) — rebuilding from scenes`);
         }
       } catch (e) {
         console.warn('[Timeline] Could not restore saved state:', e.message);
