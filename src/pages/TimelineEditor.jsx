@@ -684,7 +684,7 @@ export default function TimelineEditor() {
 
   const [activePanel,    setActivePanel]    = useState('media');
   const [isPlaying,      setIsPlaying]      = useState(false);
-  const [pps,            setPps]            = useState(15);
+  const [pps,            setPps]            = useState(3);
   const [isMuted,        setIsMuted]        = useState(false);
   const [musicVol,       setMusicVol]       = useState(0.3);
   const [voiceoverVol,   setVoiceoverVol]   = useState(1.0);
@@ -972,6 +972,11 @@ export default function TimelineEditor() {
     console.log(`[Timeline] Built ${initClips.length} clips from scenes`);
     videoHistory.reset(initClips);
     setInitialized(true);
+    // Scroll timeline back to start
+    setTimeout(() => {
+      const timelineEl = document.querySelector('.overflow-x-auto');
+      if (timelineEl) timelineEl.scrollLeft = 0;
+    }, 100);
   }, [scenes, prodSettings, audioBeatDurations]);
 
   // ── Playback Engine ─────────────────────────────────────────────
