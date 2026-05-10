@@ -948,7 +948,7 @@ export default function TimelineEditor() {
     const beats = audioBeatDurations.length === scenes.length ? audioBeatDurations : null;
     let offset = 0;
     const initClips = scenes.map((scene, idx) => {
-      const duration = (beats ? beats[idx] : null) || scene.duration_seconds || 5;
+      const duration = Math.max(1.5, (beats ? beats[idx] : null) || scene.duration_seconds || 5);
       const hasVideo = scene.video_url && scene.video_url.startsWith('http')
         && !scene.video_url.startsWith('veo_task:') && !scene.video_url.startsWith('grok_vid_task:');
       const hasBroll = scene.broll_url && scene.broll_url.startsWith('http');
@@ -1048,17 +1048,30 @@ export default function TimelineEditor() {
         ? (() => { try { return JSON.parse(prodSettings.beat_start_times); } catch (_) { return null; } })()
         : null;
 
-      if (
+      // Always derive durations from scene.duration_seconds — ground truth set at scene-creation time
+      const sceneDurations = scenes.map(s => Math.max(1.5, s.duration_seconds || 5));
+      const sceneTotal = sceneDurations.reduce((a, b) => a + b, 0);
+      const savedIsValid = (
         savedDurations && Array.isArray(savedDurations) &&
         savedDurations.length === scenes.length &&
-        savedDurations.every(d => typeof d === 'number' && d > 0 && isFinite(d))
-      ) {
+        savedDurations.every(d => typeof d === 'number' && d > 0 && isFinite(d)) &&
+        // Sanity check: no single scene should exceed 30% of total — catches bad estimation dumps
+        savedDurations.every(d => d / savedDurations.reduce((a,b)=>a+b,0) < 0.30)
+      );
+
+      if (savedIsValid) {
         newBeatDurations = savedDurations;
         newStartTimes = savedStartTimes && savedStartTimes.length === scenes.length
           ? savedStartTimes
           : (() => { let off = 0; return savedDurations.map(d => { const s = off; off += d; return s; }); })();
         syncSource = 'saved';
         console.log(`[AutoSync] Using saved beat timings: ${scenes.length} scenes, total ${newBeatDurations.reduce((s,d)=>s+d,0).toFixed(1)}s`);
+      } else if (sceneTotal > 0) {
+        // Use duration_seconds from each scene — set correctly by generateSceneBreakdown
+        newBeatDurations = sceneDurations;
+        newStartTimes = (() => { let off = 0; return sceneDurations.map(d => { const s = off; off += d; return s; }); })();
+        syncSource = 'saved';
+        console.log(`[AutoSync] Using scene.duration_seconds: ${scenes.length} scenes, total ${sceneTotal.toFixed(1)}s`);
       } else {
         // ── FALLBACK: syllable-weighted estimation ───────────────
         console.log(`[AutoSync] No saved timings match scene count (${savedDurations?.length} saved vs ${scenes.length} scenes) — estimating`);
