@@ -754,6 +754,7 @@ export default function TimelineEditor() {
   const [lastAlignmentResults, setLastAlignmentResults] = useState(null); // stored for manual drift fix
   const initializedRef = useRef(false);
   const initializedForSceneCount = useRef(0);
+  const lastInitializedScenes = useRef([]);
 
   const [transcription, setTranscription] = useState({ status: 'idle', words: [], wordCount: 0, error: null });
   const [overrideBeatDurations, setOverrideBeatDurations] = useState(null);
@@ -895,59 +896,68 @@ export default function TimelineEditor() {
     }]);
   }, [musicUrl, selectedMusic]);
 
-  // ── Initialize video clips — reruns whenever scene count changes ──
+  // ── Initialize video clips ──────────────────────────────────────
+  // Waits for BOTH scenes and prodSettings to be fully loaded.
+  // Re-runs if scene count changes (e.g. partial load → full load).
   useEffect(() => {
-    if (scenes.length === 0) return;
-    // Wait for prodSettings to load before deciding whether to use saved clips
+    // Gate 1: need scenes
+    if (!scenes || scenes.length === 0) return;
+    // Gate 2: need prodSettings to have resolved (undefined = still loading, null = loaded but empty)
     if (prodSettings === undefined) return;
-    // Already initialized for this exact scene count — skip
-    if (initializedForSceneCount.current === scenes.length) return;
-    initializedForSceneCount.current = scenes.length;
-    initializedRef.current = true;
+    // Gate 3: already built clips for this exact set of scene IDs — skip
+    const sceneIds = scenes.map(s => s.id).join(',');
+    if (lastInitializedScenes.current === sceneIds) return;
+    lastInitializedScenes.current = sceneIds;
 
+    console.log(`[Timeline] Initializing ${scenes.length} scenes`);
+
+    // Try to restore saved clips only if count matches exactly
     if (prodSettings?.timeline_video_clips) {
       try {
         const savedVideo = JSON.parse(prodSettings.timeline_video_clips);
-        const savedCaptions = prodSettings.timeline_caption_clips ? JSON.parse(prodSettings.timeline_caption_clips) : [];
-        // Only restore saved clips if they match the current scene count exactly
         if (Array.isArray(savedVideo) && savedVideo.length === scenes.length) {
+          console.log(`[Timeline] Restoring ${savedVideo.length} saved clips`);
           videoHistory.reset(savedVideo);
+          const savedCaptions = prodSettings.timeline_caption_clips
+            ? JSON.parse(prodSettings.timeline_caption_clips) : [];
           if (savedCaptions.length > 0) captionHistory.reset(savedCaptions);
           if (prodSettings.timeline_overlay_clips) {
             try {
               const savedOverlays = JSON.parse(prodSettings.timeline_overlay_clips);
               if (Array.isArray(savedOverlays) && savedOverlays.length > 0) overlayHistory.reset(savedOverlays);
-            } catch (e) {}
+            } catch (_) {}
           }
           setInitialized(true);
           return;
-        } else {
-          console.warn(`[Timeline] Saved clips (${savedVideo?.length}) ≠ scenes (${scenes.length}) — rebuilding from scenes`);
-          // Clear stale saved clips so they don't interfere on next load
-          if (prodSettings?.id) {
-            base44.entities.ProductionSettings.update(prodSettings.id, {
-              timeline_video_clips: null,
-              timeline_caption_clips: null,
-              timeline_overlay_clips: null,
-            }).catch(e => console.warn('[Timeline] Could not clear stale clips:', e.message));
-          }
+        }
+        console.warn(`[Timeline] Saved clips count (${savedVideo?.length}) ≠ scenes (${scenes.length}) — rebuilding`);
+        // Wipe stale saved data from DB
+        if (prodSettings?.id) {
+          base44.entities.ProductionSettings.update(prodSettings.id, {
+            timeline_video_clips: null,
+            timeline_caption_clips: null,
+            timeline_overlay_clips: null,
+          }).catch(() => {});
         }
       } catch (e) {
-        console.warn('[Timeline] Could not restore saved state:', e.message);
+        console.warn('[Timeline] Saved state parse error:', e.message);
       }
     }
 
-    const currentBeats = audioBeatDurations.length === scenes.length ? audioBeatDurations : null;
+    // Build fresh clips from scenes
+    const beats = audioBeatDurations.length === scenes.length ? audioBeatDurations : null;
     let offset = 0;
     const initClips = scenes.map((scene, idx) => {
-      const duration  = (currentBeats ? currentBeats[idx] : null) || scene.duration_seconds || 5;
-      const hasVideo  = scene.video_url && scene.video_url.startsWith('http') && !scene.video_url.startsWith('veo_task:') && !scene.video_url.startsWith('grok_vid_task:');
+      const duration = (beats ? beats[idx] : null) || scene.duration_seconds || 5;
+      const hasVideo = scene.video_url && scene.video_url.startsWith('http')
+        && !scene.video_url.startsWith('veo_task:') && !scene.video_url.startsWith('grok_vid_task:');
       const hasBroll = scene.broll_url && scene.broll_url.startsWith('http');
       const clip = {
         id: `video-${scene.id}`, sceneId: scene.id, sceneNumber: scene.scene_number,
         type: 'video', startTime: offset, duration,
         label: `Scene ${scene.scene_number}`, thumbnail: scene.image_url,
-        imageUrl: scene.image_url, videoUrl: hasVideo ? scene.video_url : null,
+        imageUrl: scene.image_url,
+        videoUrl: hasVideo ? scene.video_url : null,
         brollUrl: hasBroll ? scene.broll_url : null,
         brollSource: scene.broll_source || null, brollQuery: scene.broll_query || null,
         mediaType: hasVideo ? 'video' : 'image',
@@ -959,9 +969,10 @@ export default function TimelineEditor() {
       offset += duration;
       return clip;
     });
+    console.log(`[Timeline] Built ${initClips.length} clips from scenes`);
     videoHistory.reset(initClips);
     setInitialized(true);
-  }, [scenes.length, scenes, prodSettings, audioBeatDurations]);
+  }, [scenes, prodSettings, audioBeatDurations]);
 
   // ── Playback Engine ─────────────────────────────────────────────
   const playbackEngine = usePlaybackEngine({
