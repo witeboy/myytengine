@@ -753,6 +753,7 @@ export default function TimelineEditor() {
   const [driftedScenes,     setDriftedScenes]     = useState([]); // scenes with alignment drift detected after sync
   const [lastAlignmentResults, setLastAlignmentResults] = useState(null); // stored for manual drift fix
   const initializedRef = useRef(false);
+  const initializedForSceneCount = useRef(0);
 
   const [transcription, setTranscription] = useState({ status: 'idle', words: [], wordCount: 0, error: null });
   const [overrideBeatDurations, setOverrideBeatDurations] = useState(null);
@@ -894,9 +895,14 @@ export default function TimelineEditor() {
     }]);
   }, [musicUrl, selectedMusic]);
 
-  // ── Initialize video clips once ────────────────────────────────
+  // ── Initialize video clips — reruns whenever scene count changes ──
   useEffect(() => {
-    if (scenes.length === 0 || initializedRef.current) return;
+    if (scenes.length === 0) return;
+    // Wait for prodSettings to load before deciding whether to use saved clips
+    if (prodSettings === undefined) return;
+    // Already initialized for this exact scene count — skip
+    if (initializedForSceneCount.current === scenes.length) return;
+    initializedForSceneCount.current = scenes.length;
     initializedRef.current = true;
 
     if (prodSettings?.timeline_video_clips) {
@@ -904,7 +910,6 @@ export default function TimelineEditor() {
         const savedVideo = JSON.parse(prodSettings.timeline_video_clips);
         const savedCaptions = prodSettings.timeline_caption_clips ? JSON.parse(prodSettings.timeline_caption_clips) : [];
         // Only restore saved clips if they match the current scene count exactly
-        // Mismatch means scenes were added/removed since last save — rebuild from scratch
         if (Array.isArray(savedVideo) && savedVideo.length === scenes.length) {
           videoHistory.reset(savedVideo);
           if (savedCaptions.length > 0) captionHistory.reset(savedCaptions);
@@ -918,6 +923,14 @@ export default function TimelineEditor() {
           return;
         } else {
           console.warn(`[Timeline] Saved clips (${savedVideo?.length}) ≠ scenes (${scenes.length}) — rebuilding from scenes`);
+          // Clear stale saved clips so they don't interfere on next load
+          if (prodSettings?.id) {
+            base44.entities.ProductionSettings.update(prodSettings.id, {
+              timeline_video_clips: null,
+              timeline_caption_clips: null,
+              timeline_overlay_clips: null,
+            }).catch(e => console.warn('[Timeline] Could not clear stale clips:', e.message));
+          }
         }
       } catch (e) {
         console.warn('[Timeline] Could not restore saved state:', e.message);
@@ -948,7 +961,7 @@ export default function TimelineEditor() {
     });
     videoHistory.reset(initClips);
     setInitialized(true);
-  }, [scenes.length, prodSettings]);
+  }, [scenes.length, scenes, prodSettings, audioBeatDurations]);
 
   // ── Playback Engine ─────────────────────────────────────────────
   const playbackEngine = usePlaybackEngine({
