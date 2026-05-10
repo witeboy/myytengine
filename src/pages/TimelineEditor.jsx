@@ -1001,7 +1001,7 @@ export default function TimelineEditor() {
     try {
       let newBeatDurations;
       let newStartTimes;
-      let syncSource;
+      let syncSource = 'words';
       let alignmentResults = null;
 
       // ── PRIMARY PATH: use beat_durations already saved at scene-creation time ──
