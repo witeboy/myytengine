@@ -118,6 +118,7 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     }
     
     const firstAsrIdx = asrCursor;
+    let firstMatchedAsrIdx = -1;
     let lastMatchedAsrIdx = -1;
     let scriptIdx = 0;
     let matchedCount = 0;
@@ -127,7 +128,7 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     // This prevents one scene from eating all remaining ASR words
     // if matching goes wrong.
     const maxAsrConsume = Math.min(
-      scriptWords.length * 2 + 5,
+      scriptWords.length * 4 + 15,
       asrWords.length - asrCursor
     );
     
@@ -142,39 +143,49 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
       
       if (wordsMatch(scriptW, asrW)) {
         // Match found — consume both
+        if (firstMatchedAsrIdx === -1) firstMatchedAsrIdx = asrIdx;
         lastMatchedAsrIdx = asrIdx;
         matchedCount++;
         scriptIdx++;
         localAsrIdx++;
       } else {
-        // No match — try skipping 1 ASR word (ASR inserted a word)
-        if (asrIdx + 1 < asrWords.length && localAsrIdx + 1 < maxAsrConsume) {
-          if (wordsMatch(scriptW, asrWords[asrIdx + 1].word)) {
-            // Skip this ASR word, match the next one
-            localAsrIdx++; // skip
+        // No match — try skipping up to 3 ASR words (ASR inserted filler)
+        let asrSkipFound = false;
+        for (let skip = 1; skip <= 3 && localAsrIdx + skip < maxAsrConsume; skip++) {
+          const candidateIdx = asrIdx + skip;
+          if (candidateIdx < asrWords.length && wordsMatch(scriptW, asrWords[candidateIdx].word)) {
+            localAsrIdx += skip; // skip inserted ASR words
+            if (firstMatchedAsrIdx === -1) firstMatchedAsrIdx = asrCursor + localAsrIdx;
             lastMatchedAsrIdx = asrCursor + localAsrIdx;
             matchedCount++;
             scriptIdx++;
             localAsrIdx++;
-            continue;
+            asrSkipFound = true;
+            break;
           }
         }
-        
-        // Try skipping 1 script word (ASR missed a word)
-        if (scriptIdx + 1 < scriptWords.length) {
-          if (wordsMatch(scriptWords[scriptIdx + 1], asrW)) {
-            // Skip this script word, match current ASR word to next script word
-            scriptIdx++; // skip
-            lastMatchedAsrIdx = asrIdx;
-            matchedCount++;
-            scriptIdx++;
+
+        if (!asrSkipFound) {
+          // Try skipping up to 3 script words (ASR dropped them)
+          let scriptSkipFound = false;
+          for (let skip = 1; skip <= 3 && scriptIdx + skip < scriptWords.length; skip++) {
+            if (wordsMatch(scriptWords[scriptIdx + skip], asrW)) {
+              scriptIdx += skip; // skip dropped script words
+              if (firstMatchedAsrIdx === -1) firstMatchedAsrIdx = asrIdx;
+              lastMatchedAsrIdx = asrIdx;
+              matchedCount++;
+              scriptIdx++;
+              localAsrIdx++;
+              scriptSkipFound = true;
+              break;
+            }
+          }
+
+          if (!scriptSkipFound) {
+            // Neither skip worked — advance ASR cursor and try again
             localAsrIdx++;
-            continue;
           }
         }
-        
-        // Neither skip worked — advance ASR cursor and try again
-        localAsrIdx++;
       }
     }
     
@@ -203,6 +214,7 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     
     sceneMatches.push({
       firstAsrIdx: firstAsrIdx,
+      firstMatchedAsrIdx: firstMatchedAsrIdx >= 0 ? firstMatchedAsrIdx : firstAsrIdx,
       lastAsrIdx: lastMatchedAsrIdx,
       matchedCount,
       empty: false,
@@ -232,7 +244,10 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
       };
     }
     
-    const firstIdx = Math.max(0, Math.min(match.firstAsrIdx, asrWords.length - 1));
+    const firstIdx = Math.max(0, Math.min(
+      match.firstMatchedAsrIdx >= 0 ? match.firstMatchedAsrIdx : match.firstAsrIdx,
+      asrWords.length - 1
+    ));
     const lastIdx = Math.max(0, Math.min(match.lastAsrIdx, asrWords.length - 1));
     
     const speechStart = asrWords[firstIdx].start;
