@@ -312,7 +312,8 @@ Return JSON:
 ${selectedHook ? `- Batch 1 MUST open with this hook: "${selectedHook.hook_text}"` : '- Batch 1 MUST open with the most powerful attention trigger possible'}
 - Each synopsis: 150-250 words of SPECIFIC detail
 - Every batch must contain at least ONE curiosity gap
-- Ensure narrative continuity — each batch ends with a hook into the next`;
+- Ensure narrative continuity — each batch ends with a hook into the next
+- **BATCH 1 HOOK PACING LAW**: The synopsis for Batch 1 must describe an opening of 4-6 ultra-short sentences (2-5 words each, staccato rhythm, no filler). After those hook sentences the pacing opens up to normal 8-15 word sentences. Describe the exact hook sentences to use in the synopsis.`;
 }
 
 // ═══════════════════════════════════════════════════════════════════
