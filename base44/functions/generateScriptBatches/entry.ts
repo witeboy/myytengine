@@ -369,7 +369,15 @@ ${previousContent ? `**PREVIOUSLY WRITTEN** (maintain continuity, do NOT repeat)
 4. Every sentence must EARN its place — zero filler
 5. Mix punchy short sentences (3-7 words) with flowing longer ones (20-30 words)
 6. Include micro-hooks every 60-90 seconds ("But that wasn't the real story...", "What happened next changed everything...")
-7. ${isFirstBatch ? 'Open STRONG — the first 5 seconds determine if they stay' : 'Continue seamlessly from where the previous batch ended'}
+7. ${isFirstBatch
+  ? `HOOK PACING LAW (first batch only — NON-NEGOTIABLE):
+   - The opening hook MUST use ultra-short staccato sentences: 2–5 words each, maximum
+   - Write 4–6 of these short punchy sentences back to back — no conjunctions, no padding
+   - After the hook (roughly 30–40 words in), transition to normal pacing: 8–15 word sentences
+   - The hook should feel breathless and urgent; the rest of the batch flows but stays tight
+   - Example hook rhythm: "He had nothing. No money. No plan. No way out. Then one phone call changed everything."
+   - BAD example: "This is the incredible story of a man who had nothing but managed to change his life through sheer determination."`
+  : 'Continue seamlessly from where the previous batch ended'}
 8. ${isLastBatch ? 'End with a powerful closing line — memorable, quotable, perspective-shifting. Include a subtle CTA.' : 'End on a cliffhanger or curiosity hook that pulls into the next batch'}
 9. Use specific details: names, numbers, dates, places — not vague generalities
 10. Write for the EAR, not the eye — natural spoken rhythm, not essay prose
