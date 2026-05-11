@@ -225,44 +225,53 @@ RULES: Always 3D Pixar-quality CGI. Faces ALWAYS well-lit and readable. Include 
 function calculateBeatDurations(phases, durationMinutes, isSleep = false) {
   if (isSleep) return calculateSleepBeatDurations(phases, durationMinutes);
 
-  const anchors = [
-    {m:1,s:0.70},{m:3,s:0.85},{m:5,s:1.00},{m:10,s:1.20},
-    {m:15,s:1.40},{m:30,s:1.70},{m:60,s:2.00}
-  ];
-  function getScale(mins) {
-    if (mins <= anchors[0].m) return anchors[0].s;
-    if (mins >= anchors[anchors.length-1].m) return anchors[anchors.length-1].s;
-    for (let i = 0; i < anchors.length - 1; i++) {
-      if (mins >= anchors[i].m && mins <= anchors[i+1].m) {
-        const t = (mins - anchors[i].m) / (anchors[i+1].m - anchors[i].m);
-        return anchors[i].s + t * (anchors[i+1].s - anchors[i].s);
-      }
-    }
-    return 1.0;
-  }
-
-  const scale = getScale(durationMinutes);
+  // Base pacing shapes define rhythm between phases — cold opens are punchy,
+  // emotional cores linger a beat longer. No scale factor: video length does NOT
+  // change the rhythm, only the normalization step changes absolute seconds.
   const basePacing = {
-    cold_open: { base: 3.5, variance: 0.5 },
-    rising_tension: { base: 4.5, variance: 0.8 },
-    emotional_core: { base: 5.5, variance: 1.0 },
-    resolution: { base: 4.5, variance: 0.5 }
+    cold_open:          { base: 3.2, variance: 0.4 },
+    hook:               { base: 3.5, variance: 0.3 },
+    cold_open_crime:    { base: 3.2, variance: 0.4 },
+    rising_tension:     { base: 4.5, variance: 0.6 },
+    the_problem:        { base: 4.2, variance: 0.5 },
+    pursuit_begins:     { base: 4.0, variance: 0.5 },
+    investigation:      { base: 4.8, variance: 0.6 },
+    emotional_core:     { base: 5.5, variance: 0.8 },
+    growing_closer:     { base: 5.2, variance: 0.7 },
+    deeper_mystery:     { base: 5.0, variance: 0.6 },
+    the_mechanism:      { base: 5.0, variance: 0.5 },
+    resolution:         { base: 4.8, variance: 0.5 },
+    aftermath:          { base: 5.0, variance: 0.5 },
+    callback:           { base: 4.5, variance: 0.4 },
+    happy_ending:       { base: 5.0, variance: 0.5 },
+    revelation:         { base: 4.2, variance: 0.4 },
+    confrontation:      { base: 3.8, variance: 0.4 },
+    climax:             { base: 3.5, variance: 0.3 },
+    cta:                { base: 4.0, variance: 0.3 },
   };
 
-  const durations = [];
-  const floor = Math.max(2.5, 2.0 * scale);
+  const FLOOR_SECONDS = 2.5;
 
+  // Step 1: raw durations — shape only, no length-based inflation
+  const rawDurations = [];
   for (const phase of phases) {
-    const p = basePacing[phase.name] || { base: 5 * scale, variance: 0.5 * scale };
-    const base = p.base * scale;
-    const vari = p.variance * scale;
+    const p = basePacing[phase.name] || { base: 4.8, variance: 0.5 };
     for (let i = 0; i < phase.scenes; i++) {
       const ratio = phase.scenes > 1 ? i / (phase.scenes - 1) : 0.5;
-      const d = Math.round((base + (ratio - 0.5) * vari) * 10) / 10;
-      durations.push(Math.max(floor, d));
+      const d = p.base + (ratio - 0.5) * p.variance;
+      rawDurations.push(Math.max(FLOOR_SECONDS, Math.round(d * 10) / 10));
     }
   }
-  return durations;
+
+  if (rawDurations.length === 0) return [];
+
+  // Step 2: normalize so all beats sum to exactly durationMinutes * 60 seconds.
+  // Scene count is fixed by densityAnchors — this step only calibrates beat lengths.
+  const rawTotal = rawDurations.reduce((a, b) => a + b, 0);
+  const targetTotal = durationMinutes * 60;
+  const normFactor = targetTotal / rawTotal;
+
+  return rawDurations.map(d => Math.round(Math.max(FLOOR_SECONDS, d * normFactor) * 10) / 10);
 }
 
 function calculateSleepBeatDurations(phases, durationMinutes) {
@@ -1101,7 +1110,7 @@ Deno.serve(async (req) => {
 
     const densityAnchors = isSleep
       ? [{m:5,d:15},{m:10,d:20},{m:15,d:22},{m:20,d:25},{m:30,d:28},{m:60,d:32}]
-      : [{m:1,d:4.2},{m:3,d:5.0},{m:5,d:5.5},{m:8,d:6.0},{m:10,d:6.2},{m:15,d:7.0},{m:30,d:8.0},{m:60,d:9.0}];
+      : [{m:1,d:4.2},{m:3,d:4.8},{m:5,d:5.0},{m:8,d:5.2},{m:10,d:5.3},{m:15,d:5.5},{m:30,d:5.8},{m:60,d:6.0}];
 
     function getAvgSceneDuration(mins) {
       if (mins <= densityAnchors[0].m) return densityAnchors[0].d;
