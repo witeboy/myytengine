@@ -684,7 +684,7 @@ export default function TimelineEditor() {
 
   const [activePanel,    setActivePanel]    = useState('media');
   const [isPlaying,      setIsPlaying]      = useState(false);
-  const [pps,            setPps]            = useState(3);
+  const [pps,            setPps]            = useState(15);
   const [isMuted,        setIsMuted]        = useState(false);
   const [musicVol,       setMusicVol]       = useState(0.3);
   const [voiceoverVol,   setVoiceoverVol]   = useState(1.0);
@@ -742,7 +742,6 @@ export default function TimelineEditor() {
   const [isDetectingBeats,  setIsDetectingBeats]  = useState(false);
   const [beatSnapEnabled,   setBeatSnapEnabled]   = useState(false);
   const [syncStatus,        setSyncStatus]        = useState(null);
-  const [syncSource,        setSyncSource]        = useState(null);
   const [isGenCaptions,     setIsGenCaptions]     = useState(false);
   const [captionOffset,     setCaptionOffset]     = useState(0);
   const [isApplyingZoom,    setIsApplyingZoom]    = useState(false);
@@ -753,8 +752,6 @@ export default function TimelineEditor() {
   const [driftedScenes,     setDriftedScenes]     = useState([]); // scenes with alignment drift detected after sync
   const [lastAlignmentResults, setLastAlignmentResults] = useState(null); // stored for manual drift fix
   const initializedRef = useRef(false);
-  const initializedForSceneCount = useRef(0);
-  const lastInitializedScenes = useRef([]);
 
   const [transcription, setTranscription] = useState({ status: 'idle', words: [], wordCount: 0, error: null });
   const [overrideBeatDurations, setOverrideBeatDurations] = useState(null);
@@ -896,68 +893,43 @@ export default function TimelineEditor() {
     }]);
   }, [musicUrl, selectedMusic]);
 
-  // ── Initialize video clips ──────────────────────────────────────
-  // Waits for BOTH scenes and prodSettings to be fully loaded.
-  // Re-runs if scene count changes (e.g. partial load → full load).
+  // ── Initialize video clips once ────────────────────────────────
   useEffect(() => {
-    // Gate 1: need scenes
-    if (!scenes || scenes.length === 0) return;
-    // Gate 2: need prodSettings to have resolved (undefined = still loading, null = loaded but empty)
-    if (prodSettings === undefined) return;
-    // Gate 3: already built clips for this exact set of scene IDs — skip
-    const sceneIds = scenes.map(s => s.id).join(',');
-    if (lastInitializedScenes.current === sceneIds) return;
-    lastInitializedScenes.current = sceneIds;
+    if (scenes.length === 0 || initializedRef.current) return;
+    initializedRef.current = true;
 
-    console.log(`[Timeline] Initializing ${scenes.length} scenes`);
-
-    // Try to restore saved clips only if count matches exactly
     if (prodSettings?.timeline_video_clips) {
       try {
         const savedVideo = JSON.parse(prodSettings.timeline_video_clips);
-        if (Array.isArray(savedVideo) && savedVideo.length === scenes.length) {
-          console.log(`[Timeline] Restoring ${savedVideo.length} saved clips`);
+        const savedCaptions = prodSettings.timeline_caption_clips ? JSON.parse(prodSettings.timeline_caption_clips) : [];
+        if (Array.isArray(savedVideo) && savedVideo.length > 0) {
           videoHistory.reset(savedVideo);
-          const savedCaptions = prodSettings.timeline_caption_clips
-            ? JSON.parse(prodSettings.timeline_caption_clips) : [];
           if (savedCaptions.length > 0) captionHistory.reset(savedCaptions);
           if (prodSettings.timeline_overlay_clips) {
             try {
               const savedOverlays = JSON.parse(prodSettings.timeline_overlay_clips);
               if (Array.isArray(savedOverlays) && savedOverlays.length > 0) overlayHistory.reset(savedOverlays);
-            } catch (_) {}
+            } catch (e) {}
           }
           setInitialized(true);
           return;
         }
-        console.warn(`[Timeline] Saved clips count (${savedVideo?.length}) ≠ scenes (${scenes.length}) — rebuilding`);
-        // Wipe stale saved data from DB
-        if (prodSettings?.id) {
-          base44.entities.ProductionSettings.update(prodSettings.id, {
-            timeline_video_clips: null,
-            timeline_caption_clips: null,
-            timeline_overlay_clips: null,
-          }).catch(() => {});
-        }
       } catch (e) {
-        console.warn('[Timeline] Saved state parse error:', e.message);
+        console.warn('[Timeline] Could not restore saved state:', e.message);
       }
     }
 
-    // Build fresh clips from scenes
-    const beats = audioBeatDurations.length === scenes.length ? audioBeatDurations : null;
+    const currentBeats = audioBeatDurations.length === scenes.length ? audioBeatDurations : null;
     let offset = 0;
     const initClips = scenes.map((scene, idx) => {
-      const duration = Math.max(1.5, (beats ? beats[idx] : null) || scene.duration_seconds || 5);
-      const hasVideo = scene.video_url && scene.video_url.startsWith('http')
-        && !scene.video_url.startsWith('veo_task:') && !scene.video_url.startsWith('grok_vid_task:');
+      const duration  = (currentBeats ? currentBeats[idx] : null) || scene.duration_seconds || 5;
+      const hasVideo  = scene.video_url && scene.video_url.startsWith('http') && !scene.video_url.startsWith('veo_task:') && !scene.video_url.startsWith('grok_vid_task:');
       const hasBroll = scene.broll_url && scene.broll_url.startsWith('http');
       const clip = {
         id: `video-${scene.id}`, sceneId: scene.id, sceneNumber: scene.scene_number,
         type: 'video', startTime: offset, duration,
         label: `Scene ${scene.scene_number}`, thumbnail: scene.image_url,
-        imageUrl: scene.image_url,
-        videoUrl: hasVideo ? scene.video_url : null,
+        imageUrl: scene.image_url, videoUrl: hasVideo ? scene.video_url : null,
         brollUrl: hasBroll ? scene.broll_url : null,
         brollSource: scene.broll_source || null, brollQuery: scene.broll_query || null,
         mediaType: hasVideo ? 'video' : 'image',
@@ -969,15 +941,9 @@ export default function TimelineEditor() {
       offset += duration;
       return clip;
     });
-    console.log(`[Timeline] Built ${initClips.length} clips from scenes`);
     videoHistory.reset(initClips);
     setInitialized(true);
-    // Scroll timeline back to start
-    setTimeout(() => {
-      const timelineEl = document.querySelector('.overflow-x-auto');
-      if (timelineEl) timelineEl.scrollLeft = 0;
-    }, 100);
-  }, [scenes, prodSettings, audioBeatDurations]);
+  }, [scenes.length, prodSettings]);
 
   // ── Playback Engine ─────────────────────────────────────────────
   const playbackEngine = usePlaybackEngine({
@@ -1027,54 +993,64 @@ export default function TimelineEditor() {
     currentClip ? scenes.find(s => s.id === currentClip.sceneId) : null
   , [currentClip, scenes]);
 
-  // ── AutoSync — reads saved beat timings, falls back to syllable estimation ──
+  // ── AutoSync — ASR-driven exact alignment ────────────────────────
   const handleAutoSync = async () => {
     setIsSyncing(true);
     setSyncStatus(null);
 
     try {
+      // Step 1: Measure audio duration
+      let audioDuration = measuredAudioDuration;
+      if (!audioDuration && voiceoverUrl) {
+        audioDuration = await new Promise((resolve) => {
+          const tmp = new Audio();
+          tmp.addEventListener('loadedmetadata', () => resolve(tmp.duration || 0));
+          tmp.addEventListener('error', () => resolve(0));
+          tmp.preload = 'metadata';
+          tmp.src = voiceoverUrl;
+          setTimeout(() => resolve(0), 8000);
+        });
+      }
+      if (!audioDuration || audioDuration <= 0) {
+        throw new Error('No voiceover audio to sync against');
+      }
+
+      // Step 2: Get ASR word-level timestamps (submit/poll from browser)
+      let asrWords = null;
+      if (voiceoverUrl) {
+        try {
+          setAsrProgress({ phase: 'submitting', message: 'Submitting audio for speech recognition…', pollCount: 0 });
+          const { transcribeVoiceover: transcribeASR } = await import('@/lib/transcribeASR');
+          const result = await transcribeASR(voiceoverUrl, (p) => setAsrProgress(p));
+          if (result?.success && result.words?.length > 0) {
+            asrWords = result.words;
+            console.log(`[AutoSync] ASR: ${asrWords.length} words transcribed`);
+          }
+        } catch (err) {
+          console.warn('[AutoSync] ASR failed, will fall back to estimation:', err.message);
+        }
+        setAsrProgress(null);
+      }
+
       let newBeatDurations;
       let newStartTimes;
-      let syncSource = 'words';
+      let syncSource;
       let alignmentResults = null;
 
-      // ── PRIMARY PATH: use beat_durations already saved at scene-creation time ──
-      // generateSceneBreakdown and shortsSceneBreakdown both compute and save
-      // beat_durations to ProductionSettings. Trust those — they are ground truth.
-      const savedDurations = prodSettings?.beat_durations
-        ? (() => { try { return JSON.parse(prodSettings.beat_durations); } catch (_) { return null; } })()
-        : null;
-      const savedStartTimes = prodSettings?.beat_start_times
-        ? (() => { try { return JSON.parse(prodSettings.beat_start_times); } catch (_) { return null; } })()
-        : null;
+      if (asrWords && asrWords.length > 0) {
+        // ── ASR PATH: exact alignment via word matching ──
+        const { alignScenesToASR } = await import('@/lib/asrAutoSync');
+        const alignment = alignScenesToASR(asrWords, scenes, audioDuration);
+        alignmentResults = alignment;
 
-      // Always derive durations from scene.duration_seconds — ground truth set at scene-creation time
-      const sceneDurations = scenes.map(s => Math.max(1.5, s.duration_seconds || 5));
-      const sceneTotal = sceneDurations.reduce((a, b) => a + b, 0);
-      const savedIsValid = (
-        savedDurations && Array.isArray(savedDurations) &&
-        savedDurations.length === scenes.length &&
-        savedDurations.every(d => typeof d === 'number' && d > 0 && isFinite(d)) &&
-        // Sanity check: no single scene should exceed 30% of total — catches bad estimation dumps
-        savedDurations.every(d => d / savedDurations.reduce((a,b)=>a+b,0) < 0.30)
-      );
+        newBeatDurations = alignment.map(a => a.duration);
+        newStartTimes = alignment.map(a => a.startTime);
+        syncSource = 'asr';
 
-      if (savedIsValid) {
-        newBeatDurations = savedDurations;
-        newStartTimes = savedStartTimes && savedStartTimes.length === scenes.length
-          ? savedStartTimes
-          : (() => { let off = 0; return savedDurations.map(d => { const s = off; off += d; return s; }); })();
-        syncSource = 'saved';
-        console.log(`[AutoSync] Using saved beat timings: ${scenes.length} scenes, total ${newBeatDurations.reduce((s,d)=>s+d,0).toFixed(1)}s`);
-      } else if (sceneTotal > 0) {
-        // Use duration_seconds from each scene — set correctly by generateSceneBreakdown
-        newBeatDurations = sceneDurations;
-        newStartTimes = (() => { let off = 0; return sceneDurations.map(d => { const s = off; off += d; return s; }); })();
-        syncSource = 'saved';
-        console.log(`[AutoSync] Using scene.duration_seconds: ${scenes.length} scenes, total ${sceneTotal.toFixed(1)}s`);
+        const avgScore = alignment.filter(a => !a.empty).reduce((s, a) => s + (a.matchScore || 0), 0) / alignment.filter(a => !a.empty).length;
+        console.log(`[AutoSync] ASR alignment: ${alignment.length} scenes, avg match score: ${(avgScore * 100).toFixed(0)}%`);
       } else {
         // ── FALLBACK: syllable-weighted estimation ───────────────
-        console.log(`[AutoSync] No saved timings match scene count (${savedDurations?.length} saved vs ${scenes.length} scenes) — estimating`);
         const countSyllables = (word) => {
           const w = word.toLowerCase().replace(/[^a-z]/g, '');
           if (!w || w.length <= 2) return 1;
@@ -1151,10 +1127,8 @@ export default function TimelineEditor() {
         let off = 0;
         newBeatDurations.forEach(dur => { newStartTimes.push(off); off += dur; });
         syncSource = 'words';
-      } // ← closes the else/fallback block
 
-      // Build alignment results for drift detection (syllable estimate only)
-      if (syncSource === 'words') {
+        // Build syllable-based alignment results for drift detection
         alignmentResults = scenes.map((scene, idx) => {
           const text = (scene.narration_text || scene.voiceover_text || '').trim();
           const wordCount = text.split(/\s+/).filter(Boolean).length;
@@ -1279,8 +1253,7 @@ export default function TimelineEditor() {
         } catch (e) { console.warn('Could not save beat data to DB:', e.message); }
       }
 
-      setSyncSource(syncSource);
-      setSyncStatus(syncSource === 'saved' ? 'saved' : syncSource === 'asr' ? 'audio' : 'words');
+      setSyncStatus(syncSource === 'asr' ? 'audio' : 'words');
     } catch (err) {
       console.error('AutoSync failed:', err);
       setSyncStatus('error');
@@ -1961,11 +1934,10 @@ export default function TimelineEditor() {
         <div className="flex items-center gap-2">
           <Button onClick={() => isSyncing ? null : setShowSyncDiag(true)} disabled={isSyncing} size="sm"
             className={`gap-1.5 text-xs px-3 h-7 ${
-              syncSource === 'saved' || syncStatus === 'audio' || syncStatus === 'saved' ? 'bg-green-600' : syncStatus === 'words' ? 'bg-teal-600' : syncStatus === 'error' ? 'bg-red-600' :
+              syncStatus === 'audio' ? 'bg-green-600' : syncStatus === 'words' ? 'bg-teal-600' : syncStatus === 'error' ? 'bg-red-600' :
               'bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-700 hover:to-purple-700'
             }`}>
             {isSyncing ? <><Loader2 size={12} className="animate-spin" /> ASR Syncing…</> :
-             syncStatus === 'saved' ? <><CheckCircle size={12} /> Synced!</> :
              syncStatus === 'audio' ? <><CheckCircle size={12} /> ASR Synced!</> :
              syncStatus === 'words' ? <><CheckCircle size={12} /> Estimated</> :
              <><Wand2 size={12} /> AutoSync</>}
@@ -2191,3 +2163,4 @@ export default function TimelineEditor() {
     </div>
   );
 }
+
