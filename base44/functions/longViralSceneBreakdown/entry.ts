@@ -2,13 +2,9 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 // ══════════════════════════════════════════════════════════════════
 // LONG VIRAL SCENE BREAKDOWN ENGINE
-// Scene count is driven by SENTENCE structure, not word budgets.
-//
-// RULES:
-// 1. Each sentence = 1 scene (script pacing is source of truth)
-// 2. Sentence < 3 words + adjacent sentence also < 3 words → grouped into 1 scene
-// 3. Sentence > 7 words → ceil(words / 7) scenes, all with IDENTICAL narration
-//    text but DIFFERENT camera angles (same story, different visual shot)
+// Systemic word-budget scene density — Spielberg rhythm (5-7s/scene).
+// AI self-organizes scene count from word-per-scene mental model.
+// Visual change emerges naturally from 13 words/scene at 150wpm.
 // ══════════════════════════════════════════════════════════════════
 
 async function callGemini(prompt, temperature = 0.5) {
@@ -38,101 +34,6 @@ async function callGemini(prompt, temperature = 0.5) {
   }
 }
 
-// ── Sentence splitter ─────────────────────────────────────────────────────────
-// Splits script into individual sentences, preserving punctuation.
-function splitIntoSentences(text) {
-  // Split on sentence-ending punctuation followed by whitespace or end-of-string.
-  // Handles: . ! ? … and combinations like ." or !'
-  const raw = text.match(/[^.!?…]+[.!?…]+["']?[\s]*/g) || [text];
-  return raw.map(s => s.trim()).filter(s => s.length > 0);
-}
-
-// ── Word count helper ─────────────────────────────────────────────────────────
-function wordCount(text) {
-  return text.trim().split(/\s+/).filter(w => w.length > 0).length;
-}
-
-// ── Apply scene rules to sentences → produce scene beats ─────────────────────
-// Returns an array of "beat" objects:
-//   { narration_text, word_count, angle_index, total_angles, is_multi_angle }
-//
-// Rule 1: each sentence → 1 scene
-// Rule 2: sentence < 3 words AND next sentence also < 3 words → merge into 1 scene
-// Rule 3: sentence > 7 words → ceil(words/7) scenes, same narration, diff angles
-function buildSceneBeats(sentences) {
-  const beats = [];
-  let i = 0;
-
-  while (i < sentences.length) {
-    const sentence = sentences[i];
-    const wc = wordCount(sentence);
-
-    // Rule 2: group two adjacent ultra-short sentences (< 3 words each)
-    if (wc < 3 && i + 1 < sentences.length && wordCount(sentences[i + 1]) < 3) {
-      const merged = `${sentence} ${sentences[i + 1]}`;
-      beats.push({
-        narration_text: merged,
-        word_count: wordCount(merged),
-        angle_index: 0,
-        total_angles: 1,
-        is_multi_angle: false,
-      });
-      i += 2;
-      continue;
-    }
-
-    // Rule 3: long sentence > 7 words → split into ceil(wc/7) angle scenes
-    if (wc > 7) {
-      const totalAngles = Math.ceil(wc / 7);
-      for (let a = 0; a < totalAngles; a++) {
-        beats.push({
-          narration_text: sentence,
-          word_count: wc,
-          angle_index: a,
-          total_angles: totalAngles,
-          is_multi_angle: true,
-        });
-      }
-      i++;
-      continue;
-    }
-
-    // Rule 1: normal sentence → 1 scene
-    beats.push({
-      narration_text: sentence,
-      word_count: wc,
-      angle_index: 0,
-      total_angles: 1,
-      is_multi_angle: false,
-    });
-    i++;
-  }
-
-  return beats;
-}
-
-// ── Narrative section label by position ──────────────────────────────────────
-function getSectionLabel(pct) {
-  if (pct < 0.08) return 'cold_open';
-  if (pct < 0.15) return 'hook';
-  if (pct < 0.30) return 'rising_tension';
-  if (pct < 0.65) return 'emotional_core';
-  if (pct < 0.80) return 'climax';
-  if (pct < 0.92) return 'resolution';
-  return 'cta';
-}
-
-// ── Batch beats into AI-digestible sub-batches (~20 beats per call) ───────────
-const BEATS_PER_SUBBATCH = 20;
-
-function chunkBeats(beats) {
-  const chunks = [];
-  for (let i = 0; i < beats.length; i += BEATS_PER_SUBBATCH) {
-    chunks.push(beats.slice(i, i + BEATS_PER_SUBBATCH));
-  }
-  return chunks;
-}
-
 Deno.serve(async (req) => {
   const callStart = Date.now();
   try {
@@ -155,90 +56,119 @@ Deno.serve(async (req) => {
     const fullScript = script.full_script;
     const durationMin = project.video_duration_minutes || 10;
 
+    // ── Word-budget systemic scene density ──────────────────────────────────────
+    // A scene change every 5 seconds at 150wpm = ~12.5 words per scene.
+    // We give the AI this mental model instead of enforcing pre-split chunks.
+    // The AI naturally divides text into scenes because it understands WHY.
+    const TARGET_WORDS_PER_SCENE = 13; // ~5s at 150wpm — Spielberg rhythm
+    const WORDS_PER_SUBBATCH = 400;    // ~27 scenes per AI call — comfortable context
+
+    const scriptWords = fullScript.split(/\s+/).filter(w => w.length > 0);
+    const totalWords = scriptWords.length;
+    const targetSceneCount = Math.max(8, Math.round(totalWords / TARGET_WORDS_PER_SCENE));
+
     let nicheId = 'finance';
     if (project.channel_id) {
       const channels = await base44.asServiceRole.entities.Channels.filter({ id: project.channel_id });
       nicheId = channels[0]?.shorts_niche || 'finance';
     }
 
-    // ── Step 1: Split into sentences ─────────────────────────────────────────
-    const sentences = splitIntoSentences(fullScript);
-    console.log(`📝 Script: ${sentences.length} sentences detected`);
+    console.log(`🎬 Long Viral: ${durationMin}min | ${totalWords} words → ${targetSceneCount} scenes @ ~${TARGET_WORDS_PER_SCENE}w/scene`);
 
-    // ── Step 2: Apply scene rules → build beat list ──────────────────────────
-    const allBeats = buildSceneBeats(sentences);
-    const totalScenes = allBeats.length;
-    console.log(`🎬 Long Viral: ${durationMin}min | ${sentences.length} sentences → ${totalScenes} scene beats`);
+    // ── Split script into sentence-aligned word-budget sub-batches ──────────────
+    // Each sub-batch is ~WORDS_PER_SUBBATCH words, cut at sentence boundaries.
+    // The AI gets each block and is told how many scenes to create based on word count.
+    const sentences = fullScript.match(/[^.!?]+[.!?]+[\s]*/g) || [fullScript];
+    const subBatchTexts = [];
+    let currentBatch = [];
+    let currentWordCount = 0;
 
-    // ── Step 3: Chunk beats into sub-batches for AI ──────────────────────────
-    const beatChunks = chunkBeats(allBeats);
+    for (const sentence of sentences) {
+      const sentenceWords = sentence.trim().split(/\s+/).length;
+      if (currentWordCount + sentenceWords > WORDS_PER_SUBBATCH && currentBatch.length > 0) {
+        subBatchTexts.push(currentBatch.join(''));
+        currentBatch = [];
+        currentWordCount = 0;
+      }
+      currentBatch.push(sentence);
+      currentWordCount += sentenceWords;
+    }
+    if (currentBatch.length > 0) subBatchTexts.push(currentBatch.join(''));
 
-    // ── Step 4: Process each sub-batch through Gemini ────────────────────────
+    // Determine narrative section label by position in the full story
+    function getSectionLabel(batchIdx, totalBatches, sceneIdx, scenesInBatch) {
+      const pct = (batchIdx + sceneIdx / Math.max(scenesInBatch, 1)) / Math.max(totalBatches, 1);
+      if (pct < 0.08) return 'cold_open';
+      if (pct < 0.15) return 'hook';
+      if (pct < 0.30) return 'rising_tension';
+      if (pct < 0.65) return 'emotional_core';
+      if (pct < 0.80) return 'climax';
+      if (pct < 0.92) return 'resolution';
+      return 'cta';
+    }
+
+    // ── Process each sub-batch — AI self-organizes scene count from word budget ──
     const allAiScenes = [];
     let globalSceneNumber = 1;
 
-    for (let bi = 0; bi < beatChunks.length; bi++) {
-      const chunk = beatChunks[bi];
-
-      // Build a numbered list of beats for the AI with full context
-      const beatList = chunk.map((beat, idx) => {
-        const sceneNum = globalSceneNumber + idx;
-        const pct = sceneNum / totalScenes;
-        const section = getSectionLabel(pct);
-        const angleNote = beat.is_multi_angle
-          ? `[MULTI-ANGLE: angle ${beat.angle_index + 1} of ${beat.total_angles} — SAME narration, DIFFERENT shot from prior angle]`
-          : '[SINGLE SCENE]';
-        return `Scene ${sceneNum} | ${section} | ${angleNote}\nNarration: "${beat.narration_text}"`;
-      }).join('\n\n');
+    for (let bi = 0; bi < subBatchTexts.length; bi++) {
+      const batchText = subBatchTexts[bi];
+      const batchWords = batchText.trim().split(/\s+/).length;
+      const expectedScenes = Math.max(1, Math.round(batchWords / TARGET_WORDS_PER_SCENE));
+      const expectedDuration = Math.round((batchWords / 150) * 60); // seconds at 150wpm
 
       const continuityNote = allAiScenes.length > 0
         ? `Last scene ended with: "${allAiScenes[allAiScenes.length - 1].narration_text?.slice(-80) || ''}"`
         : 'This is the opening of the video.';
 
-      const subPrompt = `You are a world-class YouTube visual director for long-form faceless ${nicheId} content.
+      const subPrompt = `You are a world-class YouTube visual director for long-form faceless content (${nicheId} niche).
 
-SCENE STRUCTURE RULES — already applied for you:
-1. Each scene below maps to exactly one sentence from the script.
-2. Some scenes are [MULTI-ANGLE]: the narrator says the SAME sentence but the VIDEO cuts to a fresh shot. These scenes have IDENTICAL narration_text. Your job is to give each angle a DISTINCT visual — different framing, different subject, different energy. This keeps kinetic momentum while the narrator completes a long thought.
-3. [SINGLE SCENE] scenes are short, punchy beats — one image, maximum impact.
+MENTAL MODEL — how a Spielberg-caliber editor thinks:
+A narrator speaks at 150 words per minute. Each visual scene should hold for 5-7 seconds.
+At 150wpm, 5 seconds = ~12 words of narration. 7 seconds = ~18 words.
+Therefore: one scene = 12-18 spoken words. Never more. Each sentence break is a potential cut.
 
 YOUR TASK:
-For each scene listed below, produce a complete scene object. Do NOT rewrite, split, or merge the narration_text — use it exactly as given.
+Break the narration block below into individual scenes.
+- This block is ${batchWords} words (~${expectedDuration} seconds of narration)
+- At 12-18 words per scene, this block naturally yields approximately ${expectedScenes} scenes
+- Cut at natural sentence or clause boundaries — wherever a new visual image makes sense
+- Do NOT merge multiple sentences into one scene unless they form a single unbroken image
+
+NARRATION BLOCK (scenes ${globalSceneNumber} onward):
+${batchText}
 
 CONTINUITY: ${continuityNote}
 
-SCENES TO DIRECT (${chunk.length} scenes, starting at scene ${globalSceneNumber}):
-${beatList}
-
 FOR EACH SCENE PROVIDE:
-- scene_number: as listed above
-- section: as listed above (cold_open | hook | rising_tension | emotional_core | climax | resolution | cta)
-- narration_text: EXACT text as given — do not alter
-- duration_seconds: word_count / 2.5 (speaking time at 150wpm). For multi-angle scenes all angles share the same duration_seconds = full_sentence_word_count / 2.5 / total_angles
-- visual_description: 2-3 sentences. Specific stock footage — real locations, real objects, real situations. For multi-angle scenes, each angle MUST be visually distinct from its siblings (different subject, framing, energy).
+- scene_number: sequential, starting at ${globalSceneNumber}
+- section: narrative position (cold_open | hook | rising_tension | emotional_core | climax | resolution | cta)
+- narration_text: the exact words from the block for this scene (12-18 words, one thought)
+- duration_seconds: word_count_of_narration_text / 2.5 (this is the speaking time at 150wpm)
+- visual_description: specific stock footage or graphic that illustrates exactly what is being said. 2-3 sentences. Name real locations, real situations, real objects — not abstract concepts.
 - camera_direction: zoom_in | zoom_out | pan_left | pan_right | static | push_in
 - text_overlay: 3-6 word bold on-screen text for emphasis, or empty string
 - mood: 2-3 words (e.g. "tense, anticipatory")
-- audio_note: voice energy (whisper/conversational/urgent/commanding) + music cue
-- characters_present: [] — faceless stock footage only
+- audio_note: voice energy (whisper/conversational/urgent/commanding) + music (e.g. "urgent narration, low percussive build")
+- characters_present: [] — this is faceless stock footage content
 
 VISUAL DIRECTION BY SECTION:
-- cold_open / hook: maximum contrast, kinetic energy, bold text — grab in 3 seconds
-- rising_tension: building momentum, tight shots, urgency
-- emotional_core: human-scale moments, warm palette, let image breathe
-- climax: single most powerful image — the visual payoff
-- resolution: wide, authoritative, settled — viewer exhales
-- cta: action-oriented, forward-looking energy
+- cold_open / hook: maximum contrast, kinetic energy, bold text — grab attention in 3 seconds
+- rising_tension: building momentum, tight shots, urgency in every frame
+- emotional_core: human-scale relatable moments, warm palette, let the image breathe
+- climax: the single most powerful image — the visual payoff of everything built
+- resolution: wide, authoritative, settled — the viewer exhales
+- cta: return to hook energy — action-oriented, forward-looking
 
-NICHE (${nicheId}): Real environments and situations this audience recognizes and trusts.
+NICHE VISUAL SENSIBILITY (${nicheId}): Match stock footage to this niche's visual world — real environments, real people, real situations this audience recognizes and trusts.
 
-Return ONLY valid JSON:
+Return only valid JSON with all narration words accounted for:
 {
   "scenes": [
     {
       "scene_number": ${globalSceneNumber},
       "section": "...",
-      "narration_text": "exact text",
+      "narration_text": "exact words from the block",
       "duration_seconds": 5.2,
       "visual_description": "...",
       "camera_direction": "push_in",
@@ -250,102 +180,88 @@ Return ONLY valid JSON:
   ]
 }`;
 
-      console.log(`🎬 Sub-batch ${bi + 1}/${beatChunks.length}: ${chunk.length} beats`);
+      console.log(`🎬 Sub-batch ${bi + 1}/${subBatchTexts.length}: ${batchWords} words → ~${expectedScenes} scenes`);
 
       let subResult;
       try {
         subResult = await callGemini(subPrompt, 0.5);
       } catch (err) {
         console.error(`❌ Sub-batch ${bi + 1} failed: ${err.message}`);
-        // Fallback: create one scene per beat with minimal data
-        chunk.forEach((beat, idx) => {
-          const sceneNum = globalSceneNumber + idx;
-          const pct = sceneNum / totalScenes;
-          allAiScenes.push({
-            scene_number: sceneNum,
-            section: getSectionLabel(pct),
-            narration_text: beat.narration_text,
-            duration_seconds: parseFloat((beat.word_count / 2.5).toFixed(1)),
-            visual_description: `Cinematic footage matching: "${beat.narration_text.substring(0, 100)}"`,
-            camera_direction: 'push_in',
-            text_overlay: '',
-            mood: 'engaged, focused',
-            audio_note: 'conversational narration, subtle background music',
-            characters_present: [],
-            _beat: beat,
-          });
+        // On AI failure, keep the block as one scene with real narration content
+        allAiScenes.push({
+          scene_number: globalSceneNumber,
+          section: getSectionLabel(bi, subBatchTexts.length, 0, 1),
+          narration_text: batchText.trim(),
+          duration_seconds: parseFloat(expectedDuration.toFixed(1)),
+          visual_description: `Cinematic footage matching the narration: ${batchText.trim().substring(0, 120)}`,
+          camera_direction: 'push_in',
+          text_overlay: '',
+          mood: 'engaged, focused',
+          audio_note: 'conversational narration, subtle background music',
+          characters_present: [],
         });
-        globalSceneNumber += chunk.length;
+        globalSceneNumber++;
         continue;
       }
 
       const subScenes = subResult?.scenes;
       if (!subScenes || !Array.isArray(subScenes) || subScenes.length === 0) {
-        console.warn(`⚠️ Sub-batch ${bi + 1}: no scenes returned — using fallback`);
-        chunk.forEach((beat, idx) => {
-          const sceneNum = globalSceneNumber + idx;
-          const pct = sceneNum / totalScenes;
-          allAiScenes.push({
-            scene_number: sceneNum,
-            section: getSectionLabel(pct),
-            narration_text: beat.narration_text,
-            duration_seconds: parseFloat((beat.word_count / 2.5).toFixed(1)),
-            visual_description: `Cinematic footage: "${beat.narration_text.substring(0, 100)}"`,
-            camera_direction: 'push_in',
-            text_overlay: '',
-            mood: 'engaged, focused',
-            audio_note: 'conversational narration',
-            characters_present: [],
-            _beat: beat,
-          });
+        console.warn(`⚠️ Sub-batch ${bi + 1}: no scenes returned — keeping block as single scene`);
+        allAiScenes.push({
+          scene_number: globalSceneNumber,
+          section: getSectionLabel(bi, subBatchTexts.length, 0, 1),
+          narration_text: batchText.trim(),
+          duration_seconds: parseFloat(expectedDuration.toFixed(1)),
+          visual_description: `Cinematic footage: ${batchText.trim().substring(0, 120)}`,
+          camera_direction: 'push_in',
+          text_overlay: '',
+          mood: 'engaged, focused',
+          audio_note: 'conversational narration',
+          characters_present: [],
         });
-        globalSceneNumber += chunk.length;
+        globalSceneNumber++;
         continue;
       }
 
-      // Attach beat metadata to each returned scene and renumber sequentially
-      subScenes.forEach((scene, idx) => {
-        const beat = chunk[idx] || chunk[chunk.length - 1];
-        scene.scene_number = globalSceneNumber + idx;
-        scene._beat = beat;
-        // Enforce narration_text integrity — AI must not alter it
-        if (beat) scene.narration_text = beat.narration_text;
+      // Renumber sequentially and accept AI's natural splits
+      for (let si = 0; si < subScenes.length; si++) {
+        const scene = subScenes[si];
+        scene.scene_number = globalSceneNumber++;
+        if (!scene.section) {
+          scene.section = getSectionLabel(bi, subBatchTexts.length, si, subScenes.length);
+        }
         allAiScenes.push(scene);
-      });
+      }
 
-      globalSceneNumber += subScenes.length;
-      console.log(`✅ Sub-batch ${bi + 1}: ${subScenes.length} scenes`);
+      const actualScenes = subScenes.length;
+      const ratio = actualScenes / expectedScenes;
+      if (ratio < 0.6) {
+        console.warn(`⚠️ Sub-batch ${bi + 1}: AI produced ${actualScenes} scenes, expected ~${expectedScenes} (${Math.round(ratio * 100)}% of target) — consider reducing WORDS_PER_SUBBATCH`);
+      } else {
+        console.log(`✅ Sub-batch ${bi + 1}: ${actualScenes} scenes (expected ~${expectedScenes})`);
+      }
     }
 
-    // ── Delete old scenes ────────────────────────────────────────────────────
+    // ── Delete old scenes ────────────────────────────────────────────────────────
     const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
     if (oldScenes.length > 0) {
       await Promise.all(oldScenes.map(s => base44.asServiceRole.entities.Scenes.delete(s.id).catch(() => {})));
     }
 
-    // ── Beat durations and start times ───────────────────────────────────────
-    // For multi-angle scenes: duration = full_sentence_words / 2.5 / total_angles
-    // For single scenes: duration = word_count / 2.5
-    const beatDurations = allAiScenes.map(s => {
-      const beat = s._beat;
-      if (beat?.is_multi_angle) {
-        return parseFloat((beat.word_count / 2.5 / beat.total_angles).toFixed(2));
-      }
-      return parseFloat(((s.duration_seconds) || (beat?.word_count / 2.5) || 3).toFixed(2));
-    });
-
+    // ── Beat durations and start times ───────────────────────────────────────────
+    const beatDurations = allAiScenes.map(s => s.duration_seconds || (TARGET_WORDS_PER_SCENE / 2.5));
     const beatStartTimes = [];
     let offset = 0;
-    beatDurations.forEach(d => { beatStartTimes.push(parseFloat(offset.toFixed(2))); offset += d; });
+    beatDurations.forEach(d => { beatStartTimes.push(offset); offset += d; });
 
-    // ── Save ProductionSettings ──────────────────────────────────────────────
+    // ── Save ProductionSettings ───────────────────────────────────────────────────
     const psPayload = {
       beat_durations: JSON.stringify(beatDurations),
       beat_start_times: JSON.stringify(beatStartTimes),
       story_analysis: JSON.stringify({
         central_theme: `Long Viral: ${project.name}`,
         narrative_arc_summary: `${nicheId} viral structure — ${durationMin}min`,
-        visual_world: `Long-form ${nicheId} | ${allAiScenes.length} scenes | sentence-paced`,
+        visual_world: `Long-form ${nicheId} | ${allAiScenes.length} scenes | ~${TARGET_WORDS_PER_SCENE}w/scene`,
         visual_format: 'long_viral',
       })
     };
@@ -356,16 +272,14 @@ Return ONLY valid JSON:
       await base44.asServiceRole.entities.ProductionSettings.create({ project_id, ...psPayload });
     }
 
-    // ── Camera direction map ─────────────────────────────────────────────────
+    // ── Create scene records ─────────────────────────────────────────────────────
     const cameraMap = {
       'zoom_in': 'slow_zoom_in', 'zoom_out': 'slow_zoom_out',
       'pan_left': 'slow_pan', 'pan_right': 'slow_pan',
       'push_in': 'slow_zoom_in', 'static': 'static',
     };
 
-    // ── Create scene records ─────────────────────────────────────────────────
     const sceneRecords = allAiScenes.map(aiScene => {
-      const beat = aiScene._beat || {};
       const directorNotes = {
         section: aiScene.section,
         visual_description: aiScene.visual_description,
@@ -375,9 +289,6 @@ Return ONLY valid JSON:
         audio_note: aiScene.audio_note || '',
         long_viral_format: true,
         characters_present: aiScene.characters_present || [],
-        is_multi_angle: beat.is_multi_angle || false,
-        angle_index: beat.angle_index ?? 0,
-        total_angles: beat.total_angles ?? 1,
       };
       return {
         project_id,
@@ -385,7 +296,7 @@ Return ONLY valid JSON:
         narration_text: aiScene.narration_text || '',
         image_prompt: `DIRECTOR_NOTES:${JSON.stringify(directorNotes)}`,
         animation_prompt: aiScene.camera_direction || 'push_in',
-        duration_seconds: beatDurations[aiScene.scene_number - 1] || 3,
+        duration_seconds: aiScene.duration_seconds || TARGET_WORDS_PER_SCENE / 2.5,
         camera_movement: cameraMap[aiScene.camera_direction] || 'slow_zoom_in',
         animation_speed: 'normal',
         status: 'breakdown_ready',
@@ -402,15 +313,14 @@ Return ONLY valid JSON:
     });
 
     const elapsed = ((Date.now() - callStart) / 1000).toFixed(1);
-    const totalDuration = offset.toFixed(1);
-    console.log(`🎬 Created ${sceneRecords.length} Long Viral scenes in ${elapsed}s | ${durationMin}min | ${sentences.length} sentences → ${totalScenes} beats | total runtime: ${totalDuration}s`);
+    console.log(`🎬 Created ${sceneRecords.length} Long Viral scenes in ${elapsed}s | ${durationMin}min | ${totalWords} words | target was ${targetSceneCount}`);
 
     return Response.json({
       success: true,
       done: true,
       scenes_created: sceneRecords.length,
-      sentence_count: sentences.length,
-      total_duration: totalDuration,
+      target_scenes: targetSceneCount,
+      total_duration: offset.toFixed(1),
     });
 
   } catch (error) {
