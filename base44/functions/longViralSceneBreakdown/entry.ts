@@ -303,18 +303,44 @@ Return ONLY valid JSON:
         continue;
       }
 
-      // Attach beat metadata to each returned scene and renumber sequentially
-      subScenes.forEach((scene, idx) => {
-        const beat = chunk[idx] || chunk[chunk.length - 1];
-        scene.scene_number = globalSceneNumber + idx;
-        scene._beat = beat;
-        // Enforce narration_text integrity — AI must not alter it
-        if (beat) scene.narration_text = beat.narration_text;
-        allAiScenes.push(scene);
+      // ── THE FIX: Iterate over the source of truth (the chunk), NOT the AI's output ──
+      chunk.forEach((beat, idx) => {
+        const expectedSceneNum = globalSceneNumber + idx;
+        const pct = expectedSceneNum / totalScenes;
+        
+        // Try to find the AI's response for this specific beat
+        // Match by the scene_number it returned, or fallback to the array index
+        let aiScene = subScenes.find(s => s.scene_number === expectedSceneNum);
+        if (!aiScene) aiScene = subScenes[idx]; 
+
+        if (aiScene) {
+          // The AI successfully created a scene for this beat
+          aiScene.scene_number = expectedSceneNum;
+          aiScene._beat = beat;
+          aiScene.narration_text = beat.narration_text; // Enforce exact script text
+          allAiScenes.push(aiScene);
+        } else {
+          // 🚨 THE AI SKIPPED THIS BEAT! Trigger micro-fallback so text isn't lost.
+          console.warn(`⚠️ AI skipped beat ${expectedSceneNum}. Forcing local fallback.`);
+          allAiScenes.push({
+            scene_number: expectedSceneNum,
+            section: getSectionLabel(pct),
+            narration_text: beat.narration_text,
+            duration_seconds: parseFloat((beat.word_count / 2.5).toFixed(1)),
+            visual_description: `Cinematic footage: "${beat.narration_text.substring(0, 100)}"`,
+            camera_direction: 'push_in',
+            text_overlay: '',
+            mood: 'engaged, focused',
+            audio_note: 'conversational narration',
+            characters_present: [],
+            _beat: beat,
+          });
+        }
       });
 
-      globalSceneNumber += subScenes.length;
-      console.log(`✅ Sub-batch ${bi + 1}: ${subScenes.length} scenes`);
+      // ALWAYS increment by the exact number of beats in the chunk, never the AI's count
+      globalSceneNumber += chunk.length; 
+      console.log(`✅ Sub-batch ${bi + 1}: processed ${chunk.length} beats`);
     }
 
     // ── Delete old scenes ────────────────────────────────────────────────────
