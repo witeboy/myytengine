@@ -993,15 +993,18 @@ export default function TimelineEditor() {
     currentClip ? scenes.find(s => s.id === currentClip.sceneId) : null
   , [currentClip, scenes]);
 
-  // ── AutoSync — ASR-driven exact alignment ────────────────────────
+  // ── AutoSync — pure ASR, no syllable fallback ────────────────────
   const handleAutoSync = async () => {
     setIsSyncing(true);
     setSyncStatus(null);
 
     try {
-      // Step 1: Measure audio duration
+      // Step 1: Require voiceover
+      if (!voiceoverUrl) throw new Error('No voiceover audio loaded. Add a voiceover first.');
+
+      // Step 2: Measure audio duration
       let audioDuration = measuredAudioDuration;
-      if (!audioDuration && voiceoverUrl) {
+      if (!audioDuration) {
         audioDuration = await new Promise((resolve) => {
           const tmp = new Audio();
           tmp.addEventListener('loadedmetadata', () => resolve(tmp.duration || 0));
@@ -1011,185 +1014,70 @@ export default function TimelineEditor() {
           setTimeout(() => resolve(0), 8000);
         });
       }
-      if (!audioDuration || audioDuration <= 0) {
-        throw new Error('No voiceover audio to sync against');
+      if (!audioDuration || audioDuration <= 0) throw new Error('Could not measure audio duration.');
+
+      // Step 3: ASR transcription — this is the ONLY path
+      setAsrProgress({ phase: 'submitting', message: 'Submitting audio for speech recognition…', pollCount: 0 });
+      const { transcribeVoiceover: transcribeASR } = await import('@/lib/transcribeASR');
+      const result = await transcribeASR(voiceoverUrl, (p) => setAsrProgress(p));
+      setAsrProgress(null);
+
+      if (!result?.success || !result.words?.length) {
+        throw new Error('Speech recognition returned no words. Check that your voiceover has audible speech.');
       }
 
-      // Step 2: Get ASR word-level timestamps (submit/poll from browser)
-      let asrWords = null;
-      if (voiceoverUrl) {
-        try {
-          setAsrProgress({ phase: 'submitting', message: 'Submitting audio for speech recognition…', pollCount: 0 });
-          const { transcribeVoiceover: transcribeASR } = await import('@/lib/transcribeASR');
-          const result = await transcribeASR(voiceoverUrl, (p) => setAsrProgress(p));
-          if (result?.success && result.words?.length > 0) {
-            asrWords = result.words;
-            console.log(`[AutoSync] ASR: ${asrWords.length} words transcribed`);
-          }
-        } catch (err) {
-          console.warn('[AutoSync] ASR failed, will fall back to estimation:', err.message);
-        }
-        setAsrProgress(null);
-      }
+      const asrWords = result.words;
+      console.log(`[AutoSync] ASR: ${asrWords.length} words transcribed`);
 
-      let newBeatDurations;
-      let newStartTimes;
-      let syncSource;
-      let alignmentResults = null;
+      // Step 4: Text-anchored alignment — match scene script words to ASR timestamps
+      const { alignScenesToASR } = await import('@/lib/asrAutoSync');
+      const alignment = alignScenesToASR(asrWords, scenes, audioDuration);
 
-      if (asrWords && asrWords.length > 0) {
-        // ── ASR PATH: exact alignment via word matching ──
-        const { alignScenesToASR } = await import('@/lib/asrAutoSync');
-        const alignment = alignScenesToASR(asrWords, scenes, audioDuration);
-        alignmentResults = alignment;
+      // alignment[i].startTime and alignment[i].duration are the authoritative values
+      const newStartTimes    = alignment.map(a => a.startTime);
+      const newBeatDurations = alignment.map(a => a.duration);
 
-        newBeatDurations = alignment.map(a => a.duration);
-        newStartTimes = alignment.map(a => a.startTime);
-        syncSource = 'asr';
+      const avgScore = alignment.filter(a => !a.empty).reduce((s, a) => s + (a.matchScore || 0), 0)
+        / Math.max(1, alignment.filter(a => !a.empty).length);
+      console.log(`[AutoSync] alignment: ${alignment.length} scenes, avg match score: ${(avgScore * 100).toFixed(0)}%`);
 
-        const avgScore = alignment.filter(a => !a.empty).reduce((s, a) => s + (a.matchScore || 0), 0) / alignment.filter(a => !a.empty).length;
-        console.log(`[AutoSync] ASR alignment: ${alignment.length} scenes, avg match score: ${(avgScore * 100).toFixed(0)}%`);
-      } else {
-        // ── FALLBACK: syllable-weighted estimation ───────────────
-        const countSyllables = (word) => {
-          const w = word.toLowerCase().replace(/[^a-z]/g, '');
-          if (!w || w.length <= 2) return 1;
-          const stripped = w.replace(/(?:[^laeiouy]es|[^laeiouy]ed|[aeiou]es?)$/, '').replace(/^y/, '');
-          const clusters = stripped.match(/[aeiouy]{1,2}/g);
-          return Math.max(1, clusters ? clusters.length : 1);
-        };
-        const FAST_WORDS = new Set(['a','an','the','and','or','but','in','on','at','to','for','of','with','is','it','its','be','as','by','he','she','we','they','this','that','was','are','has','have','had','do','did','not','so','if','up','out','from','into','than','then','when','where','who','which','i','you','my','your','our','their','its']);
-        const SECS_PER_SYL = 0.165;
-        const FAST_DISCOUNT = 0.60;
-        const SCENE_GAP_SECS = 0.20;
-
-        const sceneWeights = scenes.map(scene => {
-          const text = (scene.narration_text || scene.voiceover_text || '').trim();
-          const tokens = text.split(/\s+/).filter(Boolean);
-          if (tokens.length === 0) return SCENE_GAP_SECS;
-          let weight = SCENE_GAP_SECS;
-          tokens.forEach(token => {
-            const clean = token.toLowerCase().replace(/[^a-z]/g, '');
-            const syls = countSyllables(clean);
-            const fast = FAST_WORDS.has(clean);
-            weight += Math.max(0.10, syls * SECS_PER_SYL * (fast ? FAST_DISCOUNT : 1.0));
-            weight += /[.!?]$/.test(token) ? 0.30 : /[,;:]$/.test(token) ? 0.14 : 0;
-          });
-          return weight;
-        });
-
-        const totalWeight = sceneWeights.reduce((s, w) => s + w, 0);
-        // Step 1: proportional raw durations
-        const rawDurations = sceneWeights.map(w => (w / totalWeight) * audioDuration);
- 
-        // Step 2: per-scene speech span estimate (used as cap reference)
-        const speechSpans = scenes.map(scene => {
-          const text = (scene.narration_text || scene.voiceover_text || '').trim();
-          const wc = text.split(/\s+/).filter(Boolean).length;
-          return Math.max(1.0, wc * 0.42); // 0.42s per word at natural pace
-        });
- 
-        // Step 3: clamp each scene — max 2.2× its speech span, min 1.5s
-        newBeatDurations = rawDurations.map((d, i) => {
-          const maxAllowed = Math.max(1.5, speechSpans[i] * 2.2);
-          return Math.max(1.5, Math.min(d, maxAllowed));
-        });
- 
-        // Step 4: redistribute clamped time proportionally to ALL scenes
-        const cappedSum  = newBeatDurations.reduce((s, d) => s + d, 0);
-        const surplusTime = audioDuration - cappedSum;
-        if (Math.abs(surplusTime) > 0.01) {
-          // First try scenes with headroom
-          const headroom = newBeatDurations.map((d, i) => Math.max(0, speechSpans[i] * 2.2 - d));
-          const totalHeadroom = headroom.reduce((s, h) => s + h, 0);
-          if (totalHeadroom > 0.01) {
-            newBeatDurations = newBeatDurations.map((d, i) =>
-              parseFloat((d + (headroom[i] / totalHeadroom) * surplusTime).toFixed(3))
-            );
-          } else {
-            // No headroom anywhere — distribute evenly across ALL scenes
-            // instead of dumping everything on the last scene
-            const perScene = surplusTime / newBeatDurations.length;
-            newBeatDurations = newBeatDurations.map(d =>
-              parseFloat((d + perScene).toFixed(3))
-            );
-          }
-        }
- 
-        // Step 5: final drift correction (floating point cleanup)
-        const finalDrift = audioDuration - newBeatDurations.reduce((s, d) => s + d, 0);
-        if (Math.abs(finalDrift) > 0) {
-          newBeatDurations[newBeatDurations.length - 1] =
-            parseFloat((newBeatDurations[newBeatDurations.length - 1] + finalDrift).toFixed(3));
-        }
-
-        newStartTimes = [];
-        let off = 0;
-        newBeatDurations.forEach(dur => { newStartTimes.push(off); off += dur; });
-        syncSource = 'words';
-
-        // Build syllable-based alignment results for drift detection
-        alignmentResults = scenes.map((scene, idx) => {
-          const text = (scene.narration_text || scene.voiceover_text || '').trim();
-          const wordCount = text.split(/\s+/).filter(Boolean).length;
-          const dur = newBeatDurations[idx];
-          const wordEstimate = Math.max(1.0, wordCount * 0.38);
-          const isBloated = dur > wordEstimate * 2.5 && dur > 10;
-          const suggestedDur = Math.round(Math.max(1.0, Math.min(10, wordEstimate + 1.5)) * 100) / 100;
-          return {
-            sceneId: scene.id,
-            sceneNumber: scene.scene_number,
-            startTime: newStartTimes[idx],
-            endTime: newStartTimes[idx] + dur,
-            duration: dur,
-            matchScore: 1,
-            empty: wordCount === 0,
-            wordCount,
-            speechStart: newStartTimes[idx],
-            speechEnd: newStartTimes[idx] + wordEstimate,
-            driftDetected: isBloated,
-            driftInfo: isBloated ? {
-              currentDuration: dur,
-              speechSpan: Math.round(wordEstimate * 100) / 100,
-              wordCount,
-              wordEstimate: Math.round(wordEstimate * 100) / 100,
-              suggestedDuration: suggestedDur,
-              deadAir: Math.round((dur - wordEstimate) * 100) / 100,
-            } : undefined,
-          };
-        });
-      }
-
-      // Step 3: Build synced video clips
+      // Step 5: Build video clips using ONLY alignment-derived startTime/duration
       const synced = scenes.map((scene, idx) => {
-        const existing = videoClips.find(c => c.sceneId === scene.id);
-        const hasVideo = scene.video_url && scene.video_url.startsWith('http') && !scene.video_url.startsWith('veo_task:') && !scene.video_url.startsWith('grok_vid_task:');
-        const hasBroll = scene.broll_url && scene.broll_url.startsWith('http');
+        const existing  = videoClips.find(c => c.sceneId === scene.id);
+        const hasVideo  = scene.video_url && scene.video_url.startsWith('http')
+          && !scene.video_url.startsWith('veo_task:') && !scene.video_url.startsWith('grok_vid_task:');
+        const hasBroll  = scene.broll_url && scene.broll_url.startsWith('http');
         return {
           ...(existing || {}),
-          id: `video-${scene.id}`, sceneId: scene.id, sceneNumber: scene.scene_number,
-          type: 'video', startTime: newStartTimes[idx], duration: newBeatDurations[idx],
-          label: `Scene ${scene.scene_number}`, thumbnail: scene.image_url,
-          effects: existing?.effects || [], audioMuted: existing?.audioMuted || false,
-          imageUrl: existing?.imageUrl || scene.image_url || null,
-          videoUrl: existing?.videoUrl || (hasVideo ? scene.video_url : null),
-          mediaType: existing?.mediaType || (hasVideo ? 'video' : 'image'),
-          brollUrl: existing?.brollUrl || (hasBroll ? scene.broll_url : null),
-          brollSource: existing?.brollSource || scene.broll_source || null,
-          brollQuery: existing?.brollQuery || scene.broll_query || null,
-          cinematicMotion: existing?.cinematicMotion || null,
-          transition: existing?.transition || null,
-          transitionDuration: existing?.transitionDuration ?? null,
-          motionSpeed: existing?.motionSpeed ?? 1.0,
-          motionIntensity: existing?.motionIntensity ?? 1.0,
-          playbackRate: existing?.playbackRate ?? 1.0,
-          videoDuration: existing?.videoDuration ?? null,
-          manualSpeed: existing?.manualSpeed ?? false,
-          synced: true,
+          id:                 `video-${scene.id}`,
+          sceneId:            scene.id,
+          sceneNumber:        scene.scene_number,
+          type:               'video',
+          startTime:          newStartTimes[idx],    // ← ASR-derived, exact
+          duration:           newBeatDurations[idx], // ← ASR-derived, exact
+          label:              `Scene ${scene.scene_number}`,
+          thumbnail:          scene.image_url,
+          effects:            existing?.effects            || [],
+          audioMuted:         existing?.audioMuted          || false,
+          imageUrl:           existing?.imageUrl            || scene.image_url   || null,
+          videoUrl:           existing?.videoUrl            || (hasVideo ? scene.video_url  : null),
+          mediaType:          existing?.mediaType           || (hasVideo ? 'video' : 'image'),
+          brollUrl:           existing?.brollUrl            || (hasBroll ? scene.broll_url  : null),
+          brollSource:        existing?.brollSource         || scene.broll_source || null,
+          brollQuery:         existing?.brollQuery          || scene.broll_query  || null,
+          cinematicMotion:    existing?.cinematicMotion     || null,
+          transition:         existing?.transition          || null,
+          transitionDuration: existing?.transitionDuration  ?? null,
+          motionSpeed:        existing?.motionSpeed          ?? 1.0,
+          motionIntensity:    existing?.motionIntensity      ?? 1.0,
+          playbackRate:       existing?.playbackRate         ?? 1.0,
+          videoDuration:      existing?.videoDuration        ?? null,
+          manualSpeed:        existing?.manualSpeed          ?? false,
+          synced:             true,
         };
       });
 
-      // Step 4: Measure video durations and set playback rates
+      // Step 6: Measure video durations and set playback rates
       const videoDurationCache = {};
       const measureVideoDur = (url) => {
         if (videoDurationCache[url]) return Promise.resolve(videoDurationCache[url]);
@@ -1205,58 +1093,45 @@ export default function TimelineEditor() {
 
       const syncedWithRates = await Promise.all(synced.map(async (clip) => {
         if (clip.mediaType !== 'video' || !clip.videoUrl) return clip;
-        const vidDur = await measureVideoDur(clip.videoUrl);
+        const vidDur  = await measureVideoDur(clip.videoUrl);
         const beatDur = clip.duration;
         if (clip.manualSpeed) return { ...clip, videoDuration: vidDur };
- 
-        if (beatDur <= vidDur) {
-          // Video is longer than or equal to beat — play at 1× (may need trimming)
-          return { ...clip, playbackRate: 1.0, videoLoop: false, videoDuration: vidDur };
-        }
- 
+        if (beatDur <= vidDur)  return { ...clip, playbackRate: 1.0, videoLoop: false, videoDuration: vidDur };
         const rate = vidDur / beatDur;
- 
-        if (rate < 0.6) {
-          // Video is too short to slow-stretch without looking broken
-          // Loop at 1× instead of slow-mo
-          return { ...clip, playbackRate: 1.0, videoLoop: true, videoDuration: vidDur };
-        }
- 
-        // Safe slow-down range: 0.6× – 1.0×
+        if (rate < 0.6)         return { ...clip, playbackRate: 1.0, videoLoop: true,  videoDuration: vidDur };
         return { ...clip, playbackRate: parseFloat(rate.toFixed(3)), videoLoop: false, videoDuration: vidDur };
       }));
 
+      // Step 7: Commit — ASR alignment is now the source of truth
       setVideoClips(syncedWithRates);
-      setOverrideBeatDurations(newBeatDurations);
+      setOverrideBeatDurations(newBeatDurations); // drives audioBeatDurations useMemo
 
-      // Step 4b: Detect bloated scenes and show in DriftFixPanel
-      if (alignmentResults) {
-        setLastAlignmentResults(alignmentResults);
-        const drifted = alignmentResults
-          .map((a, i) => a.driftDetected ? { index: i, sceneNumber: a.sceneNumber, info: a.driftInfo } : null)
-          .filter(Boolean);
-        setDriftedScenes(drifted);
-        if (drifted.length > 0) {
-          console.log(`[AutoSync] ${drifted.length} bloated scene(s) detected — review in Drift Fix panel`);
-        }
-      } else {
-        setDriftedScenes([]);
+      // Step 8: Drift detection
+      setLastAlignmentResults(alignment);
+      const drifted = alignment
+        .map((a, i) => a.driftDetected ? { index: i, sceneNumber: a.sceneNumber, info: a.driftInfo } : null)
+        .filter(Boolean);
+      setDriftedScenes(drifted);
+      if (drifted.length > 0) {
+        console.log(`[AutoSync] ${drifted.length} bloated scene(s) detected — review in Drift Fix panel`);
       }
 
-      // Step 5: Persist
+      // Step 9: Persist to DB (non-fatal)
       if (prodSettings?.id) {
         try {
           await base44.entities.ProductionSettings.update(prodSettings.id, {
-            beat_durations: JSON.stringify(newBeatDurations),
+            beat_durations:   JSON.stringify(newBeatDurations),
             beat_start_times: JSON.stringify(newStartTimes),
           });
         } catch (e) { console.warn('Could not save beat data to DB:', e.message); }
       }
 
-      setSyncStatus(syncSource === 'asr' ? 'audio' : 'words');
+      setSyncStatus('audio'); // always 'audio' — only one path now
     } catch (err) {
       console.error('AutoSync failed:', err);
+      setAsrProgress(null);
       setSyncStatus('error');
+      console.warn('[AutoSync] Error:', err.message);
     }
 
     setIsSyncing(false);
