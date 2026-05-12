@@ -1634,16 +1634,24 @@ Minimum 80 words. Respond with JSON: {"image_prompt": "..."}`;
                 const primaryDesc = primaryTiers[identityTier] || primaryTiers.moderate;
                 modifiedPrompt = modifiedPrompt.replace(genericRefs, primaryDesc);
 
-                if (sceneCast.length === 1) {
-                  modifiedPrompt = modifiedPrompt.replace(
-                    /\bthe (man|woman|boy|girl|person)\b/gi,
-                    primaryTiers.minimal
-                  );
-                }
+                
               }
             }
 
             rawPrompt = modifiedPrompt;
+
+          // ── CROWD DIVERSITY ANCHOR ──
+          // When main char is present AND there are other people in the scene,
+          // explicitly tell the image generator the crowd must have diverse faces.
+          const hasCrowdOrGroup = /\b(crowd|people|group|fans?|audience|onlookers?|bystanders?|spectators?|others|background figures?|passersby|civilians|workers|officers|soldiers|students|classmates)\b/i.test(rawPrompt);
+          const hasSecondaryPerson = /\b(a man|a woman|a boy|a girl|an old|an elderly|another person|his (friend|colleague|partner|boss|teacher)|her (friend|colleague|partner|boss|teacher))\b/i.test(rawPrompt);
+          if (sceneCast.length >= 1 && (hasCrowdOrGroup || hasSecondaryPerson)) {
+            rawPrompt = rawPrompt.replace(
+              /, masterpiece quality/i,
+              ', surrounding people have completely different distinct faces and appearances, diverse crowd with unique individuals, masterpiece quality'
+            );
+            console.log(`👥 Scene ${s.scene_number}: crowd diversity anchor injected`);
+          }
           }
 
           // ═══ PROP FIDELITY ═══
@@ -1710,11 +1718,18 @@ Minimum 80 words. Respond with JSON: {"image_prompt": "..."}`;
                 const genericHuman = /\b(a\s+(?:woman|man|person|figure|character|user|narrator))\b/i;
                 const ghMatch = rawPrompt.match(genericHuman);
                 if (ghMatch) {
-                  const ghIdx = rawPrompt.indexOf(ghMatch[0]);
-                  const ghBefore = rawPrompt.substring(0, ghIdx);
-                  const ghAfter = rawPrompt.substring(ghIdx + ghMatch[0].length);
-                  rawPrompt = `${ghBefore}${desc}${ghAfter}`;
-                  console.log(`👤 Scene ${s.scene_number}: injected primary char via generic ref (${tier}, ${desc.length}ch)`);
+                  const narrLowerCheck = (s.narration_text || '').toLowerCase();
+                  const mainCharNameInNarr = narrLowerCheck.includes(pName) ||
+                    /\b(i |my |me |myself)\b/.test(narrLowerCheck);
+                  if (mainCharNameInNarr) {
+                    const ghIdx = rawPrompt.indexOf(ghMatch[0]);
+                    const ghBefore = rawPrompt.substring(0, ghIdx);
+                    const ghAfter = rawPrompt.substring(ghIdx + ghMatch[0].length);
+                    rawPrompt = `${ghBefore}${desc}${ghAfter}`;
+                    console.log(`👤 Scene ${s.scene_number}: injected primary char via generic ref (${tier}, ${desc.length}ch)`);
+                  } else {
+                    console.log(`🚫 Scene ${s.scene_number}: skipped generic injection — main char not in narration`);
+                  }
                 }
               }
             } else if (isEnvironmentScene) {
