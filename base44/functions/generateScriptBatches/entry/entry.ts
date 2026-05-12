@@ -238,7 +238,7 @@ function buildSleepStoryWritingPrompt({ batch, project, topic, sortedBatches, pr
   const protagonistMatch = batch.synopsis?.match(/\[Protagonist:\s*([^\]]+)\]/) ||
                            batch.synopsis?.match(/^Protagonist:\s*(.+?)[\.\n]/);
   const protagonist = batch.protagonist_name ||
-                      (protagonistMatch ? protagonistMatch[1].trim() : 'the traveller');
+                      (protagonistMatch ? protagonistMatch[1].trim() : 'You');
 
   return `You are an expert sleep audio fiction writer. You write professional-grade bedtime stories in the style of Calm app Sleepcasts and Headspace Sleep — warm, unhurried, sensory-rich third-person narrative fiction.
 
