@@ -183,6 +183,45 @@ function cleanNarrationText(text) {
   return cleaned;
 }
 
+// ── Sentence-driven scene count helpers ───────────────────────────
+function splitIntoSentences(text) {
+  const parts = text
+    .split(/(?<=[.!?…]["']?)\s+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+  return parts.length > 0 ? parts : [text.trim()];
+}
+
+function wcWords(text) {
+  return text.trim().split(/\s+/).filter(w => w.length > 0).length;
+}
+
+function buildSceneBeats(sentences) {
+  const beats = [];
+  let i = 0;
+  while (i < sentences.length) {
+    const sentence = sentences[i];
+    const wc = wcWords(sentence);
+    if (wc < 3 && i + 1 < sentences.length && wcWords(sentences[i + 1]) < 3) {
+      const merged = `${sentence} ${sentences[i + 1]}`;
+      beats.push({ narration_text: merged, word_count: wcWords(merged), angle_index: 0, total_angles: 1, is_multi_angle: false });
+      i += 2;
+      continue;
+    }
+    if (wc > 7) {
+      const totalAngles = Math.ceil(wc / 7);
+      for (let a = 0; a < totalAngles; a++) {
+        beats.push({ narration_text: sentence, word_count: wc, angle_index: a, total_angles: totalAngles, is_multi_angle: true });
+      }
+      i++;
+      continue;
+    }
+    beats.push({ narration_text: sentence, word_count: wc, angle_index: 0, total_angles: 1, is_multi_angle: false });
+    i++;
+  }
+  return beats;
+}
+
 function normalizeStyleKey(raw) {
   if (!raw) return '';
   const normalized = raw.trim().toLowerCase().replace(/[\s\-]+/g, '_');
@@ -709,43 +748,61 @@ function getNarrativePosition(sceneNumber, totalScenes) {
   return Math.round(((sceneNumber - 1) / (totalScenes - 1)) * 100);
 }
 
-function splitScriptByPhase(script, phases) {
+function splitScriptByPhase(script, phases, beats = []) {
   if (!script || !script.trim() || !phases || phases.length === 0) return [];
 
-  const sentences = script.match(/[^.!?]+[.!?]+[\s]*/g) || [script];
-  const totalSentences = sentences.length;
   const totalPhaseScenes = phases.reduce((a, b) => a + b.scenes, 0);
-
   if (totalPhaseScenes === 0) return [];
 
+  // Non-sleep: distribute pre-built beats across phases (source of truth)
+  if (beats.length > 0) {
+    let beatCursor = 0;
+    const chunks = [];
+    for (let i = 0; i < phases.length; i++) {
+      const phase = phases[i];
+      if (!phase.scenes || phase.scenes <= 0) continue;
+      const isLast = i === phases.length - 1;
+      const endCursor = isLast ? beats.length : Math.min(beatCursor + phase.scenes, beats.length);
+      if (endCursor > beatCursor) {
+        const phaseBeats = beats.slice(beatCursor, endCursor);
+        const segment = phaseBeats.map(b => b.narration_text).join(' ');
+        if (segment.trim().length > 0) {
+          chunks.push({
+            phase: phase.name,
+            purpose: phase.purpose,
+            scenes: phaseBeats.length,
+            text: segment,
+            beats: phaseBeats,
+          });
+        }
+      }
+      beatCursor = endCursor;
+      if (beatCursor >= beats.length) break;
+    }
+    return chunks;
+  }
+
+  // Sleep/fallback: original sentence-regex approach
+  const sentences = script.match(/[^.!?]+[.!?]+[\s]*/g) || [script];
+  const totalSentences = sentences.length;
   let cursor = 0;
   const chunks = [];
-
   for (let i = 0; i < phases.length; i++) {
     const phase = phases[i];
     if (!phase.scenes || phase.scenes <= 0) continue;
-
     const proportion = phase.scenes / totalPhaseScenes;
     const sentenceCount = Math.max(1, Math.round(totalSentences * proportion));
     const isLast = i === phases.length - 1;
     const endCursor = isLast ? totalSentences : Math.min(cursor + sentenceCount, totalSentences);
-
     if (endCursor > cursor) {
       const segment = sentences.slice(cursor, endCursor).join("").trim();
       if (segment.length > 0) {
-        chunks.push({
-          phase: phase.name,
-          purpose: phase.purpose,
-          scenes: phase.scenes,
-          text: segment
-        });
+        chunks.push({ phase: phase.name, purpose: phase.purpose, scenes: phase.scenes, text: segment });
       }
     }
     cursor = endCursor;
-
     if (cursor >= totalSentences) break;
   }
-
   return chunks;
 }
 
@@ -1108,25 +1165,33 @@ Deno.serve(async (req) => {
 
     const isSleep = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
 
-    const densityAnchors = isSleep
-      ? [{m:5,d:15},{m:10,d:20},{m:15,d:22},{m:20,d:25},{m:30,d:28},{m:60,d:32}]
-      : [{m:1,d:4.2},{m:3,d:4.8},{m:5,d:5.0},{m:8,d:5.2},{m:10,d:5.3},{m:15,d:5.5},{m:30,d:5.8},{m:60,d:6.0}];
+    const sleepDensityAnchors = [{m:5,d:15},{m:10,d:20},{m:15,d:22},{m:20,d:25},{m:30,d:28},{m:60,d:32}];
 
-    function getAvgSceneDuration(mins) {
-      if (mins <= densityAnchors[0].m) return densityAnchors[0].d;
-      if (mins >= densityAnchors[densityAnchors.length-1].m) return densityAnchors[densityAnchors.length-1].d;
-      for (let i = 0; i < densityAnchors.length - 1; i++) {
-        const lo = densityAnchors[i], hi = densityAnchors[i+1];
+    function getSleepAvgSceneDuration(mins) {
+      if (mins <= sleepDensityAnchors[0].m) return sleepDensityAnchors[0].d;
+      if (mins >= sleepDensityAnchors[sleepDensityAnchors.length-1].m) return sleepDensityAnchors[sleepDensityAnchors.length-1].d;
+      for (let i = 0; i < sleepDensityAnchors.length - 1; i++) {
+        const lo = sleepDensityAnchors[i], hi = sleepDensityAnchors[i+1];
         if (mins >= lo.m && mins <= hi.m) {
           const t = (mins - lo.m) / (hi.m - lo.m);
           return lo.d + t * (hi.d - lo.d);
         }
       }
-      return isSleep ? 22 : 5.5;
+      return 22;
     }
 
-    const avgSceneDuration = getAvgSceneDuration(durationMinutes);
-    const totalTargetScenes = Math.max(isSleep ? 4 : 8, Math.round((durationMinutes * 60) / avgSceneDuration));
+    let totalTargetScenes;
+    let scriptBeats = [];
+
+    if (isSleep) {
+      const avgSceneDuration = getSleepAvgSceneDuration(durationMinutes);
+      totalTargetScenes = Math.max(4, Math.round((durationMinutes * 60) / avgSceneDuration));
+    } else {
+      const scriptSentences = splitIntoSentences(finalScript);
+      scriptBeats = buildSceneBeats(scriptSentences);
+      totalTargetScenes = Math.max(8, scriptBeats.length);
+      console.log(`📝 Sentence-driven: ${scriptSentences.length} sentences → ${totalTargetScenes} scene beats`);
+    }
 
     const projectMode = project.project_mode || '';
     const storyArch   = project.shorts_niche  || '';
@@ -1151,7 +1216,7 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'Phase allocation produced zero scenes. Check video_duration_minutes on the project.' }, { status: 400 });
     }
 
-    const scriptChunks = splitScriptByPhase(finalScript, phases);
+    const scriptChunks = splitScriptByPhase(finalScript, phases, scriptBeats);
 
     if (scriptChunks.length === 0) {
       return Response.json({ error: 'Script could not be split into scene chunks. Script may be too short.' }, { status: 400 });
