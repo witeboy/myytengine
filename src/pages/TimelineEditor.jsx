@@ -1143,7 +1143,9 @@ export default function TimelineEditor() {
     if (!lastAlignmentResults || !driftedIndices?.length) return;
 
     const { applyDriftFix } = await import('@/lib/asrAutoSync');
-    const fixed = applyDriftFix(lastAlignmentResults.map(r => ({...r})), driftedIndices);
+    // Pass the actual scene indices (not scene objects) to the fix function
+    const indices = driftedIndices.map(d => d.index !== undefined ? d.index : d);
+    const fixed = applyDriftFix(lastAlignmentResults.map(r => ({...r})), indices);
 
     const newDurations = fixed.map(a => a.duration);
     const newStarts = fixed.map(a => a.startTime);
