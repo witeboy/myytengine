@@ -710,6 +710,49 @@ export default function ContentGeneration() {
         setImportPhase('prompts');
         await runPromptGeneration({ onProgress: setImportProgress });
 
+      } else if (project?.project_mode === 'long_viral') {
+        // ── LONG VIRAL: sentence-driven scene breakdown ──
+        setImportProgress('Breaking script into sentence-driven scenes...');
+        try {
+          const result = await base44.functions.invoke('longViralSceneBreakdown', { project_id: projectId });
+          const data = result?.data || result;
+          if (data?.error) throw new Error(data.error);
+        } catch (err) {
+          const status = err?.response?.status || err?.status;
+          if (status === 502 || status === 504) {
+            setImportProgress('Taking longer than expected, checking results...');
+            await new Promise(r => setTimeout(r, 10000));
+          } else {
+            throw err;
+          }
+        }
+
+        let freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+
+        if (freshScenes.length === 0) {
+          setImportProgress('No scenes yet — retrying breakdown...');
+          try {
+            await base44.functions.invoke('longViralSceneBreakdown', { project_id: projectId });
+          } catch (retryErr) {
+            const status = retryErr?.response?.status || retryErr?.status;
+            if (status !== 502 && status !== 504) throw retryErr;
+            await new Promise(r => setTimeout(r, 12000));
+          }
+          freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+        }
+
+        if (freshScenes.length === 0) {
+          throw new Error('Long Viral scene breakdown failed after retry. Please try again.');
+        }
+
+        queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+        setTotalExpectedScenes(freshScenes.length);
+        setImportProgress(`Created ${freshScenes.length} scenes — now generating image prompts...`);
+
+        // Long viral breakdown saves DIRECTOR_NOTES: scenes — must run prompt generation
+        setImportPhase('prompts');
+        await runPromptGeneration({ onProgress: setImportProgress });
+
       } else {
         // ── STANDARD: full cinematic multi-batch breakdown ──
         try {
