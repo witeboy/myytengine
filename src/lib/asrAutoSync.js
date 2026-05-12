@@ -98,16 +98,11 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
   const sceneScriptWords = scenes.map(scene => getSceneWords(scene));
   const totalScriptWords = sceneScriptWords.reduce((s, arr) => s + arr.length, 0);
   
-  console.log(`[ASR Sync v4] ${totalScriptWords} script words, ${asrWords.length} ASR words, ${scenes.length} scenes, ${totalAudioDuration.toFixed(1)}s audio`);
+  console.log(`[ASR Sync v5] ${totalScriptWords} script words, ${asrWords.length} ASR words, ${scenes.length} scenes, ${totalAudioDuration.toFixed(1)}s audio`);
 
   // ── Step 2: Sequential text-anchored matching ──────────────────
-  // Walk through ASR words, consuming them scene by scene.
-  // For each scene, try to match its script words against upcoming
-  // ASR words. Allow skipping up to 2 ASR words (ASR insertions)
-  // and up to 1 script word (ASR deletions) to stay robust.
-  
-  let asrCursor = 0; // current position in ASR word array
-  const sceneMatches = []; // per-scene: { firstAsrIdx, lastAsrIdx, matchedCount }
+  let asrCursor = 0;
+  const sceneMatches = [];
   
   for (let si = 0; si < scenes.length; si++) {
     const scriptWords = sceneScriptWords[si];
@@ -123,16 +118,12 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     let scriptIdx = 0;
     let matchedCount = 0;
     
-    // How many ASR words should this scene consume at most?
-    // Use a generous upper bound: 2× the script word count + 5.
-    // This prevents one scene from eating all remaining ASR words
-    // if matching goes wrong.
     const maxAsrConsume = Math.min(
       scriptWords.length * 4 + 15,
       asrWords.length - asrCursor
     );
     
-    let localAsrIdx = 0; // how many ASR words we've looked at for this scene
+    let localAsrIdx = 0;
     
     while (scriptIdx < scriptWords.length && localAsrIdx < maxAsrConsume) {
       const asrIdx = asrCursor + localAsrIdx;
@@ -142,19 +133,17 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
       const scriptW = scriptWords[scriptIdx];
       
       if (wordsMatch(scriptW, asrW)) {
-        // Match found — consume both
         if (firstMatchedAsrIdx === -1) firstMatchedAsrIdx = asrIdx;
         lastMatchedAsrIdx = asrIdx;
         matchedCount++;
         scriptIdx++;
         localAsrIdx++;
       } else {
-        // No match — try skipping up to 3 ASR words (ASR inserted filler)
         let asrSkipFound = false;
         for (let skip = 1; skip <= 3 && localAsrIdx + skip < maxAsrConsume; skip++) {
           const candidateIdx = asrIdx + skip;
           if (candidateIdx < asrWords.length && wordsMatch(scriptW, asrWords[candidateIdx].word)) {
-            localAsrIdx += skip; // skip inserted ASR words
+            localAsrIdx += skip;
             if (firstMatchedAsrIdx === -1) firstMatchedAsrIdx = asrCursor + localAsrIdx;
             lastMatchedAsrIdx = asrCursor + localAsrIdx;
             matchedCount++;
@@ -166,11 +155,10 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
         }
 
         if (!asrSkipFound) {
-          // Try skipping up to 3 script words (ASR dropped them)
           let scriptSkipFound = false;
           for (let skip = 1; skip <= 3 && scriptIdx + skip < scriptWords.length; skip++) {
             if (wordsMatch(scriptWords[scriptIdx + skip], asrW)) {
-              scriptIdx += skip; // skip dropped script words
+              scriptIdx += skip;
               if (firstMatchedAsrIdx === -1) firstMatchedAsrIdx = asrIdx;
               lastMatchedAsrIdx = asrIdx;
               matchedCount++;
@@ -182,33 +170,23 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
           }
 
           if (!scriptSkipFound) {
-            // Neither skip worked — advance ASR cursor and try again
             localAsrIdx++;
           }
         }
       }
     }
     
-    // Advance the global ASR cursor past all words consumed by this scene
     if (lastMatchedAsrIdx >= 0) {
       asrCursor = lastMatchedAsrIdx + 1;
     } else {
-      // No matches at all — scene had words but ASR didn't match any.
-      // Don't advance cursor, will be handled as empty.
-      // But assign it a proportional chunk of remaining ASR words
-      // so it doesn't collapse to zero.
-      const remainingScenes = scenes.length - si;
-      const remainingAsr = asrWords.length - asrCursor;
-      const fairShare = Math.max(1, Math.round(remainingAsr / remainingScenes));
-      const assignedEnd = Math.min(asrCursor + fairShare, asrWords.length) - 1;
+      // No matches — mark as fallback, don't steal ASR words
       sceneMatches.push({
-        firstAsrIdx: asrCursor,
-        lastAsrIdx: assignedEnd,
+        firstAsrIdx: -1,
+        lastAsrIdx: -1,
         matchedCount: 0,
         empty: false,
-        fallback: true, // flag that this used proportional fallback
+        fallback: true,
       });
-      asrCursor = assignedEnd + 1;
       continue;
     }
     
@@ -224,7 +202,9 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     console.log(`[ASR Scene ${scenes[si].scene_number}] ${scriptWords.length} script → ${matchedCount} matched, ASR range [${firstAsrIdx}..${lastMatchedAsrIdx}]`);
   }
 
-  // ── Step 3: Extract timestamps from matched ranges ─────────────
+  // ── Step 3: Extract AUTHORITATIVE timestamps from matched words ─
+  // speechStart/speechEnd are the ground truth — they come directly
+  // from the ASR word timestamps and will NOT be overridden.
   const results = scenes.map((scene, idx) => {
     const match = sceneMatches[idx];
     const wc = sceneScriptWords[idx].length;
@@ -237,7 +217,8 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
         endTime: null,
         duration: 0,
         matchScore: 0,
-        empty: true,
+        empty: match.empty || false,
+        fallback: match.fallback || false,
         wordCount: wc,
         speechStart: null,
         speechEnd: null,
@@ -256,83 +237,155 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     return {
       sceneId: scene.id,
       sceneNumber: scene.scene_number,
-      startTime: speechStart,
-      endTime: speechEnd,
+      startTime: speechStart,   // will be adjusted for padding only
+      endTime: speechEnd,       // will be adjusted for padding only
       duration: Math.max(0.5, speechEnd - speechStart),
-      matchScore: match.matchRate || (match.fallback ? 0.3 : 0),
+      matchScore: match.matchRate || 0,
       empty: false,
+      fallback: false,
       wordCount: wc,
       speechStart,
       speechEnd,
       matchedCount: match.matchedCount,
-      fallback: match.fallback || false,
     };
   });
 
-  // ── Step 4: Stitch timeline — fill gaps between scenes ─────────
-  // First scene always starts at 0
-  if (results.length > 0 && !results[0].empty) {
-    results[0].startTime = 0;
+  // ── Step 4: Word-anchored stitching ────────────────────────────
+  // RULE: Each scene's startTime/endTime stays anchored to its
+  // speechStart/speechEnd. We only distribute dead-air gaps
+  // (silence between scenes) as symmetric padding, capped so no
+  // scene gets more than 0.5s of padding on either side.
+  
+  const MAX_PAD = 0.5; // max padding added to either side of a scene
+  
+  // 4a: Handle the leading silence (before first spoken scene)
+  const firstSpoken = results.find(r => !r.empty && !r.fallback && r.speechStart !== null);
+  if (firstSpoken) {
+    const leadingSilence = firstSpoken.speechStart;
+    // Give at most MAX_PAD of leading silence to the first scene
+    firstSpoken.startTime = Math.max(0, firstSpoken.speechStart - Math.min(leadingSilence, MAX_PAD));
   }
-
-  // Between consecutive non-empty scenes, split the gap at midpoint
-  // with 70/30 bias toward the outgoing scene (natural speech pause)
+  
+  // 4b: Handle trailing silence (after last spoken scene)
+  const lastSpoken = [...results].reverse().find(r => !r.empty && !r.fallback && r.speechEnd !== null);
+  if (lastSpoken) {
+    const trailingSilence = totalAudioDuration - lastSpoken.speechEnd;
+    lastSpoken.endTime = Math.min(totalAudioDuration, lastSpoken.speechEnd + Math.min(trailingSilence, MAX_PAD));
+  }
+  
+  // 4c: Between consecutive matched scenes, split the gap symmetrically
+  // but cap each side at MAX_PAD so no scene bloats
   for (let i = 0; i < results.length - 1; i++) {
     const curr = results[i];
     const next = results[i + 1];
-    if (curr.empty || next.empty) continue;
+    
+    // Skip empty/fallback scenes — handled separately
+    if (curr.empty || curr.fallback || next.empty || next.fallback) continue;
     if (curr.speechEnd === null || next.speechStart === null) continue;
 
     const gap = next.speechStart - curr.speechEnd;
 
     if (gap > 0) {
-      // Gap between scenes — bias toward outgoing scene
-      const boundary = curr.speechEnd + gap * 0.7;
-      curr.endTime = boundary;
-      next.startTime = boundary;
+      // Positive gap — silence between scenes
+      // Give each side at most MAX_PAD, split remainder evenly
+      const halfGap = gap / 2;
+      const currPad = Math.min(halfGap, MAX_PAD);
+      const nextPad = Math.min(halfGap, MAX_PAD);
+      const boundary = curr.speechEnd + currPad;
+      // If there's leftover gap after both pads, the boundary stays at curr pad
+      // and next starts at its own pad — any middle gap is "assigned" to curr
+      curr.endTime = curr.speechEnd + currPad;
+      next.startTime = next.speechStart - nextPad;
+      
+      // If the pads don't cover the full gap, we need a clean boundary
+      // Split any remaining gap at the midpoint
+      if (curr.endTime < next.startTime) {
+        const mid = (curr.endTime + next.startTime) / 2;
+        curr.endTime = mid;
+        next.startTime = mid;
+      }
     } else {
-      // Overlap — split at midpoint
+      // Overlap — scenes' speech overlaps (shouldn't happen with good ASR)
+      // Split at midpoint of the overlapping region
       const boundary = (curr.speechEnd + next.speechStart) / 2;
       curr.endTime = boundary;
       next.startTime = boundary;
     }
   }
 
-  // Last non-empty scene ends at total audio duration
-  const lastNonEmpty = [...results].reverse().find(r => !r.empty);
-  if (lastNonEmpty) {
-    lastNonEmpty.endTime = totalAudioDuration;
-  }
-
-  // Handle empty scenes (no narration) — give them 1.5s between neighbors
-  const MIN_EMPTY = 1.5;
+  // 4d: Handle empty/fallback scenes — give them a minimal slot
+  // between their neighbors, without stealing from matched scenes
+  const MIN_EMPTY = 0.8;
   for (let i = 0; i < results.length; i++) {
-    if (!results[i].empty) continue;
+    const r = results[i];
+    if (!r.empty && !r.fallback) continue;
+    
     const prev = i > 0 ? results[i - 1] : null;
     const next = i < results.length - 1 ? results[i + 1] : null;
-
+    
     if (prev && prev.endTime !== null && next && next.startTime !== null) {
+      // Slot between neighbors — take only from the gap, not from their speech time
       const available = next.startTime - prev.endTime;
-      const dur = Math.min(MIN_EMPTY, available);
-      results[i].startTime = prev.endTime;
-      results[i].endTime = prev.endTime + dur;
-      if (dur < available) next.startTime = results[i].endTime;
+      if (available >= MIN_EMPTY) {
+        r.startTime = prev.endTime;
+        r.endTime = prev.endTime + Math.min(MIN_EMPTY, available);
+        // Push next startTime only if we consumed the full gap
+        if (r.endTime > next.startTime) next.startTime = r.endTime;
+      } else if (available > 0) {
+        r.startTime = prev.endTime;
+        r.endTime = prev.endTime + available;
+      } else {
+        // No gap available — give it a tiny sliver at prev's end
+        r.startTime = prev.endTime;
+        r.endTime = prev.endTime + 0.3;
+      }
     } else if (prev && prev.endTime !== null) {
-      results[i].startTime = prev.endTime;
-      results[i].endTime = Math.min(prev.endTime + MIN_EMPTY, totalAudioDuration);
+      r.startTime = prev.endTime;
+      r.endTime = Math.min(prev.endTime + MIN_EMPTY, totalAudioDuration);
     } else if (next && next.startTime !== null) {
-      results[i].endTime = next.startTime;
-      results[i].startTime = Math.max(0, next.startTime - MIN_EMPTY);
+      r.endTime = next.startTime;
+      r.startTime = Math.max(0, next.startTime - MIN_EMPTY);
+    } else {
+      // Completely isolated — shouldn't happen but handle gracefully
+      r.startTime = 0;
+      r.endTime = MIN_EMPTY;
     }
   }
 
-  // ── Step 5: Enforce minimums, detect drift, round ──────────────
-  const MIN_DURATION = 1.0;
+  // 4e: Ensure first scene starts at 0 and last scene ends at totalAudioDuration
+  // by extending only the boundary (not overriding speechStart/speechEnd)
+  if (results.length > 0 && results[0].startTime !== null && results[0].startTime > 0) {
+    results[0].startTime = 0;
+  }
+  const lastResult = results[results.length - 1];
+  if (lastResult && lastResult.endTime !== null && lastResult.endTime < totalAudioDuration) {
+    lastResult.endTime = totalAudioDuration;
+  }
+
+  // ── Step 5: Enforce continuity + minimums + round ──────────────
+  const MIN_DURATION = 0.5;
+  
+  // First pass: enforce continuity (no gaps between consecutive scenes)
+  for (let i = 0; i < results.length - 1; i++) {
+    const curr = results[i];
+    const next = results[i + 1];
+    if (curr.endTime !== null && next.startTime !== null) {
+      // If there's a micro-gap, close it by extending curr to meet next
+      if (next.startTime > curr.endTime + 0.002) {
+        // Small gap — extend curr
+        curr.endTime = next.startTime;
+      } else if (curr.endTime > next.startTime + 0.002) {
+        // Overlap — next starts where curr ends
+        next.startTime = curr.endTime;
+      }
+    }
+  }
+  
+  // Second pass: enforce minimums and round
   results.forEach((r, i) => {
     if (r.startTime !== null && r.endTime !== null) {
-      if (r.endTime - r.startTime < MIN_DURATION && !r.empty) {
+      if (r.endTime - r.startTime < MIN_DURATION) {
         r.endTime = r.startTime + MIN_DURATION;
-        // Push next scene if we expanded into it
         if (i + 1 < results.length && results[i + 1].startTime !== null) {
           if (results[i + 1].startTime < r.endTime) {
             results[i + 1].startTime = r.endTime;
@@ -343,47 +396,35 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
       r.endTime = Math.round(r.endTime * 1000) / 1000;
       r.duration = Math.round((r.endTime - r.startTime) * 1000) / 1000;
       
-      // Drift detection: if scene duration is >2.5× the estimated speech time
-      // and the scene is >10s, it's probably bloated
-      if (!r.empty && r.wordCount > 0) {
-        const estimatedSpeechTime = Math.max(1.0, r.wordCount * 0.38);
-        const isBloated = r.duration > estimatedSpeechTime * 2.5 && r.duration > 10;
+      // Drift detection
+      if (!r.empty && !r.fallback && r.wordCount > 0) {
+        const estimatedSpeechTime = Math.max(0.5, r.wordCount * 0.38);
+        const isBloated = r.duration > estimatedSpeechTime * 3.0 && r.duration > 8;
         r.driftDetected = isBloated;
         if (isBloated) {
           r.driftInfo = {
             currentDuration: r.duration,
-            speechSpan: Math.round(estimatedSpeechTime * 100) / 100,
+            speechSpan: Math.round((r.speechEnd - r.speechStart) * 100) / 100,
             wordCount: r.wordCount,
-            suggestedDuration: Math.round(Math.max(1.0, Math.min(10, estimatedSpeechTime + 1.5)) * 100) / 100,
-            deadAir: Math.round((r.duration - estimatedSpeechTime) * 100) / 100,
+            suggestedDuration: Math.round(Math.max(0.5, estimatedSpeechTime + 1.0) * 100) / 100,
+            deadAir: Math.round((r.duration - (r.speechEnd - r.speechStart)) * 100) / 100,
           };
         }
       }
     }
   });
 
-  // ── Step 6: Final continuity check ─────────────────────────────
-  // Ensure no gaps or overlaps between consecutive scenes
-  for (let i = 0; i < results.length - 1; i++) {
-    const curr = results[i];
-    const next = results[i + 1];
-    if (curr.endTime !== null && next.startTime !== null) {
-      if (Math.abs(curr.endTime - next.startTime) > 0.002) {
-        // Force continuity — next scene starts exactly where previous ends
-        next.startTime = curr.endTime;
-        next.duration = Math.round((next.endTime - next.startTime) * 1000) / 1000;
-      }
-    }
-  }
-
   // Log final timeline
-  console.log(`[ASR Timeline v4] ${results.length} scenes, total: ${totalAudioDuration.toFixed(1)}s`);
+  console.log(`[ASR Timeline v5] ${results.length} scenes, total: ${totalAudioDuration.toFixed(1)}s`);
   let totalMapped = 0;
   results.forEach(r => {
-    if (r.empty) return;
+    if (r.startTime === null) return;
     totalMapped += r.duration;
-    const matchInfo = r.fallback ? '(fallback)' : `${r.matchedCount}/${r.wordCount} matched`;
-    console.log(`  Scene ${r.sceneNumber}: ${r.startTime?.toFixed(2)}s → ${r.endTime?.toFixed(2)}s = ${r.duration.toFixed(2)}s | ${matchInfo}`);
+    const speechSpan = (r.speechStart !== null && r.speechEnd !== null) 
+      ? `speech ${r.speechStart.toFixed(2)}-${r.speechEnd.toFixed(2)}s` 
+      : (r.empty ? 'empty' : 'fallback');
+    const matchInfo = r.fallback ? '(fallback)' : r.empty ? '(empty)' : `${r.matchedCount}/${r.wordCount}`;
+    console.log(`  Scene ${r.sceneNumber}: ${r.startTime.toFixed(2)}s → ${r.endTime.toFixed(2)}s = ${r.duration.toFixed(2)}s | ${speechSpan} | ${matchInfo}`);
   });
   console.log(`  Total mapped: ${totalMapped.toFixed(2)}s / ${totalAudioDuration.toFixed(2)}s`);
 
@@ -394,6 +435,55 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
  * Apply drift fix — kept for backward compatibility.
  * In v4, drift detection is built into alignScenesToASR.
  */
-export function applyDriftFix(results) {
-  return results;
+export function applyDriftFix(results, driftedIndices) {
+  if (!driftedIndices?.length || !results?.length) return results;
+  
+  const fixed = results.map(r => ({ ...r }));
+  let totalReclaimed = 0;
+  
+  // Shrink bloated scenes to their suggested duration
+  for (const idx of driftedIndices) {
+    const r = fixed[idx];
+    if (!r || !r.driftInfo) continue;
+    
+    const oldDuration = r.duration;
+    const newDuration = r.driftInfo.suggestedDuration || Math.max(1.0, (r.speechEnd - r.speechStart) + 0.5);
+    const reclaimed = oldDuration - newDuration;
+    
+    if (reclaimed <= 0) continue;
+    
+    r.endTime = r.startTime + newDuration;
+    r.duration = newDuration;
+    totalReclaimed += reclaimed;
+  }
+  
+  // Rebuild start times to close gaps created by shrinking
+  for (let i = 1; i < fixed.length; i++) {
+    const prev = fixed[i - 1];
+    if (prev.endTime !== null && fixed[i].startTime !== null) {
+      if (fixed[i].startTime !== prev.endTime) {
+        const shift = prev.endTime - fixed[i].startTime;
+        fixed[i].startTime = prev.endTime;
+        fixed[i].endTime = fixed[i].endTime + shift;
+        // Don't change duration of non-drifted scenes
+        if (!driftedIndices.includes(i)) {
+          fixed[i].endTime = fixed[i].startTime + fixed[i].duration;
+        }
+      }
+    }
+  }
+  
+  // Recalculate durations
+  fixed.forEach(r => {
+    if (r.startTime !== null && r.endTime !== null) {
+      r.duration = Math.round((r.endTime - r.startTime) * 1000) / 1000;
+      r.startTime = Math.round(r.startTime * 1000) / 1000;
+      r.endTime = Math.round(r.endTime * 1000) / 1000;
+      r.driftDetected = false;
+      r.driftInfo = undefined;
+    }
+  });
+  
+  console.log(`[DriftFix] Reclaimed ${totalReclaimed.toFixed(2)}s from ${driftedIndices.length} bloated scenes`);
+  return fixed;
 }
