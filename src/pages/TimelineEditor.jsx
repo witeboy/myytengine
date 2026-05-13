@@ -766,6 +766,7 @@ export default function TimelineEditor() {
   const previewVideoRef = useRef(null);
 
   const [isSyncing,         setIsSyncing]         = useState(false);
+  const [timelineKey,       setTimelineKey]       = useState(0);
   
     // Beat detection state
   const [detectedBeats,     setDetectedBeats]     = useState([]);
