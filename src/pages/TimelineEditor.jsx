@@ -861,11 +861,19 @@ export default function TimelineEditor() {
   }, [scenes, prodSettings, overrideBeatDurations]);
 
   const audioStartTimes = useMemo(() => {
+    // Prefer persisted start times (exact ASR anchors) over re-derived cumulative sum
+    if (prodSettings?.beat_start_times) {
+      try {
+        const saved = JSON.parse(prodSettings.beat_start_times);
+        if (Array.isArray(saved) && saved.length === scenes.length) return saved;
+      } catch (e) {}
+    }
+    // Fallback: cumulate from durations (less accurate but functional)
     const starts = [];
     let offset = 0;
     audioBeatDurations.forEach(dur => { starts.push(offset); offset += dur; });
     return starts;
-  }, [audioBeatDurations]);
+  }, [audioBeatDurations, prodSettings, scenes.length]);
 
   const totalDuration = useMemo(() => {
     const beatSum = audioBeatDurations.reduce((s, d) => s + d, 0);
@@ -1407,10 +1415,20 @@ export default function TimelineEditor() {
         setAsrProgress({ phase: 'submitting', message: 'Submitting audio for speech recognition…', pollCount: 0 });
         const result = await transcribeVoiceover(voiceoverUrl, (p) => setAsrProgress(p));
         if (result?.success && result.words?.length > 0) {
+          // Use the freshest start times — overrideBeatDurations (post-sync) takes priority
+          const freshStartTimes = (() => {
+            const base = overrideBeatDurations && overrideBeatDurations.length === scenes.length
+              ? overrideBeatDurations
+              : audioBeatDurations;
+            const starts = [];
+            let offset = 0;
+            base.forEach(dur => { starts.push(offset); offset += dur; });
+            return starts;
+          })();
           allWords = result.words.map(w => {
             let sceneIdx = 0;
-            for (let i = audioStartTimes.length - 1; i >= 0; i--) {
-              if (w.start >= (audioStartTimes[i] || 0)) { sceneIdx = i; break; }
+            for (let i = freshStartTimes.length - 1; i >= 0; i--) {
+              if (w.start >= (freshStartTimes[i] || 0)) { sceneIdx = i; break; }
             }
             return { word: w.word, raw: w.word, start: w.start, end: w.end, sceneIdx };
           });
