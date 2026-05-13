@@ -118,7 +118,7 @@ function useHistory(initialState) {
   return { state, setState, undo, redo, reset, canUndo: index > 0, canRedo: index < history.length - 1 };
 }
 
-function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport, onDownloadAssets, onShowExporter, onShowFFmpegExporter, onNext, onSave, isSaving, saveStatus }) {  const panels = [
+function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport, onDownloadAssets, onShowExporter, onShowFFmpegExporter, onNext, onSave, isSaving, saveStatus, onClearCache }) {  const panels = [
     { id: 'media',       label: 'Media',       icon: Film     },
     { id: 'audio',       label: 'Audio',       icon: Music    },
     { id: 'text',        label: 'Text',        icon: Type     },
@@ -154,26 +154,7 @@ function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport,
 
       <div className="flex items-center gap-2">
         <Button
-          onClick={async () => {
-            if (!window.confirm('Clear all cached timeline positions? This resets scene timings to their saved duration_seconds values.')) return;
-            // Clear overrides in state
-            setOverrideBeatDurations(null);
-            // Clear from DB
-            if (prodSettings?.id) {
-              try {
-                await base44.entities.ProductionSettings.update(prodSettings.id, {
-                  beat_durations: null,
-                  beat_start_times: null,
-                  timeline_video_clips: null,
-                });
-                await queryClient.invalidateQueries(['prod-settings', projectId]);
-              } catch (e) { console.warn('Cache clear failed:', e.message); }
-            }
-            // Reset video clips to scene defaults
-            videoHistory.reset([]);
-            initializedRef.current = false;
-            setTimelineKey(k => k + 1);
-          }}
+          onClick={onClearCache}
           size="sm"
           variant="outline"
           className="gap-1.5 text-xs border-red-800 text-red-400 hover:bg-red-500/10"
@@ -1642,6 +1623,23 @@ export default function TimelineEditor() {
         onShowExporter={() => setShowExporter(true)}
         onShowFFmpegExporter={() => setShowFFmpegExporter(true)} onNext={handleNext}
         onSave={handleSaveTimeline} isSaving={isSaving} saveStatus={saveStatus}
+        onClearCache={async () => {
+          if (!window.confirm('Clear all cached timeline positions? This resets scene timings to their saved duration_seconds values.')) return;
+          setOverrideBeatDurations(null);
+          if (prodSettings?.id) {
+            try {
+              await base44.entities.ProductionSettings.update(prodSettings.id, {
+                beat_durations: null,
+                beat_start_times: null,
+                timeline_video_clips: null,
+              });
+              await queryClient.invalidateQueries(['prod-settings', projectId]);
+            } catch (e) { console.warn('Cache clear failed:', e.message); }
+          }
+          videoHistory.reset([]);
+          initializedRef.current = false;
+          setTimelineKey(k => k + 1);
+        }}
       />
 
       <div className="flex-1 flex min-h-0">
