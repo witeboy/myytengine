@@ -175,7 +175,7 @@ function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     const match = sceneMatches[idx];
     const wc = sceneScriptWords[idx].length;
 
-    if (match.empty || (match.firstAsrIdx === -1 && match.lastAsrIdx === -1 && !match.firstMatchedAsrIdx)) {
+    if (match.empty || match.fallback || (match.lastAsrIdx == null || match.lastAsrIdx < 0)) {
       return {
         sceneId: scene.id, sceneNumber: scene.scene_number,
         startTime: null, endTime: null, duration: 0,
