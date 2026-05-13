@@ -300,12 +300,14 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
 
   // Pass 2: minimums, rounding, drift detection
   results.forEach((r, i) => {
+    if (!r) return;
     if (r.startTime === null || r.endTime === null) return;
 
     if (r.endTime - r.startTime < MIN_DURATION) {
       r.endTime = r.startTime + MIN_DURATION;
-      if (results[i + 1]?.startTime !== null && results[i + 1].startTime < r.endTime) {
-        results[i + 1].startTime = r.endTime;
+      const nextR = results[i + 1];
+      if (nextR && nextR.startTime != null && nextR.startTime < r.endTime) {
+        nextR.startTime = r.endTime;
       }
     }
 
