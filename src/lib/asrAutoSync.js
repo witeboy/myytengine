@@ -219,12 +219,17 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     lastSpoken.endTime = Math.min(totalAudioDuration, lastSpoken.speechEnd + Math.min(trailingSilence, MAX_PAD));
   }
 
-  // 4c: Gaps between matched scenes
+  // 4c: Gaps between matched scenes — also bridge over intermediate fallbacks
   for (let i = 0; i < results.length - 1; i++) {
     const curr = results[i];
-    const next = results[i + 1];
+    if (curr.empty || curr.fallback || curr.speechEnd === null) continue;
 
-    if (curr.empty || curr.fallback || next.empty || next.fallback) continue;
+    // Find the next non-fallback, non-empty scene
+    let nextIdx = i + 1;
+    while (nextIdx < results.length && (results[nextIdx].empty || results[nextIdx].fallback)) nextIdx++;
+    if (nextIdx >= results.length) continue;
+    const next = results[nextIdx];
+    if (next.speechStart === null) continue;
     if (curr.speechEnd === null || next.speechStart === null) continue;
 
     const gap = next.speechStart - curr.speechEnd;
