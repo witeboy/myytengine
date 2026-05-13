@@ -153,6 +153,34 @@ function TopToolbar({ activePanel, onPanelChange, projectName, onBack, onExport,
       </div>
 
       <div className="flex items-center gap-2">
+        <Button
+          onClick={async () => {
+            if (!window.confirm('Clear all cached timeline positions? This resets scene timings to their saved duration_seconds values.')) return;
+            // Clear overrides in state
+            setOverrideBeatDurations(null);
+            // Clear from DB
+            if (prodSettings?.id) {
+              try {
+                await base44.entities.ProductionSettings.update(prodSettings.id, {
+                  beat_durations: null,
+                  beat_start_times: null,
+                  timeline_video_clips: null,
+                });
+                await queryClient.invalidateQueries(['prod-settings', projectId]);
+              } catch (e) { console.warn('Cache clear failed:', e.message); }
+            }
+            // Reset video clips to scene defaults
+            videoHistory.reset([]);
+            initializedRef.current = false;
+            setTimelineKey(k => k + 1);
+          }}
+          size="sm"
+          variant="outline"
+          className="gap-1.5 text-xs border-red-800 text-red-400 hover:bg-red-500/10"
+          title="Clear cached beat positions and rebuild timeline from scene durations"
+        >
+          🗑 Clear Cache
+        </Button>
         <Button onClick={onSave} disabled={isSaving} size="sm"
           className={`gap-1.5 text-xs ${
             saveStatus === 'saved' ? 'bg-green-600 hover:bg-green-700' :
@@ -835,6 +863,7 @@ export default function TimelineEditor() {
   // ── Audio beat durations ─────────────────────────────────────────
   const audioBeatDurations = useMemo(() => {
     if (scenes.length === 0) return [];
+    // overrideBeatDurations is set immediately after sync — always wins over cached DB value
     if (overrideBeatDurations && overrideBeatDurations.length === scenes.length) return overrideBeatDurations;
     if (prodSettings?.beat_durations) {
       try {
@@ -1124,6 +1153,8 @@ export default function TimelineEditor() {
             beat_durations:   JSON.stringify(newBeatDurations),
             beat_start_times: JSON.stringify(newStartTimes),
           });
+          // Force refetch so audioBeatDurations useMemo picks up new values immediately
+          await queryClient.invalidateQueries(['prod-settings', projectId]);
         } catch (e) { console.warn('Could not save beat data to DB:', e.message); }
       }
 
@@ -1930,7 +1961,7 @@ export default function TimelineEditor() {
                     onSelect={id => { setSelectedOverlayId(id); setSelectedVideoId(null); setSelectedCaptionId(null); }}
                     onUpdate={c => setOverlayClips(overlayClips.map(x => x.id === c.id ? c : x))}
                     editable snappingEnabled={snappingEnabled} onSnapLine={setSnapLinePx} />
-                  <SnapTimelineTrack type="video" clips={videoClips} allClips={[...videoClips, ...overlayClips, ...captionClips]} pps={pps} totalDuration={totalDuration} currentTime={displayTime} selectedId={selectedVideoId}
+                  <SnapTimelineTrack key={`video-track-${timelineKey}`} type="video" clips={videoClips} allClips={[...videoClips, ...overlayClips, ...captionClips]} pps={pps} totalDuration={totalDuration} currentTime={displayTime} selectedId={selectedVideoId}
                     onSelect={id => { setSelectedVideoId(id); setSelectedCaptionId(null); setSelectedOverlayId(null); }}
                     onUpdate={c => { let updated = videoClips.map(x => x.id === c.id ? c : x); if (magneticMode) updated = closeGaps(updated); setVideoClips(updated); }}
                     editable snappingEnabled={snappingEnabled} onSnapLine={setSnapLinePx} />
