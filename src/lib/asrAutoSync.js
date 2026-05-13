@@ -77,7 +77,7 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     let localAsrIdx = 0;
 
     const maxAsrConsume = Math.min(
-      scriptWords.length * 4 + 15,
+      scriptWords.length * 6 + 25,
       asrWords.length - asrCursor
     );
 
@@ -137,6 +137,10 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     if (lastMatchedAsrIdx >= 0) {
       asrCursor = lastMatchedAsrIdx + 1;
     } else {
+      // CRITICAL: advance cursor by estimated word count so the next scene
+      // doesn't scan over the same ASR region this scene failed to match
+      const estimatedWordsConsumed = Math.max(1, Math.floor(scriptWords.length * 0.8));
+      asrCursor = Math.min(asrWords.length, asrCursor + estimatedWordsConsumed);
       sceneMatches.push({ firstAsrIdx: -1, lastAsrIdx: -1, matchedCount: 0, empty: false, fallback: true });
       continue;
     }
@@ -279,10 +283,11 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     }
   }
 
-  // 4e: Clamp first/last to audio boundaries
-  if (results[0]?.startTime > 0) results[0].startTime = 0;
-  const lastResult = results[results.length - 1];
-  if (lastResult?.endTime < totalAudioDuration) lastResult.endTime = totalAudioDuration;
+  // 4e: Clamp first/last to audio boundaries — only for matched (non-null) scenes
+  const firstValid = results.find(r => r.startTime !== null);
+  if (firstValid && firstValid.startTime > 0) firstValid.startTime = 0;
+  const lastValid = [...results].reverse().find(r => r.endTime !== null);
+  if (lastValid && lastValid.endTime < totalAudioDuration) lastValid.endTime = totalAudioDuration;
 
   // ── Step 5: Continuity, minimums, rounding, drift detection ────
   const MIN_DURATION = 0.5;
