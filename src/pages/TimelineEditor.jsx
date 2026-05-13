@@ -1141,7 +1141,7 @@ export default function TimelineEditor() {
             beat_start_times: JSON.stringify(newStartTimes),
           });
           // Force refetch so audioBeatDurations useMemo picks up new values immediately
-          await queryClient.invalidateQueries(['prod-settings', projectId]);
+          // queryClient invalidation handled by onSynced callback
         } catch (e) { console.warn('Could not save beat data to DB:', e.message); }
       }
 
