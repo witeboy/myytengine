@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
-// v3 — redeployed
+// v4 — fixed API fields + error logging
 
 // ══════════════════════════════════════════════════════════════════
 // SUBMIT TRANSCRIPTION — Start AssemblyAI job, return ID
@@ -29,11 +29,17 @@ Deno.serve(async (req) => {
 
   if (!submitRes.ok) {
     const err = await submitRes.text();
-    return Response.json({ error: `AssemblyAI submit failed: ${err}` }, { status: 500 });
+    console.error('AssemblyAI submit error:', submitRes.status, err);
+    return Response.json({ error: `AssemblyAI submit failed (${submitRes.status}): ${err}` }, { status: 500 });
   }
 
-  const { id } = await submitRes.json();
-  console.log(`📡 Transcription submitted: ${id}`);
+  const submitData = await submitRes.json();
+  const id = submitData.id;
+  if (!id) {
+    console.error('AssemblyAI returned no transcript id:', JSON.stringify(submitData));
+    return Response.json({ error: 'AssemblyAI returned no transcript ID' }, { status: 500 });
+  }
 
+  console.log(`📡 Transcription submitted: ${id}`);
   return Response.json({ success: true, transcript_id: id });
 });
