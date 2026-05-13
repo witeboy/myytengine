@@ -40,6 +40,19 @@ function wordsMatch(scriptWord, asrWord) {
   return false;
 }
 
+// Tokens that ASR renders differently from how they appear in script text.
+// Mark them so the matcher can skip them gracefully instead of stalling.
+const TRANSPARENT_TOKEN_RE = /^[\d,]+(?:st|nd|rd|th|s)?$|^\d+[\d,.]*$/;
+const ERA_TOKENS = new Set(['bc', 'ad', 'ce', 'bce', 'am', 'pm']);
+
+function isTransparentToken(word) {
+  const w = word.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!w) return true;
+  if (TRANSPARENT_TOKEN_RE.test(word.replace(/,/g, ''))) return true;
+  if (ERA_TOKENS.has(w)) return false; // ASR usually gets these — keep them
+  return false;
+}
+
 function getSceneWords(scene) {
   const text = (scene.narration_text || scene.voiceover_text || '').trim();
   if (!text) return [];
