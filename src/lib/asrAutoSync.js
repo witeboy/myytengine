@@ -156,7 +156,7 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     const match = sceneMatches[idx];
     const wc = sceneScriptWords[idx].length;
 
-    if (match.empty || (match.firstAsrIdx < 0 && match.lastAsrIdx < 0)) {
+    if (!match || match.empty || match.fallback || (match.firstAsrIdx < 0 && match.lastAsrIdx < 0 && !match.firstMatchedAsrIdx)) {
       return {
         sceneId: scene.id,
         sceneNumber: scene.scene_number,
@@ -249,25 +249,28 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     const prev = i > 0 ? results[i - 1] : null;
     const next = i < results.length - 1 ? results[i + 1] : null;
 
-    if (prev?.endTime !== null && next?.startTime !== null) {
-      const available = next.startTime - prev.endTime;
+    const prevEnd  = (prev  && prev.endTime   !== null && prev.endTime   !== undefined) ? prev.endTime   : null;
+    const nextStart = (next && next.startTime !== null && next.startTime !== undefined) ? next.startTime : null;
+
+    if (prevEnd !== null && nextStart !== null) {
+      const available = nextStart - prevEnd;
       if (available >= MIN_EMPTY) {
-        r.startTime = prev.endTime;
-        r.endTime = prev.endTime + Math.min(MIN_EMPTY, available);
-        if (r.endTime > next.startTime) next.startTime = r.endTime;
+        r.startTime = prevEnd;
+        r.endTime = prevEnd + Math.min(MIN_EMPTY, available);
+        if (r.endTime > nextStart) next.startTime = r.endTime;
       } else if (available > 0) {
-        r.startTime = prev.endTime;
-        r.endTime = prev.endTime + available;
+        r.startTime = prevEnd;
+        r.endTime = prevEnd + available;
       } else {
-        r.startTime = prev.endTime;
-        r.endTime = prev.endTime + 0.3;
+        r.startTime = prevEnd;
+        r.endTime = prevEnd + 0.3;
       }
-    } else if (prev?.endTime !== null) {
-      r.startTime = prev.endTime;
-      r.endTime = Math.min(prev.endTime + MIN_EMPTY, totalAudioDuration);
-    } else if (next?.startTime !== null) {
-      r.endTime = next.startTime;
-      r.startTime = Math.max(0, next.startTime - MIN_EMPTY);
+    } else if (prevEnd !== null) {
+      r.startTime = prevEnd;
+      r.endTime = Math.min(prevEnd + MIN_EMPTY, totalAudioDuration);
+    } else if (nextStart !== null) {
+      r.endTime = nextStart;
+      r.startTime = Math.max(0, nextStart - MIN_EMPTY);
     } else {
       r.startTime = 0;
       r.endTime = MIN_EMPTY;
