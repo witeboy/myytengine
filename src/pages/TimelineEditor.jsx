@@ -733,6 +733,10 @@ export default function TimelineEditor() {
   const captionClipsRef = useRef(captionClips);
   const overlayClipsRef = useRef(overlayClips);
   const musicClipsRef = useRef([]);
+  // Sync refs synchronously — useEffect is async and misses the first RAF tick
+  videoClipsRef.current = videoClips;
+  captionClipsRef.current = captionClips;
+  overlayClipsRef.current = overlayClips;
   useEffect(() => { videoClipsRef.current = videoClips; }, [videoClips]);
   useEffect(() => { captionClipsRef.current = captionClips; }, [captionClips]);
   useEffect(() => { overlayClipsRef.current = overlayClips; }, [overlayClips]);
@@ -1949,8 +1953,7 @@ export default function TimelineEditor() {
 
       {/* Timeline — collapsible & resizable */}
       <div className="flex-shrink-0 bg-[#0a0a14] border-t border-gray-700 overflow-x-auto relative transition-all duration-200"
-        style={{ height: effectiveTimelineHeight, overflow: timelineCollapsed ? 'hidden' : 'auto' }}>
-        <div style={{ width: Math.max(totalDuration * pps + LABEL_WIDTH + 40, 800), minWidth: '100%', position: 'relative' }}>
+        style={{ height: effectiveTimelineHeight, overflow: timelineCollapsed ? 'hidden' : undefined }}>
         {!timelineCollapsed && (
           <>
             <TimelineRuler totalDuration={totalDuration} pps={pps} onSeek={handleSeek} beats={detectedBeats} bpm={detectedBpm} />
@@ -1982,7 +1985,6 @@ export default function TimelineEditor() {
             <SnapGuide snapLinePx={snapLinePx} trackAreaHeight={effectiveTimelineHeight - 20} />
           </>
         )}
-      </div>
       </div>
 
       {/* Sync Diagnostic Panel */}
