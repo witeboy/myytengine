@@ -106,12 +106,19 @@ function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     );
     let localAsrIdx = 0;
 
-    while (scriptIdx < scriptWords.length && localAsrIdx < maxAsrConsume) {
+   while (scriptIdx < scriptWords.length && localAsrIdx < maxAsrConsume) {
       const asrIdx = asrCursor + localAsrIdx;
       if (asrIdx >= asrWords.length) break;
 
       const asrW    = asrWords[asrIdx].word;
       const scriptW = scriptWords[scriptIdx];
+
+      // Transparent tokens (numbers, years) are consumed without needing an ASR match.
+      // They anchor nothing but don't stall the cursor either.
+      if (isTransparentToken(scriptW)) {
+        scriptIdx++;
+        continue;
+      }
 
       if (wordsMatch(scriptW, asrW)) {
         if (firstMatchedAsrIdx === -1) firstMatchedAsrIdx = asrIdx;
