@@ -333,9 +333,9 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
   console.log(`[ASR Timeline v5] ${results.length} scenes, total: ${totalAudioDuration.toFixed(1)}s`);
   let totalMapped = 0;
   results.forEach(r => {
-    if (r.startTime === null) return;
-    totalMapped += r.duration;
-    const speechSpan = r.speechStart !== null
+    if (r.startTime == null || r.endTime == null) return;
+    totalMapped += r.duration || 0;
+    const speechSpan = r.speechStart != null
       ? `speech ${r.speechStart.toFixed(2)}-${r.speechEnd.toFixed(2)}s`
       : (r.empty ? 'empty' : 'fallback');
     const matchInfo = r.fallback ? '(fallback)' : r.empty ? '(empty)' : `${r.matchedCount}/${r.wordCount}`;
