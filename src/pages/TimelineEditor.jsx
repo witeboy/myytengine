@@ -35,6 +35,9 @@ import {
   Minimize2, Focus, Blend, ArrowUpRight, ArrowDownLeft,
   Monitor, Smartphone, Radio, Smile, Layers, GripHorizontal, ChevronDown, ChevronUp
 } from 'lucide-react';
+import { alignScenesToASR, applyDriftFix } from '@/lib/asrAutoSync.js';
+import { transcribeVoiceover } from '@/lib/transcribeASR.js';
+import { detectBeats, snapTimestampsToBeat, beatLockCaptions } from '@/lib/beatDetector.js';
 
 const TRACK_HEIGHT = 56;
 const LABEL_WIDTH = 40;
@@ -1018,8 +1021,7 @@ export default function TimelineEditor() {
 
       // Step 3: ASR transcription — this is the ONLY path
       setAsrProgress({ phase: 'submitting', message: 'Submitting audio for speech recognition…', pollCount: 0 });
-      const { transcribeVoiceover: transcribeASR } = await import('@/lib/transcribeASR');
-      const result = await transcribeASR(voiceoverUrl, (p) => setAsrProgress(p));
+      const result = await transcribeVoiceover(voiceoverUrl, (p) => setAsrProgress(p));
       setAsrProgress(null);
 
       if (!result?.success || !result.words?.length) {
@@ -1030,7 +1032,6 @@ export default function TimelineEditor() {
       console.log(`[AutoSync] ASR: ${asrWords.length} words transcribed`);
 
       // Step 4: Text-anchored alignment — match scene script words to ASR timestamps
-      const { alignScenesToASR } = await import('@/lib/asrAutoSync');
       const alignment = alignScenesToASR(asrWords, scenes, audioDuration);
 
       // alignment[i].startTime and alignment[i].duration are the authoritative values
@@ -1142,7 +1143,6 @@ export default function TimelineEditor() {
   const handleApplyDriftFix = async (driftedIndices) => {
     if (!lastAlignmentResults || !driftedIndices?.length) return;
 
-    const { applyDriftFix } = await import('@/lib/asrAutoSync');
     // Pass the actual scene indices (not scene objects) to the fix function
     const indices = driftedIndices.map(d => d.index !== undefined ? d.index : d);
     const fixed = applyDriftFix(lastAlignmentResults.map(r => ({...r})), indices);
@@ -1387,8 +1387,7 @@ export default function TimelineEditor() {
     if (voiceoverUrl) {
       try {
         setAsrProgress({ phase: 'submitting', message: 'Submitting audio for speech recognition…', pollCount: 0 });
-        const { transcribeVoiceover: transcribeASR } = await import('@/lib/transcribeASR');
-        const result = await transcribeASR(voiceoverUrl, (p) => setAsrProgress(p));
+        const result = await transcribeVoiceover(voiceoverUrl, (p) => setAsrProgress(p));
         if (result?.success && result.words?.length > 0) {
           allWords = result.words.map(w => {
             let sceneIdx = 0;
@@ -1426,7 +1425,6 @@ export default function TimelineEditor() {
     if (!musicUrl) return;
     setIsDetectingBeats(true);
     try {
-      const { detectBeats } = await import('@/lib/beatDetector');
       const result = await detectBeats(musicUrl, (phase, pct) => {
         console.log(`[BeatDetect] ${phase} ${pct}%`);
       });
@@ -1442,8 +1440,6 @@ export default function TimelineEditor() {
   // Snap all clip boundaries to nearest beat
   const handleSnapAllToBeats = async () => {
     if (detectedBeats.length === 0) return;
-    const { snapTimestampsToBeat } = await import('@/lib/beatDetector');
- 
     // Collect all clip start times and snap them
     let cumulativeOffset = 0;
     const snappedClips = videoClips.map((clip, idx) => {
@@ -1460,7 +1456,6 @@ export default function TimelineEditor() {
   // Beat-lock captions
   const handleBeatLockCaptions = async () => {
     if (detectedBeats.length === 0 || captionClips.length === 0) return;
-    const { beatLockCaptions } = await import('@/lib/beatDetector');
     const locked = beatLockCaptions(captionClips, detectedBeats, 80);
     setCaptionClips(locked);
   };
