@@ -156,7 +156,7 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     const match = sceneMatches[idx];
     const wc = sceneScriptWords[idx].length;
 
-    if (!match || match.empty || match.fallback || (match.firstAsrIdx < 0 && match.lastAsrIdx < 0 && !match.firstMatchedAsrIdx)) {
+    if (!match || match.empty || match.fallback || match.lastAsrIdx < 0) {
       return {
         sceneId: scene.id,
         sceneNumber: scene.scene_number,
