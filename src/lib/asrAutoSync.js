@@ -54,6 +54,8 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
   const totalScriptWords = sceneScriptWords.reduce((s, arr) => s + arr.length, 0);
 
   console.log(`[ASR Sync v5] ${totalScriptWords} script words, ${asrWords.length} ASR words, ${scenes.length} scenes, ${totalAudioDuration.toFixed(1)}s audio`);
+  console.log(`[ASR Sync v5] Scene 1 narration: "${sceneScriptWords[0]?.slice(0,10).join(' ')}"`);
+  console.log(`[ASR Sync v5] First 10 ASR words: "${asrWords.slice(0,10).map(w=>w.word).join(' ')}"`);
 
   // ── Step 2: Sequential text-anchored matching ───────────────────
   let asrCursor = 0;
