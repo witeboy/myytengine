@@ -914,6 +914,7 @@ export default function TimelineEditor() {
   // ── Initialize video clips once ────────────────────────────────
   useEffect(() => {
     if (scenes.length === 0 || initializedRef.current) return;
+    console.log('[Init] Building clips from', scenes.length, 'scenes');
     initializedRef.current = true;
 
     if (prodSettings?.timeline_video_clips) {
