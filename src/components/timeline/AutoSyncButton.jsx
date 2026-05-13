@@ -126,8 +126,8 @@ function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
           const ci = asrIdx + skip;
           if (ci < asrWords.length && wordsMatch(scriptW, asrWords[ci].word)) {
             localAsrIdx += skip;
-            if (firstMatchedAsrIdx === -1) firstMatchedAsrIdx = asrCursor + localAsrIdx;
-            lastMatchedAsrIdx = asrCursor + localAsrIdx;
+            if (firstMatchedAsrIdx === -1) firstMatchedAsrIdx = ci;
+            lastMatchedAsrIdx = ci;
             matchedCount++;
             scriptIdx++;
             localAsrIdx++;
