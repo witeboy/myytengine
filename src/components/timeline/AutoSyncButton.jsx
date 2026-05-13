@@ -331,7 +331,7 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
 
       await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
       pollCount++;
-      setProgress(`Recognizing speech… (${pollCount * 3}s)`);
+      setProgress(`Recognizing speech\u2026 (${pollCount * 3}s)`);
 
       const pollRes  = await base44.functions.invoke('pollTranscription', { transcript_id: transcriptId });
       const pollData = pollRes?.data ?? pollRes;
@@ -366,14 +366,14 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
       if (!voiceoverUrl) throw new Error('No voiceover audio. Add a voiceover first.');
 
       // ── 2. Measure audio duration ──────────────────────────────
-      setProgress('Measuring audio duration…');
+      setProgress('Measuring audio duration\u2026');
       const audioDuration = await measureAudioDuration(voiceoverUrl);
       if (!audioDuration || audioDuration <= 0)
         throw new Error('Could not measure audio duration. Check the voiceover URL.');
 
       // ── 3. Load scenes from DB ─────────────────────────────────
       setPhase('submitting');
-      setProgress('Loading scenes…');
+      setProgress('Loading scenes\u2026');
       const [allScenes, allProdSettings] = await Promise.all([
         base44.asServiceRole
           ? base44.asServiceRole.entities.Scenes.filter({ project_id: projectId })
@@ -393,7 +393,7 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
         throw new Error('No scenes have narration text. AutoSync needs narration to align.');
 
       // ── 4. ASR transcription ───────────────────────────────────
-      setProgress('Submitting audio for speech recognition…');
+      setProgress('Submitting audio for speech recognition\u2026');
       const asrResult = await transcribeVoiceover(voiceoverUrl);
 
       if (!asrResult?.success || !asrResult.words?.length)
@@ -403,7 +403,7 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
 
       // ── 5. Word-anchored alignment — THE HOLY GRAIL ────────────
       setPhase('aligning');
-      setProgress(`Matching ${asrWords.length} ASR words to ${scenes.length} scenes…`);
+      setProgress(`Matching ${asrWords.length} ASR words to ${scenes.length} scenes\u2026`);
 
       const alignment = alignScenesToASR(asrWords, scenes, audioDuration);
 
@@ -424,7 +424,7 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
 
       // ── 6. Persist to DB ───────────────────────────────────────
       setPhase('saving');
-      setProgress('Writing scene durations to database…');
+      setProgress('Writing scene durations to database\u2026');
 
       // 6a. Update Scenes.duration_seconds in parallel batches of 10
       const BATCH = 10;
@@ -458,7 +458,7 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
       }
 
       // 6b. Write beat_durations + beat_start_times to ProductionSettings
-      setProgress('Saving timeline timing data…');
+      setProgress('Saving timeline timing data\u2026');
       const psPayload = {
         beat_durations:   JSON.stringify(newDurations),
         beat_start_times: JSON.stringify(newStartTimes),
@@ -501,11 +501,11 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
 
   // ── Phase label ────────────────────────────────────────────────
   const phaseLabel = {
-    measuring:  'Measuring…',
-    submitting: 'Submitting…',
-    polling:    'Transcribing…',
-    aligning:   'Aligning…',
-    saving:     'Saving…',
+    measuring:  'Measuring\u2026',
+    submitting: 'Submitting\u2026',
+    polling:    'Transcribing\u2026',
+    aligning:   'Aligning\u2026',
+    saving:     'Saving\u2026',
   }[phase] ?? 'Beat Sync';
 
   // ── Phase dot colors ───────────────────────────────────────────
@@ -531,8 +531,8 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
         }`}
         title={
           !voiceoverUrl
-            ? 'Add a voiceover first — AutoSync needs audio to align scenes'
-            : 'ASR Beat Sync — transcribes voiceover and matches each scene narration words to exact audio timestamps'
+            ? 'Add a voiceover first \u2014 AutoSync needs audio to align scenes'
+            : "ASR Beat Sync \u2014 transcribes voiceover and matches each scene's narration words to exact audio timestamps"
         }
       >
         {syncing ? (
@@ -572,13 +572,13 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
       {phase === 'done' && result && (
         <span className="text-[9px] text-emerald-300 font-medium animate-in fade-in slide-in-from-left-2 duration-300 flex items-center gap-1.5">
           <Check className="w-3 h-3" />
-          {result.scenes} scenes · {result.duration} · {result.matchPct}% match
-          {result.wordCount > 0 && ` · ${result.wordCount}w`}
+          {result.scenes} scenes &middot; {result.duration} &middot; {result.matchPct}% match
+          {result.wordCount > 0 && ` \u00b7 ${result.wordCount}w`}
           {result.fallbacks > 0 && (
-            <span className="text-amber-400">· {result.fallbacks} unmatched</span>
+            <span className="text-amber-400">&middot; {result.fallbacks} unmatched</span>
           )}
           {result.failed > 0 && (
-            <span className="text-red-400">· {result.failed} save err</span>
+            <span className="text-red-400">&middot; {result.failed} save err</span>
           )}
         </span>
       )}
