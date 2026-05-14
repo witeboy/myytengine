@@ -4,35 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Loader2, AudioLines, Check, AlertCircle } from 'lucide-react';
 
 // ══════════════════════════════════════════════════════════════════
-// BEAT SYNC BUTTON v7 — Full ASR → Word-Match → Persist pipeline
-// ══════════════════════════════════════════════════════════════════
-//
-// THE HOLY GRAIL: media start/end times are EXCLUSIVELY derived
-// from word-level ASR timestamps. No formulas. No distributions.
-//
-// Flow:
-//   1. Measure voiceover duration (HTML5 Audio API)
-//   2. Submit audio to AssemblyAI via submitTranscription
-//   3. Poll for completion via pollTranscription (browser-side loop)
-//   4. Run alignScenesToASR() — fuzzy word-match per scene
-//      → scene.startTime = ASR timestamp of first matched word
-//      → scene.endTime   = ASR timestamp of last matched word
-//      → scene.duration  = endTime - startTime (with gap stitching)
-//   5. Write duration_seconds per scene to DB (parallel batches)
-//   6. Write beat_durations + beat_start_times to ProductionSettings
-//   7. Call onSynced() so the Timeline refreshes
-//
-// Props:
-//   projectId    — string
-//   voiceoverUrl — string (ProductionSettings.voiceover_url)
-//   onSynced     — () => void  (called after successful sync)
+// BEAT SYNC BUTTON v8 — Full ASR → Word-Match → Persist pipeline
 // ══════════════════════════════════════════════════════════════════
 
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS  = 180000; // 3 min
 
-// ── Inline copies of the alignment utilities ───────────────────────
-// (avoids a dynamic import that may fail in some Base44 environments)
+// ── Word matching utilities ────────────────────────────────────────
 
 function normalizeWord(w) {
   if (!w) return '';
@@ -50,17 +28,32 @@ function wordsMatch(scriptWord, asrWord) {
   if (a.length >= 3 && b.length >= 3) {
     if (a.startsWith(b) || b.startsWith(a)) return true;
   }
-  if (Math.abs(a.length - b.length) <= 1) {
-    let diffs = 0;
-    const longer  = a.length >= b.length ? a : b;
-    const shorter = a.length >= b.length ? b : a;
-    let si = 0;
-    for (let li = 0; li < longer.length && diffs <= 1; li++) {
-      if (shorter[si] === longer[li]) { si++; }
-      else { diffs++; if (a.length === b.length) si++; }
+  // Full Levenshtein DP — correctly handles insertion, deletion, substitution
+  if (Math.abs(a.length - b.length) <= 2 && a.length >= 4 && b.length >= 4) {
+    const m = a.length, n = b.length;
+    const dp = Array.from({ length: m + 1 }, (_, i) =>
+      Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0))
+    );
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        dp[i][j] = a[i - 1] === b[j - 1]
+          ? dp[i - 1][j - 1]
+          : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      }
     }
-    if (diffs <= 1) return true;
+    if (dp[m][n] <= 1) return true;
   }
+  return false;
+}
+
+// Numeric tokens (years, dates, counts) that ASR expands to spoken words.
+// Skipping them prevents the cursor stalling on "44" vs "forty" etc.
+const TRANSPARENT_TOKEN_RE = /^[\d,]+(?:st|nd|rd|th|s)?$|^\d+[\d,.]*$/;
+
+function isTransparentToken(word) {
+  const w = word.toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (!w) return true;
+  if (TRANSPARENT_TOKEN_RE.test(word.replace(/,/g, ''))) return true;
   return false;
 }
 
@@ -70,18 +63,12 @@ function getSceneWords(scene) {
   return text.split(/\s+/).filter(Boolean);
 }
 
-/**
- * alignScenesToASR
- * ────────────────
- * Matches each scene's narration words to ASR word timestamps in order.
- * Returns [{sceneId, sceneNumber, startTime, endTime, duration, ...}]
- */
 function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
   if (!asrWords?.length || !scenes?.length) return [];
 
   const sceneScriptWords = scenes.map(s => getSceneWords(s));
-  const MAX_PAD  = 0.5;
-  const MIN_EMPTY = 0.8;
+  const MAX_PAD    = 0.5;
+  const MIN_EMPTY  = 0.8;
   const MIN_DURATION = 0.5;
 
   // ── Step 1: Sequential word-anchored matching ──────────────────
@@ -98,23 +85,23 @@ function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
 
     let firstMatchedAsrIdx = -1;
     let lastMatchedAsrIdx  = -1;
-    let scriptIdx   = 0;
+    let scriptIdx    = 0;
     let matchedCount = 0;
+    // Wider window: *6+25 catches ASR verbosity on long scenes
     const maxAsrConsume = Math.min(
-      scriptWords.length * 4 + 15,
+      scriptWords.length * 6 + 25,
       asrWords.length - asrCursor
     );
     let localAsrIdx = 0;
 
-   while (scriptIdx < scriptWords.length && localAsrIdx < maxAsrConsume) {
+    while (scriptIdx < scriptWords.length && localAsrIdx < maxAsrConsume) {
       const asrIdx = asrCursor + localAsrIdx;
       if (asrIdx >= asrWords.length) break;
 
       const asrW    = asrWords[asrIdx].word;
       const scriptW = scriptWords[scriptIdx];
 
-      // Transparent tokens (numbers, years) are consumed without needing an ASR match.
-      // They anchor nothing but don't stall the cursor either.
+      // Skip numeric tokens — ASR says "forty four", script says "44"
       if (isTransparentToken(scriptW)) {
         scriptIdx++;
         continue;
@@ -127,7 +114,7 @@ function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
         scriptIdx++;
         localAsrIdx++;
       } else {
-        // Try skipping up to 3 ASR words
+        // Try skipping up to 3 ASR words (ASR inserted extra)
         let found = false;
         for (let skip = 1; skip <= 3 && localAsrIdx + skip < maxAsrConsume; skip++) {
           const ci = asrIdx + skip;
@@ -143,7 +130,7 @@ function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
           }
         }
         if (!found) {
-          // Try skipping up to 3 script words
+          // Try skipping up to 3 script words (ASR dropped a word)
           let sfound = false;
           for (let skip = 1; skip <= 3 && scriptIdx + skip < scriptWords.length; skip++) {
             if (wordsMatch(scriptWords[scriptIdx + skip], asrW)) {
@@ -173,6 +160,9 @@ function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
         matchRate: matchedCount / scriptWords.length,
       });
     } else {
+      // Advance cursor by estimated consumption so next scene doesn't re-scan same words
+      const estimatedConsumed = Math.max(1, Math.floor(scriptWords.length * 0.8));
+      asrCursor = Math.min(asrWords.length, asrCursor + estimatedConsumed);
       sceneMatches.push({ firstAsrIdx: -1, lastAsrIdx: -1, matchedCount: 0, empty: false, fallback: true });
     }
   }
@@ -206,11 +196,10 @@ function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     };
   });
 
-  // ── Step 3: Stitch gaps symmetrically (max MAX_PAD per side) ───
+  // ── Step 3: Stitch gaps — bridge over intermediate fallbacks ───
   const firstSpoken = results.find(r => !r.empty && !r.fallback && r.speechStart !== null);
   if (firstSpoken) {
-    const lead = firstSpoken.speechStart;
-    firstSpoken.startTime = Math.max(0, firstSpoken.speechStart - Math.min(lead, MAX_PAD));
+    firstSpoken.startTime = Math.max(0, firstSpoken.speechStart - Math.min(firstSpoken.speechStart, MAX_PAD));
   }
 
   const lastSpoken = [...results].reverse().find(r => !r.empty && !r.fallback && r.speechEnd !== null);
@@ -221,9 +210,13 @@ function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
 
   for (let i = 0; i < results.length - 1; i++) {
     const curr = results[i];
-    const next = results[i + 1];
-    if (curr.empty || curr.fallback || next.empty || next.fallback) continue;
-    if (curr.speechEnd === null || next.speechStart === null) continue;
+    if (curr.empty || curr.fallback || curr.speechEnd === null) continue;
+    // Bridge over fallback/empty neighbours to find next valid scene
+    let nextIdx = i + 1;
+    while (nextIdx < results.length && (results[nextIdx].empty || results[nextIdx].fallback)) nextIdx++;
+    if (nextIdx >= results.length) continue;
+    const next = results[nextIdx];
+    if (next.speechStart === null) continue;
 
     const gap = next.speechStart - curr.speechEnd;
     if (gap > 0) {
@@ -242,7 +235,7 @@ function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     }
   }
 
-  // Fill empty/fallback scenes
+  // Fill empty/fallback scenes between neighbours
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
     if (!r.empty && !r.fallback) continue;
@@ -263,12 +256,11 @@ function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     }
   }
 
-  // Anchor first to 0, last to totalAudioDuration
-  if (results.length > 0 && results[0].startTime != null && results[0].startTime > 0)
-    results[0].startTime = 0;
-  const last = results[results.length - 1];
-  if (last?.endTime != null && last.endTime < totalAudioDuration)
-    last.endTime = totalAudioDuration;
+  // Anchor first valid scene to 0, last to totalAudioDuration
+  const firstValid = results.find(r => r.startTime !== null);
+  if (firstValid && firstValid.startTime > 0) firstValid.startTime = 0;
+  const lastValid = [...results].reverse().find(r => r.endTime !== null);
+  if (lastValid && lastValid.endTime < totalAudioDuration) lastValid.endTime = totalAudioDuration;
 
   // Enforce continuity + minimums + round
   for (let i = 0; i < results.length - 1; i++) {
@@ -298,7 +290,7 @@ function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
 
 // ── Main component ─────────────────────────────────────────────────
 export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
-  const [phase, setPhase]       = useState(null);   // null | 'measuring' | 'submitting' | 'polling' | 'aligning' | 'saving' | 'done' | 'error'
+  const [phase, setPhase]       = useState(null);
   const [progress, setProgress] = useState('');
   const [result,   setResult]   = useState(null);
   const [error,    setError]    = useState(null);
@@ -306,7 +298,6 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
 
   const syncing = phase !== null && phase !== 'done' && phase !== 'error';
 
-  // ── Measure audio duration via HTML5 Audio API ─────────────────
   const measureAudioDuration = (url) => new Promise((resolve) => {
     const audio = new Audio();
     const timeout = setTimeout(() => resolve(0), 8000);
@@ -319,19 +310,16 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
     audio.src = url;
   });
 
-  // ── ASR submit/poll (browser-side) ─────────────────────────────
   const transcribeVoiceover = async (url) => {
-    // Submit
     const submitRes = await base44.functions.invoke('submitTranscription', { voiceover_url: url });
     const submitData = submitRes?.data ?? submitRes;
     if (!submitData?.success || !submitData?.transcript_id)
       throw new Error(submitData?.error || 'Failed to submit transcription');
 
     const transcriptId = submitData.transcript_id;
-
-    // Poll
     const start = Date.now();
     let pollCount = 0;
+
     while (true) {
       if (abortRef.current) throw new Error('Cancelled');
       if (Date.now() - start > POLL_TIMEOUT_MS) throw new Error('Transcription timed out after 3 minutes');
@@ -346,7 +334,7 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
       if (pollData?.status === 'completed') {
         return {
           success:    true,
-          words:      pollData.words,      // [{word, start, end}] — already in seconds
+          words:      pollData.words,
           word_count: pollData.word_count,
           confidence: pollData.confidence,
           duration:   pollData.duration,
@@ -355,11 +343,9 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
       if (pollData?.status === 'error') {
         throw new Error(pollData.error || 'Transcription failed');
       }
-      // status === 'processing' | 'queued' — keep polling
     }
   };
 
-  // ── Main sync flow ─────────────────────────────────────────────
   const handleSync = async () => {
     if (!voiceoverUrl || syncing) return;
 
@@ -369,16 +355,13 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
     setError(null);
 
     try {
-      // ── 1. Require voiceover ───────────────────────────────────
       if (!voiceoverUrl) throw new Error('No voiceover audio. Add a voiceover first.');
 
-      // ── 2. Measure audio duration ──────────────────────────────
       setProgress('Measuring audio duration\u2026');
       const audioDuration = await measureAudioDuration(voiceoverUrl);
       if (!audioDuration || audioDuration <= 0)
         throw new Error('Could not measure audio duration. Check the voiceover URL.');
 
-      // ── 3. Load scenes from DB ─────────────────────────────────
       setPhase('submitting');
       setProgress('Loading scenes\u2026');
       const [allScenes, allProdSettings] = await Promise.all([
@@ -399,22 +382,18 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
       if (!scenesWithText.length)
         throw new Error('No scenes have narration text. AutoSync needs narration to align.');
 
-      // ── 4. ASR transcription ───────────────────────────────────
       setProgress('Submitting audio for speech recognition\u2026');
       const asrResult = await transcribeVoiceover(voiceoverUrl);
 
       if (!asrResult?.success || !asrResult.words?.length)
         throw new Error('Speech recognition returned no words. Check that your voiceover has audible speech.');
 
-      const asrWords = asrResult.words; // [{word, start, end}] in seconds
+      const asrWords = asrResult.words;
 
-      // ── 5. Word-anchored alignment — THE HOLY GRAIL ────────────
       setPhase('aligning');
       setProgress(`Matching ${asrWords.length} ASR words to ${scenes.length} scenes\u2026`);
 
       const alignment = alignScenesToASR(asrWords, scenes, audioDuration);
-
-      // These are the ONLY source of truth — no formula, no distribution
       const newDurations  = alignment.map(a => a.duration);
       const newStartTimes = alignment.map(a => a.startTime ?? 0);
 
@@ -423,48 +402,33 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
         .reduce((s, a) => s + (a.matchScore || 0), 0)
         / Math.max(1, alignment.filter(a => !a.empty && !a.fallback).length);
 
-      console.log(
-        `[AutoSyncButton] Alignment complete: ${alignment.length} scenes, ` +
-        `avg match score: ${(avgScore * 100).toFixed(0)}%, ` +
-        `total: ${audioDuration.toFixed(1)}s`
-      );
+      console.log(`[AutoSyncButton] Alignment: ${alignment.length} scenes, avg match: ${(avgScore * 100).toFixed(0)}%`);
 
-      // ── 6. Persist to DB ───────────────────────────────────────
       setPhase('saving');
       setProgress('Writing scene durations to database\u2026');
 
-      // 6a. Update Scenes.duration_seconds in parallel batches of 10
       const BATCH = 10;
       let applied = 0;
       let failed  = 0;
-      const entities = base44.asServiceRole
-        ? base44.asServiceRole.entities
-        : base44.entities;
+      const entities = base44.asServiceRole ? base44.asServiceRole.entities : base44.entities;
 
       for (let i = 0; i < scenes.length && i < newDurations.length; i += BATCH) {
         const batch = [];
         for (let j = i; j < Math.min(i + BATCH, scenes.length, newDurations.length); j++) {
           const duration = newDurations[j];
           if (typeof duration !== 'number' || duration <= 0 || !isFinite(duration)) {
-            console.warn(`[AutoSyncButton] Skipping scene ${scenes[j].scene_number} — invalid duration: ${duration}`);
-            failed++;
-            continue;
+            failed++; continue;
           }
           batch.push(
             entities.Scenes.update(scenes[j].id, {
               duration_seconds: parseFloat(duration.toFixed(3)),
-            }).catch(e => {
-              console.warn(`[AutoSyncButton] Scene ${scenes[j].scene_number} update failed:`, e?.message);
-              failed++;
-              return null;
-            })
+            }).catch(() => { failed++; return null; })
           );
         }
-        const results = await Promise.all(batch);
-        applied += results.filter(r => r !== null).length;
+        const res = await Promise.all(batch);
+        applied += res.filter(r => r !== null).length;
       }
 
-      // 6b. Write beat_durations + beat_start_times to ProductionSettings
       setProgress('Saving timeline timing data\u2026');
       const psPayload = {
         beat_durations:   JSON.stringify(newDurations),
@@ -476,26 +440,23 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
         await entities.ProductionSettings.create({ project_id: projectId, ...psPayload });
       }
 
-      // ── 7. Done ────────────────────────────────────────────────
       setPhase('done');
 
       const totalDuration = newDurations.reduce((s, d) => s + d, 0);
       const mins = Math.floor(totalDuration / 60);
       const secs = String(Math.floor(totalDuration % 60)).padStart(2, '0');
       const fallbacks = alignment.filter(a => a.fallback).length;
-      const matchPct  = Math.round(avgScore * 100);
 
       setResult({
-        scenes:     applied,
+        scenes:   applied,
         failed,
-        duration:   `${mins}:${secs}`,
-        matchPct,
+        duration: `${mins}:${secs}`,
+        matchPct: Math.round(avgScore * 100),
         fallbacks,
-        wordCount:  asrResult.word_count,
+        wordCount: asrResult.word_count,
       });
 
       onSynced?.();
-
       setTimeout(() => { setPhase(null); setResult(null); }, 7000);
 
     } catch (err) {
@@ -506,7 +467,6 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
     }
   };
 
-  // ── Phase label ────────────────────────────────────────────────
   const phaseLabel = {
     measuring:  'Measuring\u2026',
     submitting: 'Submitting\u2026',
@@ -515,13 +475,11 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
     saving:     'Saving\u2026',
   }[phase] ?? 'Beat Sync';
 
-  // ── Phase dot colors ───────────────────────────────────────────
   const DOTS = ['measuring', 'submitting', 'polling', 'aligning', 'saving'];
   const phaseIdx = DOTS.indexOf(phase);
 
   return (
     <div className="flex items-center gap-2">
-      {/* Main button */}
       <Button
         size="sm"
         variant="ghost"
@@ -536,11 +494,6 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
             ? 'text-red-400 bg-red-500/10'
             : 'text-cyan-400 hover:bg-cyan-500/10'
         }`}
-        title={
-          !voiceoverUrl
-            ? 'Add a voiceover first \u2014 AutoSync needs audio to align scenes'
-            : "ASR Beat Sync \u2014 transcribes voiceover and matches each scene's narration words to exact audio timestamps"
-        }
       >
         {syncing ? (
           <Loader2 className="w-3 h-3 animate-spin" />
@@ -554,7 +507,6 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
         {syncing ? phaseLabel : phase === 'done' ? 'Synced!' : phase === 'error' ? 'Failed' : 'Beat Sync'}
       </Button>
 
-      {/* Progress dots + message */}
       {syncing && (
         <div className="flex items-center gap-1.5">
           <div className="flex gap-0.5">
@@ -575,7 +527,6 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
         </div>
       )}
 
-      {/* Success toast */}
       {phase === 'done' && result && (
         <span className="text-[9px] text-emerald-300 font-medium animate-in fade-in slide-in-from-left-2 duration-300 flex items-center gap-1.5">
           <Check className="w-3 h-3" />
@@ -590,7 +541,6 @@ export default function AutoSyncButton({ projectId, voiceoverUrl, onSynced }) {
         </span>
       )}
 
-      {/* Error toast */}
       {phase === 'error' && error && (
         <span className="text-[9px] text-red-400 flex items-center gap-1 max-w-[220px]">
           <AlertCircle className="w-3 h-3 flex-shrink-0" />
