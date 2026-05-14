@@ -1,5 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
-// v4 — fixed API fields + error logging
+// v5 — all paths synced, correct AssemblyAI API fields
 
 // ══════════════════════════════════════════════════════════════════
 // SUBMIT TRANSCRIPTION — Start AssemblyAI job, return ID
