@@ -1,5 +1,5 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-// v2 — redeployed
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+// v5 — all paths synced, correct AssemblyAI API fields
 
 // ══════════════════════════════════════════════════════════════════
 // SUBMIT TRANSCRIPTION — Start AssemblyAI job, return ID
@@ -21,18 +21,25 @@ Deno.serve(async (req) => {
     headers: { 'Authorization': API_KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       audio_url: voiceover_url,
-      speech_models: ['universal-3-pro'],
-      language_detection: true,
+      speech_model: 'best',
+      language_code: 'en',
+      format_text: false,
     }),
   });
 
   if (!submitRes.ok) {
     const err = await submitRes.text();
-    return Response.json({ error: `AssemblyAI submit failed: ${err}` }, { status: 500 });
+    console.error('AssemblyAI submit error:', submitRes.status, err);
+    return Response.json({ error: `AssemblyAI submit failed (${submitRes.status}): ${err}` }, { status: 500 });
   }
 
-  const { id } = await submitRes.json();
-  console.log(`📡 Transcription submitted: ${id}`);
+  const submitData = await submitRes.json();
+  const id = submitData.id;
+  if (!id) {
+    console.error('AssemblyAI returned no transcript id:', JSON.stringify(submitData));
+    return Response.json({ error: 'AssemblyAI returned no transcript ID' }, { status: 500 });
+  }
 
+  console.log(`📡 Transcription submitted: ${id}`);
   return Response.json({ success: true, transcript_id: id });
 });
