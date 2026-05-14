@@ -1,12 +1,8 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
-// v2 — redeployed
+// v3 — fixed AssemblyAI API fields, format_text: false
+
 // ═══════════════════════════════════════════════════════════════
 // VOICEOVER TRANSCRIPTION — AssemblyAI word-level timestamps
-//
-// This is the CapCut approach: send the actual audio file to a
-// speech recognition engine and get back exact word-level
-// timestamps measured from the waveform. No heuristics, no
-// guessing — the timing comes from the real audio.
 //
 // Returns: { words: [{ word, start, end }, ...] }
 //   start/end are in seconds (float)
@@ -45,65 +41,66 @@ Deno.serve(async (req) => {
       headers,
       body: JSON.stringify({
         audio_url: voiceover_url,
-        speech_models: ['universal-3-pro'],
-        language_detection: true,
+        speech_model: 'best',
+        language_code: 'en',
+        format_text: false,
       }),
     });
 
     if (!submitRes.ok) {
       const err = await submitRes.text();
+      console.error('AssemblyAI submit error:', submitRes.status, err);
       throw new Error(`AssemblyAI submit failed (${submitRes.status}): ${err}`);
     }
 
-    const { id: transcriptId } = await submitRes.json();
+    const submitData = await submitRes.json();
+    const transcriptId = submitData.id;
+    if (!transcriptId) {
+      throw new Error(`AssemblyAI returned no transcript ID: ${JSON.stringify(submitData)}`);
+    }
     console.log(`📡 Transcription job submitted: ${transcriptId}`);
 
-    // ── Step 2: Poll until complete ─────────────────────────────
-    const startTime = Date.now();
+    // ── Step 2: Poll for completion ───────────────────────────────
+    const deadline = Date.now() + POLL_TIMEOUT;
 
-    while (true) {
-      if (Date.now() - startTime > POLL_TIMEOUT) {
-        throw new Error('Transcription timed out after 5 minutes');
-      }
-
+    while (Date.now() < deadline) {
       await new Promise(r => setTimeout(r, POLL_INTERVAL));
 
-      const pollRes = await fetch(`${ASSEMBLYAI_BASE}/transcript/${transcriptId}`, {
-        headers: { 'Authorization': API_KEY },
-      });
+      const pollRes = await fetch(`${ASSEMBLYAI_BASE}/transcript/${transcriptId}`, { headers: { 'Authorization': API_KEY } });
+      if (!pollRes.ok) {
+        throw new Error(`AssemblyAI poll failed (${pollRes.status})`);
+      }
 
-      if (!pollRes.ok) continue;
       const result = await pollRes.json();
 
       if (result.status === 'completed') {
         const words = (result.words || []).map(w => ({
-          word:  w.text,
-          start: w.start / 1000, // ms → seconds
-          end:   w.end / 1000,
+          word: w.text,
+          start: w.start / 1000,
+          end: w.end / 1000,
         }));
 
-        console.log(`✓ Transcription complete: ${words.length} words, confidence: ${(result.confidence * 100).toFixed(1)}%`);
-
+        console.log(`✅ Transcription complete: ${words.length} words`);
         return Response.json({
           success: true,
           words,
           word_count: words.length,
           confidence: result.confidence,
           duration: result.audio_duration,
-          language: result.language_code,
         });
       }
 
       if (result.status === 'error') {
-        throw new Error(`Transcription failed: ${result.error || 'Unknown error'}`);
+        throw new Error(`AssemblyAI error: ${result.error}`);
       }
 
-      // Still processing
-      console.log(`⏳ Transcription status: ${result.status}...`);
+      console.log(`⏳ Status: ${result.status}...`);
     }
 
-  } catch (error) {
-    console.error(`❌ Transcription error: ${error.message}`);
-    return Response.json({ error: error.message }, { status: 500 });
+    throw new Error('Transcription timed out after 5 minutes');
+
+  } catch (err) {
+    console.error('transcribeVoiceover error:', err.message);
+    return Response.json({ error: err.message }, { status: 500 });
   }
 });
