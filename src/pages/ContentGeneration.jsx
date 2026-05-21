@@ -647,6 +647,7 @@ export default function ContentGeneration() {
 
       // ── Detect Shorts by project_mode OR portrait orientation ──
       const isShortsProject = project?.project_mode === 'shorts' || project?.project_mode === 'youtube_shorts' || project?.orientation === 'portrait';
+      const isExplainerProject = project?.project_mode === 'explainer';
 
       if (isSleepProject) {
         // ── SLEEP: lightweight ambient breakdown (6-12 images) ──
@@ -750,6 +751,71 @@ export default function ContentGeneration() {
         setImportProgress(`Created ${freshScenes.length} scenes — now generating image prompts...`);
 
         // Long viral breakdown saves DIRECTOR_NOTES: scenes — must run prompt generation
+        setImportPhase('prompts');
+        await runPromptGeneration({ onProgress: setImportProgress });
+
+      } else if (isExplainerProject) {
+        // ── EXPLAINER: research → breakdown → prompt generation ──
+
+        // Step 1: Research with web search
+        setImportProgress('Researching topic with live web search (Gemini + Google Search)...');
+        let outlineSections = [];
+        try {
+          const proj = await base44.entities.Projects.filter({ id: projectId });
+          if (proj[0]?.outline) {
+            outlineSections = JSON.parse(proj[0].outline);
+          }
+        } catch (_) {}
+
+        try {
+          const researchResult = await base44.functions.invoke('explainerScriptResearch', {
+            project_id: projectId,
+            topic: project?.name || '',
+            outline_sections: outlineSections.length > 0 ? outlineSections : [
+              { title: 'Introduction', description: 'Hook and overview' },
+              { title: 'Core Concept', description: 'Central idea and terminology' },
+              { title: 'How It Works', description: 'Mechanism and process' },
+              { title: 'Worked Example', description: 'Concrete real-world example' },
+              { title: 'Real-World Application', description: 'Practical usage today' },
+              { title: 'Summary', description: 'Key takeaways and closing' },
+            ],
+            arc_type: project?.explainer_arc || 'professor',
+          });
+          const resData = researchResult?.data || researchResult;
+          setImportProgress(`✅ Research complete (${resData.sections_researched} sections, confidence: ${Math.round((resData.overall_accuracy_confidence || 0) * 100)}%) — breaking down into scenes...`);
+        } catch (researchErr) {
+          console.warn('Research step failed (non-fatal):', researchErr.message);
+          setImportProgress('Research step skipped — proceeding to scene breakdown...');
+        }
+
+        // Step 2: Einstein DNA (character setup)
+        try {
+          await base44.functions.invoke('extractCharacterDNA', { project_id: projectId });
+        } catch (err) {
+          console.warn('Einstein DNA setup failed (non-fatal):', err.message);
+        }
+
+        // Step 3: Explainer scene breakdown
+        setImportProgress('Breaking down script into educational scenes and diagrams...');
+        try {
+          const bdResult = await base44.functions.invoke('explainerSceneBreakdown', { project_id: projectId });
+          const bdData = bdResult?.data || bdResult;
+          if (bdData?.error) throw new Error(bdData.error);
+          const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+          queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+          setTotalExpectedScenes(freshScenes.length);
+          setImportProgress(`Created ${freshScenes.length} educational scenes — generating image prompts...`);
+        } catch (err) {
+          const status = err?.response?.status || err?.status;
+          if (status === 502 || status === 504) {
+            setImportProgress('Scene breakdown taking longer than expected, checking results...');
+            await new Promise(r => setTimeout(r, 10000));
+          } else {
+            throw err;
+          }
+        }
+
+        // Step 4: Convert director notes → image prompts
         setImportPhase('prompts');
         await runPromptGeneration({ onProgress: setImportProgress });
 
