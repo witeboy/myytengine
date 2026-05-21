@@ -338,25 +338,8 @@ export default function StoryScript() {
     setRegenerating(false);
 
     try {
-      // Step 0: explainer projects → run grounded research first if missing
-      if (isExplainer && !project?.research_notes) {
-        const MAX_RESEARCH_RETRIES = 3;
-        for (let attempt = 1; attempt <= MAX_RESEARCH_RETRIES; attempt++) {
-          try {
-            await base44.functions.invoke('explainerResearch', { project_id: projectId });
-            await refetchProject();
-            break;
-          } catch (err) {
-            const status = err?.response?.status || err?.status;
-            console.warn(`[explainer] Research attempt ${attempt} failed (${status}):`, err.message);
-            if (attempt < MAX_RESEARCH_RETRIES) {
-              await new Promise(r => setTimeout(r, 2000 * attempt));
-            }
-          }
-        }
-      }
-
-      // Step 1: Re-initialize batch outlines — route explainer to its own pipeline
+      // Step 1: Re-initialize batch outlines — route explainer to its own pipeline.
+      // initializeExplainerBatches auto-runs grounded research internally when missing.
       const initFn = isExplainer ? 'initializeExplainerBatches' : 'initializeScriptBatches';
       await base44.functions.invoke(initFn, { project_id: projectId });
       await refetchBatches();
