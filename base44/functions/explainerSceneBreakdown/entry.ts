@@ -1,7 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 // ══════════════════════════════════════════════════════════════════
-// EXPLAINER SCENE BREAKDOWN ENGINE v1
+// EXPLAINER SCENE BREAKDOWN ENGINE v1.1 (redeploy 2026-05-21)
 // Diagram-first scene breakdown for educational explainer videos.
 //
 // SCENE RULES (explainer-optimised):
@@ -247,36 +247,20 @@ SCENE TYPE OPTIONS (pick the right type for each beat):
 - comparison_table: Side-by-side comparison or Venn diagram
 - summary_card: Recap bullet points or key takeaway
 
-**═══ CRITICAL PACING RULE — READ TWICE ═══**
+SCENE COUNT RULES:
+- Simple concept (1 idea) → 1-2 scenes
+- Medium concept (2-3 ideas or a formula) → 2-4 scenes  
+- Complex concept (algorithm, multi-step process, code) → 4-8 scenes
+- Each distinct diagram, formula, or code block gets its OWN scene
+- Do NOT cram multiple diagrams into one scene
+${isFirst ? '- MUST start with an einstein_intro scene' : ''}
+${isLast ? '- MUST end with an einstein_outro scene' : ''}
 
-**ONE SENTENCE = ONE SCENE. MAX 3.0 SECONDS PER SCENE. PERIOD.**
-
-- Split the section_script_content into individual sentences (by periods).
-- EACH sentence becomes ONE scene. No exceptions.
-- duration_seconds MUST be between 1.5 and 3.0 seconds. NEVER above 3.0.
-- If a sentence is longer than ~8 words, split it at natural commas into 2 scenes.
-- narration_text for each scene = ONE short sentence (3-8 words ideal, max 10).
-- This means a 30-sentence section gets ~30 scenes. That is correct. That is the goal.
-
-SCENE COUNT RULES (override any AI instinct to make scenes longer):
-- Count the sentences in the script content. That is your minimum scene count.
-- Each distinct diagram, number, formula, or code line = its OWN scene
-- Do NOT cram two sentences into one scene
-- Do NOT extend duration past 3.0 sec to "let the visual breathe" — the next scene IS the breathing room
-${isFirst ? '- MUST start with an einstein_intro scene (2-3 sec)' : ''}
-${isLast ? '- MUST end with an einstein_outro scene (2-3 sec)' : ''}
-
-DIAGRAM RULES (for ALL scenes — every visual_concept must be richly described):
-- Describe the EXACT layout: what boxes exist, what arrows connect, what labels say verbatim
-- If the narration mentions a number, that EXACT number must appear written in the visual (on chalkboard, hologram, or callout)
-- If the narration mentions an example (e.g. "Sarah's bakery"), the visual must show that example with its actual name visible
-- For formulas: write the actual formula text exactly as it should appear (e.g. "Revenue - Costs = Profit")
+DIAGRAM RULES (for concept_diagram, formula_panel, example_walkthrough):
+- Describe the EXACT layout: what boxes exist, what the arrows connect, what labels say
+- For formulas: write the actual formula text exactly as it should appear
 - For code: write the actual code snippet that should be displayed
-- visual_concept must be SPECIFIC and DENSE — at least 30 words describing every element on screen
-- Always specify: foreground subject, what's on the chalkboard/screen behind Einstein, key text overlays, and 1-2 props on desk
-- Image generators render what you SPELL OUT — so spell out every word, number, and label that must appear
-
-DURATION RULE: duration_seconds MUST be a number between 1.5 and 3.0. If you write 4.0 or higher, you have failed this task.
+- Be specific enough that an image generator can render it accurately
 
 ACCURACY MANDATE: Every fact, formula, and code snippet in visual_concept MUST match the verified research above. Do not invent numbers or examples.
 
@@ -295,7 +279,7 @@ Return ONLY valid JSON:
       "shot_type": "ECU/CU/MCU/MS/WS/STATIC",
       "camera_movement": "e.g. slow push-in or static or pan left to right",
       "camera_direction": "zoom_in or zoom_out or pan_left or pan_right or static or push_in",
-      "duration_seconds": 2.5,
+      "duration_seconds": 4.0,
       "lighting": "e.g. warm key light from left, clean shadows",
       "color_palette": "dominant colors with hex codes matching arc palette",
       "mood": "2-3 words",
@@ -399,46 +383,36 @@ Deno.serve(async (req) => {
       } catch (err) {
         console.error(`❌ Section ${si + 1} breakdown failed: ${err.message} — applying fallback`);
         // Minimal fallback: one concept diagram per section
-        // Fallback: split section content by sentence, one scene each, ≤3 sec
-        const sentences = (section.content || section.title || '')
-          .split(/(?<=[.!?])\s+/)
-          .map(s => s.trim())
-          .filter(s => s.length > 0)
-          .slice(0, 40);
-        const fallbackScenes = (sentences.length > 0 ? sentences : [section.title]).map((sent, i) => ({
-          scene_number: globalSceneNumber + i,
-          scene_type: 'concept_diagram',
-          narration_text: sent,
-          visual_concept: `Clean educational diagram. Chalkboard behind Einstein with title "${section.title}" and key text from: "${sent.substring(0, 60)}"`,
-          diagram_content: sent.substring(0, 80),
-          einstein_present: true,
-          einstein_action: 'pointing up at chalkboard',
-          shot_type: 'MS',
-          camera_movement: 'static',
-          camera_direction: 'static',
-          duration_seconds: 2.5,
-          lighting: 'Bright warm studio lighting',
-          color_palette: arcDef.color_palette,
-          mood: 'educational, clear',
-          text_overlay: '',
-          continuity_bridge: 'chalkboard reveals next point',
-        }));
-        sectionResult = { scenes: fallbackScenes };
+        sectionResult = {
+          scenes: [{
+            scene_number: globalSceneNumber,
+            scene_type: 'concept_diagram',
+            narration_text: section.content?.substring(0, 200) || section.title,
+            visual_concept: `Clean educational diagram for: ${section.title}`,
+            diagram_content: section.title,
+            einstein_present: false,
+            einstein_action: null,
+            shot_type: 'WS',
+            camera_movement: 'static',
+            camera_direction: 'static',
+            duration_seconds: 5.0,
+            lighting: 'Bright even studio lighting',
+            color_palette: arcDef.color_palette,
+            mood: 'educational, clear',
+            text_overlay: section.title,
+            continuity_bridge: 'diagram panel',
+          }]
+        };
       }
 
       const sectionScenes = sectionResult?.scenes || [];
 
-      // Enforce scene numbers, attach metadata, CLAMP duration to 1.5-3.0 sec range
+      // Enforce scene numbers, attach metadata
       sectionScenes.forEach((scene, idx) => {
         scene.scene_number = globalSceneNumber + idx;
         scene.section_title = section.title;
         scene.section_index = si;
         scene.arc_type = arcType;
-        // HARD CLAMP: explainer scenes must be 1.5-3.0 sec — punchy pacing rule
-        const rawDur = parseFloat(scene.duration_seconds);
-        if (!Number.isFinite(rawDur) || rawDur < 1.5) scene.duration_seconds = 2.0;
-        else if (rawDur > 3.0) scene.duration_seconds = 3.0;
-        else scene.duration_seconds = parseFloat(rawDur.toFixed(2));
         allScenes.push(scene);
       });
 

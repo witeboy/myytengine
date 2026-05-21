@@ -105,9 +105,21 @@ export default function StoryDuration() {
     if ((scriptMode === 'story' || scriptMode === 'explainer') && project?.channel_id) {
       try { await base44.entities.Channels.update(project.channel_id, { shorts_niche: shortsNiche }); } catch (_) {}
     }
-    // Also save directly to project so the backend can read it immediately
+    // Also save directly to project so the backend can read it immediately.
+    // For explainer mode, map the subject (explainer_tech / explainer_finance / ...) to
+    // the explainer_arc enum the backend expects (tech / accountant / professor / science).
     if (scriptMode === 'story' || scriptMode === 'explainer') {
-      await base44.entities.Projects.update(projectId, { shorts_niche: shortsNiche });
+      const updates = { shorts_niche: shortsNiche };
+      if (scriptMode === 'explainer') {
+        const arcMap = {
+          explainer_tech: 'tech',
+          explainer_finance: 'accountant',
+          explainer_legal: 'professor',
+          explainer_ai: 'science',
+        };
+        updates.explainer_arc = arcMap[shortsNiche] || 'professor';
+      }
+      await base44.entities.Projects.update(projectId, updates);
     }
 
     // Outline + batches are now created by initializeScriptBatches on StoryScript
