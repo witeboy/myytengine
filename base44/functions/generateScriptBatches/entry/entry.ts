@@ -378,65 +378,92 @@ Return JSON:
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// EXPLAINER SCRIPT WRITING PROMPT — Einstein-character educational mode
-// Hook section (batch 1): ultra-punchy ≤7-word sentences
-// Body sections (batch 2+): natural educational pacing
+// EXPLAINER SCRIPT WRITING PROMPT
+// Listicle-aware, fact-dense, casual conversational educator voice.
+// Forbids cinematic novel prose and TVF curtain-raiser openers.
 // ═══════════════════════════════════════════════════════════════════
-function buildExplainerWritingPrompt({ batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock, researchBlock }) {
-  const arcType = project.explainer_arc || 'professor';
+function buildExplainerWritingPrompt({ batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock }) {
+  const arc = project.explainer_arc || 'professor';
+  const subjectMap = {
+    tech: 'Tech & IT',
+    accountant: 'Personal Finance / Business / Money',
+    professor: 'Legal, Tax & General Education',
+    science: 'AI Tools, Science & How-things-work',
+  };
+  const subject = subjectMap[arc] || 'General Education';
 
-  // Hook section gets ultra-punchy rules; body sections get natural educational pacing
-  const pacingRules = isFirstBatch
-    ? `**═══ HOOK PACING (THIS BATCH ONLY) ═══**
-This is the OPENING HOOK — first 5-10 seconds of the video. Pacing is ULTRA-PUNCHY:
-- EVERY sentence ≤7 words (≈3 seconds spoken). No exceptions.
-- Each sentence stands alone. No commas chaining ideas.
-- Rapid-fire curiosity bombs. Promise the payoff.
-- If the hook mentions data/numbers, state the actual number immediately.
-- Example rhythm: "Most people lose money here. The maths is brutal. Let me show you. In 60 seconds."`
-    : `**═══ BODY PACING (educational, natural) ═══**
-This is a body section — natural teaching pace:
-- Mix sentence lengths: short punchy beats (5-10 words) for emphasis, longer flowing sentences (15-25 words) for explanation.
-- Average ~12-18 words per sentence. Vary rhythm — never monotonous.
-- Each paragraph teaches ONE concept clearly, then moves on.
-- DELIVER THE GOODS: if you mention "the maths" or "the data" or "here are the numbers", the next sentences MUST contain the actual numerical values. Never tease without delivering.`;
-
-  return `You are an elite educational scriptwriter writing for an EXPLAINER VIDEO with an Einstein-style character host (${arcType} arc).
+  return `You are an elite YouTube EDUCATOR writing the narration for an EXPLAINER video. Your job is to TEACH the viewer with specific facts, named examples, and concrete numbers — in a casual, in-your-face voice. Think "smart friend explaining over a beer" — not a documentary narrator.
 
 **PROJECT CONTEXT**:
-- Topic: ${topic?.title || project.name}
-- Description: ${topic?.description || ''}
-- Niche: ${project.niche || 'Educational'}
-- Tone: ${project.tone || 'educational'}
-- Video Duration: ${project.video_duration_minutes || 5} minutes
-- Einstein Arc: ${arcType}
-${selectedHook && isFirstBatch ? `- Opening Hook (MUST use as first line): "${selectedHook.hook_text}"` : ''}
+- Title: ${topic?.title || project.name}
+- Subject: ${subject}
+- Niche: ${project.niche || 'General'}
+- Duration: ${project.video_duration_minutes || 10} minutes
+${selectedHook && isFirstBatch ? `- Opening line (use as first sentence): "${selectedHook.hook_text}"` : ''}
 ${strategyBlock}
-${researchBlock}
 
-**FULL EXPLAINER ARC** (all batches):
+**FULL OUTLINE** (all batches):
 ${outlineContext}
 
 **YOU ARE NOW WRITING BATCH ${batch.batch_number} of ${sortedBatches.length}**: "${batch.story_segment}"
 
-**BATCH SYNOPSIS** (follow this closely):
+**BATCH SYNOPSIS** (deliver every item / fact / quote it lists):
 ${batch.synopsis}
 
-**MANDATORY WORD COUNT**: At LEAST ${batch.target_words} words. Under ${Math.round(batch.target_words * 0.9)} = FAILURE. (150 words ≈ 1 minute.)
+**MANDATORY WORD COUNT**: AT LEAST ${batch.target_words} words. Under ${Math.round(batch.target_words * 0.9)} = failure. 150 words = 1 minute of narration.
 
 ${previousContent ? `**PREVIOUSLY WRITTEN** (continue seamlessly, do NOT repeat):\n${previousContent.slice(-4000)}\n` : ''}
 
-${pacingRules}
+**═══ EXPLAINER VOICE (THE NON-NEGOTIABLES) ═══**
 
-**EXPLAINER WRITING RULES**:
-1. Write ONLY narration text — words the Einstein character speaks aloud.
-2. NO scene directions, NO [VISUAL:], NO stage directions.
-3. NO "In this video", NO meta-commentary.
-4. NUMBERS ARE MANDATORY: If research provides numbers, USE THEM verbatim. Never say "a lot" — say the actual figure.
-5. Use named examples (e.g. "Sarah's bakery made $4,200") instead of vague generalities.
-6. ${isFirstBatch ? 'HOOK: Open with the selected hook line, then 3-5 ultra-short curiosity bombs ≤7 words each. Promise the data payoff.' : 'BODY: Teach the concept clearly. State the formula/number/example. Then explain it. Then give one concrete worked example.'}
-7. ${isLastBatch ? 'OUTRO: Recap the 1-2 key numbers in punchy short sentences. Memorable closing line. Subtle CTA.' : 'End by setting up the next concept — "But here\'s where it gets interesting..." style bridge.'}
-8. Match the Einstein arc voice: ${arcType === 'science' ? 'eureka moments, "the data does not lie"' : arcType === 'professor' ? 'warm teacher, "class is in session"' : arcType === 'accountant' ? 'sharp money focus, "mathematically relative"' : 'tech-savvy, "simple geometry my friends"'}.
+CASUAL CONVERSATIONAL TONE:
+- "You know what's funny?" / "Look, I get it." / "Hear me out." / "Stick with me here."
+- "I know, I know — [the obvious objection]. But..."
+- Self-aware asides and dry humor. ("Is it sexy? Absolutely not.")
+- Direct second person — "you", "your friends", "your bank account".
+- Contractions everywhere. Talk like a person, not a press release.
+
+DATA DENSITY (TEACHING IS THE PRODUCT):
+- Minimum 1.5 concrete numbers per 100 words (dollars, units, percentages, years, counts).
+- Every claim needs a specific example with a name, location, scale, and outcome.
+- If a real operator name isn't known, INVENT a plausible one with realistic details — never be vague.
+- Show the mechanics: HOW the thing works, step by step, in plain English.
+- Show the moat: WHY it works (recurring demand, low competition, automation).
+
+ABSOLUTELY FORBIDDEN — DO NOT WRITE LIKE THIS:
+❌ Cinematic novelist prose: "The clock on the dashboard glows with angry red numbers."
+❌ Mood-setting scene-painting that delays the teaching: "You're sitting in your car... a cocktail of exhaust fumes..."
+❌ TVF curtain-raiser hype: "What if I told you... we'll pull back the curtain... stay with us..."
+❌ Vague gestures: "make stupid amounts of money" without "$75,000/month"
+❌ Curtain-raiser teases at end with no payoff in the batch
+❌ "In this video..." / "Today we'll explore..." / "Welcome back..."
+❌ Long character vignettes (>120 words per named person)
+
+${isFirstBatch ? `**THIS IS THE COLD OPEN** (max 200 words for the open, then jump in):
+- Open with a casual punch line — NOT a scene. Examples:
+  "You know what's funny? While everyone's chasing the next crypto startup, there are people quietly making millions selling trash. Literally."
+  "Look, I get it. When you think 'millionaire' you probably picture some tech genius in a hoodie. But here's the truth..."
+- Tease ONE specific upcoming item by NUMBER ("Number 4 involves something you probably flushed this morning")
+- End with "Let's jump in" or "Let's get into it" — then immediately start delivering.
+- DO NOT scene-set. DO NOT describe traffic jams, offices, or weather. DO NOT use the words "picture this".` : ''}
+
+${!isFirstBatch && !isLastBatch ? `**THIS IS A TEACHING BATCH**:
+- Open with the item declaration: "Number X, [item name]." — direct, no preamble.
+- Deliver every item from the synopsis with its named operator, dollar figures, mechanics, why-it-works, and one casual aside.
+- After each item, bridge to the next with a one-line tease: "Number X+1, and this one is even more boring but the numbers are insane."
+- Treat numbers as the point of the show. Lead with them. Don't bury them.` : ''}
+
+${isLastBatch ? `**THIS IS THE WRAP-UP**:
+- Restate the meta-lesson in plain words ("Boring is beautiful. Boring is predictable. Boring means proven.")
+- Reinforce the recurring-need logic ("People will always need to park. They'll always need storage. They'll always need to do laundry.")
+- CTA with personality: name two specific items from the list and ask the viewer to pick a side. Add subscribe nudge in casual voice ("If you want more real talk about making money without the hype, subscribe. Now get out there and get boring.")` : ''}
+
+WRITING RULES:
+1. Narration only — no scene directions, no [VISUAL:], no stage marks.
+2. Mix punchy short sentences (3-7 words) with flowing ones (15-25 words).
+3. Every paragraph contains at least one specific number, name, or named place.
+4. Inter-item teases at least every 90 seconds of narration.
+5. Write for the EAR — spoken rhythm, contractions, asides.
 
 Return JSON:
 {
@@ -527,27 +554,12 @@ Deno.serve(async (req) => {
     }
 
     // Detect script mode
+    const sleepMode = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
     const isExplainerMode = project.project_mode === 'explainer';
-    const isSleepModeRaw = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
-    const scriptMode = isExplainerMode ? 'explainer' : (isSleepModeRaw ? project.project_mode : 'standard');
-    const isSleepMode = isSleepModeRaw;
+    const scriptMode = sleepMode ? project.project_mode : (isExplainerMode ? 'explainer' : 'standard');
+    const isSleepMode = sleepMode;
 
     console.log(`[generateScriptBatches] Script mode: ${scriptMode}`);
-
-    // Load explainer research notes (verified facts/numbers) if in explainer mode
-    let researchBlock = '';
-    if (isExplainerMode && project.research_notes) {
-      try {
-        const r = typeof project.research_notes === 'string' ? JSON.parse(project.research_notes) : project.research_notes;
-        const facts = (r.facts || []).slice(0, 12).map(f => `- ${f.claim || f}`).join('\n');
-        const numbers = (r.key_numbers || []).slice(0, 12).map(n => typeof n === 'string' ? `- ${n}` : `- ${n.label || ''}: ${n.value || ''}`).join('\n');
-        const misconceptions = (r.common_misconceptions || []).slice(0, 6).map(m => `- ${m}`).join('\n');
-        researchBlock = `
-**═══ VERIFIED RESEARCH (USE THESE NUMBERS VERBATIM) ═══**
-${facts ? `FACTS:\n${facts}\n` : ''}${numbers ? `KEY NUMBERS:\n${numbers}\n` : ''}${misconceptions ? `MISCONCEPTIONS TO ADDRESS:\n${misconceptions}\n` : ''}
-RULE: When you reference "the data", "the maths", "the numbers" — you MUST state the actual values above. Never tease without delivering.`;
-      } catch (_) {}
-    }
 
     // Get channel script strategy
     let scriptStrategy = '';
@@ -616,14 +628,14 @@ RULE: When you reference "the data", "the maths", "the numbers" — you MUST sta
 
       const prompt = isSleepMode
         ? buildSleepWritingPrompt({ ...promptArgs, scriptMode })
-        : (isExplainerMode
-            ? buildExplainerWritingPrompt({ ...promptArgs, researchBlock })
-            : buildStandardWritingPrompt(promptArgs));
+        : isExplainerMode
+          ? buildExplainerWritingPrompt(promptArgs)
+          : buildStandardWritingPrompt(promptArgs);
 
       console.log(`[Batch ${batch.batch_number}] Generating ~${batch.target_words} words (${scriptMode})...`);
 
       // Sleep scripts use lower temperature for more consistent, soothing output
-      const baseTemp = isSleepMode ? 0.65 : 0.85;
+      const baseTemp = isSleepMode ? 0.65 : isExplainerMode ? 0.9 : 0.85;
       const minWords = Math.round(batch.target_words * 0.92);
       let content = '';
       let wordCount = 0;
