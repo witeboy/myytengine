@@ -378,28 +378,21 @@ Return JSON:
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// EXPLAINER SCRIPT WRITING PROMPT
-// Listicle-aware, fact-dense, casual conversational educator voice.
-// Forbids cinematic novel prose and TVF curtain-raiser openers.
+// EXPLAINER WRITING PROMPT — educational / listicle / fact-dense
 // ═══════════════════════════════════════════════════════════════════
 function buildExplainerWritingPrompt({ batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock }) {
-  const arc = project.explainer_arc || 'professor';
-  const subjectMap = {
-    tech: 'Tech & IT',
-    accountant: 'Personal Finance / Business / Money',
-    professor: 'Legal, Tax & General Education',
-    science: 'AI Tools, Science & How-things-work',
-  };
-  const subject = subjectMap[arc] || 'General Education';
+  const title = topic?.title || project.name || '';
+  const listicleMatch = title.match(/^\s*(\d+)\s+/);
+  const isListicle = !!listicleMatch;
 
-  return `You are an elite YouTube EDUCATOR writing the narration for an EXPLAINER video. Your job is to TEACH the viewer with specific facts, named examples, and concrete numbers — in a casual, in-your-face voice. Think "smart friend explaining over a beer" — not a documentary narrator.
+  return `You are an elite educational YouTube scriptwriter (Wendover, Polymatter, Modern MBA, Logically Answered style). You write dense, fact-packed, conversational narration that teaches the viewer something concrete.
 
 **PROJECT CONTEXT**:
-- Title: ${topic?.title || project.name}
-- Subject: ${subject}
-- Niche: ${project.niche || 'General'}
+- Title: ${title}
+- Description: ${topic?.description || ''}
+- Niche: ${project.niche || 'Educational'}
 - Duration: ${project.video_duration_minutes || 10} minutes
-${selectedHook && isFirstBatch ? `- Opening line (use as first sentence): "${selectedHook.hook_text}"` : ''}
+${selectedHook && isFirstBatch ? `- Opening Hook (MUST use as first line): "${selectedHook.hook_text}"` : ''}
 ${strategyBlock}
 
 **FULL OUTLINE** (all batches):
@@ -407,63 +400,46 @@ ${outlineContext}
 
 **YOU ARE NOW WRITING BATCH ${batch.batch_number} of ${sortedBatches.length}**: "${batch.story_segment}"
 
-**BATCH SYNOPSIS** (deliver every item / fact / quote it lists):
+**BATCH SYNOPSIS** (follow this closely):
 ${batch.synopsis}
 
-**MANDATORY WORD COUNT**: AT LEAST ${batch.target_words} words. Under ${Math.round(batch.target_words * 0.9)} = failure. 150 words = 1 minute of narration.
+**MANDATORY WORD COUNT**: AT LEAST ${batch.target_words} words. Non-negotiable. (150 words = 1 minute)
 
-${previousContent ? `**PREVIOUSLY WRITTEN** (continue seamlessly, do NOT repeat):\n${previousContent.slice(-4000)}\n` : ''}
+${previousContent ? `**PREVIOUSLY WRITTEN** (continuity — do NOT repeat):\n${previousContent.slice(-4000)}\n` : ''}
 
-**═══ EXPLAINER VOICE (THE NON-NEGOTIABLES) ═══**
+**═══ EXPLAINER VOICE RULES (CRITICAL) ═══**
 
-CASUAL CONVERSATIONAL TONE:
-- "You know what's funny?" / "Look, I get it." / "Hear me out." / "Stick with me here."
-- "I know, I know — [the obvious objection]. But..."
-- Self-aware asides and dry humor. ("Is it sexy? Absolutely not.")
-- Direct second person — "you", "your friends", "your bank account".
-- Contractions everywhere. Talk like a person, not a press release.
+❌ ABSOLUTELY FORBIDDEN:
+- Cinematic novel prose ("Dave sat in traffic, his fingers drumming the wheel...")
+- TVF phases — no "But here's what nobody tells you..." curiosity-gap framing
+- Dramatic scene-setting openings — this is education, not a film
+- Vague generalities ("many people", "lots of money", "huge industry")
+- Filler ("In this video", "Welcome back", "Today we'll explore")
+- Inspirational closing platitudes
 
-DATA DENSITY (TEACHING IS THE PRODUCT):
-- Minimum 1.5 concrete numbers per 100 words (dollars, units, percentages, years, counts).
-- Every claim needs a specific example with a name, location, scale, and outcome.
-- If a real operator name isn't known, INVENT a plausible one with realistic details — never be vague.
-- Show the mechanics: HOW the thing works, step by step, in plain English.
-- Show the moat: WHY it works (recurring demand, low competition, automation).
+✅ REQUIRED VOICE:
+- Casual, conversational educator — like explaining to a smart friend
+- Use casual asides: "I know, I know — sounds boring", "here's the thing", "stay with me"
+- Direct address: "you"
+- Specific, concrete, numerical — minimum 1.5 dollar figures / data points per 100 words
+- Name real operators, companies, people with brief backstory (1-2 sentences)
+- Short, punchy sentences mixed with the occasional longer explanatory one
+- Show the mechanic — explain HOW the thing actually works, step-by-step
 
-ABSOLUTELY FORBIDDEN — DO NOT WRITE LIKE THIS:
-❌ Cinematic novelist prose: "The clock on the dashboard glows with angry red numbers."
-❌ Mood-setting scene-painting that delays the teaching: "You're sitting in your car... a cocktail of exhaust fumes..."
-❌ TVF curtain-raiser hype: "What if I told you... we'll pull back the curtain... stay with us..."
-❌ Vague gestures: "make stupid amounts of money" without "$75,000/month"
-❌ Curtain-raiser teases at end with no payoff in the batch
-❌ "In this video..." / "Today we'll explore..." / "Welcome back..."
-❌ Long character vignettes (>120 words per named person)
+${isListicle ? `**LISTICLE ITEM RULES** (this batch is likely one item):
+- Open with: "Number ${batch.batch_number === 1 ? 'one' : batch.batch_number === sortedBatches.length ? 'X' : batch.batch_number - 1}, [item name]." — or natural variation
+  (Skip this if this is the intro or outro batch — check the synopsis)
+- Within 30 seconds, name a real operator and drop the first dollar figure
+- Walk through mechanics: startup cost → revenue model → margins → why it's overlooked
+- Anecdote: one named operator's actual story (city, scale, money made)
+- End with a 1-sentence tease into the next item ("but the next one is even weirder...")\n` : ''}
 
-${isFirstBatch ? `**THIS IS THE COLD OPEN** (max 200 words for the open, then jump in):
-- Open with a casual punch line — NOT a scene. Examples:
-  "You know what's funny? While everyone's chasing the next crypto startup, there are people quietly making millions selling trash. Literally."
-  "Look, I get it. When you think 'millionaire' you probably picture some tech genius in a hoodie. But here's the truth..."
-- Tease ONE specific upcoming item by NUMBER ("Number 4 involves something you probably flushed this morning")
-- End with "Let's jump in" or "Let's get into it" — then immediately start delivering.
-- DO NOT scene-set. DO NOT describe traffic jams, offices, or weather. DO NOT use the words "picture this".` : ''}
-
-${!isFirstBatch && !isLastBatch ? `**THIS IS A TEACHING BATCH**:
-- Open with the item declaration: "Number X, [item name]." — direct, no preamble.
-- Deliver every item from the synopsis with its named operator, dollar figures, mechanics, why-it-works, and one casual aside.
-- After each item, bridge to the next with a one-line tease: "Number X+1, and this one is even more boring but the numbers are insane."
-- Treat numbers as the point of the show. Lead with them. Don't bury them.` : ''}
-
-${isLastBatch ? `**THIS IS THE WRAP-UP**:
-- Restate the meta-lesson in plain words ("Boring is beautiful. Boring is predictable. Boring means proven.")
-- Reinforce the recurring-need logic ("People will always need to park. They'll always need storage. They'll always need to do laundry.")
-- CTA with personality: name two specific items from the list and ask the viewer to pick a side. Add subscribe nudge in casual voice ("If you want more real talk about making money without the hype, subscribe. Now get out there and get boring.")` : ''}
-
-WRITING RULES:
-1. Narration only — no scene directions, no [VISUAL:], no stage marks.
-2. Mix punchy short sentences (3-7 words) with flowing ones (15-25 words).
-3. Every paragraph contains at least one specific number, name, or named place.
-4. Inter-item teases at least every 90 seconds of narration.
-5. Write for the EAR — spoken rhythm, contractions, asides.
+**WRITING RULES**:
+1. Narration ONLY — no scene directions, no [VISUAL:], no stage directions
+2. ${isFirstBatch ? 'Open punchy. State the premise + tease what\'s coming. NO scene-setting prose.' : 'Continue seamlessly from where the previous batch ended'}
+3. ${isLastBatch ? 'Wrap with a quick recap (name 2 specific items/concepts). End with a soft CTA — like or subscribe — phrased casually.' : 'End with a 1-line tease into the next batch'}
+4. Write for the EAR — natural spoken rhythm
+5. EVERY 100 words should contain at least one specific fact (name, number, date, place)
 
 Return JSON:
 {
@@ -554,10 +530,9 @@ Deno.serve(async (req) => {
     }
 
     // Detect script mode
-    const sleepMode = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
+    const isSleepMode = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
     const isExplainerMode = project.project_mode === 'explainer';
-    const scriptMode = sleepMode ? project.project_mode : (isExplainerMode ? 'explainer' : 'standard');
-    const isSleepMode = sleepMode;
+    const scriptMode = isSleepMode ? project.project_mode : (isExplainerMode ? 'explainer' : 'standard');
 
     console.log(`[generateScriptBatches] Script mode: ${scriptMode}`);
 
@@ -634,7 +609,7 @@ Deno.serve(async (req) => {
 
       console.log(`[Batch ${batch.batch_number}] Generating ~${batch.target_words} words (${scriptMode})...`);
 
-      // Sleep scripts use lower temperature for more consistent, soothing output
+      // Sleep: lower temp for soothing consistency. Explainer: slightly higher for casual asides.
       const baseTemp = isSleepMode ? 0.65 : isExplainerMode ? 0.9 : 0.85;
       const minWords = Math.round(batch.target_words * 0.92);
       let content = '';
