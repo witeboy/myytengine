@@ -206,30 +206,15 @@ function buildSectionBreakdownPrompt({
   continuityNote,
   globalSceneStart,
 }) {
-  // Try sectioned research first, then fall back to flat research (applied to every section)
   const researchSection = researchData?.sections?.[sectionIndex] || null;
-  const flatResearch = researchData?._flat || null;
-  let researchBlock = '';
-  if (researchSection) {
-    researchBlock = `
+  const researchBlock = researchSection ? `
 VERIFIED RESEARCH FOR THIS SECTION:
 Core facts: ${JSON.stringify(researchSection.core_facts)}
 Best analogy: ${researchSection.best_analogy}
 Formulas/Code: ${JSON.stringify(researchSection.formulas_or_code)}
 Misconceptions to address: ${JSON.stringify(researchSection.misconceptions)}
 Accuracy notes: ${researchSection.accuracy_notes}
-`;
-  } else if (flatResearch) {
-    const facts = (flatResearch.facts || []).map(f => f.claim).slice(0, 6);
-    const numbers = (flatResearch.key_numbers || []).map(n => `${n.number} — ${n.context}`).slice(0, 5);
-    const myths = (flatResearch.common_misconceptions || []).map(m => `MYTH: ${m.myth} / TRUTH: ${m.truth}`).slice(0, 3);
-    researchBlock = `
-VERIFIED RESEARCH (general facts pool — pick the ones relevant to this section):
-Core facts: ${JSON.stringify(facts)}
-Key numbers: ${JSON.stringify(numbers)}
-Misconceptions to address: ${JSON.stringify(myths)}
-`;
-  }
+` : '';
 
   const isFirst = sectionIndex === 0;
   const isLast = sectionIndex === totalSections - 1;
@@ -328,42 +313,35 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'No final script found.' }, { status: 400 });
     }
 
-    // ── Get research notes — check BOTH ProductionSettings (sectioned) AND Projects (flat from writer) ──
+    // Get research notes from ProductionSettings
     const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
     let researchData = null;
-    // Prefer sectioned research from ProductionSettings (richer per-section structure)
     if (psList[0]?.research_notes) {
-      try {
-        const parsed = JSON.parse(psList[0].research_notes);
-        if (parsed.sections && Array.isArray(parsed.sections)) {
-          researchData = parsed;
-          console.log(`[explainerSceneBreakdown] Loaded sectioned research from ProductionSettings (${parsed.sections.length} sections)`);
-        }
-      } catch (_) {}
-    }
-    // Fallback: flat research from Projects (written by initializeScriptBatches)
-    if (!researchData && project.research_notes) {
-      try {
-        const flat = JSON.parse(project.research_notes);
-        if (flat.facts || flat.key_numbers || flat.common_misconceptions) {
-          // Spread flat facts across all sections (every section sees all facts)
-          researchData = {
-            sections: [], // populated per-section below from flat
-            _flat: flat,
-            overall_accuracy_confidence: 0.85,
-          };
-          console.log(`[explainerSceneBreakdown] Loaded flat research from Projects (${flat.facts?.length || 0} facts) — applying to all sections`);
-        }
-      } catch (_) {}
+      try { researchData = JSON.parse(psList[0].research_notes); } catch (_) {}
     }
 
-    // Get outline sections from project
+    // Get outline sections — PRIMARY: ScriptBatches (the 6-section explainer arc)
     let outlineSections = [];
-    if (project.outline) {
+    const batches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
+    if (batches.length > 0) {
+      outlineSections = batches
+        .sort((a, b) => (a.batch_number || 0) - (b.batch_number || 0))
+        .map(b => ({
+          title: b.story_segment || `Section ${b.batch_number}`,
+          content: b.content || b.synopsis || '',
+          description: b.focus_area || '',
+          target_words: b.target_words || 0,
+          word_count: b.word_count || 0,
+        }));
+      console.log(`📚 Loaded ${outlineSections.length} sections from ScriptBatches`);
+    }
+
+    // Secondary fallback: project.outline JSON
+    if (!outlineSections.length && project.outline) {
       try { outlineSections = JSON.parse(project.outline); } catch (_) {}
     }
 
-    // Fallback: split script into sections by heading markers
+    // Last-resort fallback: split script by heading markers
     if (!outlineSections.length) {
       const scriptText = script.full_script;
       const parts = scriptText.split(/\n(?=#{1,3}\s|\*\*[A-Z]|\d\.\s[A-Z])/g);
