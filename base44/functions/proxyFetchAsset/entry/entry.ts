@@ -1,6 +1,10 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-// v2 — redeployed
+// v3 — inline base64 (skip R2 to avoid CORS on public bucket)
 import { S3Client, PutObjectCommand } from 'npm:@aws-sdk/client-s3@3.600.0';
+
+// Files up to this size are returned as inline base64 — no R2 round-trip,
+// no CORS issues on the public bucket. Larger files still go to R2.
+const INLINE_MAX_BYTES = 12 * 1024 * 1024; // 12MB
 
 // ══════════════════════════════════════════════════════════════════
 // PROXY FETCH — Downloads CORS-blocked URLs server-side
@@ -27,7 +31,7 @@ Deno.serve(async (req) => {
 
     // Security: only allow known asset domains
     const allowed = [
-      'aiquickdraw.com',
+      'tempfile.aiquickdraw.com',
       'storage.googleapis.com',
       'firebasestorage.googleapis.com',
       'cdn.base44.app',
@@ -56,15 +60,31 @@ Deno.serve(async (req) => {
     const sizeKB = (blob.size / 1024).toFixed(1);
     console.log(`✓ Downloaded: ${sizeKB}KB (${contentType})`);
 
-    // Determine file extension
+    const fileBytes = new Uint8Array(await blob.arrayBuffer());
+
+    // For small enough files, return base64 inline — avoids R2 CORS issues entirely.
+    if (blob.size <= INLINE_MAX_BYTES) {
+      let binary = '';
+      const chunkSize = 0x8000;
+      for (let i = 0; i < fileBytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, fileBytes.subarray(i, i + chunkSize));
+      }
+      const base64 = btoa(binary);
+      console.log(`✅ Returning inline base64 (${sizeKB}KB)`);
+      return Response.json({
+        success: true,
+        data: base64,
+        content_type: contentType,
+        size: blob.size,
+      });
+    }
+
+    // Larger files: upload to R2
     const ext = contentType.includes('video') ? 'mp4'
       : contentType.includes('png') ? 'png'
       : contentType.includes('webp') ? 'webp'
       : 'jpg';
-
-    // Re-upload to Cloudflare R2 for a CORS-safe URL
     const fileName = `proxy/${Date.now()}.${ext}`;
-    const fileBytes = new Uint8Array(await blob.arrayBuffer());
 
     const r2Client = new S3Client({
       region: 'auto',
