@@ -2,15 +2,13 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // v3 — inline base64 (skip R2 to avoid CORS on public bucket)
 import { S3Client, PutObjectCommand } from 'npm:@aws-sdk/client-s3@3.600.0';
 
-// Files up to this size are returned as inline base64 — no R2 round-trip,
-// no CORS issues on the public bucket. Larger files still go to R2.
-const INLINE_MAX_BYTES = 12 * 1024 * 1024; // 12MB
-
 // ══════════════════════════════════════════════════════════════════
 // PROXY FETCH — Downloads CORS-blocked URLs server-side
-// Re-uploads to Cloudflare R2 and returns a CORS-safe URL
-// For small files (<500KB), returns base64 inline as fallback
+// Small files: returns inline base64 (CORS-safe, no R2 needed)
+// Large files: re-uploads to R2
 // ══════════════════════════════════════════════════════════════════
+
+const INLINE_MAX_BYTES = 12 * 1024 * 1024; // 12MB → inline base64
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -24,23 +22,35 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { url, mode } = await req.json();
+    const { url } = await req.json();
     if (!url || !url.startsWith('http')) {
       return Response.json({ error: 'Invalid URL' }, { status: 400 });
     }
 
-    // Security: only allow known asset domains
+    // Security: only allow known asset domains (substring match)
     const allowed = [
-      'tempfile.aiquickdraw.com',
+      'aiquickdraw.com',              // file.aiquickdraw.com, tempfile.aiquickdraw.com, cdn.aiquickdraw.com
       'storage.googleapis.com',
       'firebasestorage.googleapis.com',
       'cdn.base44.app',
+      'base44.app',
       'api.kie.ai',
       'kie-asset',
+      'kie.ai',
       'suno',
       'ideogram.ai',
       'image.pollinations.ai',
-      'oaidalleapiprodscus.blob.core.windows.net', 
+      'oaidalleapiprodscus.blob.core.windows.net',
+      'replicate.delivery',
+      'cdn.openai.com',
+      'fal.media',
+      'fal.ai',
+      'r2.cloudflarestorage.com',
+      'myvoicify.app',
+      'pexels.com',
+      'pixabay.com',
+      'freepik.com',
+      'cloudinary.com',
     ];
 
     const hostname = new URL(url).hostname;
@@ -55,14 +65,14 @@ Deno.serve(async (req) => {
       return Response.json({ error: `Fetch failed: ${response.status}` }, { status: response.status });
     }
 
-    const contentType = response.headers.get('content-type') || 'application/octet-stream'; 
+    const contentType = response.headers.get('content-type') || 'application/octet-stream';
     const blob = await response.blob();
     const sizeKB = (blob.size / 1024).toFixed(1);
     console.log(`✓ Downloaded: ${sizeKB}KB (${contentType})`);
 
     const fileBytes = new Uint8Array(await blob.arrayBuffer());
 
-    // For small enough files, return base64 inline — avoids R2 CORS issues entirely.
+    // Small files → inline base64. Avoids R2 public bucket CORS issues entirely.
     if (blob.size <= INLINE_MAX_BYTES) {
       let binary = '';
       const chunkSize = 0x8000;
@@ -79,7 +89,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Larger files: upload to R2
+    // Large files → R2
     const ext = contentType.includes('video') ? 'mp4'
       : contentType.includes('png') ? 'png'
       : contentType.includes('webp') ? 'webp'
