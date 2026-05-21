@@ -55,8 +55,15 @@ function isTransparentToken(word) {
 }
 
 function getSceneWords(scene) {
-  const text = (scene.narration_text || scene.voiceover_text || '').trim();
+  let text = (scene.narration_text || scene.voiceover_text || '').trim();
   if (!text) return [];
+  // Strip narrator directions that the TTS skips and ASR will never produce:
+  // [PAUSE 3], [pause], (whispered), *softly*, {breath}, etc.
+  text = text
+    .replace(/\[[^\]]*\]/g, ' ')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\{[^}]*\}/g, ' ')
+    .replace(/\*[^*]+\*/g, ' ');
   return text.split(/\s+/).filter(Boolean);
 }
 
