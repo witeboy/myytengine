@@ -31,12 +31,25 @@ async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
 // Detect sleep script mode from channel or project (v2)
 // ═══════════════════════════════════════════════════════════════════
 function detectScriptMode(channel, project) {
-  if (project?.project_mode && project.project_mode !== 'standard') return project.project_mode;
-  if (channel?.script_mode && channel.script_mode !== 'standard') return channel.script_mode;
-  const combined = `${channel?.niche || ''} ${channel?.name || ''} ${project?.niche || ''}`.toLowerCase();
-  if (/sleep\s*stor|bedtime\s*stor/i.test(combined)) return 'sleep_story';
-  if (/sleep|meditation|relax|calm|sooth|asmr|bedtime/i.test(combined)) return 'sleep_meditation';
-  if (/explainer|how.?to|tutorial|education|learn|teach|concept|technology/i.test(combined)) return 'explainer';
+  // Explicit mode from project (highest priority — user-selected)
+  if (project?.project_mode === 'explainer') return 'explainer';
+  if (project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story') {
+    return project.project_mode;
+  }
+  // Explicit mode from channel
+  if (channel?.script_mode && channel.script_mode !== 'standard') {
+    return channel.script_mode;
+  }
+  // Auto-detect from niche keywords
+  const niche = (channel?.niche || project?.niche || '').toLowerCase();
+  const name = (channel?.name || '').toLowerCase();
+  const combined = `${niche} ${name}`;
+  if (/sleep\s*stor/i.test(combined) || /bedtime\s*stor/i.test(combined)) {
+    return 'sleep_story';
+  }
+  if (/sleep|meditation|relax|calm|sooth|asmr|bedtime/i.test(combined)) {
+    return 'sleep_meditation';
+  }
   return 'standard';
 }
 
@@ -155,87 +168,9 @@ Return JSON:
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// EXPLAINER OUTLINE PROMPT — diagram-first educational content
-// ═══════════════════════════════════════════════════════════════════
-function buildExplainerOutlinePrompt({ topic, project, numBatches, totalTargetWords, durationMinutes }) {
-  const arcType = project.explainer_arc || 'professor';
-  const arcLabels = {
-    science:    'Mad Scientist Einstein (lab coat, goggles, test tubes)',
-    professor:  'Academic Lecturer Einstein (tweed jacket, chalk, whiteboard)',
-    accountant: 'Financial Guru Einstein (sharp suit, calculator watch)',
-    tech:       'IT Geek Einstein (graphic tee, RGB headset, holographic screen)',
-  };
-  const arcLabel = arcLabels[arcType] || arcLabels.professor;
-
-  const EXPLAINER_SECTIONS = [
-    { title: 'Hook & Introduction',    purpose: 'Einstein character intro, establish why this topic matters today, what the viewer will learn, create curiosity gap' },
-    { title: 'Core Concept',           purpose: 'Define the central idea clearly, break down key terminology, establish the mental model the viewer needs' },
-    { title: 'The Mechanism / How It Works', purpose: 'Explain the underlying mechanics step by step, include diagrams/formulas/code where relevant, no hand-waving' },
-    { title: 'Worked Example',         purpose: 'Concrete real-world example or case study, walk through it step by step, show the concept in action with real numbers' },
-    { title: 'Real-World Application', purpose: 'Where and how this is used in practice today, industry examples, why it matters beyond the classroom' },
-    { title: 'Summary & Key Takeaways', purpose: 'Einstein character recap, 3-5 bullet point key lessons, memorable closing thought, call to action for next steps' },
-  ];
-
-  const sections = EXPLAINER_SECTIONS.slice(0, Math.max(numBatches, EXPLAINER_SECTIONS.length)).slice(0, numBatches);
-
-  return `You are an expert educational content strategist creating an explainer video outline.
-
-**CONTENT TYPE**: Educational Explainer — accurate, concept-driven, taught by ${arcLabel}.
-
-**ACCURACY MANDATE — NON-NEGOTIABLE**:
-Every fact, formula, statistic, and code snippet must be correct.
-Flag anything uncertain with [VERIFY].
-Prefer specific numbers over vague claims.
-Prefer concrete examples over abstract descriptions.
-
-**FORBIDDEN CONTENT**:
-❌ Viral hooks or clickbait framing
-❌ Unverified statistics or made-up examples  
-❌ Oversimplified explanations that sacrifice accuracy
-❌ Filler phrases like "in today's fast-paced world"
-❌ References to views, likes, or YouTube metrics
-
-**PROJECT**:
-- Topic: ${topic?.title || project.name}
-- Description: ${topic?.description || ''}
-- Einstein Arc: ${arcLabel}
-- Duration: ${durationMinutes} minutes (~${totalTargetWords} words at 150 wpm)
-- Niche: ${project.niche || 'education'}
-
-**EXPLAINER SECTION STRUCTURE** (map ${numBatches} batches across these):
-${sections.map((s, i) => `  ${i + 1}. ${s.title}: ${s.purpose}`).join('\n')}
-
-**DIAGRAM & VISUAL PLANNING**:
-For each section, identify which visual aids are needed:
-- Concept diagrams (flowcharts, architecture diagrams, hierarchies)
-- Formula panels (mathematical equations, derivations)
-- Code blocks (syntax-highlighted code snippets)
-- Comparison tables (side-by-side feature comparisons)
-- Analogy scenes (real-world visual metaphors)
-
-Return JSON:
-{
-  "batches": [
-    {
-      "batch_number": 1,
-      "story_segment": "Section title (3-5 words)",
-      "section_type": "intro or concept or mechanism or example or application or summary",
-      "focus_area": "One sentence: what the viewer learns in this section",
-      "synopsis": "200-300 words: exact content to cover — specific facts, formulas, examples, diagrams needed. Be precise enough that a writer can produce 100% accurate content from this alone.",
-      "visual_aids_needed": ["concept_diagram: [description]", "formula_panel: [actual formula]", "code_block: [language and what it shows]"],
-      "key_facts": ["specific verifiable fact 1", "fact 2"],
-      "einstein_moment": "How Einstein character appears or reacts in this section"
-    }
-  ]
-}
-
-Generate exactly ${numBatches} batches covering the full explainer arc.`;
-}
-
-// ═══════════════════════════════════════════════════════════════════
 // STANDARD TVF OUTLINE PROMPT (existing logic)
 // ═══════════════════════════════════════════════════════════════════
-function buildStandardOutlinePrompt({ topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock }) {
+function buildStandardOutlinePrompt({ topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock, isExplainerMode }) {
   const TVF_PHASES = [
     { phase: 'HOOK', purpose: 'Open with a powerful attention trigger — shocking statement, contrarian truth, bold question, dramatic result, or hidden secret.' },
     { phase: 'RELATABLE SITUATION', purpose: 'Describe a moment the audience recognizes from real life — a mistake, frustration, confusing situation, or hidden problem.' },
@@ -296,11 +231,11 @@ Return JSON:
 **RULES:**
 - Generate exactly ${numBatches} batches
 - ALL 8 TVF phases must be covered — no phase skipped
-${selectedHook ? `- Batch 1 MUST open with this hook: "${selectedHook.hook_text}"` : '- Batch 1 MUST open with the most powerful attention trigger possible'}
+${isExplainerMode ? `- Batch 1 MUST start with the phrase "In this video" (this is an EXPLAINER video — that opener is mandatory).` : (selectedHook ? `- Batch 1 MUST open with this hook: "${selectedHook.hook_text}"` : '- Batch 1 MUST open with the most powerful attention trigger possible')}
 - Each synopsis: 150-250 words of SPECIFIC detail
 - Every batch must contain at least ONE curiosity gap
 - Ensure narrative continuity — each batch ends with a hook into the next
-- No filler, no generic buzzwords, no "in today's video"`;
+${isExplainerMode ? '- This is an EXPLAINER (educational) video — focus on clear teaching, analogies, factual breakdowns; tone is curious and authoritative rather than dramatic-viral.' : '- No filler, no generic buzzwords, no "in today\'s video"'}`;
 }
 
 Deno.serve(async (req) => {
@@ -323,8 +258,7 @@ Deno.serve(async (req) => {
     // Get selected hook if any (skip for sleep projects — they don't use hooks)
     let selectedHook = null;
     const isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
-    const isExplainerProject = project.project_mode === 'explainer';
-    if (!isSleepProject && !isExplainerProject && project.selected_hook_id) {
+    if (!isSleepProject && project.selected_hook_id) {
       const hooks = await base44.asServiceRole.entities.Hooks.filter({ id: project.selected_hook_id });
       selectedHook = hooks[0];
     }
@@ -369,7 +303,6 @@ Deno.serve(async (req) => {
     // ── DETECT SCRIPT MODE ──
     const scriptMode = detectScriptMode(channel, project);
     const isSleepMode = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
-    const isExplainer = scriptMode === 'explainer';
 
     console.log(`[initializeScriptBatches] Script mode: ${scriptMode} (channel: ${channel?.name || 'none'})`);
 
@@ -397,12 +330,11 @@ Deno.serve(async (req) => {
     console.log(`Project: ${durationMinutes} min → ${totalTargetWords} words → ${numBatches} batches (${scriptMode})`);
 
     // ── BUILD OUTLINE PROMPT ──
-    const promptArgs = { topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock, channel };
+    const isExplainerMode = scriptMode === 'explainer';
+    const promptArgs = { topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock, isExplainerMode };
     const outlinePrompt = isSleepMode
-      ? buildSleepOutlinePrompt({ ...promptArgs, scriptMode })
-      : isExplainer
-        ? buildExplainerOutlinePrompt(promptArgs)
-        : buildStandardOutlinePrompt(promptArgs);
+      ? buildSleepOutlinePrompt({ ...promptArgs, scriptMode, channel })
+      : buildStandardOutlinePrompt(promptArgs);
 
     console.log("Generating detailed outline...");
     const outlineResult = await callOpenAI(outlinePrompt, isSleepMode ? 0.6 : 0.7);
@@ -429,11 +361,12 @@ Deno.serve(async (req) => {
       createdBatches.push(batch);
     }
 
-    // Update project status — also store the detected script_mode for downstream use
+    // Update project status — preserve sleep & explainer modes for downstream use
+    const isPreservedMode = isSleepMode || scriptMode === 'explainer';
     await base44.asServiceRole.entities.Projects.update(project_id, {
       status: 'scripting',
       current_step: 3,
-      project_mode: isSleepMode ? scriptMode : ''
+      project_mode: isPreservedMode ? scriptMode : (project.project_mode || '')
     });
 
     console.log(`Created ${createdBatches.length} batches with detailed outlines (${scriptMode})`);
