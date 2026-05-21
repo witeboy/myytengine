@@ -378,82 +378,69 @@ Return JSON:
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// EXPLAINER SCRIPT WRITING PROMPT — short punchy sentences, real data
+// EXPLAINER SCRIPT WRITING PROMPT — Einstein-character educational mode
+// Hook section (batch 1): ultra-punchy ≤7-word sentences
+// Body sections (batch 2+): natural educational pacing
 // ═══════════════════════════════════════════════════════════════════
 function buildExplainerWritingPrompt({ batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock, researchBlock }) {
-  return `You are an elite EXPLAINER VIDEO scriptwriter. Your job is to write a punchy, fast-paced educational narration where every sentence is short enough to fit ONE scene image (max ~3 seconds of narration each).
+  const arcType = project.explainer_arc || 'professor';
+
+  // Hook section gets ultra-punchy rules; body sections get natural educational pacing
+  const pacingRules = isFirstBatch
+    ? `**═══ HOOK PACING (THIS BATCH ONLY) ═══**
+This is the OPENING HOOK — first 5-10 seconds of the video. Pacing is ULTRA-PUNCHY:
+- EVERY sentence ≤7 words (≈3 seconds spoken). No exceptions.
+- Each sentence stands alone. No commas chaining ideas.
+- Rapid-fire curiosity bombs. Promise the payoff.
+- If the hook mentions data/numbers, state the actual number immediately.
+- Example rhythm: "Most people lose money here. The maths is brutal. Let me show you. In 60 seconds."`
+    : `**═══ BODY PACING (educational, natural) ═══**
+This is a body section — natural teaching pace:
+- Mix sentence lengths: short punchy beats (5-10 words) for emphasis, longer flowing sentences (15-25 words) for explanation.
+- Average ~12-18 words per sentence. Vary rhythm — never monotonous.
+- Each paragraph teaches ONE concept clearly, then moves on.
+- DELIVER THE GOODS: if you mention "the maths" or "the data" or "here are the numbers", the next sentences MUST contain the actual numerical values. Never tease without delivering.`;
+
+  return `You are an elite educational scriptwriter writing for an EXPLAINER VIDEO with an Einstein-style character host (${arcType} arc).
 
 **PROJECT CONTEXT**:
 - Topic: ${topic?.title || project.name}
 - Description: ${topic?.description || ''}
-- Niche: ${project.niche || 'General'}
-- Duration: ${project.video_duration_minutes || 10} minutes
-${selectedHook && isFirstBatch ? `- Opening Hook (MUST use as first sentence): "${selectedHook.hook_text}"` : ''}
+- Niche: ${project.niche || 'Educational'}
+- Tone: ${project.tone || 'educational'}
+- Video Duration: ${project.video_duration_minutes || 5} minutes
+- Einstein Arc: ${arcType}
+${selectedHook && isFirstBatch ? `- Opening Hook (MUST use as first line): "${selectedHook.hook_text}"` : ''}
 ${strategyBlock}
 ${researchBlock}
 
-**FULL OUTLINE**:
+**FULL EXPLAINER ARC** (all batches):
 ${outlineContext}
 
-**YOU ARE WRITING BATCH ${batch.batch_number} of ${sortedBatches.length}**: "${batch.story_segment}"
+**YOU ARE NOW WRITING BATCH ${batch.batch_number} of ${sortedBatches.length}**: "${batch.story_segment}"
 
-**BATCH SYNOPSIS**:
+**BATCH SYNOPSIS** (follow this closely):
 ${batch.synopsis}
 
-**TARGET WORD COUNT**: ~${batch.target_words} words. Stay close — short sentences mean MORE sentences, not longer ones.
+**MANDATORY WORD COUNT**: At LEAST ${batch.target_words} words. Under ${Math.round(batch.target_words * 0.9)} = FAILURE. (150 words ≈ 1 minute.)
 
-${previousContent ? `**PREVIOUSLY WRITTEN** (continue seamlessly, do NOT repeat):\n${previousContent.slice(-3000)}\n` : ''}
+${previousContent ? `**PREVIOUSLY WRITTEN** (continue seamlessly, do NOT repeat):\n${previousContent.slice(-4000)}\n` : ''}
 
-**═══ THE ONE RULE THAT MATTERS MOST ═══**
+${pacingRules}
 
-**EVERY SENTENCE = ONE SCENE = MAX 3 SECONDS OF NARRATION = MAX 7-8 SPOKEN WORDS.**
-
-Each sentence will become a separate scene with its own image. So:
-- Write in SHORT, PUNCHY sentences. 3 to 8 words ideal. Never more than 10.
-- Break compound ideas into multiple separate sentences.
-- One fact per sentence. One number per sentence. One step per sentence.
-- Use periods aggressively. Avoid commas that chain ideas together.
-
-❌ BAD: "Sarah's bakery was making 5,000 dollars a month but only profiting 500 because her costs were eating her alive."
-✅ GOOD: "Sarah's bakery made 5,000 dollars a month. But profit? Just 500. Her costs were eating her alive."
-
-**═══ THE SECOND RULE: DELIVER WHAT YOU PROMISE ═══**
-
-If the script says ANY of these phrases, the VERY NEXT sentences MUST contain the actual numbers/data spoken out loud:
-- "Look at these numbers" → next 2-4 sentences = the actual numbers
-- "Run the maths with me" → next 3-6 sentences = the actual calculation, step by step
-- "Here's the breakdown" → next 3-5 sentences = each line item
-- "Watch what happens" → next sentences = describe exactly what happens
-- "Let me show you" → next sentences = show it explicitly
-
-✅ EXAMPLE — "Run the maths with me":
-"Run the maths with me. Revenue: 5,000 dollars. Ingredients: 1,500. Rent: 1,200. Staff: 1,800. Total costs: 4,500. Profit: just 500 dollars."
-
-NEVER say "look at these numbers" and then move on without saying the numbers. NEVER tease data you don't deliver.
-
-**═══ WRITING STYLE ═══**
-
-1. ONLY narration text — words spoken by Einstein character. Nothing else.
-2. NO scene directions, NO [VISUAL], NO stage notes.
-3. Use Einstein's voice: warm, witty, slightly theatrical, grandfatherly genius.
-4. Each section opens with a punchy hook sentence. Each closes with a curiosity bridge to the next.
-5. Numbers are SPOKEN: "fifty percent" or "50 percent" — pick the cleaner reading.
-6. Use the verified research data above. Embed REAL numbers, REAL examples, REAL formulas — not vague generalities.
-7. Rhetorical devices: rule of three, callbacks, contrasts. ("Not bigger. Smarter.")
-8. ${isFirstBatch ? 'Open EXPLOSIVELY. First sentence under 8 words. Hook them in 3 seconds.' : 'Continue from where previous batch ended. Do not re-introduce the topic.'}
-9. ${isLastBatch ? 'End with a memorable one-liner. Then a 5-word CTA. ("Now go build it.")' : 'End with a 3-5 word cliffhanger pulling into the next batch.'}
-
-**═══ HOOK SECTION SPECIAL RULES (if this is batch 1) ═══**
-${isFirstBatch ? `The HOOK is the most punchy section of all. 15-25 ultra-short sentences in the first 30 seconds.
-- Sentence 1: under 8 words. Pattern interrupt.
-- Sentences 2-5: rapid escalation. Each under 7 words.
-- Sentences 6-15: state the problem, the stakes, the curiosity gap.
-- NO long sentences in the hook. EVER.
-- If you promise data ("here's what 99% miss"), the next sentences MUST be the data.` : 'N/A — not the hook section.'}
+**EXPLAINER WRITING RULES**:
+1. Write ONLY narration text — words the Einstein character speaks aloud.
+2. NO scene directions, NO [VISUAL:], NO stage directions.
+3. NO "In this video", NO meta-commentary.
+4. NUMBERS ARE MANDATORY: If research provides numbers, USE THEM verbatim. Never say "a lot" — say the actual figure.
+5. Use named examples (e.g. "Sarah's bakery made $4,200") instead of vague generalities.
+6. ${isFirstBatch ? 'HOOK: Open with the selected hook line, then 3-5 ultra-short curiosity bombs ≤7 words each. Promise the data payoff.' : 'BODY: Teach the concept clearly. State the formula/number/example. Then explain it. Then give one concrete worked example.'}
+7. ${isLastBatch ? 'OUTRO: Recap the 1-2 key numbers in punchy short sentences. Memorable closing line. Subtle CTA.' : 'End by setting up the next concept — "But here\'s where it gets interesting..." style bridge.'}
+8. Match the Einstein arc voice: ${arcType === 'science' ? 'eureka moments, "the data does not lie"' : arcType === 'professor' ? 'warm teacher, "class is in session"' : arcType === 'accountant' ? 'sharp money focus, "mathematically relative"' : 'tech-savvy, "simple geometry my friends"'}.
 
 Return JSON:
 {
-  "content": "The full narration text. Just sentences, one after another. Periods aggressively.",
+  "content": "The full narration text for this batch...",
   "word_count": 1234
 }`;
 }
@@ -541,12 +528,26 @@ Deno.serve(async (req) => {
 
     // Detect script mode
     const isExplainerMode = project.project_mode === 'explainer';
-    const scriptMode = project.project_mode && (project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story')
-      ? project.project_mode
-      : (isExplainerMode ? 'explainer' : 'standard');
-    const isSleepMode = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
+    const isSleepModeRaw = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
+    const scriptMode = isExplainerMode ? 'explainer' : (isSleepModeRaw ? project.project_mode : 'standard');
+    const isSleepMode = isSleepModeRaw;
 
     console.log(`[generateScriptBatches] Script mode: ${scriptMode}`);
+
+    // Load explainer research notes (verified facts/numbers) if in explainer mode
+    let researchBlock = '';
+    if (isExplainerMode && project.research_notes) {
+      try {
+        const r = typeof project.research_notes === 'string' ? JSON.parse(project.research_notes) : project.research_notes;
+        const facts = (r.facts || []).slice(0, 12).map(f => `- ${f.claim || f}`).join('\n');
+        const numbers = (r.key_numbers || []).slice(0, 12).map(n => typeof n === 'string' ? `- ${n}` : `- ${n.label || ''}: ${n.value || ''}`).join('\n');
+        const misconceptions = (r.common_misconceptions || []).slice(0, 6).map(m => `- ${m}`).join('\n');
+        researchBlock = `
+**═══ VERIFIED RESEARCH (USE THESE NUMBERS VERBATIM) ═══**
+${facts ? `FACTS:\n${facts}\n` : ''}${numbers ? `KEY NUMBERS:\n${numbers}\n` : ''}${misconceptions ? `MISCONCEPTIONS TO ADDRESS:\n${misconceptions}\n` : ''}
+RULE: When you reference "the data", "the maths", "the numbers" — you MUST state the actual values above. Never tease without delivering.`;
+      } catch (_) {}
+    }
 
     // Get channel script strategy
     let scriptStrategy = '';
@@ -608,26 +609,6 @@ Deno.serve(async (req) => {
         .map(b => `Batch ${b.batch_number} "${b.story_segment}": ${b.focus_area}`)
         .join('\n');
 
-      // Load research notes for explainer projects
-      let researchBlock = '';
-      if (isExplainerMode && project.research_notes) {
-        try {
-          const r = JSON.parse(project.research_notes);
-          const facts = (r.facts || []).slice(0, 12).map(f => `- ${f.claim || f}`).join('\n');
-          const numbers = (r.key_numbers || []).slice(0, 10).map(n => `- ${typeof n === 'string' ? n : (n.label || '') + ': ' + (n.value || '')}`).join('\n');
-          const misconceptions = (r.common_misconceptions || []).slice(0, 5).map(m => `- ${m}`).join('\n');
-          researchBlock = `\n**VERIFIED RESEARCH** (use these REAL facts, numbers, and examples — do NOT invent data):
-FACTS:
-${facts || '(none)'}
-
-KEY NUMBERS:
-${numbers || '(none)'}
-
-COMMON MISCONCEPTIONS TO ADDRESS:
-${misconceptions || '(none)'}\n`;
-        } catch (_) {}
-      }
-
       const promptArgs = {
         batch, project, topic, selectedHook, sortedBatches,
         previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock
@@ -635,15 +616,14 @@ ${misconceptions || '(none)'}\n`;
 
       const prompt = isSleepMode
         ? buildSleepWritingPrompt({ ...promptArgs, scriptMode })
-        : isExplainerMode
-          ? buildExplainerWritingPrompt({ ...promptArgs, researchBlock })
-          : buildStandardWritingPrompt(promptArgs);
+        : (isExplainerMode
+            ? buildExplainerWritingPrompt({ ...promptArgs, researchBlock })
+            : buildStandardWritingPrompt(promptArgs));
 
       console.log(`[Batch ${batch.batch_number}] Generating ~${batch.target_words} words (${scriptMode})...`);
 
       // Sleep scripts use lower temperature for more consistent, soothing output
-      // Explainer scripts use lower temp for factual precision and short-sentence discipline
-      const baseTemp = isSleepMode ? 0.65 : (isExplainerMode ? 0.6 : 0.85);
+      const baseTemp = isSleepMode ? 0.65 : 0.85;
       const minWords = Math.round(batch.target_words * 0.92);
       let content = '';
       let wordCount = 0;
