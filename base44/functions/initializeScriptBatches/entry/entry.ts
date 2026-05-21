@@ -31,18 +31,15 @@ async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
 // Detect sleep script mode from channel or project (v2)
 // ═══════════════════════════════════════════════════════════════════
 function detectScriptMode(channel, project) {
-  // 1. HIGHEST PRIORITY: explicit project_mode set by the user on the project itself
-  if (project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story') {
+  // 🎯 Explicit project_mode ALWAYS wins (set by user on NewProject / StoryDuration)
+  if (project?.project_mode && project.project_mode !== 'standard') {
     return project.project_mode;
   }
-  if (project?.project_mode === 'explainer') {
-    return 'explainer';
-  }
-  // 2. Explicit mode from channel
+  // Explicit mode from channel
   if (channel?.script_mode && channel.script_mode !== 'standard') {
     return channel.script_mode;
   }
-  // 3. Auto-detect from niche keywords
+  // Auto-detect from niche keywords
   const niche = (channel?.niche || project?.niche || '').toLowerCase();
   const name = (channel?.name || '').toLowerCase();
   const combined = `${niche} ${name}`;
@@ -167,6 +164,64 @@ Return JSON:
 - Every synopsis: 200-300 words of SPECIFIC soothing content detail
 - NO educational content, NO science, NO advice, NO meta-commentary
 - Content gets progressively more repetitive and slower as it goes`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPLAINER OUTLINE PROMPT — educational, fact-driven, NOT viral storytelling
+// ═══════════════════════════════════════════════════════════════════
+function buildExplainerOutlinePrompt({ topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock }) {
+  return `You are an expert explainer-video script planner (think Veritasium, Vox, Kurzgesagt, Wendover, Polymatter).
+
+You plan EDUCATIONAL scripts that teach the viewer something real — with structured facts, definitions, mechanisms, numbers, and worked examples. You do NOT write viral storytelling, fake suspense, "nobody tells you" curiosity gaps, or dramatic cliffhangers between batches.
+
+**PROJECT**:
+- Topic: ${topic?.title || project.name}
+- Topic Description: ${topic?.description || ''}
+- Niche: ${project.niche || 'General'}
+- Tone: ${project.tone || 'educational'} (but always clear, intelligent, grounded)
+- Duration: ${durationMinutes} minutes (~${totalTargetWords} words at 150 wpm)
+${selectedHook ? `- Opening Hook (MUST USE): "${selectedHook.hook_text}"` : ''}
+${strategyBlock}
+
+**EXPLAINER STRUCTURE** (map this across ${numBatches} batches):
+  1. FRAMING: What question/phenomenon are we explaining? Why does it matter?
+  2. CORE CONCEPT(S): Define the key terms and ideas precisely.
+  3. MECHANISM / HOW IT WORKS: Walk through the actual logic, numbers, cause→effect.
+  4. EVIDENCE: Real examples, data points, case studies, numbers.
+  5. EDGE CASES / NUANCE: Where it breaks, what's commonly misunderstood, caveats.
+  6. IMPLICATIONS: What this means for the viewer or the world.
+  7. CLOSE: Synthesis — the one durable insight to remember.
+
+**HARD RULES** (these are what separates explainer from viral storytelling):
+✅ Every batch should contain SPECIFIC facts, numbers, definitions, or worked examples.
+✅ Use precise language. "Roughly 73% of franchise laundromats break even in year 2" beats "most laundromats do really well".
+✅ Treat the viewer as smart. Explain mechanisms, don't tease them.
+✅ Transitions between batches are LOGICAL ("now that we've defined X, we can ask Y"), not dramatic cliffhangers.
+❌ NO "but here's what nobody tells you", "the SHOCKING truth", "you won't believe".
+❌ NO fake suspense, fake stakes, or invented characters ("meet Jim, a frustrated office worker").
+❌ NO curiosity gaps for their own sake. Curiosity comes from real questions, not withheld info.
+❌ NO generic motivational filler.
+
+Return JSON:
+{
+  "batches": [
+    {
+      "batch_number": 1,
+      "story_segment": "Short segment title (3-5 words, descriptive of the CONCEPT covered)",
+      "explainer_phases": ["FRAMING", "CORE CONCEPT"],
+      "focus_area": "The specific question or concept this batch teaches (1 sentence)",
+      "synopsis": "EXTREMELY DETAILED synopsis (200-300 words) describing the ACTUAL educational content: which definitions are introduced, which numbers/facts are cited, which mechanism is walked through step-by-step, which worked example is used, which misconception is addressed. Be concrete — name the businesses, the margins, the cost structures, the case studies. Do NOT describe storytelling beats."
+    }
+  ]
+}
+
+**OUTPUT RULES:**
+- Generate exactly ${numBatches} batches.
+- Cover the topic comprehensively — every batch advances the viewer's understanding.
+${selectedHook ? `- Batch 1 MUST open with this hook: "${selectedHook.hook_text}"` : '- Batch 1 should frame the question precisely (no shock-bait).'}
+- Each synopsis: 200-300 words of SPECIFIC educational content (real facts, real numbers, real examples).
+- Transitions are logical, not dramatic.
+- The script should leave the viewer genuinely smarter about ${topic?.title || project.name}.`;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -305,6 +360,7 @@ Deno.serve(async (req) => {
     // ── DETECT SCRIPT MODE ──
     const scriptMode = detectScriptMode(channel, project);
     const isSleepMode = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
+    const isExplainerMode = scriptMode === 'explainer';
 
     console.log(`[initializeScriptBatches] Script mode: ${scriptMode} (channel: ${channel?.name || 'none'})`);
 
@@ -335,6 +391,8 @@ Deno.serve(async (req) => {
     const promptArgs = { topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock };
     const outlinePrompt = isSleepMode
       ? buildSleepOutlinePrompt({ ...promptArgs, scriptMode, channel })
+      : isExplainerMode
+      ? buildExplainerOutlinePrompt(promptArgs)
       : buildStandardOutlinePrompt(promptArgs);
 
     console.log("Generating detailed outline...");
@@ -362,17 +420,15 @@ Deno.serve(async (req) => {
       createdBatches.push(batch);
     }
 
-    // Update project status — ONLY set project_mode if sleep is detected.
-    // NEVER wipe an existing project_mode (sleep/explainer) the user already chose.
-    const updatePayload = {
+    // Update project status. 🛡️ PRESERVE the resolved script_mode — never wipe it.
+    // (The previous version cleared project_mode here, destroying the user's
+    // explainer/shorts/etc selection and forcing downstream pipelines to fall
+    // back to standard viral storytelling.)
+    await base44.asServiceRole.entities.Projects.update(project_id, {
       status: 'scripting',
       current_step: 3,
-    };
-    if (isSleepMode) {
-      updatePayload.project_mode = scriptMode;
-    }
-    // else: leave project_mode untouched — preserves explainer, sleep, or empty as-is
-    await base44.asServiceRole.entities.Projects.update(project_id, updatePayload);
+      project_mode: scriptMode === 'standard' ? '' : scriptMode
+    });
 
     console.log(`Created ${createdBatches.length} batches with detailed outlines (${scriptMode})`);
 
