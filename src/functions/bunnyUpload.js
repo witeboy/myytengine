@@ -1,3 +1,5 @@
+/* eslint-env deno */
+/* global Deno */
 // bunnyUpload.js — Deno backend function
 // Required env vars:
 //   BUNNY_STORAGE_ZONE      — storage zone name (e.g. "my-videos")

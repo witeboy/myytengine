@@ -1,3 +1,5 @@
+/* eslint-env deno */
+/* global Deno */
 import { createClientFromRequest } from "https://cdn.base44.com/base44-deno-sdk.js";
 
 Deno.serve(async (req) => {
