@@ -290,6 +290,10 @@ const styleMap = {
   afro_nolly_global: {
     positive: "3D Pixar-Illumination quality CGI animation, subsurface scattering on skin, soft ambient occlusion, individually strand-rendered hair showing fiber detail, realistic cloth folds and weight on clothing, warm natural lighting, vibrant saturated colors, cinematic composition with 3-layer depth staging, dramatic exaggerated expressions, detailed clothing textures, community of onlookers with expressive shocked or amused reactions, colorful compound courtyard setting with hand-painted signs on buildings, 16:9 cinematic aspect ratio, high-quality 3D rendering, Nollywood-style community drama meets Disney Pixar aesthetic",
     negative: "photorealistic, live action, photograph, anime, manga, watercolor, sketch, flat 2D, dark gloomy, cartoon outline style, cel-shaded, low quality, blurry, grey ashy skin tones, empty backgrounds, isolated portraits, minimalist, abstract, horror, scary, chibi, bobblehead, oversized head, text garbled, distorted letters"
+  },
+  explainer_diagram: {
+    positive: "Premium educational explainer illustration, clean professional 3D render, subject-matter-expert visual authority, crisp geometric shapes, bold readable typography, clear diagram hierarchy with labeled nodes and arrows, professional color-coded sections, subtle drop shadows for depth, clean white or dark slate background, high contrast for readability, Kurzgesagt meets 3Blue1Brown visual quality, precise technical illustration, no clutter, every element serves the explanation",
+    negative: "cartoon, childish, amateur, clipart, stock photo, photograph, realistic human skin, bokeh, lens flare, film grain, dark moody, horror, fantasy, abstract art, watercolor, oil painting, messy, cluttered, decorative elements that distract from the content, comic book style, anime, chibi, oversized heads, distorted proportions"
   }
 };
 
@@ -403,7 +407,13 @@ function getStyleSceneBodyRules(styleName) {
       environments: "COMPOUND COURTYARD: Colorful buildings (mustard, terracotta, dusty blue, sage green, salmon pink), terracotta or dark roofs, warm-colored dirt or paved ground, wooden doors, louvered windows, hanging laundry between buildings, potted flowers at doorsteps, scattered rocks, hand-painted signs with proverbs on buildings (black text on cream/white wood, all caps, hand-lettered). INDOOR: Warm-toned living rooms, kitchens, hallways with doorways where crowds peek in, candles, furniture, shelves. Night: warm artificial or candlelight as primary light, deep blue-black sky, HUGE stylized full moon.",
       objects: "Hand-painted wooden signs with proverbs that foreshadow the moral (e.g. 'PRIDE COMES BEFORE THE FALL', 'COMPOUND RULES: LANDLADY IS ALWAYS RIGHT'), wooden sticks/canes (mama's signature prop), gold jewelry (earrings, bangles, necklaces), colorful patterned clothing, cooking pots, woven baskets, wooden stools, corrugated iron roofing, potted plants, street signs with place names.",
       rendering: "3D Pixar-Illumination quality CGI. Subsurface scattering on skin. Soft ambient occlusion in shadows. Slight depth-of-field blur on background characters. Hair individually strand-rendered. Cloth shows realistic folds, wrinkles, and weight. Camera slightly below eye level (heroic/dramatic). Slight wide-angle lens distortion making foreground characters larger. 3-layer depth: foreground characters, mid-ground action, background crowd (6-15 shocked/amused onlookers with dramatic expressions). Faces ALWAYS well-lit and readable even in dark scenes. Warm bounce light from ground. Saturated punchy vibrant colors."
-    }
+    },
+  explainer_diagram: {
+      characters: `Einstein character rendered as premium 3D illustration — ALWAYS in his arc-specific costume (lab coat OR tweed jacket OR suit OR graphic tee as specified in director notes). Einstein's signature wild white hair, bushy mustache, warm expressive eyes. Character proportions are realistic adult male — NOT cartoon, NOT chibi. High detail on face and clothing. Character exudes intellectual authority and warm enthusiasm. When present: Einstein is MID-ACTION — gesturing at diagrams, pointing at formulas, writing on boards, reacting with excitement to concepts.`,
+      environments: `Clean professional educational environment matching the arc: laboratory (science), grand lecture hall (professor), sleek boardroom (accountant), futuristic tech hub (tech). Environments are detailed and immersive but never cluttered. Diagrams and visual elements are part of the environment as floating 3D panels, holographic displays, or whiteboard content.`,
+      objects: `Diagrams rendered as clean 3D floating panels with crisp typography, color-coded sections, and clear hierarchy. Formulas typeset in LaTeX-style precision. Code blocks in monospace font with syntax highlighting. All text in diagrams must be READABLE and CORRECT. Arrows are clean with proper arrowheads. Icons are professional and universally understood.`,
+      rendering: `Premium 3D render — NOT cartoon, NOT flat design. Subsurface scattering on character skin. Soft ambient occlusion. Professional studio lighting. High contrast between diagram elements and background. Every text element must be legible at video resolution. Depth of field: medium f/4 — character and diagrams both sharp, background subtly soft.`,
+    },
   };
 
   const base = rules[styleName] || null;
@@ -490,7 +500,45 @@ MANDATORY FRAMING:
 - Lighting: golden hour, volumetric rays, warm amber grading, rim light on bone edges
 - NEVER empty dark eye sockets — always BIG ROUND EXPRESSIVE BROWN/AMBER EYEBALLS
 - NEVER show readable text, numbers, dollar amounts, or screen content — use physical metaphors instead
-- NEVER write the style name as a prefix (e.g. "Skeleton protagonist →") — just describe the scene`
+- NEVER write the style name as a prefix (e.g. "Skeleton protagonist →") — just describe the scene`,
+
+    explainer_diagram: universalReinforcement + `
+**🎓 EXPLAINER DIAGRAM STYLE — CRITICAL RULES:**
+
+This is premium educational content. Every image must communicate information clearly AND look visually impressive. The viewer must feel they are learning from a subject matter expert.
+
+**EINSTEIN CHARACTER (when einstein_present = true):**
+- ALWAYS use the exact arc costume from director notes — lab coat (science), tweed jacket (professor), suit (accountant), graphic tee with RGB headset (tech)
+- Einstein is ALWAYS mid-action: gesturing, pointing, writing, reacting — NEVER standing static
+- Express genuine enthusiasm through body language — leaning forward, wide eyes, animated hands
+- Face must be recognisably Einstein-inspired: wild white hair, bushy mustache, warm expressive eyes
+- Character proportions: realistic adult male, authoritative presence, NOT cartoon or chibi
+
+**DIAGRAMS AND VISUAL ELEMENTS:**
+- Every diagram must be READABLE — text large enough to see clearly
+- Color-code related elements consistently throughout the video
+- Arrows must have clear direction and connect logical elements
+- Formulas must be typeset precisely — use proper mathematical notation
+- Code blocks must use monospace font with visible syntax highlighting
+- Labels must be concise and positioned clearly near their element
+
+**SCENE TYPE RULES:**
+- concept_diagram: Pure clean diagram, no character, white or dark slate background, diagram fills 70% of frame
+- formula_panel: Formula centered, large, beautiful typesetting, dark background, formula glows subtly
+- code_block: Terminal or IDE aesthetic, syntax highlighted, clean monospace, relevant lines highlighted
+- einstein_intro / einstein_outro: Full body Einstein, environment visible, maximum personality
+- einstein_transition: Mid shot Einstein, gesturing toward next concept
+- analogy_scene: Split frame or comparison — real world LEFT, concept RIGHT
+
+**FORBIDDEN:**
+- Cluttered scenes with too many elements
+- Text too small to read
+- Incorrect formulas or wrong code syntax
+- Generic stock-photo aesthetic
+- Childish cartoon style
+- Character standing static doing nothing
+- Multiple unrelated concepts in one frame
+- Blurred or illegible diagram text`
   };
   return instructions[visualStyle] || universalReinforcement;
 }
