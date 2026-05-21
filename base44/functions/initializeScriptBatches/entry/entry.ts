@@ -31,10 +31,6 @@ async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
 // Detect sleep script mode from channel or project (v2)
 // ═══════════════════════════════════════════════════════════════════
 function detectScriptMode(channel, project) {
-  // 🎯 Explicit project_mode ALWAYS wins (set by user on NewProject / StoryDuration)
-  if (project?.project_mode && project.project_mode !== 'standard') {
-    return project.project_mode;
-  }
   // Explicit mode from channel
   if (channel?.script_mode && channel.script_mode !== 'standard') {
     return channel.script_mode;
@@ -167,61 +163,79 @@ Return JSON:
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// EXPLAINER OUTLINE PROMPT — educational, fact-driven, NOT viral storytelling
+// EXPLAINER OUTLINE PROMPT — grounded in research, factual, educational
 // ═══════════════════════════════════════════════════════════════════
-function buildExplainerOutlinePrompt({ topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock }) {
-  return `You are an expert explainer-video script planner (think Veritasium, Vox, Kurzgesagt, Wendover, Polymatter).
+function buildExplainerOutlinePrompt({ topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock, researchNotes }) {
+  let researchBlock = '';
+  if (researchNotes) {
+    try {
+      const r = typeof researchNotes === 'string' ? JSON.parse(researchNotes) : researchNotes;
+      const facts = (r.facts || []).slice(0, 10).map((f, i) => `  ${i + 1}. ${f.claim} [${f.source_name || 'source'}]`).join('\n');
+      const numbers = (r.key_numbers || []).slice(0, 8).map((n, i) => `  ${i + 1}. ${n.number} — ${n.context} [${n.source_name || 'source'}]`).join('\n');
+      const myths = (r.common_misconceptions || []).slice(0, 4).map((m, i) => `  ${i + 1}. MYTH: "${m.myth}" → TRUTH: ${m.truth}`).join('\n');
+      researchBlock = `\n**GROUNDED RESEARCH** (the ONLY facts/numbers you may use — do NOT invent statistics, names, locations, or revenues):
 
-You plan EDUCATIONAL scripts that teach the viewer something real — with structured facts, definitions, mechanisms, numbers, and worked examples. You do NOT write viral storytelling, fake suspense, "nobody tells you" curiosity gaps, or dramatic cliffhangers between batches.
+VERIFIED FACTS:
+${facts || '  (none)'}
 
+VERIFIED NUMBERS:
+${numbers || '  (none)'}
+
+MISCONCEPTIONS TO CORRECT:
+${myths || '  (none)'}
+`;
+    } catch (_) {
+      researchBlock = '';
+    }
+  }
+
+  return `You are an expert educational scriptwriter planning a FACTUAL, EDUCATIONAL explainer video.
+
+**CRITICAL ANTI-HALLUCINATION RULES**:
+❌ Do NOT invent specific company names, owner names, locations ("a family in Florida"), or dollar amounts
+❌ Do NOT fabricate statistics, percentages, or year dates that aren't in the research
+❌ Do NOT make up case studies or anecdotes about specific businesses/people
+✅ Use ONLY the verified facts and numbers from the GROUNDED RESEARCH block below
+✅ When citing a number, use the exact figure from research (don't round wildly)
+✅ If research has no specific figure for a claim, speak generally without numbers — never invent
+
+**CONTENT STYLE**: Educational explainer — clear, teacher-like, calm authority. Think Veritasium, Vox, Wendover Productions. Not viral storytelling. Not "you won't believe what happens next." Just clear factual explanation with worked examples and concrete mechanisms.
+
+${researchBlock}
+${strategyBlock}
 **PROJECT**:
 - Topic: ${topic?.title || project.name}
-- Topic Description: ${topic?.description || ''}
+- Topic Description: ${topic?.description || 'No description available'}
 - Niche: ${project.niche || 'General'}
-- Tone: ${project.tone || 'educational'} (but always clear, intelligent, grounded)
+- Tone: educational, clear, authoritative
 - Duration: ${durationMinutes} minutes (~${totalTargetWords} words at 150 wpm)
 ${selectedHook ? `- Opening Hook (MUST USE): "${selectedHook.hook_text}"` : ''}
-${strategyBlock}
 
-**EXPLAINER STRUCTURE** (map this across ${numBatches} batches):
-  1. FRAMING: What question/phenomenon are we explaining? Why does it matter?
-  2. CORE CONCEPT(S): Define the key terms and ideas precisely.
-  3. MECHANISM / HOW IT WORKS: Walk through the actual logic, numbers, cause→effect.
-  4. EVIDENCE: Real examples, data points, case studies, numbers.
-  5. EDGE CASES / NUANCE: Where it breaks, what's commonly misunderstood, caveats.
-  6. IMPLICATIONS: What this means for the viewer or the world.
-  7. CLOSE: Synthesis — the one durable insight to remember.
-
-**HARD RULES** (these are what separates explainer from viral storytelling):
-✅ Every batch should contain SPECIFIC facts, numbers, definitions, or worked examples.
-✅ Use precise language. "Roughly 73% of franchise laundromats break even in year 2" beats "most laundromats do really well".
-✅ Treat the viewer as smart. Explain mechanisms, don't tease them.
-✅ Transitions between batches are LOGICAL ("now that we've defined X, we can ask Y"), not dramatic cliffhangers.
-❌ NO "but here's what nobody tells you", "the SHOCKING truth", "you won't believe".
-❌ NO fake suspense, fake stakes, or invented characters ("meet Jim, a frustrated office worker").
-❌ NO curiosity gaps for their own sake. Curiosity comes from real questions, not withheld info.
-❌ NO generic motivational filler.
+**YOUR TASK**: Plan exactly ${numBatches} batches that teach this topic factually. Each batch should:
+1. Cover a distinct sub-topic or mechanism
+2. Include real-world data points from the research (only)
+3. Use worked examples where possible (e.g. "if margins are 40% and revenue is X, then profit is Y")
+4. Build understanding cumulatively — concepts in batch N rely on batch N-1
 
 Return JSON:
 {
   "batches": [
     {
       "batch_number": 1,
-      "story_segment": "Short segment title (3-5 words, descriptive of the CONCEPT covered)",
-      "explainer_phases": ["FRAMING", "CORE CONCEPT"],
-      "focus_area": "The specific question or concept this batch teaches (1 sentence)",
-      "synopsis": "EXTREMELY DETAILED synopsis (200-300 words) describing the ACTUAL educational content: which definitions are introduced, which numbers/facts are cited, which mechanism is walked through step-by-step, which worked example is used, which misconception is addressed. Be concrete — name the businesses, the margins, the cost structures, the case studies. Do NOT describe storytelling beats."
+      "story_segment": "Short segment title (3-5 words)",
+      "focus_area": "What this batch teaches (1 sentence)",
+      "synopsis": "EXTREMELY DETAILED synopsis (150-250 words) describing what the narrator will TEACH. Reference specific verified facts/numbers from research. Use worked examples. NO invented statistics, NO fictional case studies."
     }
   ]
 }
 
-**OUTPUT RULES:**
-- Generate exactly ${numBatches} batches.
-- Cover the topic comprehensively — every batch advances the viewer's understanding.
-${selectedHook ? `- Batch 1 MUST open with this hook: "${selectedHook.hook_text}"` : '- Batch 1 should frame the question precisely (no shock-bait).'}
-- Each synopsis: 200-300 words of SPECIFIC educational content (real facts, real numbers, real examples).
-- Transitions are logical, not dramatic.
-- The script should leave the viewer genuinely smarter about ${topic?.title || project.name}.`;
+**RULES:**
+- Generate exactly ${numBatches} batches
+- Use ONLY facts and numbers from the research block (or speak generally without numbers)
+- Every synopsis must teach a concrete mechanism, not just narrate emotion
+- No "you won't believe", no fake suspense, no fabricated anecdotes
+- Avoid generic buzzwords ("game-changer", "shocking truth", "they don't want you to know")
+- End each batch with a logical bridge to the next concept, not a cliffhanger`;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -358,11 +372,12 @@ Deno.serve(async (req) => {
     }
 
     // ── DETECT SCRIPT MODE ──
-    const scriptMode = detectScriptMode(channel, project);
+    // Explainer mode is set at the project level (not channel) — check it first
+    const isExplainerMode = project.project_mode === 'explainer';
+    const scriptMode = isExplainerMode ? 'explainer' : detectScriptMode(channel, project);
     const isSleepMode = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
-    const isExplainerMode = scriptMode === 'explainer';
 
-    console.log(`[initializeScriptBatches] Script mode: ${scriptMode} (channel: ${channel?.name || 'none'})`);
+    console.log(`[initializeScriptBatches] Script mode: ${scriptMode} | explainer: ${isExplainerMode} (channel: ${channel?.name || 'none'})`);
 
     // ── CALCULATE BATCH COUNT ──
     const durationMinutes = project.video_duration_minutes || 10;
@@ -389,14 +404,21 @@ Deno.serve(async (req) => {
 
     // ── BUILD OUTLINE PROMPT ──
     const promptArgs = { topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock };
-    const outlinePrompt = isSleepMode
-      ? buildSleepOutlinePrompt({ ...promptArgs, scriptMode, channel })
-      : isExplainerMode
-      ? buildExplainerOutlinePrompt(promptArgs)
-      : buildStandardOutlinePrompt(promptArgs);
+    let outlinePrompt;
+    let outlineTemp;
+    if (isExplainerMode) {
+      outlinePrompt = buildExplainerOutlinePrompt({ ...promptArgs, researchNotes: project.research_notes });
+      outlineTemp = 0.4; // Lower temp = less hallucination for factual content
+    } else if (isSleepMode) {
+      outlinePrompt = buildSleepOutlinePrompt({ ...promptArgs, scriptMode, channel });
+      outlineTemp = 0.6;
+    } else {
+      outlinePrompt = buildStandardOutlinePrompt(promptArgs);
+      outlineTemp = 0.7;
+    }
 
-    console.log("Generating detailed outline...");
-    const outlineResult = await callOpenAI(outlinePrompt, isSleepMode ? 0.6 : 0.7);
+    console.log(`Generating detailed outline... (${scriptMode})`);
+    const outlineResult = await callOpenAI(outlinePrompt, outlineTemp);
 
     if (!outlineResult.batches || outlineResult.batches.length === 0) {
       throw new Error("AI failed to generate outline batches");
@@ -420,15 +442,19 @@ Deno.serve(async (req) => {
       createdBatches.push(batch);
     }
 
-    // Update project status. 🛡️ PRESERVE the resolved script_mode — never wipe it.
-    // (The previous version cleared project_mode here, destroying the user's
-    // explainer/shorts/etc selection and forcing downstream pipelines to fall
-    // back to standard viral storytelling.)
-    await base44.asServiceRole.entities.Projects.update(project_id, {
+    // Update project status — preserve project_mode (explainer, sleep_*, etc.)
+    // Only update project_mode if we detected a special mode; never overwrite existing explainer/sleep mode with empty.
+    const updates = {
       status: 'scripting',
       current_step: 3,
-      project_mode: scriptMode === 'standard' ? '' : scriptMode
-    });
+    };
+    if (isExplainerMode) {
+      updates.project_mode = 'explainer';
+    } else if (isSleepMode) {
+      updates.project_mode = scriptMode;
+    }
+    // else: leave project_mode untouched (don't wipe it)
+    await base44.asServiceRole.entities.Projects.update(project_id, updates);
 
     console.log(`Created ${createdBatches.length} batches with detailed outlines (${scriptMode})`);
 
