@@ -4,10 +4,23 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 // EXPLAINER PIPELINE — Step 2: Generate ONE script batch grounded in research.
 // Dedicated function for project_mode === 'explainer'.
 // Standard/sleep pipelines use generateScriptBatches.
+//
+// SECTION-AWARE WRITING:
+//   hook batch  → ultra-short staccato sentences (≤7 words ≈ 3s narration)
+//   body/take.  → natural educational pacing (12-18 words avg)
 // ═══════════════════════════════════════════════════════════════════
 
 const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
+
+// Extract section_type from focus_area tag "[section_type|sN] ..."
+function extractSectionType(focusArea, batchNumber) {
+  const m = (focusArea || '').match(/^\[([a-z_]+)\|s\d+\]/);
+  if (m) return m[1];
+  // Fallback to canonical order for older batches
+  const canonical = ['hook', 'core_concept', 'mechanism', 'example', 'application', 'takeaway'];
+  return canonical[batchNumber - 1] || 'core_concept';
+}
 
 async function callClaude(prompt, temperature = 0.55, retries = 2) {
   for (let attempt = 0; attempt <= retries; attempt++) {
@@ -92,15 +105,21 @@ async function callLLM(prompt, temperature = 0.55) {
   }
 }
 
-function buildExplainerWritingPrompt({ batch, project, topic, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, researchNotes }) {
+function buildExplainerWritingPrompt({ batch, sectionType, project, topic, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, researchNotes }) {
   // Parse research into a tight reference block
   let researchBlock = '';
   if (researchNotes) {
     try {
       const research = typeof researchNotes === 'string' ? JSON.parse(researchNotes) : researchNotes;
       const facts = (research.facts || []).map((f, i) => `  [F${i + 1}] ${f.claim}`).join('\n');
-      const numbers = (research.key_numbers || []).map((n, i) => `  [N${i + 1}] ${n.number} — ${n.context}`).join('\n');
-      const myths = (research.common_misconceptions || []).map((m, i) => `  [M${i + 1}] MYTH: ${m.myth}\n         TRUTH: ${m.truth}`).join('\n');
+      const numbers = (research.key_numbers || []).map((n, i) => {
+        if (typeof n === 'string') return `  [N${i + 1}] ${n}`;
+        return `  [N${i + 1}] ${n.number || n.value || ''} — ${n.context || ''}`;
+      }).join('\n');
+      const myths = (research.common_misconceptions || []).map((m, i) => {
+        if (typeof m === 'string') return `  [M${i + 1}] ${m}`;
+        return `  [M${i + 1}] MYTH: ${m.myth || ''}\n         TRUTH: ${m.truth || ''}`;
+      }).join('\n');
       researchBlock = `
 **═══ GROUNDED RESEARCH — THE ONLY FACTS YOU MAY USE ═══**
 
@@ -118,6 +137,50 @@ ${myths || '  (none)'}
     }
   }
 
+  // Section-specific pacing rules
+  const isHook = sectionType === 'hook';
+  const isTakeaway = sectionType === 'takeaway';
+
+  const pacingRules = isHook ? `
+**═══ HOOK SECTION — STACCATO PACY MODE (CRITICAL) ═══**
+This is batch 1 — the hook. Cleo Abram / Vox cold-open density.
+
+✅ HOOK RULES:
+- EVERY sentence ≤ 7 words. Hard cap. Most sentences should be 3-6 words.
+- Each sentence ≈ 2-3 seconds of narration
+- Each sentence becomes ITS OWN SCENE in the breakdown — so write them like a barrage of punches
+- Open with the most striking number from research (one sentence)
+- Then the central question (one sentence)
+- Then a misconception flip (one sentence)
+- Then a promise of what we'll prove (one sentence)
+- Punchy. Concrete. Number-led.
+
+❌ HOOK BANS:
+- NO long sentences. NO compound clauses with "and"/"but"/"because" that exceed 7 words total.
+- NO "in this video" / "today we'll explore" / "buckle up"
+- NO storytelling preamble. Numbers and questions only.
+
+EXAMPLE HOOK CADENCE:
+"Forty-five percent of small businesses fail. Year one. Why?
+Most owners blame the economy. Wrong.
+The real killer is invisible. It hides in plain sight.
+Today we name it. And we kill it."
+` : `
+**═══ ${isTakeaway ? 'TAKEAWAY' : 'BODY'} SECTION — TEACHERLY PACING ═══**
+- Natural educational rhythm. Average sentence: 12-18 words.
+- Mix short declaratives ("That's a real number.") with longer explanatory sentences.
+- ${isTakeaway ? 'Slow down. Settle. Land 2-3 takeaways. Correct the biggest misconception. End with a clear, useful conclusion — NOT a CTA.' : 'Build the concept step-by-step. Each idea earned before the next.'}
+
+**DELIVER WHAT YOU PROMISE (CRITICAL):**
+If you write "let's look at the numbers" or "run the maths with me" or "here are the figures",
+the very NEXT sentences MUST contain the actual spoken numbers from the research block.
+NEVER promise data and then move on without delivering it.
+
+Example — WRONG: "Let's run the maths. As you can see, the margins are excellent."
+Example — RIGHT: "Let's run the maths. Revenue: one hundred thousand. Costs: forty thousand.
+That leaves sixty thousand profit. A sixty percent margin."
+`;
+
   return `You are an expert educational scriptwriter narrating a fact-grounded explainer video. You write in the patient, clear voice of a great teacher — never in the hype voice of a viral YouTuber.
 
 **PROJECT**:
@@ -131,44 +194,44 @@ ${researchBlock}
 ${outlineContext}
 
 **YOU ARE WRITING BATCH ${batch.batch_number} of ${sortedBatches.length}**: "${batch.story_segment}"
+**SECTION TYPE**: ${sectionType.toUpperCase()}
 
 **BATCH SYNOPSIS**:
 ${batch.synopsis}
 
-**MANDATORY WORD COUNT**: AT LEAST ${batch.target_words} words. Below ${Math.round(batch.target_words * 0.9)} = failure. Add more specific examples, more numbers from research, more step-by-step mechanism explanation. 150 words = 1 minute of narration.
+**MANDATORY WORD COUNT**: AT LEAST ${batch.target_words} words. Below ${Math.round(batch.target_words * 0.9)} = failure. ${isHook ? 'For the hook, hit the word count via MORE short sentences — never lengthen individual sentences past 7 words.' : 'Add more specific examples, more numbers from research, more step-by-step mechanism explanation.'} 150 words = 1 minute of narration.
 
 ${previousContent ? `**PREVIOUSLY WRITTEN** (continue seamlessly, do NOT repeat):\n${previousContent.slice(-4000)}\n` : ''}
+
+${pacingRules}
 
 **═══ EXPLAINER WRITING RULES (NON-NEGOTIABLE) ═══**
 
 ✅ DO:
 1. Quote SPECIFIC numbers, percentages, and ranges from the research block above — use them verbatim
-2. When citing a fact, weave it naturally: "Self-storage businesses typically operate with profit margins between 40 and 60 percent..."
+2. When citing a fact, weave it naturally with the actual number spoken aloud
 3. Explain mechanisms step by step — show your reasoning
 4. Define terms before using them
 5. Correct misconceptions head-on when this batch covers them
-6. Use a calm, teacherly cadence — varied sentence lengths
-7. Use concrete examples from the research, not invented ones
+6. Use concrete examples from the research, not invented ones
 
 ❌ DO NOT:
 1. Invent any statistic, percentage, company name, dollar amount, or example not in the research block
-2. Use viral hype phrases — banned list: "you won't believe", "wait till you hear", "this changes everything", "what happened next", "buckle up", "here's the kicker", "trust me", "I know, I know"
+2. Use viral hype phrases — banned: "you won't believe", "wait till you hear", "this changes everything", "buckle up", "here's the kicker", "trust me", "I know, I know"
 3. Tease future batches mysteriously ("but first..."). Use logical transitions ("Now that we understand X, let's see how Y follows.")
-4. Use clickbait curiosity gaps
-5. Make sweeping claims ("90% success rate") unless EXACTLY in the research (and correct it if it's a misconception)
-6. Write rhetorical hype questions ("Sounds crazy, right?")
-7. Address the audience as "guys" or "you" excessively — use occasional "we" for shared exploration
+4. Use clickbait curiosity gaps or rhetorical hype questions ("Sounds crazy, right?")
+5. Make sweeping claims unless EXACTLY in the research
+6. Write scene directions, [SCENE:], or stage directions — narration text ONLY
+7. Say "in today's video" / "welcome back" / any meta-commentary
 
 **WRITING STYLE**:
 - Voice: a great college professor explaining to curious adults
-- Sentence rhythm: mix short declarative ("That's a real number.") with explanatory longer sentences
 - Numbers: spell out small ones, use digits for percentages and dollar figures ("40 to 60 percent", "$100,000 to $300,000")
 - No scene directions, no [SCENE:], no stage directions — narration text only
-- No "in today's video", no "welcome back", no meta-commentary
 
-**${isFirstBatch ? 'OPENING: State the central question or claim directly. No hype intro. Example: "Self-storage businesses regularly post profit margins of 40 to 60 percent. That number sounds high — let\'s look at why it holds."' : 'Continue logically from the previous batch. Use a transitional bridge that references what was just established.'}**
+**${isFirstBatch ? 'OPENING: Open with the most striking number or question. No hype intro. No storytelling preamble.' : 'Continue logically from the previous batch. Use a transitional bridge that references what was just established.'}**
 
-**${isLastBatch ? 'CLOSING: Summarize the 2-3 most important takeaways. Explicitly correct any major misconception from the research. End with a clear, useful conclusion — not a CTA hype line. Example: "The takeaway is simple: boring businesses succeed because demand is constant, not because they\'re easy."' : 'End with a logical bridge into the next batch — not a teaser. Example: "With the profit picture clear, the next question is what actually drives those margins day to day."'}**
+**${isLastBatch ? 'CLOSING: Summarize the 2-3 most important takeaways. Explicitly correct any major misconception from the research. End with a clear, useful conclusion — not a CTA hype line.' : 'End with a logical bridge into the next batch — not a teaser.'}**
 
 Return JSON:
 {
@@ -214,6 +277,9 @@ Deno.serve(async (req) => {
     console.log(`[generateExplainerBatch] ${pendingBatches.length} pending, ${completedBatches.length} completed`);
 
     const batch = pendingBatches[0];
+    const sectionType = extractSectionType(batch.focus_area, batch.batch_number);
+    console.log(`[generateExplainerBatch] Batch ${batch.batch_number} → section_type: ${sectionType}`);
+
     await base44.asServiceRole.entities.ScriptBatches.update(batch.id, { status: 'generating' });
 
     const previousContent = completedBatches
@@ -229,14 +295,15 @@ Deno.serve(async (req) => {
       .join('\n');
 
     const prompt = buildExplainerWritingPrompt({
-      batch, project, topic, sortedBatches,
+      batch, sectionType, project, topic, sortedBatches,
       previousContent, outlineContext, isFirstBatch, isLastBatch,
       researchNotes: project.research_notes,
     });
 
-    console.log(`[generateExplainerBatch] Batch ${batch.batch_number}: ~${batch.target_words} words`);
+    console.log(`[generateExplainerBatch] Batch ${batch.batch_number} (${sectionType}): ~${batch.target_words} words`);
 
-    const baseTemp = 0.55; // Lower than standard (0.85) — explainers reward consistency
+    // Hook section uses tighter temp for snap; body/takeaway slightly looser for teacher warmth
+    const baseTemp = sectionType === 'hook' ? 0.5 : 0.55;
     const minWords = Math.round(batch.target_words * 0.92);
     let content = '';
     let wordCount = 0;
@@ -248,14 +315,14 @@ Deno.serve(async (req) => {
         currentPrompt = prompt;
       } else {
         const wordsNeeded = batch.target_words - wordCount;
-        currentPrompt = `You previously wrote this explainer section but it's too short (${wordCount}/${batch.target_words} words).
+        currentPrompt = `You previously wrote this explainer ${sectionType} section but it's too short (${wordCount}/${batch.target_words} words).
 
 EXISTING CONTENT (do NOT repeat — continue from the last line):
 ---
 ${content.slice(-3000)}
 ---
 
-Write EXACTLY ${wordsNeeded} MORE words continuing the explanation. Same teacherly tone. Add: more step-by-step mechanism detail, more specific numbers from the research, more concrete examples from the research. NO hype, NO teases.
+Write EXACTLY ${wordsNeeded} MORE words continuing the ${sectionType}. ${sectionType === 'hook' ? 'Stay in staccato mode — every sentence ≤ 7 words. Add MORE short sentences, never longer ones.' : 'Same teacherly tone. Add: more step-by-step mechanism detail, more specific numbers from the research, more concrete examples from the research.'} NO hype, NO teases.
 
 Return JSON: {"content": "additional text only...", "word_count": ${wordsNeeded}}`;
       }
@@ -286,7 +353,7 @@ Return JSON: {"content": "additional text only...", "word_count": ${wordsNeeded}
       status: 'completed',
     });
 
-    console.log(`[generateExplainerBatch] ✅ Batch ${batch.batch_number}: ${wordCount} words`);
+    console.log(`[generateExplainerBatch] ✅ Batch ${batch.batch_number} (${sectionType}): ${wordCount} words`);
 
     await base44.asServiceRole.entities.Projects.update(project_id, {
       status: 'scripting',
@@ -301,6 +368,7 @@ Return JSON: {"content": "additional text only...", "word_count": ${wordsNeeded}
     return Response.json({
       success: true,
       completed: 1,
+      section_type: sectionType,
       total_batches: sortedBatches.length,
       remaining: remainingPending,
       done: allDone,

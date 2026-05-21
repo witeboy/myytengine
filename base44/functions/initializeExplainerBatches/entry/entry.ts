@@ -9,6 +9,17 @@ import OpenAI from 'npm:openai@4.58.1';
 
 const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
 
+// Canonical 6-section explainer arc (matches the cuts-per-min cadence table
+// in explainerSceneBreakdown). Section_type drives downstream pacing.
+const EXPLAINER_SECTIONS = [
+  { type: 'hook',         label: 'Hook',          time_pct: 0.10 },
+  { type: 'core_concept', label: 'Core Concept',  time_pct: 0.15 },
+  { type: 'mechanism',    label: 'Mechanism',     time_pct: 0.25 },
+  { type: 'example',      label: 'Worked Example',time_pct: 0.25 },
+  { type: 'application',  label: 'Application',   time_pct: 0.15 },
+  { type: 'takeaway',     label: 'Takeaway',      time_pct: 0.10 },
+];
+
 async function callOpenAI(prompt, temperature = 0.4, retries = 3) {
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
@@ -31,15 +42,20 @@ async function callOpenAI(prompt, temperature = 0.4, retries = 3) {
   }
 }
 
-function buildExplainerOutlinePrompt({ topic, project, numBatches, totalTargetWords, durationMinutes, researchNotes, strategyBlock }) {
-  // Parse research notes into a structured block
+function buildExplainerOutlinePrompt({ topic, project, totalTargetWords, durationMinutes, researchNotes, strategyBlock }) {
   let researchBlock = '';
   if (researchNotes) {
     try {
       const research = typeof researchNotes === 'string' ? JSON.parse(researchNotes) : researchNotes;
       const facts = (research.facts || []).slice(0, 12).map((f, i) => `  ${i + 1}. ${f.claim} [source: ${f.source_name || 'unknown'}]`).join('\n');
-      const numbers = (research.key_numbers || []).slice(0, 12).map((n, i) => `  ${i + 1}. ${n.number} — ${n.context}`).join('\n');
-      const myths = (research.common_misconceptions || []).slice(0, 6).map((m, i) => `  ${i + 1}. MYTH: ${m.myth}\n     TRUTH: ${m.truth}`).join('\n');
+      const numbers = (research.key_numbers || []).slice(0, 12).map((n, i) => {
+        if (typeof n === 'string') return `  ${i + 1}. ${n}`;
+        return `  ${i + 1}. ${n.number || n.value || ''} — ${n.context || ''}`;
+      }).join('\n');
+      const myths = (research.common_misconceptions || []).slice(0, 6).map((m, i) => {
+        if (typeof m === 'string') return `  ${i + 1}. ${m}`;
+        return `  ${i + 1}. MYTH: ${m.myth || ''}\n     TRUTH: ${m.truth || ''}`;
+      }).join('\n');
       researchBlock = `
 **═══ GROUNDED RESEARCH FACTS — USE THESE EXACTLY ═══**
 These are the ONLY facts, numbers, and examples you may reference. Do NOT invent others.
@@ -57,6 +73,12 @@ ${myths || '  (none provided)'}
       researchBlock = `\n**RESEARCH NOTES**: ${researchNotes}\n`;
     }
   }
+
+  // Build per-section spec with allocated words
+  const sectionSpec = EXPLAINER_SECTIONS.map((s, i) => {
+    const wordTarget = Math.round(totalTargetWords * s.time_pct);
+    return `${i + 1}. ${s.label} (${s.type}) — ${Math.round(s.time_pct * 100)}% of video, ~${wordTarget} words`;
+  }).join('\n');
 
   return `You are an elite educational scriptwriter creating a fact-grounded explainer video outline.
 
@@ -86,28 +108,28 @@ ${researchBlock}
 - Use clickbait curiosity gaps — instead, use logical "and here's why" transitions
 - Make claims without backing them in the research notes
 
-**═══ EXPLAINER 5-PART STRUCTURE ═══**
-Map across exactly ${numBatches} batches:
+**═══ FIXED 6-SECTION EXPLAINER ARC ═══**
+You MUST generate exactly 6 batches, one per section:
 
-1. **FRAME** — Define the question/topic in plain terms. State why it matters factually.
-2. **CONTEXT** — Provide background facts, history, scale of the issue (use KEY NUMBERS from research).
-3. **MECHANISM** — Explain HOW it actually works. The core teaching. Step-by-step logic.
-4. **EVIDENCE & EXAMPLES** — Walk through specific cases from the research facts. Cite numbers.
-5. **TAKEAWAY** — Summarize the key insight. Correct misconceptions. End with a clear, useful conclusion.
+${sectionSpec}
 
-${numBatches <= 3 ? `With ${numBatches} batches, combine multiple parts per batch.` :
-numBatches <= 6 ? `With ${numBatches} batches, dedicate roughly one batch per part, with mechanism getting 2.` :
-`With ${numBatches} batches, give mechanism and evidence multiple batches each.`}
+SECTION-SPECIFIC GUIDANCE:
+- HOOK (batch 1): Short punchy sentences. Pose the central question. State the most striking number from research. NO storytelling preamble. World-class hook = Cleo Abram / Vox cold-open density.
+- CORE CONCEPT (batch 2): Define the central idea in plain language. Define terms before using them.
+- MECHANISM (batch 3): How does it actually work? Step-by-step reasoning. This is the longest teaching section.
+- WORKED EXAMPLE (batch 4): Walk through ONE concrete example end-to-end with real numbers from research.
+- APPLICATION (batch 5): Where the viewer encounters this in real life. Practical implications.
+- TAKEAWAY (batch 6): Summarize 2-3 key insights. Correct the biggest misconception. Land the lesson. NO CTA hype.
 
-**YOUR TASK**: Plan exactly ${numBatches} batches.
+**YOUR TASK**: Plan exactly 6 batches matching the section arc above.
 
 Return JSON:
 {
   "batches": [
     {
       "batch_number": 1,
+      "section_type": "hook",
       "story_segment": "Short segment title (3-5 words)",
-      "explainer_part": "FRAME|CONTEXT|MECHANISM|EVIDENCE|TAKEAWAY",
       "focus_area": "Brief focus (1 sentence)",
       "synopsis": "DETAILED synopsis (150-250 words) describing the ACTUAL teaching content. Cite SPECIFIC facts and numbers from the RESEARCH block above. Quote exact percentages and ranges. Name the specific misconceptions being corrected. Show the logical progression — what concept is introduced, what evidence supports it, what conclusion follows. NO hype, NO teases, NO viral phrasing."
     }
@@ -115,7 +137,8 @@ Return JSON:
 }
 
 **RULES**:
-- Generate exactly ${numBatches} batches
+- Generate EXACTLY 6 batches in this exact section order: hook → core_concept → mechanism → example → application → takeaway
+- section_type must be one of: hook, core_concept, mechanism, example, application, takeaway
 - Every synopsis MUST reference at least one specific fact or number from the research block
 - Every claim must be traceable to the research — if it's not in research, don't include it
 - Synopses are PLANS for teaching, not narration drafts
@@ -174,30 +197,18 @@ Deno.serve(async (req) => {
       await base44.asServiceRole.entities.ScriptBatches.delete(batch.id);
     }
 
-    // Calculate batch count
     const durationMinutes = project.video_duration_minutes || 10;
     const wordsPerMinute = 150;
     const totalTargetWords = Math.round(durationMinutes * wordsPerMinute);
-    const WORDS_PER_BATCH = 750; // Explainers benefit from slightly tighter batches for clarity
-    const numBatches = Math.max(2, Math.ceil(totalTargetWords / WORDS_PER_BATCH));
 
-    const batchTargets = [];
-    let wordsRemaining = totalTargetWords;
-    for (let i = 0; i < numBatches; i++) {
-      if (i === numBatches - 1) {
-        batchTargets.push(wordsRemaining);
-      } else {
-        batchTargets.push(WORDS_PER_BATCH);
-        wordsRemaining -= WORDS_PER_BATCH;
-      }
-    }
+    // Per-section word targets driven by time_pct
+    const batchTargets = EXPLAINER_SECTIONS.map(s => Math.max(50, Math.round(totalTargetWords * s.time_pct)));
 
-    console.log(`[initializeExplainerBatches] Project: ${durationMinutes} min → ${totalTargetWords} words → ${numBatches} batches`);
+    console.log(`[initializeExplainerBatches] Project: ${durationMinutes} min → ${totalTargetWords} words → 6 sections`);
     console.log(`[initializeExplainerBatches] Research notes: ${project.research_notes ? 'present' : 'MISSING — content will be ungrounded'}`);
 
-    // Build prompt
     const outlinePrompt = buildExplainerOutlinePrompt({
-      topic, project, numBatches, totalTargetWords, durationMinutes,
+      topic, project, totalTargetWords, durationMinutes,
       researchNotes: project.research_notes,
       strategyBlock,
     });
@@ -209,25 +220,29 @@ Deno.serve(async (req) => {
       throw new Error('AI failed to generate outline batches');
     }
 
-    // Create batch records
+    // Create batch records — tag focus_area with [section_type|sN] so
+    // generateExplainerBatch and explainerSceneBreakdown can read section_type
+    // back via regex (same convention as initializeScriptBatches).
     const createdBatches = [];
-    for (let i = 0; i < numBatches; i++) {
+    for (let i = 0; i < 6; i++) {
       const aiBatch = outlineResult.batches[i];
-      const fallbackSegment = `Part ${i + 1}`;
+      const canonical = EXPLAINER_SECTIONS[i];
+      const sectionType = aiBatch?.section_type || canonical.type;
+      const focusBase = aiBatch?.focus_area || canonical.label;
+      const taggedFocus = `[${sectionType}|s${i + 1}] ${focusBase}`;
 
       const batch = await base44.asServiceRole.entities.ScriptBatches.create({
         project_id,
         batch_number: i + 1,
-        story_segment: aiBatch?.story_segment || fallbackSegment,
-        focus_area: aiBatch?.focus_area || fallbackSegment,
-        synopsis: aiBatch?.synopsis || `Teach approximately ${batchTargets[i]} words for part ${i + 1}, citing research facts.`,
+        story_segment: aiBatch?.story_segment || canonical.label,
+        focus_area: taggedFocus,
+        synopsis: aiBatch?.synopsis || `Teach approximately ${batchTargets[i]} words for ${canonical.label}, citing research facts.`,
         target_words: batchTargets[i],
         status: 'pending'
       });
       createdBatches.push(batch);
     }
 
-    // Update project — preserve project_mode: 'explainer'
     await base44.asServiceRole.entities.Projects.update(project_id, {
       status: 'scripting',
       current_step: 3,
