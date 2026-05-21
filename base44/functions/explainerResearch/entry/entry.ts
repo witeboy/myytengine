@@ -2,7 +2,7 @@
 // Pulls real, sourced facts about the topic using Gemini 2.5 Flash + Google Search grounding.
 // Returns structured JSON the explainer pipeline uses to anchor scripts in reality.
 
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
 
