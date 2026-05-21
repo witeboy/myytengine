@@ -27,9 +27,6 @@ Deno.serve(async (req) => {
 
     // Security: only allow known asset domains
     const allowed = [
-      'tempfile.aiquickdraw.com',
-      'file.aiquickdraw.com',
-      'cdn.aiquickdraw.com',
       'aiquickdraw.com',
       'storage.googleapis.com',
       'firebasestorage.googleapis.com',
@@ -39,11 +36,7 @@ Deno.serve(async (req) => {
       'suno',
       'ideogram.ai',
       'image.pollinations.ai',
-      'oaidalleapiprodscus.blob.core.windows.net',
-      'replicate.delivery',
-      'replicate.com',
-      'r2.cloudflarestorage.com',
-      'myvoicify.app',
+      'oaidalleapiprodscus.blob.core.windows.net', 
     ];
 
     const hostname = new URL(url).hostname;
@@ -63,32 +56,15 @@ Deno.serve(async (req) => {
     const sizeKB = (blob.size / 1024).toFixed(1);
     console.log(`✓ Downloaded: ${sizeKB}KB (${contentType})`);
 
-    const fileBytes = new Uint8Array(await blob.arrayBuffer());
-
-    // Inline as base64 for images <8MB — avoids R2 CORS issues entirely
-    if (blob.size < 8 * 1024 * 1024) {
-      let binary = '';
-      const chunkSize = 32768;
-      for (let i = 0; i < fileBytes.length; i += chunkSize) {
-        binary += String.fromCharCode.apply(null, fileBytes.subarray(i, i + chunkSize));
-      }
-      const b64 = btoa(binary);
-      console.log(`✅ Returning inline base64 (${sizeKB}KB)`);
-      return Response.json({
-        success: true,
-        data: b64,
-        content_type: contentType,
-        size: blob.size,
-      });
-    }
-
-    // Larger files → fall back to R2 upload
+    // Determine file extension
     const ext = contentType.includes('video') ? 'mp4'
       : contentType.includes('png') ? 'png'
       : contentType.includes('webp') ? 'webp'
       : 'jpg';
 
+    // Re-upload to Cloudflare R2 for a CORS-safe URL
     const fileName = `proxy/${Date.now()}.${ext}`;
+    const fileBytes = new Uint8Array(await blob.arrayBuffer());
 
     const r2Client = new S3Client({
       region: 'auto',
