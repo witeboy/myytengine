@@ -3,10 +3,20 @@ import OpenAI from 'npm:openai@4.58.1';
 
 // ═══════════════════════════════════════════════════════════════════
 // EXPLAINER PIPELINE — Step 1: Outline batches anchored to research_notes
+// Auto-runs grounded web research (Gemini + Google Search) if missing.
 // ═══════════════════════════════════════════════════════════════════
 
 const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
+
+const EXPLAINER_SECTIONS = [
+  { type: 'hook',         label: 'Hook',          time_pct: 0.10 },
+  { type: 'core_concept', label: 'Core Concept',  time_pct: 0.15 },
+  { type: 'mechanism',    label: 'Mechanism',     time_pct: 0.25 },
+  { type: 'example',      label: 'Worked Example',time_pct: 0.25 },
+  { type: 'application',  label: 'Application',   time_pct: 0.15 },
+  { type: 'takeaway',     label: 'Takeaway',      time_pct: 0.10 },
+];
 
 function hasUsableResearch(researchNotes) {
   if (!researchNotes) return false;
@@ -14,6 +24,36 @@ function hasUsableResearch(researchNotes) {
     const r = typeof researchNotes === 'string' ? JSON.parse(researchNotes) : researchNotes;
     return ((r.facts || []).length + (r.key_numbers || []).length) >= 4;
   } catch (_) { return false; }
+}
+
+// Resilient JSON parser for citation-heavy Gemini output
+function parseLooseJSON(rawText) {
+  let cleaned = rawText.trim();
+
+  // Strip Gemini citation chips like [1], [2][3]
+  cleaned = cleaned.replace(/\[\d+\](?:\[\d+\])*/g, '');
+
+  // Strip markdown fences
+  if (cleaned.includes('```json')) cleaned = cleaned.split('```json')[1].split('```')[0].trim();
+  else if (cleaned.startsWith('```')) cleaned = cleaned.split('```')[1].split('```')[0].trim();
+
+  // Narrow to outer JSON object
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start !== -1 && end > start) cleaned = cleaned.slice(start, end + 1);
+
+  // Try strict parse
+  try { return JSON.parse(cleaned); } catch (_) {}
+
+  // Aggressive sanitize: strip control chars, trailing commas
+  const sanitized = cleaned
+    .replace(/[\u0000-\u001F]+/g, ' ')
+    .replace(/,\s*([}\]])/g, '$1');
+  try { return JSON.parse(sanitized); } catch (e) {
+    console.error('[parseLooseJSON] Parse error:', e.message);
+    console.error('[parseLooseJSON] Cleaned (first 800):', cleaned.slice(0, 800));
+    throw new Error(`Failed to parse research JSON: ${e.message}`);
+  }
 }
 
 // Grounded web research using Gemini 2.5 Flash + Google Search
@@ -46,43 +86,13 @@ Return ONLY a single valid JSON object (no markdown fences, no citation chips li
   const rawText = parts.map(p => p.text || '').join('').trim();
   if (!rawText) throw new Error('Empty Gemini response');
 
-  // Clean citation markers [1], [2][3], etc.
-  let cleaned = rawText.replace(/\[\d+\](?:\[\d+\])*/g, '').trim();
-
-  let parsed = null;
-  try { parsed = JSON.parse(cleaned); } catch (_) {}
-  if (!parsed) {
-    let jsonStr = cleaned;
-    if (cleaned.includes('```json')) jsonStr = cleaned.split('```json')[1].split('```')[0].trim();
-    else if (cleaned.includes('```')) jsonStr = cleaned.split('```')[1].split('```')[0].trim();
-    try { parsed = JSON.parse(jsonStr); } catch (_) {}
-  }
-  if (!parsed) {
-    const start = cleaned.indexOf('{');
-    const end = cleaned.lastIndexOf('}');
-    if (start !== -1 && end > start) {
-      try { parsed = JSON.parse(cleaned.slice(start, end + 1)); } catch (_) {}
-    }
-  }
-  if (!parsed) {
-    console.error('[researchTopicGrounded] Raw text (first 500):', rawText.slice(0, 500));
-    throw new Error('Failed to parse research JSON');
-  }
+  const parsed = parseLooseJSON(rawText);
   return {
     facts: Array.isArray(parsed.facts) ? parsed.facts : [],
     key_numbers: Array.isArray(parsed.key_numbers) ? parsed.key_numbers : [],
     common_misconceptions: Array.isArray(parsed.common_misconceptions) ? parsed.common_misconceptions : [],
   };
 }
-
-const EXPLAINER_SECTIONS = [
-  { type: 'hook',         label: 'Hook',          time_pct: 0.10 },
-  { type: 'core_concept', label: 'Core Concept',  time_pct: 0.15 },
-  { type: 'mechanism',    label: 'Mechanism',     time_pct: 0.25 },
-  { type: 'example',      label: 'Worked Example',time_pct: 0.25 },
-  { type: 'application',  label: 'Application',   time_pct: 0.15 },
-  { type: 'takeaway',     label: 'Takeaway',      time_pct: 0.10 },
-];
 
 async function callOpenAI(prompt, temperature = 0.4, retries = 3) {
   for (let attempt = 0; attempt < retries; attempt++) {
