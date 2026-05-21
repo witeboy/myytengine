@@ -165,6 +165,10 @@
         "tech"
       ],
       "description": "Einstein character arc for explainer videos \u2014 determines look, behavior, and environment"
+    },
+    "research_notes": {
+      "type": "string",
+      "description": "JSON string of grounded research facts for explainer scripts \u2014 { facts: [{claim, source_url, source_name}], key_numbers: [...], common_misconceptions: [...] }"
     }
   },
   "required": [

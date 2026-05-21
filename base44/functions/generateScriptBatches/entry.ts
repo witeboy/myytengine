@@ -480,8 +480,21 @@ function detectExplainerArc(project, channel) {
 // ═══════════════════════════════════════════════════════════════════
 // EXPLAINER SCRIPT WRITING PROMPT — Einstein arc voice + section-aware
 // ═══════════════════════════════════════════════════════════════════
-function buildExplainerWritingPrompt({ batch, project, topic, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock, explainerArc }) {
+function buildExplainerWritingPrompt({ batch, project, topic, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock, explainerArc, research }) {
   const arc = EXPLAINER_ARCS[explainerArc] || EXPLAINER_ARCS.professor;
+
+  // ── Build research block (Phase B — factual grounding) ──
+  let researchBlock = '';
+  if (research && (research.facts?.length || research.key_numbers?.length || research.common_misconceptions?.length)) {
+    const factsList = (research.facts || []).map((f, i) => `  ${i + 1}. ${f.claim} (Source: ${f.source_name || 'unknown'})`).join('\n');
+    const numbersList = (research.key_numbers || []).map((n, i) => `  ${i + 1}. ${n.number} — ${n.context}`).join('\n');
+    const mythsList = (research.common_misconceptions || []).map((m, i) => `  ${i + 1}. MYTH: ${m.myth}\n     TRUTH: ${m.truth}`).join('\n');
+
+    researchBlock = `\n**═══ APPROVED RESEARCH — your only source of specific facts ═══**\n\n`;
+    if (factsList) researchBlock += `**VERIFIED FACTS** (cite naturally — "according to the Federal Reserve...", "researchers at X found that..."):\n${factsList}\n\n`;
+    if (numbersList) researchBlock += `**APPROVED NUMBERS** (these are the ONLY specific statistics/percentages/dates/dollar amounts you may use):\n${numbersList}\n\n`;
+    if (mythsList) researchBlock += `**MISCONCEPTIONS TO CORRECT**:\n${mythsList}\n\n`;
+  }
 
   return `You are Einstein in the "${arc.label}" arc, teaching a YouTube audience directly. You are writing the EXACT spoken script — every word the host says aloud. This is an EXPLAINER video, not a viral story.
 
@@ -512,7 +525,7 @@ ${arc.diagram_cue_phrases.map(p => `- "${p}"`).join('\n')}
 - Niche: ${project.niche || 'General'}
 - Duration: ${project.video_duration_minutes || 10} minutes
 ${strategyBlock}
-
+${researchBlock}
 **FULL 6-SECTION ARC** (for continuity awareness):
 ${outlineContext}
 
@@ -537,6 +550,15 @@ ${previousContent ? `**PREVIOUSLY WRITTEN** (maintain continuity, do NOT repeat)
 8. Sentence rhythm: vary short punchy sentences with longer explanatory ones. Match Einstein's pacing for this arc.
 9. Address the viewer directly using "you" — Einstein is talking TO them
 10. NO meta-commentary ("welcome back", "today we will discuss", "let me tell you a story") — just teach
+
+**═══ FACT DISCIPLINE (CRITICAL — Phase B) ═══**
+11. **DO NOT FABRICATE STATISTICS.** Every specific percentage, dollar amount, year, or named study you mention MUST appear in the APPROVED RESEARCH block above. If it is not in the research block, you may NOT invent it.
+12. When the research block has the data, USE IT EXACTLY — cite it naturally ("according to the Federal Reserve...", "a 2023 Pew study found..."). Do NOT round wildly or change numbers.
+13. When you need a quantity that is NOT in the research block, use ILLUSTRATIVE LANGUAGE instead of fake precision:
+    ✅ "many people", "for most workers", "roughly half", "a significant portion", "studies consistently show"
+    ❌ "73% of millennials" (fabricated), "$4,287 per year" (fabricated), "in 2019, a study by Harvard..." (fabricated)
+14. The Worked Example section MUST use real numbers from the APPROVED RESEARCH where applicable. If you need to demonstrate a calculation with hypothetical numbers, explicitly say "let's say" or "imagine you have" — make it clear it's illustrative, not factual.
+15. Misconceptions: if the research lists common myths, use them where they fit naturally (especially in Hook or Core Concept sections).
 
 Return JSON:
 {
@@ -591,7 +613,17 @@ Deno.serve(async (req) => {
     // Resolve arc — prefer stored value, else auto-detect from niche
     const explainerArc = isExplainerMode ? (project.explainer_arc || detectExplainerArc(project, channel)) : null;
 
-    console.log(`[generateScriptBatches] Script mode: ${scriptMode}${explainerArc ? ` arc=${explainerArc}` : ''}`);
+    // Phase B — load grounded research for explainer mode
+    let research = null;
+    if (isExplainerMode && project.research_notes) {
+      try {
+        research = typeof project.research_notes === 'string' ? JSON.parse(project.research_notes) : project.research_notes;
+      } catch (e) {
+        console.warn('[generateScriptBatches] Failed to parse research_notes:', e.message);
+      }
+    }
+
+    console.log(`[generateScriptBatches] Script mode: ${scriptMode}${explainerArc ? ` arc=${explainerArc}` : ''}${research ? ` research=${research.facts?.length || 0}f/${research.key_numbers?.length || 0}n` : ''}`);
 
     // Get channel script strategy
     let scriptStrategy = '';
@@ -661,7 +693,7 @@ Deno.serve(async (req) => {
       const prompt = isSleepMode
         ? buildSleepWritingPrompt({ ...promptArgs, scriptMode })
         : isExplainerMode
-          ? buildExplainerWritingPrompt({ ...promptArgs, explainerArc })
+          ? buildExplainerWritingPrompt({ ...promptArgs, explainerArc, research })
           : buildStandardWritingPrompt(promptArgs);
 
       console.log(`[Batch ${batch.batch_number}] Generating ~${batch.target_words} words (${scriptMode})...`);
@@ -687,7 +719,7 @@ EXISTING CONTENT (DO NOT REPEAT — continue SEAMLESSLY from the last line):
 ${content.slice(-3000)}
 ---
 
-Write EXACTLY ${wordsNeeded} MORE words continuing this section. Maintain the same tone, style, and pacing. ${isSleepMode ? 'Add more repetition, more imagery, more [PAUSE] markers, more sensory grounding.' : isExplainerMode ? `Stay in Einstein's "${explainerArc}" arc voice. Add more concrete examples, more specific numbers/formulas/code, more diagram references using the natural cue phrases.` : 'Add more detail, more anecdotes, more specific examples, more emotional beats.'}
+Write EXACTLY ${wordsNeeded} MORE words continuing this section. Maintain the same tone, style, and pacing. ${isSleepMode ? 'Add more repetition, more imagery, more [PAUSE] markers, more sensory grounding.' : isExplainerMode ? `Stay in Einstein's "${explainerArc}" arc voice. Add more concrete examples and diagram references using the natural cue phrases. CRITICAL: do NOT fabricate statistics — only cite numbers that already appeared in your approved research; otherwise use illustrative language like "roughly" or "for many people".` : 'Add more detail, more anecdotes, more specific examples, more emotional beats.'}
 
 Return JSON:
 {"content": "The additional continuation text only...", "word_count": ${wordsNeeded}}`;

@@ -2,6 +2,102 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 import OpenAI from 'npm:openai@4.58.1';
 
 const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
+const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
+
+// ═══════════════════════════════════════════════════════════════════
+// PHASE B — Inline research helper (Gemini 2.5 Flash + Google Search)
+// Same logic as explainerResearch fn, inlined to avoid cross-function permission issues
+// ═══════════════════════════════════════════════════════════════════
+async function fetchGroundedResearch(topicTitle, topicDescription, niche) {
+  if (!GEMINI_KEY) throw new Error('GEMINI_API_KEY not set');
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`;
+
+  const prompt = `You are a research assistant for an educational YouTube explainer video. Use Google Search to find REAL, VERIFIABLE facts about this topic. Do NOT make up statistics, dates, or studies.
+
+**TOPIC**: ${topicTitle}
+**DESCRIPTION**: ${topicDescription || 'N/A'}
+**NICHE**: ${niche || 'general'}
+
+**YOUR TASK**: Find 6-10 concrete facts grounded in real sources. Also find 2-4 common misconceptions people have about this topic. Also find 3-6 specific numbers/percentages/dates that are well-documented (with sources).
+
+**OUTPUT RULES**:
+- Every fact must have a source URL from your search
+- Quote numbers exactly as they appear in the source (don't round wildly)
+- If you can't find a real number for something, OMIT it — don't invent
+- Favor recent sources (last 5 years) and reputable institutions (government data, academic papers, major news outlets, industry reports)
+- For misconceptions, explain the TRUTH that corrects each one
+
+Return ONLY valid JSON (no markdown, no commentary):
+{
+  "facts": [
+    {
+      "claim": "The concrete fact in 1-2 sentences",
+      "source_name": "Name of source (e.g. 'Federal Reserve', 'Pew Research')",
+      "source_url": "https://..."
+    }
+  ],
+  "key_numbers": [
+    {
+      "number": "e.g. '64%' or '$1.4 trillion' or '2019'",
+      "context": "What this number represents",
+      "source_name": "Source name",
+      "source_url": "https://..."
+    }
+  ],
+  "common_misconceptions": [
+    {
+      "myth": "The widespread belief that is wrong",
+      "truth": "The actual reality, with source",
+      "source_url": "https://..."
+    }
+  ]
+}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      tools: [{ googleSearch: {} }],
+      generationConfig: { temperature: 0.3, maxOutputTokens: 8192 },
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(`Gemini research ${response.status}: ${err.error?.message || JSON.stringify(err)}`);
+  }
+
+  const data = await response.json();
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const finishReason = data.candidates?.[0]?.finishReason;
+  console.log(`[research] Gemini finish=${finishReason}, rawText len=${rawText.length}`);
+
+  // Parse
+  let parsed = null;
+  try { parsed = JSON.parse(rawText); } catch (_) {}
+  if (!parsed) {
+    let jsonStr = rawText;
+    if (rawText.includes('```json')) jsonStr = rawText.split('```json')[1].split('```')[0].trim();
+    else if (rawText.includes('```')) jsonStr = rawText.split('```')[1].split('```')[0].trim();
+    try { parsed = JSON.parse(jsonStr); } catch (_) {}
+  }
+  if (!parsed) {
+    const m = rawText.match(/\{[\s\S]*\}/);
+    if (m) { try { parsed = JSON.parse(m[0]); } catch (_) {} }
+  }
+  if (!parsed) {
+    console.error(`[research] First 500 chars: ${rawText.substring(0, 500)}`);
+    console.error(`[research] Last 500 chars: ${rawText.substring(rawText.length - 500)}`);
+    throw new Error('Failed to parse research JSON');
+  }
+
+  return {
+    facts: Array.isArray(parsed.facts) ? parsed.facts : [],
+    key_numbers: Array.isArray(parsed.key_numbers) ? parsed.key_numbers : [],
+    common_misconceptions: Array.isArray(parsed.common_misconceptions) ? parsed.common_misconceptions : [],
+  };
+}
 
 async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
   for (let attempt = 0; attempt < retries; attempt++) {
@@ -123,7 +219,7 @@ const EXPLAINER_SECTIONS = [
 // ═══════════════════════════════════════════════════════════════════
 // EXPLAINER OUTLINE PROMPT — fixed 6-section structure with arc voice
 // ═══════════════════════════════════════════════════════════════════
-function buildExplainerOutlinePrompt({ topic, project, arcKey, totalTargetWords, durationMinutes, strategyBlock }) {
+function buildExplainerOutlinePrompt({ topic, project, arcKey, totalTargetWords, durationMinutes, strategyBlock, research }) {
   const arc = EXPLAINER_ARCS[arcKey] || EXPLAINER_ARCS.professor;
 
   const sectionPlan = EXPLAINER_SECTIONS.map((s, i) => {
@@ -131,6 +227,20 @@ function buildExplainerOutlinePrompt({ topic, project, arcKey, totalTargetWords,
     const targetSeconds = Math.round(durationMinutes * 60 * s.time_pct);
     return `  ${i + 1}. ${s.name} (${Math.round(s.time_pct * 100)}% = ~${targetSeconds}s, ~${targetWords} words, pacing: ${s.pacing})\n     Purpose: ${s.purpose}`;
   }).join('\n');
+
+  // ── Build research block (Phase B — factual grounding) ──
+  let researchBlock = '';
+  if (research && (research.facts?.length || research.key_numbers?.length || research.common_misconceptions?.length)) {
+    const factsList = (research.facts || []).map((f, i) => `  ${i + 1}. ${f.claim} (Source: ${f.source_name || 'unknown'})`).join('\n');
+    const numbersList = (research.key_numbers || []).map((n, i) => `  ${i + 1}. ${n.number} — ${n.context} (Source: ${n.source_name || 'unknown'})`).join('\n');
+    const mythsList = (research.common_misconceptions || []).map((m, i) => `  ${i + 1}. MYTH: ${m.myth}\n     TRUTH: ${m.truth}`).join('\n');
+
+    researchBlock = `\n**═══ GROUNDED RESEARCH (use these REAL facts — do NOT invent your own) ═══**\n\n`;
+    if (factsList) researchBlock += `**VERIFIED FACTS**:\n${factsList}\n\n`;
+    if (numbersList) researchBlock += `**KEY NUMBERS** (use these exact figures; do not invent percentages or statistics):\n${numbersList}\n\n`;
+    if (mythsList) researchBlock += `**COMMON MISCONCEPTIONS** (great material for the Hook or Core Concept sections):\n${mythsList}\n\n`;
+    researchBlock += `**RULE**: Synopses must reference these specific facts/numbers/myths where relevant. The Worked Example section MUST use real numbers from the KEY NUMBERS list. If a synopsis needs a number that isn't here, use illustrative language ("roughly half", "for many people") — NEVER invent specific statistics like "70% of X".\n`;
+  }
 
   return `You are planning an EXPLAINER VIDEO — fundamentally different from viral storytelling. Goal: understanding and trust, not emotional hook retention. Host is Einstein in the "${arc.label}" arc.
 
@@ -155,7 +265,7 @@ ${arc.script_voice}
 - Niche: ${project.niche || 'General'}
 - Duration: ${durationMinutes} minutes (~${totalTargetWords} words at 150 wpm)
 ${strategyBlock}
-
+${researchBlock}
 **THE FIXED 6-SECTION EXPLAINER ARC** — every explainer follows this exact structure:
 ${sectionPlan}
 
@@ -482,7 +592,24 @@ Deno.serve(async (req) => {
     let outlineTemp;
 
     if (isExplainerMode) {
-      outlinePrompt = buildExplainerOutlinePrompt({ topic, project, arcKey, totalTargetWords, durationMinutes, strategyBlock });
+      // ── PHASE B: Research grounding (inline — no cross-fn invoke) ──
+      let research = null;
+      try {
+        console.log('[initializeScriptBatches] Phase B — fetching grounded research...');
+        research = await fetchGroundedResearch(
+          topic?.title || project.name,
+          topic?.description || '',
+          project.niche
+        );
+        console.log(`[initializeScriptBatches] Research: ${research.facts?.length || 0} facts, ${research.key_numbers?.length || 0} numbers, ${research.common_misconceptions?.length || 0} myths`);
+        // Persist so writer can reuse without re-calling
+        await base44.asServiceRole.entities.Projects.update(project_id, {
+          research_notes: JSON.stringify(research),
+        });
+      } catch (researchErr) {
+        console.warn(`[initializeScriptBatches] Research failed (continuing without): ${researchErr.message}`);
+      }
+      outlinePrompt = buildExplainerOutlinePrompt({ topic, project, arcKey, totalTargetWords, durationMinutes, strategyBlock, research });
       outlineTemp = 0.55; // lower temp — explainer needs accuracy + consistency
     } else if (isSleepMode) {
       outlinePrompt = buildSleepOutlinePrompt({ ...promptArgs, scriptMode, channel });
