@@ -70,7 +70,8 @@
         "low_poly_3d_cartoon",
         "roblox",
         "skeleton_protagonist",
-        "afro_nolly_global"
+        "afro_nolly_global",
+        "explainer_diagram"
       ],
       "description": "Visual style for all generated images"
     },
@@ -153,7 +154,17 @@
     },
     "project_mode": {
       "type": "string",
-      "description": "Special project mode \u2014 sleep_meditation, sleep_story, progression, or empty for standard"
+      "description": "Special project mode \u2014 sleep_meditation, sleep_story, explainer, progression, or empty for standard"
+    },
+    "explainer_arc": {
+      "type": "string",
+      "enum": [
+        "science",
+        "professor",
+        "accountant",
+        "tech"
+      ],
+      "description": "Einstein character arc for explainer videos \u2014 determines look, behavior, and environment"
     }
   },
   "required": [
