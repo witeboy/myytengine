@@ -169,8 +169,65 @@ Deno.serve(async (req) => {
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-    // Skip for sleep projects
-    if (project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story') {
+    // Skip for sleep and explainer projects
+    // Explainer uses pre-defined Einstein arc — not script-extracted characters
+    if (
+      project.project_mode === 'sleep_meditation' ||
+      project.project_mode === 'sleep_story' ||
+      project.project_mode === 'explainer'
+    ) {
+      // For explainer: pre-populate Einstein character DNA based on arc
+      if (project.project_mode === 'explainer') {
+        const arcType = project.explainer_arc || 'professor';
+        const einsteinDNA = {
+          science: {
+            name: 'Einstein',
+            role: 'protagonist',
+            identity_core: '70-year-old male, wild untamed white hair sticking out in all directions, prominent bushy white mustache, warm intelligent brown eyes with deep laugh lines, oval face with high cheekbones, slightly ruddy warm skin tone, wiry lean build, 5ft9, wearing rumpled white lab coat over casual shirt, safety goggles pushed up on forehead, animated expressive face showing constant delight at discovery',
+            default_clothing: 'Rumpled white lab coat, safety goggles pushed up on forehead, casual plaid shirt underneath, comfortable worn trousers, sensible shoes',
+            emotional_arc: 'Starts with explosive excitement at introducing the topic, builds to focused intensity during core concepts, reaches peak joy at elegant solutions and aha moments, closes with warm satisfaction',
+            scene_keywords: ['einstein', 'professor', 'scientist', 'he', 'his', 'our host', 'the professor'],
+          },
+          professor: {
+            name: 'Einstein',
+            role: 'protagonist',
+            identity_core: '70-year-old male, wild white hair neatly side-parted for once but still voluminous, prominent bushy white mustache, warm intelligent brown eyes with deep laugh lines, oval face with high cheekbones, slightly ruddy warm skin tone, wiry lean build, 5ft9, wearing tweed jacket with distinctive elbow patches, mismatched socks visible above brogues, holding chalk',
+            default_clothing: 'Brown tweed jacket with leather elbow patches, slightly wrinkled dress shirt, mismatched wool socks, worn brown brogues, piece of chalk always in hand',
+            emotional_arc: 'Opens with theatrical warmth and welcoming energy, becomes passionately focused during concept explanation, uses dramatic pauses for emphasis, closes with proud satisfaction at the viewer having learned something real',
+            scene_keywords: ['einstein', 'professor', 'lecturer', 'he', 'his', 'our professor', 'the lecturer'],
+          },
+          accountant: {
+            name: 'Einstein',
+            role: 'protagonist',
+            identity_core: '70-year-old male, wild white hair slicked back with partial success, prominent bushy white mustache, sharp focused brown eyes behind reading glasses perched on nose, oval face with high cheekbones, slightly ruddy warm skin tone, wiry lean build, 5ft9, wearing sharp charcoal corporate suit with sleeves rolled up, retro calculator watch visible on wrist, animated intense expression when circling numbers',
+            default_clothing: 'Sharp charcoal double-breasted suit, crisp white dress shirt, conservative tie loosened at collar, sleeves rolled up to forearms, retro calculator watch, reading glasses on nose',
+            emotional_arc: 'Opens with laser-focused energy about the financial opportunity, builds intensity as numbers are revealed, reaches peak excitement at elegant mathematical solutions, closes with gleeful satisfaction at the profit potential',
+            scene_keywords: ['einstein', 'the professor', 'financial expert', 'he', 'his', 'our analyst'],
+          },
+          tech: {
+            name: 'Einstein',
+            role: 'protagonist',
+            identity_core: '70-year-old male reimagined as tech visionary, wild white hair with one streak of neon blue, prominent bushy white mustache, sharp bright brown eyes behind thin-framed smart glasses, oval face with high cheekbones, slightly ruddy warm skin tone, wiry lean build, 5ft9, wearing physics-joke graphic tee, over-ear RGB headset around neck, glowing smartphone in hand, effortlessly cool modern energy',
+            default_clothing: 'Physics equation graphic tee, dark slim jeans, clean white sneakers, over-ear RGB headset worn around neck, thin-framed smart glasses, glowing smartphone always in hand or nearby',
+            emotional_arc: 'Opens cool and fast-talking, builds genuine excitement as technology complexity is revealed, reaches peak enthusiasm at elegant technical solutions, closes with knowing satisfaction and a touch of futurism',
+            scene_keywords: ['einstein', 'the developer', 'the tech guy', 'he', 'his', 'our expert', 'the geek'],
+          },
+        };
+
+        const characterData = [einsteinDNA[arcType] || einsteinDNA.professor];
+        await base44.asServiceRole.entities.Projects.update(project_id, {
+          character_descriptions: JSON.stringify(characterData),
+        });
+        console.log(`🧬 Einstein character DNA pre-populated for arc: ${arcType}`);
+        return Response.json({
+          success: true,
+          skipped: false,
+          reason: 'explainer_einstein_prepopulated',
+          arc_type: arcType,
+          character_count: 1,
+        });
+      }
+
       return Response.json({ success: true, skipped: true, reason: 'sleep_project' });
     }
 
