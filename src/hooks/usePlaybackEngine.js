@@ -100,7 +100,7 @@ export default function usePlaybackEngine({
   // Throttle: update React time display at ~10fps (every 100ms), not 60fps
   const DISPLAY_INTERVAL = 0.1; // seconds
 
-  const useAudioClock = useCallback(() => {
+  const hasAudioClock = useCallback(() => {
     const el = audioRef?.current;
     return !!(el && el.src && el.duration && isFinite(el.duration) && el.duration > 0);
   }, [audioRef]);
@@ -110,7 +110,7 @@ export default function usePlaybackEngine({
 
     // ── 1. Read master clock ──────────────────────────────────────
     let t;
-    if (useAudioClock()) {
+    if (hasAudioClock()) {
       t = audioRef.current.currentTime;
     } else {
       const elapsed = (performance.now() - startWallRef.current) / 1000;
@@ -208,7 +208,7 @@ export default function usePlaybackEngine({
 
     rafIdRef.current = requestAnimationFrame(tick);
   }, [
-    totalDuration, useAudioClock, audioRef, musicRef,
+    totalDuration, hasAudioClock, audioRef, musicRef,
     videoClipsRef, captionClipsRef, overlayClipsRef, musicClipsRef,
     previewVideoRef,
     onTimeDisplay, onClipChange, onCaptionsChange, onOverlaysChange, onPlaybackEnd,
@@ -218,7 +218,7 @@ export default function usePlaybackEngine({
     if (isPlayingRef.current) return;
     isPlayingRef.current = true;
 
-    if (useAudioClock()) {
+    if (hasAudioClock()) {
       const audioEl = audioRef.current;
       audioEl.currentTime = playheadRef.current;
       audioEl.play().catch(() => {});
@@ -239,7 +239,7 @@ export default function usePlaybackEngine({
     }
 
     rafIdRef.current = requestAnimationFrame(tick);
-  }, [tick, useAudioClock, audioRef, musicRef, musicClipsRef]);
+  }, [tick, hasAudioClock, audioRef, musicRef, musicClipsRef]);
 
   const pause = useCallback(() => {
     isPlayingRef.current = false;
@@ -255,7 +255,7 @@ export default function usePlaybackEngine({
     const t = Math.max(0, Math.min(totalDuration, time));
     playheadRef.current = t;
 
-    if (useAudioClock()) {
+    if (hasAudioClock()) {
       audioRef.current.currentTime = t;
     }
 
@@ -303,7 +303,7 @@ export default function usePlaybackEngine({
       onOverlaysChange?.(activeOvs);
     }
   }, [
-    totalDuration, useAudioClock, audioRef, musicRef, musicClipsRef,
+    totalDuration, hasAudioClock, audioRef, musicRef, musicClipsRef,
     videoClipsRef, captionClipsRef, overlayClipsRef,
     onTimeDisplay, onClipChange, onCaptionsChange, onOverlaysChange,
   ]);
