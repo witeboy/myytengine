@@ -821,24 +821,46 @@ export default function ContentGeneration() {
         // Calling extractCharacterDNA here would overwrite character_descriptions with generic placeholders
         // and break the Einstein character injection in scene prompts.
 
-        // Step 3: Explainer scene breakdown
+        // Step 3: Explainer scene breakdown — batched/resumable (2 sections per call)
         setImportProgress('Breaking down script into educational scenes and diagrams...');
-        try {
-          const bdResult = await base44.functions.invoke('explainerSceneBreakdown', { project_id: projectId });
-          const bdData = bdResult?.data || bdResult;
-          if (bdData?.error) throw new Error(bdData.error);
-          const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
-          queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
-          setTotalExpectedScenes(freshScenes.length);
-          setImportProgress(`Created ${freshScenes.length} educational scenes — generating image prompts...`);
-        } catch (err) {
-          const status = err?.response?.status || err?.status;
-          if (status === 502 || status === 504) {
-            setImportProgress('Scene breakdown taking longer than expected, checking results...');
-            await new Promise(r => setTimeout(r, 10000));
-          } else {
+        let breakdownDone = false;
+        let nextSection = 0;
+        let totalSections = 6;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10;
+
+        while (!breakdownDone && attempts < MAX_ATTEMPTS) {
+          attempts++;
+          try {
+            const bdResult = await base44.functions.invoke('explainerSceneBreakdown', {
+              project_id: projectId,
+              start_section: nextSection,
+            });
+            const bdData = bdResult?.data || bdResult;
+            if (bdData?.error) throw new Error(bdData.error);
+
+            breakdownDone = bdData.done === true;
+            nextSection = bdData.next_section ?? nextSection;
+            totalSections = bdData.total_sections || totalSections;
+
+            const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+            queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+            setTotalExpectedScenes(Math.max(freshScenes.length, totalSections * 5));
+            setImportProgress(
+              breakdownDone
+                ? `✅ Created ${freshScenes.length} educational scenes — generating image prompts...`
+                : `Breaking down sections ${nextSection}/${totalSections} — ${freshScenes.length} scenes so far...`
+            );
+          } catch (err) {
+            const status = err?.response?.status || err?.status;
+            if (status === 502 || status === 504) {
+              setImportProgress(`Section ${nextSection + 1} taking long — retrying in 8s...`);
+              await new Promise(r => setTimeout(r, 8000));
+              continue;
+            }
             throw err;
           }
+          if (!breakdownDone) await new Promise(r => setTimeout(r, 1500));
         }
 
         // Step 4: Convert director notes → image prompts

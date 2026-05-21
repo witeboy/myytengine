@@ -300,7 +300,8 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id } = await req.json();
+    const { project_id, start_section = 0 } = await req.json();
+    const SECTIONS_PER_CALL = 2; // process 2 sections per invocation to stay under 504
 
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
     const project = projects[0];
@@ -363,21 +364,43 @@ Deno.serve(async (req) => {
       console.warn(`⚠️ No research data found — proceeding without verified facts`);
     }
 
-    // Delete old scenes
-    const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-    if (oldScenes.length > 0) {
-      await Promise.all(
-        oldScenes.map(s => base44.asServiceRole.entities.Scenes.delete(s.id).catch(() => {}))
-      );
-      console.log(`🗑️ Deleted ${oldScenes.length} old scenes`);
+    // Only delete old scenes on the FIRST call (start_section === 0)
+    if (start_section === 0) {
+      const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
+      if (oldScenes.length > 0) {
+        await Promise.all(
+          oldScenes.map(s => base44.asServiceRole.entities.Scenes.delete(s.id).catch(() => {}))
+        );
+        console.log(`🗑️ Deleted ${oldScenes.length} old scenes`);
+      }
     }
 
-    // Process each section sequentially for continuity
-    const allScenes = [];
-    let globalSceneNumber = 1;
-    let continuityNote = 'This is the opening of the video — Einstein enters with maximum personality and energy.';
+    // For resume: figure out where we are in the global scene numbering
+    const existingScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
+    let globalSceneNumber = existingScenes.length > 0
+      ? Math.max(...existingScenes.map(s => s.scene_number || 0)) + 1
+      : 1;
 
-    for (let si = 0; si < outlineSections.length; si++) {
+    // Continuity from last existing scene if resuming
+    let continuityNote = 'This is the opening of the video — Einstein enters with maximum personality and energy.';
+    if (start_section > 0 && existingScenes.length > 0) {
+      const lastScene = existingScenes.sort((a, b) => b.scene_number - a.scene_number)[0];
+      try {
+        const notes = JSON.parse((lastScene.image_prompt || '').replace('DIRECTOR_NOTES:', ''));
+        continuityNote = [
+          `Last section: "${notes.section_title}"`,
+          `Last visual: ${(notes.visual_concept || '').substring(0, 120)}`,
+          `Continuity bridge: ${notes.continuity_bridge || 'none'}`,
+          `Color palette carried: ${notes.color_palette || arcDef.color_palette}`,
+        ].join(' | ');
+      } catch (_) {}
+    }
+
+    // Process limited batch of sections this call
+    const endSection = Math.min(start_section + SECTIONS_PER_CALL, outlineSections.length);
+    const allScenes = [];
+
+    for (let si = start_section; si < endSection; si++) {
       const section = outlineSections[si];
 
       const prompt = buildSectionBreakdownPrompt({
@@ -445,36 +468,7 @@ Deno.serve(async (req) => {
         ].join(' | ');
       }
 
-      console.log(`✅ Section ${si + 1}: ${sectionScenes.length} scenes (total so far: ${allScenes.length})`);
-    }
-
-    // Build beat durations — explainer pacing (longer than shorts)
-    const beatDurations = allScenes.map(s => parseFloat((s.duration_seconds || 4.0).toFixed(2)));
-    const beatStartTimes = [];
-    let offset = 0;
-    beatDurations.forEach(d => {
-      beatStartTimes.push(parseFloat(offset.toFixed(2)));
-      offset += d;
-    });
-
-    // Save production settings
-    const psPayload = {
-      beat_durations: JSON.stringify(beatDurations),
-      beat_start_times: JSON.stringify(beatStartTimes),
-      story_analysis: JSON.stringify({
-        central_theme: project.name,
-        narrative_arc_summary: `Explainer: ${outlineSections.map(s => s.title).join(' → ')}`,
-        visual_world: `Educational explainer | ${arcDef.label} Einstein | ${allScenes.length} scenes | ${arcType} arc`,
-        visual_format: 'explainer_diagram',
-        einstein_arc: arcType,
-        arc_label: arcDef.label,
-      }),
-    };
-
-    if (psList[0]) {
-      await base44.asServiceRole.entities.ProductionSettings.update(psList[0].id, psPayload);
-    } else {
-      await base44.asServiceRole.entities.ProductionSettings.create({ project_id, ...psPayload });
+      console.log(`✅ Section ${si + 1}: ${sectionScenes.length} scenes (total so far this call: ${allScenes.length})`);
     }
 
     // Camera direction map matching existing pipeline
@@ -484,7 +478,8 @@ Deno.serve(async (req) => {
       push_in: 'slow_zoom_in', static: 'static',
     };
 
-    // Build scene records
+    // Build scene records for THIS batch only
+    const batchDurations = allScenes.map(s => parseFloat((s.duration_seconds || 4.0).toFixed(2)));
     const sceneRecords = allScenes.map((scene, i) => {
       const directorNotes = {
         visual_concept: scene.visual_concept || '',
@@ -521,7 +516,7 @@ Deno.serve(async (req) => {
         narration_text: scene.narration_text || '',
         image_prompt: `DIRECTOR_NOTES:${JSON.stringify(directorNotes)}`,
         animation_prompt: scene.camera_direction || 'static',
-        duration_seconds: beatDurations[i],
+        duration_seconds: batchDurations[i],
         camera_movement: cameraMap[scene.camera_direction] || 'static',
         animation_speed: 'normal',
         status: 'breakdown_ready',
@@ -530,25 +525,76 @@ Deno.serve(async (req) => {
       };
     });
 
-    await base44.asServiceRole.entities.Scenes.bulkCreate(sceneRecords);
+    // Save THIS batch incrementally so a future timeout doesn't lose work
+    if (sceneRecords.length > 0) {
+      await base44.asServiceRole.entities.Scenes.bulkCreate(sceneRecords);
+    }
 
-    await base44.asServiceRole.entities.Projects.update(project_id, {
-      status: 'breakdown_complete',
-      current_step: 5,
-    });
+    const isDone = endSection >= outlineSections.length;
 
+    // On final call, compute aggregate beat timings across ALL saved scenes & finalize project
+    if (isDone) {
+      const allSavedScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
+      const sortedAll = allSavedScenes.sort((a, b) => a.scene_number - b.scene_number);
+      const allBeatDurations = sortedAll.map(s => parseFloat((s.duration_seconds || 4.0).toFixed(2)));
+      const allBeatStartTimes = [];
+      let cursor = 0;
+      allBeatDurations.forEach(d => {
+        allBeatStartTimes.push(parseFloat(cursor.toFixed(2)));
+        cursor += d;
+      });
+
+      const psPayload = {
+        beat_durations: JSON.stringify(allBeatDurations),
+        beat_start_times: JSON.stringify(allBeatStartTimes),
+        story_analysis: JSON.stringify({
+          central_theme: project.name,
+          narrative_arc_summary: `Explainer: ${outlineSections.map(s => s.title).join(' → ')}`,
+          visual_world: `Educational explainer | ${arcDef.label} Einstein | ${sortedAll.length} scenes | ${arcType} arc`,
+          visual_format: 'explainer_diagram',
+          einstein_arc: arcType,
+          arc_label: arcDef.label,
+        }),
+      };
+      if (psList[0]) {
+        await base44.asServiceRole.entities.ProductionSettings.update(psList[0].id, psPayload);
+      } else {
+        await base44.asServiceRole.entities.ProductionSettings.create({ project_id, ...psPayload });
+      }
+
+      await base44.asServiceRole.entities.Projects.update(project_id, {
+        status: 'breakdown_complete',
+        current_step: 5,
+      });
+
+      const elapsed = ((Date.now() - callStart) / 1000).toFixed(1);
+      console.log(`🎓 FINAL: ${sortedAll.length} explainer scenes total in ${elapsed}s | total duration: ${cursor.toFixed(1)}s`);
+
+      return Response.json({
+        success: true,
+        done: true,
+        scenes_created: sortedAll.length,
+        sections_processed: outlineSections.length,
+        arc_type: arcType,
+        arc_label: arcDef.label,
+        total_duration_seconds: parseFloat(cursor.toFixed(1)),
+        research_used: !!researchData,
+      });
+    }
+
+    // Partial batch — return resume info
     const elapsed = ((Date.now() - callStart) / 1000).toFixed(1);
-    console.log(`🎓 Created ${sceneRecords.length} explainer scenes in ${elapsed}s | total duration: ${offset.toFixed(1)}s`);
+    console.log(`⏸️  Batch done: sections ${start_section + 1}-${endSection} of ${outlineSections.length} in ${elapsed}s | ${sceneRecords.length} new scenes | resume from section ${endSection}`);
 
     return Response.json({
       success: true,
-      done: true,
-      scenes_created: sceneRecords.length,
-      sections_processed: outlineSections.length,
+      done: false,
+      next_section: endSection,
+      total_sections: outlineSections.length,
+      sections_processed_this_call: endSection - start_section,
+      scenes_created_this_call: sceneRecords.length,
       arc_type: arcType,
       arc_label: arcDef.label,
-      total_duration_seconds: parseFloat(offset.toFixed(1)),
-      research_used: !!researchData,
     });
 
   } catch (error) {
