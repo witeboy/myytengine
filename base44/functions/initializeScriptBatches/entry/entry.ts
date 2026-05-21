@@ -31,11 +31,18 @@ async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
 // Detect sleep script mode from channel or project (v2)
 // ═══════════════════════════════════════════════════════════════════
 function detectScriptMode(channel, project) {
-  // Explicit mode from channel
+  // 1. HIGHEST PRIORITY: explicit project_mode set by the user on the project itself
+  if (project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story') {
+    return project.project_mode;
+  }
+  if (project?.project_mode === 'explainer') {
+    return 'explainer';
+  }
+  // 2. Explicit mode from channel
   if (channel?.script_mode && channel.script_mode !== 'standard') {
     return channel.script_mode;
   }
-  // Auto-detect from niche keywords
+  // 3. Auto-detect from niche keywords
   const niche = (channel?.niche || project?.niche || '').toLowerCase();
   const name = (channel?.name || '').toLowerCase();
   const combined = `${niche} ${name}`;
@@ -160,76 +167,6 @@ Return JSON:
 - Every synopsis: 200-300 words of SPECIFIC soothing content detail
 - NO educational content, NO science, NO advice, NO meta-commentary
 - Content gets progressively more repetitive and slower as it goes`;
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// EXPLAINER OUTLINE PROMPT — listicle / educational structure
-// ═══════════════════════════════════════════════════════════════════
-function buildExplainerOutlinePrompt({ topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock }) {
-  const title = topic?.title || project.name || '';
-  const description = topic?.description || '';
-
-  const listicleMatch = title.match(/^\s*(\d+)\s+/);
-  const itemCount = listicleMatch ? parseInt(listicleMatch[1], 10) : 0;
-  const isListicle = itemCount >= 2 && itemCount <= 20;
-
-  const listicleBlock = isListicle
-    ? `\n**LISTICLE FORMAT DETECTED** — Title implies ${itemCount} discrete items.
-- Plan an INTRO batch (hook + premise + tease the list)
-- Then one batch per item OR group items if ${itemCount} > ${numBatches - 2}
-- End with a CLOSE batch (recap + CTA)
-- For each item batch, the synopsis MUST include:
-  • The item name as a clear header
-  • At least ONE named real-world operator/example with backstory
-  • Concrete dollar figures (revenue, margins, startup cost) — minimum 3 numbers per item
-  • How the mechanic actually works (the boring/unsexy reality)
-  • A "tease the next item" cliffhanger at the end\n`
-    : `\n**EDUCATIONAL EXPLAINER FORMAT** — Plan as concept → mechanics → examples → implications.
-- Each batch should anchor on ONE concrete sub-topic, not abstract themes
-- Every synopsis must include specific named examples, numbers, dates, places
-- No vague "we will explore" framing — describe WHAT will be said\n`;
-
-  return `You are an expert YouTube educator and explainer script planner. You plan scripts in the style of Wendover, Polymatter, Modern MBA, Logically Answered — dense, fact-packed, conversational, packed with specific numbers and real-world examples.
-
-**CRITICAL RULES**:
-❌ NO cinematic novel prose — this is education, not a film treatment
-❌ NO "Dave sat in traffic..." dramatic curtain-raiser openings
-❌ NO TVF phases (HOOK/TENSION/INSIGHT) — those are for viral story scripts
-❌ NO vague themes — every batch must commit to specific facts, names, and numbers
-✅ Casual, conversational educator voice ("here's the thing...", "I know, I know...")
-✅ Density of named operators, dollar figures, mechanics
-✅ Inter-batch teases to maintain retention
-
-**PROJECT**:
-- Title: ${title}
-- Description: ${description}
-- Niche: ${project.niche || 'Educational'}
-- Duration: ${durationMinutes} minutes (~${totalTargetWords} words at 150 wpm)
-${selectedHook ? `- Opening Hook (MUST USE in batch 1): "${selectedHook.hook_text}"` : ''}
-${strategyBlock}
-${listicleBlock}
-
-**YOUR TASK**: Plan exactly ${numBatches} batches.
-
-Return JSON:
-{
-  "batches": [
-    {
-      "batch_number": 1,
-      "story_segment": "Short segment title (3-5 words) — for listicles use the item name",
-      "focus_area": "Brief focus (1 sentence)",
-      "synopsis": "EXTREMELY DETAILED synopsis (200-300 words) describing exactly what the narrator will SAY. Include: specific company/person names, dollar amounts (revenue, costs, margins), how the mechanic works step-by-step, at least one short anecdote, and a tease into the next batch. NO cinematic prose."
-    }
-  ]
-}
-
-**RULES**:
-- Generate exactly ${numBatches} batches
-${selectedHook ? `- Batch 1 MUST open with this hook: "${selectedHook.hook_text}"` : '- Batch 1 must open punchy — premise + tease, no novelistic scene-setting'}
-- Every synopsis: 200-300 words of SPECIFIC, factual detail
-- Every item/concept batch must name AT LEAST one real operator and contain AT LEAST 3 dollar figures
-- Each batch ends with a 1-line tease into the next batch
-- Last batch is a quick recap + CTA naming 2 specific items/concepts viewers should remember`;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -368,9 +305,8 @@ Deno.serve(async (req) => {
     // ── DETECT SCRIPT MODE ──
     const scriptMode = detectScriptMode(channel, project);
     const isSleepMode = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
-    const isExplainerMode = project.project_mode === 'explainer';
 
-    console.log(`[initializeScriptBatches] Script mode: ${scriptMode} | explainer: ${isExplainerMode} (channel: ${channel?.name || 'none'})`);
+    console.log(`[initializeScriptBatches] Script mode: ${scriptMode} (channel: ${channel?.name || 'none'})`);
 
     // ── CALCULATE BATCH COUNT ──
     const durationMinutes = project.video_duration_minutes || 10;
@@ -399,12 +335,10 @@ Deno.serve(async (req) => {
     const promptArgs = { topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock };
     const outlinePrompt = isSleepMode
       ? buildSleepOutlinePrompt({ ...promptArgs, scriptMode, channel })
-      : isExplainerMode
-        ? buildExplainerOutlinePrompt(promptArgs)
-        : buildStandardOutlinePrompt(promptArgs);
+      : buildStandardOutlinePrompt(promptArgs);
 
-    console.log(`Generating detailed outline... (${isSleepMode ? 'sleep' : isExplainerMode ? 'explainer' : 'standard TVF'})`);
-    const outlineResult = await callOpenAI(outlinePrompt, isSleepMode ? 0.6 : isExplainerMode ? 0.75 : 0.7);
+    console.log("Generating detailed outline...");
+    const outlineResult = await callOpenAI(outlinePrompt, isSleepMode ? 0.6 : 0.7);
 
     if (!outlineResult.batches || outlineResult.batches.length === 0) {
       throw new Error("AI failed to generate outline batches");
@@ -428,18 +362,16 @@ Deno.serve(async (req) => {
       createdBatches.push(batch);
     }
 
-    // Update project status — preserve explainer mode, set sleep mode if detected,
-    // otherwise leave project_mode untouched (don't wipe it)
+    // Update project status — ONLY set project_mode if sleep is detected.
+    // NEVER wipe an existing project_mode (sleep/explainer) the user already chose.
     const updatePayload = {
       status: 'scripting',
       current_step: 3,
     };
     if (isSleepMode) {
       updatePayload.project_mode = scriptMode;
-    } else if (!isExplainerMode && project.project_mode && project.project_mode !== 'explainer') {
-      updatePayload.project_mode = '';
     }
-    // If isExplainerMode, leave project_mode as 'explainer' untouched
+    // else: leave project_mode untouched — preserves explainer, sleep, or empty as-is
     await base44.asServiceRole.entities.Projects.update(project_id, updatePayload);
 
     console.log(`Created ${createdBatches.length} batches with detailed outlines (${scriptMode})`);
