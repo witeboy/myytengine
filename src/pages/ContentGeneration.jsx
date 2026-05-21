@@ -768,6 +768,8 @@ export default function ContentGeneration() {
         } catch (_) {}
 
         try {
+          // Check if function exists first — it may not be deployed yet
+          setImportProgress('Researching topic with live web search...');
           const researchResult = await base44.functions.invoke('explainerScriptResearch', {
             project_id: projectId,
             topic: project?.name || '',
@@ -784,8 +786,18 @@ export default function ContentGeneration() {
           const resData = researchResult?.data || researchResult;
           setImportProgress(`✅ Research complete (${resData.sections_researched} sections, confidence: ${Math.round((resData.overall_accuracy_confidence || 0) * 100)}%) — breaking down into scenes...`);
         } catch (researchErr) {
-          console.warn('Research step failed (non-fatal):', researchErr.message);
-          setImportProgress('Research step skipped — proceeding to scene breakdown...');
+          // 404 = function not deployed yet, any other error = API failure
+          // Both are non-fatal — explainerSceneBreakdown works without research
+          const is404 = researchErr?.message?.includes('404') || researchErr?.response?.status === 404;
+          if (is404) {
+            console.warn('explainerScriptResearch not deployed yet — skipping research step');
+            setImportProgress('⚠️ Research function not deployed — skipping to scene breakdown...');
+          } else {
+            console.warn('Research step failed (non-fatal):', researchErr.message);
+            setImportProgress('Research step skipped — proceeding to scene breakdown...');
+          }
+          // Always continue — research enriches but is never a blocker
+          await new Promise(r => setTimeout(r, 1500));
         }
 
         // Step 2: Einstein DNA (character setup)
