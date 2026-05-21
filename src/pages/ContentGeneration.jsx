@@ -664,10 +664,11 @@ export default function ContentGeneration() {
       console.log(`[Pipeline] Resolved mode: ${resolvedMode} (source: ${source}, inferred: ${inferred})`);
 
       // Self-heal: if mode was inferred and project.project_mode is missing/stale, persist it
-      // so downstream functions (scene breakdown, broll, etc.) see the correct mode.
+      // AND refresh the local project cache so downstream rendering sees the new mode.
       if (inferred && resolvedMode !== 'standard' && project?.project_mode !== resolvedMode) {
         try {
           await base44.entities.Projects.update(projectId, { project_mode: resolvedMode });
+          await refetchProject();
           console.log(`[Pipeline] Self-healed project_mode → ${resolvedMode}`);
         } catch (e) {
           console.warn(`[Pipeline] Could not self-heal project_mode: ${e.message}`);
@@ -688,7 +689,13 @@ export default function ContentGeneration() {
         isLongViralProject ? 'longViralSceneBreakdown':
         isExplainerProject ? 'explainerSceneBreakdown':
                              'generateSceneBreakdown';
-      assertBreakdownMatchesMode(chosenBreakdownFn, resolvedMode);
+      try {
+        assertBreakdownMatchesMode(chosenBreakdownFn, resolvedMode);
+      } catch (validationErr) {
+        // Surface validation errors to the user instead of swallowing them silently.
+        setImportProgress(`❌ Pipeline mismatch: ${validationErr.message}`);
+        throw validationErr;
+      }
       console.log(`[Pipeline] Validated → will call "${chosenBreakdownFn}" for mode "${resolvedMode}"`);
 
       if (isSleepProject) {
@@ -977,6 +984,12 @@ export default function ContentGeneration() {
 
     } catch (err) {
       console.error('Scene generation error:', err);
+      // Keep the error message visible briefly so the user knows what happened.
+      // Validation errors already set their own importProgress; preserve it.
+      if (!importProgress.startsWith('❌')) {
+        setImportProgress(`❌ ${err.message || 'Scene generation failed'}`);
+      }
+      await new Promise(r => setTimeout(r, 4000));
     } finally {
       await refetchScenes();
       await refetchProject();
@@ -1467,7 +1480,10 @@ export default function ContentGeneration() {
   const directorNotesCount = scenes.filter(s => s.image_prompt?.startsWith('DIRECTOR_NOTES:')).length;
   const brollCount = scenes.filter(s => s.broll_url && s.broll_url.startsWith('http')).length;
 
-  const isShortsProject = project?.project_mode === 'shorts' || project?.project_mode === 'youtube_shorts' || project?.orientation === 'portrait';
+  // Use the canonical resolver — single source of truth.
+  // Falls back to portrait-orientation heuristic only when no explicit mode is set.
+  const resolvedUiMode = resolveProjectMode(project, null).mode;
+  const isShortsProject = isShortsModeFn(resolvedUiMode);
 
   const videoStatusCounts = videoProgress.sceneStatuses ? {
     queued: Object.values(videoProgress.sceneStatuses).filter(s => s === 'queued').length,
