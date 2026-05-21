@@ -337,6 +337,116 @@ Return JSON:
 // ═══════════════════════════════════════════════════════════════════
 // STANDARD VIRAL SCRIPT WRITING PROMPT
 // ═══════════════════════════════════════════════════════════════════
+function buildExplainerWritingPrompt({ batch, project, topic, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, researchData }) {
+  const arcType = project.explainer_arc || 'professor';
+
+  const arcPersonalities = {
+    science: {
+      label: 'Mad Scientist Einstein',
+      voice: 'Rapid-fire, bursting with excitement, occasionally trails off into mumbling about equations before snapping back, uses "Fascinating!" and "Extraordinary!" liberally, speaks like discovery is happening in real time',
+      catchphrase: 'Eureka! The data does not lie — it evolves!',
+      style: 'High energy, erratic rhythm, short excited sentences mixed with long detailed technical explanations, occasional dramatic gasps at elegant solutions',
+    },
+    professor: {
+      label: 'Academic Lecturer Einstein',
+      voice: 'Warm, theatrical, deeply passionate, uses dramatic pauses, beckons the viewer like sharing a secret, says "Now, here is where it gets interesting" before key insights',
+      catchphrase: 'Class is in session, and curiosity is mandatory!',
+      style: 'Measured but enthusiastic, builds concepts layer by layer, uses "Imagine if..." for analogies, treats complex ideas as delightful puzzles',
+    },
+    accountant: {
+      label: 'Financial Guru Einstein',
+      voice: 'Laser-focused, intensely energetic about numbers and efficiency, says "Let us run the numbers" before any calculation, gets visibly excited about percentages and margins',
+      catchphrase: 'It is mathematically relative — your savings are about to multiply!',
+      style: 'Precise, numbers-forward, uses real figures always, builds from problem to solution methodically, occasional glee when a formula works out cleanly',
+    },
+    tech: {
+      label: 'IT Geek Einstein',
+      voice: 'Fast-talking, tech-savvy, uses technical terms naturally but always explains them, says "Think of it like..." before analogies, occasional pop culture references to tech',
+      catchphrase: 'Simple geometry my friends — let us optimise your workflow!',
+      style: 'Energetic and cool, moves fast between concepts, uses code and diagrams naturally, appreciates elegant solutions with a knowing "Beautiful, right?"',
+    },
+  };
+
+  const arc = arcPersonalities[arcType] || arcPersonalities.professor;
+
+  // Pull research data for this batch if available
+  const batchSectionIndex = batch.batch_number - 1;
+  const researchSection = researchData?.sections?.[batchSectionIndex] || null;
+  const researchBlock = researchSection ? `
+VERIFIED RESEARCH FOR THIS SECTION (use these facts — do NOT invent alternatives):
+Core facts: ${researchSection.core_facts?.join(' | ')}
+Best analogy: ${researchSection.best_analogy}
+Formulas/Code to include: ${researchSection.formulas_or_code?.join(' | ')}
+Misconceptions to address: ${researchSection.misconceptions?.join(' | ')}
+Accuracy notes: ${researchSection.accuracy_notes}
+Key terms: ${JSON.stringify(researchData?.key_terms_glossary || {})}
+` : '';
+
+  return `You are writing one section of an educational explainer video script.
+
+NARRATOR CHARACTER: ${arc.label}
+Voice and personality: ${arc.voice}
+Catchphrase (use sparingly, max once per video): ${arc.catchphrase}
+Writing style: ${arc.style}
+
+ACCURACY MANDATE — THIS IS NON-NEGOTIABLE:
+- Every fact must be verifiable and correct
+- Every formula must be mathematically accurate
+- Every code snippet must be syntactically valid
+- Every statistic must be real — never approximate or invent
+- If you are unsure about a specific fact, write around it or flag with [VERIFY]
+- Accuracy > entertainment. Never sacrifice correctness for a better joke.
+
+${researchBlock}
+
+PROJECT CONTEXT:
+- Topic: ${topic?.title || project.name}
+- Description: ${topic?.description || ''}
+- Duration: ${project.video_duration_minutes || 10} minutes total
+- Arc: ${arc.label}
+
+FULL EXPLAINER OUTLINE (all sections):
+${outlineContext}
+
+YOU ARE NOW WRITING SECTION ${batch.batch_number} of ${sortedBatches.length}: "${batch.story_segment}"
+Section type: ${batch.section_type || 'concept'}
+Focus: ${batch.focus_area}
+
+SECTION BRIEF (follow this closely):
+${batch.synopsis}
+
+Visual aids planned for this section:
+${JSON.stringify(batch.visual_aids_needed || [])}
+
+MANDATORY WORD COUNT: Write AT LEAST ${batch.target_words} words. Non-negotiable.
+
+${previousContent ? `PREVIOUSLY WRITTEN (maintain continuity — do NOT repeat):\n${previousContent.slice(-3000)}\n` : ''}
+
+WRITING RULES:
+1. Write ONLY the words the narrator speaks — no stage directions, no [VISUAL:] tags
+2. The narrator IS Einstein in the ${arc.label} persona — write in first person as him
+3. Explain concepts clearly enough for a smart non-expert to follow
+4. When introducing a formula or equation, READ IT OUT in plain language first, then state it formally
+5. When referencing a diagram say "As you can see here..." or "Look at this diagram..." naturally
+6. Use the verified research facts above — do not invent alternatives
+7. Build each concept before using it — no assumed prior knowledge beyond prerequisites
+8. Use the best analogy from research when introducing abstract concepts
+9. Address misconceptions directly: "Now, many people think X — but that is actually wrong because..."
+10. ${isFirstBatch ? `OPENING: Einstein enters with energy and personality. Start with the catchphrase or a bold curiosity-gap question. Set up what the viewer will know by the end.` : 'Continue seamlessly from the previous section.'}
+11. ${isLastBatch ? `CLOSING: Einstein delivers a memorable summary. Restate the 3 key takeaways. End with the catchphrase moment. Leave the viewer feeling genuinely smarter.` : 'End the section with a bridge sentence that sets up the next concept naturally.'}
+
+DIAGRAM CUE FORMAT:
+When a diagram, formula, or code block should appear on screen, write a natural verbal cue:
+- For diagrams: "Look at this diagram — [describe what viewer sees]"
+- For formulas: "The formula is [read formula in plain language], or written out: [formal notation]"
+- For code: "Here is what this looks like in code — [describe what the code does before showing it]"
+
+Return JSON:
+{
+  "content": "The full narrator script for this section...",
+  "word_count": 1234
+}`;
+}
 function buildStandardWritingPrompt({ batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock }) {
   return `You are an elite YouTube scriptwriter creating a viral narration script.
 
@@ -399,6 +509,9 @@ function buildWritingPrompt(scriptMode, promptArgs) {
   if (scriptMode === 'sleep_meditation') {
     return buildMeditationWritingPrompt(promptArgs);
   }
+  if (scriptMode === 'explainer') {
+    return buildExplainerWritingPrompt(promptArgs);
+  }
   return buildStandardWritingPrompt(promptArgs);
 }
 
@@ -427,9 +540,23 @@ Deno.serve(async (req) => {
 
     // Get selected hook (not used for sleep modes)
     let selectedHook = null;
-    if (project.selected_hook_id) {
+    if (!isExplainer && project.selected_hook_id) {
       const hooks = await base44.asServiceRole.entities.Hooks.filter({ id: project.selected_hook_id });
       selectedHook = hooks[0];
+    }
+
+    // Load research data for explainer mode
+    let researchData = null;
+    if (isExplainer) {
+      const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
+      if (psList[0]?.research_notes) {
+        try { researchData = JSON.parse(psList[0].research_notes); } catch (_) {}
+      }
+      if (researchData) {
+        console.log(`🔬 Research loaded for script writing | confidence: ${researchData.overall_accuracy_confidence}`);
+      } else {
+        console.warn(`⚠️ No research data found — explainer will write without verified facts`);
+      }
     }
 
     // Get channel
@@ -440,16 +567,21 @@ Deno.serve(async (req) => {
     }
 
     // Detect script mode — project_mode is authoritative
-    const scriptMode = (project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story')
+    const scriptMode = (
+      project.project_mode === 'sleep_meditation' ||
+      project.project_mode === 'sleep_story' ||
+      project.project_mode === 'explainer'
+    )
       ? project.project_mode
       : 'standard';
-    const isSleepMode = scriptMode !== 'standard';
+    const isSleepMode = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
+    const isExplainer = scriptMode === 'explainer';
 
     console.log(`[generateScriptBatches] Script mode: ${scriptMode}`);
 
     // Build strategy block (standard mode only — not relevant for sleep)
     let strategyBlock = '';
-    if (!isSleepMode) {
+    if (!isSleepMode && !isExplainer) {
       const scriptStrategy = project.script_strategy_override || channel?.script_strategy || '';
       if (scriptStrategy) {
         try {
@@ -508,13 +640,14 @@ Deno.serve(async (req) => {
         batch,
         project,
         topic,
-        selectedHook: isSleepMode ? null : selectedHook,
+        selectedHook: isSleepMode || isExplainer ? null : selectedHook,
         sortedBatches,
         previousContent,
         outlineContext,
         isFirstBatch,
         isLastBatch,
         strategyBlock,
+        researchData: isExplainer ? researchData : null,
       };
 
       const prompt = buildWritingPrompt(scriptMode, promptArgs);
@@ -524,6 +657,7 @@ Deno.serve(async (req) => {
       // Sleep story uses slightly higher temp for narrative variety; meditation lower for consistency
       const baseTemp = scriptMode === 'sleep_story' ? 0.75
         : scriptMode === 'sleep_meditation' ? 0.65
+        : scriptMode === 'explainer' ? 0.4
         : 0.85;
 
       const minWords = Math.round(batch.target_words * 0.92);
