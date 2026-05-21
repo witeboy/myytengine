@@ -274,10 +274,24 @@ Deno.serve(async (req) => {
     const isLastBatch = batch.batch_number === sortedBatches.length;
     const outlineContext = sortedBatches.map(b => `Batch ${b.batch_number} "${b.story_segment}": ${b.focus_area}`).join('\n');
 
+    // Safety net: fetch grounded research if missing/thin before writing
+    let researchNotes = project.research_notes;
+    if (!hasUsableResearch(researchNotes)) {
+      console.log(`[generateExplainerBatch] No usable research — fetching grounded facts...`);
+      try {
+        const r = await researchTopicGrounded(topic?.title || project.name, topic?.description || '', project.niche);
+        researchNotes = JSON.stringify(r);
+        await base44.asServiceRole.entities.Projects.update(project_id, { research_notes: researchNotes });
+        console.log(`[generateExplainerBatch] ✅ Fetched ${r.facts.length} facts, ${r.key_numbers.length} numbers`);
+      } catch (e) {
+        console.warn(`[generateExplainerBatch] ⚠️ Research fallback failed: ${e.message}`);
+      }
+    }
+
     const prompt = buildExplainerWritingPrompt({
       batch, sectionType, project, topic, sortedBatches,
       previousContent, outlineContext, isFirstBatch, isLastBatch,
-      researchNotes: project.research_notes,
+      researchNotes,
     });
 
     const baseTemp = sectionType === 'hook' ? 0.5 : 0.55;
