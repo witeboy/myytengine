@@ -166,12 +166,22 @@ export default function StoryScript() {
           // batches and scene breakdown can anchor on real facts/numbers.
           // Skip if research_notes already exist (avoid re-spending Gemini calls).
           if (project?.project_mode === 'explainer' && !project?.research_notes) {
-            try {
-              console.log('[explainer] Running grounded research before script init...');
-              await base44.functions.invoke('explainerResearch', { project_id: projectId });
-              await refetchProject();
-            } catch (err) {
-              console.warn('[explainer] Research step failed, continuing without grounded facts:', err.message);
+            const MAX_RESEARCH_RETRIES = 3;
+            for (let attempt = 1; attempt <= MAX_RESEARCH_RETRIES; attempt++) {
+              try {
+                console.log(`[explainer] Running grounded research (attempt ${attempt}/${MAX_RESEARCH_RETRIES})...`);
+                await base44.functions.invoke('explainerResearch', { project_id: projectId });
+                await refetchProject();
+                break;
+              } catch (err) {
+                const status = err?.response?.status || err?.status;
+                console.warn(`[explainer] Research attempt ${attempt} failed (${status}):`, err.message);
+                if (attempt < MAX_RESEARCH_RETRIES) {
+                  await new Promise(r => setTimeout(r, 2000 * attempt));
+                } else {
+                  console.warn('[explainer] Research failed after all retries, continuing without grounded facts');
+                }
+              }
             }
           }
 
@@ -330,11 +340,19 @@ export default function StoryScript() {
     try {
       // Step 0: explainer projects → run grounded research first if missing
       if (isExplainer && !project?.research_notes) {
-        try {
-          await base44.functions.invoke('explainerResearch', { project_id: projectId });
-          await refetchProject();
-        } catch (err) {
-          console.warn('[explainer] Research step failed:', err.message);
+        const MAX_RESEARCH_RETRIES = 3;
+        for (let attempt = 1; attempt <= MAX_RESEARCH_RETRIES; attempt++) {
+          try {
+            await base44.functions.invoke('explainerResearch', { project_id: projectId });
+            await refetchProject();
+            break;
+          } catch (err) {
+            const status = err?.response?.status || err?.status;
+            console.warn(`[explainer] Research attempt ${attempt} failed (${status}):`, err.message);
+            if (attempt < MAX_RESEARCH_RETRIES) {
+              await new Promise(r => setTimeout(r, 2000 * attempt));
+            }
+          }
         }
       }
 
