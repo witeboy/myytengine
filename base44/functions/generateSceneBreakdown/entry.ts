@@ -1140,6 +1140,17 @@ Deno.serve(async (req) => {
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
+    // ── PHASE C ROUTING: explainer projects use the dedicated section-paced breakdown ──
+    if (project.project_mode === 'explainer') {
+      console.log(`[generateSceneBreakdown] Explainer project — routing to explainerSceneBreakdown`);
+      const result = await base44.asServiceRole.functions.invoke('explainerSceneBreakdown', {
+        project_id,
+        batch_index: startBatch,
+      });
+      // Forward the response from the explainer handler
+      return Response.json(result.data || result);
+    }
+
     const allScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
     const script = allScripts.find(s => s.version === 'final_aggregated');
     if (!script?.full_script) {

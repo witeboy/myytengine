@@ -459,10 +459,19 @@ const EXPLAINER_ARCS = {
     label: 'IT Geek',
     trigger_niches: ['software', 'ai', 'machine learning', 'cybersecurity', 'web development', 'data science', 'cloud', 'blockchain', 'api', 'programming', 'tech', 'devops', 'coding', 'technology'],
     script_voice: `Fast-talking, tech-savvy, effortlessly cool. "Think of it like..." before every analogy. "Beautiful, right?" after elegant solutions. Uses technical terms naturally then immediately explains them.`,
-    environment: `Futuristic tech hub — neon-lit server racks, floating holographic code editors, RGB ambient lighting`,
+    environment: `Dark techy room — large monitor behind, MacBook open with AI logos, small robot mascot on desk, blue rim + warm key light`,
     catchphrase: `Simple geometry my friends — let us optimise your workflow!`,
     diagram_cue_phrases: ['Pull up the code —', 'Check out this architecture:', 'Think of it like this —', 'Here is the flow:', 'Watch the data move —'],
     pacing_note: 'Medium-fast — technical density needs time but energy stays high.',
+  },
+  maker: {
+    label: 'DIY Workshop Maker',
+    trigger_niches: ['diy', 'woodworking', 'crafts', 'homestead', 'home improvement', 'maker', 'building', 'tools', 'gardening', 'hands-on', 'workshop', 'repair', 'restoration'],
+    script_voice: `Hands-on, encouraging, plain-spoken. "Let me show you how this comes together." "See that? Simple — but you gotta do it right." Frequent step-by-step demonstrations with tools in hand.`,
+    environment: `Warm workshop — pegboard of tools, wooden workbench with project in progress, sawdust, pendant lamp warm overhead, chalkboard checklist`,
+    catchphrase: `Measure twice, cut once — craftsmanship lasts a lifetime!`,
+    diagram_cue_phrases: ['Take a look at this —', 'Step one, watch carefully —', 'Here is how it fits together:', 'Notice this part here:', 'Just like that —'],
+    pacing_note: 'Steady and deliberate — like a craftsman demonstrating each step.',
   },
 };
 
@@ -483,6 +492,55 @@ function detectExplainerArc(project, channel) {
 function buildExplainerWritingPrompt({ batch, project, topic, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock, explainerArc, research }) {
   const arc = EXPLAINER_ARCS[explainerArc] || EXPLAINER_ARCS.professor;
 
+  // Detect section_type from focus_area prefix (set by initializeScriptBatches)
+  const sectionMatch = (batch.focus_area || '').match(/^\[(\w+)\|scenes:(\d+)\]/);
+  const sectionType = sectionMatch ? sectionMatch[1] : null;
+  const sceneCount = sectionMatch ? parseInt(sectionMatch[2], 10) : null;
+  const isHookSection = sectionType === 'hook';
+  const isTakeawaySection = sectionType === 'takeaway';
+
+  // ── Hook section gets the VIRAL STACCATO mandate ──
+  const hookViralBlock = isHookSection ? `
+
+**═══ HOOK SECTION — VIRAL VIEWER PSYCHOLOGY (CRITICAL) ═══**
+
+This is the HOOK. The first 15 seconds decide if the viewer stays. Write it like a viral creator (MrBeast / Veritasium / Cleo Abram), not like a lecturer.
+
+**MANDATORY SOUND-BITE PATTERNS** (include AT LEAST 3 of these, naturally placed in the first 15s of script):
+- "But wait — look at this number" or "Look at this figure"
+- "Most people get this completely wrong"
+- "This changes everything"
+- "Watch what happens next" / "Stay with me"
+- "${arc.diagram_cue_phrases[0]}" (arc-specific lead-in)
+
+**WRITING STRUCTURE** — write as ${sceneCount} short punchy beats, each beat = one short sentence (avg 8-15 words) Einstein speaks aloud:
+- Beat 1 (2s): "In this video..." + the shocking promise
+- Beat 2-3 (4s): the surprising number or myth (use real data from research above)
+- Beat 4-5 (4s): pattern interrupt — "Most people get this wrong"
+- Beat 6-8 (6s): stakes elevation — what changes if they understand this
+- Beat 9-10 (4s): forward promise — "Stay with me" / "Watch what happens"
+- Beat 11-12 (6s): set up the Core Concept (next section)
+
+**STACCATO RULES**:
+- Each sentence MUST be punchy and standalone — no compound run-on sentences
+- Vary sentence length: 4-word punches between 15-word reveals
+- Land at least 2 dramatic ONE-WORD or TWO-WORD sentences ("Look.", "Watch this.", "Wrong.")
+- The energy here is HIGH — Einstein is grabbing the viewer by the collar
+- Sentences must read like beats — perfect for fast cutting in editing` : '';
+
+  const takeawayBlock = isTakeawaySection ? `
+
+**═══ TAKEAWAY SECTION — LANDING THE CATCHPHRASE ═══**
+
+This is the FINAL section. Slow the pace. Land the insight. The catchphrase "${arc.catchphrase}" MUST appear as a quotable closing line — set it up emotionally first, then deliver it.
+
+Structure as ${sceneCount} measured beats:
+- Recap the one key insight in plain language
+- Mention the worked example outcome briefly
+- Build to the catchphrase with one set-up sentence
+- Deliver the catchphrase
+- One final memorable takeaway line the viewer screenshots` : '';
+
   // ── Build research block (Phase B — factual grounding) ──
   let researchBlock = '';
   if (research && (research.facts?.length || research.key_numbers?.length || research.common_misconceptions?.length)) {
@@ -498,12 +556,13 @@ function buildExplainerWritingPrompt({ batch, project, topic, sortedBatches, pre
 
   return `You are Einstein in the "${arc.label}" arc, teaching a YouTube audience directly. You are writing the EXACT spoken script — every word the host says aloud. This is an EXPLAINER video, not a viral story.
 
-**EXPLAINER VS VIRAL — Critical Differences**:
+**EXPLAINER VS VIRAL — Critical Differences** (applies to sections 2-6):
 - Goal: viewer UNDERSTANDS the concept (NOT emotional manipulation)
 - Voice: Einstein teaching directly in first person (NOT third-person narrator)
-- Pacing: measured and breathable (NOT staccato cuts)
-- NO "but wait", NO "here's the shocking truth", NO fake curiosity gaps
+- Pacing: measured and breathable (NOT staccato cuts) — EXCEPT the Hook section which IS staccato by design
+- For sections 2-6: NO "but wait", NO "here's the shocking truth", NO fake curiosity gaps
 - Earn trust through clarity, not through manipulation
+${hookViralBlock}${takeawayBlock}
 
 **YOUR EINSTEIN ARC — ${arc.label}**:
 
@@ -542,7 +601,7 @@ ${previousContent ? `**PREVIOUSLY WRITTEN** (maintain continuity, do NOT repeat)
 
 1. Write ONLY spoken words — exactly what Einstein says aloud
 2. NO scene directions, NO [SCENE:], NO [VISUAL:], NO stage directions in brackets
-3. ${isFirstBatch ? '**MANDATORY**: The very first words must be "In this video" — non-negotiable. Then continue with what Einstein will explain.' : 'Continue seamlessly from where the previous section ended — no re-greeting, no restart, no summary of previous section'}
+3. ${isFirstBatch ? '**MANDATORY**: The very first words must be "In this video" — non-negotiable. Then continue with the staccato hook beats as specified in the HOOK block above.' : 'Continue seamlessly from where the previous section ended — no re-greeting, no restart, no summary of previous section'}
 4. When Einstein references a diagram/formula/code, introduce it NATURALLY using his cue phrases above (e.g. "${arc.diagram_cue_phrases[0]}"). The visual cue should sound like natural speech, not a stage direction.
 5. Write SPECIFIC concrete content — actual formulas spoken in words ("A equals P times one plus r over n"), actual numbers ("one hundred dollars a month at ten percent for thirty years gives you nearly two hundred thousand dollars"), actual code logic. NEVER use placeholders.
 6. Maintain Einstein's ${arc.label} voice quirks throughout — his speech patterns must shine through
