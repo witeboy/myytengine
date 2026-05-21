@@ -162,30 +162,8 @@ export default function StoryScript() {
             await base44.entities.ScriptBatches.delete(b.id);
           }
 
-          // Step 0: Explainer projects → run grounded research FIRST so script
-          // batches and scene breakdown can anchor on real facts/numbers.
-          // Skip if research_notes already exist (avoid re-spending Gemini calls).
-          if (project?.project_mode === 'explainer' && !project?.research_notes) {
-            const MAX_RESEARCH_RETRIES = 3;
-            for (let attempt = 1; attempt <= MAX_RESEARCH_RETRIES; attempt++) {
-              try {
-                console.log(`[explainer] Running grounded research (attempt ${attempt}/${MAX_RESEARCH_RETRIES})...`);
-                await base44.functions.invoke('explainerResearch', { project_id: projectId });
-                await refetchProject();
-                break;
-              } catch (err) {
-                const status = err?.response?.status || err?.status;
-                console.warn(`[explainer] Research attempt ${attempt} failed (${status}):`, err.message);
-                if (attempt < MAX_RESEARCH_RETRIES) {
-                  await new Promise(r => setTimeout(r, 2000 * attempt));
-                } else {
-                  console.warn('[explainer] Research failed after all retries, continuing without grounded facts');
-                }
-              }
-            }
-          }
-
-          // Step 1: Create batch outlines — route explainer to its own pipeline
+          // Step 1: Create batch outlines — route explainer to its own pipeline.
+          // initializeExplainerBatches auto-runs grounded research internally when missing.
           const initFn = isExplainer ? 'initializeExplainerBatches' : 'initializeScriptBatches';
           await base44.functions.invoke(initFn, { project_id: projectId });
           await refetchBatches();
