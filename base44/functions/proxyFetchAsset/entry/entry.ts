@@ -28,6 +28,9 @@ Deno.serve(async (req) => {
     // Security: only allow known asset domains
     const allowed = [
       'tempfile.aiquickdraw.com',
+      'file.aiquickdraw.com',
+      'cdn.aiquickdraw.com',
+      'aiquickdraw.com',
       'storage.googleapis.com',
       'firebasestorage.googleapis.com',
       'cdn.base44.app',
@@ -36,7 +39,11 @@ Deno.serve(async (req) => {
       'suno',
       'ideogram.ai',
       'image.pollinations.ai',
-      'oaidalleapiprodscus.blob.core.windows.net', 
+      'oaidalleapiprodscus.blob.core.windows.net',
+      'replicate.delivery',
+      'replicate.com',
+      'r2.cloudflarestorage.com',
+      'myvoicify.app',
     ];
 
     const hostname = new URL(url).hostname;
