@@ -49,7 +49,19 @@ export default function StoryScript() {
 
 
 
+  // Self-heal: if explainer_arc is set but project_mode is empty, treat as explainer.
+  // (Older projects created before project_mode was reliably saved.)
+  useEffect(() => {
+    if (!project) return;
+    if (!project.project_mode && project.explainer_arc) {
+      base44.entities.Projects.update(projectId, { project_mode: 'explainer' })
+        .then(() => refetchProject())
+        .catch(() => {});
+    }
+  }, [project?.id, project?.project_mode, project?.explainer_arc]);
+
   const isShorts = project?.project_mode === 'youtube_shorts';
+  const effectiveMode = project?.project_mode || (project?.explainer_arc ? 'explainer' : '');
 
   const completedCount = batches.filter(b => b.status === 'completed').length;
   const stuckCount = batches.filter(b => b.status === 'generating').length;
@@ -341,17 +353,17 @@ export default function StoryScript() {
         {/* ── Mode Confirmation Banner — proves which writing pipeline will run ── */}
         {project && (
           <div className={`rounded-lg px-4 py-2.5 mb-4 flex items-center gap-2 text-sm border ${
-            project.project_mode
+            effectiveMode
               ? 'bg-emerald-50 border-emerald-200'
               : 'bg-amber-50 border-amber-300'
           }`}>
-            {project.project_mode ? (
+            {effectiveMode ? (
               <>
                 <span className="text-emerald-700 font-medium">✅ Writing in mode:</span>
                 <span className="font-mono font-semibold text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded">
-                  {project.project_mode}
+                  {effectiveMode}
                 </span>
-                {project.project_mode === 'explainer' && (
+                {effectiveMode === 'explainer' && (
                   <>
                     <span className="text-emerald-700">·</span>
                     <select
