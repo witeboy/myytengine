@@ -98,6 +98,7 @@ function detectScriptMode(channel, project) {
   const combined = `${channel?.niche || ''} ${channel?.name || ''} ${project?.niche || ''}`.toLowerCase();
   if (/sleep\s*stor|bedtime\s*stor/i.test(combined)) return 'sleep_story';
   if (/sleep|meditation|relax|calm|sooth|asmr|bedtime/i.test(combined)) return 'sleep_meditation';
+  if (/explainer|how.?to|tutorial|education|learn|teach|concept|technology/i.test(combined)) return 'explainer';
   return 'standard';
 }
 
@@ -261,6 +262,81 @@ Return only valid JSON:
 Generate exactly ${numBatches} chapters.`;
 }
 
+function buildExplainerOutlinePrompt({ topic, project, numBatches, totalTargetWords, durationMinutes }) {
+  const arcType = project.explainer_arc || 'professor';
+  const arcLabels = {
+    science:    'Mad Scientist Einstein (lab coat, goggles, test tubes)',
+    professor:  'Academic Lecturer Einstein (tweed jacket, chalk, whiteboard)',
+    accountant: 'Financial Guru Einstein (sharp suit, calculator watch)',
+    tech:       'IT Geek Einstein (graphic tee, RGB headset, holographic screen)',
+  };
+  const arcLabel = arcLabels[arcType] || arcLabels.professor;
+
+  const EXPLAINER_SECTIONS = [
+    { title: 'Hook & Introduction',    purpose: 'Einstein character intro, establish why this topic matters today, what the viewer will learn, create curiosity gap' },
+    { title: 'Core Concept',           purpose: 'Define the central idea clearly, break down key terminology, establish the mental model the viewer needs' },
+    { title: 'The Mechanism / How It Works', purpose: 'Explain the underlying mechanics step by step, include diagrams/formulas/code where relevant, no hand-waving' },
+    { title: 'Worked Example',         purpose: 'Concrete real-world example or case study, walk through it step by step, show the concept in action with real numbers' },
+    { title: 'Real-World Application', purpose: 'Where and how this is used in practice today, industry examples, why it matters beyond the classroom' },
+    { title: 'Summary & Key Takeaways', purpose: 'Einstein character recap, 3-5 bullet point key lessons, memorable closing thought, call to action for next steps' },
+  ];
+
+  const sections = EXPLAINER_SECTIONS.slice(0, Math.max(numBatches, EXPLAINER_SECTIONS.length)).slice(0, numBatches);
+
+  return `You are an expert educational content strategist creating an explainer video outline.
+
+**CONTENT TYPE**: Educational Explainer — accurate, concept-driven, taught by ${arcLabel}.
+
+**ACCURACY MANDATE — NON-NEGOTIABLE**:
+Every fact, formula, statistic, and code snippet must be correct.
+Flag anything uncertain with [VERIFY].
+Prefer specific numbers over vague claims.
+Prefer concrete examples over abstract descriptions.
+
+**FORBIDDEN CONTENT**:
+❌ Viral hooks or clickbait framing
+❌ Unverified statistics or made-up examples  
+❌ Oversimplified explanations that sacrifice accuracy
+❌ Filler phrases like "in today's fast-paced world"
+❌ References to views, likes, or YouTube metrics
+
+**PROJECT**:
+- Topic: ${topic?.title || project.name}
+- Description: ${topic?.description || ''}
+- Einstein Arc: ${arcLabel}
+- Duration: ${durationMinutes} minutes (~${totalTargetWords} words at 150 wpm)
+- Niche: ${project.niche || 'education'}
+
+**EXPLAINER SECTION STRUCTURE** (map ${numBatches} batches across these):
+${sections.map((s, i) => `  ${i + 1}. ${s.title}: ${s.purpose}`).join('\n')}
+
+**DIAGRAM & VISUAL PLANNING**:
+For each section, identify which visual aids are needed:
+- Concept diagrams (flowcharts, architecture diagrams, hierarchies)
+- Formula panels (mathematical equations, derivations)
+- Code blocks (syntax-highlighted code snippets)
+- Comparison tables (side-by-side feature comparisons)
+- Analogy scenes (real-world visual metaphors)
+
+Return JSON:
+{
+  "batches": [
+    {
+      "batch_number": 1,
+      "story_segment": "Section title (3-5 words)",
+      "section_type": "intro or concept or mechanism or example or application or summary",
+      "focus_area": "One sentence: what the viewer learns in this section",
+      "synopsis": "200-300 words: exact content to cover — specific facts, formulas, examples, diagrams needed. Be precise enough that a writer can produce 100% accurate content from this alone.",
+      "visual_aids_needed": ["concept_diagram: [description]", "formula_panel: [actual formula]", "code_block: [language and what it shows]"],
+      "key_facts": ["specific verifiable fact 1", "fact 2"],
+      "einstein_moment": "How Einstein character appears or reacts in this section"
+    }
+  ]
+}
+
+Generate exactly ${numBatches} batches covering the full explainer arc.`;
+}
+
 function buildStandardOutlinePrompt({ topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock }) {
   const TVF_PHASES = [
     { phase: 'HOOK', purpose: 'Open with a powerful attention trigger — shocking statement, contrarian truth, bold question, dramatic result, or hidden secret.' },
@@ -346,6 +422,7 @@ Deno.serve(async (req) => {
     const isSleepMode   = resolvedScriptMode === 'sleep_meditation' || resolvedScriptMode === 'sleep_story';
     const isSleepStory  = resolvedScriptMode === 'sleep_story';
     const isMeditation  = resolvedScriptMode === 'sleep_meditation';
+    const isExplainer   = resolvedScriptMode === 'explainer';
 
     console.log(`[initializeScriptBatches] mode=${resolvedScriptMode} channel=${channel?.name || 'none'}`);
 
@@ -369,9 +446,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Sleep projects don't use hooks
+    // Sleep and explainer projects don't use hooks
     let selectedHook = null;
-    if (!isSleepMode && project.selected_hook_id) {
+    if (!isSleepMode && !isExplainer && project.selected_hook_id) {
       const hooks = await base44.asServiceRole.entities.Hooks.filter({ id: project.selected_hook_id });
       selectedHook = hooks[0] || null;
     }
@@ -395,6 +472,7 @@ Deno.serve(async (req) => {
     let outlinePrompt;
     if (isMeditation)      outlinePrompt = buildMeditationOutlinePrompt(promptArgs);
     else if (isSleepStory) outlinePrompt = buildSleepStoryOutlinePrompt(promptArgs);
+    else if (isExplainer)  outlinePrompt = buildExplainerOutlinePrompt(promptArgs);
     else                   outlinePrompt = buildStandardOutlinePrompt(promptArgs);
 
     const temperature = isSleepStory ? 0.85 : isMeditation ? 0.6 : 0.7;
