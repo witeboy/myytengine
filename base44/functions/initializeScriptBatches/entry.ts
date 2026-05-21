@@ -632,11 +632,22 @@ Deno.serve(async (req) => {
       const aiBatch = outlineResult.batches[i];
       const fallbackSegment = isExplainerMode ? EXPLAINER_SECTIONS[i]?.name || `Section ${i + 1}` : `Part ${i + 1}`;
 
+      // For explainer mode: tag focus_area with section_type prefix so scene breakdown can detect it
+      let focusArea = aiBatch?.focus_area || fallbackSegment;
+      if (isExplainerMode) {
+        const canonicalSectionType = EXPLAINER_SECTIONS[i]?.section_type;
+        const aiSectionType = aiBatch?.section_type;
+        const sectionType = canonicalSectionType || aiSectionType;
+        if (sectionType && !focusArea.startsWith('[')) {
+          focusArea = `[${sectionType}|s${i + 1}] ${focusArea}`;
+        }
+      }
+
       const batch = await base44.asServiceRole.entities.ScriptBatches.create({
         project_id,
         batch_number: i + 1,
         story_segment: aiBatch?.story_segment || fallbackSegment,
-        focus_area: aiBatch?.focus_area || fallbackSegment,
+        focus_area: focusArea,
         synopsis: aiBatch?.synopsis || `Write approximately ${batchTargets[i]} words for part ${i + 1}.`,
         target_words: batchTargets[i],
         status: 'pending'

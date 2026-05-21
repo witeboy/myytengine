@@ -1,349 +1,342 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-// Phase C — Explainer Scene Breakdown
-// Generates section-paced scenes (12+8+10+8+8+4 = 50 total) with mixed shot types
-// (Einstein establishing + diagram inserts + B-roll cuts + text slams + close-ups)
-// Locked to the 5 Einstein visual arcs (science, professor, accountant, tech, maker).
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-const OPENAI_KEY = Deno.env.get('OPENAI_API_KEY');
-const GEMINI_KEY = Deno.env.get('GEMINI_API_KEY');
+// ══════════════════════════════════════════════════════════════════
+// EXPLAINER SCENE BREAKDOWN ENGINE v1
+// Diagram-first scene breakdown for educational explainer videos.
+//
+// SCENE RULES (explainer-optimised):
+// 1. Each concept beat = 1+ scenes depending on complexity
+// 2. Diagrams, schemas, formulas, code blocks = dedicated scene panels
+// 3. Einstein character appears in intro/transition/outro scenes
+// 4. AI decides scene count per concept based on complexity
+//
+// CHARACTER: Einstein arc system
+//   science    → Mad Scientist (lab coat, goggles, test tubes)
+//   professor  → Academic Lecturer (tweed jacket, chalk, whiteboard)
+//   accountant → Financial Guru (suit, calculator watch, glasses)
+//   tech       → IT Geek (graphic tee, RGB headset, holographic screen)
+//
+// VISUAL STYLE: explainer_diagram (clean 3D, subject-matter-expert aura)
+// ══════════════════════════════════════════════════════════════════
 
-// ═══════════════════════════════════════════════════════════════════
-// 5-ARC VISUAL DNA — every Einstein scene anchors to these blocks
-// ═══════════════════════════════════════════════════════════════════
-const ARC_VISUAL_DNA = {
-  science: {
-    label: 'Mad Scientist',
-    outfit: 'Crisp white lab coat over olive sweater, glasses pushed up, safety goggles around neck',
-    environment: 'Cluttered laboratory — glowing test tubes, bubbling beakers, chalkboards covered in equations, holographic 3D molecular structures, warm tungsten lamps mixed with electric blue glow',
-    signature_props: 'Glowing test tubes in rack, bubbling beaker, holographic 3D molecular structure floating mid-air, chalkboard covered in equations',
-    branded_mug: 'Coffee mug labeled "EUREKA"',
-    diagram_style: 'Hand-drawn equations in white chalk, molecular structures, particle diagrams, data plots, glowing holographic 3D models',
-    diagram_bg: 'Dark green or black chalkboard, OR floating holographic display with electric blue accents',
-    color_palette: 'Deep teal #1A3A3F, electric blue #4FD1E0, warm amber lab light #D4A574, off-white lab coat #F5F5F0',
-    catchphrase: 'Eureka!',
-  },
-  professor: {
-    label: 'Academic Lecturer',
-    outfit: 'Tweed jacket with elbow patches over white shirt, bow tie, glasses, holding white chalk',
-    environment: 'Grand lecture hall — floor-to-ceiling green chalkboard, stacked books on oak desk, tall arched windows with warm afternoon light, leather wing chair',
-    signature_props: 'Green chalkboard with handwritten concept map, classic books, oak desk, arched windows',
-    branded_mug: 'Ceramic mug labeled "CURIOSITY IS MANDATORY"',
-    diagram_style: 'Clean concept maps with arrows, flowcharts, timeline diagrams, comparison tables — all hand-drawn in white chalk',
-    diagram_bg: 'Green chalkboard with subtle chalk dust texture',
-    color_palette: 'Dark forest green #1B3A2A, warm amber #D4A574, cream paper #F5EFE0, deep brown #4A2E1A',
-    catchphrase: 'Class is in session!',
-  },
-  accountant: {
-    label: 'Financial Guru',
-    outfit: 'Tailored grey vest over crisp white shirt and tie, glasses on',
-    environment: 'Warm wood-paneled study or modern boardroom — green chalkboard headlined "MAKE MONEY / MANAGE MONEY / BUILD FREEDOM" with EARN/SAVE/INVEST/GROW icons, finance books spine-out (RICH DAD POOR DAD, THE INTELLIGENT INVESTOR, INVESTING 101, THE PSYCHOLOGY OF MONEY), warm amber lighting',
-    signature_props: 'Calculator, stacked gold coins, cash bundles, "Financial Plan" notebook with checklist, stack of finance books',
-    branded_mug: 'Coffee mug labeled "COMPOUND CONSISTENCY FREEDOM"',
-    diagram_style: 'Bar charts, pie charts, compound interest curves, balance sheets, dollar amounts in bold typography, before/after comparison tables',
-    diagram_bg: 'Green chalkboard with chalk-drawn financial diagrams, OR clean dark slate with gold/green chart accents',
-    color_palette: 'Deep forest green #1B3A2A, warm gold #D4A574, cream #F5EFE0, money green #2D6B3F',
-    catchphrase: 'The math doesn\'t lie!',
-  },
-  tech: {
-    label: 'IT Geek',
-    outfit: 'Navy "AI" hoodie, glasses, stylus/pen in hand',
-    environment: 'Dark techy room — large monitor behind showing "AI EXPLAINED" headline with brain icon, MacBook open on glass desk showing OpenAI/Claude logos, small white robot mascot beside laptop',
-    signature_props: 'Open MacBook with AI logos, small robot mascot, stack of AI books, "I ❤️ PROMPTS" mousepad, yellow sticky note "BE CURIOUS"',
-    branded_mug: '"BE CURIOUS" yellow sticky note on desk',
-    diagram_style: 'System architecture diagrams with rounded boxes and arrows, code blocks with syntax highlighting, API flow diagrams, bullet checklists on screen (Prompt → Process → Output → Improve)',
-    diagram_bg: 'Dark monitor screen with neon syntax highlighting, OR holographic floating UI panels',
-    color_palette: 'Deep navy #0A0F1E, electric cyan #4FD1E0, neon purple #B45CFF, off-white text #F5F5F0',
-    catchphrase: 'Beautiful, right?',
-  },
-  maker: {
-    label: 'DIY Workshop Maker',
-    outfit: 'Red-and-black flannel shirt, denim overalls, sleeves rolled up, holding a cordless power drill',
-    environment: 'Warm workshop — pegboard wall covered in hammers/wrenches/screwdrivers, sturdy wooden workbench with sawdust, wooden birdhouse project in progress, pendant lamp warm overhead light, black chalkboard with handwritten checklist "HOW TO: PLAN / PREPARE / STEP BY STEP / PRACTICE / IMPROVE"',
-    signature_props: 'Cordless power drill, tape measure, wooden birdhouse mid-build, scattered sawdust, pegboard with tools, sketched plans notepad',
-    branded_mug: 'Coffee mug labeled "MEASURE TWICE CUT ONCE"',
-    diagram_style: 'Hand-drawn schematic diagrams, exploded views of mechanical parts, step-numbered checklists in chalk, measurement diagrams with arrows',
-    diagram_bg: 'Black chalkboard with hand-drawn schematics, OR brown wooden plank with sketched diagrams',
-    color_palette: 'Warm wood brown #6B4423, deep red flannel #8B2424, denim blue #2C4A6B, off-white chalk #F5F5F0',
-    catchphrase: 'Measure twice, cut once!',
-  },
-};
+function repairJSON(str) {
+  return str
+    .replace(/[\x00-\x1F\x7F]/g, c => c === '\n' || c === '\r' || c === '\t' ? c : ' ')
+    .replace(/,\s*([}\]])/g, '$1')
+    .replace(/(["\w\d])\s*\n\s*"/g, '$1, "');
+}
 
-// ═══════════════════════════════════════════════════════════════════
-// SCENE DENSITY SPEC — must match initializeScriptBatches exactly
-// ═══════════════════════════════════════════════════════════════════
-const SCENE_DENSITY = [
-  { section_type: 'hook',          scene_count: 12, pacing: 'staccato',   time_pct: 0.10 },
-  { section_type: 'core_concept',  scene_count: 8,  pacing: 'measured',   time_pct: 0.15 },
-  { section_type: 'mechanism',     scene_count: 10, pacing: 'breathable', time_pct: 0.25 },
-  { section_type: 'example',       scene_count: 8,  pacing: 'breathable', time_pct: 0.25 },
-  { section_type: 'application',   scene_count: 8,  pacing: 'measured',   time_pct: 0.15 },
-  { section_type: 'takeaway',      scene_count: 4,  pacing: 'landing',    time_pct: 0.10 },
-];
-
-// ═══════════════════════════════════════════════════════════════════
-// SHOT TYPES — drives downstream image generation
-// ═══════════════════════════════════════════════════════════════════
-const SHOT_TYPES = {
-  establish_einstein: 'Wide shot of Einstein in his arc environment, mid-gesture, full body visible, branded mug + signature props in frame',
-  closeup_einstein: 'Medium close-up of Einstein face/upper-body, expressive, pointing or gesturing, environment softly blurred behind',
-  text_slam: 'BOLD BLACK BACKGROUND with huge white/colored text overlay (the key number or phrase), Einstein\'s eyes peeking from a corner OR pure typography slide',
-  diagram_insert: 'CLEAN DIAGRAM — no Einstein in frame. Just the chart/formula/code on the arc-specific background (chalkboard or monitor). Crisp typography.',
-  broll_cut: 'Real-world stock footage matching the topic (money counting, code scrolling, hands working, etc.) — NO Einstein, just the real-world action',
-  contrast_slam: 'Split-screen showing MYTH vs TRUTH with X mark on the wrong side and ✓ on the right side, bold typography',
-  montage_flash: 'Triple-cut quick preview — 3 fast images of upcoming sections combined into one frame',
-};
-
-// ═══════════════════════════════════════════════════════════════════
-// SECTION-SPECIFIC SHOT CHOREOGRAPHY
-// Each section has a fixed shot pattern — choreographs the visual cadence
-// ═══════════════════════════════════════════════════════════════════
-const SHOT_CHOREOGRAPHY = {
-  hook: [
-    // 12 staccato beats — viral hook psychology
-    'establish_einstein',  // 1: "In this video..." wide
-    'text_slam',           // 2: Shocking number BIG
-    'closeup_einstein',    // 3: "Look at this" ECU pointing
-    'diagram_insert',      // 4: Number/chart flash
-    'broll_cut',           // 5: Real-world reaction footage
-    'closeup_einstein',    // 6: "But wait..." gesture
-    'contrast_slam',       // 7: Myth vs truth side-by-side
-    'establish_einstein',  // 8: Pull back wide — promise
-    'diagram_insert',      // 9: Tease the formula/chart
-    'closeup_einstein',    // 10: "Stay with me" direct address
-    'montage_flash',       // 11: Triple-cut preview
-    'establish_einstein',  // 12: Points up — sets up next section
-  ],
-  core_concept: [
-    'establish_einstein',  // 1: Opens the section in environment
-    'closeup_einstein',    // 2: Introduces the simple definition
-    'diagram_insert',      // 3: Concept diagram
-    'closeup_einstein',    // 4: Expands with analogy
-    'diagram_insert',      // 5: Analogy visualized
-    'establish_einstein',  // 6: Brings it back to environment
-    'diagram_insert',      // 7: Recap diagram
-    'closeup_einstein',    // 8: Bridge to mechanism
-  ],
-  mechanism: [
-    'establish_einstein',  // 1: Sets up the how
-    'diagram_insert',      // 2: Step 1 of mechanism
-    'closeup_einstein',    // 3: Explains step 1
-    'diagram_insert',      // 4: Step 2
-    'closeup_einstein',    // 5: Explains step 2
-    'diagram_insert',      // 6: Step 3
-    'closeup_einstein',    // 7: Explains step 3
-    'diagram_insert',      // 8: Full system diagram
-    'establish_einstein',  // 9: Steps back, full view
-    'closeup_einstein',    // 10: Bridge to example
-  ],
-  example: [
-    'establish_einstein',  // 1: Sets up the worked example
-    'diagram_insert',      // 2: Initial numbers/setup
-    'closeup_einstein',    // 3: Walks through step 1
-    'diagram_insert',      // 4: Calculation 1
-    'closeup_einstein',    // 5: Walks through step 2
-    'diagram_insert',      // 6: Calculation 2
-    'diagram_insert',      // 7: Final result big number
-    'closeup_einstein',    // 8: Reaction to the result
-  ],
-  application: [
-    'establish_einstein',  // 1: Opens real-world frame
-    'broll_cut',           // 2: Real-world use case footage
-    'closeup_einstein',    // 3: Why this matters
-    'broll_cut',           // 4: Second use case footage
-    'closeup_einstein',    // 5: Stakes elevation
-    'diagram_insert',      // 6: Before/after impact
-    'broll_cut',           // 7: Third use case
-    'establish_einstein',  // 8: Bridge to takeaway
-  ],
-  takeaway: [
-    'establish_einstein',  // 1: Wide settled shot
-    'closeup_einstein',    // 2: Recap insight
-    'text_slam',           // 3: The catchphrase as text overlay
-    'establish_einstein',  // 4: Final wide — points up, freezes
-  ],
-};
-
-// ═══════════════════════════════════════════════════════════════════
-// Detect arc from project
-// ═══════════════════════════════════════════════════════════════════
-function detectArc(project, channel) {
-  if (project?.explainer_arc && ARC_VISUAL_DNA[project.explainer_arc]) return project.explainer_arc;
-  const niche = `${project?.niche || ''} ${channel?.niche || ''} ${project?.name || ''}`.toLowerCase();
-  const triggers = {
-    science: /physics|chemistry|biology|neuroscience|space|mathematics|science|research/,
-    professor: /history|economics|philosophy|psychology|literature|education/,
-    accountant: /finance|investing|money|wealth|business|tax|crypto|stocks/,
-    tech: /software|ai|machine learning|coding|programming|tech|cyber/,
-    maker: /diy|woodworking|crafts|workshop|tools|building|repair/,
-  };
-  for (const [arc, re] of Object.entries(triggers)) {
-    if (re.test(niche)) return arc;
+function extractJSON(rawText) {
+  if (!rawText || typeof rawText !== 'string') return null;
+  try { return JSON.parse(rawText); } catch (_) {}
+  try { return JSON.parse(repairJSON(rawText)); } catch (_) {}
+  let jsonStr = rawText;
+  if (rawText.includes("```json")) jsonStr = rawText.split("```json")[1].split("```")[0].trim();
+  else if (rawText.includes("```")) jsonStr = rawText.split("```")[1].split("```")[0].trim();
+  try { return JSON.parse(repairJSON(jsonStr)); } catch (_) {}
+  const match = jsonStr.match(/\{[\s\S]*\}/);
+  if (match) {
+    try { return JSON.parse(match[0]); } catch (_) {}
+    try { return JSON.parse(repairJSON(match[0])); } catch (_) {}
   }
-  return 'professor';
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// Extract section_type from focus_area prefix
-// ═══════════════════════════════════════════════════════════════════
-function extractSectionType(focusArea, fallbackIdx) {
-  const m = (focusArea || '').match(/^\[(\w+)\|scenes:\d+\]/);
-  if (m && SCENE_DENSITY.find(d => d.section_type === m[1])) return m[1];
-  return SCENE_DENSITY[fallbackIdx]?.section_type || null;
-}
-
-// ═══════════════════════════════════════════════════════════════════
-// LLM caller — OpenAI primary, Gemini fallback
-// ═══════════════════════════════════════════════════════════════════
-async function callLLM(prompt, temperature = 0.6) {
-  // Try OpenAI first
+  const text = match ? match[0] : rawText;
+  let repaired = text.replace(/,\s*\{[^}]*$/, '').replace(/,\s*$/, '');
+  if (!repaired.endsWith(']}')) {
+    if (!repaired.endsWith(']')) repaired += ']';
+    if (!repaired.endsWith('}')) repaired += '}';
+  }
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        temperature,
-        max_tokens: 8000,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: 'You are a film director and visual designer. Always respond with valid JSON only.' },
-          { role: 'user', content: prompt },
-        ],
-      }),
-    });
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(`OpenAI ${response.status}: ${err.error?.message || JSON.stringify(err)}`);
-    }
-    const data = await response.json();
-    return JSON.parse(data.choices[0].message.content);
-  } catch (oaiErr) {
-    console.warn(`[scene] OpenAI failed: ${oaiErr.message.substring(0, 120)} — trying Gemini`);
-    if (!GEMINI_KEY) throw oaiErr;
-
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${GEMINI_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: 8192, responseMimeType: 'application/json' },
-      }),
-    });
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(`Gemini ${response.status}: ${err.error?.message || JSON.stringify(err)}`);
-    }
-    const data = await response.json();
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    return JSON.parse(raw);
+    const result = JSON.parse(repaired);
+    console.log(`🔧 JSON repair recovered ${result.scenes?.length || 0} scenes`);
+    return result;
+  } catch (_) {}
+  const lastComplete = text.lastIndexOf('},');
+  if (lastComplete > 0) {
+    try {
+      const result = JSON.parse(text.substring(0, lastComplete + 1) + ']}');
+      console.log(`🔧 JSON deep repair recovered ${result.scenes?.length || 0} scenes`);
+      return result;
+    } catch (_) {}
   }
+  return null;
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// Build the scene breakdown prompt for ONE section
-// ═══════════════════════════════════════════════════════════════════
-function buildSectionPrompt({ batch, arc, sectionType, sceneCount, sceneStartNumber, durationSeconds, choreography, characterRefImageUrl }) {
-  const arcDna = ARC_VISUAL_DNA[arc];
-  const avgSec = (durationSeconds / sceneCount).toFixed(1);
-  const isHook = sectionType === 'hook';
-  const isTakeaway = sectionType === 'takeaway';
+async function callGemini(prompt, systemText, temperature = 0.4) {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
 
-  const choreographyTable = choreography.map((shot, i) => {
-    const sceneNum = sceneStartNumber + i;
-    const dur = isHook ? '2-3s' : `${avgSec}s`;
-    return `  Scene ${sceneNum} (${dur}): ${shot} — ${SHOT_TYPES[shot]}`;
-  }).join('\n');
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemText }] },
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature,
+          maxOutputTokens: 8192,
+          responseMimeType: "application/json",
+        },
+      }),
+    }
+  );
 
-  return `You are a world-class film director planning the visual breakdown for ONE section of an Einstein explainer video.
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(`Gemini error ${response.status}: ${err.error?.message || JSON.stringify(err)}`);
+  }
 
-**EINSTEIN ARC — ${arcDna.label}** (locked visual DNA — every Einstein scene MUST match):
-- Outfit: ${arcDna.outfit}
-- Environment: ${arcDna.environment}
-- Signature props in frame: ${arcDna.signature_props}
-- Branded mug/sticky note: ${arcDna.branded_mug}
-- Color palette: ${arcDna.color_palette}
-- Diagram style (for diagram_insert shots): ${arcDna.diagram_style}
-- Diagram background: ${arcDna.diagram_bg}
-${characterRefImageUrl ? `- Character reference image (use as exact face/style anchor): ${characterRefImageUrl}` : ''}
+  const data = await response.json();
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const parsed = extractJSON(rawText);
+  if (parsed) return parsed;
+  throw new Error(`Gemini JSON parse failed. Length: ${rawText.length}`);
+}
 
-**SECTION: ${sectionType.toUpperCase()}** (${sceneCount} scenes, ${durationSeconds}s total, avg ${avgSec}s per scene)
+async function callClaudeFallback(prompt, systemText, temperature = 0.4) {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY");
 
-**SCRIPT CONTENT FOR THIS SECTION** (Einstein's actual spoken words — slice these into ${sceneCount} narration beats):
-${batch.content}
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 8192,
+      temperature,
+      system: systemText,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
 
-**FIXED SHOT CHOREOGRAPHY** (you MUST follow this exact order — DO NOT change shot types):
-${choreographyTable}
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(`Claude error ${response.status}: ${err.error?.message || JSON.stringify(err)}`);
+  }
 
-${isHook ? `**═══ HOOK PACING — VIRAL STACCATO (CRITICAL) ═══**
-- This is the 30-second hook. Each scene is 2-3 seconds MAX.
-- Match each scene's narration to ONE short punchy sentence from the script — NEVER more than one sentence per scene.
-- text_slam scenes: pick the SHOCKING NUMBER or KEY PHRASE from the script as the on-screen text overlay (e.g. "$139,243" or "70% WRONG")
-- contrast_slam: identify the MYTH vs TRUTH in the script for split-screen text
-- montage_flash: list 3 quick previews of upcoming sections (Problem → Mechanism → Payoff)
-- The cuts are FAST and PURPOSEFUL — every scene must justify its 2-3 second slot` : ''}
+  const data = await response.json();
+  const rawText = data.content?.[0]?.text || '';
+  const parsed = extractJSON(rawText);
+  if (parsed) return parsed;
+  throw new Error(`Claude JSON parse failed. stop_reason: ${data.stop_reason}`);
+}
 
-${isTakeaway ? `**═══ TAKEAWAY PACING — SETTLING ═══**
-- Slow the pace, let the catchphrase land
-- text_slam: the catchphrase "${arcDna.catchphrase}" as the full-screen text overlay
-- Final establish_einstein: Einstein freezes pointing up, the iconic teaching pose` : ''}
+async function callAI(prompt, temperature = 0.4) {
+  const systemText = "You are an educational video director specialising in explainer content. Return ONLY raw valid JSON. No markdown, no backticks, no conversational text.";
+  try {
+    const result = await callGemini(prompt, systemText, temperature);
+    console.log(`✅ Gemini succeeded`);
+    return result;
+  } catch (geminiErr) {
+    console.warn(`⚠️ Gemini failed: ${geminiErr.message} — falling back to Claude`);
+  }
+  const result = await callClaudeFallback(prompt, systemText, temperature);
+  console.log(`✅ Claude fallback succeeded`);
+  return result;
+}
 
-**YOUR TASK**: Generate EXACTLY ${sceneCount} scene objects matching the choreography above. For each scene specify:
+// ══════════════════════════════════════════════════════════════════
+// WORLD-CLASS SCENE CADENCE — cuts-per-minute by section type
+// Based on documented analysis of Veritasium, Kurzgesagt, Vox,
+// Johnny Harris, Wendover, CGP Grey, Cleo Abram, MrBeast educational.
+// Scene counts SCALE WITH DURATION — NO HARD CAP.
+// ══════════════════════════════════════════════════════════════════
+const WORLD_CLASS_CADENCE = {
+  hook:         { cuts_per_min: 30, min_scenes: 12, max_scenes: 25, pacing_note: 'STACCATO — 2-3s per scene, viral hook density (MrBeast/Cleo Abram speed)' },
+  core_concept: { cuts_per_min: 8,  min_scenes: 4,  max_scenes: 999, pacing_note: 'MEASURED — comprehension needs breath, 6-8s per scene' },
+  mechanism:    { cuts_per_min: 10, min_scenes: 6,  max_scenes: 999, pacing_note: 'BREATHABLE — diagrams need showing, 5-7s per scene' },
+  example:      { cuts_per_min: 8,  min_scenes: 5,  max_scenes: 999, pacing_note: 'BREATHABLE — numbers need to land, 6-8s per scene' },
+  application:  { cuts_per_min: 14, min_scenes: 5,  max_scenes: 999, pacing_note: 'FAST — B-roll heavy, 4-5s per scene' },
+  takeaway:     { cuts_per_min: 5,  min_scenes: 3,  max_scenes: 8,   pacing_note: 'SLOW LANDING — let the catchphrase breathe, 8-12s per scene' },
+  // Default fallback for any unrecognized section_type (e.g. legacy markdown-split sections)
+  default:      { cuts_per_min: 10, min_scenes: 4,  max_scenes: 999, pacing_note: 'STANDARD — 5-7s per scene' },
+};
 
-For **einstein scenes** (establish_einstein, closeup_einstein):
-- visual_concept: Detailed shot description rooted in the arc's ${arcDna.label} environment. Include the outfit, environment, signature props, branded mug, and Einstein's specific gesture. Be cinematic.
-- narration_text: The EXACT short slice of script Einstein speaks in this scene (from the script content above, in order)
-- diagram_visible_in_background: A short description of any chalkboard text/monitor display visible behind Einstein (matches the topic — e.g. "MAKE MONEY / MANAGE MONEY / BUILD FREEDOM" headline)
+const EXPLAINER_SECTION_TIME_PCT = {
+  hook: 0.10, core_concept: 0.15, mechanism: 0.25,
+  example: 0.25, application: 0.15, takeaway: 0.10,
+};
 
-For **diagram_insert scenes** (no Einstein):
-- visual_concept: Clean diagram description ONLY — no Einstein. Specify exactly what chart, formula, code, or chalkboard text appears. Use the arc's diagram_style and diagram_bg.
-- narration_text: The script slice Einstein is speaking over this diagram
-- text_overlay: The headline/title text on the diagram (e.g. "COMPOUND INTEREST" or "STEP 2: SAVE")
-- key_numbers_or_labels: Specific labeled values on the diagram (e.g. ["$100/mo", "10%", "30 years", "= $197,392"])
+// Compute target scene count for a section given its duration in seconds
+function computeSceneTarget(sectionType, sectionDurationSec) {
+  const cadence = WORLD_CLASS_CADENCE[sectionType] || WORLD_CLASS_CADENCE.default;
+  const rawTarget = (sectionDurationSec / 60) * cadence.cuts_per_min;
+  const target = Math.max(cadence.min_scenes, Math.min(cadence.max_scenes, Math.round(rawTarget)));
+  return { target, cadence };
+}
 
-For **text_slam scenes**:
-- text_overlay: The HUGE bold text that fills the screen (the shocking number, the key phrase, the catchphrase)
-- visual_concept: Black background with massive bold text, the color of accent from the arc palette, optional Einstein eyes peeking from corner
-- narration_text: The script slice spoken during this slam
+// ── Einstein arc definitions ─────────────────────────────────────
+function getEinsteinArc(arcType) {
+  const arcs = {
+    science: {
+      label: 'Mad Scientist',
+      look: 'Rumpled white lab coat, safety goggles pushed up on forehead, Einstein wild white hair, holding bubbling test tube in one hand while wildly gesturing with the other, bushy mustache, animated wide eyes',
+      behavior: 'Erratic high-energy pacing, speaks rapidly while wildly gesturing at 3D formulas floating in mid-air, bursts of sudden excitement, occasional maniacal laughter at elegant solutions',
+      catchphrase: 'Eureka! The data does not lie — it evolves!',
+      environment: 'Cluttered laboratory with glowing equipment, floating 3D molecular structures, holographic formula projections, bubbling beakers on shelves, chalkboards covered in equations',
+      color_palette: 'Electric blue #0066FF, lab green #00CC88, white #FFFFFF, deep navy #0A1628',
+    },
+    professor: {
+      label: 'Academic Lecturer',
+      look: 'Tweed jacket with elbow patches, mismatched socks visible above brogues, holding a piece of chalk, Einstein wild white hair neatly side-parted, reading glasses on nose, warm grandfatherly expression',
+      behavior: 'Warm theatrical and deeply passionate, treats the whiteboard like a grand canvas, dramatic pauses for emphasis, beckons the viewer closer to share a secret insight, paces with chalk behind back',
+      catchphrase: 'Class is in session, and curiosity is mandatory!',
+      environment: 'Grand lecture hall with tiered seating, floor-to-ceiling whiteboard filled with clean diagrams, warm amber lighting, oak desk with stacked books, floating holographic concept maps',
+      color_palette: 'Warm amber #D4A574, chalk white #F5F5F0, oak brown #8B6914, deep blue #0A1628',
+    },
+    accountant: {
+      label: 'Financial Guru',
+      look: 'Sharp charcoal corporate suit, retro calculator watch on wrist, sleeves rolled up, reading glasses perched on nose, Einstein white hair slicked back, animated expression of intense focus on numbers',
+      behavior: 'Laser-focused intensely energetic about margins, aggressively circles budget numbers on the whiteboard with absolute glee, jabs at floating spreadsheet cells, counts on fingers rapidly',
+      catchphrase: 'It is mathematically relative — your savings are about to multiply!',
+      environment: 'Sleek modern boardroom with floor-to-ceiling glass, floating holographic spreadsheets and bar charts, digital tickers, marble surfaces, city skyline backdrop',
+      color_palette: 'Money green #00AA55, gold #D4AF37, charcoal #2C2C2C, crisp white #FFFFFF',
+    },
+    tech: {
+      label: 'IT Geek',
+      look: 'Graphic tee featuring a physics equation joke, over-ear RGB headset around neck, glowing smartphone in hand, Einstein wild white hair with one streak of neon blue, casual jeans, sneakers, multiple screens reflected in glasses',
+      behavior: 'Fast-talking tech-savvy and effortlessly cool, swipes through holographic 3D app screens like a sci-fi conductor, types in mid-air on floating keyboard, snaps fingers to spin up diagrams',
+      catchphrase: 'Simple geometry my friends — let us optimise your workflow!',
+      environment: 'Futuristic tech hub with neon-lit server racks, floating holographic code editors, dual curved monitors, RGB ambient lighting, floating UI components and API diagrams',
+      color_palette: 'Neon cyan #00FFFF, electric purple #7B00FF, dark charcoal #1A1A2E, white #FFFFFF',
+    },
+  };
+  return arcs[arcType] || arcs.professor;
+}
 
-For **broll_cut scenes** (real-world stock):
-- broll_query: Short search query for stock footage (e.g. "person counting money close up", "hands typing on laptop")
-- visual_concept: What the real-world footage shows
-- narration_text: The script slice spoken over the b-roll
+// ── Scene type definitions ───────────────────────────────────────
+function getSceneTypeDirective(sceneType, arcDef) {
+  const directives = {
+    einstein_intro: `Einstein character FULL BODY in his ${arcDef.label} look, entering the frame with energy and personality. Environment: ${arcDef.environment}. He opens with his catchphrase gesture. Camera: LOW ANGLE push-in, dramatic. Duration: 4-6 seconds.`,
+    einstein_transition: `Einstein character MID SHOT reacting to the previous concept with excitement or curiosity, gesturing toward the next diagram that's about to appear. Bridges two concept blocks. Duration: 2-3 seconds.`,
+    einstein_outro: `Einstein character FULL BODY, satisfied expression, arms wide, catchphrase moment. Environment wraps up warmly. Camera pulls back slowly. Duration: 4-5 seconds.`,
+    concept_diagram: `Clean educational diagram showing the concept. NO character. Pure diagram: boxes, arrows, labels, hierarchy. 2D flat design on clean background. Camera: STATIC or SLOW ZOOM IN on key element. Duration: 3-6 seconds depending on complexity.`,
+    formula_panel: `Mathematical formula or equation beautifully typeset and floating in 3D space. Step-by-step if multiple steps. Clean dark background with glowing formula text. Camera: SLOW ZOOM IN left to right following the equation. Duration: 3-5 seconds.`,
+    code_block: `Code snippet displayed in a floating terminal or IDE panel, syntax highlighted, clean font. Relevant lines highlighted one at a time. Camera: STATIC, slight push-in on highlighted section. Duration: 3-5 seconds.`,
+    analogy_scene: `Visual metaphor or real-world analogy scene. Einstein character OPTIONAL (MCU). Analogy rendered as vivid 3D illustration. Camera: WIDE establishing then PUSH IN to detail. Duration: 3-4 seconds.`,
+    example_walkthrough: `Step-by-step example with numbered panels or callouts. Can include Einstein character pointing at panels. Clean diagram layout. Camera: PAN LEFT TO RIGHT following the steps. Duration: 4-8 seconds.`,
+    comparison_table: `Side-by-side comparison table or Venn diagram. Clean, readable, color-coded. NO character. Camera: STATIC wide then zoom to each column. Duration: 4-6 seconds.`,
+    summary_card: `Clean recap card with key bullet points or a single memorable visual. Einstein character OPTIONAL (SMALL, corner). Bold readable typography. Camera: STATIC. Duration: 3-4 seconds.`,
+  };
+  return directives[sceneType] || directives.concept_diagram;
+}
 
-For **contrast_slam scenes**:
-- text_overlay: Left side text (myth) | Right side text (truth)
-- visual_concept: Split screen with X on left, ✓ on right, bold typography
-- narration_text: The script slice
+// ── Build breakdown prompt for one outline section ───────────────
+function buildSectionBreakdownPrompt({
+  section,
+  sectionIndex,
+  totalSections,
+  arcDef,
+  researchData,
+  continuityNote,
+  globalSceneStart,
+  sceneTarget,
+  sectionDurationSec,
+  pacingNote,
+  sectionType,
+}) {
+  const researchSection = researchData?.sections?.[sectionIndex] || null;
+  const researchBlock = researchSection ? `
+VERIFIED RESEARCH FOR THIS SECTION:
+Core facts: ${JSON.stringify(researchSection.core_facts)}
+Best analogy: ${researchSection.best_analogy}
+Formulas/Code: ${JSON.stringify(researchSection.formulas_or_code)}
+Misconceptions to address: ${JSON.stringify(researchSection.misconceptions)}
+Accuracy notes: ${researchSection.accuracy_notes}
+` : '';
 
-For **montage_flash scenes**:
-- visual_concept: 3 quick preview frames combined (Problem → Mechanism → Payoff each as a small thumbnail)
-- preview_frames: Array of 3 short descriptions of each preview tile
-- narration_text: The script slice
+  const isFirst = sectionIndex === 0;
+  const isLast = sectionIndex === totalSections - 1;
 
-**UNIVERSAL FIELDS for EVERY scene**:
-- scene_number: ${sceneStartNumber}, ${sceneStartNumber + 1}, ${sceneStartNumber + 2}, ...
-- shot_type: EXACT match from choreography (establish_einstein, closeup_einstein, text_slam, diagram_insert, broll_cut, contrast_slam, montage_flash)
-- duration_seconds: ${isHook ? '2 or 3' : `roughly ${avgSec}`}
-- camera_movement: For Einstein scenes — slow_zoom_in / static / slow_pan. For diagram/text_slam — static or slow_zoom_in. For broll — match natural footage motion.
-- audio_note: Voice energy (urgent / conversational / commanding / warm) + sound effect cue (whoosh / ding / impact / silence)
+  return `You are an educational video director breaking down one section of an explainer video into scenes.
 
-Return JSON:
+EINSTEIN CHARACTER ARC: ${arcDef.label}
+Character look: ${arcDef.look}
+Character behavior: ${arcDef.behavior}
+Environment: ${arcDef.environment}
+Color palette: ${arcDef.color_palette}
+
+SECTION ${sectionIndex + 1} of ${totalSections}: "${section.title}"
+Section script content:
+${section.content}
+
+${researchBlock}
+
+CONTINUITY FROM PREVIOUS SECTION: ${continuityNote}
+
+SCENE TYPE OPTIONS (pick the right type for each beat):
+- einstein_intro: Character enters and welcomes (use ONLY for section 1 opening)
+- einstein_transition: Character bridges concepts (use between major concept shifts)
+- einstein_outro: Character wraps up (use ONLY for last section closing)
+- concept_diagram: Pure diagram — boxes, arrows, labels, flowcharts
+- formula_panel: Mathematical formula or equation display
+- code_block: Code snippet with syntax highlighting
+- analogy_scene: Visual metaphor or real-world example
+- example_walkthrough: Step-by-step numbered example
+- comparison_table: Side-by-side comparison or Venn diagram
+- summary_card: Recap bullet points or key takeaway
+
+═══ WORLD-CLASS SCENE CADENCE (MANDATORY) ═══
+This section is **${sectionType || 'general'}** type. Target duration: **${sectionDurationSec.toFixed(0)} seconds**.
+
+🎯 **GENERATE EXACTLY ${sceneTarget} SCENES** for this section. This count is calibrated to match world-class explainer pacing (Veritasium, Kurzgesagt, Vox, Cleo Abram).
+
+⏱️ **PACING RULE**: ${pacingNote}
+   → Average scene duration this section: **${(sectionDurationSec / sceneTarget).toFixed(1)}s per scene**
+   → Total scenes ÷ section minutes = ~${((sceneTarget / sectionDurationSec) * 60).toFixed(0)} cuts/minute
+
+📋 **SCENE COMPOSITION RULES**:
+- Each distinct diagram, formula, code block, or visual beat gets its OWN scene
+- For hook sections: use rapid-fire cuts — text slams, quick diagrams, MCU reactions, B-roll flashes
+- For mechanism/example sections: dedicate full scenes to each formula/code/step
+- For takeaway: slow, lingering shots that let the catchphrase land
+- Do NOT cram multiple diagrams into one scene
+- Do NOT produce fewer than ${sceneTarget} scenes — the AI tends to under-deliver; this section NEEDS ${sceneTarget} to match world-class density
+${isFirst ? '- MUST start with an einstein_intro scene' : ''}
+${isLast ? '- MUST end with an einstein_outro scene' : ''}
+
+DIAGRAM RULES (for concept_diagram, formula_panel, example_walkthrough):
+- Describe the EXACT layout: what boxes exist, what the arrows connect, what labels say
+- For formulas: write the actual formula text exactly as it should appear
+- For code: write the actual code snippet that should be displayed
+- Be specific enough that an image generator can render it accurately
+
+ACCURACY MANDATE: Every fact, formula, and code snippet in visual_concept MUST match the verified research above. Do not invent numbers or examples.
+
+Return ONLY valid JSON:
 {
+  "section_title": "${section.title}",
   "scenes": [
-    { /* scene 1 with all relevant fields per shot_type */ },
-    ...
+    {
+      "scene_number": ${globalSceneStart},
+      "scene_type": "one of the types above",
+      "narration_text": "exact words the narrator says during this scene",
+      "visual_concept": "detailed director description of what appears on screen — layout, content, labels, positions",
+      "diagram_content": "if scene_type is concept_diagram/formula_panel/code_block: the EXACT text/formula/code to display, else null",
+      "einstein_present": true or false,
+      "einstein_action": "what Einstein is doing if present, else null",
+      "shot_type": "ECU/CU/MCU/MS/WS/STATIC",
+      "camera_movement": "e.g. slow push-in or static or pan left to right",
+      "camera_direction": "zoom_in or zoom_out or pan_left or pan_right or static or push_in",
+      "duration_seconds": 4.0,
+      "lighting": "e.g. warm key light from left, clean shadows",
+      "color_palette": "dominant colors with hex codes matching arc palette",
+      "mood": "2-3 words",
+      "text_overlay": "bold on-screen label or title or empty string",
+      "continuity_bridge": "specific visual element linking to next scene"
+    }
   ]
 }
 
-GENERATE EXACTLY ${sceneCount} SCENES IN ORDER. Use the EXACT script text for narration_text — never paraphrase.`;
+Scene numbers start at ${globalSceneStart}. Number them sequentially.`;
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// MAIN HANDLER
-// ═══════════════════════════════════════════════════════════════════
+// ── Main handler ─────────────────────────────────────────────────
 Deno.serve(async (req) => {
   const callStart = Date.now();
   try {
@@ -351,215 +344,298 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, batch_index } = await req.json();
-    if (!project_id) return Response.json({ error: 'Missing project_id' }, { status: 400 });
+    const { project_id } = await req.json();
 
-    const startBatch = batch_index || 0;
-
-    // ── Load project + verify explainer mode ──
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
-    if (project.project_mode !== 'explainer') {
-      return Response.json({ error: 'This function is only for explainer projects' }, { status: 400 });
+
+    // Get final aggregated script
+    const allScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
+    const script = allScripts.find(s => s.version === 'final_aggregated');
+    if (!script?.full_script) {
+      return Response.json({ error: 'No final script found.' }, { status: 400 });
     }
 
-    let channel = null;
-    if (project.channel_id) {
-      const channels = await base44.asServiceRole.entities.Channels.filter({ id: project.channel_id });
-      channel = channels[0];
+    // Get research notes from ProductionSettings
+    const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
+    let researchData = null;
+    if (psList[0]?.research_notes) {
+      try { researchData = JSON.parse(psList[0].research_notes); } catch (_) {}
     }
 
-    const arc = detectArc(project, channel);
-    const arcDna = ARC_VISUAL_DNA[arc];
-    console.log(`[explainerScene] Project ${project_id} arc=${arc} (${arcDna.label})`);
-
-    // ── Load all 6 batches with their generated script content ──
-    const allBatches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
-    const sortedBatches = allBatches.sort((a, b) => a.batch_number - b.batch_number);
-    if (sortedBatches.length < 6) {
-      return Response.json({ error: `Expected 6 script batches, found ${sortedBatches.length}` }, { status: 400 });
+    // ── PRIMARY: Pull section structure from ScriptBatches (initialized by initializeScriptBatches) ──
+    // Each batch carries section_type via its focus_area prefix "[section_type|...]" or via story_segment matching EXPLAINER_SECTIONS.
+    let outlineSections = [];
+    const batches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
+    if (batches.length > 0) {
+      const sortedBatches = batches.sort((a, b) => a.batch_number - b.batch_number);
+      // Detect section_type — try focus_area prefix first, fall back to canonical order
+      const CANONICAL_TYPES = ['hook', 'core_concept', 'mechanism', 'example', 'application', 'takeaway'];
+      outlineSections = sortedBatches.map((b, i) => {
+        const m = (b.focus_area || '').match(/^\[(\w+)\|/);
+        const sectionType = m ? m[1] : (CANONICAL_TYPES[i] || null);
+        return {
+          title: b.story_segment || `Section ${i + 1}`,
+          content: b.content || b.synopsis || '',
+          description: (b.synopsis || '').substring(0, 100),
+          section_type: sectionType,
+        };
+      });
+      console.log(`📋 Loaded ${outlineSections.length} sections from ScriptBatches`);
     }
-    if (sortedBatches.some(b => !b.content || b.status !== 'completed')) {
-      return Response.json({ error: 'Not all script batches are completed yet' }, { status: 400 });
-    }
 
-    // ── Clear old scenes on first batch ──
-    if (startBatch === 0) {
-      const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-      if (oldScenes.length > 0) {
-        for (let i = 0; i < oldScenes.length; i += 10) {
-          await Promise.all(oldScenes.slice(i, i + 10).map(s =>
-            base44.asServiceRole.entities.Scenes.delete(s.id).catch(_ => {})
-          ));
+    // FALLBACK 1: project.outline (legacy)
+    if (!outlineSections.length && project.outline) {
+      try {
+        const parsed = JSON.parse(project.outline);
+        if (Array.isArray(parsed) && parsed.length) {
+          outlineSections = parsed.map((p, i) => ({ ...p, section_type: p.section_type || null }));
         }
-        console.log(`[explainerScene] Deleted ${oldScenes.length} old scenes`);
-      }
+      } catch (_) {}
     }
 
-    // ── Optional character reference image (Phase C visual lock) ──
-    // If the project or channel has a reference image saved (e.g. via ChannelThumbnailDNA), pass it through.
-    const characterRefImageUrl = project.reference_image_url || null;
-
-    const durationMinutes = project.video_duration_minutes || 10;
-    const totalDurationSec = durationMinutes * 60;
-
-    // ── Compute scene number offset (sum of scene_counts of prior sections) ──
-    const sceneOffsets = [];
-    let cumulative = 0;
-    for (const sec of SCENE_DENSITY) {
-      sceneOffsets.push(cumulative);
-      cumulative += sec.scene_count;
+    // FALLBACK 2: split script by markdown headings (no section_type → uses default cadence)
+    if (!outlineSections.length) {
+      const scriptText = script.full_script;
+      const parts = scriptText.split(/\n(?=#{1,3}\s|\*\*[A-Z]|\d\.\s[A-Z])/g);
+      outlineSections = parts.map((p, i) => ({
+        title: `Section ${i + 1}`,
+        content: p.trim(),
+        description: p.substring(0, 100),
+        section_type: null,
+      }));
     }
-    const totalTargetScenes = cumulative; // 50
 
-    // ── Process sections starting from startBatch ──
-    const MAX_WALL_MS = 55000;
-    let totalCreated = 0;
+    // ── Compute scene targets per section (world-class cuts-per-minute, scales with video duration) ──
+    const totalDurationMinutes = project.video_duration_minutes || 10;
+    const totalDurationSec = totalDurationMinutes * 60;
+    let projectedTotalScenes = 0;
+    outlineSections.forEach((sec, i) => {
+      const sectionType = sec.section_type;
+      // Use canonical time_pct if section_type matches, otherwise even split
+      const timePct = (sectionType && EXPLAINER_SECTION_TIME_PCT[sectionType]) || (1 / outlineSections.length);
+      const sectionDurationSec = totalDurationSec * timePct;
+      const { target, cadence } = computeSceneTarget(sectionType || 'default', sectionDurationSec);
+      sec._sceneTarget = target;
+      sec._sectionDurationSec = sectionDurationSec;
+      sec._pacingNote = cadence.pacing_note;
+      projectedTotalScenes += target;
+    });
+    console.log(`🎯 World-class cadence: ${totalDurationMinutes}min video → projected ${projectedTotalScenes} scenes across ${outlineSections.length} sections (${(projectedTotalScenes / totalDurationMinutes).toFixed(1)} cuts/min avg)`);
 
-    for (let batchIdx = startBatch; batchIdx < sortedBatches.length; batchIdx++) {
-      const elapsed = Date.now() - callStart;
-      if (elapsed > MAX_WALL_MS && batchIdx > startBatch) {
-        console.log(`[explainerScene] ⏱️ ${(elapsed/1000).toFixed(1)}s — pausing, will resume from batch ${batchIdx}`);
-        return Response.json({
-          success: true,
-          done: false,
-          next_batch: batchIdx,
-          scenes_created_so_far: totalCreated,
-          total_target_scenes: totalTargetScenes,
-        });
-      }
+    // Detect arc type from project
+    const arcType = project.explainer_arc || 'professor';
+    const arcDef = getEinsteinArc(arcType);
 
-      const batch = sortedBatches[batchIdx];
-      const sectionType = extractSectionType(batch.focus_area, batchIdx);
-      if (!sectionType) {
-        console.warn(`[explainerScene] Batch ${batchIdx + 1} has no section_type — skipping`);
-        continue;
-      }
+    console.log(`🎓 Explainer breakdown: "${project.name}" | arc: ${arcType} (${arcDef.label}) | sections: ${outlineSections.length}`);
+    if (researchData) {
+      console.log(`🔬 Research loaded | confidence: ${researchData.overall_accuracy_confidence} | provider: ${psList[0]?.research_provider}`);
+    } else {
+      console.warn(`⚠️ No research data found — proceeding without verified facts`);
+    }
 
-      const sectionSpec = SCENE_DENSITY.find(d => d.section_type === sectionType);
-      const choreography = SHOT_CHOREOGRAPHY[sectionType];
-      if (!sectionSpec || !choreography) {
-        console.warn(`[explainerScene] No spec for section ${sectionType} — skipping`);
-        continue;
-      }
+    // Delete old scenes
+    const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
+    if (oldScenes.length > 0) {
+      await Promise.all(
+        oldScenes.map(s => base44.asServiceRole.entities.Scenes.delete(s.id).catch(() => {}))
+      );
+      console.log(`🗑️ Deleted ${oldScenes.length} old scenes`);
+    }
 
-      const sceneStartNumber = sceneOffsets[batchIdx] + 1;
-      const sectionDurationSec = Math.round(totalDurationSec * sectionSpec.time_pct);
+    // Process each section sequentially for continuity
+    const allScenes = [];
+    let globalSceneNumber = 1;
+    let continuityNote = 'This is the opening of the video — Einstein enters with maximum personality and energy.';
 
-      console.log(`[explainerScene] Section ${batchIdx + 1}/${sortedBatches.length}: ${sectionType} → ${sectionSpec.scene_count} scenes (${sectionDurationSec}s)`);
+    for (let si = 0; si < outlineSections.length; si++) {
+      const section = outlineSections[si];
 
-      const prompt = buildSectionPrompt({
-        batch,
-        arc,
-        sectionType,
-        sceneCount: sectionSpec.scene_count,
-        sceneStartNumber,
-        durationSeconds: sectionDurationSec,
-        choreography,
-        characterRefImageUrl,
+      const prompt = buildSectionBreakdownPrompt({
+        section,
+        sectionIndex: si,
+        totalSections: outlineSections.length,
+        arcDef,
+        researchData,
+        continuityNote,
+        globalSceneStart: globalSceneNumber,
+        sceneTarget: section._sceneTarget,
+        sectionDurationSec: section._sectionDurationSec,
+        pacingNote: section._pacingNote,
+        sectionType: section.section_type,
       });
 
-      const temp = sectionType === 'hook' ? 0.75 : 0.55;
-      let result;
+      console.log(`🎬 Section ${si + 1}/${outlineSections.length}: "${section.title}" [${section.section_type || 'default'}] target=${section._sceneTarget} scenes / ${section._sectionDurationSec.toFixed(0)}s (starting at scene ${globalSceneNumber})`);
+
+      let sectionResult;
       try {
-        result = await callLLM(prompt, temp);
+        sectionResult = await callAI(prompt, 0.4);
       } catch (err) {
-        console.error(`[explainerScene] Section ${sectionType} FAILED: ${err.message}`);
-        return Response.json({
-          success: false,
-          error: `Section ${sectionType} failed: ${err.message}`,
-          next_batch: batchIdx,
-          scenes_created_so_far: totalCreated,
-        }, { status: 500 });
-      }
-
-      const scenesArr = Array.isArray(result?.scenes) ? result.scenes : [];
-      if (scenesArr.length === 0) {
-        console.warn(`[explainerScene] Section ${sectionType} returned 0 scenes`);
-        continue;
-      }
-
-      // ── Persist scenes ──
-      for (let i = 0; i < scenesArr.length && i < sectionSpec.scene_count; i++) {
-        const s = scenesArr[i];
-        const sceneNum = sceneStartNumber + i;
-        const shotType = choreography[i]; // enforce choreography
-        const sceneDuration = sectionType === 'hook'
-          ? (s.duration_seconds || 2.5)
-          : (s.duration_seconds || sectionDurationSec / sectionSpec.scene_count);
-
-        // Pack the arc visual DNA + shot metadata into image_prompt as DIRECTOR_NOTES
-        const directorNotes = {
-          arc,
-          arc_label: arcDna.label,
-          section_type: sectionType,
-          shot_type: shotType,
-          visual_concept: s.visual_concept || '',
-          diagram_visible_in_background: s.diagram_visible_in_background || '',
-          text_overlay: s.text_overlay || '',
-          key_numbers_or_labels: s.key_numbers_or_labels || [],
-          broll_query: s.broll_query || '',
-          preview_frames: s.preview_frames || [],
-          camera_movement: s.camera_movement || 'static',
-          audio_note: s.audio_note || '',
-          arc_outfit: arcDna.outfit,
-          arc_environment: arcDna.environment,
-          arc_signature_props: arcDna.signature_props,
-          arc_branded_mug: arcDna.branded_mug,
-          arc_color_palette: arcDna.color_palette,
-          arc_diagram_style: arcDna.diagram_style,
-          arc_diagram_bg: arcDna.diagram_bg,
-          character_ref_image_url: characterRefImageUrl || '',
+        console.error(`❌ Section ${si + 1} breakdown failed: ${err.message} — applying fallback`);
+        // Minimal fallback: one concept diagram per section
+        sectionResult = {
+          scenes: [{
+            scene_number: globalSceneNumber,
+            scene_type: 'concept_diagram',
+            narration_text: section.content?.substring(0, 200) || section.title,
+            visual_concept: `Clean educational diagram for: ${section.title}`,
+            diagram_content: section.title,
+            einstein_present: false,
+            einstein_action: null,
+            shot_type: 'WS',
+            camera_movement: 'static',
+            camera_direction: 'static',
+            duration_seconds: 5.0,
+            lighting: 'Bright even studio lighting',
+            color_palette: arcDef.color_palette,
+            mood: 'educational, clear',
+            text_overlay: section.title,
+            continuity_bridge: 'diagram panel',
+          }]
         };
-
-        const cameraMap = {
-          slow_zoom_in: 'slow_zoom_in',
-          slow_zoom_out: 'slow_zoom_out',
-          static: 'static',
-          slow_pan: 'slow_pan',
-          push_in: 'slow_zoom_in',
-        };
-
-        await base44.asServiceRole.entities.Scenes.create({
-          project_id,
-          scene_number: sceneNum,
-          narration_text: s.narration_text || '',
-          image_prompt: `DIRECTOR_NOTES:${JSON.stringify(directorNotes)}`,
-          animation_prompt: shotType === 'broll_cut' ? 'natural' : 'push_in',
-          duration_seconds: sceneDuration,
-          camera_movement: cameraMap[s.camera_movement] || 'slow_zoom_in',
-          animation_speed: sectionType === 'hook' ? 'fast' : 'normal',
-          status: 'breakdown_ready',
-          notes: s.text_overlay || '',
-          broll_query: s.broll_query || null,
-        });
-
-        totalCreated++;
       }
 
-      console.log(`[explainerScene] ✓ ${sectionType}: ${scenesArr.length} scenes [${((Date.now()-callStart)/1000).toFixed(1)}s]`);
+      const sectionScenes = sectionResult?.scenes || [];
+
+      // Enforce scene numbers, attach metadata
+      sectionScenes.forEach((scene, idx) => {
+        scene.scene_number = globalSceneNumber + idx;
+        scene.section_title = section.title;
+        scene.section_index = si;
+        scene.arc_type = arcType;
+        allScenes.push(scene);
+      });
+
+      globalSceneNumber += sectionScenes.length;
+
+      // Update continuity for next section
+      const lastScene = sectionScenes[sectionScenes.length - 1];
+      if (lastScene) {
+        continuityNote = [
+          `Last section: "${section.title}"`,
+          `Last scene type: ${lastScene.scene_type}`,
+          `Last visual: ${(lastScene.visual_concept || '').substring(0, 120)}`,
+          `Continuity bridge: ${lastScene.continuity_bridge || 'none'}`,
+          `Color palette carried: ${lastScene.color_palette || arcDef.color_palette}`,
+        ].join(' | ');
+      }
+
+      const targetMiss = section._sceneTarget - sectionScenes.length;
+      if (targetMiss > 2) {
+        console.warn(`⚠️ Section ${si + 1} [${section.section_type || 'default'}] UNDER-DELIVERED: got ${sectionScenes.length} scenes, target was ${section._sceneTarget} (short by ${targetMiss})`);
+      } else if (targetMiss < -3) {
+        console.log(`📈 Section ${si + 1} [${section.section_type || 'default'}] over-delivered: ${sectionScenes.length} scenes vs target ${section._sceneTarget}`);
+      } else {
+        console.log(`✅ Section ${si + 1} [${section.section_type || 'default'}]: ${sectionScenes.length} scenes (target ${section._sceneTarget}) — total so far: ${allScenes.length}`);
+      }
     }
 
-    // ── Mark project complete ──
+    // Build beat durations — explainer pacing (longer than shorts)
+    const beatDurations = allScenes.map(s => parseFloat((s.duration_seconds || 4.0).toFixed(2)));
+    const beatStartTimes = [];
+    let offset = 0;
+    beatDurations.forEach(d => {
+      beatStartTimes.push(parseFloat(offset.toFixed(2)));
+      offset += d;
+    });
+
+    // Save production settings
+    const psPayload = {
+      beat_durations: JSON.stringify(beatDurations),
+      beat_start_times: JSON.stringify(beatStartTimes),
+      story_analysis: JSON.stringify({
+        central_theme: project.name,
+        narrative_arc_summary: `Explainer: ${outlineSections.map(s => s.title).join(' → ')}`,
+        visual_world: `Educational explainer | ${arcDef.label} Einstein | ${allScenes.length} scenes | ${arcType} arc`,
+        visual_format: 'explainer_diagram',
+        einstein_arc: arcType,
+        arc_label: arcDef.label,
+      }),
+    };
+
+    if (psList[0]) {
+      await base44.asServiceRole.entities.ProductionSettings.update(psList[0].id, psPayload);
+    } else {
+      await base44.asServiceRole.entities.ProductionSettings.create({ project_id, ...psPayload });
+    }
+
+    // Camera direction map matching existing pipeline
+    const cameraMap = {
+      zoom_in: 'slow_zoom_in', zoom_out: 'slow_zoom_out',
+      pan_left: 'slow_pan', pan_right: 'slow_pan',
+      push_in: 'slow_zoom_in', static: 'static',
+    };
+
+    // Build scene records
+    const sceneRecords = allScenes.map((scene, i) => {
+      const directorNotes = {
+        visual_concept: scene.visual_concept || '',
+        diagram_content: scene.diagram_content || null,
+        scene_type: scene.scene_type || 'concept_diagram',
+        einstein_present: scene.einstein_present || false,
+        einstein_action: scene.einstein_action || null,
+        einstein_arc: arcType,
+        arc_label: arcDef.label,
+        einstein_look: arcDef.look,
+        einstein_environment: arcDef.environment,
+        shot_type: scene.shot_type || 'WS',
+        camera_angle: 'Eye-level, locked',
+        camera_movement: scene.camera_movement || 'static',
+        camera_direction: scene.camera_direction || 'static',
+        lighting: scene.lighting || 'Bright even studio lighting, no harsh shadows',
+        color_palette: scene.color_palette || arcDef.color_palette,
+        mood: scene.mood || 'educational, clear',
+        depth_of_field: 'Medium f/4 — diagram sharp, background soft',
+        continuity_bridge: scene.continuity_bridge || '',
+        emotional_intensity: 0.6,
+        viewer_emotion: 'curious, engaged',
+        section_title: scene.section_title || '',
+        section_index: scene.section_index ?? 0,
+        text_overlay: scene.text_overlay || '',
+        audio_note: 'clear educational narration, subtle ambient background music',
+        characters_present: scene.einstein_present ? ['Einstein'] : [],
+        explainer_mode: true,
+      };
+
+      return {
+        project_id,
+        scene_number: scene.scene_number,
+        narration_text: scene.narration_text || '',
+        image_prompt: `DIRECTOR_NOTES:${JSON.stringify(directorNotes)}`,
+        animation_prompt: scene.camera_direction || 'static',
+        duration_seconds: beatDurations[i],
+        camera_movement: cameraMap[scene.camera_direction] || 'static',
+        animation_speed: 'normal',
+        status: 'breakdown_ready',
+        act: scene.section_title || '',
+        notes: scene.text_overlay || '',
+      };
+    });
+
+    await base44.asServiceRole.entities.Scenes.bulkCreate(sceneRecords);
+
     await base44.asServiceRole.entities.Projects.update(project_id, {
       status: 'breakdown_complete',
       current_step: 5,
     });
 
-    console.log(`[explainerScene] 🎉 COMPLETE — ${totalCreated} scenes`);
+    const elapsed = ((Date.now() - callStart) / 1000).toFixed(1);
+    console.log(`🎓 Created ${sceneRecords.length} explainer scenes in ${elapsed}s | total duration: ${offset.toFixed(1)}s`);
 
     return Response.json({
       success: true,
       done: true,
-      scenes_created: totalCreated,
-      total_target_scenes: totalTargetScenes,
-      arc,
-      arc_label: arcDna.label,
+      scenes_created: sceneRecords.length,
+      sections_processed: outlineSections.length,
+      arc_type: arcType,
+      arc_label: arcDef.label,
+      total_duration_seconds: parseFloat(offset.toFixed(1)),
+      research_used: !!researchData,
     });
 
   } catch (error) {
-    console.error('[explainerScene] error:', error.message, error.stack);
+    console.error('❌ explainerSceneBreakdown error:', error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 });
