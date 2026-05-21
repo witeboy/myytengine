@@ -351,12 +351,24 @@ export default function StoryScript() {
                 <span className="font-mono font-semibold text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded">
                   {project.project_mode}
                 </span>
-                {project.project_mode === 'explainer' && project.explainer_arc && (
+                {project.project_mode === 'explainer' && (
                   <>
                     <span className="text-emerald-700">·</span>
-                    <span className="font-mono font-semibold text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded">
-                      {project.explainer_arc} arc
-                    </span>
+                    <select
+                      value={project.explainer_arc || 'professor'}
+                      onChange={async (e) => {
+                        await base44.entities.Projects.update(projectId, { explainer_arc: e.target.value });
+                        await refetchProject();
+                      }}
+                      className="font-mono font-semibold text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded text-xs border border-emerald-300 cursor-pointer hover:bg-emerald-200"
+                      title="Change Einstein arc — affects character look & narration style"
+                    >
+                      <option value="science">science arc</option>
+                      <option value="professor">professor arc</option>
+                      <option value="accountant">accountant arc (finance)</option>
+                      <option value="tech">tech arc</option>
+                    </select>
+                    <span className="text-emerald-600 text-xs">(click to change)</span>
                   </>
                 )}
               </>

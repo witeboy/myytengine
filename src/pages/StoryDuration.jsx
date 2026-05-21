@@ -108,9 +108,11 @@ export default function StoryDuration() {
     // Also save directly to project so the backend can read it immediately.
     // For explainer mode, map the subject (explainer_tech / explainer_finance / ...) to
     // the explainer_arc enum the backend expects (tech / accountant / professor / science).
+    // ⚠️ ONLY overwrite explainer_arc if the project doesn't already have one set
+    // (NewProject's ProjectModePicker writes the user's chosen arc — we must respect it).
     if (scriptMode === 'story' || scriptMode === 'explainer') {
       const updates = { shorts_niche: shortsNiche };
-      if (scriptMode === 'explainer') {
+      if (scriptMode === 'explainer' && !project?.explainer_arc) {
         const arcMap = {
           explainer_tech: 'tech',
           explainer_finance: 'accountant',
