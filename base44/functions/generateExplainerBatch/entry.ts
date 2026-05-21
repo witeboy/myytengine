@@ -9,19 +9,63 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
 
+function hasUsableResearch(researchNotes) {
+  if (!researchNotes) return false;
+  try {
+    const r = typeof researchNotes === 'string' ? JSON.parse(researchNotes) : researchNotes;
+    return ((r.facts || []).length + (r.key_numbers || []).length) >= 4;
+  } catch (_) { return false; }
+}
+
+// Grounded web research fallback (Gemini + Google Search) — used only if research_notes missing.
+async function researchTopicGrounded(topicTitle, topicDescription, niche) {
+  if (!GEMINI_KEY) throw new Error('GEMINI_API_KEY not set');
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`;
+  const prompt = `Use Google Search to find REAL, VERIFIABLE facts for an explainer video. Do NOT invent numbers, companies, studies, or dollar figures.
+
+TOPIC: ${topicTitle}
+DESCRIPTION: ${topicDescription || 'N/A'}
+NICHE: ${niche || 'general'}
+
+Find 8-12 sourced facts, 6-10 specific numbers (with sources), 2-4 misconceptions with truths. For list-style topics, find a real example + revenue range for each item.
+
+Return ONLY JSON:
+{"facts":[{"claim":"...","source_name":"...","source_url":"..."}],"key_numbers":[{"number":"...","context":"...","source_name":"...","source_url":"..."}],"common_misconceptions":[{"myth":"...","truth":"...","source_url":"..."}]}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      tools: [{ googleSearch: {} }],
+      generationConfig: { temperature: 0.3, maxOutputTokens: 8192 },
+    }),
+  });
+  if (!response.ok) throw new Error(`Gemini research ${response.status}`);
+  const data = await response.json();
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  let parsed = null;
+  try { parsed = JSON.parse(rawText); } catch (_) {}
+  if (!parsed) {
+    let jsonStr = rawText;
+    if (rawText.includes('```json')) jsonStr = rawText.split('```json')[1].split('```')[0].trim();
+    else if (rawText.includes('```')) jsonStr = rawText.split('```')[1].split('```')[0].trim();
+    try { parsed = JSON.parse(jsonStr); } catch (_) {}
+  }
+  if (!parsed) { const m = rawText.match(/\{[\s\S]*\}/); if (m) { try { parsed = JSON.parse(m[0]); } catch (_) {} } }
+  if (!parsed) throw new Error('Failed to parse research JSON');
+  return {
+    facts: Array.isArray(parsed.facts) ? parsed.facts : [],
+    key_numbers: Array.isArray(parsed.key_numbers) ? parsed.key_numbers : [],
+    common_misconceptions: Array.isArray(parsed.common_misconceptions) ? parsed.common_misconceptions : [],
+  };
+}
+
 function extractSectionType(focusArea, batchNumber) {
   const m = (focusArea || '').match(/^\[([a-z_]+)\|s\d+\]/);
   if (m) return m[1];
   const canonical = ['hook', 'core_concept', 'mechanism', 'example', 'application', 'takeaway'];
   return canonical[batchNumber - 1] || 'core_concept';
-}
-
-// Extract item ordinal ("Number 3", "Item 5") from story_segment / focus_area
-function extractItemNumber(batch) {
-  const text = `${batch.story_segment || ''} ${batch.focus_area || ''}`;
-  const m = text.match(/(?:number|item|#)\s*(\d{1,2})/i);
-  if (m) return parseInt(m[1]);
-  return null;
 }
 
 async function callClaude(prompt, temperature = 0.55, retries = 2) {
@@ -94,138 +138,83 @@ function buildExplainerWritingPrompt({ batch, sectionType, project, topic, sorte
 
   const isHook = sectionType === 'hook';
   const isTakeaway = sectionType === 'takeaway';
-  const isItem = sectionType === 'item';
-  const itemNumber = isItem ? extractItemNumber(batch) : null;
-
-  // Detect list-mode from sibling batches (presence of any 'item' batches)
-  const isListVideo = sortedBatches.some(b => /\[item\|s\d+\]/.test(b.focus_area || ''));
 
   const pacingRules = isHook ? `
-**═══ HOOK SECTION — CONVERSATIONAL TEASE ═══**
-✅ HOOK STYLE (90-150 seconds of narration):
-- Open with a casual observation or skeptical question: "You know what's funny?" / "While everyone's chasing X, there are people quietly..."
-- Drop the most striking number from research IN CASUAL FORM ("making millions selling trash. Literally.")
-- Acknowledge the listener's likely assumption ("I know, when you think X you're probably picturing Y, right?")
-- Tease the WILDEST/MOST SHOCKING item or fact ("stick with me because ${isListVideo ? 'number four' : 'point three'} involves something you probably flushed this morning. I'm serious.")
-- End with a casual "Let's jump in" / "Here we go" — NOT a formal transition
-- Mix sentence lengths freely. Short punchy lines AND medium 12-15 word lines. No 7-word cap.
+**═══ HOOK SECTION — STACCATO PACY MODE (CRITICAL) ═══**
+✅ HOOK RULES:
+- EVERY sentence ≤ 7 words. Hard cap. Most sentences 3-6 words.
+- Each sentence ≈ 2-3 seconds of narration
+- Each sentence becomes ITS OWN SCENE in the breakdown
+- Open with the most striking number from research
+- Then central question. Then misconception flip. Then promise.
 
 ❌ HOOK BANS:
-- NO "in this video" / "today we'll explore" / "buckle up" / "let me show you"
-- NO academic preamble ("A 90% success rate exists. For certain business owners.")
-- NO stating thesis up front like a school essay
-- NO "this raises a question" / "let us examine"
-` : isItem ? `
-**═══ ITEM ${itemNumber || ''} SECTION — CONVERSATIONAL STORY-DRIVEN ═══**
-✅ ITEM STRUCTURE (in order):
-1. ANNOUNCE the item by name: "Number ${itemNumber || 'N'}: [thing]." OR "Alright, ${itemNumber === 1 ? 'first up' : itemNumber === 2 ? 'number two' : `number ${itemNumber}`}, [thing]."
-2. Acknowledge skepticism: "I know, I know, you're thinking [obvious objection]. But hear me out."
-3. Tell ONE specific anonymous-character story with CONCRETE numbers:
-   - "There's this guy who used to work in accounting..." OR "I read about this woman who..."
-   - Starting capital (e.g. "$2k", "ten grand")
-   - Time-to-scale (e.g. "5 years later")
-   - Current operation size (e.g. "800 vending machines", "4 storage facilities")
-   - Annual revenue/profit (e.g. "$2.3 million a year", "$1.8 million in profit annually")
-4. Explain why this business WORKS — recession-proof, low overhead, recurring, passive — in casual language
-5. Drop 2-3 MORE specific numbers (profit margins, monthly figures, employee counts)
-6. End with ONE punchy line that bridges to the next item OR cements the takeaway
-7. Add at least ONE casual aside, joke, or skeptical interjection ("Is it sexy? Absolutely not. Will your friends be impressed at parties? Probably not.")
+- NO long sentences. NO compound clauses exceeding 7 words.
+- NO "in this video" / "today we'll explore" / "buckle up"
+- NO storytelling preamble. Numbers and questions only.
 
-EXAMPLE OPENING (vending machines):
-"Number one: vending machines. I know, I know, you're thinking, vending machines? Really? That's your big millionaire secret? But hear me out. There's this guy who used to work in accounting. Regular dude. Hated every second of it. One day he buys one vending machine for about two grand..."
-
-❌ ITEM BANS:
-- NO academic vocabulary (inelastic demand, barriers to entry, economies of scale, discretionary purchases)
-- NO formal sourcing ("According to IBISWorld..." / "The U.S. Census Bureau notes...") — sources stay implicit
-- NO bullet points or numbered sub-lists inside narration
-- NO "Let's examine" / "Let's distill" / "This raises a question"
-- NO generic statements without a specific story ("People always need X" must be followed by a real-numbers anecdote)
-` : isTakeaway ? `
-**═══ TAKEAWAY SECTION — CASUAL WRAP-UP ═══**
-✅ TAKEAWAY STYLE:
-- Casual: "So there you have it." / "Here's the thing everyone misses." / "Alright, let's wrap this up."
-- Restate the THROUGH-LINE in plain language ("Boring is beautiful. Boring is predictable. Boring means proven.")
-- 2-3 punchy insights that feel like advice from a friend, NOT lessons from a teacher
-- Acknowledge the elephant in the room ("These won't get featured in TechCrunch")
-- Soft CTA at the end is OK: "If this opened your eyes, like the video and drop a comment..."
-- End with a memorable kicker line
-
-❌ TAKEAWAY BANS:
-- NO "Let's distill these lessons into critical insights."
-- NO "The data shows otherwise."
-- NO formal recap structure ("The first key insight... The second key insight...")
-- NO academic conclusion ("This directly addresses the most pervasive misconception")
+EXAMPLE:
+"Forty-five percent of small businesses fail. Year one. Why?
+Most owners blame the economy. Wrong.
+The real killer is invisible. It hides in plain sight."
 ` : `
-**═══ BODY SECTION — CONVERSATIONAL TEACHING ═══**
-- Casual friend-explaining-something voice. Mix 5-word sentences with 15-20 word ones.
-- Use "there's this guy who..." / "I read about a woman who..." anonymous-character stories with REAL DOLLAR FIGURES
-- Drop concrete numbers every 2-3 sentences
-- Add skeptical/curious asides ("Sounds simple, right? It is.")
-- NO academic vocabulary
+**═══ ${isTakeaway ? 'TAKEAWAY' : 'BODY'} SECTION — TEACHERLY PACING ═══**
+- Natural educational rhythm. Average sentence: 12-18 words.
+- Mix short declaratives with longer explanatory sentences.
+- ${isTakeaway ? 'Slow down. Land 2-3 takeaways. Correct biggest misconception. NO CTA.' : 'Build step-by-step. Each idea earned before the next.'}
 
 **DELIVER WHAT YOU PROMISE:**
-If you write "let's look at the numbers", the very NEXT sentences MUST contain spoken numbers.
+If you write "let's look at the numbers", the very NEXT sentences MUST contain actual spoken numbers from research.
 WRONG: "Let's run the maths. As you can see, margins are excellent."
-RIGHT: "Let's do some quick math. Revenue: 100 grand. Costs: 40 grand. Sixty thousand profit. A 60% margin."
+RIGHT: "Let's run the maths. Revenue: one hundred thousand. Costs: forty thousand. Sixty thousand profit. A sixty percent margin."
 `;
 
-  const audienceLine = isListVideo
-    ? `**TOTAL FORMAT**: This is a LIST video with multiple ITEM sections. Each item batch is one entry on the list. You are writing ${isItem ? `ITEM ${itemNumber || batch.batch_number - 1} of the list` : sectionType.toUpperCase() + ' (frames the list)'}.`
-    : `**TOTAL FORMAT**: Standard conversational explainer.`;
-
-  return `You are a top YouTube explainer scriptwriter writing a CONVERSATIONAL, story-driven narration. Imagine you're talking to a friend over coffee — casual, punchy, full of specific dollar figures and "there's this guy who..." anecdotes. Never lecture mode.
+  return `You are an expert educational scriptwriter narrating a fact-grounded explainer video. Patient, clear teacher voice — never viral YouTuber hype.
 
 **PROJECT**:
 - Topic: ${topic?.title || project.name}
 - Description: ${topic?.description || ''}
 - Niche: ${project.niche || 'Educational'}
 - Video Duration: ${project.video_duration_minutes || 10} minutes
-
-${audienceLine}
 ${researchBlock}
 
 **FULL STORY ARC**:
 ${outlineContext}
 
 **YOU ARE WRITING BATCH ${batch.batch_number} of ${sortedBatches.length}**: "${batch.story_segment}"
-**SECTION TYPE**: ${sectionType.toUpperCase()}${isItem && itemNumber ? ` (Item #${itemNumber} on the list)` : ''}
+**SECTION TYPE**: ${sectionType.toUpperCase()}
 
 **BATCH SYNOPSIS**:
 ${batch.synopsis}
 
-**MANDATORY WORD COUNT**: AT LEAST ${batch.target_words} words. Below ${Math.round(batch.target_words * 0.9)} = failure. Hit it via MORE specific anecdotes, MORE concrete numbers, MORE casual asides — never via academic padding.
+**MANDATORY WORD COUNT**: AT LEAST ${batch.target_words} words. Below ${Math.round(batch.target_words * 0.9)} = failure. ${isHook ? 'Hit count via MORE short sentences — never lengthen past 7 words.' : 'Add more examples, numbers, mechanism detail.'}
 
-${previousContent ? `**PREVIOUSLY WRITTEN** (continue seamlessly, do NOT repeat the same items/stories):\n${previousContent.slice(-4000)}\n` : ''}
+${previousContent ? `**PREVIOUSLY WRITTEN** (continue seamlessly, do NOT repeat):\n${previousContent.slice(-4000)}\n` : ''}
 
 ${pacingRules}
 
-**═══ UNIVERSAL CONVERSATIONAL RULES ═══**
+**═══ EXPLAINER WRITING RULES ═══**
+✅ DO:
+1. Quote SPECIFIC numbers from research verbatim
+2. Explain mechanisms step by step
+3. Define terms before using them
+4. Correct misconceptions head-on
+5. Concrete examples from research only
 
-✅ DO (every batch):
-1. Use casual contractions: "you're", "it's", "they're", "won't", "doesn't"
-2. Drop concrete dollar figures and numbers naturally ("$2.3 million a year", "60% margin", "800 units")
-3. Use anonymous-character stories ("there's this guy who...", "this woman started with one...")
-4. Add at least 2-3 casual interjections per batch ("I know, I know", "hear me out", "I'm serious", "stick with me")
-5. Mix sentence lengths freely — punchy 4-word lines + flowing 15-20 word lines
-6. Light humor / skepticism / self-deprecation when natural
-7. ${researchNotes ? 'Anchor numbers to the research provided. You MAY invent realistic illustrative anecdotes around those numbers, but never invent percentages or dollar figures not supported by research.' : 'Use plausible realistic numbers consistent with industry norms.'}
+❌ DO NOT:
+1. Invent statistics, percentages, company names, or examples not in research
+2. Hype phrases — banned: "you won't believe", "wait till you hear", "buckle up", "here's the kicker"
+3. Tease future batches mysteriously
+4. Clickbait curiosity gaps or rhetorical hype questions
+5. Scene directions, [SCENE:], stage directions — narration ONLY
+6. "in today's video" / "welcome back" / meta-commentary
 
-❌ DO NOT (every batch — list of BANNED phrases/structures):
-1. ACADEMIC VOCAB: "inelastic demand", "barriers to entry", "economies of scale", "discretionary purchases", "this combination creates", "this directly addresses", "let us examine", "let's distill", "the data shows", "this raises a question"
-2. FORMAL SOURCING: "According to IBISWorld...", "The U.S. Bureau of Labor Statistics confirms...", "Entrepreneur magazine reports..." — sources stay IMPLICIT inside anecdotes
-3. ESSAY STRUCTURE: "First... Second... Third... Finally..." rigid listing inside one section
-4. TEXTBOOK FRAMING: "We will now reveal", "We have covered", "Now that we understand"
-5. HYPE PHRASES: "you won't believe", "wait till you hear", "buckle up"
-6. META: "in today's video" / "welcome back" / scene directions / [SCENE:]
-7. Phrases starting with "Let's" except natural ones like "Let's jump in", "Let's do some quick math"
-8. Inventing statistics not in research
-
-**${isFirstBatch ? 'OPENING: Casual observation or "you know what\'s funny?" — drop a striking number IMPLICITLY through a story. No textbook thesis.' : 'Continue naturally from previous batch — like a friend continuing a conversation, NOT a chapter transition.'}**
-**${isLastBatch ? 'CLOSING: Casual wrap-up. Restate through-line conversationally. Soft CTA OK.' : 'End with a casual bridge — "Number ' + ((extractItemNumber(batch) || batch.batch_number) + 1) + '..." OR a punchy one-liner setting up what\'s next. NOT a formal section close.'}**
+**${isFirstBatch ? 'OPENING: Most striking number or question. No hype intro.' : 'Continue logically from previous batch with transitional bridge.'}**
+**${isLastBatch ? 'CLOSING: 2-3 takeaways. Correct major misconception. Clear conclusion — not CTA.' : 'End with logical bridge to next batch — not a teaser.'}**
 
 Return JSON:
 {
-  "content": "Full narration text — pure spoken words, no directions, no headings...",
+  "content": "Full narration text — pure spoken words, no directions...",
   "word_count": 1234
 }`;
 }
@@ -276,10 +265,24 @@ Deno.serve(async (req) => {
     const isLastBatch = batch.batch_number === sortedBatches.length;
     const outlineContext = sortedBatches.map(b => `Batch ${b.batch_number} "${b.story_segment}": ${b.focus_area}`).join('\n');
 
+    // Safety net: if research_notes missing/thin, fetch grounded facts before writing
+    let researchNotes = project.research_notes;
+    if (!hasUsableResearch(researchNotes)) {
+      console.log(`[generateExplainerBatch] No usable research — fetching grounded facts...`);
+      try {
+        const r = await researchTopicGrounded(topic?.title || project.name, topic?.description || '', project.niche);
+        researchNotes = JSON.stringify(r);
+        await base44.asServiceRole.entities.Projects.update(project_id, { research_notes: researchNotes });
+        console.log(`[generateExplainerBatch] ✅ Fetched ${r.facts.length} facts, ${r.key_numbers.length} numbers`);
+      } catch (e) {
+        console.warn(`[generateExplainerBatch] ⚠️ Research fallback failed: ${e.message}`);
+      }
+    }
+
     const prompt = buildExplainerWritingPrompt({
       batch, sectionType, project, topic, sortedBatches,
       previousContent, outlineContext, isFirstBatch, isLastBatch,
-      researchNotes: project.research_notes,
+      researchNotes,
     });
 
     const baseTemp = sectionType === 'hook' ? 0.5 : 0.55;
@@ -296,12 +299,12 @@ Deno.serve(async (req) => {
         const wordsNeeded = batch.target_words - wordCount;
         currentPrompt = `You previously wrote this explainer ${sectionType} section but it's too short (${wordCount}/${batch.target_words} words).
 
-EXISTING CONTENT (do NOT repeat — continue from last line in the SAME casual conversational voice):
+EXISTING CONTENT (do NOT repeat — continue from last line):
 ---
 ${content.slice(-3000)}
 ---
 
-Write EXACTLY ${wordsNeeded} MORE words continuing the ${sectionType} in casual, conversational YouTube-explainer voice. ADD: more specific dollar figures, another "there's this guy/woman who..." anecdote with concrete numbers, casual asides, light humor. NO academic vocabulary (no "inelastic demand", "barriers to entry", "let's distill", "the data shows"). NO formal sourcing. NO hype phrases ("you won't believe").
+Write EXACTLY ${wordsNeeded} MORE words continuing the ${sectionType}. ${sectionType === 'hook' ? 'Staccato mode — every sentence ≤ 7 words. MORE short sentences.' : 'Same teacherly tone. Add: mechanism detail, specific numbers, concrete examples.'} NO hype, NO teases.
 
 Return JSON: {"content": "additional text only...", "word_count": ${wordsNeeded}}`;
       }

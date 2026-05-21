@@ -3,9 +3,96 @@ import OpenAI from 'npm:openai@4.58.1';
 
 // ═══════════════════════════════════════════════════════════════════
 // EXPLAINER PIPELINE — Step 1: Outline batches anchored to research_notes
+// Auto-runs web research (Gemini + Google Search grounding) if missing.
 // ═══════════════════════════════════════════════════════════════════
 
 const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
+const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
+
+// ─── Inline web research (mirrors explainerResearch) ──────────────────
+async function researchTopicGrounded(topicTitle, topicDescription, niche) {
+  if (!GEMINI_KEY) throw new Error('GEMINI_API_KEY not set — cannot run grounded research');
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`;
+  const prompt = `You are a research assistant for an educational YouTube explainer video. Use Google Search to find REAL, VERIFIABLE facts about this topic. Do NOT make up statistics, dates, studies, company names, or dollar figures.
+
+**TOPIC**: ${topicTitle}
+**DESCRIPTION**: ${topicDescription || 'N/A'}
+**NICHE**: ${niche || 'general'}
+
+**YOUR TASK**:
+- Find 8-12 concrete facts grounded in real sources (recent, reputable: gov data, academic, major news, industry reports)
+- Find 6-10 specific numbers/percentages/dollar amounts/dates that are well-documented (with sources)
+- Find 2-4 common misconceptions and the actual truth that corrects each one
+- If the topic is a LIST-STYLE topic (e.g. "6 boring businesses that make millionaires"), find a real example, real revenue/margin range, and a real owner story (anonymized OK if needed) for EACH item
+
+**RULES**:
+- Every fact must have a source URL from your search
+- Quote numbers exactly as they appear in the source (don't round wildly)
+- If you can't find a real number for something, OMIT it — do NOT invent
+- Favor sources from the last 5 years
+
+Return ONLY valid JSON (no markdown):
+{
+  "facts": [
+    {"claim": "...", "source_name": "...", "source_url": "https://..."}
+  ],
+  "key_numbers": [
+    {"number": "e.g. '$1.4 trillion' or '64%'", "context": "what it represents", "source_name": "...", "source_url": "https://..."}
+  ],
+  "common_misconceptions": [
+    {"myth": "...", "truth": "...", "source_url": "https://..."}
+  ]
+}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      tools: [{ googleSearch: {} }],
+      generationConfig: { temperature: 0.3, maxOutputTokens: 8192 },
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json();
+    throw new Error(`Gemini research error ${response.status}: ${err.error?.message || JSON.stringify(err)}`);
+  }
+
+  const data = await response.json();
+  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+  let parsed = null;
+  try { parsed = JSON.parse(rawText); } catch (_) {}
+  if (!parsed) {
+    let jsonStr = rawText;
+    if (rawText.includes('```json')) jsonStr = rawText.split('```json')[1].split('```')[0].trim();
+    else if (rawText.includes('```')) jsonStr = rawText.split('```')[1].split('```')[0].trim();
+    try { parsed = JSON.parse(jsonStr); } catch (_) {}
+  }
+  if (!parsed) {
+    const objMatch = rawText.match(/\{[\s\S]*\}/);
+    if (objMatch) { try { parsed = JSON.parse(objMatch[0]); } catch (_) {} }
+  }
+  if (!parsed) throw new Error('Failed to parse research JSON from Gemini');
+
+  return {
+    facts: Array.isArray(parsed.facts) ? parsed.facts : [],
+    key_numbers: Array.isArray(parsed.key_numbers) ? parsed.key_numbers : [],
+    common_misconceptions: Array.isArray(parsed.common_misconceptions) ? parsed.common_misconceptions : [],
+  };
+}
+
+function hasUsableResearch(researchNotes) {
+  if (!researchNotes) return false;
+  try {
+    const r = typeof researchNotes === 'string' ? JSON.parse(researchNotes) : researchNotes;
+    const factCount = (r.facts || []).length;
+    const numCount = (r.key_numbers || []).length;
+    return factCount + numCount >= 4;
+  } catch (_) { return false; }
+}
 
 const EXPLAINER_SECTIONS = [
   { type: 'hook',         label: 'Hook',          time_pct: 0.10 },
@@ -16,50 +103,7 @@ const EXPLAINER_SECTIONS = [
   { type: 'takeaway',     label: 'Takeaway',      time_pct: 0.10 },
 ];
 
-// ═══════════════════════════════════════════════════════════════════
-// LIST TOPIC DETECTOR — detects "6 Boring Businesses", "Top 5 X", "7 Habits"
-// Returns N (item count, capped 3-10) or null if not a list topic.
-// ═══════════════════════════════════════════════════════════════════
-function detectListTopic(title, description) {
-  if (!title) return null;
-  const combined = `${title} ${description || ''}`.toLowerCase();
-
-  // Pattern 1: leading digit "6 boring businesses", "5 mistakes"
-  let m = combined.match(/\b(\d{1,2})\s+(boring|best|worst|weird|unusual|simple|easy|insane|crazy|surprising|hidden|secret|proven|essential|common|biggest|smartest|stupidest|profitable|deadly|silent|odd|underrated|overlooked)?\s*([a-z]+)/);
-  if (m) {
-    const n = parseInt(m[1]);
-    if (n >= 3 && n <= 10) return n;
-  }
-
-  // Pattern 2: "top 5", "top 7"
-  m = combined.match(/\btop\s+(\d{1,2})\b/);
-  if (m) {
-    const n = parseInt(m[1]);
-    if (n >= 3 && n <= 10) return n;
-  }
-
-  // Pattern 3: word-form numbers "seven habits", "six businesses"
-  const wordToNum = { three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
-  for (const [word, num] of Object.entries(wordToNum)) {
-    if (new RegExp(`\\b${word}\\s+[a-z]+`, 'i').test(combined)) return num;
-  }
-
-  return null;
-}
-
-// Build dynamic LIST arc: hook + N items + takeaway
-// Hook=8%, Takeaway=8%, items share 84% equally
-function buildListSections(itemCount) {
-  const itemPct = 0.84 / itemCount;
-  const sections = [{ type: 'hook', label: 'Hook', time_pct: 0.08 }];
-  for (let i = 1; i <= itemCount; i++) {
-    sections.push({ type: 'item', label: `Item ${i}`, time_pct: itemPct, item_number: i });
-  }
-  sections.push({ type: 'takeaway', label: 'Takeaway', time_pct: 0.08 });
-  return sections;
-}
-
-async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
+async function callOpenAI(prompt, temperature = 0.4, retries = 3) {
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       const response = await openai.chat.completions.create({
@@ -68,7 +112,7 @@ async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
         max_tokens: 16384,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: 'You are a top YouTube scriptwriter who writes conversational, story-driven explainers. You write like you are talking to a friend — casual, punchy, full of specific named-anonymous-person stories with exact dollar figures and numbers. You NEVER use academic vocabulary. Always respond with valid JSON. Anchor every claim to provided research facts. Never invent statistics or company names not in research, but you MAY invent illustrative "there is this guy who..." stories that are realistic and consistent with research.' },
+          { role: 'system', content: 'You are an educational content strategist. Always respond with valid JSON. Anchor every claim to provided research facts. Never invent statistics or examples.' },
           { role: 'user', content: prompt },
         ],
       });
@@ -81,7 +125,7 @@ async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
   }
 }
 
-function buildExplainerOutlinePrompt({ topic, project, totalTargetWords, durationMinutes, researchNotes, strategyBlock, isList, itemCount, sectionsArray }) {
+function buildExplainerOutlinePrompt({ topic, project, totalTargetWords, durationMinutes, researchNotes, strategyBlock }) {
   let researchBlock = '';
   if (researchNotes) {
     try {
@@ -111,72 +155,50 @@ ${myths || '  (none provided)'}
     }
   }
 
-  const sectionSpec = sectionsArray.map((s, i) => {
+  const sectionSpec = EXPLAINER_SECTIONS.map((s, i) => {
     const wordTarget = Math.round(totalTargetWords * s.time_pct);
-    const itemLabel = s.type === 'item' ? ` (the #${s.item_number} item on the list)` : '';
-    return `${i + 1}. ${s.label}${itemLabel} (${s.type}) — ${Math.round(s.time_pct * 100)}% of video, ~${wordTarget} words`;
+    return `${i + 1}. ${s.label} (${s.type}) — ${Math.round(s.time_pct * 100)}% of video, ~${wordTarget} words`;
   }).join('\n');
 
-  const sectionGuidance = isList
-    ? `SECTION-SPECIFIC GUIDANCE (LIST VIDEO):
-- HOOK: Conversational opening. Tease the wildest item on the list ("number four involves something you probably flushed this morning"). Punchy, casual. NO academic preamble.
-- ITEM_1...ITEM_${itemCount}: EACH item gets its own batch. Each item MUST include: (a) the item's name announced clearly ("Number two: self-storage facilities"), (b) ONE specific "there's this guy/woman who..." millionaire story with concrete numbers (starting capital, current revenue, profit margin, units owned, years in business), (c) why this business works (recession-proof, low overhead, recurring, etc.), (d) a casual aside / joke / skeptical interjection.
-- TAKEAWAY: Wrap it up casually. "So there you have it." Recap the through-line ("boring is beautiful"). Direct CTA to like/comment/subscribe is OK here — be friendly, not preachy.`
-    : `SECTION-SPECIFIC GUIDANCE:
-- HOOK: Conversational opening. Drop the most striking number. Pose THE question. Casual, like talking to a friend. NO "in this video" / "today we'll explore" / "buckle up".
-- CORE CONCEPT: Plain-language definition of the central idea — with a real number from research in the first 3 sentences.
-- MECHANISM: How it actually works. Use a "there's this guy/woman who..." example with specific numbers wherever possible. Avoid academic vocab.
-- WORKED EXAMPLE: ONE concrete walkthrough with real dollar figures. Show the math casually ("revenue: 100 grand. Costs: 40 grand. That's 60k profit, 60% margin.").
-- APPLICATION: Practical implications. "Here's why this matters to you."
-- TAKEAWAY: 2-3 key insights, casual recap. Correct the biggest misconception. Soft CTA OK at end.`;
-
-  return `You are a top YouTube explainer scriptwriter outlining a CONVERSATIONAL, story-driven video.
+  return `You are an elite educational scriptwriter creating a fact-grounded explainer video outline.
 
 **PROJECT**:
 - Topic: ${topic?.title || project.name}
 - Topic Description: ${topic?.description || 'No description'}
 - Niche: ${project.niche || 'Educational'}
 - Duration: ${durationMinutes} minutes (~${totalTargetWords} words at 150 wpm)
-- Format Detected: ${isList ? `LIST VIDEO with ${itemCount} items` : 'STANDARD EXPLAINER'}
-- Voice: casual, friendly, slightly skeptical — NEVER academic/textbook
+- Tone: clear, authoritative, curious — NOT viral/hype
 ${strategyBlock || ''}
 ${researchBlock}
 
-**═══ ${isList ? `LIST ARC — HOOK + ${itemCount} ITEMS + TAKEAWAY` : 'FIXED 6-SECTION EXPLAINER ARC'} ═══**
+**═══ FIXED 6-SECTION EXPLAINER ARC ═══**
 ${sectionSpec}
 
-${sectionGuidance}
-
-**═══ VOICE & STYLE RULES (APPLY TO EVERY SYNOPSIS) ═══**
-✅ DO write synopses that demand:
-- Specific "there's this guy/woman who..." millionaire/expert stories with concrete dollar figures (starting capital, annual revenue, profit margin, number of units, years)
-- Casual interjections, asides, mild humor, light self-deprecation
-- Numbers in nearly every paragraph — quoted as the writer would SAY them ("two grand", "$2.3 million a year", "60% margin")
-- Skeptical/curious framing ("I know what you're thinking..." / "Hear me out..." / "Sounds simple, right? It is.")
-
-❌ NEVER include academic/textbook vocabulary in synopses:
-- BANNED words/phrases: "inelastic demand", "barriers to entry", "economies of scale", "discretionary purchases", "let's distill", "let us examine", "consumer", "stakeholder", "this raises a question", "this combination creates", "we have covered"
-- BANNED structures: bullet points inside narration, formal section headers, "First... Second... Third..." rigid listing inside a section
-- BANNED phrases: "fundamental mistake", "the data shows", "U.S. Bureau of Labor Statistics confirms", "according to market research firm" (use sources implicitly — "this guy told Forbes...", not "Forbes reported that...")
+SECTION-SPECIFIC GUIDANCE:
+- HOOK: Short punchy sentences. Pose the central question. State the most striking number. NO storytelling preamble.
+- CORE CONCEPT: Define the central idea in plain language.
+- MECHANISM: Step-by-step reasoning. Longest teaching section.
+- WORKED EXAMPLE: Walk through ONE concrete example with real numbers.
+- APPLICATION: Practical implications.
+- TAKEAWAY: 2-3 key insights. Correct the biggest misconception. NO CTA hype.
 
 Return JSON:
 {
   "batches": [
     {
       "batch_number": 1,
-      "section_type": "${isList ? 'hook | item | takeaway' : 'hook | core_concept | mechanism | example | application | takeaway'}",
-      "story_segment": "Short title (3-5 words)${isList ? ', e.g. \"Number 1: Vending Machines\" for items' : ''}",
+      "section_type": "hook",
+      "story_segment": "Short title (3-5 words)",
       "focus_area": "Brief focus (1 sentence)",
-      "synopsis": "DETAILED synopsis (150-250 words). MUST briefly name the specific anonymous-character story you intend to use in this batch, MUST list 3-5 specific numbers/dollar figures the writer will weave in, AND describe the casual conversational angle."
+      "synopsis": "DETAILED synopsis (150-250 words) citing SPECIFIC facts and numbers from research."
     }
   ]
 }
 
 **RULES**:
-- Generate EXACTLY ${sectionsArray.length} batches in section order
-- Every synopsis MUST reference at least one specific number from research OR a clear placeholder number range (e.g. "starting capital ~$2k, scales to $300k/yr")
-- ${isList ? `For each item batch, include the item's NAME in the story_segment ("Number ${'<N>'}: ${'<thing>'}")` : 'No filler, no "in today\'s video"'}
-- No academic vocabulary. No textbook tone.`;
+- Generate EXACTLY 6 batches in section order: hook → core_concept → mechanism → example → application → takeaway
+- Every synopsis MUST reference at least one specific fact or number from research
+- No filler, no buzzwords, no "in today's video"`;
 }
 
 Deno.serve(async (req) => {
@@ -227,31 +249,44 @@ Deno.serve(async (req) => {
 
     const durationMinutes = project.video_duration_minutes || 10;
     const totalTargetWords = Math.round(durationMinutes * 150);
+    const batchTargets = EXPLAINER_SECTIONS.map(s => Math.max(50, Math.round(totalTargetWords * s.time_pct)));
 
-    // ═══ LIST DETECTION ═══
-    const itemCount = detectListTopic(topic?.title || project.name, topic?.description);
-    const isList = itemCount !== null;
-    const sectionsArray = isList ? buildListSections(itemCount) : EXPLAINER_SECTIONS;
-    const batchTargets = sectionsArray.map(s => Math.max(50, Math.round(totalTargetWords * s.time_pct)));
+    console.log(`[initializeExplainerBatches] ${durationMinutes}min → ${totalTargetWords} words → 6 sections`);
 
-    console.log(`[initializeExplainerBatches] ${durationMinutes}min → ${totalTargetWords} words → ${sectionsArray.length} sections${isList ? ` (LIST: ${itemCount} items)` : ''}`);
+    // ─── Auto-run grounded web research if missing/thin ────────────────
+    let researchNotes = project.research_notes;
+    if (!hasUsableResearch(researchNotes)) {
+      console.log(`[initializeExplainerBatches] No usable research yet — running grounded web research...`);
+      try {
+        const researchTitle = topic?.title || project.name;
+        const researchDesc = topic?.description || '';
+        const research = await researchTopicGrounded(researchTitle, researchDesc, project.niche);
+        researchNotes = JSON.stringify(research);
+        await base44.asServiceRole.entities.Projects.update(project_id, { research_notes: researchNotes });
+        console.log(`[initializeExplainerBatches] ✅ Research: ${research.facts.length} facts, ${research.key_numbers.length} numbers, ${research.common_misconceptions.length} myths`);
+      } catch (researchErr) {
+        console.warn(`[initializeExplainerBatches] ⚠️ Research failed (continuing without): ${researchErr.message}`);
+        researchNotes = project.research_notes || null;
+      }
+    } else {
+      console.log(`[initializeExplainerBatches] ✅ Reusing existing research_notes`);
+    }
 
     const outlinePrompt = buildExplainerOutlinePrompt({
       topic, project, totalTargetWords, durationMinutes,
-      researchNotes: project.research_notes,
+      researchNotes,
       strategyBlock,
-      isList, itemCount, sectionsArray,
     });
 
-    const outlineResult = await callOpenAI(outlinePrompt, 0.7);
+    const outlineResult = await callOpenAI(outlinePrompt, 0.4);
     if (!outlineResult.batches || outlineResult.batches.length === 0) {
       throw new Error('AI failed to generate outline batches');
     }
 
     const createdBatches = [];
-    for (let i = 0; i < sectionsArray.length; i++) {
+    for (let i = 0; i < 6; i++) {
       const aiBatch = outlineResult.batches[i];
-      const canonical = sectionsArray[i];
+      const canonical = EXPLAINER_SECTIONS[i];
       const sectionType = aiBatch?.section_type || canonical.type;
       const focusBase = aiBatch?.focus_area || canonical.label;
       const taggedFocus = `[${sectionType}|s${i + 1}] ${focusBase}`;
@@ -261,7 +296,7 @@ Deno.serve(async (req) => {
         batch_number: i + 1,
         story_segment: aiBatch?.story_segment || canonical.label,
         focus_area: taggedFocus,
-        synopsis: aiBatch?.synopsis || `Write approximately ${batchTargets[i]} words for ${canonical.label} in a conversational, story-driven voice with specific numbers.`,
+        synopsis: aiBatch?.synopsis || `Teach approximately ${batchTargets[i]} words for ${canonical.label}, citing research facts.`,
         target_words: batchTargets[i],
         status: 'pending'
       });
@@ -282,9 +317,7 @@ Deno.serve(async (req) => {
       total_target_words: totalTargetWords,
       duration_minutes: durationMinutes,
       script_mode: 'explainer',
-      is_list: isList,
-      item_count: itemCount,
-      has_research: !!project.research_notes,
+      has_research: hasUsableResearch(researchNotes),
       batches: createdBatches,
     });
   } catch (error) {
