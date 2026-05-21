@@ -2,29 +2,12 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
 // ══════════════════════════════════════════════════════════════════
 // EXPLAINER SCENE BREAKDOWN v3 — world-class cuts-per-min cadence
-//
-// HOW IT WORKS:
-// 1. Reads 6 ScriptBatches with [section_type|sN] tags (hook/core_concept/...
-//    mechanism/example/application/takeaway)
-// 2. Computes per-section target scene count using SECTION_CADENCE table
-// 3. Generates scenes section-by-section (resumable, 2 sections per call)
-// 4. Enforces 1.5-3.0s duration clamp server-side
-// 5. Outputs DIRECTOR_NOTES JSON in image_prompt for downstream Z-Image gen
-//
-// WORLD-CLASS DENSITY TARGETS (matches Vox / Veritasium / Kurzgesagt):
-//   hook:        30 cuts/min  (capped at 25 max scenes — no 9-min hooks)
-//   core_concept:10 cuts/min
-//   mechanism:   11 cuts/min
-//   example:     10 cuts/min
-//   application: 13 cuts/min
-//   takeaway:     6 cuts/min  (min 3 scenes — settle)
-//
-// Resulting: 10-min explainer = ~118 scenes (Veritasium territory)
+// Resumable: processes 2 sections per HTTP call. Frontend loops with
+// start_section until done=true.
 // ══════════════════════════════════════════════════════════════════
 
-// ── Section cadence (cuts per minute) ────────────────────────────
 const SECTION_CADENCE = {
-  hook:         { cuts_per_min: 30, min_scenes: 6,  max_scenes: 25, scene_dur: [1.5, 2.5] },
+  hook:         { cuts_per_min: 30, min_scenes: 6,  max_scenes: 25,  scene_dur: [1.5, 2.5] },
   core_concept: { cuts_per_min: 10, min_scenes: 4,  max_scenes: 999, scene_dur: [2.0, 3.0] },
   mechanism:    { cuts_per_min: 11, min_scenes: 6,  max_scenes: 999, scene_dur: [2.0, 3.0] },
   example:      { cuts_per_min: 10, min_scenes: 6,  max_scenes: 999, scene_dur: [2.0, 3.0] },
@@ -38,11 +21,8 @@ const EXPLAINER_SECTION_TIME_PCT = {
 };
 
 const CANONICAL_TYPES = ['hook', 'core_concept', 'mechanism', 'example', 'application', 'takeaway'];
-
-// Sections processed per HTTP call — keeps each call under ~90s to avoid 504
 const SECTIONS_PER_CALL = 2;
 
-// ── Helpers ──────────────────────────────────────────────────────
 function computeSceneTarget(sectionType, durationMinutes) {
   const cad = SECTION_CADENCE[sectionType] || SECTION_CADENCE.core_concept;
   const pct = EXPLAINER_SECTION_TIME_PCT[sectionType] ?? (1 / 6);
@@ -95,17 +75,12 @@ function extractJSON(rawText) {
     if (!repaired.endsWith('}')) repaired += '}';
   }
   try { return JSON.parse(repaired); } catch (_) {}
-  const lastComplete = text.lastIndexOf('},');
-  if (lastComplete > 0) {
-    try { return JSON.parse(text.substring(0, lastComplete + 1) + ']}'); } catch (_) {}
-  }
   return null;
 }
 
 async function callGemini(prompt, systemText, temperature = 0.4) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
-
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`,
     {
@@ -118,23 +93,20 @@ async function callGemini(prompt, systemText, temperature = 0.4) {
       }),
     }
   );
-
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(`Gemini error ${response.status}: ${err.error?.message || JSON.stringify(err)}`);
+    throw new Error(`Gemini ${response.status}: ${err.error?.message || JSON.stringify(err)}`);
   }
-
   const data = await response.json();
   const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   const parsed = extractJSON(rawText);
   if (parsed) return parsed;
-  throw new Error(`Gemini JSON parse failed. Length: ${rawText.length}`);
+  throw new Error(`Gemini JSON parse failed`);
 }
 
 async function callClaudeFallback(prompt, systemText, temperature = 0.4) {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   if (!apiKey) throw new Error("Missing ANTHROPIC_API_KEY");
-
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
@@ -146,12 +118,10 @@ async function callClaudeFallback(prompt, systemText, temperature = 0.4) {
       messages: [{ role: "user", content: prompt }],
     }),
   });
-
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(`Claude error ${response.status}: ${err.error?.message || JSON.stringify(err)}`);
+    throw new Error(`Claude ${response.status}: ${err.error?.message || JSON.stringify(err)}`);
   }
-
   const data = await response.json();
   const rawText = data.content?.[0]?.text || '';
   const parsed = extractJSON(rawText);
@@ -161,15 +131,13 @@ async function callClaudeFallback(prompt, systemText, temperature = 0.4) {
 
 async function callAI(prompt, temperature = 0.4) {
   const systemText = "You are an educational video director specialising in explainer content. Return ONLY raw valid JSON. No markdown, no backticks, no conversational text.";
-  try {
-    return await callGemini(prompt, systemText, temperature);
-  } catch (geminiErr) {
+  try { return await callGemini(prompt, systemText, temperature); }
+  catch (geminiErr) {
     console.warn(`⚠️ Gemini failed: ${geminiErr.message.substring(0, 120)} — falling back to Claude`);
   }
   return await callClaudeFallback(prompt, systemText, temperature);
 }
 
-// ── Einstein arc definitions ─────────────────────────────────────
 function getEinsteinArc(arcType) {
   const arcs = {
     science: {
@@ -204,7 +172,6 @@ function getEinsteinArc(arcType) {
   return arcs[arcType] || arcs.professor;
 }
 
-// ── Build section breakdown prompt ───────────────────────────────
 function buildSectionBreakdownPrompt({
   section, sectionIndex, totalSections, arcDef, sectionType,
   targetSceneCount, durationSeconds, sceneDurRange,
@@ -212,10 +179,10 @@ function buildSectionBreakdownPrompt({
 }) {
   const [durLo, durHi] = sceneDurRange;
   const pacingDirective = sectionType === 'hook'
-    ? `HOOK CADENCE: ${SECTION_CADENCE.hook.cuts_per_min} cuts/min (Cleo Abram / Vox cold-open density). Each narration sentence is ITS OWN SCENE. Most scenes ${durLo}-${durHi}s. Make ${targetSceneCount} scenes minimum.`
+    ? `HOOK CADENCE: 30 cuts/min. Each narration sentence is ITS OWN SCENE. Scenes ${durLo}-${durHi}s. Make ${targetSceneCount} scenes minimum.`
     : sectionType === 'takeaway'
-    ? `TAKEAWAY CADENCE: settle and breathe. ${SECTION_CADENCE.takeaway.cuts_per_min} cuts/min. Scenes ${durLo}-${durHi}s. Make ~${targetSceneCount} scenes.`
-    : `BODY CADENCE: ${SECTION_CADENCE[sectionType]?.cuts_per_min || 10} cuts/min (Veritasium/Kurzgesagt density). Scenes ${durLo}-${durHi}s. Make ~${targetSceneCount} scenes.`;
+    ? `TAKEAWAY CADENCE: settle and breathe. 6 cuts/min. Scenes ${durLo}-${durHi}s. Make ~${targetSceneCount} scenes.`
+    : `BODY CADENCE: ${SECTION_CADENCE[sectionType]?.cuts_per_min || 10} cuts/min. Scenes ${durLo}-${durHi}s. Make ~${targetSceneCount} scenes.`;
 
   return `You are an educational video director breaking down ONE section of an explainer video into scenes.
 
@@ -230,7 +197,7 @@ Title: "${section.title}"
 Allocated section duration: ${durationSeconds.toFixed(1)}s
 TARGET SCENE COUNT: ${targetSceneCount} scenes
 
-**SECTION SCRIPT** (narration to break up into scenes):
+**SECTION SCRIPT**:
 ${section.content}
 
 ${researchBlock}
@@ -240,20 +207,14 @@ ${researchBlock}
 **═══ WORLD-CLASS CADENCE RULE ═══**
 ${pacingDirective}
 
-**SCENE-BUILDING RULES (HARD)**:
-1. ONE SENTENCE = ONE SCENE. Split the section narration sentence-by-sentence.
-2. Each scene duration MUST be between ${durLo} and ${durHi} seconds — no exceptions.
-3. ${sectionType === 'hook' ? 'Hook scenes are PUNCHY — short narration, rapid cuts, big visual contrast between scenes.' : 'Body scenes show ONE diagram/formula/example per scene — never cram multiple ideas.'}
-4. Every scene must show Einstein OR a clean diagram OR a worked example panel.
-5. If the section mentions specific numbers/formulas/text, that EXACT text must appear visually on a chalkboard/panel in the scene.
-${isFirst ? '6. FIRST section of video — opening scene shows Einstein entering with personality.' : ''}
-${isLast ? '6. LAST section of video — final scene shows Einstein delivering the takeaway with warm satisfaction.' : ''}
-
-**VISUAL CONCEPT REQUIREMENTS (each scene)**:
-- 30+ words describing what's on screen
-- For diagrams: state EXACT text/numbers visible on chalkboard
-- For Einstein scenes: describe his pose, expression, what he's pointing at, what's on the chalkboard behind him
-- Use the EXACT Einstein look from the arc above — do NOT rephrase it
+**SCENE-BUILDING RULES**:
+1. ONE SENTENCE = ONE SCENE.
+2. Each scene duration MUST be between ${durLo} and ${durHi} seconds.
+3. ${sectionType === 'hook' ? 'Hook scenes PUNCHY — short narration, rapid cuts, big visual contrast.' : 'Body scenes show ONE diagram/formula/example per scene.'}
+4. Every scene shows Einstein OR a clean diagram OR a worked example panel.
+5. If section mentions specific numbers/formulas, that EXACT text must appear on a chalkboard/panel.
+${isFirst ? '6. FIRST section — opening scene shows Einstein entering with personality.' : ''}
+${isLast ? '6. LAST section — final scene shows Einstein delivering takeaway with warm satisfaction.' : ''}
 
 Return ONLY valid JSON:
 {
@@ -261,11 +222,11 @@ Return ONLY valid JSON:
   "scenes": [
     {
       "scene_number": ${globalSceneStart},
-      "narration_text": "single sentence from the section script — verbatim",
-      "visual_concept": "30+ word description: layout, what Einstein is doing, exact text on chalkboard, props visible",
-      "chalkboard_text": "EXACT text/numbers/formula visible on chalkboard or panel (or empty string)",
+      "narration_text": "single sentence — verbatim",
+      "visual_concept": "30+ word description: layout, Einstein action, chalkboard text, props",
+      "chalkboard_text": "EXACT text/numbers/formula visible (or empty)",
       "einstein_present": true,
-      "einstein_action": "specific action — pointing at chalkboard, writing formula, holding test tube, etc.",
+      "einstein_action": "pointing at chalkboard / writing formula / holding test tube",
       "shot_type": "ECU/CU/MCU/MS/WS",
       "camera_movement": "static / slow push-in / pan left / pan right / zoom in / zoom out",
       "camera_direction": "zoom_in or zoom_out or pan_left or pan_right or static or push_in",
@@ -273,7 +234,7 @@ Return ONLY valid JSON:
       "lighting": "lighting style",
       "color_palette": "from arc palette",
       "mood": "2-3 words",
-      "text_overlay": "bold on-screen label (or empty)",
+      "text_overlay": "bold label (or empty)",
       "continuity_bridge": "visual element linking to next scene"
     }
   ]
@@ -282,21 +243,11 @@ Return ONLY valid JSON:
 Scene numbers start at ${globalSceneStart}, increment by 1.`;
 }
 
-// ── Build research block for a section ───────────────────────────
 function buildResearchBlockForSection(researchData, flatResearch, sectionType, sectionIndex) {
-  // Prefer sectioned research if available
   const sectioned = researchData?.sections?.[sectionIndex];
   if (sectioned) {
-    return `
-**═══ VERIFIED RESEARCH FOR THIS SECTION ═══**
-Core facts: ${JSON.stringify(sectioned.core_facts || [])}
-Best analogy: ${sectioned.best_analogy || 'N/A'}
-Formulas/Code: ${JSON.stringify(sectioned.formulas_or_code || [])}
-Misconceptions to address: ${JSON.stringify(sectioned.misconceptions || [])}
-Accuracy notes: ${sectioned.accuracy_notes || 'N/A'}
-`;
+    return `\n**═══ VERIFIED RESEARCH FOR THIS SECTION ═══**\nCore facts: ${JSON.stringify(sectioned.core_facts || [])}\nBest analogy: ${sectioned.best_analogy || 'N/A'}\nFormulas/Code: ${JSON.stringify(sectioned.formulas_or_code || [])}\nMisconceptions: ${JSON.stringify(sectioned.misconceptions || [])}\n`;
   }
-  // Fall back to flat research — spread to all sections
   if (flatResearch) {
     try {
       const r = typeof flatResearch === 'string' ? JSON.parse(flatResearch) : flatResearch;
@@ -305,21 +256,12 @@ Accuracy notes: ${sectioned.accuracy_notes || 'N/A'}
         if (typeof n === 'string') return `  [N${i + 1}] ${n}`;
         return `  [N${i + 1}] ${n.number || n.value || ''} — ${n.context || ''}`;
       }).join('\n');
-      return `
-**═══ GROUNDED RESEARCH (use exactly, no invention) ═══**
-FACTS:
-${facts || '  (none)'}
-KEY NUMBERS:
-${numbers || '  (none)'}
-`;
-    } catch (_) {
-      return `\n**RESEARCH NOTES**: ${flatResearch}\n`;
-    }
+      return `\n**═══ GROUNDED RESEARCH ═══**\nFACTS:\n${facts || '  (none)'}\nKEY NUMBERS:\n${numbers || '  (none)'}\n`;
+    } catch (_) { return `\n**RESEARCH NOTES**: ${flatResearch}\n`; }
   }
   return '';
 }
 
-// ── Main handler ─────────────────────────────────────────────────
 Deno.serve(async (req) => {
   const callStart = Date.now();
   try {
@@ -334,19 +276,14 @@ Deno.serve(async (req) => {
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-    // Guard: explainer only
     if (project.project_mode !== 'explainer') {
-      return Response.json({
-        error: `Project mode is "${project.project_mode || 'unset'}", not "explainer".`
-      }, { status: 400 });
+      return Response.json({ error: `Project mode is "${project.project_mode || 'unset'}", not "explainer".` }, { status: 400 });
     }
 
-    // ── Load sections from ScriptBatches (preferred) ─────────────
     const allBatches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
     const sortedBatches = allBatches.sort((a, b) => a.batch_number - b.batch_number);
 
     let outlineSections = [];
-
     if (sortedBatches.length > 0 && sortedBatches.every(b => b.content)) {
       outlineSections = sortedBatches.map(b => ({
         title: b.story_segment || `Section ${b.batch_number}`,
@@ -355,7 +292,6 @@ Deno.serve(async (req) => {
       }));
       console.log(`📦 Loaded ${outlineSections.length} sections from ScriptBatches`);
     } else {
-      // Fallback: split final aggregated script
       const allScripts = await base44.asServiceRole.entities.Scripts.filter({ project_id });
       const script = allScripts.find(s => s.version === 'final_aggregated');
       if (!script?.full_script) {
@@ -367,12 +303,10 @@ Deno.serve(async (req) => {
         content: p.trim(),
         section_type: CANONICAL_TYPES[i] || 'core_concept',
       }));
-      console.warn(`⚠️ Fell back to script split — ${outlineSections.length} sections`);
     }
 
     const totalSections = outlineSections.length;
 
-    // ── Load research from both possible locations ───────────────
     const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
     let sectionedResearch = null;
     if (psList[0]?.research_notes) {
@@ -380,16 +314,12 @@ Deno.serve(async (req) => {
     }
     const flatResearch = project.research_notes || null;
 
-    // ── Arc ──────────────────────────────────────────────────────
     const arcType = project.explainer_arc || 'professor';
     const arcDef = getEinsteinArc(arcType);
-
     const durationMinutes = project.video_duration_minutes || 10;
-    const totalDurationSec = durationMinutes * 60;
 
-    console.log(`🎓 Explainer breakdown v3: "${project.name}" | arc: ${arcType} | sections: ${totalSections} | duration: ${durationMinutes}min | start_section: ${start_section}`);
+    console.log(`🎓 Explainer breakdown: "${project.name}" | arc: ${arcType} | sections: ${totalSections} | duration: ${durationMinutes}min | start: ${start_section}`);
 
-    // ── First call only: delete old scenes ───────────────────────
     let globalSceneNumber = 1;
     let continuityNote = 'This is the opening of the video — Einstein enters with maximum personality and energy.';
 
@@ -402,7 +332,6 @@ Deno.serve(async (req) => {
         console.log(`🗑️ Deleted ${oldScenes.length} old scenes`);
       }
     } else {
-      // Resume: find current max scene number
       const existing = await base44.asServiceRole.entities.Scenes.filter({ project_id });
       if (existing.length > 0) {
         globalSceneNumber = Math.max(...existing.map(s => s.scene_number || 0)) + 1;
@@ -411,7 +340,6 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Process this call's section range ────────────────────────
     const endSection = Math.min(start_section + SECTIONS_PER_CALL, totalSections);
     const allScenesThisCall = [];
 
@@ -425,22 +353,16 @@ Deno.serve(async (req) => {
       const researchBlock = buildResearchBlockForSection(sectionedResearch, flatResearch, sectionType, si);
 
       const prompt = buildSectionBreakdownPrompt({
-        section,
-        sectionIndex: si,
-        totalSections,
-        arcDef,
-        sectionType,
+        section, sectionIndex: si, totalSections, arcDef, sectionType,
         targetSceneCount: target,
         durationSeconds: sectionMinutes * 60,
         sceneDurRange: cadence.scene_dur,
-        researchBlock,
-        continuityNote,
+        researchBlock, continuityNote,
         globalSceneStart: globalSceneNumber,
         isFirst: si === 0,
         isLast: si === totalSections - 1,
       });
 
-      // Section-aware temperature
       const temp = sectionType === 'hook' ? 0.75
                  : (sectionType === 'mechanism' || sectionType === 'example') ? 0.35
                  : 0.5;
@@ -449,8 +371,7 @@ Deno.serve(async (req) => {
       try {
         sectionResult = await callAI(prompt, temp);
       } catch (err) {
-        console.error(`❌ Section ${si + 1} breakdown failed: ${err.message} — applying fallback`);
-        // Fallback: split section narration by sentence
+        console.error(`❌ Section ${si + 1} failed: ${err.message} — applying fallback`);
         const sentences = (section.content || section.title || '').match(/[^.!?]+[.!?]+/g) || [section.content || section.title];
         sectionResult = {
           scenes: sentences.slice(0, target).map((sent, idx) => ({
@@ -475,14 +396,12 @@ Deno.serve(async (req) => {
 
       const sectionScenes = (sectionResult?.scenes || []).slice(0, cadence.max_scenes);
 
-      // Verify scene count
       if (sectionScenes.length < target * 0.7) {
-        console.warn(`⚠️ Section ${si + 1} (${sectionType}): delivered ${sectionScenes.length}/${target} scenes (under target)`);
+        console.warn(`⚠️ Section ${si + 1} (${sectionType}): ${sectionScenes.length}/${target} scenes (under target)`);
       } else {
-        console.log(`✅ Section ${si + 1} (${sectionType}): delivered ${sectionScenes.length}/${target} scenes`);
+        console.log(`✅ Section ${si + 1} (${sectionType}): ${sectionScenes.length}/${target} scenes`);
       }
 
-      // Enforce numbering, clamp durations, attach metadata
       sectionScenes.forEach((scene, idx) => {
         scene.scene_number = globalSceneNumber + idx;
         scene.section_title = section.title;
@@ -495,14 +414,12 @@ Deno.serve(async (req) => {
 
       globalSceneNumber += sectionScenes.length;
 
-      // Update continuity for next section
       const lastScene = sectionScenes[sectionScenes.length - 1];
       if (lastScene) {
         continuityNote = `Last section: "${section.title}" (${sectionType}) | Last visual: ${(lastScene.visual_concept || '').substring(0, 120)} | Bridge: ${lastScene.continuity_bridge || 'none'}`;
       }
     }
 
-    // ── Save scenes incrementally (survives 504 on next section) ──
     const cameraMap = {
       zoom_in: 'slow_zoom_in', zoom_out: 'slow_zoom_out',
       pan_left: 'slow_pan', pan_right: 'slow_pan',
@@ -558,7 +475,6 @@ Deno.serve(async (req) => {
 
     const isDone = endSection >= totalSections;
 
-    // ── Final pass: update production settings + project status ──
     if (isDone) {
       const allScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
       const sorted = allScenes.sort((a, b) => (a.scene_number || 0) - (b.scene_number || 0));
@@ -596,7 +512,7 @@ Deno.serve(async (req) => {
       });
 
       const elapsed = ((Date.now() - callStart) / 1000).toFixed(1);
-      console.log(`🎓 ALL DONE: ${sorted.length} explainer scenes in ${elapsed}s | total duration: ${offset.toFixed(1)}s`);
+      console.log(`🎓 DONE: ${sorted.length} scenes in ${elapsed}s | total ${offset.toFixed(1)}s`);
 
       return Response.json({
         success: true,
@@ -610,9 +526,8 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── Resume: return next_section so frontend re-calls ─────────
     const elapsed = ((Date.now() - callStart) / 1000).toFixed(1);
-    console.log(`⏸ Processed sections ${start_section + 1}-${endSection}/${totalSections} in ${elapsed}s — frontend should call again with start_section=${endSection}`);
+    console.log(`⏸ Sections ${start_section + 1}-${endSection}/${totalSections} in ${elapsed}s — next: ${endSection}`);
 
     return Response.json({
       success: true,

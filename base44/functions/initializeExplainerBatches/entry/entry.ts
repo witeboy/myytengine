@@ -3,14 +3,10 @@ import OpenAI from 'npm:openai@4.58.1';
 
 // ═══════════════════════════════════════════════════════════════════
 // EXPLAINER PIPELINE — Step 1: Outline batches anchored to research_notes
-// Dedicated function for project_mode === 'explainer'.
-// Standard/sleep pipelines use initializeScriptBatches.
 // ═══════════════════════════════════════════════════════════════════
 
 const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
 
-// Canonical 6-section explainer arc (matches the cuts-per-min cadence table
-// in explainerSceneBreakdown). Section_type drives downstream pacing.
 const EXPLAINER_SECTIONS = [
   { type: 'hook',         label: 'Hook',          time_pct: 0.10 },
   { type: 'core_concept', label: 'Core Concept',  time_pct: 0.15 },
@@ -36,7 +32,7 @@ async function callOpenAI(prompt, temperature = 0.4, retries = 3) {
       return JSON.parse(response.choices[0].message.content);
     } catch (error) {
       if (attempt === retries - 1) throw error;
-      console.warn(`⚠️ OpenAI attempt ${attempt + 1} failed: ${error.message}, retrying...`);
+      console.warn(`⚠️ OpenAI attempt ${attempt + 1} failed: ${error.message}`);
       await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
     }
   }
@@ -58,8 +54,6 @@ function buildExplainerOutlinePrompt({ topic, project, totalTargetWords, duratio
       }).join('\n');
       researchBlock = `
 **═══ GROUNDED RESEARCH FACTS — USE THESE EXACTLY ═══**
-These are the ONLY facts, numbers, and examples you may reference. Do NOT invent others.
-
 FACTS:
 ${facts || '  (none — use only topic title for context)'}
 
@@ -74,7 +68,6 @@ ${myths || '  (none provided)'}
     }
   }
 
-  // Build per-section spec with allocated words
   const sectionSpec = EXPLAINER_SECTIONS.map((s, i) => {
     const wordTarget = Math.round(totalTargetWords * s.time_pct);
     return `${i + 1}. ${s.label} (${s.type}) — ${Math.round(s.time_pct * 100)}% of video, ~${wordTarget} words`;
@@ -91,37 +84,16 @@ ${myths || '  (none provided)'}
 ${strategyBlock || ''}
 ${researchBlock}
 
-**═══ EXPLAINER PRINCIPLES (NON-NEGOTIABLE) ═══**
-
-✅ DO:
-- Cite ONLY facts, numbers, and examples from the RESEARCH block above
-- State concrete numbers, percentages, and ranges from the research
-- Correct common misconceptions explicitly when relevant
-- Use a teacher's voice — patient, clear, evidence-driven
-- Build understanding incrementally — each batch deepens the prior
-- Define terms before using them
-
-❌ DON'T:
-- Invent statistics, percentages, company names, or examples not in research
-- Use viral hype phrases: "you won't believe", "wait till you hear", "this will change your life"
-- Tease the next batch with mystery — explainers reveal, they don't tease
-- Use clickbait curiosity gaps — instead, use logical "and here's why" transitions
-- Make claims without backing them in the research notes
-
 **═══ FIXED 6-SECTION EXPLAINER ARC ═══**
-You MUST generate exactly 6 batches, one per section:
-
 ${sectionSpec}
 
 SECTION-SPECIFIC GUIDANCE:
-- HOOK (batch 1): Short punchy sentences. Pose the central question. State the most striking number from research. NO storytelling preamble. World-class hook = Cleo Abram / Vox cold-open density.
-- CORE CONCEPT (batch 2): Define the central idea in plain language. Define terms before using them.
-- MECHANISM (batch 3): How does it actually work? Step-by-step reasoning. This is the longest teaching section.
-- WORKED EXAMPLE (batch 4): Walk through ONE concrete example end-to-end with real numbers from research.
-- APPLICATION (batch 5): Where the viewer encounters this in real life. Practical implications.
-- TAKEAWAY (batch 6): Summarize 2-3 key insights. Correct the biggest misconception. Land the lesson. NO CTA hype.
-
-**YOUR TASK**: Plan exactly 6 batches matching the section arc above.
+- HOOK: Short punchy sentences. Pose the central question. State the most striking number. NO storytelling preamble.
+- CORE CONCEPT: Define the central idea in plain language.
+- MECHANISM: Step-by-step reasoning. Longest teaching section.
+- WORKED EXAMPLE: Walk through ONE concrete example with real numbers.
+- APPLICATION: Practical implications.
+- TAKEAWAY: 2-3 key insights. Correct the biggest misconception. NO CTA hype.
 
 Return JSON:
 {
@@ -129,20 +101,16 @@ Return JSON:
     {
       "batch_number": 1,
       "section_type": "hook",
-      "story_segment": "Short segment title (3-5 words)",
+      "story_segment": "Short title (3-5 words)",
       "focus_area": "Brief focus (1 sentence)",
-      "synopsis": "DETAILED synopsis (150-250 words) describing the ACTUAL teaching content. Cite SPECIFIC facts and numbers from the RESEARCH block above. Quote exact percentages and ranges. Name the specific misconceptions being corrected. Show the logical progression — what concept is introduced, what evidence supports it, what conclusion follows. NO hype, NO teases, NO viral phrasing."
+      "synopsis": "DETAILED synopsis (150-250 words) citing SPECIFIC facts and numbers from research."
     }
   ]
 }
 
 **RULES**:
-- Generate EXACTLY 6 batches in this exact section order: hook → core_concept → mechanism → example → application → takeaway
-- section_type must be one of: hook, core_concept, mechanism, example, application, takeaway
-- Every synopsis MUST reference at least one specific fact or number from the research block
-- Every claim must be traceable to the research — if it's not in research, don't include it
-- Synopses are PLANS for teaching, not narration drafts
-- Use the misconceptions to add value (correct them explicitly in TAKEAWAY)
+- Generate EXACTLY 6 batches in section order: hook → core_concept → mechanism → example → application → takeaway
+- Every synopsis MUST reference at least one specific fact or number from research
 - No filler, no buzzwords, no "in today's video"`;
 }
 
@@ -158,28 +126,24 @@ Deno.serve(async (req) => {
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-    // Guard: explainer only
     if (project.project_mode !== 'explainer') {
       return Response.json({
         error: `Project mode is "${project.project_mode || 'unset'}", not "explainer". Use initializeScriptBatches instead.`
       }, { status: 400 });
     }
 
-    // Get topic
     let topic = null;
     if (project.selected_topic_id) {
       const topics = await base44.asServiceRole.entities.Topics.filter({ id: project.selected_topic_id });
       topic = topics[0];
     }
 
-    // Get channel (optional)
     let channel = null;
     if (project.channel_id) {
       const channels = await base44.asServiceRole.entities.Channels.filter({ id: project.channel_id });
       channel = channels[0];
     }
 
-    // Optional strategy block
     let strategyBlock = '';
     const scriptStrategy = project.script_strategy_override || channel?.script_strategy;
     if (scriptStrategy) {
@@ -191,21 +155,16 @@ Deno.serve(async (req) => {
       } catch (_) {}
     }
 
-    // Delete existing batches
     const existingBatches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
     for (const batch of existingBatches) {
       await base44.asServiceRole.entities.ScriptBatches.delete(batch.id);
     }
 
     const durationMinutes = project.video_duration_minutes || 10;
-    const wordsPerMinute = 150;
-    const totalTargetWords = Math.round(durationMinutes * wordsPerMinute);
-
-    // Per-section word targets driven by time_pct
+    const totalTargetWords = Math.round(durationMinutes * 150);
     const batchTargets = EXPLAINER_SECTIONS.map(s => Math.max(50, Math.round(totalTargetWords * s.time_pct)));
 
-    console.log(`[initializeExplainerBatches] Project: ${durationMinutes} min → ${totalTargetWords} words → 6 sections`);
-    console.log(`[initializeExplainerBatches] Research notes: ${project.research_notes ? 'present' : 'MISSING — content will be ungrounded'}`);
+    console.log(`[initializeExplainerBatches] ${durationMinutes}min → ${totalTargetWords} words → 6 sections`);
 
     const outlinePrompt = buildExplainerOutlinePrompt({
       topic, project, totalTargetWords, durationMinutes,
@@ -213,16 +172,11 @@ Deno.serve(async (req) => {
       strategyBlock,
     });
 
-    console.log('[initializeExplainerBatches] Generating grounded outline at temp 0.4...');
     const outlineResult = await callOpenAI(outlinePrompt, 0.4);
-
     if (!outlineResult.batches || outlineResult.batches.length === 0) {
       throw new Error('AI failed to generate outline batches');
     }
 
-    // Create batch records — tag focus_area with [section_type|sN] so
-    // generateExplainerBatch and explainerSceneBreakdown can read section_type
-    // back via regex (same convention as initializeScriptBatches).
     const createdBatches = [];
     for (let i = 0; i < 6; i++) {
       const aiBatch = outlineResult.batches[i];
