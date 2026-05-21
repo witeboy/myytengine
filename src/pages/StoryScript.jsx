@@ -161,6 +161,19 @@ export default function StoryScript() {
             await base44.entities.ScriptBatches.delete(b.id);
           }
 
+          // Step 0: Explainer projects → run grounded research FIRST so script
+          // batches and scene breakdown can anchor on real facts/numbers.
+          // Skip if research_notes already exist (avoid re-spending Gemini calls).
+          if (project?.project_mode === 'explainer' && !project?.research_notes) {
+            try {
+              console.log('[explainer] Running grounded research before script init...');
+              await base44.functions.invoke('explainerResearch', { project_id: projectId });
+              await refetchProject();
+            } catch (err) {
+              console.warn('[explainer] Research step failed, continuing without grounded facts:', err.message);
+            }
+          }
+
           // Step 1: Create batch outlines
           await base44.functions.invoke('initializeScriptBatches', {
             project_id: projectId,
