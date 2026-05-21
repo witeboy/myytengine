@@ -61,6 +61,7 @@ export default function StoryScript() {
   }, [project?.id, project?.project_mode, project?.explainer_arc]);
 
   const isShorts = project?.project_mode === 'youtube_shorts';
+  const isExplainer = project?.project_mode === 'explainer';
   const effectiveMode = project?.project_mode || (project?.explainer_arc ? 'explainer' : '');
 
   const completedCount = batches.filter(b => b.status === 'completed').length;
@@ -174,10 +175,9 @@ export default function StoryScript() {
             }
           }
 
-          // Step 1: Create batch outlines
-          await base44.functions.invoke('initializeScriptBatches', {
-            project_id: projectId,
-          });
+          // Step 1: Create batch outlines — route explainer to its own pipeline
+          const initFn = isExplainer ? 'initializeExplainerBatches' : 'initializeScriptBatches';
+          await base44.functions.invoke(initFn, { project_id: projectId });
           await refetchBatches();
         } else {
           // Batches exist — just make sure React Query is in sync
@@ -210,7 +210,8 @@ export default function StoryScript() {
 
       while (retries < MAX_RETRIES && !success) {
         try {
-          const resp = await base44.functions.invoke('generateScriptBatches', { project_id: projectId });
+          const genFn = isExplainer ? 'generateExplainerBatch' : 'generateScriptBatches';
+          const resp = await base44.functions.invoke(genFn, { project_id: projectId });
           const data = resp.data || resp;
           success = true;
           allDone = data.done === true;
@@ -327,10 +328,19 @@ export default function StoryScript() {
     setRegenerating(false);
 
     try {
-      // Step 1: Re-initialize batch outlines
-      await base44.functions.invoke('initializeScriptBatches', {
-        project_id: projectId,
-      });
+      // Step 0: explainer projects → run grounded research first if missing
+      if (isExplainer && !project?.research_notes) {
+        try {
+          await base44.functions.invoke('explainerResearch', { project_id: projectId });
+          await refetchProject();
+        } catch (err) {
+          console.warn('[explainer] Research step failed:', err.message);
+        }
+      }
+
+      // Step 1: Re-initialize batch outlines — route explainer to its own pipeline
+      const initFn = isExplainer ? 'initializeExplainerBatches' : 'initializeScriptBatches';
+      await base44.functions.invoke(initFn, { project_id: projectId });
       await refetchBatches();
 
       // Step 2: Generate batches with retry logic
