@@ -1405,6 +1405,37 @@ export default function ContentGeneration() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <StageProgress currentStage={2} />
+
+      {/* ── DEV: Explainer Mode Patcher ── remove after use ── */}
+      {project && !project.project_mode && (
+        <div className="bg-red-50 border border-red-300 rounded-lg p-3 mx-4 mt-2 flex items-center gap-3">
+          <p className="text-sm text-red-700 flex-1">⚠️ This project has no mode set. Set as Explainer?</p>
+          <select
+            className="text-xs border rounded px-2 py-1"
+            defaultValue="accountant"
+            id="arc-select"
+          >
+            <option value="science">Science Arc</option>
+            <option value="professor">Professor Arc</option>
+            <option value="accountant">Accountant Arc</option>
+            <option value="tech">Tech Arc</option>
+          </select>
+          <button
+            className="bg-red-600 text-white text-xs px-3 py-1 rounded"
+            onClick={async () => {
+              const arc = document.getElementById('arc-select').value;
+              await base44.entities.Projects.update(projectId, {
+                project_mode: 'explainer',
+                explainer_arc: arc,
+              });
+              await refetchProject();
+              alert(`✅ Set to explainer / ${arc}`);
+            }}
+          >
+            Set Explainer Mode
+          </button>
+        </div>
+      )}
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-3">
