@@ -1,10 +1,7 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-// ══════════════════════════════════════════════════════════════════
 // EXPLAINER SCENE BREAKDOWN v3 — world-class cuts-per-min cadence
-// Resumable: processes 2 sections per HTTP call. Frontend loops with
-// start_section until done=true.
-// ══════════════════════════════════════════════════════════════════
+// Resumable: processes 2 sections per HTTP call.
 
 const SECTION_CADENCE = {
   hook:         { cuts_per_min: 30, min_scenes: 6,  max_scenes: 25,  scene_dur: [1.5, 2.5] },

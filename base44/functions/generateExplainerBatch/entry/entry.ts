@@ -1,13 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 
-// ═══════════════════════════════════════════════════════════════════
 // EXPLAINER PIPELINE — Step 2: Generate ONE script batch grounded in research.
-//   hook batch  → ultra-short staccato sentences (≤7 words)
-//   body/take.  → natural educational pacing (12-18 words avg)
-// ═══════════════════════════════════════════════════════════════════
-
-const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
 
 function extractSectionType(focusArea, batchNumber) {
   const m = (focusArea || '').match(/^\[([a-z_]+)\|s\d+\]/);
@@ -17,6 +10,7 @@ function extractSectionType(focusArea, batchNumber) {
 }
 
 async function callClaude(prompt, temperature = 0.55, retries = 2) {
+  const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY");
   for (let attempt = 0; attempt <= retries; attempt++) {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -39,6 +33,7 @@ async function callClaude(prompt, temperature = 0.55, retries = 2) {
 }
 
 async function callGemini(prompt, temperature = 0.55, retries = 2) {
+  const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${GEMINI_KEY}`;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const response = await fetch(url, {
@@ -61,7 +56,7 @@ async function callLLM(prompt, temperature = 0.55) {
   try { return { result: await callClaude(prompt, temperature), provider: 'claude' }; }
   catch (claudeErr) {
     console.warn(`[LLM] Claude failed: ${claudeErr.message.substring(0, 120)}`);
-    if (!GEMINI_KEY) throw claudeErr;
+    if (!Deno.env.get("GEMINI_API_KEY")) throw claudeErr;
     return { result: await callGemini(prompt, temperature), provider: 'gemini' };
   }
 }

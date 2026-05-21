@@ -5,8 +5,6 @@ import OpenAI from 'npm:openai@4.58.1';
 // EXPLAINER PIPELINE — Step 1: Outline batches anchored to research_notes
 // ═══════════════════════════════════════════════════════════════════
 
-const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
-
 const EXPLAINER_SECTIONS = [
   { type: 'hook',         label: 'Hook',          time_pct: 0.10 },
   { type: 'core_concept', label: 'Core Concept',  time_pct: 0.15 },
@@ -17,6 +15,7 @@ const EXPLAINER_SECTIONS = [
 ];
 
 async function callOpenAI(prompt, temperature = 0.4, retries = 3) {
+  const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       const response = await openai.chat.completions.create({
