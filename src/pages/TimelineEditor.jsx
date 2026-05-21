@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
@@ -39,11 +39,8 @@ import { alignScenesToASR, applyDriftFix } from '@/lib/asrAutoSync.js';
 import { transcribeVoiceover } from '@/lib/transcribeASR.js';
 import { detectBeats, snapTimestampsToBeat, beatLockCaptions } from '@/lib/beatDetector.js';
 
-const TRACK_HEIGHT = 56;
-const LABEL_WIDTH = 40;
 const MAX_HISTORY = 50;
 const DEFAULT_TRANSITION_DURATION = 0.6;
-const MIN_TIMELINE_HEIGHT = 100;
 const DEFAULT_TIMELINE_HEIGHT = 180;
 
 const CINEMATIC_MOTIONS = [
@@ -597,100 +594,11 @@ function TransportControls({ isPlaying, onPlayPause, currentTime, totalDuration,
   );
 }
 
-function TimelineRuler({ totalDuration, pps, onSeek, beats = [], bpm = 0 }) {
-  const markers = [];
-  const interval = pps >= 15 ? 5 : pps >= 8 ? 10 : 30;
-  for (let t = 0; t <= totalDuration; t += interval) markers.push(t);
- 
-  // Hook zone: first 3 seconds — viral content must hook here
-  const hookEndPx = Math.min(3 * pps, totalDuration * pps);
- 
-  return (
-    <div className="h-6 bg-[#0d0d1a] border-b border-gray-800 relative cursor-pointer overflow-hidden"
-      style={{ width: totalDuration * pps, marginLeft: LABEL_WIDTH }}
-      onClick={e => { const r = e.currentTarget.getBoundingClientRect(); onSeek(Math.max(0, Math.min(totalDuration, (e.clientX - r.left) / pps))); }}>
- 
-      {/* Hook zone overlay — first 3 seconds */}
-      <div
-        className="absolute top-0 bottom-0 pointer-events-none"
-        style={{ left: 0, width: hookEndPx, background: 'rgba(239,68,68,0.10)', borderRight: '1px solid rgba(239,68,68,0.5)' }}
-        title="Hook Zone — first 3s must grab viewer">
-        <span className="text-[7px] text-red-400 absolute top-0.5 left-1 font-bold tracking-wide select-none">HOOK</span>
-      </div>
- 
-      {/* Beat grid lines */}
-      {beats.map((beat, i) => (
-        <div key={i} className="absolute top-0 bottom-0 pointer-events-none"
-          style={{
-            left: beat * pps,
-            width: 1,
-            // Stronger line on every 4th beat (downbeat)
-            background: i % 4 === 0 ? 'rgba(6,182,212,0.55)' : 'rgba(6,182,212,0.18)',
-          }}
-        />
-      ))}
- 
-      {/* Time markers */}
-      {markers.map(t => (
-        <div key={t} className="absolute bottom-0" style={{ left: t * pps }}>
-          <span className="text-[8px] text-gray-500 font-mono">{formatTime(t)}</span>
-        </div>
-      ))}
- 
-      {/* BPM badge */}
-      {bpm > 0 && (
-        <div className="absolute right-1 top-0.5 text-[7px] text-cyan-400 font-mono select-none">
-          {bpm} BPM
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Resizable Timeline Divider ───────────────────────────────────
-function TimelineDivider({ timelineHeight, onResize, collapsed, onToggle }) {
-  const dragging = useRef(false);
-  const startY = useRef(0);
-  const startH = useRef(0);
-
-  const onMouseDown = (e) => {
-    e.preventDefault();
-    dragging.current = true;
-    startY.current = e.clientY;
-    startH.current = timelineHeight;
-    const onMouseMove = (ev) => {
-      if (!dragging.current) return;
-      const delta = startY.current - ev.clientY;
-      const newH = Math.max(MIN_TIMELINE_HEIGHT, Math.min(500, startH.current + delta));
-      onResize(newH);
-    };
-    const onMouseUp = () => {
-      dragging.current = false;
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-    };
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-  };
-
-  return (
-    <div
-      className="h-2 bg-gray-800 border-t border-gray-700 cursor-row-resize flex items-center justify-center gap-2 hover:bg-gray-700 transition-colors group select-none"
-      onMouseDown={onMouseDown}
-    >
-      <GripHorizontal size={12} className="text-gray-500 group-hover:text-gray-300" />
-      <button
-        onClick={(e) => { e.stopPropagation(); onToggle(); }}
-        className="p-0.5 text-gray-500 hover:text-white"
-      >
-        {collapsed ? <ChevronUp size={10} /> : <ChevronDown size={10} />}
-      </button>
-    </div>
-  );
-}
+import { TimelineRuler, TimelineDivider } from '@/components/timeline/TimelineRulerInline';
 
 export default function TimelineEditor() {
   const navigate       = useNavigate();
+  const queryClient    = useQueryClient();
   const [searchParams] = useSearchParams();
   const projectId      = searchParams.get('project_id');
 
@@ -2088,4 +1996,3 @@ export default function TimelineEditor() {
     </div>
   );
 }
-

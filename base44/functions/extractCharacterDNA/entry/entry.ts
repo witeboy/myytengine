@@ -1,6 +1,5 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-
-// v3 — Gemini Primary, Claude Backup
+// v2 — redeployed
 // ══════════════════════════════════════════════════════════════════
 // CHARACTER DNA EXTRACTOR
 // ══════════════════════════════════════════════════════════════════
@@ -8,8 +7,6 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // and maps which characters appear in which scenes.
 // 
 // Pipeline: Script Complete → [THIS] → Scene Breakdown → Prompts → Image Gen
-// 
-// AI Strategy: Gemini 2.5 Pro (primary) → Claude Sonnet (fallback)
 // 
 // Output saved to Project.character_descriptions as JSON:
 // [
@@ -27,133 +24,30 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // The scene breakdown and prompt generator both consume this data.
 // ══════════════════════════════════════════════════════════════════
 
-const SYSTEM_INSTRUCTION = "You are a casting director and data extraction system. You must return ONLY raw, valid JSON. Do not include markdown formatting like ```json and do not include any conversational text.";
-
-// ═══ GEMINI 2.5 PRO — PRIMARY ═══
-async function callGemini(prompt, temperature = 0.4) {
+async function callGemini(prompt, temperature = 0.5) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
-  
-  if (!apiKey) {
-    throw new Error("Missing GEMINI_API_KEY environment variable");
-  }
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${apiKey}`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { 
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      systemInstruction: {
-        parts: [{ text: SYSTEM_INSTRUCTION }]
-      },
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: prompt }]
-        }
-      ],
-      generationConfig: {
-        temperature: temperature,
-        maxOutputTokens: 4096,
-        responseMimeType: "application/json"
-      }
-    })
-  });
-
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature, maxOutputTokens: 8192, responseMimeType: "application/json" }
+      })
+    }
+  );
   if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    const msg = err?.error?.message || `HTTP ${response.status}`;
-    throw new Error(`Gemini error: ${msg}`);
+    const err = await response.json();
+    throw new Error(`Gemini error: ${err.error?.message || response.status}`); 
   }
-
   const data = await response.json();
-
-  // Gemini response structure: candidates[0].content.parts[0].text
-  const candidate = data?.candidates?.[0];
-  if (!candidate?.content?.parts?.length) {
-    throw new Error("No content returned from Gemini");
-  }
-
-  const rawText = candidate.content.parts[0].text;
-  
-  try { 
-    return JSON.parse(rawText); 
-  } catch (_) {
-    // Fallback: extract JSON object from text
+  if (!data.candidates?.length) throw new Error("No candidates from Gemini");
+  const rawText = data.candidates[0].content.parts[0].text;
+  try { return JSON.parse(rawText); } catch (_) {
     const match = rawText.match(/\{[\s\S]*\}/);
     if (match) return JSON.parse(match[0]);
-    throw new Error("Failed to parse Gemini JSON response");
-  }
-}
-
-// ═══ CLAUDE — BACKUP ═══
-async function callClaude(prompt, temperature = 0.4) {
-  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-  
-  if (!apiKey) {
-    throw new Error("Missing ANTHROPIC_API_KEY environment variable");
-  }
-
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { 
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01"
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-5",
-      max_tokens: 4096,
-      temperature: temperature,
-      system: SYSTEM_INSTRUCTION,
-      messages: [
-        { role: "user", content: prompt }
-      ]
-    })
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(`Claude error: ${err.error?.message || response.status}`); 
-  }
-
-  const data = await response.json();
-  if (!data.content || !data.content.length) throw new Error("No content returned from Claude");
-  
-  const rawText = data.content[0].text;
-  
-  try { 
-    return JSON.parse(rawText); 
-  } catch (_) {
-    const match = rawText.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]);
-    throw new Error("Failed to parse Claude JSON response");
-  }
-}
-
-// ═══ UNIFIED CALLER: Gemini first → Claude fallback ═══
-async function callAI(prompt, temperature = 0.4) {
-  // Try Gemini first
-  try {
-    console.log("🤖 Attempting Gemini 2.5 Pro...");
-    const result = await callGemini(prompt, temperature);
-    console.log("✅ Gemini 2.5 Pro succeeded");
-    return { result, model: "gemini-2.5-pro" };
-  } catch (geminiError) {
-    console.warn(`⚠️ Gemini failed: ${geminiError.message}`);
-  }
-
-  // Fallback to Claude
-  try {
-    console.log("🔄 Falling back to Claude Sonnet...");
-    const result = await callClaude(prompt, temperature);
-    console.log("✅ Claude Sonnet fallback succeeded");
-    return { result, model: "claude-sonnet-4-5" };
-  } catch (claudeError) {
-    console.error(`❌ Claude also failed: ${claudeError.message}`);
-    throw new Error(`Both AI providers failed. Gemini: ${claudeError.message}`);
+    throw new Error("Failed to parse Gemini JSON");
   }
 }
 
@@ -240,31 +134,9 @@ Deno.serve(async (req) => {
     const niche = project.niche || 'general';
     const fullScript = script.full_script;
 
-    // ═══ READ DIVERSITY SEED — protagonist identity constraints ═══
-    let seed = null;
-    if (project.script_strategy_override) {
-      try {
-        const strat = typeof project.script_strategy_override === 'string'
-          ? JSON.parse(project.script_strategy_override)
-          : project.script_strategy_override;
-        seed = strat?._script_seed || null;
-      } catch (_) {}
-    }
+    console.log(`🧬 Extracting Character DNA for "${project.name}" (${niche})`);
 
-    const seedConstraint = seed ? `
-
-**🎲 MANDATORY PROTAGONIST CONSTRAINTS (from project seed):**
-- The protagonist's first name MUST be **${seed.firstName}** (${seed.namingCulture?.replace(/_/g, ' ')} cultural background)
-- Archetype context: ${seed.archetype}
-- Use this name and cultural context to inform the protagonist's appearance, family details, and situational framing.
-- Skin tone, features, and cultural markers should authentically reflect the ${seed.namingCulture?.replace(/_/g, ' ')} heritage.
-- This is NOT optional. The downstream pipeline depends on this name being consistent.
-` : '';
-
-    console.log(`🧬 Extracting Character DNA for "${project.name}" (${niche})${seed ? ` | seed: ${seed.firstName} [${seed.namingCulture}]` : ''}`);
-
-    const prompt = `Study this script carefully and extract EVERY character that appears or is referenced.
-${seedConstraint}
+    const prompt = `You are a casting director and character analyst. Study this script carefully and extract EVERY character that appears or is referenced.
 
 **SCRIPT:**
 ${fullScript}
@@ -320,12 +192,12 @@ ${fullScript}
 - For multi-character stories, ensure characters look DIFFERENT from each other — contrasting builds, hair colors, skin tones, clothing styles.
 - Maximum 5 characters. Merge background characters into archetypes if there are many.`;
 
-    const { result, model } = await callAI(prompt, 0.4);
+    const result = await callGemini(prompt, 0.4);
 
     const characters = result.characters || [];
     const hasCharacters = result.has_characters !== false && characters.length > 0;
 
-    console.log(`🧬 Found ${characters.length} characters | has_characters: ${hasCharacters} | model: ${model}`);
+    console.log(`🧬 Found ${characters.length} characters | has_characters: ${hasCharacters}`);
     for (const c of characters) {
       console.log(`   • ${c.name} (${c.role}): ${(c.identity_core || '').substring(0, 80)}... | keywords: [${(c.scene_keywords || []).join(', ')}]`);
     }
@@ -339,7 +211,6 @@ ${fullScript}
       success: true,
       has_characters: hasCharacters,
       character_count: characters.length,
-      model_used: model,
       characters: characters.map(c => ({
         name: c.name,
         role: c.role,
