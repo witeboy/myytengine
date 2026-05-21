@@ -21,7 +21,7 @@ Deno.serve(async (req) => {
     headers: { 'Authorization': API_KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       audio_url: voiceover_url,
-      speech_model: 'best',
+      speech_models: 'best',
       language_code: 'en',
       format_text: false,
     }),

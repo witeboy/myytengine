@@ -141,39 +141,56 @@ async function callAI(prompt, temperature = 0.4) {
 }
 
 // ── Einstein arc definitions ─────────────────────────────────────
+// VISUAL STYLE: 3D Pixar/Illumination CGI cartoon Einstein character —
+// caricatured proportions (slightly oversized head, expressive features),
+// soft subsurface-scattered skin, wild white hair with fiber detail,
+// bushy white mustache, warm friendly grandfatherly expression.
+// Every scene shows Einstein IN his themed workspace with a CHALKBOARD
+// or whiteboard behind him filled with hand-lettered titles, bullet
+// lists, checkboxes, and topic-specific labels. He POINTS at the board
+// with one finger raised. Props specific to the niche surround him on a
+// foreground desk/workbench.
 function getEinsteinArc(arcType) {
   const arcs = {
     science: {
       label: 'Mad Scientist',
-      look: 'Rumpled white lab coat, safety goggles pushed up on forehead, Einstein wild white hair, holding bubbling test tube in one hand while wildly gesturing with the other, bushy mustache, animated wide eyes',
-      behavior: 'Erratic high-energy pacing, speaks rapidly while wildly gesturing at 3D formulas floating in mid-air, bursts of sudden excitement, occasional maniacal laughter at elegant solutions',
+      look: 'CGI cartoon Einstein with caricatured proportions and slightly oversized head, wild fluffy white hair rendered strand-by-strand, big bushy white mustache, expressive warm cartoon eyes, rumpled white lab coat over a periodic-table graphic tee, safety goggles pushed up on forehead, one cartoon finger raised in classic "Eureka!" pointing gesture, Pixar-quality subsurface scattering on skin, friendly grandfatherly smile',
+      behavior: 'Standing front and center beside a large chalkboard or whiteboard covered in hand-lettered scientific headlines, bullet lists, checkboxes, and labelled diagrams. Always pointing UP at one specific item on the board. Foreground workbench cluttered with bubbling beakers, test tubes, microscope, formula notebooks, atomic models, science books with visible spines.',
       catchphrase: 'Eureka! The data does not lie — it evolves!',
-      environment: 'Cluttered laboratory with glowing equipment, floating 3D molecular structures, holographic formula projections, bubbling beakers on shelves, chalkboards covered in equations',
-      color_palette: 'Electric blue #0066FF, lab green #00CC88, white #FFFFFF, deep navy #0A1628',
+      environment: 'Warm laboratory study — wooden workbench in foreground with science props (beakers, microscope, notebooks, atomic models, periodic table chart, books with visible spines like "EXPERIMENT", "QUANTUM PHYSICS"), large dark green or black chalkboard behind Einstein filled with hand-lettered title at top in bold caps + 4-5 bullet bullet points or checkbox list below in chalk, warm amber tungsten ceiling light from above, walls lined with shelves of scientific glassware',
+      color_palette: 'Electric blue #0066FF chalk accents, lab green #00CC88, warm amber wood tones, dark chalkboard green #1F3D2A',
     },
     professor: {
       label: 'Academic Lecturer',
-      look: 'Tweed jacket with elbow patches, mismatched socks visible above brogues, holding a piece of chalk, Einstein wild white hair neatly side-parted, reading glasses on nose, warm grandfatherly expression',
-      behavior: 'Warm theatrical and deeply passionate, treats the whiteboard like a grand canvas, dramatic pauses for emphasis, beckons the viewer closer to share a secret insight, paces with chalk behind back',
+      look: 'CGI cartoon Einstein with caricatured proportions and slightly oversized head, wild fluffy white hair rendered strand-by-strand, big bushy white mustache, warm friendly cartoon eyes behind small round reading glasses, tweed vest over white button-down shirt with knit tie, tweed jacket with elbow patches, one cartoon finger raised pointing UP at the chalkboard, Pixar-quality subsurface scattering on skin, gentle grandfatherly smile',
+      behavior: 'Standing front and center beside a large dark green chalkboard filled with hand-lettered title at top in bold all-caps + 4-5 bullet points or checkbox list below in white chalk. Always pointing UP at one specific bullet on the board. Foreground oak desk cluttered with classic book stacks with visible spines, an open notebook, a steaming coffee mug with a quote on it, antique brass desk lamp, fountain pen.',
       catchphrase: 'Class is in session, and curiosity is mandatory!',
-      environment: 'Grand lecture hall with tiered seating, floor-to-ceiling whiteboard filled with clean diagrams, warm amber lighting, oak desk with stacked books, floating holographic concept maps',
-      color_palette: 'Warm amber #D4A574, chalk white #F5F5F0, oak brown #8B6914, deep blue #0A1628',
+      environment: 'Warm wood-panelled study or library — oak desk in foreground stacked with classic books showing readable spine titles ("THE INTELLIGENT INVESTOR", "RICH DAD POOR DAD", "PSYCHOLOGY OF MONEY" style — substitute topic-relevant titles), open notebook, steaming coffee mug, antique brass desk lamp, fountain pen. Large dark green chalkboard behind Einstein with hand-lettered title in bold caps + 4-5 bullet points or checkbox list in white chalk. Warm amber tungsten lighting from above, walls lined with floor-to-ceiling bookshelves',
+      color_palette: 'Warm amber #D4A574, chalk white #F5F5F0, oak brown #8B6914, dark chalkboard green #1F3D2A',
     },
     accountant: {
       label: 'Financial Guru',
-      look: 'Sharp charcoal corporate suit, retro calculator watch on wrist, sleeves rolled up, reading glasses perched on nose, Einstein white hair slicked back, animated expression of intense focus on numbers',
-      behavior: 'Laser-focused intensely energetic about margins, aggressively circles budget numbers on the whiteboard with absolute glee, jabs at floating spreadsheet cells, counts on fingers rapidly',
+      look: 'CGI cartoon Einstein with caricatured proportions and slightly oversized head, wild fluffy white hair, big bushy white mustache, sharp focused cartoon eyes behind small round glasses, charcoal vest over white shirt with sleeves rolled up, calculator watch on wrist, one cartoon finger raised pointing UP at the board, Pixar-quality subsurface scattering, confident smile',
+      behavior: 'Standing front and center beside a large chalkboard filled with hand-lettered finance headlines like "MAKE MONEY / MANAGE MONEY / BUILD FREEDOM" or "EARN / SAVE / INVEST / GROW" in bold all-caps chalk, with money-bag icons, piggy-bank icons, and small chart sketches drawn beside each bullet. Foreground desk with stacked finance books showing visible spines, an open financial-plan notebook with checklist of "Budget / Emergency Fund / Invest / Passive Income", stacks of cash bills, gold coins, a calculator, a coffee mug with "COMPOUND / CONSISTENCY / FREEDOM" printed on it.',
       catchphrase: 'It is mathematically relative — your savings are about to multiply!',
-      environment: 'Sleek modern boardroom with floor-to-ceiling glass, floating holographic spreadsheets and bar charts, digital tickers, marble surfaces, city skyline backdrop',
-      color_palette: 'Money green #00AA55, gold #D4AF37, charcoal #2C2C2C, crisp white #FFFFFF',
+      environment: 'Warm wood-panelled finance study — oak desk in foreground with stacked finance books showing readable titles ("INVESTING 101", "THE INTELLIGENT INVESTOR", "RICH DAD POOR DAD", "THE PSYCHOLOGY OF MONEY"), open notebook with handwritten checklist + simple pie chart, stacks of cash bills, gold coin stacks, calculator, branded coffee mug. Large dark green chalkboard behind Einstein with hand-lettered finance title in bold all-caps + 4-5 hand-lettered bullets each with a small chalk icon (money bag, piggy bank, chart, arrow up). Warm amber tungsten lighting from above',
+      color_palette: 'Money green #00AA55 chalk accents, gold #D4AF37, warm amber wood tones, dark chalkboard green #1F3D2A',
     },
     tech: {
       label: 'IT Geek',
-      look: 'Graphic tee featuring a physics equation joke, over-ear RGB headset around neck, glowing smartphone in hand, Einstein wild white hair with one streak of neon blue, casual jeans, sneakers, multiple screens reflected in glasses',
-      behavior: 'Fast-talking tech-savvy and effortlessly cool, swipes through holographic 3D app screens like a sci-fi conductor, types in mid-air on floating keyboard, snaps fingers to spin up diagrams',
+      look: 'CGI cartoon Einstein with caricatured proportions and slightly oversized head, wild fluffy white hair with one playful streak of neon blue, big bushy white mustache, expressive cartoon eyes, wearing a navy hoodie with a bold "AI" or topic-relevant text print on the chest, one cartoon finger raised pointing UP at the screen behind him, Pixar-quality subsurface scattering, mischievous friendly smile',
+      behavior: 'Standing front and center in front of a large dark-mode monitor or holographic screen displaying a hand-designed UI dashboard with a bold title at top (e.g. "AI EXPLAINED") + 4-5 numbered or checkbox-style bullets each with a small icon (brain, gear, lightbulb, arrow). Always pointing UP at one specific bullet on the screen. Foreground desk cluttered with a sleek laptop showing a code editor, sticky notes with handwritten labels ("PROMPTS", "BE CURIOUS"), a cute little robot figurine companion, stack of tech books with visible spines ("AI SUPERPOWERS", "HUMAN + MACHINE", "THE ALIGNMENT PROBLEM" style).',
       catchphrase: 'Simple geometry my friends — let us optimise your workflow!',
-      environment: 'Futuristic tech hub with neon-lit server racks, floating holographic code editors, dual curved monitors, RGB ambient lighting, floating UI components and API diagrams',
-      color_palette: 'Neon cyan #00FFFF, electric purple #7B00FF, dark charcoal #1A1A2E, white #FFFFFF',
+      environment: 'Modern tech workspace — desk in foreground with sleek silver laptop open showing dark IDE/code editor, sticky notes with handwritten labels, tiny cartoon robot figurine, stack of tech books with readable spines, coffee mug. Large dark-mode monitor or holographic screen behind Einstein displaying a clean UI dashboard with bold title at top in white sans-serif + 4-5 numbered bullets each with a small flat icon. Cool ambient blue and purple RGB rim lighting from the screen, warm key light on Einstein from above',
+      color_palette: 'Neon cyan #00FFFF screen glow, electric purple #7B00FF accents, dark charcoal #1A1A2E background, warm key light on character',
+    },
+    diy: {
+      label: 'DIY Handyman',
+      look: 'CGI cartoon Einstein with caricatured proportions and slightly oversized head, wild fluffy white hair, big bushy white mustache, warm focused cartoon eyes, plaid flannel shirt under denim overalls, one cartoon finger raised pointing UP at the board, holding a power drill in the other hand, Pixar-quality subsurface scattering, friendly capable smile',
+      behavior: 'Standing front and center beside a large dark chalkboard with hand-lettered "HOW TO:" title at top + 4-5 checkbox bullets ("PLAN / PREPARE / STEP BY STEP / PRACTICE / IMPROVE" style — substitute topic-relevant steps). Always pointing UP at one specific checkbox. Foreground workbench cluttered with hand tools (hammer, drill, tape measure, saw), a half-built wooden project, sawdust, a coffee mug with "MEASURE TWICE / CUT ONCE" printed on it.',
+      catchphrase: 'Measure twice, cut once — let us build it together!',
+      environment: 'Warm garage workshop — wooden workbench in foreground with scattered hand tools (hammer, drill, tape measure, saw, screwdrivers), a half-built wooden project, sawdust, pegboard wall behind with tools hung on hooks, branded coffee mug. Large dark chalkboard mounted on the pegboard wall with hand-lettered "HOW TO:" title in bold all-caps + 4-5 checkbox-style bullets in white chalk. Warm tungsten work-lamp overhead light, walls lined with shelves of paint cans and supplies',
+      color_palette: 'Warm tungsten amber, weathered wood brown, plaid red and navy, dark chalkboard green #1F3D2A',
     },
   };
   return arcs[arcType] || arcs.professor;
@@ -300,8 +317,7 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id, start_section = 0 } = await req.json();
-    const SECTIONS_PER_CALL = 2; // process 2 sections per invocation to stay under 504
+    const { project_id } = await req.json();
 
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
     const project = projects[0];
@@ -321,28 +337,13 @@ Deno.serve(async (req) => {
       try { researchData = JSON.parse(psList[0].research_notes); } catch (_) {}
     }
 
-    // Get outline sections — PRIMARY: ScriptBatches (the 6-section explainer arc)
+    // Get outline sections from project
     let outlineSections = [];
-    const batches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
-    if (batches.length > 0) {
-      outlineSections = batches
-        .sort((a, b) => (a.batch_number || 0) - (b.batch_number || 0))
-        .map(b => ({
-          title: b.story_segment || `Section ${b.batch_number}`,
-          content: b.content || b.synopsis || '',
-          description: b.focus_area || '',
-          target_words: b.target_words || 0,
-          word_count: b.word_count || 0,
-        }));
-      console.log(`📚 Loaded ${outlineSections.length} sections from ScriptBatches`);
-    }
-
-    // Secondary fallback: project.outline JSON
-    if (!outlineSections.length && project.outline) {
+    if (project.outline) {
       try { outlineSections = JSON.parse(project.outline); } catch (_) {}
     }
 
-    // Last-resort fallback: split script by heading markers
+    // Fallback: split script into sections by heading markers
     if (!outlineSections.length) {
       const scriptText = script.full_script;
       const parts = scriptText.split(/\n(?=#{1,3}\s|\*\*[A-Z]|\d\.\s[A-Z])/g);
@@ -364,43 +365,21 @@ Deno.serve(async (req) => {
       console.warn(`⚠️ No research data found — proceeding without verified facts`);
     }
 
-    // Only delete old scenes on the FIRST call (start_section === 0)
-    if (start_section === 0) {
-      const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-      if (oldScenes.length > 0) {
-        await Promise.all(
-          oldScenes.map(s => base44.asServiceRole.entities.Scenes.delete(s.id).catch(() => {}))
-        );
-        console.log(`🗑️ Deleted ${oldScenes.length} old scenes`);
-      }
+    // Delete old scenes
+    const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
+    if (oldScenes.length > 0) {
+      await Promise.all(
+        oldScenes.map(s => base44.asServiceRole.entities.Scenes.delete(s.id).catch(() => {}))
+      );
+      console.log(`🗑️ Deleted ${oldScenes.length} old scenes`);
     }
 
-    // For resume: figure out where we are in the global scene numbering
-    const existingScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-    let globalSceneNumber = existingScenes.length > 0
-      ? Math.max(...existingScenes.map(s => s.scene_number || 0)) + 1
-      : 1;
-
-    // Continuity from last existing scene if resuming
-    let continuityNote = 'This is the opening of the video — Einstein enters with maximum personality and energy.';
-    if (start_section > 0 && existingScenes.length > 0) {
-      const lastScene = existingScenes.sort((a, b) => b.scene_number - a.scene_number)[0];
-      try {
-        const notes = JSON.parse((lastScene.image_prompt || '').replace('DIRECTOR_NOTES:', ''));
-        continuityNote = [
-          `Last section: "${notes.section_title}"`,
-          `Last visual: ${(notes.visual_concept || '').substring(0, 120)}`,
-          `Continuity bridge: ${notes.continuity_bridge || 'none'}`,
-          `Color palette carried: ${notes.color_palette || arcDef.color_palette}`,
-        ].join(' | ');
-      } catch (_) {}
-    }
-
-    // Process limited batch of sections this call
-    const endSection = Math.min(start_section + SECTIONS_PER_CALL, outlineSections.length);
+    // Process each section sequentially for continuity
     const allScenes = [];
+    let globalSceneNumber = 1;
+    let continuityNote = 'This is the opening of the video — Einstein enters with maximum personality and energy.';
 
-    for (let si = start_section; si < endSection; si++) {
+    for (let si = 0; si < outlineSections.length; si++) {
       const section = outlineSections[si];
 
       const prompt = buildSectionBreakdownPrompt({
@@ -468,7 +447,36 @@ Deno.serve(async (req) => {
         ].join(' | ');
       }
 
-      console.log(`✅ Section ${si + 1}: ${sectionScenes.length} scenes (total so far this call: ${allScenes.length})`);
+      console.log(`✅ Section ${si + 1}: ${sectionScenes.length} scenes (total so far: ${allScenes.length})`);
+    }
+
+    // Build beat durations — explainer pacing (longer than shorts)
+    const beatDurations = allScenes.map(s => parseFloat((s.duration_seconds || 4.0).toFixed(2)));
+    const beatStartTimes = [];
+    let offset = 0;
+    beatDurations.forEach(d => {
+      beatStartTimes.push(parseFloat(offset.toFixed(2)));
+      offset += d;
+    });
+
+    // Save production settings
+    const psPayload = {
+      beat_durations: JSON.stringify(beatDurations),
+      beat_start_times: JSON.stringify(beatStartTimes),
+      story_analysis: JSON.stringify({
+        central_theme: project.name,
+        narrative_arc_summary: `Explainer: ${outlineSections.map(s => s.title).join(' → ')}`,
+        visual_world: `Educational explainer | ${arcDef.label} Einstein | ${allScenes.length} scenes | ${arcType} arc`,
+        visual_format: 'explainer_diagram',
+        einstein_arc: arcType,
+        arc_label: arcDef.label,
+      }),
+    };
+
+    if (psList[0]) {
+      await base44.asServiceRole.entities.ProductionSettings.update(psList[0].id, psPayload);
+    } else {
+      await base44.asServiceRole.entities.ProductionSettings.create({ project_id, ...psPayload });
     }
 
     // Camera direction map matching existing pipeline
@@ -478,36 +486,44 @@ Deno.serve(async (req) => {
       push_in: 'slow_zoom_in', static: 'static',
     };
 
-    // Build scene records for THIS batch only
-    const batchDurations = allScenes.map(s => parseFloat((s.duration_seconds || 4.0).toFixed(2)));
+    // Build scene records
     const sceneRecords = allScenes.map((scene, i) => {
+      // EXPLAINER RULE: Einstein appears in EVERY scene (not just intro/outro).
+      // Pure diagram/formula/code scenes can hide him only if AI explicitly opts out,
+      // but default to present so we get the consistent CGI cartoon Einstein look
+      // from the reference image throughout the video.
+      const einsteinPresent = scene.einstein_present !== false; // default true
       const directorNotes = {
         visual_concept: scene.visual_concept || '',
         diagram_content: scene.diagram_content || null,
         scene_type: scene.scene_type || 'concept_diagram',
-        einstein_present: scene.einstein_present || false,
-        einstein_action: scene.einstein_action || null,
+        einstein_present: einsteinPresent,
+        einstein_action: scene.einstein_action || 'standing beside the chalkboard, one finger raised pointing UP at a specific bullet on the board',
         einstein_arc: arcType,
         arc_label: arcDef.label,
         einstein_look: arcDef.look,
         einstein_environment: arcDef.environment,
-        shot_type: scene.shot_type || 'WS',
-        camera_angle: 'Eye-level, locked',
+        shot_type: scene.shot_type || 'MS',
+        camera_angle: 'Eye-level, locked, slightly low to make Einstein feel approachable and authoritative',
         camera_movement: scene.camera_movement || 'static',
         camera_direction: scene.camera_direction || 'static',
-        lighting: scene.lighting || 'Bright even studio lighting, no harsh shadows',
+        lighting: scene.lighting || 'Warm tungsten key light from above, soft fill, friendly Pixar-quality 3-point lighting with subsurface scattering on skin',
         color_palette: scene.color_palette || arcDef.color_palette,
-        mood: scene.mood || 'educational, clear',
-        depth_of_field: 'Medium f/4 — diagram sharp, background soft',
+        mood: scene.mood || 'warm, friendly, educational, approachable',
+        depth_of_field: 'Medium f/2.8 — Einstein and chalkboard text sharp, foreground props in focus, gentle background falloff',
         continuity_bridge: scene.continuity_bridge || '',
         emotional_intensity: 0.6,
-        viewer_emotion: 'curious, engaged',
+        viewer_emotion: 'curious, engaged, learning',
         section_title: scene.section_title || '',
         section_index: scene.section_index ?? 0,
         text_overlay: scene.text_overlay || '',
         audio_note: 'clear educational narration, subtle ambient background music',
-        characters_present: scene.einstein_present ? ['Einstein'] : [],
+        characters_present: einsteinPresent ? ['Einstein'] : [],
         explainer_mode: true,
+        // Force the prompt engine to render in the warm CGI cartoon style
+        // matching the reference image (Pixar / cinematic_picstory aesthetic)
+        forced_visual_style: 'cinematic_picstory',
+        explainer_render_note: 'RENDER STYLE: 3D Pixar/Illumination quality CGI cartoon — caricatured Einstein with slightly oversized head and wild fluffy white hair rendered strand-by-strand, big bushy white mustache, warm subsurface-scattered skin, expressive cartoon eyes. Einstein stands front-and-center in frame with one cartoon finger raised pointing UP at a hand-lettered chalkboard or screen behind him filled with a bold all-caps TITLE at top + 4-5 readable bullet points or checkbox items below (text must be perfectly spelled, sharp, legible — hand-lettered chalk style for chalkboards, clean sans-serif for screens). Foreground desk/workbench has topic-relevant props: books with readable spine titles, branded coffee mug, notebook with checklist, niche-specific objects. Warm tungsten ambient lighting. NEVER photorealistic, NEVER realistic-old-man Einstein — ALWAYS warm friendly cartoon CGI like Pixar/Illumination.',
       };
 
       return {
@@ -516,7 +532,7 @@ Deno.serve(async (req) => {
         narration_text: scene.narration_text || '',
         image_prompt: `DIRECTOR_NOTES:${JSON.stringify(directorNotes)}`,
         animation_prompt: scene.camera_direction || 'static',
-        duration_seconds: batchDurations[i],
+        duration_seconds: beatDurations[i],
         camera_movement: cameraMap[scene.camera_direction] || 'static',
         animation_speed: 'normal',
         status: 'breakdown_ready',
@@ -525,76 +541,25 @@ Deno.serve(async (req) => {
       };
     });
 
-    // Save THIS batch incrementally so a future timeout doesn't lose work
-    if (sceneRecords.length > 0) {
-      await base44.asServiceRole.entities.Scenes.bulkCreate(sceneRecords);
-    }
+    await base44.asServiceRole.entities.Scenes.bulkCreate(sceneRecords);
 
-    const isDone = endSection >= outlineSections.length;
+    await base44.asServiceRole.entities.Projects.update(project_id, {
+      status: 'breakdown_complete',
+      current_step: 5,
+    });
 
-    // On final call, compute aggregate beat timings across ALL saved scenes & finalize project
-    if (isDone) {
-      const allSavedScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-      const sortedAll = allSavedScenes.sort((a, b) => a.scene_number - b.scene_number);
-      const allBeatDurations = sortedAll.map(s => parseFloat((s.duration_seconds || 4.0).toFixed(2)));
-      const allBeatStartTimes = [];
-      let cursor = 0;
-      allBeatDurations.forEach(d => {
-        allBeatStartTimes.push(parseFloat(cursor.toFixed(2)));
-        cursor += d;
-      });
-
-      const psPayload = {
-        beat_durations: JSON.stringify(allBeatDurations),
-        beat_start_times: JSON.stringify(allBeatStartTimes),
-        story_analysis: JSON.stringify({
-          central_theme: project.name,
-          narrative_arc_summary: `Explainer: ${outlineSections.map(s => s.title).join(' → ')}`,
-          visual_world: `Educational explainer | ${arcDef.label} Einstein | ${sortedAll.length} scenes | ${arcType} arc`,
-          visual_format: 'explainer_diagram',
-          einstein_arc: arcType,
-          arc_label: arcDef.label,
-        }),
-      };
-      if (psList[0]) {
-        await base44.asServiceRole.entities.ProductionSettings.update(psList[0].id, psPayload);
-      } else {
-        await base44.asServiceRole.entities.ProductionSettings.create({ project_id, ...psPayload });
-      }
-
-      await base44.asServiceRole.entities.Projects.update(project_id, {
-        status: 'breakdown_complete',
-        current_step: 5,
-      });
-
-      const elapsed = ((Date.now() - callStart) / 1000).toFixed(1);
-      console.log(`🎓 FINAL: ${sortedAll.length} explainer scenes total in ${elapsed}s | total duration: ${cursor.toFixed(1)}s`);
-
-      return Response.json({
-        success: true,
-        done: true,
-        scenes_created: sortedAll.length,
-        sections_processed: outlineSections.length,
-        arc_type: arcType,
-        arc_label: arcDef.label,
-        total_duration_seconds: parseFloat(cursor.toFixed(1)),
-        research_used: !!researchData,
-      });
-    }
-
-    // Partial batch — return resume info
     const elapsed = ((Date.now() - callStart) / 1000).toFixed(1);
-    console.log(`⏸️  Batch done: sections ${start_section + 1}-${endSection} of ${outlineSections.length} in ${elapsed}s | ${sceneRecords.length} new scenes | resume from section ${endSection}`);
+    console.log(`🎓 Created ${sceneRecords.length} explainer scenes in ${elapsed}s | total duration: ${offset.toFixed(1)}s`);
 
     return Response.json({
       success: true,
-      done: false,
-      next_section: endSection,
-      total_sections: outlineSections.length,
-      sections_processed_this_call: endSection - start_section,
-      scenes_created_this_call: sceneRecords.length,
+      done: true,
+      scenes_created: sceneRecords.length,
+      sections_processed: outlineSections.length,
       arc_type: arcType,
       arc_label: arcDef.label,
+      total_duration_seconds: parseFloat(offset.toFixed(1)),
+      research_used: !!researchData,
     });
 
   } catch (error) {

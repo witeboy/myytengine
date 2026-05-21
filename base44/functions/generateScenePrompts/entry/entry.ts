@@ -389,12 +389,6 @@ function getStyleSceneBodyRules(styleName) {
       environments: "COMPOUND COURTYARD: Colorful buildings (mustard, terracotta, dusty blue, sage green, salmon pink), terracotta or dark roofs, warm-colored dirt or paved ground, wooden doors, louvered windows, hanging laundry between buildings, potted flowers at doorsteps, scattered rocks, hand-painted signs with proverbs on buildings (black text on cream/white wood, all caps, hand-lettered). INDOOR: Warm-toned living rooms, kitchens, hallways with doorways where crowds peek in, candles, furniture, shelves. Night: warm artificial or candlelight as primary light, deep blue-black sky, HUGE stylized full moon.",
       objects: "Hand-painted wooden signs with proverbs that foreshadow the moral (e.g. 'PRIDE COMES BEFORE THE FALL', 'COMPOUND RULES: LANDLADY IS ALWAYS RIGHT'), wooden sticks/canes (mama's signature prop), gold jewelry (earrings, bangles, necklaces), colorful patterned clothing, cooking pots, woven baskets, wooden stools, corrugated iron roofing, potted plants, street signs with place names.",
       rendering: "3D Pixar-Illumination quality CGI. Subsurface scattering on skin. Soft ambient occlusion in shadows. Slight depth-of-field blur on background characters. Hair individually strand-rendered. Cloth shows realistic folds, wrinkles, and weight. Camera slightly below eye level (heroic/dramatic). Slight wide-angle lens distortion making foreground characters larger. 3-layer depth: foreground characters, mid-ground action, background crowd (6-15 shocked/amused onlookers with dramatic expressions). Faces ALWAYS well-lit and readable even in dark scenes. Warm bounce light from ground. Saturated punchy vibrant colors."
-    },
-    explainer_diagram: {
-      characters: "Einstein character rendered as premium 3D illustration — ALWAYS in his arc-specific costume (lab coat OR tweed jacket OR suit OR graphic tee as specified in director notes). Einstein's signature wild white hair, bushy mustache, warm expressive eyes. Character proportions are realistic adult male — NOT cartoon, NOT chibi. High detail on face and clothing. When present: Einstein is MID-ACTION — gesturing at diagrams, pointing at formulas, writing on boards, reacting with excitement to concepts.",
-      environments: "Clean professional educational environment matching the arc: laboratory (science), grand lecture hall (professor), sleek boardroom (accountant), futuristic tech hub (tech). Diagrams and visual elements are part of the environment as floating 3D panels, holographic displays, or whiteboard content.",
-      objects: "Diagrams rendered as clean 3D floating panels with crisp typography, color-coded sections, and clear hierarchy. Formulas typeset in LaTeX-style precision. Code blocks in monospace font with syntax highlighting. All text in diagrams must be READABLE and CORRECT. Arrows are clean with proper arrowheads.",
-      rendering: "Premium 3D render — NOT cartoon, NOT flat design. Subsurface scattering on character skin. Soft ambient occlusion. Professional studio lighting. High contrast between diagram elements and background. Every text element must be legible at video resolution. Depth of field: medium f/4 — character and diagrams both sharp, background subtly soft."
     }
   };
 
@@ -488,26 +482,7 @@ MANDATORY FRAMING:
 - Lighting: golden hour, volumetric rays, warm amber grading, rim light on bone edges
 - NEVER empty dark eye sockets — always BIG ROUND EXPRESSIVE BROWN/AMBER EYEBALLS
 - NEVER show readable text, numbers, dollar amounts, or screen content — use physical metaphors instead
-- NEVER write the style name as a prefix (e.g. "Skeleton protagonist →") — just describe the scene`,
-
-    explainer_diagram: universalReinforcement + `
-**🎓 EXPLAINER DIAGRAM STYLE — CRITICAL RULES:**
-
-This is premium educational content. Every image must communicate information clearly AND look visually impressive.
-
-EINSTEIN CHARACTER (when einstein_present = true): ALWAYS use the exact arc costume from director notes — lab coat (science), tweed jacket (professor), suit (accountant), graphic tee with RGB headset (tech). Einstein is ALWAYS mid-action: gesturing, pointing, writing, reacting — NEVER standing static. Face must be recognisably Einstein-inspired: wild white hair, bushy mustache, warm expressive eyes. Character proportions: realistic adult male, authoritative presence, NOT cartoon or chibi.
-
-DIAGRAMS: Every diagram must be READABLE — text large enough to see clearly. Color-code related elements consistently. Formulas typeset precisely with proper mathematical notation. Code blocks in monospace font with visible syntax highlighting. Labels concise and positioned clearly near their element.
-
-SCENE TYPE RULES:
-- concept_diagram: Pure clean diagram, no character, white or dark slate background, diagram fills 70% of frame
-- formula_panel: Formula centered, large, beautiful typesetting, dark background, formula glows subtly
-- code_block: Terminal or IDE aesthetic, syntax highlighted, clean monospace, relevant lines highlighted
-- einstein_intro/einstein_outro: Full body Einstein, environment visible, maximum personality
-- einstein_transition: Mid shot Einstein, gesturing toward next concept
-- analogy_scene: Split frame or comparison — real world LEFT, concept RIGHT
-
-FORBIDDEN: Cluttered scenes with too many elements, text too small to read, incorrect formulas or wrong code syntax, generic stock-photo aesthetic, childish cartoon style, character standing static doing nothing, multiple unrelated concepts in one frame, blurred or illegible diagram text.`
+- NEVER write the style name as a prefix (e.g. "Skeleton protagonist →") — just describe the scene`
   };
   return instructions[visualStyle] || universalReinforcement;
 }
@@ -699,7 +674,9 @@ Deno.serve(async (req) => {
     const isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
     const isSleepAmbient = rawStyle === 'sleep_ambient';
     const useSleepStyle = isSleepProject || isSleepAmbient;
-    const visualStyle = useSleepStyle ? 'oil_painting' : normalizeStyleKey(rawStyle);
+    const isExplainerProject = project.project_mode === 'explainer';
+    const visualStyle = useSleepStyle ? 'oil_painting' : (isExplainerProject ? 'cinematic_picstory' : normalizeStyleKey(rawStyle));
+    if (isExplainerProject) console.log(`🎓 Explainer project — locking visual style to cinematic_picstory (Pixar CGI cartoon)`);
     let styleConfig;
 
     // ═══ SLEEP MODE or SLEEP_AMBIENT style — REPLACE style entirely with dark oil painting ═══
@@ -754,6 +731,9 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
 **FORBIDDEN in prompts:** bright daylight, harsh lighting, vivid colors, neon, overexposed, studio lighting, white background, ARRI, Panavision, anamorphic, lens flare, bokeh, film grain, 8K, Hollywood, photorealistic, woman, man, person, figure, hands, face, body, skin, eyes, hair
 `;
       console.log(`🌙 Sleep dark aesthetic reinforcement active`);
+    } else if (isExplainerProject) {
+      styleReinforcement = `**🎓 EXPLAINER — MANDATORY CGI CARTOON EINSTEIN STYLE:** Every scene = 3D Pixar/Illumination CGI cartoon. Einstein appears FRONT AND CENTER in every scene (never distant, never small). Caricatured cartoon proportions: slightly oversized head, wild fluffy WHITE hair (strand-rendered), big bushy WHITE mustache, warm grandfatherly cartoon smile, expressive cartoon eyes, Pixar subsurface-scattered warm skin. Always one cartoon finger raised pointing UP at a chalkboard/whiteboard/screen behind him. CHALKBOARD/SCREEN BEHIND HIM (mandatory): bold all-caps TITLE at top + 4-5 readable bullets/checkboxes/numbered steps below. Text must be PERFECTLY SPELLED, SHARP, LEGIBLE — embed the exact text from diagram_content / text_overlay / einstein_environment in director notes. Hand-drawn chalk icons next to bullets when relevant (money bag, brain, gear, checkmark, arrow). FOREGROUND DESK: topic-relevant props — books with readable spine titles, branded coffee mug with short readable phrase, open notebook with handwritten checklist, niche-specific objects. LIGHTING: warm tungsten ambient from above, friendly Pixar 3-point lighting, subsurface scattering, soft ambient occlusion. Sharp focus on Einstein and chalkboard text. FORBIDDEN: photorealistic Einstein, real-old-man Einstein, sad/serious Einstein, dark moody lighting, empty backgrounds, abstract metaphors, surreal imagery, ARRI/Panavision/anamorphic/lens-flare language, garbled chalkboard text. Every image_prompt MUST embed: (1) exact chalkboard title + bullet text, (2) Einstein's arc outfit + pointing-up gesture, (3) 3-4 specific foreground props with readable text where applicable, (4) warm Pixar CGI cartoon rendering language.`;
+      console.log(`🎓 Explainer CGI cartoon Einstein reinforcement active`);
     } else if (styleReinforcement) {
       console.log(`🦴 Style reinforcement active: ${visualStyle}`);
     }
@@ -1110,14 +1090,39 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
     function extractNamedProps(narrationText) {
       if (!narrationText) return [];
       const props = [];
-      const groups = [
-        [[/\biphone\b/i, 'an iPhone'], [/\bipad\b/i, 'an iPad'], [/\bmacbook\b/i, 'a MacBook'], [/\bandroid\s*(phone|device)?\b/i, 'an Android phone'], [/\bsamsung\b/i, 'a Samsung phone'], [/\bgalaxy\b/i, 'a Samsung Galaxy'], [/\blaptop\b/i, 'a laptop'], [/\bcomputer\b/i, 'a computer'], [/\btablet\b/i, 'a tablet'], [/\bkindle\b/i, 'a Kindle']],
-        [[/\btesla\b/i, 'a Tesla'], [/\bporsche\b/i, 'a Porsche'], [/\bbmw\b/i, 'a BMW'], [/\buber\b/i, 'an Uber car']],
-        [[/\bstarbucks\b/i, 'a Starbucks cup'], [/\bamazon\s*package\b/i, 'an Amazon package'], [/\bnetflix\b/i, 'a screen']],
+      // Devices (specific beats generic)
+      const deviceMap = [
+        [/\biphone\b/i, 'an iPhone'],
+        [/\bipad\b/i, 'an iPad'],
+        [/\bmacbook\b/i, 'a MacBook'],
+        [/\bandroid\s*(phone|device)?\b/i, 'an Android phone'],
+        [/\bsamsung\b/i, 'a Samsung phone'],
+        [/\bgalaxy\b/i, 'a Samsung Galaxy'],
+        [/\blaptop\b/i, 'a laptop'],
+        [/\bcomputer\b/i, 'a computer'],
+        [/\btablet\b/i, 'a tablet'],
+        [/\bkindle\b/i, 'a Kindle'],
       ];
-      for (const group of groups) {
-        for (const [pattern, replacement] of group) {
-          if (pattern.test(narrationText)) { props.push(replacement); break; }
+      // Vehicles
+      const vehicleMap = [
+        [/\btesla\b/i, 'a Tesla'],
+        [/\bporsche\b/i, 'a Porsche'],
+        [/\bbmw\b/i, 'a BMW'],
+        [/\buber\b/i, 'an Uber car'],
+      ];
+      // Brands/places
+      const brandMap = [
+        [/\bstarbucks\b/i, 'a Starbucks cup'],
+        [/\bamazon\s*package\b/i, 'an Amazon package'],
+        [/\bnetflix\b/i, 'a screen'],
+      ];
+      
+      for (const mapList of [deviceMap, vehicleMap, brandMap]) {
+        for (const [pattern, replacement] of mapList) {
+          if (pattern.test(narrationText)) {
+            props.push(replacement);
+            break; // one per category
+          }
         }
       }
       return props;
