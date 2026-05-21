@@ -141,56 +141,39 @@ async function callAI(prompt, temperature = 0.4) {
 }
 
 // ── Einstein arc definitions ─────────────────────────────────────
-// VISUAL STYLE: 3D Pixar/Illumination CGI cartoon Einstein character —
-// caricatured proportions (slightly oversized head, expressive features),
-// soft subsurface-scattered skin, wild white hair with fiber detail,
-// bushy white mustache, warm friendly grandfatherly expression.
-// Every scene shows Einstein IN his themed workspace with a CHALKBOARD
-// or whiteboard behind him filled with hand-lettered titles, bullet
-// lists, checkboxes, and topic-specific labels. He POINTS at the board
-// with one finger raised. Props specific to the niche surround him on a
-// foreground desk/workbench.
 function getEinsteinArc(arcType) {
   const arcs = {
     science: {
       label: 'Mad Scientist',
-      look: 'CGI cartoon Einstein with caricatured proportions and slightly oversized head, wild fluffy white hair rendered strand-by-strand, big bushy white mustache, expressive warm cartoon eyes, rumpled white lab coat over a periodic-table graphic tee, safety goggles pushed up on forehead, one cartoon finger raised in classic "Eureka!" pointing gesture, Pixar-quality subsurface scattering on skin, friendly grandfatherly smile',
-      behavior: 'Standing front and center beside a large chalkboard or whiteboard covered in hand-lettered scientific headlines, bullet lists, checkboxes, and labelled diagrams. Always pointing UP at one specific item on the board. Foreground workbench cluttered with bubbling beakers, test tubes, microscope, formula notebooks, atomic models, science books with visible spines.',
+      look: 'Rumpled white lab coat, safety goggles pushed up on forehead, Einstein wild white hair, holding bubbling test tube in one hand while wildly gesturing with the other, bushy mustache, animated wide eyes',
+      behavior: 'Erratic high-energy pacing, speaks rapidly while wildly gesturing at 3D formulas floating in mid-air, bursts of sudden excitement, occasional maniacal laughter at elegant solutions',
       catchphrase: 'Eureka! The data does not lie — it evolves!',
-      environment: 'Warm laboratory study — wooden workbench in foreground with science props (beakers, microscope, notebooks, atomic models, periodic table chart, books with visible spines like "EXPERIMENT", "QUANTUM PHYSICS"), large dark green or black chalkboard behind Einstein filled with hand-lettered title at top in bold caps + 4-5 bullet bullet points or checkbox list below in chalk, warm amber tungsten ceiling light from above, walls lined with shelves of scientific glassware',
-      color_palette: 'Electric blue #0066FF chalk accents, lab green #00CC88, warm amber wood tones, dark chalkboard green #1F3D2A',
+      environment: 'Cluttered laboratory with glowing equipment, floating 3D molecular structures, holographic formula projections, bubbling beakers on shelves, chalkboards covered in equations',
+      color_palette: 'Electric blue #0066FF, lab green #00CC88, white #FFFFFF, deep navy #0A1628',
     },
     professor: {
       label: 'Academic Lecturer',
-      look: 'CGI cartoon Einstein with caricatured proportions and slightly oversized head, wild fluffy white hair rendered strand-by-strand, big bushy white mustache, warm friendly cartoon eyes behind small round reading glasses, tweed vest over white button-down shirt with knit tie, tweed jacket with elbow patches, one cartoon finger raised pointing UP at the chalkboard, Pixar-quality subsurface scattering on skin, gentle grandfatherly smile',
-      behavior: 'Standing front and center beside a large dark green chalkboard filled with hand-lettered title at top in bold all-caps + 4-5 bullet points or checkbox list below in white chalk. Always pointing UP at one specific bullet on the board. Foreground oak desk cluttered with classic book stacks with visible spines, an open notebook, a steaming coffee mug with a quote on it, antique brass desk lamp, fountain pen.',
+      look: 'Tweed jacket with elbow patches, mismatched socks visible above brogues, holding a piece of chalk, Einstein wild white hair neatly side-parted, reading glasses on nose, warm grandfatherly expression',
+      behavior: 'Warm theatrical and deeply passionate, treats the whiteboard like a grand canvas, dramatic pauses for emphasis, beckons the viewer closer to share a secret insight, paces with chalk behind back',
       catchphrase: 'Class is in session, and curiosity is mandatory!',
-      environment: 'Warm wood-panelled study or library — oak desk in foreground stacked with classic books showing readable spine titles ("THE INTELLIGENT INVESTOR", "RICH DAD POOR DAD", "PSYCHOLOGY OF MONEY" style — substitute topic-relevant titles), open notebook, steaming coffee mug, antique brass desk lamp, fountain pen. Large dark green chalkboard behind Einstein with hand-lettered title in bold caps + 4-5 bullet points or checkbox list in white chalk. Warm amber tungsten lighting from above, walls lined with floor-to-ceiling bookshelves',
-      color_palette: 'Warm amber #D4A574, chalk white #F5F5F0, oak brown #8B6914, dark chalkboard green #1F3D2A',
+      environment: 'Grand lecture hall with tiered seating, floor-to-ceiling whiteboard filled with clean diagrams, warm amber lighting, oak desk with stacked books, floating holographic concept maps',
+      color_palette: 'Warm amber #D4A574, chalk white #F5F5F0, oak brown #8B6914, deep blue #0A1628',
     },
     accountant: {
       label: 'Financial Guru',
-      look: 'CGI cartoon Einstein with caricatured proportions and slightly oversized head, wild fluffy white hair, big bushy white mustache, sharp focused cartoon eyes behind small round glasses, charcoal vest over white shirt with sleeves rolled up, calculator watch on wrist, one cartoon finger raised pointing UP at the board, Pixar-quality subsurface scattering, confident smile',
-      behavior: 'Standing front and center beside a large chalkboard filled with hand-lettered finance headlines like "MAKE MONEY / MANAGE MONEY / BUILD FREEDOM" or "EARN / SAVE / INVEST / GROW" in bold all-caps chalk, with money-bag icons, piggy-bank icons, and small chart sketches drawn beside each bullet. Foreground desk with stacked finance books showing visible spines, an open financial-plan notebook with checklist of "Budget / Emergency Fund / Invest / Passive Income", stacks of cash bills, gold coins, a calculator, a coffee mug with "COMPOUND / CONSISTENCY / FREEDOM" printed on it.',
+      look: 'Sharp charcoal corporate suit, retro calculator watch on wrist, sleeves rolled up, reading glasses perched on nose, Einstein white hair slicked back, animated expression of intense focus on numbers',
+      behavior: 'Laser-focused intensely energetic about margins, aggressively circles budget numbers on the whiteboard with absolute glee, jabs at floating spreadsheet cells, counts on fingers rapidly',
       catchphrase: 'It is mathematically relative — your savings are about to multiply!',
-      environment: 'Warm wood-panelled finance study — oak desk in foreground with stacked finance books showing readable titles ("INVESTING 101", "THE INTELLIGENT INVESTOR", "RICH DAD POOR DAD", "THE PSYCHOLOGY OF MONEY"), open notebook with handwritten checklist + simple pie chart, stacks of cash bills, gold coin stacks, calculator, branded coffee mug. Large dark green chalkboard behind Einstein with hand-lettered finance title in bold all-caps + 4-5 hand-lettered bullets each with a small chalk icon (money bag, piggy bank, chart, arrow up). Warm amber tungsten lighting from above',
-      color_palette: 'Money green #00AA55 chalk accents, gold #D4AF37, warm amber wood tones, dark chalkboard green #1F3D2A',
+      environment: 'Sleek modern boardroom with floor-to-ceiling glass, floating holographic spreadsheets and bar charts, digital tickers, marble surfaces, city skyline backdrop',
+      color_palette: 'Money green #00AA55, gold #D4AF37, charcoal #2C2C2C, crisp white #FFFFFF',
     },
     tech: {
       label: 'IT Geek',
-      look: 'CGI cartoon Einstein with caricatured proportions and slightly oversized head, wild fluffy white hair with one playful streak of neon blue, big bushy white mustache, expressive cartoon eyes, wearing a navy hoodie with a bold "AI" or topic-relevant text print on the chest, one cartoon finger raised pointing UP at the screen behind him, Pixar-quality subsurface scattering, mischievous friendly smile',
-      behavior: 'Standing front and center in front of a large dark-mode monitor or holographic screen displaying a hand-designed UI dashboard with a bold title at top (e.g. "AI EXPLAINED") + 4-5 numbered or checkbox-style bullets each with a small icon (brain, gear, lightbulb, arrow). Always pointing UP at one specific bullet on the screen. Foreground desk cluttered with a sleek laptop showing a code editor, sticky notes with handwritten labels ("PROMPTS", "BE CURIOUS"), a cute little robot figurine companion, stack of tech books with visible spines ("AI SUPERPOWERS", "HUMAN + MACHINE", "THE ALIGNMENT PROBLEM" style).',
+      look: 'Graphic tee featuring a physics equation joke, over-ear RGB headset around neck, glowing smartphone in hand, Einstein wild white hair with one streak of neon blue, casual jeans, sneakers, multiple screens reflected in glasses',
+      behavior: 'Fast-talking tech-savvy and effortlessly cool, swipes through holographic 3D app screens like a sci-fi conductor, types in mid-air on floating keyboard, snaps fingers to spin up diagrams',
       catchphrase: 'Simple geometry my friends — let us optimise your workflow!',
-      environment: 'Modern tech workspace — desk in foreground with sleek silver laptop open showing dark IDE/code editor, sticky notes with handwritten labels, tiny cartoon robot figurine, stack of tech books with readable spines, coffee mug. Large dark-mode monitor or holographic screen behind Einstein displaying a clean UI dashboard with bold title at top in white sans-serif + 4-5 numbered bullets each with a small flat icon. Cool ambient blue and purple RGB rim lighting from the screen, warm key light on Einstein from above',
-      color_palette: 'Neon cyan #00FFFF screen glow, electric purple #7B00FF accents, dark charcoal #1A1A2E background, warm key light on character',
-    },
-    diy: {
-      label: 'DIY Handyman',
-      look: 'CGI cartoon Einstein with caricatured proportions and slightly oversized head, wild fluffy white hair, big bushy white mustache, warm focused cartoon eyes, plaid flannel shirt under denim overalls, one cartoon finger raised pointing UP at the board, holding a power drill in the other hand, Pixar-quality subsurface scattering, friendly capable smile',
-      behavior: 'Standing front and center beside a large dark chalkboard with hand-lettered "HOW TO:" title at top + 4-5 checkbox bullets ("PLAN / PREPARE / STEP BY STEP / PRACTICE / IMPROVE" style — substitute topic-relevant steps). Always pointing UP at one specific checkbox. Foreground workbench cluttered with hand tools (hammer, drill, tape measure, saw), a half-built wooden project, sawdust, a coffee mug with "MEASURE TWICE / CUT ONCE" printed on it.',
-      catchphrase: 'Measure twice, cut once — let us build it together!',
-      environment: 'Warm garage workshop — wooden workbench in foreground with scattered hand tools (hammer, drill, tape measure, saw, screwdrivers), a half-built wooden project, sawdust, pegboard wall behind with tools hung on hooks, branded coffee mug. Large dark chalkboard mounted on the pegboard wall with hand-lettered "HOW TO:" title in bold all-caps + 4-5 checkbox-style bullets in white chalk. Warm tungsten work-lamp overhead light, walls lined with shelves of paint cans and supplies',
-      color_palette: 'Warm tungsten amber, weathered wood brown, plaid red and navy, dark chalkboard green #1F3D2A',
+      environment: 'Futuristic tech hub with neon-lit server racks, floating holographic code editors, dual curved monitors, RGB ambient lighting, floating UI components and API diagrams',
+      color_palette: 'Neon cyan #00FFFF, electric purple #7B00FF, dark charcoal #1A1A2E, white #FFFFFF',
     },
   };
   return arcs[arcType] || arcs.professor;
@@ -264,20 +247,36 @@ SCENE TYPE OPTIONS (pick the right type for each beat):
 - comparison_table: Side-by-side comparison or Venn diagram
 - summary_card: Recap bullet points or key takeaway
 
-SCENE COUNT RULES:
-- Simple concept (1 idea) → 1-2 scenes
-- Medium concept (2-3 ideas or a formula) → 2-4 scenes  
-- Complex concept (algorithm, multi-step process, code) → 4-8 scenes
-- Each distinct diagram, formula, or code block gets its OWN scene
-- Do NOT cram multiple diagrams into one scene
-${isFirst ? '- MUST start with an einstein_intro scene' : ''}
-${isLast ? '- MUST end with an einstein_outro scene' : ''}
+**═══ CRITICAL PACING RULE — READ TWICE ═══**
 
-DIAGRAM RULES (for concept_diagram, formula_panel, example_walkthrough):
-- Describe the EXACT layout: what boxes exist, what the arrows connect, what labels say
-- For formulas: write the actual formula text exactly as it should appear
+**ONE SENTENCE = ONE SCENE. MAX 3.0 SECONDS PER SCENE. PERIOD.**
+
+- Split the section_script_content into individual sentences (by periods).
+- EACH sentence becomes ONE scene. No exceptions.
+- duration_seconds MUST be between 1.5 and 3.0 seconds. NEVER above 3.0.
+- If a sentence is longer than ~8 words, split it at natural commas into 2 scenes.
+- narration_text for each scene = ONE short sentence (3-8 words ideal, max 10).
+- This means a 30-sentence section gets ~30 scenes. That is correct. That is the goal.
+
+SCENE COUNT RULES (override any AI instinct to make scenes longer):
+- Count the sentences in the script content. That is your minimum scene count.
+- Each distinct diagram, number, formula, or code line = its OWN scene
+- Do NOT cram two sentences into one scene
+- Do NOT extend duration past 3.0 sec to "let the visual breathe" — the next scene IS the breathing room
+${isFirst ? '- MUST start with an einstein_intro scene (2-3 sec)' : ''}
+${isLast ? '- MUST end with an einstein_outro scene (2-3 sec)' : ''}
+
+DIAGRAM RULES (for ALL scenes — every visual_concept must be richly described):
+- Describe the EXACT layout: what boxes exist, what arrows connect, what labels say verbatim
+- If the narration mentions a number, that EXACT number must appear written in the visual (on chalkboard, hologram, or callout)
+- If the narration mentions an example (e.g. "Sarah's bakery"), the visual must show that example with its actual name visible
+- For formulas: write the actual formula text exactly as it should appear (e.g. "Revenue - Costs = Profit")
 - For code: write the actual code snippet that should be displayed
-- Be specific enough that an image generator can render it accurately
+- visual_concept must be SPECIFIC and DENSE — at least 30 words describing every element on screen
+- Always specify: foreground subject, what's on the chalkboard/screen behind Einstein, key text overlays, and 1-2 props on desk
+- Image generators render what you SPELL OUT — so spell out every word, number, and label that must appear
+
+DURATION RULE: duration_seconds MUST be a number between 1.5 and 3.0. If you write 4.0 or higher, you have failed this task.
 
 ACCURACY MANDATE: Every fact, formula, and code snippet in visual_concept MUST match the verified research above. Do not invent numbers or examples.
 
@@ -296,7 +295,7 @@ Return ONLY valid JSON:
       "shot_type": "ECU/CU/MCU/MS/WS/STATIC",
       "camera_movement": "e.g. slow push-in or static or pan left to right",
       "camera_direction": "zoom_in or zoom_out or pan_left or pan_right or static or push_in",
-      "duration_seconds": 4.0,
+      "duration_seconds": 2.5,
       "lighting": "e.g. warm key light from left, clean shadows",
       "color_palette": "dominant colors with hex codes matching arc palette",
       "mood": "2-3 words",
@@ -400,36 +399,46 @@ Deno.serve(async (req) => {
       } catch (err) {
         console.error(`❌ Section ${si + 1} breakdown failed: ${err.message} — applying fallback`);
         // Minimal fallback: one concept diagram per section
-        sectionResult = {
-          scenes: [{
-            scene_number: globalSceneNumber,
-            scene_type: 'concept_diagram',
-            narration_text: section.content?.substring(0, 200) || section.title,
-            visual_concept: `Clean educational diagram for: ${section.title}`,
-            diagram_content: section.title,
-            einstein_present: false,
-            einstein_action: null,
-            shot_type: 'WS',
-            camera_movement: 'static',
-            camera_direction: 'static',
-            duration_seconds: 5.0,
-            lighting: 'Bright even studio lighting',
-            color_palette: arcDef.color_palette,
-            mood: 'educational, clear',
-            text_overlay: section.title,
-            continuity_bridge: 'diagram panel',
-          }]
-        };
+        // Fallback: split section content by sentence, one scene each, ≤3 sec
+        const sentences = (section.content || section.title || '')
+          .split(/(?<=[.!?])\s+/)
+          .map(s => s.trim())
+          .filter(s => s.length > 0)
+          .slice(0, 40);
+        const fallbackScenes = (sentences.length > 0 ? sentences : [section.title]).map((sent, i) => ({
+          scene_number: globalSceneNumber + i,
+          scene_type: 'concept_diagram',
+          narration_text: sent,
+          visual_concept: `Clean educational diagram. Chalkboard behind Einstein with title "${section.title}" and key text from: "${sent.substring(0, 60)}"`,
+          diagram_content: sent.substring(0, 80),
+          einstein_present: true,
+          einstein_action: 'pointing up at chalkboard',
+          shot_type: 'MS',
+          camera_movement: 'static',
+          camera_direction: 'static',
+          duration_seconds: 2.5,
+          lighting: 'Bright warm studio lighting',
+          color_palette: arcDef.color_palette,
+          mood: 'educational, clear',
+          text_overlay: '',
+          continuity_bridge: 'chalkboard reveals next point',
+        }));
+        sectionResult = { scenes: fallbackScenes };
       }
 
       const sectionScenes = sectionResult?.scenes || [];
 
-      // Enforce scene numbers, attach metadata
+      // Enforce scene numbers, attach metadata, CLAMP duration to 1.5-3.0 sec range
       sectionScenes.forEach((scene, idx) => {
         scene.scene_number = globalSceneNumber + idx;
         scene.section_title = section.title;
         scene.section_index = si;
         scene.arc_type = arcType;
+        // HARD CLAMP: explainer scenes must be 1.5-3.0 sec — punchy pacing rule
+        const rawDur = parseFloat(scene.duration_seconds);
+        if (!Number.isFinite(rawDur) || rawDur < 1.5) scene.duration_seconds = 2.0;
+        else if (rawDur > 3.0) scene.duration_seconds = 3.0;
+        else scene.duration_seconds = parseFloat(rawDur.toFixed(2));
         allScenes.push(scene);
       });
 
@@ -488,42 +497,33 @@ Deno.serve(async (req) => {
 
     // Build scene records
     const sceneRecords = allScenes.map((scene, i) => {
-      // EXPLAINER RULE: Einstein appears in EVERY scene (not just intro/outro).
-      // Pure diagram/formula/code scenes can hide him only if AI explicitly opts out,
-      // but default to present so we get the consistent CGI cartoon Einstein look
-      // from the reference image throughout the video.
-      const einsteinPresent = scene.einstein_present !== false; // default true
       const directorNotes = {
         visual_concept: scene.visual_concept || '',
         diagram_content: scene.diagram_content || null,
         scene_type: scene.scene_type || 'concept_diagram',
-        einstein_present: einsteinPresent,
-        einstein_action: scene.einstein_action || 'standing beside the chalkboard, one finger raised pointing UP at a specific bullet on the board',
+        einstein_present: scene.einstein_present || false,
+        einstein_action: scene.einstein_action || null,
         einstein_arc: arcType,
         arc_label: arcDef.label,
         einstein_look: arcDef.look,
         einstein_environment: arcDef.environment,
-        shot_type: scene.shot_type || 'MS',
-        camera_angle: 'Eye-level, locked, slightly low to make Einstein feel approachable and authoritative',
+        shot_type: scene.shot_type || 'WS',
+        camera_angle: 'Eye-level, locked',
         camera_movement: scene.camera_movement || 'static',
         camera_direction: scene.camera_direction || 'static',
-        lighting: scene.lighting || 'Warm tungsten key light from above, soft fill, friendly Pixar-quality 3-point lighting with subsurface scattering on skin',
+        lighting: scene.lighting || 'Bright even studio lighting, no harsh shadows',
         color_palette: scene.color_palette || arcDef.color_palette,
-        mood: scene.mood || 'warm, friendly, educational, approachable',
-        depth_of_field: 'Medium f/2.8 — Einstein and chalkboard text sharp, foreground props in focus, gentle background falloff',
+        mood: scene.mood || 'educational, clear',
+        depth_of_field: 'Medium f/4 — diagram sharp, background soft',
         continuity_bridge: scene.continuity_bridge || '',
         emotional_intensity: 0.6,
-        viewer_emotion: 'curious, engaged, learning',
+        viewer_emotion: 'curious, engaged',
         section_title: scene.section_title || '',
         section_index: scene.section_index ?? 0,
         text_overlay: scene.text_overlay || '',
         audio_note: 'clear educational narration, subtle ambient background music',
-        characters_present: einsteinPresent ? ['Einstein'] : [],
+        characters_present: scene.einstein_present ? ['Einstein'] : [],
         explainer_mode: true,
-        // Force the prompt engine to render in the warm CGI cartoon style
-        // matching the reference image (Pixar / cinematic_picstory aesthetic)
-        forced_visual_style: 'cinematic_picstory',
-        explainer_render_note: 'RENDER STYLE: 3D Pixar/Illumination quality CGI cartoon — caricatured Einstein with slightly oversized head and wild fluffy white hair rendered strand-by-strand, big bushy white mustache, warm subsurface-scattered skin, expressive cartoon eyes. Einstein stands front-and-center in frame with one cartoon finger raised pointing UP at a hand-lettered chalkboard or screen behind him filled with a bold all-caps TITLE at top + 4-5 readable bullet points or checkbox items below (text must be perfectly spelled, sharp, legible — hand-lettered chalk style for chalkboards, clean sans-serif for screens). Foreground desk/workbench has topic-relevant props: books with readable spine titles, branded coffee mug, notebook with checklist, niche-specific objects. Warm tungsten ambient lighting. NEVER photorealistic, NEVER realistic-old-man Einstein — ALWAYS warm friendly cartoon CGI like Pixar/Illumination.',
       };
 
       return {
