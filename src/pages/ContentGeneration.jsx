@@ -24,6 +24,14 @@ import {
   XCircle, Clock, Zap, Video, FolderDown, Mic, Music, Volume2, Home,
   FileText, RefreshCw
 } from 'lucide-react';
+import {
+  resolveProjectMode,
+  isSleepMode as isSleepModeFn,
+  isShortsMode as isShortsModeFn,
+  isExplainerMode as isExplainerModeFn,
+  isLongViralMode as isLongViralModeFn,
+  assertBreakdownMatchesMode,
+} from '@/lib/resolveProjectMode';
 
 
 // ═══════════════════════════════════════════════════════════════════
@@ -643,11 +651,45 @@ export default function ContentGeneration() {
     try {
       setImportPhase('breakdown');
 
-      const isSleepProject = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
+      // ── Resolve to ONE canonical mode — strict, never cross-pollinated ──
+      // We fetch the channel so resolution can self-heal a wiped project_mode.
+      let channel = null;
+      if (project?.channel_id) {
+        try {
+          const channels = await base44.entities.Channels?.filter({ id: project.channel_id });
+          channel = channels?.[0] || null;
+        } catch (_) {}
+      }
+      const { mode: resolvedMode, inferred, source } = resolveProjectMode(project, channel);
+      console.log(`[Pipeline] Resolved mode: ${resolvedMode} (source: ${source}, inferred: ${inferred})`);
 
-      // ── Detect Shorts by project_mode OR portrait orientation ──
-      const isShortsProject = project?.project_mode === 'shorts' || project?.project_mode === 'youtube_shorts' || project?.orientation === 'portrait';
-      const isExplainerProject = project?.project_mode === 'explainer';
+      // Self-heal: if mode was inferred and project.project_mode is missing/stale, persist it
+      // so downstream functions (scene breakdown, broll, etc.) see the correct mode.
+      if (inferred && resolvedMode !== 'standard' && project?.project_mode !== resolvedMode) {
+        try {
+          await base44.entities.Projects.update(projectId, { project_mode: resolvedMode });
+          console.log(`[Pipeline] Self-healed project_mode → ${resolvedMode}`);
+        } catch (e) {
+          console.warn(`[Pipeline] Could not self-heal project_mode: ${e.message}`);
+        }
+      }
+
+      const isSleepProject     = isSleepModeFn(resolvedMode);
+      const isShortsProject    = isShortsModeFn(resolvedMode);
+      const isExplainerProject = isExplainerModeFn(resolvedMode);
+      const isLongViralProject = isLongViralModeFn(resolvedMode);
+
+      // ── PRE-FLIGHT VALIDATION ──
+      // Lock in which backend function will run BEFORE we invoke it.
+      // assertBreakdownMatchesMode throws if anything is wrong — bug-catching guardrail.
+      const chosenBreakdownFn =
+        isSleepProject     ? 'sleepSceneBreakdown'    :
+        isShortsProject    ? 'shortsSceneBreakdown'   :
+        isLongViralProject ? 'longViralSceneBreakdown':
+        isExplainerProject ? 'explainerSceneBreakdown':
+                             'generateSceneBreakdown';
+      assertBreakdownMatchesMode(chosenBreakdownFn, resolvedMode);
+      console.log(`[Pipeline] Validated → will call "${chosenBreakdownFn}" for mode "${resolvedMode}"`);
 
       if (isSleepProject) {
         // ── SLEEP: lightweight ambient breakdown (6-12 images) ──
@@ -711,7 +753,7 @@ export default function ContentGeneration() {
         setImportPhase('prompts');
         await runPromptGeneration({ onProgress: setImportProgress });
 
-      } else if (project?.project_mode === 'long_viral') {
+      } else if (isLongViralProject) {
         // ── LONG VIRAL: sentence-driven scene breakdown ──
         setImportProgress('Breaking script into sentence-driven scenes...');
         try {
@@ -1442,8 +1484,12 @@ export default function ContentGeneration() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <StageProgress currentStage={2} />
 
-      {/* ── DEV: Explainer Mode Patcher ── remove after use ── */}
-      {project && !project.project_mode && (
+      {/* ── DEV: Explainer Mode Patcher ──
+          Only shows when BOTH (a) project has no mode set AND
+          (b) no sleep/shorts heuristic would auto-resolve it.
+          Prevents asking sleep/shorts projects to pick an Einstein arc. */}
+      {project && !project.project_mode &&
+        resolveProjectMode(project, null).mode === 'standard' && (
         <div className="bg-red-50 border border-red-300 rounded-lg p-3 mx-4 mt-2 flex items-center gap-3">
           <p className="text-sm text-red-700 flex-1">⚠️ This project has no mode set. Set as Explainer?</p>
           <select
