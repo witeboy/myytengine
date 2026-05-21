@@ -1,10 +1,11 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
-// v3 — expanded domain allowlist + audio extension support
+// v2 — redeployed
 import { S3Client, PutObjectCommand } from 'npm:@aws-sdk/client-s3@3.600.0';
 
 // ══════════════════════════════════════════════════════════════════
 // PROXY FETCH — Downloads CORS-blocked URLs server-side
 // Re-uploads to Cloudflare R2 and returns a CORS-safe URL
+// For small files (<500KB), returns base64 inline as fallback
 // ══════════════════════════════════════════════════════════════════
 
 Deno.serve(async (req) => {
@@ -26,49 +27,22 @@ Deno.serve(async (req) => {
 
     // Security: only allow known asset domains
     const allowed = [
-      // AIQuickDraw
       'tempfile.aiquickdraw.com',
       'file.aiquickdraw.com',
       'cdn.aiquickdraw.com',
-      'aiquickdraw.com',
-      // MyVoicify / R2
-      'myvoicify.app',
-      'media.myvoicify.app',
-      'files.myvoicify.app',
-      'cdn.myvoicify.app',
-      // Cloudflare R2
-      'r2.dev',
-      'r2.cloudflarestorage.com',
-      'pub-aafc308ff5954f7187e75e4d90948e91.r2.dev',
-      // Google
       'storage.googleapis.com',
       'firebasestorage.googleapis.com',
-      // Base44 CDN
       'cdn.base44.app',
-      // KIE / image gen
       'api.kie.ai',
       'kie-asset',
-      // Grok / xAI
-      'x.ai',
-      'imgen.x.ai',
-      'pbs.twimg.com',
-      // Ideogram
+      'suno',
       'ideogram.ai',
-      // Pollinations
       'image.pollinations.ai',
-      // OpenAI / DALL-E
-      'cdn.openai.com',
       'oaidalleapiprodscus.blob.core.windows.net',
-      // ElevenLabs
-      'elevenlabs.io',
-      'storage.elevenlabs.io',
-      'api.elevenlabs.io',
-      // Replicate
       'replicate.delivery',
       'pbxt.replicate.delivery',
-      // Suno
-      'suno',
-      'files.suno.ai',
+      '.r2.dev',
+      'r2.cloudflarestorage.com',
     ];
 
     const hostname = new URL(url).hostname;
@@ -83,24 +57,15 @@ Deno.serve(async (req) => {
       return Response.json({ error: `Fetch failed: ${response.status}` }, { status: response.status });
     }
 
-    const contentType = response.headers.get('content-type') || 'application/octet-stream';
+    const contentType = response.headers.get('content-type') || 'application/octet-stream'; 
     const blob = await response.blob();
     const sizeKB = (blob.size / 1024).toFixed(1);
     console.log(`✓ Downloaded: ${sizeKB}KB (${contentType})`);
 
-    // Determine file extension — includes audio types
+    // Determine file extension
     const ext = contentType.includes('video') ? 'mp4'
       : contentType.includes('png') ? 'png'
       : contentType.includes('webp') ? 'webp'
-      : contentType.includes('wav') ? 'wav'
-      : contentType.includes('ogg') ? 'ogg'
-      : contentType.includes('audio') ? 'mp3'
-      : url.includes('.wav') ? 'wav'
-      : url.includes('.ogg') ? 'ogg'
-      : url.includes('.mp3') ? 'mp3'
-      : url.includes('.mp4') ? 'mp4'
-      : url.includes('.png') ? 'png'
-      : url.includes('.webp') ? 'webp'
       : 'jpg';
 
     // Re-upload to Cloudflare R2 for a CORS-safe URL
