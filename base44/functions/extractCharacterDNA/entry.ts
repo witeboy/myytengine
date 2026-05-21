@@ -1,6 +1,6 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
-// v4 — OpenAI Primary, Gemini + Claude Backup
+// v3 — Gemini Primary, Claude Backup
 // ══════════════════════════════════════════════════════════════════
 // CHARACTER DNA EXTRACTOR
 // ══════════════════════════════════════════════════════════════════
@@ -9,7 +9,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // 
 // Pipeline: Script Complete → [THIS] → Scene Breakdown → Prompts → Image Gen
 // 
-// AI Strategy: OpenAI GPT-4o (primary) → Gemini 2.5 Pro (fallback 1) → Claude Sonnet (fallback 2)
+// AI Strategy: Gemini 2.5 Pro (primary) → Claude Sonnet (fallback)
 // 
 // Output saved to Project.character_descriptions as JSON:
 // [
@@ -29,55 +29,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 
 const SYSTEM_INSTRUCTION = "You are a casting director and data extraction system. You must return ONLY raw, valid JSON. Do not include markdown formatting like ```json and do not include any conversational text.";
 
-// ═══ OPENAI GPT-4o — PRIMARY ═══
-async function callOpenAI(prompt, temperature = 0.4) {
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
-  
-  if (!apiKey) {
-    throw new Error("Missing OPENAI_API_KEY environment variable");
-  }
-
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { 
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: "gpt-4o",
-      temperature: temperature,
-      max_tokens: 4096,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: SYSTEM_INSTRUCTION },
-        { role: "user", content: prompt }
-      ]
-    })
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    const msg = err?.error?.message || `HTTP ${response.status}`;
-    throw new Error(`OpenAI error: ${msg}`);
-  }
-
-  const data = await response.json();
-  const rawText = data?.choices?.[0]?.message?.content;
-  
-  if (!rawText) {
-    throw new Error("No content returned from OpenAI");
-  }
-
-  try { 
-    return JSON.parse(rawText); 
-  } catch (_) {
-    const match = rawText.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]);
-    throw new Error("Failed to parse OpenAI JSON response");
-  }
-}
-
-// ═══ GEMINI 2.5 PRO — FALLBACK 1 ═══
+// ═══ GEMINI 2.5 PRO — PRIMARY ═══
 async function callGemini(prompt, temperature = 0.4) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   
@@ -118,6 +70,7 @@ async function callGemini(prompt, temperature = 0.4) {
 
   const data = await response.json();
 
+  // Gemini response structure: candidates[0].content.parts[0].text
   const candidate = data?.candidates?.[0];
   if (!candidate?.content?.parts?.length) {
     throw new Error("No content returned from Gemini");
@@ -128,13 +81,14 @@ async function callGemini(prompt, temperature = 0.4) {
   try { 
     return JSON.parse(rawText); 
   } catch (_) {
+    // Fallback: extract JSON object from text
     const match = rawText.match(/\{[\s\S]*\}/);
     if (match) return JSON.parse(match[0]);
     throw new Error("Failed to parse Gemini JSON response");
   }
 }
 
-// ═══ CLAUDE — FALLBACK 2 ═══
+// ═══ CLAUDE — BACKUP ═══
 async function callClaude(prompt, temperature = 0.4) {
   const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
   
@@ -179,30 +133,16 @@ async function callClaude(prompt, temperature = 0.4) {
   }
 }
 
-// ═══ UNIFIED CALLER: OpenAI first → Gemini fallback → Claude fallback ═══
+// ═══ UNIFIED CALLER: Gemini first → Claude fallback ═══
 async function callAI(prompt, temperature = 0.4) {
-  const errors = [];
-
-  // Try OpenAI first
+  // Try Gemini first
   try {
-    console.log("🤖 Attempting OpenAI GPT-4o...");
-    const result = await callOpenAI(prompt, temperature);
-    console.log("✅ OpenAI GPT-4o succeeded");
-    return { result, model: "gpt-4o" };
-  } catch (openaiError) {
-    console.warn(`⚠️ OpenAI failed: ${openaiError.message}`);
-    errors.push(`OpenAI: ${openaiError.message}`);
-  }
-
-  // Fallback to Gemini
-  try {
-    console.log("🔄 Falling back to Gemini 2.5 Pro...");
+    console.log("🤖 Attempting Gemini 2.5 Pro...");
     const result = await callGemini(prompt, temperature);
-    console.log("✅ Gemini 2.5 Pro fallback succeeded");
+    console.log("✅ Gemini 2.5 Pro succeeded");
     return { result, model: "gemini-2.5-pro" };
   } catch (geminiError) {
     console.warn(`⚠️ Gemini failed: ${geminiError.message}`);
-    errors.push(`Gemini: ${geminiError.message}`);
   }
 
   // Fallback to Claude
@@ -213,8 +153,7 @@ async function callAI(prompt, temperature = 0.4) {
     return { result, model: "claude-sonnet-4-5" };
   } catch (claudeError) {
     console.error(`❌ Claude also failed: ${claudeError.message}`);
-    errors.push(`Claude: ${claudeError.message}`);
-    throw new Error(`All 3 AI providers failed. ${errors.join(' | ')}`);
+    throw new Error(`Both AI providers failed. Gemini: ${claudeError.message}`);
   }
 }
 
@@ -230,8 +169,65 @@ Deno.serve(async (req) => {
     const project = projects[0];
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
-    // Skip for sleep projects
-    if (project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story') {
+    // Skip for sleep and explainer projects
+    // Explainer uses pre-defined Einstein arc — not script-extracted characters
+    if (
+      project.project_mode === 'sleep_meditation' ||
+      project.project_mode === 'sleep_story' ||
+      project.project_mode === 'explainer'
+    ) {
+      // For explainer: pre-populate Einstein character DNA based on arc
+      if (project.project_mode === 'explainer') {
+        const arcType = project.explainer_arc || 'professor';
+        const einsteinDNA = {
+          science: {
+            name: 'Einstein',
+            role: 'protagonist',
+            identity_core: '70-year-old male, wild untamed white hair sticking out in all directions, prominent bushy white mustache, warm intelligent brown eyes with deep laugh lines, oval face with high cheekbones, slightly ruddy warm skin tone, wiry lean build, 5ft9, wearing rumpled white lab coat over casual shirt, safety goggles pushed up on forehead, animated expressive face showing constant delight at discovery',
+            default_clothing: 'Rumpled white lab coat, safety goggles pushed up on forehead, casual plaid shirt underneath, comfortable worn trousers, sensible shoes',
+            emotional_arc: 'Starts with explosive excitement at introducing the topic, builds to focused intensity during core concepts, reaches peak joy at elegant solutions and aha moments, closes with warm satisfaction',
+            scene_keywords: ['einstein', 'professor', 'scientist', 'he', 'his', 'our host', 'the professor'],
+          },
+          professor: {
+            name: 'Einstein',
+            role: 'protagonist',
+            identity_core: '70-year-old male, wild white hair neatly side-parted for once but still voluminous, prominent bushy white mustache, warm intelligent brown eyes with deep laugh lines, oval face with high cheekbones, slightly ruddy warm skin tone, wiry lean build, 5ft9, wearing tweed jacket with distinctive elbow patches, mismatched socks visible above brogues, holding chalk',
+            default_clothing: 'Brown tweed jacket with leather elbow patches, slightly wrinkled dress shirt, mismatched wool socks, worn brown brogues, piece of chalk always in hand',
+            emotional_arc: 'Opens with theatrical warmth and welcoming energy, becomes passionately focused during concept explanation, uses dramatic pauses for emphasis, closes with proud satisfaction at the viewer having learned something real',
+            scene_keywords: ['einstein', 'professor', 'lecturer', 'he', 'his', 'our professor', 'the lecturer'],
+          },
+          accountant: {
+            name: 'Einstein',
+            role: 'protagonist',
+            identity_core: '70-year-old male, wild white hair slicked back with partial success, prominent bushy white mustache, sharp focused brown eyes behind reading glasses perched on nose, oval face with high cheekbones, slightly ruddy warm skin tone, wiry lean build, 5ft9, wearing sharp charcoal corporate suit with sleeves rolled up, retro calculator watch visible on wrist, animated intense expression when circling numbers',
+            default_clothing: 'Sharp charcoal double-breasted suit, crisp white dress shirt, conservative tie loosened at collar, sleeves rolled up to forearms, retro calculator watch, reading glasses on nose',
+            emotional_arc: 'Opens with laser-focused energy about the financial opportunity, builds intensity as numbers are revealed, reaches peak excitement at elegant mathematical solutions, closes with gleeful satisfaction at the profit potential',
+            scene_keywords: ['einstein', 'the professor', 'financial expert', 'he', 'his', 'our analyst'],
+          },
+          tech: {
+            name: 'Einstein',
+            role: 'protagonist',
+            identity_core: '70-year-old male reimagined as tech visionary, wild white hair with one streak of neon blue, prominent bushy white mustache, sharp bright brown eyes behind thin-framed smart glasses, oval face with high cheekbones, slightly ruddy warm skin tone, wiry lean build, 5ft9, wearing physics-joke graphic tee, over-ear RGB headset around neck, glowing smartphone in hand, effortlessly cool modern energy',
+            default_clothing: 'Physics equation graphic tee, dark slim jeans, clean white sneakers, over-ear RGB headset worn around neck, thin-framed smart glasses, glowing smartphone always in hand or nearby',
+            emotional_arc: 'Opens cool and fast-talking, builds genuine excitement as technology complexity is revealed, reaches peak enthusiasm at elegant technical solutions, closes with knowing satisfaction and a touch of futurism',
+            scene_keywords: ['einstein', 'the developer', 'the tech guy', 'he', 'his', 'our expert', 'the geek'],
+          },
+        };
+
+        const characterData = [einsteinDNA[arcType] || einsteinDNA.professor];
+        await base44.asServiceRole.entities.Projects.update(project_id, {
+          character_descriptions: JSON.stringify(characterData),
+        });
+        console.log(`🧬 Einstein character DNA pre-populated for arc: ${arcType}`);
+        return Response.json({
+          success: true,
+          skipped: false,
+          reason: 'explainer_einstein_prepopulated',
+          arc_type: arcType,
+          character_count: 1,
+        });
+      }
+
       return Response.json({ success: true, skipped: true, reason: 'sleep_project' });
     }
 
