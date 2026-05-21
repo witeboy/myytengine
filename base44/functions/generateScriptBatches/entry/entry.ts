@@ -378,24 +378,36 @@ Return JSON:
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// EXPLAINER WRITING PROMPT — educational / listicle / fact-dense
+// EXPLAINER SCRIPT WRITING PROMPT — fact-driven, educational narration
 // ═══════════════════════════════════════════════════════════════════
 function buildExplainerWritingPrompt({ batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock }) {
-  const title = topic?.title || project.name || '';
-  const listicleMatch = title.match(/^\s*(\d+)\s+/);
-  const isListicle = !!listicleMatch;
+  // Pull research notes if available
+  let researchBlock = '';
+  if (project.research_notes) {
+    try {
+      const r = typeof project.research_notes === 'string' ? JSON.parse(project.research_notes) : project.research_notes;
+      const facts = Array.isArray(r.facts) ? r.facts.slice(0, 12).map(f => `- ${f.claim || f}`).join('\n') : '';
+      const numbers = Array.isArray(r.key_numbers) ? r.key_numbers.slice(0, 10).map(n => `- ${n}`).join('\n') : '';
+      const miscons = Array.isArray(r.common_misconceptions) ? r.common_misconceptions.slice(0, 6).map(m => `- ${m}`).join('\n') : '';
+      researchBlock = `\n**GROUNDED RESEARCH** (use these facts — do NOT invent new statistics):
+${facts ? `Facts:\n${facts}\n` : ''}${numbers ? `Key Numbers:\n${numbers}\n` : ''}${miscons ? `Common Misconceptions:\n${miscons}\n` : ''}`;
+    } catch (_) {}
+  }
 
-  return `You are an elite educational YouTube scriptwriter (Wendover, Polymatter, Modern MBA, Logically Answered style). You write dense, fact-packed, conversational narration that teaches the viewer something concrete.
+  return `You are an expert explainer-video scriptwriter (think Veritasium, Vox, Kurzgesagt, Wendover, Polymatter).
+
+You write EDUCATIONAL narration that teaches the viewer something real and useful. You do NOT write viral storytelling, fake suspense, "nobody tells you" hooks, or invented characters.
 
 **PROJECT CONTEXT**:
-- Title: ${title}
+- Topic: ${topic?.title || project.name}
 - Description: ${topic?.description || ''}
-- Niche: ${project.niche || 'Educational'}
-- Duration: ${project.video_duration_minutes || 10} minutes
-${selectedHook && isFirstBatch ? `- Opening Hook (MUST use as first line): "${selectedHook.hook_text}"` : ''}
-${strategyBlock}
+- Niche: ${project.niche || 'General'}
+- Tone: ${project.tone || 'educational'} — clear, intelligent, grounded
+- Video Duration: ${project.video_duration_minutes || 10} minutes
+${selectedHook && isFirstBatch ? `- Opening Line (MUST use as first sentence): "${selectedHook.hook_text}"` : ''}
+${strategyBlock}${researchBlock}
 
-**FULL OUTLINE** (all batches):
+**FULL SCRIPT ARC** (all batches):
 ${outlineContext}
 
 **YOU ARE NOW WRITING BATCH ${batch.batch_number} of ${sortedBatches.length}**: "${batch.story_segment}"
@@ -403,43 +415,34 @@ ${outlineContext}
 **BATCH SYNOPSIS** (follow this closely):
 ${batch.synopsis}
 
-**MANDATORY WORD COUNT**: AT LEAST ${batch.target_words} words. Non-negotiable. (150 words = 1 minute)
+**MANDATORY WORD COUNT**: AT LEAST ${batch.target_words} words. If your output is under ${Math.round(batch.target_words * 0.9)} words, it is a FAILURE. Add more worked examples, more concrete numbers, more mechanism detail until you reach the target. (150 words ≈ 1 minute of narration.)
 
-${previousContent ? `**PREVIOUSLY WRITTEN** (continuity — do NOT repeat):\n${previousContent.slice(-4000)}\n` : ''}
+${previousContent ? `**PREVIOUSLY WRITTEN** (maintain continuity, do NOT repeat):\n${previousContent.slice(-4000)}\n` : ''}
 
-**═══ EXPLAINER VOICE RULES (CRITICAL) ═══**
+**═══ EXPLAINER WRITING RULES ═══**
 
-❌ ABSOLUTELY FORBIDDEN:
-- Cinematic novel prose ("Dave sat in traffic, his fingers drumming the wheel...")
-- TVF phases — no "But here's what nobody tells you..." curiosity-gap framing
-- Dramatic scene-setting openings — this is education, not a film
-- Vague generalities ("many people", "lots of money", "huge industry")
-- Filler ("In this video", "Welcome back", "Today we'll explore")
-- Inspirational closing platitudes
+✅ DO:
+- Write narration only — words the narrator will speak.
+- Use precise, specific language. Real numbers, real names, real mechanisms.
+- Explain HOW and WHY, not just WHAT. Walk through cause→effect step by step.
+- Use worked examples ("Imagine a laundromat with $8,000/month in revenue and $5,200 in costs...").
+- Define jargon the first time you use it.
+- Use logical transitions: "This means...", "So when we ask why...", "The reason is...", "But there's a catch:...".
+- Treat the viewer as intelligent and curious.
+- Vary sentence rhythm: punchy declarative sentences mixed with longer explanatory ones.
 
-✅ REQUIRED VOICE:
-- Casual, conversational educator — like explaining to a smart friend
-- Use casual asides: "I know, I know — sounds boring", "here's the thing", "stay with me"
-- Direct address: "you"
-- Specific, concrete, numerical — minimum 1.5 dollar figures / data points per 100 words
-- Name real operators, companies, people with brief backstory (1-2 sentences)
-- Short, punchy sentences mixed with the occasional longer explanatory one
-- Show the mechanic — explain HOW the thing actually works, step-by-step
+❌ DO NOT:
+- NO "but here's what nobody tells you", "the SHOCKING truth", "you won't believe", "hiding in plain sight".
+- NO fake suspense or invented characters ("meet Jim, a frustrated office worker").
+- NO curiosity gaps for their own sake — curiosity should come from real, answered questions.
+- NO "In this video", "Welcome back", "Stay tuned", or meta-commentary.
+- NO scene directions, [SCENE:], [VISUAL:], or stage directions — narration only.
+- NO unsourced statistics or made-up studies. If you don't have a real number, describe the mechanism qualitatively.
+- NO generic motivational filler.
+- NO dramatic cliffhangers between batches — use logical bridges instead.
 
-${isListicle ? `**LISTICLE ITEM RULES** (this batch is likely one item):
-- Open with: "Number ${batch.batch_number === 1 ? 'one' : batch.batch_number === sortedBatches.length ? 'X' : batch.batch_number - 1}, [item name]." — or natural variation
-  (Skip this if this is the intro or outro batch — check the synopsis)
-- Within 30 seconds, name a real operator and drop the first dollar figure
-- Walk through mechanics: startup cost → revenue model → margins → why it's overlooked
-- Anecdote: one named operator's actual story (city, scale, money made)
-- End with a 1-sentence tease into the next item ("but the next one is even weirder...")\n` : ''}
-
-**WRITING RULES**:
-1. Narration ONLY — no scene directions, no [VISUAL:], no stage directions
-2. ${isFirstBatch ? 'Open punchy. State the premise + tease what\'s coming. NO scene-setting prose.' : 'Continue seamlessly from where the previous batch ended'}
-3. ${isLastBatch ? 'Wrap with a quick recap (name 2 specific items/concepts). End with a soft CTA — like or subscribe — phrased casually.' : 'End with a 1-line tease into the next batch'}
-4. Write for the EAR — natural spoken rhythm
-5. EVERY 100 words should contain at least one specific fact (name, number, date, place)
+**${isFirstBatch ? 'OPENING: Frame the question precisely. State what we are going to understand and why it matters. No shock-bait.' : 'CONTINUE: Pick up logically from the previous batch. Use a bridge like "Now that we understand X, the next question is Y."'}**
+**${isLastBatch ? 'ENDING: Synthesize the one durable insight the viewer should remember. End with a clean, quotable line — not a cliffhanger. Include a subtle CTA.' : 'END: Set up the next batch with a logical question, not a dramatic cliffhanger.'}**
 
 Return JSON:
 {
@@ -529,10 +532,11 @@ Deno.serve(async (req) => {
       channel = channels[0];
     }
 
-    // Detect script mode
-    const isSleepMode = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
-    const isExplainerMode = project.project_mode === 'explainer';
-    const scriptMode = isSleepMode ? project.project_mode : (isExplainerMode ? 'explainer' : 'standard');
+    // Detect script mode — respect project_mode (sleep_*, explainer) or fall back to standard
+    const KNOWN_MODES = ['sleep_meditation', 'sleep_story', 'explainer'];
+    const scriptMode = KNOWN_MODES.includes(project.project_mode) ? project.project_mode : 'standard';
+    const isSleepMode = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
+    const isExplainerMode = scriptMode === 'explainer';
 
     console.log(`[generateScriptBatches] Script mode: ${scriptMode}`);
 
@@ -604,13 +608,14 @@ Deno.serve(async (req) => {
       const prompt = isSleepMode
         ? buildSleepWritingPrompt({ ...promptArgs, scriptMode })
         : isExplainerMode
-          ? buildExplainerWritingPrompt(promptArgs)
-          : buildStandardWritingPrompt(promptArgs);
+        ? buildExplainerWritingPrompt(promptArgs)
+        : buildStandardWritingPrompt(promptArgs);
 
       console.log(`[Batch ${batch.batch_number}] Generating ~${batch.target_words} words (${scriptMode})...`);
 
-      // Sleep: lower temp for soothing consistency. Explainer: slightly higher for casual asides.
-      const baseTemp = isSleepMode ? 0.65 : isExplainerMode ? 0.9 : 0.85;
+      // Sleep scripts use lower temperature for soothing consistency.
+      // Explainer scripts use lower temperature to stay factual and reduce hallucination.
+      const baseTemp = isSleepMode ? 0.65 : isExplainerMode ? 0.55 : 0.85;
       const minWords = Math.round(batch.target_words * 0.92);
       let content = '';
       let wordCount = 0;
