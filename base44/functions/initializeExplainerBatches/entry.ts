@@ -3,7 +3,6 @@ import OpenAI from 'npm:openai@4.58.1';
 
 // ═══════════════════════════════════════════════════════════════════
 // EXPLAINER PIPELINE — Step 1: Outline batches anchored to research_notes
-// Auto-runs grounded web research (Gemini + Google Search) if missing.
 // ═══════════════════════════════════════════════════════════════════
 
 const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
@@ -17,30 +16,20 @@ function hasUsableResearch(researchNotes) {
   } catch (_) { return false; }
 }
 
-// Grounded web research — uses Gemini 2.5 Flash with Google Search tool
+// Grounded web research using Gemini 2.5 Flash + Google Search
 async function researchTopicGrounded(topicTitle, topicDescription, niche) {
   if (!GEMINI_KEY) throw new Error('GEMINI_API_KEY not set');
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`;
-  const prompt = `You are a research assistant for an educational YouTube explainer video. Use Google Search to find REAL, VERIFIABLE facts about this topic. Do NOT make up statistics, dates, studies, company names, or dollar figures.
+  const prompt = `Use Google Search to find REAL, VERIFIABLE facts for an educational explainer video. Do NOT invent numbers, companies, studies, or dollar figures.
 
 TOPIC: ${topicTitle}
 DESCRIPTION: ${topicDescription || 'N/A'}
 NICHE: ${niche || 'general'}
 
-YOUR TASK:
-- Find 8-12 concrete facts grounded in real sources (recent: gov data, academic, major news, industry reports).
-- Find 6-10 specific numbers/percentages/dollar amounts/dates that are well-documented (with sources).
-- Find 2-4 common misconceptions and the actual TRUTH that corrects each one.
-- If the topic is LIST-STYLE (e.g. "6 boring businesses that make millionaires"), find for EACH item: a real example, real revenue/margin range, and a real owner story (anonymize if needed).
+Find 8-12 sourced facts, 6-10 specific numbers (with sources), 2-4 misconceptions with truths. For list-style topics, find a real example + revenue/margin range for each item.
 
-RULES:
-- Every fact must have a source URL from your Google Search results.
-- Quote numbers exactly as they appear in the source (don't round wildly).
-- If you can't find a real number for something, OMIT it — do NOT invent.
-- Favor sources from the last 5 years.
-
-Return ONLY a single valid JSON object (no markdown, no commentary, no citations after the JSON):
-{"facts":[{"claim":"...","source_name":"...","source_url":"https://..."}],"key_numbers":[{"number":"$1.4 trillion or 64%","context":"...","source_name":"...","source_url":"https://..."}],"common_misconceptions":[{"myth":"...","truth":"...","source_url":"https://..."}]}`;
+Return ONLY a single valid JSON object (no markdown fences, no citation chips like [1], no commentary):
+{"facts":[{"claim":"...","source_name":"...","source_url":"..."}],"key_numbers":[{"number":"...","context":"...","source_name":"...","source_url":"..."}],"common_misconceptions":[{"myth":"...","truth":"...","source_url":"..."}]}`;
 
   const response = await fetch(url, {
     method: 'POST',
@@ -51,32 +40,32 @@ Return ONLY a single valid JSON object (no markdown, no commentary, no citations
       generationConfig: { temperature: 0.3, maxOutputTokens: 8192 },
     }),
   });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(`Gemini ${response.status}: ${err.error?.message || 'unknown'}`);
-  }
+  if (!response.ok) throw new Error(`Gemini research ${response.status}: ${await response.text()}`);
   const data = await response.json();
   const parts = data.candidates?.[0]?.content?.parts || [];
   const rawText = parts.map(p => p.text || '').join('').trim();
   if (!rawText) throw new Error('Empty Gemini response');
 
+  // Clean citation markers [1], [2][3], etc.
+  let cleaned = rawText.replace(/\[\d+\](?:\[\d+\])*/g, '').trim();
+
   let parsed = null;
-  try { parsed = JSON.parse(rawText); } catch (_) {}
+  try { parsed = JSON.parse(cleaned); } catch (_) {}
   if (!parsed) {
-    let jsonStr = rawText;
-    if (rawText.includes('```json')) jsonStr = rawText.split('```json')[1].split('```')[0].trim();
-    else if (rawText.includes('```')) jsonStr = rawText.split('```')[1].split('```')[0].trim();
+    let jsonStr = cleaned;
+    if (cleaned.includes('```json')) jsonStr = cleaned.split('```json')[1].split('```')[0].trim();
+    else if (cleaned.includes('```')) jsonStr = cleaned.split('```')[1].split('```')[0].trim();
     try { parsed = JSON.parse(jsonStr); } catch (_) {}
   }
   if (!parsed) {
-    const start = rawText.indexOf('{');
-    const end = rawText.lastIndexOf('}');
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
     if (start !== -1 && end > start) {
-      try { parsed = JSON.parse(rawText.slice(start, end + 1)); } catch (_) {}
+      try { parsed = JSON.parse(cleaned.slice(start, end + 1)); } catch (_) {}
     }
   }
   if (!parsed) {
-    console.warn('[research] Could not parse Gemini output. Raw start:', rawText.slice(0, 400));
+    console.error('[researchTopicGrounded] Raw text (first 500):', rawText.slice(0, 500));
     throw new Error('Failed to parse research JSON');
   }
   return {
@@ -248,7 +237,7 @@ Deno.serve(async (req) => {
     // ─── Auto-run grounded web research if missing/thin ────────────────
     let researchNotes = project.research_notes;
     if (!hasUsableResearch(researchNotes)) {
-      console.log(`[initializeExplainerBatches] No usable research — running grounded web research...`);
+      console.log(`[initializeExplainerBatches] No usable research — running Gemini + Google Search...`);
       try {
         const researchTitle = topic?.title || project.name;
         const researchDesc = topic?.description || '';
