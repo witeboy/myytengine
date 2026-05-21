@@ -28,19 +28,18 @@ async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Detect sleep script mode from channel or project (v2)
+// Detect script mode — explicit project_mode wins, then channel, then niche
 // ═══════════════════════════════════════════════════════════════════
 function detectScriptMode(channel, project) {
-  // Explicit mode from project (highest priority — user-selected)
-  if (project?.project_mode === 'explainer') return 'explainer';
-  if (project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story') {
+  // 1. Explicit project-level mode wins (set by user in UI)
+  if (project?.project_mode && project.project_mode !== 'standard' && project.project_mode !== '') {
     return project.project_mode;
   }
-  // Explicit mode from channel
+  // 2. Explicit channel mode
   if (channel?.script_mode && channel.script_mode !== 'standard') {
     return channel.script_mode;
   }
-  // Auto-detect from niche keywords
+  // 3. Auto-detect from niche keywords
   const niche = (channel?.niche || project?.niche || '').toLowerCase();
   const name = (channel?.name || '').toLowerCase();
   const combined = `${niche} ${name}`;
@@ -51,6 +50,143 @@ function detectScriptMode(channel, project) {
     return 'sleep_meditation';
   }
   return 'standard';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPLAINER ARC SYSTEM — inlined (Deno deploy isolates functions)
+// ═══════════════════════════════════════════════════════════════════
+const EXPLAINER_ARCS = {
+  science: {
+    label: 'Mad Scientist',
+    trigger_niches: ['physics', 'chemistry', 'biology', 'neuroscience', 'space', 'mathematics', 'research', 'medicine', 'science'],
+    script_voice: `Rapid-fire bursts. "Extraordinary! Fascinating! Wait — wait — do you see what just happened there?" Trails off into mumbling then snaps back. Treats every concept like a personal discovery in real time. Frequent exclamations. Short questions to himself. Mid-sentence pivots when struck by insight.`,
+    environment: `Cluttered laboratory — glowing test tubes, bubbling beakers, chalkboards covered in equations, holographic 3D molecular structures floating mid-air, warm tungsten lamps mixed with electric blue glow`,
+    diagram_style: `Scientific notation, molecular diagrams, physics equations in chalk, data plots, particle trajectories, wave diagrams`,
+    catchphrase: `Eureka! The data does not lie — it evolves!`,
+    diagram_cue_phrases: ['Look! Look at this!', 'Observe what happens here —', 'Watch this — watch closely —', 'The equation reveals it:', 'Behold the structure —'],
+    pacing_note: 'Slightly faster than baseline — his energy drives it. Short exclamations between explanations.',
+  },
+  professor: {
+    label: 'Academic Lecturer',
+    trigger_niches: ['history', 'economics', 'philosophy', 'psychology', 'social science', 'literature', 'education', 'humanities'],
+    script_voice: `Warm, measured, theatrical pauses. "Now — here is where it gets interesting." "Let me show you something most people never consider." Beckons the viewer closer to share insight. Gentle authority. Strategic silence after key points.`,
+    environment: `Grand lecture hall — floor-to-ceiling green chalkboard, warm amber lighting, stacked books on an oak desk, tall arched windows with afternoon light`,
+    diagram_style: `Clean concept maps, flowcharts with arrows, timeline diagrams, comparison tables in chalk`,
+    catchphrase: `Class is in session, and curiosity is mandatory!`,
+    diagram_cue_phrases: ['Consider this for a moment —', 'Now observe the diagram:', 'Here is what most people miss —', 'Let us examine this carefully:', 'Notice the pattern:'],
+    pacing_note: 'Slowest arc — most contemplative, most breathable. Use deliberate pauses.',
+  },
+  accountant: {
+    label: 'Financial Guru',
+    trigger_niches: ['finance', 'investing', 'business', 'startups', 'wealth', 'money', 'tax', 'accounting', 'real estate', 'crypto', 'stocks', 'trading', 'personal finance', 'economics'],
+    script_voice: `Laser-focused, intensely energetic about numbers. "Let us run the numbers — right now." Gets visibly excited about percentages and compound growth. "Look at this figure. LOOK at it." Aggressive emphasis on specific dollar amounts.`,
+    environment: `Sleek modern boardroom — floor-to-ceiling glass walls with city skyline, floating holographic spreadsheets and bar charts, digital stock tickers, polished black conference table, blue and gold accent lighting`,
+    diagram_style: `Bar charts, pie charts, compound interest curves, balance sheets, cash flow diagrams, before/after comparison tables`,
+    catchphrase: `It is mathematically relative — your savings are about to multiply!`,
+    diagram_cue_phrases: ['Look at these numbers —', 'Run the math with me:', 'Here is the figure:', 'The numbers tell the story:', 'Watch what happens to this dollar —'],
+    pacing_note: 'Medium-fast — numbers drive urgency. Pause briefly after big dollar reveals.',
+  },
+  tech: {
+    label: 'IT Geek',
+    trigger_niches: ['software', 'ai', 'machine learning', 'cybersecurity', 'web development', 'data science', 'cloud', 'blockchain', 'api', 'programming', 'tech', 'devops', 'coding'],
+    script_voice: `Fast-talking, tech-savvy, effortlessly cool. "Think of it like..." before every analogy. "Beautiful, right?" after elegant solutions. Uses technical terms naturally then immediately explains them.`,
+    environment: `Futuristic tech hub — neon-lit server racks, floating holographic code editors, dual curved monitors, RGB ambient lighting, glass desk with mechanical keyboard`,
+    diagram_style: `System architecture diagrams, API flowcharts, code blocks with syntax highlighting, data flow diagrams, network topology maps`,
+    catchphrase: `Simple geometry my friends — let us optimise your workflow!`,
+    diagram_cue_phrases: ['Pull up the code —', 'Check out this architecture:', 'Think of it like this —', 'Here is the flow:', 'Watch the data move —'],
+    pacing_note: 'Medium-fast — technical density needs time but energy stays high.',
+  },
+};
+
+function detectExplainerArc(project, channel) {
+  if (project?.explainer_arc && EXPLAINER_ARCS[project.explainer_arc]) {
+    return project.explainer_arc;
+  }
+  const niche = `${project?.niche || ''} ${channel?.niche || ''} ${project?.name || ''}`.toLowerCase();
+  for (const [arcKey, arc] of Object.entries(EXPLAINER_ARCS)) {
+    if (arc.trigger_niches.some(kw => niche.includes(kw))) return arcKey;
+  }
+  return 'professor';
+}
+
+// Fixed 6-section explainer arc — same structure regardless of duration
+const EXPLAINER_SECTIONS = [
+  { name: 'Hook & Entry', section_type: 'hook', time_pct: 0.10, purpose: 'Open with "In this video" then deliver the curiosity hook. Set up what the viewer will understand by the end.', pacing: 'staccato, pacy' },
+  { name: 'Core Concept', section_type: 'core_concept', time_pct: 0.15, purpose: 'Introduce the central idea in its simplest form. One sentence definition. Then expand with an analogy.', pacing: 'measured' },
+  { name: 'The Mechanism', section_type: 'mechanism', time_pct: 0.25, purpose: 'Explain HOW it actually works. Break down the moving parts. This is where formulas, diagrams, or code blocks live.', pacing: 'breathable' },
+  { name: 'Worked Example', section_type: 'example', time_pct: 0.25, purpose: 'Walk through one concrete numbered example step-by-step. Use real numbers, real names, real outcomes.', pacing: 'breathable' },
+  { name: 'Real Application', section_type: 'application', time_pct: 0.15, purpose: 'Show where this matters in real life. One vivid use case. Stakes and consequences.', pacing: 'measured' },
+  { name: 'Summary & Takeaway', section_type: 'takeaway', time_pct: 0.10, purpose: 'Recap the key insight in one quotable line. Land the catchphrase. End with a takeaway the viewer carries.', pacing: 'measured' },
+];
+
+// ═══════════════════════════════════════════════════════════════════
+// EXPLAINER OUTLINE PROMPT — fixed 6-section structure with arc voice
+// ═══════════════════════════════════════════════════════════════════
+function buildExplainerOutlinePrompt({ topic, project, arcKey, totalTargetWords, durationMinutes, strategyBlock }) {
+  const arc = EXPLAINER_ARCS[arcKey] || EXPLAINER_ARCS.professor;
+
+  const sectionPlan = EXPLAINER_SECTIONS.map((s, i) => {
+    const targetWords = Math.round(totalTargetWords * s.time_pct);
+    const targetSeconds = Math.round(durationMinutes * 60 * s.time_pct);
+    return `  ${i + 1}. ${s.name} (${Math.round(s.time_pct * 100)}% = ~${targetSeconds}s, ~${targetWords} words, pacing: ${s.pacing})\n     Purpose: ${s.purpose}`;
+  }).join('\n');
+
+  return `You are planning an EXPLAINER VIDEO — fundamentally different from viral storytelling. The goal is understanding and trust, not emotional hook retention. The host is Einstein in the "${arc.label}" arc.
+
+**EXPLAINER VS VIRAL — Critical Differences**:
+- Goal: comprehension (NOT emotional hook)
+- Structure: concept arc (NOT drama arc)
+- Pacing: measured and breathable (NOT staccato cuts)
+- Host: Einstein teaching directly to the viewer (NOT third-person narrator)
+- Success metric: viewer leaves understanding the concept
+
+**HOST VOICE — ${arc.label}**:
+${arc.script_voice}
+
+**HOST PACING**: ${arc.pacing_note}
+
+**HOST ENVIRONMENT**: ${arc.environment}
+
+**HOST CATCHPHRASE** (must land in final section): "${arc.catchphrase}"
+
+**PROJECT**:
+- Topic: ${topic?.title || project.name}
+- Description: ${topic?.description || ''}
+- Niche: ${project.niche || 'General'}
+- Duration: ${durationMinutes} minutes (~${totalTargetWords} words at 150 wpm)
+${strategyBlock}
+
+**THE FIXED 6-SECTION EXPLAINER ARC** — every explainer regardless of topic follows this exact structure:
+${sectionPlan}
+
+**YOUR TASK**: Plan exactly 6 batches — one per section above, in order. Each batch synopsis must describe what Einstein will SAY and what visual aids will support him.
+
+**MANDATORY RULES**:
+- Batch 1 MUST open with the phrase "In this video" — this is non-negotiable
+- Batch 6 MUST land the catchphrase: "${arc.catchphrase}"
+- Each synopsis must specify the visual aids needed (diagrams, formulas, code blocks, charts) and where Einstein will gesture to them
+- Use the host's natural diagram cue phrases when introducing visuals: ${arc.diagram_cue_phrases.map(p => `"${p}"`).join(', ')}
+- For mechanism/example sections: include SPECIFIC concrete content — actual formulas, actual code snippets, actual numbers. DO NOT write placeholders like "[insert formula]" — write the real thing.
+- The explainer style is educational and direct — NO "but wait", NO "here's the shocking truth", NO viral curiosity gap manipulation
+- Every synopsis must read like a teaching plan, not a drama plan
+
+Return JSON:
+{
+  "batches": [
+    {
+      "batch_number": 1,
+      "story_segment": "Short title (3-5 words)",
+      "section_type": "hook|core_concept|mechanism|example|application|takeaway",
+      "focus_area": "Brief focus (1 sentence)",
+      "visual_aids_needed": ["specific diagram 1", "specific formula 2", "etc"],
+      "key_facts": ["concrete fact 1", "concrete fact 2"],
+      "einstein_moment": "The signature beat for this section — what makes it Einstein-flavored",
+      "synopsis": "DETAILED 200-300 word synopsis describing what Einstein will say (with his voice quirks) and what visuals he gestures to, in his ${arc.label} environment."
+    }
+  ]
+}
+
+Return exactly 6 batches in order matching the 6-section arc above.`;
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -170,7 +306,7 @@ Return JSON:
 // ═══════════════════════════════════════════════════════════════════
 // STANDARD TVF OUTLINE PROMPT (existing logic)
 // ═══════════════════════════════════════════════════════════════════
-function buildStandardOutlinePrompt({ topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock, isExplainerMode }) {
+function buildStandardOutlinePrompt({ topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock }) {
   const TVF_PHASES = [
     { phase: 'HOOK', purpose: 'Open with a powerful attention trigger — shocking statement, contrarian truth, bold question, dramatic result, or hidden secret.' },
     { phase: 'RELATABLE SITUATION', purpose: 'Describe a moment the audience recognizes from real life — a mistake, frustration, confusing situation, or hidden problem.' },
@@ -231,11 +367,11 @@ Return JSON:
 **RULES:**
 - Generate exactly ${numBatches} batches
 - ALL 8 TVF phases must be covered — no phase skipped
-${isExplainerMode ? `- Batch 1 MUST start with the phrase "In this video" (this is an EXPLAINER video — that opener is mandatory).` : (selectedHook ? `- Batch 1 MUST open with this hook: "${selectedHook.hook_text}"` : '- Batch 1 MUST open with the most powerful attention trigger possible')}
+${selectedHook ? `- Batch 1 MUST open with this hook: "${selectedHook.hook_text}"` : '- Batch 1 MUST open with the most powerful attention trigger possible'}
 - Each synopsis: 150-250 words of SPECIFIC detail
 - Every batch must contain at least ONE curiosity gap
 - Ensure narrative continuity — each batch ends with a hook into the next
-${isExplainerMode ? '- This is an EXPLAINER (educational) video — focus on clear teaching, analogies, factual breakdowns; tone is curious and authoritative rather than dramatic-viral.' : '- No filler, no generic buzzwords, no "in today\'s video"'}`;
+- No filler, no generic buzzwords, no "in today's video"`;
 }
 
 Deno.serve(async (req) => {
@@ -303,41 +439,63 @@ Deno.serve(async (req) => {
     // ── DETECT SCRIPT MODE ──
     const scriptMode = detectScriptMode(channel, project);
     const isSleepMode = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
+    const isExplainerMode = scriptMode === 'explainer';
 
-    console.log(`[initializeScriptBatches] Script mode: ${scriptMode} (channel: ${channel?.name || 'none'})`);
+    // Resolve explainer arc if applicable
+    const arcKey = isExplainerMode ? detectExplainerArc(project, channel) : null;
 
-    // ── CALCULATE BATCH COUNT ──
+    console.log(`[initializeScriptBatches] Script mode: ${scriptMode}${arcKey ? ` arc=${arcKey}` : ''} (channel: ${channel?.name || 'none'})`);
+
+    // ── CALCULATE BATCH COUNT & TARGETS ──
     const durationMinutes = project.video_duration_minutes || 10;
-    // Sleep content uses 150 wpm (deliberately slow speaking pace)
     const wordsPerMinute = 150;
     const totalTargetWords = Math.round(durationMinutes * wordsPerMinute);
-    // Sleep scripts: ~1100 words per batch (~7 min each) for more granular sections
-    // Standard: ~800 words per batch (~5 min each) for quality and granularity
-    const WORDS_PER_BATCH = isSleepMode ? 1100 : 800;
-    const numBatches = Math.max(2, Math.ceil(totalTargetWords / WORDS_PER_BATCH));
 
-    const batchTargets = [];
-    let wordsRemaining = totalTargetWords;
-    for (let i = 0; i < numBatches; i++) {
-      if (i === numBatches - 1) {
-        batchTargets.push(wordsRemaining);
-      } else {
-        batchTargets.push(WORDS_PER_BATCH);
-        wordsRemaining -= WORDS_PER_BATCH;
+    let numBatches;
+    let batchTargets = [];
+
+    if (isExplainerMode) {
+      // Explainer: ALWAYS exactly 6 batches matching the fixed section arc
+      numBatches = 6;
+      batchTargets = EXPLAINER_SECTIONS.map(s => Math.round(totalTargetWords * s.time_pct));
+      // Fix any rounding drift to hit exact total
+      const drift = totalTargetWords - batchTargets.reduce((a, b) => a + b, 0);
+      batchTargets[batchTargets.length - 1] += drift;
+    } else {
+      // Sleep: ~1100 wpb. Standard: ~800 wpb.
+      const WORDS_PER_BATCH = isSleepMode ? 1100 : 800;
+      numBatches = Math.max(2, Math.ceil(totalTargetWords / WORDS_PER_BATCH));
+      let wordsRemaining = totalTargetWords;
+      for (let i = 0; i < numBatches; i++) {
+        if (i === numBatches - 1) {
+          batchTargets.push(wordsRemaining);
+        } else {
+          batchTargets.push(WORDS_PER_BATCH);
+          wordsRemaining -= WORDS_PER_BATCH;
+        }
       }
     }
 
-    console.log(`Project: ${durationMinutes} min → ${totalTargetWords} words → ${numBatches} batches (${scriptMode})`);
+    console.log(`Project: ${durationMinutes} min → ${totalTargetWords} words → ${numBatches} batches (${scriptMode}${arcKey ? `/${arcKey}` : ''})`);
 
-    // ── BUILD OUTLINE PROMPT ──
-    const isExplainerMode = scriptMode === 'explainer';
-    const promptArgs = { topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock, isExplainerMode };
-    const outlinePrompt = isSleepMode
-      ? buildSleepOutlinePrompt({ ...promptArgs, scriptMode, channel })
-      : buildStandardOutlinePrompt(promptArgs);
+    // ── BUILD OUTLINE PROMPT (branched by mode) ──
+    const promptArgs = { topic, project, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock };
+    let outlinePrompt;
+    let outlineTemp;
 
-    console.log("Generating detailed outline...");
-    const outlineResult = await callOpenAI(outlinePrompt, isSleepMode ? 0.6 : 0.7);
+    if (isExplainerMode) {
+      outlinePrompt = buildExplainerOutlinePrompt({ topic, project, arcKey, totalTargetWords, durationMinutes, strategyBlock });
+      outlineTemp = 0.55; // lower temp — explainer needs accuracy and consistency
+    } else if (isSleepMode) {
+      outlinePrompt = buildSleepOutlinePrompt({ ...promptArgs, scriptMode, channel });
+      outlineTemp = 0.6;
+    } else {
+      outlinePrompt = buildStandardOutlinePrompt(promptArgs);
+      outlineTemp = 0.7;
+    }
+
+    console.log(`Generating detailed outline (${scriptMode}, temp=${outlineTemp})...`);
+    const outlineResult = await callOpenAI(outlinePrompt, outlineTemp);
 
     if (!outlineResult.batches || outlineResult.batches.length === 0) {
       throw new Error("AI failed to generate outline batches");
@@ -347,7 +505,7 @@ Deno.serve(async (req) => {
     const createdBatches = [];
     for (let i = 0; i < numBatches; i++) {
       const aiBatch = outlineResult.batches[i];
-      const fallbackSegment = `Part ${i + 1}`;
+      const fallbackSegment = isExplainerMode ? EXPLAINER_SECTIONS[i]?.name || `Section ${i + 1}` : `Part ${i + 1}`;
 
       const batch = await base44.asServiceRole.entities.ScriptBatches.create({
         project_id,
@@ -361,13 +519,17 @@ Deno.serve(async (req) => {
       createdBatches.push(batch);
     }
 
-    // Update project status — preserve sleep & explainer modes for downstream use
-    const isPreservedMode = isSleepMode || scriptMode === 'explainer';
-    await base44.asServiceRole.entities.Projects.update(project_id, {
+    // Update project — PRESERVE explainer/sleep mode for downstream (do not wipe!)
+    const projectUpdate = {
       status: 'scripting',
       current_step: 3,
-      project_mode: isPreservedMode ? scriptMode : (project.project_mode || '')
-    });
+    };
+    if (isSleepMode) projectUpdate.project_mode = scriptMode;
+    if (isExplainerMode) {
+      projectUpdate.project_mode = 'explainer';
+      projectUpdate.explainer_arc = arcKey;
+    }
+    await base44.asServiceRole.entities.Projects.update(project_id, projectUpdate);
 
     console.log(`Created ${createdBatches.length} batches with detailed outlines (${scriptMode})`);
 
@@ -377,6 +539,7 @@ Deno.serve(async (req) => {
       total_target_words: totalTargetWords,
       duration_minutes: durationMinutes,
       script_mode: scriptMode,
+      explainer_arc: arcKey || null,
       batches: createdBatches
     });
   } catch (error) {
