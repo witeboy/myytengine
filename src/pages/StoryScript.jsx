@@ -338,6 +338,37 @@ export default function StoryScript() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <StageProgress currentStage={1} projectStatus={project?.status} />
       <div className="max-w-6xl mx-auto px-4 py-8">
+        {/* ── Mode Confirmation Banner — proves which writing pipeline will run ── */}
+        {project && (
+          <div className={`rounded-lg px-4 py-2.5 mb-4 flex items-center gap-2 text-sm border ${
+            project.project_mode
+              ? 'bg-emerald-50 border-emerald-200'
+              : 'bg-amber-50 border-amber-300'
+          }`}>
+            {project.project_mode ? (
+              <>
+                <span className="text-emerald-700 font-medium">✅ Writing in mode:</span>
+                <span className="font-mono font-semibold text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded">
+                  {project.project_mode}
+                </span>
+                {project.project_mode === 'explainer' && project.explainer_arc && (
+                  <>
+                    <span className="text-emerald-700">·</span>
+                    <span className="font-mono font-semibold text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded">
+                      {project.explainer_arc} arc
+                    </span>
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <span className="text-amber-800 font-medium">⚠️ No script mode set — defaulting to Standard (viral storytelling).</span>
+                <span className="text-amber-700 text-xs">For explainer/educational topics, go back to project creation and pick "Explainer" mode.</span>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Header */}
         <div className="flex items-center justify-between mb-2">
           <div>

@@ -1500,16 +1500,30 @@ export default function ContentGeneration() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <StageProgress currentStage={2} />
 
-      {/* ── DEV: Explainer Mode Patcher ──
-          Only shows when BOTH (a) project has no mode set AND
-          (b) no sleep/shorts heuristic would auto-resolve it.
-          Prevents asking sleep/shorts projects to pick an Einstein arc. */}
+      {/* ── Mode Patcher ──
+          Shows when project has no explicit mode AND resolver can't auto-detect one.
+          Click "Apply Mode" → writes to DB → refetches → banner disappears.
+          (Previously was Explainer-only — now lets you set ANY mode.) */}
       {project && !project.project_mode &&
         resolveProjectMode(project, null).mode === 'standard' && (
-        <div className="bg-red-50 border border-red-300 rounded-lg p-3 mx-4 mt-2 flex items-center gap-3">
-          <p className="text-sm text-red-700 flex-1">⚠️ This project has no mode set. Set as Explainer?</p>
+        <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 mx-4 mt-2 flex flex-wrap items-center gap-3">
+          <p className="text-sm text-amber-800 flex-1 min-w-[200px]">
+            ⚠️ This project has no script mode set. Pick one to ensure the right pipeline runs.
+          </p>
           <select
-            className="text-xs border rounded px-2 py-1"
+            className="text-xs border rounded px-2 py-1 bg-white"
+            defaultValue="explainer"
+            id="mode-select"
+          >
+            <option value="standard">🎭 Standard (Viral)</option>
+            <option value="explainer">📚 Explainer</option>
+            <option value="long_viral">🎬 Long Viral</option>
+            <option value="youtube_shorts">📱 YouTube Shorts</option>
+            <option value="sleep_meditation">🧘 Sleep Meditation</option>
+            <option value="sleep_story">🌙 Sleep Story</option>
+          </select>
+          <select
+            className="text-xs border rounded px-2 py-1 bg-white"
             defaultValue="accountant"
             id="arc-select"
           >
@@ -1519,19 +1533,37 @@ export default function ContentGeneration() {
             <option value="tech">Tech Arc</option>
           </select>
           <button
-            className="bg-red-600 text-white text-xs px-3 py-1 rounded"
+            className="bg-amber-600 hover:bg-amber-700 text-white text-xs px-3 py-1.5 rounded font-medium"
             onClick={async () => {
+              const m = document.getElementById('mode-select').value;
               const arc = document.getElementById('arc-select').value;
-              await base44.entities.Projects.update(projectId, {
-                project_mode: 'explainer',
-                explainer_arc: arc,
-              });
+              const payload = { project_mode: m === 'standard' ? '' : m };
+              if (m === 'explainer') payload.explainer_arc = arc;
+              if (m === 'youtube_shorts') payload.orientation = 'portrait';
+              await base44.entities.Projects.update(projectId, payload);
               await refetchProject();
-              alert(`✅ Set to explainer / ${arc}`);
             }}
           >
-            Set Explainer Mode
+            Apply Mode
           </button>
+        </div>
+      )}
+
+      {/* ── Confirmed Mode Badge — visible proof of what mode this project runs as ── */}
+      {project?.project_mode && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2 mx-4 mt-2 flex items-center gap-2 text-sm">
+          <span className="text-emerald-700">✅ Active mode:</span>
+          <span className="font-mono font-semibold text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded">
+            {project.project_mode}
+          </span>
+          {project.project_mode === 'explainer' && project.explainer_arc && (
+            <>
+              <span className="text-emerald-700">·</span>
+              <span className="font-mono font-semibold text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded">
+                {project.explainer_arc} arc
+              </span>
+            </>
+          )}
         </div>
       )}
       <div className="max-w-6xl mx-auto px-4 py-8">

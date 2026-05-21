@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import ProjectTemplates from '@/components/templates/ProjectTemplates';
 import MakeThumbnail from '@/components/production/MakeThumbnail';
+import ProjectModePicker from '@/components/script/ProjectModePicker';
 
 const TONE_OPTIONS = [
   { value: 'dramatic',      label: '🎭 Dramatic' },
@@ -95,6 +96,18 @@ export default function NewProject() {
   const [pasteScript, setPasteScript] = useState('');
   const [pastePipeline, setPastePipeline] = useState('');
   const [pasteName, setPasteName] = useState('');
+  // Project mode for "I Have a Topic" / "Suggest Topics" flows — chosen BEFORE script generation
+  const [projectMode, setProjectMode] = useState('standard');
+  const [explainerArc, setExplainerArc] = useState('professor');
+
+  // Helper — build the project_mode + explainer_arc payload pieces from the picker state
+  const modePayload = () => {
+    const m = projectMode === 'standard' ? '' : projectMode;
+    const payload = { project_mode: m };
+    if (projectMode === 'explainer') payload.explainer_arc = explainerArc;
+    if (projectMode === 'youtube_shorts' || projectMode === 'shorts') payload.orientation = 'portrait';
+    return payload;
+  };
 
   const handleCreateFromNiche = async () => {
     if (!niche.trim()) return;
@@ -106,6 +119,7 @@ export default function NewProject() {
       target_audience: targetAudience.trim() || undefined,
       status: 'created',
       current_step: 0,
+      ...modePayload(),
     });
     await base44.functions.invoke('generateTopics', {
       project_id: project.id,
@@ -126,6 +140,7 @@ export default function NewProject() {
       target_audience: targetAudience.trim() || undefined,
       status: 'created',
       current_step: 0,
+      ...modePayload(),
     });
     await base44.functions.invoke('generateTopics', {
       project_id: project.id,
@@ -292,6 +307,13 @@ export default function NewProject() {
                 disabled={loading}
                 className="text-base min-h-[100px]"
               />
+              <ProjectModePicker
+                mode={projectMode}
+                onModeChange={setProjectMode}
+                arc={explainerArc}
+                onArcChange={setExplainerArc}
+                disabled={loading}
+              />
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-gray-500 mb-1 block">Tone</label>
@@ -333,6 +355,13 @@ export default function NewProject() {
                 onKeyDown={e => e.key === 'Enter' && handleCreateFromNiche()}
                 disabled={loading}
                 className="text-lg py-6"
+              />
+              <ProjectModePicker
+                mode={projectMode}
+                onModeChange={setProjectMode}
+                arc={explainerArc}
+                onArcChange={setExplainerArc}
+                disabled={loading}
               />
               <div className="grid grid-cols-2 gap-3">
                 <div>
