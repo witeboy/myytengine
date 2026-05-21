@@ -141,32 +141,41 @@ async function callAI(prompt, temperature = 0.4) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// WORLD-CLASS SCENE CADENCE — cuts-per-minute by section type
-// Based on documented analysis of Veritasium, Kurzgesagt, Vox,
-// Johnny Harris, Wendover, CGP Grey, Cleo Abram, MrBeast educational.
-// Scene counts SCALE WITH DURATION — NO HARD CAP.
+// WORLD-CLASS CADENCE ENGINE
+// Matches industry creators:
+//   MrBeast/Cleo Abram: 18-25 cuts/min avg, 30-40 hook
+//   Veritasium: 8-12 avg, 15-20 hook
+//   Kurzgesagt: 10-14 avg, 18-25 hook
+//   Vox/Johnny Harris: 12-18 avg, 20-30 hook
+//   Wendover/RealLifeLore: 10-15 avg, 15-22 hook
+//   CGP Grey: 14-20 avg, 20-28 hook
+//   Mark Rober: 8-12 avg, 15-20 hook
 // ══════════════════════════════════════════════════════════════════
-const WORLD_CLASS_CADENCE = {
-  hook:         { cuts_per_min: 30, min_scenes: 12, max_scenes: 25, pacing_note: 'STACCATO — 2-3s per scene, viral hook density (MrBeast/Cleo Abram speed)' },
-  core_concept: { cuts_per_min: 8,  min_scenes: 4,  max_scenes: 999, pacing_note: 'MEASURED — comprehension needs breath, 6-8s per scene' },
-  mechanism:    { cuts_per_min: 10, min_scenes: 6,  max_scenes: 999, pacing_note: 'BREATHABLE — diagrams need showing, 5-7s per scene' },
-  example:      { cuts_per_min: 8,  min_scenes: 5,  max_scenes: 999, pacing_note: 'BREATHABLE — numbers need to land, 6-8s per scene' },
-  application:  { cuts_per_min: 14, min_scenes: 5,  max_scenes: 999, pacing_note: 'FAST — B-roll heavy, 4-5s per scene' },
-  takeaway:     { cuts_per_min: 5,  min_scenes: 3,  max_scenes: 8,   pacing_note: 'SLOW LANDING — let the catchphrase breathe, 8-12s per scene' },
-  // Default fallback for any unrecognized section_type (e.g. legacy markdown-split sections)
-  default:      { cuts_per_min: 10, min_scenes: 4,  max_scenes: 999, pacing_note: 'STANDARD — 5-7s per scene' },
-};
-
 const EXPLAINER_SECTION_TIME_PCT = {
-  hook: 0.10, core_concept: 0.15, mechanism: 0.25,
-  example: 0.25, application: 0.15, takeaway: 0.10,
+  hook:         0.10,
+  core_concept: 0.15,
+  mechanism:    0.25,
+  example:      0.25,
+  application:  0.15,
+  takeaway:     0.10,
 };
 
-// Compute target scene count for a section given its duration in seconds
+// Cuts per minute calibrated per section role — blends Vox energy with Veritasium depth
+const SECTION_CADENCE = {
+  hook:         { cuts_per_min: 30, min_cuts: 10, max_cuts: 25, pacing_note: 'RAPID-FIRE — Vox/Cleo Abram opening density. Average shot 2-2.5s. Each beat lands then cuts immediately.' },
+  core_concept: { cuts_per_min: 10, min_cuts: 4,  max_cuts: 14, pacing_note: 'BREATHE then BUILD — let the central definition land in a held shot, then start layering analogies.' },
+  mechanism:    { cuts_per_min: 11, min_cuts: 8,  max_cuts: 30, pacing_note: 'STEP-BY-STEP — every formula, every component, every connection gets its own scene. Veritasium/Kurzgesagt territory.' },
+  example:      { cuts_per_min: 10, min_cuts: 8,  max_cuts: 28, pacing_note: 'WORKED WALKTHROUGH — each step in the worked example is its own scene. Numbers update on-screen.' },
+  application:  { cuts_per_min: 13, min_cuts: 5,  max_cuts: 20, pacing_note: 'VIVID REAL-WORLD — Vox-style documentary cuts between real applications. Each use case = its own scene.' },
+  takeaway:     { cuts_per_min: 6,  min_cuts: 3,  max_cuts: 8,  pacing_note: 'SLOW LANDING — let the catchphrase breathe. Longer holds. Camera lingers. Final beat is the takeaway viewers screenshot.' },
+  default:      { cuts_per_min: 12, min_cuts: 4,  max_cuts: 20, pacing_note: 'Standard explainer pacing — balanced between teaching and momentum.' },
+};
+
 function computeSceneTarget(sectionType, sectionDurationSec) {
-  const cadence = WORLD_CLASS_CADENCE[sectionType] || WORLD_CLASS_CADENCE.default;
-  const rawTarget = (sectionDurationSec / 60) * cadence.cuts_per_min;
-  const target = Math.max(cadence.min_scenes, Math.min(cadence.max_scenes, Math.round(rawTarget)));
+  const cadence = SECTION_CADENCE[sectionType] || SECTION_CADENCE.default;
+  const minutes = sectionDurationSec / 60;
+  const raw = Math.round(minutes * cadence.cuts_per_min);
+  const target = Math.max(cadence.min_cuts, Math.min(cadence.max_cuts, raw));
   return { target, cadence };
 }
 
@@ -281,22 +290,22 @@ SCENE TYPE OPTIONS (pick the right type for each beat):
 - comparison_table: Side-by-side comparison or Venn diagram
 - summary_card: Recap bullet points or key takeaway
 
-═══ WORLD-CLASS SCENE CADENCE (MANDATORY) ═══
-This section is **${sectionType || 'general'}** type. Target duration: **${sectionDurationSec.toFixed(0)} seconds**.
+═══ WORLD-CLASS SCENE CADENCE (NON-NEGOTIABLE) ═══
+Section type: **${sectionType || 'general'}** — duration: **${(sectionDurationSec || 30).toFixed(0)}s**
 
-🎯 **GENERATE EXACTLY ${sceneTarget} SCENES** for this section. This count is calibrated to match world-class explainer pacing (Veritasium, Kurzgesagt, Vox, Cleo Abram).
+🎯 **GENERATE EXACTLY ${sceneTarget || 6} SCENES** for this section. This count matches world-class explainer pacing (MrBeast/Cleo Abram, Veritasium, Kurzgesagt, Vox, Wendover, CGP Grey).
 
-⏱️ **PACING RULE**: ${pacingNote}
-   → Average scene duration this section: **${(sectionDurationSec / sceneTarget).toFixed(1)}s per scene**
-   → Total scenes ÷ section minutes = ~${((sceneTarget / sectionDurationSec) * 60).toFixed(0)} cuts/minute
+⏱️ **PACING RULE FOR THIS SECTION**: ${pacingNote || 'Standard explainer cadence.'}
+   → Average shot duration: **${((sectionDurationSec || 30) / (sceneTarget || 6)).toFixed(1)}s per scene**
+   → Density: **~${(((sceneTarget || 6) / (sectionDurationSec || 30)) * 60).toFixed(0)} cuts per minute**
 
 📋 **SCENE COMPOSITION RULES**:
-- Each distinct diagram, formula, code block, or visual beat gets its OWN scene
-- For hook sections: use rapid-fire cuts — text slams, quick diagrams, MCU reactions, B-roll flashes
-- For mechanism/example sections: dedicate full scenes to each formula/code/step
-- For takeaway: slow, lingering shots that let the catchphrase land
-- Do NOT cram multiple diagrams into one scene
-- Do NOT produce fewer than ${sceneTarget} scenes — the AI tends to under-deliver; this section NEEDS ${sceneTarget} to match world-class density
+- Each distinct diagram, formula, code block, statistic, or visual beat = its OWN scene
+- Hook sections: use rapid-fire cuts — text slams, MCU reactions, B-roll flashes, single-word callouts
+- Mechanism/example: dedicate a full scene to EACH formula, EACH code line, EACH step
+- Takeaway: slow lingering shots — let the catchphrase land
+- DO NOT cram multiple diagrams into one scene
+- DO NOT under-deliver — the LLM tends to be lazy; ${sceneTarget || 6} is the MINIMUM
 ${isFirst ? '- MUST start with an einstein_intro scene' : ''}
 ${isLast ? '- MUST end with an einstein_outro scene' : ''}
 
@@ -365,12 +374,11 @@ Deno.serve(async (req) => {
     }
 
     // ── PRIMARY: Pull section structure from ScriptBatches (initialized by initializeScriptBatches) ──
-    // Each batch carries section_type via its focus_area prefix "[section_type|...]" or via story_segment matching EXPLAINER_SECTIONS.
+    // Each batch's focus_area is tagged "[section_type|s1] ..." so we can read section_type back.
     let outlineSections = [];
     const batches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
     if (batches.length > 0) {
       const sortedBatches = batches.sort((a, b) => a.batch_number - b.batch_number);
-      // Detect section_type — try focus_area prefix first, fall back to canonical order
       const CANONICAL_TYPES = ['hook', 'core_concept', 'mechanism', 'example', 'application', 'takeaway'];
       outlineSections = sortedBatches.map((b, i) => {
         const m = (b.focus_area || '').match(/^\[(\w+)\|/);
@@ -395,25 +403,25 @@ Deno.serve(async (req) => {
       } catch (_) {}
     }
 
-    // FALLBACK 2: split script by markdown headings (no section_type → uses default cadence)
+    // FALLBACK 2: split script by markdown headings
     if (!outlineSections.length) {
       const scriptText = script.full_script;
       const parts = scriptText.split(/\n(?=#{1,3}\s|\*\*[A-Z]|\d\.\s[A-Z])/g);
+      const CANONICAL_TYPES = ['hook', 'core_concept', 'mechanism', 'example', 'application', 'takeaway'];
       outlineSections = parts.map((p, i) => ({
         title: `Section ${i + 1}`,
         content: p.trim(),
         description: p.substring(0, 100),
-        section_type: null,
+        section_type: CANONICAL_TYPES[i] || null,
       }));
     }
 
-    // ── Compute scene targets per section (world-class cuts-per-minute, scales with video duration) ──
+    // ── Compute world-class cuts-per-minute per section (scales uncapped with video duration) ──
     const totalDurationMinutes = project.video_duration_minutes || 10;
     const totalDurationSec = totalDurationMinutes * 60;
     let projectedTotalScenes = 0;
-    outlineSections.forEach((sec, i) => {
+    outlineSections.forEach((sec) => {
       const sectionType = sec.section_type;
-      // Use canonical time_pct if section_type matches, otherwise even split
       const timePct = (sectionType && EXPLAINER_SECTION_TIME_PCT[sectionType]) || (1 / outlineSections.length);
       const sectionDurationSec = totalDurationSec * timePct;
       const { target, cadence } = computeSceneTarget(sectionType || 'default', sectionDurationSec);
@@ -422,7 +430,7 @@ Deno.serve(async (req) => {
       sec._pacingNote = cadence.pacing_note;
       projectedTotalScenes += target;
     });
-    console.log(`🎯 World-class cadence: ${totalDurationMinutes}min video → projected ${projectedTotalScenes} scenes across ${outlineSections.length} sections (${(projectedTotalScenes / totalDurationMinutes).toFixed(1)} cuts/min avg)`);
+    console.log(`🎯 World-class cadence: ${totalDurationMinutes}min video → ~${projectedTotalScenes} scenes across ${outlineSections.length} sections (${(projectedTotalScenes / totalDurationMinutes).toFixed(1)} cuts/min avg)`);
 
     // Detect arc type from project
     const arcType = project.explainer_arc || 'professor';
@@ -466,11 +474,17 @@ Deno.serve(async (req) => {
         sectionType: section.section_type,
       });
 
-      console.log(`🎬 Section ${si + 1}/${outlineSections.length}: "${section.title}" [${section.section_type || 'default'}] target=${section._sceneTarget} scenes / ${section._sectionDurationSec.toFixed(0)}s (starting at scene ${globalSceneNumber})`);
+      console.log(`🎬 Section ${si + 1}/${outlineSections.length}: "${section.title}" [${section.section_type || 'default'}] target=${section._sceneTarget}sc/${section._sectionDurationSec?.toFixed(0)}s (starts at scene ${globalSceneNumber})`);
+
+      // Higher temp for hook section (creative punch), lower for mechanism/example (accuracy)
+      const sectionTemp = section.section_type === 'hook' ? 0.75
+        : section.section_type === 'takeaway' ? 0.65
+        : section.section_type === 'mechanism' || section.section_type === 'example' ? 0.35
+        : 0.5;
 
       let sectionResult;
       try {
-        sectionResult = await callAI(prompt, 0.4);
+        sectionResult = await callAI(prompt, sectionTemp);
       } catch (err) {
         console.error(`❌ Section ${si + 1} breakdown failed: ${err.message} — applying fallback`);
         // Minimal fallback: one concept diagram per section
@@ -496,13 +510,41 @@ Deno.serve(async (req) => {
         };
       }
 
-      const sectionScenes = sectionResult?.scenes || [];
+      let sectionScenes = sectionResult?.scenes || [];
+
+      // ── SCENE COUNT ENFORCEMENT: if LLM under-delivered by >2, request an extension ──
+      const sceneShortfall = (section._sceneTarget || 0) - sectionScenes.length;
+      if (sceneShortfall > 2 && sectionScenes.length > 0) {
+        console.warn(`⚠️ Section ${si + 1} [${section.section_type}] under-delivered: got ${sectionScenes.length}, target ${section._sceneTarget} — requesting ${sceneShortfall} more`);
+        try {
+          const extendPrompt = `You previously broke down this section into ${sectionScenes.length} scenes, but the section needs ${section._sceneTarget} scenes total for world-class pacing (${section._pacingNote}).
+
+EXISTING SCENES (continue numbering from ${globalSceneNumber + sectionScenes.length}):
+${sectionScenes.map(s => `Scene ${s.scene_number}: ${s.scene_type} — ${(s.visual_concept || '').substring(0, 100)}`).join('\n')}
+
+SECTION CONTENT (re-reference):
+${section.content?.substring(0, 1500)}
+
+Generate ${sceneShortfall} ADDITIONAL scenes that fit naturally between/after the existing ones. Each new scene must be a DISTINCT visual beat — a different diagram, a different number callout, a different reaction shot, a different angle on the existing concept. Do NOT duplicate concepts already covered.
+
+Return ONLY JSON: {"scenes": [...]} with the same scene object structure as before.`;
+          const extendResult = await callAI(extendPrompt, sectionTemp);
+          const extraScenes = extendResult?.scenes || [];
+          if (extraScenes.length > 0) {
+            sectionScenes = [...sectionScenes, ...extraScenes];
+            console.log(`📈 Section ${si + 1}: extended to ${sectionScenes.length} scenes (+${extraScenes.length})`);
+          }
+        } catch (extErr) {
+          console.warn(`⚠️ Extension failed: ${extErr.message} — proceeding with ${sectionScenes.length}`);
+        }
+      }
 
       // Enforce scene numbers, attach metadata
       sectionScenes.forEach((scene, idx) => {
         scene.scene_number = globalSceneNumber + idx;
         scene.section_title = section.title;
         scene.section_index = si;
+        scene.section_type = section.section_type;
         scene.arc_type = arcType;
         allScenes.push(scene);
       });
@@ -521,14 +563,10 @@ Deno.serve(async (req) => {
         ].join(' | ');
       }
 
-      const targetMiss = section._sceneTarget - sectionScenes.length;
-      if (targetMiss > 2) {
-        console.warn(`⚠️ Section ${si + 1} [${section.section_type || 'default'}] UNDER-DELIVERED: got ${sectionScenes.length} scenes, target was ${section._sceneTarget} (short by ${targetMiss})`);
-      } else if (targetMiss < -3) {
-        console.log(`📈 Section ${si + 1} [${section.section_type || 'default'}] over-delivered: ${sectionScenes.length} scenes vs target ${section._sceneTarget}`);
-      } else {
-        console.log(`✅ Section ${si + 1} [${section.section_type || 'default'}]: ${sectionScenes.length} scenes (target ${section._sceneTarget}) — total so far: ${allScenes.length}`);
-      }
+      const cutsPerMin = section._sectionDurationSec > 0
+        ? ((sectionScenes.length / section._sectionDurationSec) * 60).toFixed(1)
+        : 'n/a';
+      console.log(`✅ Section ${si + 1} [${section.section_type || 'default'}]: ${sectionScenes.length}/${section._sceneTarget} scenes (${cutsPerMin} cuts/min) — total: ${allScenes.length}`);
     }
 
     // Build beat durations — explainer pacing (longer than shorts)

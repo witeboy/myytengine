@@ -800,12 +800,9 @@ export default function ContentGeneration() {
           await new Promise(r => setTimeout(r, 1500));
         }
 
-        // Step 2: Einstein DNA (character setup)
-        try {
-          await base44.functions.invoke('extractCharacterDNA', { project_id: projectId });
-        } catch (err) {
-          console.warn('Einstein DNA setup failed (non-fatal):', err.message);
-        }
+        // Step 2: SKIPPED — explainer mode has Einstein baked into director_notes via explainerSceneBreakdown.
+        // Calling extractCharacterDNA here would overwrite character_descriptions with generic placeholders
+        // and break the Einstein character injection in scene prompts.
 
         // Step 3: Explainer scene breakdown
         setImportProgress('Breaking down script into educational scenes and diagrams...');

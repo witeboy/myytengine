@@ -492,12 +492,19 @@ function detectExplainerArc(project, channel) {
 function buildExplainerWritingPrompt({ batch, project, topic, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock, explainerArc, research }) {
   const arc = EXPLAINER_ARCS[explainerArc] || EXPLAINER_ARCS.professor;
 
-  // Detect section_type from focus_area prefix (set by initializeScriptBatches)
-  const sectionMatch = (batch.focus_area || '').match(/^\[(\w+)\|scenes:(\d+)\]/);
+  // Detect section_type from focus_area prefix (set by initializeScriptBatches as "[section_type|sN] ...")
+  const sectionMatch = (batch.focus_area || '').match(/^\[(\w+)\|s\d*\]/);
   const sectionType = sectionMatch ? sectionMatch[1] : null;
-  const sceneCount = sectionMatch ? parseInt(sectionMatch[2], 10) : null;
-  const isHookSection = sectionType === 'hook';
-  const isTakeawaySection = sectionType === 'takeaway';
+  // Fixed-arc fallback: explainer always has 6 sections in canonical order
+  const CANONICAL_TYPES = ['hook', 'core_concept', 'mechanism', 'example', 'application', 'takeaway'];
+  const fallbackType = !sectionType && batch.batch_number >= 1 && batch.batch_number <= 6
+    ? CANONICAL_TYPES[batch.batch_number - 1]
+    : null;
+  const resolvedSectionType = sectionType || fallbackType;
+  const isHookSection = resolvedSectionType === 'hook';
+  const isTakeawaySection = resolvedSectionType === 'takeaway';
+  // Beats per section (approximation — hook needs ~12 staccato beats, takeaway ~5 measured beats)
+  const sceneCount = isHookSection ? 12 : isTakeawaySection ? 5 : 8;
 
   // ── Hook section gets the VIRAL STACCATO mandate ──
   const hookViralBlock = isHookSection ? `
