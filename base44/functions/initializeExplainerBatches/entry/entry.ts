@@ -3,9 +3,8 @@ import OpenAI from 'npm:openai@4.58.1';
 
 // ═══════════════════════════════════════════════════════════════════
 // EXPLAINER PIPELINE — Step 1: Outline batches anchored to research_notes
+// Auto-runs grounded research (Gemini + Google Search) if missing.
 // ═══════════════════════════════════════════════════════════════════
-
-const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
 
 const EXPLAINER_SECTIONS = [
   { type: 'hook',         label: 'Hook',          time_pct: 0.10 },
@@ -17,6 +16,7 @@ const EXPLAINER_SECTIONS = [
 ];
 
 async function callOpenAI(prompt, temperature = 0.4, retries = 3) {
+  const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       const response = await openai.chat.completions.create({
@@ -35,6 +35,87 @@ async function callOpenAI(prompt, temperature = 0.4, retries = 3) {
       console.warn(`⚠️ OpenAI attempt ${attempt + 1} failed: ${error.message}`);
       await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
     }
+  }
+}
+
+// ─── Grounded Research via Gemini 2.5 Flash + Google Search ───────
+function stripFencesAndCitations(text) {
+  let t = text.trim();
+  // Strip markdown fences
+  t = t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '');
+  // Strip Gemini citation tags like [1], [2,3]
+  t = t.replace(/\[\d+(?:,\s*\d+)*\]/g, '');
+  return t.trim();
+}
+
+function extractJsonObject(text) {
+  const cleaned = stripFencesAndCitations(text);
+  try { return JSON.parse(cleaned); } catch (_) {}
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start !== -1 && end > start) {
+    try { return JSON.parse(cleaned.slice(start, end + 1)); } catch (_) {}
+  }
+  return null;
+}
+
+async function fetchGroundedResearch(topicTitle, niche) {
+  const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+  if (!GEMINI_API_KEY) {
+    console.warn('[research] No GEMINI_API_KEY — skipping research');
+    return null;
+  }
+
+  const prompt = `Research the topic "${topicTitle}" (niche: ${niche || 'general'}) using Google Search. Find verified facts, specific numbers/statistics, and common misconceptions.
+
+Return ONLY a JSON object (no markdown, no commentary) in this exact shape:
+{
+  "facts": [{"claim": "...", "source_name": "..."}],
+  "key_numbers": [{"number": "...", "context": "..."}],
+  "common_misconceptions": [{"myth": "...", "truth": "..."}]
+}
+
+Provide 6-10 facts, 6-10 key numbers, 2-4 misconceptions. Be specific and accurate.`;
+
+  try {
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          tools: [{ google_search: {} }],
+          generationConfig: { temperature: 0.3 },
+        }),
+      }
+    );
+    if (!resp.ok) {
+      console.warn(`[research] Gemini ${resp.status}: ${await resp.text()}`);
+      return null;
+    }
+    const data = await resp.json();
+    const text = data?.candidates?.[0]?.content?.parts?.map(p => p.text).join('') || '';
+    const parsed = extractJsonObject(text);
+    if (!parsed) {
+      console.warn('[research] Could not parse Gemini JSON');
+      return null;
+    }
+    return parsed;
+  } catch (err) {
+    console.warn('[research] Fetch failed:', err.message);
+    return null;
+  }
+}
+
+function hasUsableResearch(notes) {
+  if (!notes) return false;
+  try {
+    const r = typeof notes === 'string' ? JSON.parse(notes) : notes;
+    const factCount = (r.facts?.length || 0) + (r.key_numbers?.length || 0);
+    return factCount >= 4;
+  } catch (_) {
+    return false;
   }
 }
 
@@ -155,6 +236,21 @@ Deno.serve(async (req) => {
       } catch (_) {}
     }
 
+    // ─── Auto-research safety net ───
+    let researchNotes = project.research_notes;
+    if (!hasUsableResearch(researchNotes)) {
+      console.log('[initializeExplainerBatches] No usable research — running Gemini + Google Search...');
+      const topicTitle = topic?.title || project.name;
+      const fetched = await fetchGroundedResearch(topicTitle, project.niche);
+      if (fetched && (fetched.facts?.length || fetched.key_numbers?.length)) {
+        researchNotes = JSON.stringify(fetched);
+        await base44.asServiceRole.entities.Projects.update(project_id, { research_notes: researchNotes });
+        console.log(`[initializeExplainerBatches] ✅ Research: ${fetched.facts?.length || 0} facts, ${fetched.key_numbers?.length || 0} numbers, ${fetched.common_misconceptions?.length || 0} myths`);
+      } else {
+        console.warn('[initializeExplainerBatches] Research fetch failed — continuing without grounded facts');
+      }
+    }
+
     const existingBatches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
     for (const batch of existingBatches) {
       await base44.asServiceRole.entities.ScriptBatches.delete(batch.id);
@@ -168,7 +264,7 @@ Deno.serve(async (req) => {
 
     const outlinePrompt = buildExplainerOutlinePrompt({
       topic, project, totalTargetWords, durationMinutes,
-      researchNotes: project.research_notes,
+      researchNotes,
       strategyBlock,
     });
 
@@ -211,7 +307,7 @@ Deno.serve(async (req) => {
       total_target_words: totalTargetWords,
       duration_minutes: durationMinutes,
       script_mode: 'explainer',
-      has_research: !!project.research_notes,
+      has_research: hasUsableResearch(researchNotes),
       batches: createdBatches,
     });
   } catch (error) {
