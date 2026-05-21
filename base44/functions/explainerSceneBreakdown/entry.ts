@@ -140,45 +140,6 @@ async function callAI(prompt, temperature = 0.4) {
   return result;
 }
 
-// ══════════════════════════════════════════════════════════════════
-// WORLD-CLASS CADENCE ENGINE
-// Matches industry creators:
-//   MrBeast/Cleo Abram: 18-25 cuts/min avg, 30-40 hook
-//   Veritasium: 8-12 avg, 15-20 hook
-//   Kurzgesagt: 10-14 avg, 18-25 hook
-//   Vox/Johnny Harris: 12-18 avg, 20-30 hook
-//   Wendover/RealLifeLore: 10-15 avg, 15-22 hook
-//   CGP Grey: 14-20 avg, 20-28 hook
-//   Mark Rober: 8-12 avg, 15-20 hook
-// ══════════════════════════════════════════════════════════════════
-const EXPLAINER_SECTION_TIME_PCT = {
-  hook:         0.10,
-  core_concept: 0.15,
-  mechanism:    0.25,
-  example:      0.25,
-  application:  0.15,
-  takeaway:     0.10,
-};
-
-// Cuts per minute calibrated per section role — blends Vox energy with Veritasium depth
-const SECTION_CADENCE = {
-  hook:         { cuts_per_min: 30, min_cuts: 10, max_cuts: 25, pacing_note: 'RAPID-FIRE — Vox/Cleo Abram opening density. Average shot 2-2.5s. Each beat lands then cuts immediately.' },
-  core_concept: { cuts_per_min: 10, min_cuts: 4,  max_cuts: 14, pacing_note: 'BREATHE then BUILD — let the central definition land in a held shot, then start layering analogies.' },
-  mechanism:    { cuts_per_min: 11, min_cuts: 8,  max_cuts: 30, pacing_note: 'STEP-BY-STEP — every formula, every component, every connection gets its own scene. Veritasium/Kurzgesagt territory.' },
-  example:      { cuts_per_min: 10, min_cuts: 8,  max_cuts: 28, pacing_note: 'WORKED WALKTHROUGH — each step in the worked example is its own scene. Numbers update on-screen.' },
-  application:  { cuts_per_min: 13, min_cuts: 5,  max_cuts: 20, pacing_note: 'VIVID REAL-WORLD — Vox-style documentary cuts between real applications. Each use case = its own scene.' },
-  takeaway:     { cuts_per_min: 6,  min_cuts: 3,  max_cuts: 8,  pacing_note: 'SLOW LANDING — let the catchphrase breathe. Longer holds. Camera lingers. Final beat is the takeaway viewers screenshot.' },
-  default:      { cuts_per_min: 12, min_cuts: 4,  max_cuts: 20, pacing_note: 'Standard explainer pacing — balanced between teaching and momentum.' },
-};
-
-function computeSceneTarget(sectionType, sectionDurationSec) {
-  const cadence = SECTION_CADENCE[sectionType] || SECTION_CADENCE.default;
-  const minutes = sectionDurationSec / 60;
-  const raw = Math.round(minutes * cadence.cuts_per_min);
-  const target = Math.max(cadence.min_cuts, Math.min(cadence.max_cuts, raw));
-  return { target, cadence };
-}
-
 // ── Einstein arc definitions ─────────────────────────────────────
 function getEinsteinArc(arcType) {
   const arcs = {
@@ -244,20 +205,31 @@ function buildSectionBreakdownPrompt({
   researchData,
   continuityNote,
   globalSceneStart,
-  sceneTarget,
-  sectionDurationSec,
-  pacingNote,
-  sectionType,
 }) {
+  // Try sectioned research first, then fall back to flat research (applied to every section)
   const researchSection = researchData?.sections?.[sectionIndex] || null;
-  const researchBlock = researchSection ? `
+  const flatResearch = researchData?._flat || null;
+  let researchBlock = '';
+  if (researchSection) {
+    researchBlock = `
 VERIFIED RESEARCH FOR THIS SECTION:
 Core facts: ${JSON.stringify(researchSection.core_facts)}
 Best analogy: ${researchSection.best_analogy}
 Formulas/Code: ${JSON.stringify(researchSection.formulas_or_code)}
 Misconceptions to address: ${JSON.stringify(researchSection.misconceptions)}
 Accuracy notes: ${researchSection.accuracy_notes}
-` : '';
+`;
+  } else if (flatResearch) {
+    const facts = (flatResearch.facts || []).map(f => f.claim).slice(0, 6);
+    const numbers = (flatResearch.key_numbers || []).map(n => `${n.number} — ${n.context}`).slice(0, 5);
+    const myths = (flatResearch.common_misconceptions || []).map(m => `MYTH: ${m.myth} / TRUTH: ${m.truth}`).slice(0, 3);
+    researchBlock = `
+VERIFIED RESEARCH (general facts pool — pick the ones relevant to this section):
+Core facts: ${JSON.stringify(facts)}
+Key numbers: ${JSON.stringify(numbers)}
+Misconceptions to address: ${JSON.stringify(myths)}
+`;
+  }
 
   const isFirst = sectionIndex === 0;
   const isLast = sectionIndex === totalSections - 1;
@@ -290,22 +262,12 @@ SCENE TYPE OPTIONS (pick the right type for each beat):
 - comparison_table: Side-by-side comparison or Venn diagram
 - summary_card: Recap bullet points or key takeaway
 
-═══ WORLD-CLASS SCENE CADENCE (NON-NEGOTIABLE) ═══
-Section type: **${sectionType || 'general'}** — duration: **${(sectionDurationSec || 30).toFixed(0)}s**
-
-🎯 **GENERATE EXACTLY ${sceneTarget || 6} SCENES** for this section. This count matches world-class explainer pacing (MrBeast/Cleo Abram, Veritasium, Kurzgesagt, Vox, Wendover, CGP Grey).
-
-⏱️ **PACING RULE FOR THIS SECTION**: ${pacingNote || 'Standard explainer cadence.'}
-   → Average shot duration: **${((sectionDurationSec || 30) / (sceneTarget || 6)).toFixed(1)}s per scene**
-   → Density: **~${(((sceneTarget || 6) / (sectionDurationSec || 30)) * 60).toFixed(0)} cuts per minute**
-
-📋 **SCENE COMPOSITION RULES**:
-- Each distinct diagram, formula, code block, statistic, or visual beat = its OWN scene
-- Hook sections: use rapid-fire cuts — text slams, MCU reactions, B-roll flashes, single-word callouts
-- Mechanism/example: dedicate a full scene to EACH formula, EACH code line, EACH step
-- Takeaway: slow lingering shots — let the catchphrase land
-- DO NOT cram multiple diagrams into one scene
-- DO NOT under-deliver — the LLM tends to be lazy; ${sceneTarget || 6} is the MINIMUM
+SCENE COUNT RULES:
+- Simple concept (1 idea) → 1-2 scenes
+- Medium concept (2-3 ideas or a formula) → 2-4 scenes  
+- Complex concept (algorithm, multi-step process, code) → 4-8 scenes
+- Each distinct diagram, formula, or code block gets its OWN scene
+- Do NOT cram multiple diagrams into one scene
 ${isFirst ? '- MUST start with an einstein_intro scene' : ''}
 ${isLast ? '- MUST end with an einstein_outro scene' : ''}
 
@@ -366,71 +328,51 @@ Deno.serve(async (req) => {
       return Response.json({ error: 'No final script found.' }, { status: 400 });
     }
 
-    // Get research notes from ProductionSettings
+    // ── Get research notes — check BOTH ProductionSettings (sectioned) AND Projects (flat from writer) ──
     const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
     let researchData = null;
+    // Prefer sectioned research from ProductionSettings (richer per-section structure)
     if (psList[0]?.research_notes) {
-      try { researchData = JSON.parse(psList[0].research_notes); } catch (_) {}
-    }
-
-    // ── PRIMARY: Pull section structure from ScriptBatches (initialized by initializeScriptBatches) ──
-    // Each batch's focus_area is tagged "[section_type|s1] ..." so we can read section_type back.
-    let outlineSections = [];
-    const batches = await base44.asServiceRole.entities.ScriptBatches.filter({ project_id });
-    if (batches.length > 0) {
-      const sortedBatches = batches.sort((a, b) => a.batch_number - b.batch_number);
-      const CANONICAL_TYPES = ['hook', 'core_concept', 'mechanism', 'example', 'application', 'takeaway'];
-      outlineSections = sortedBatches.map((b, i) => {
-        const m = (b.focus_area || '').match(/^\[(\w+)\|/);
-        const sectionType = m ? m[1] : (CANONICAL_TYPES[i] || null);
-        return {
-          title: b.story_segment || `Section ${i + 1}`,
-          content: b.content || b.synopsis || '',
-          description: (b.synopsis || '').substring(0, 100),
-          section_type: sectionType,
-        };
-      });
-      console.log(`📋 Loaded ${outlineSections.length} sections from ScriptBatches`);
-    }
-
-    // FALLBACK 1: project.outline (legacy)
-    if (!outlineSections.length && project.outline) {
       try {
-        const parsed = JSON.parse(project.outline);
-        if (Array.isArray(parsed) && parsed.length) {
-          outlineSections = parsed.map((p, i) => ({ ...p, section_type: p.section_type || null }));
+        const parsed = JSON.parse(psList[0].research_notes);
+        if (parsed.sections && Array.isArray(parsed.sections)) {
+          researchData = parsed;
+          console.log(`[explainerSceneBreakdown] Loaded sectioned research from ProductionSettings (${parsed.sections.length} sections)`);
+        }
+      } catch (_) {}
+    }
+    // Fallback: flat research from Projects (written by initializeScriptBatches)
+    if (!researchData && project.research_notes) {
+      try {
+        const flat = JSON.parse(project.research_notes);
+        if (flat.facts || flat.key_numbers || flat.common_misconceptions) {
+          // Spread flat facts across all sections (every section sees all facts)
+          researchData = {
+            sections: [], // populated per-section below from flat
+            _flat: flat,
+            overall_accuracy_confidence: 0.85,
+          };
+          console.log(`[explainerSceneBreakdown] Loaded flat research from Projects (${flat.facts?.length || 0} facts) — applying to all sections`);
         }
       } catch (_) {}
     }
 
-    // FALLBACK 2: split script by markdown headings
+    // Get outline sections from project
+    let outlineSections = [];
+    if (project.outline) {
+      try { outlineSections = JSON.parse(project.outline); } catch (_) {}
+    }
+
+    // Fallback: split script into sections by heading markers
     if (!outlineSections.length) {
       const scriptText = script.full_script;
       const parts = scriptText.split(/\n(?=#{1,3}\s|\*\*[A-Z]|\d\.\s[A-Z])/g);
-      const CANONICAL_TYPES = ['hook', 'core_concept', 'mechanism', 'example', 'application', 'takeaway'];
       outlineSections = parts.map((p, i) => ({
         title: `Section ${i + 1}`,
         content: p.trim(),
         description: p.substring(0, 100),
-        section_type: CANONICAL_TYPES[i] || null,
       }));
     }
-
-    // ── Compute world-class cuts-per-minute per section (scales uncapped with video duration) ──
-    const totalDurationMinutes = project.video_duration_minutes || 10;
-    const totalDurationSec = totalDurationMinutes * 60;
-    let projectedTotalScenes = 0;
-    outlineSections.forEach((sec) => {
-      const sectionType = sec.section_type;
-      const timePct = (sectionType && EXPLAINER_SECTION_TIME_PCT[sectionType]) || (1 / outlineSections.length);
-      const sectionDurationSec = totalDurationSec * timePct;
-      const { target, cadence } = computeSceneTarget(sectionType || 'default', sectionDurationSec);
-      sec._sceneTarget = target;
-      sec._sectionDurationSec = sectionDurationSec;
-      sec._pacingNote = cadence.pacing_note;
-      projectedTotalScenes += target;
-    });
-    console.log(`🎯 World-class cadence: ${totalDurationMinutes}min video → ~${projectedTotalScenes} scenes across ${outlineSections.length} sections (${(projectedTotalScenes / totalDurationMinutes).toFixed(1)} cuts/min avg)`);
 
     // Detect arc type from project
     const arcType = project.explainer_arc || 'professor';
@@ -468,23 +410,13 @@ Deno.serve(async (req) => {
         researchData,
         continuityNote,
         globalSceneStart: globalSceneNumber,
-        sceneTarget: section._sceneTarget,
-        sectionDurationSec: section._sectionDurationSec,
-        pacingNote: section._pacingNote,
-        sectionType: section.section_type,
       });
 
-      console.log(`🎬 Section ${si + 1}/${outlineSections.length}: "${section.title}" [${section.section_type || 'default'}] target=${section._sceneTarget}sc/${section._sectionDurationSec?.toFixed(0)}s (starts at scene ${globalSceneNumber})`);
-
-      // Higher temp for hook section (creative punch), lower for mechanism/example (accuracy)
-      const sectionTemp = section.section_type === 'hook' ? 0.75
-        : section.section_type === 'takeaway' ? 0.65
-        : section.section_type === 'mechanism' || section.section_type === 'example' ? 0.35
-        : 0.5;
+      console.log(`🎬 Section ${si + 1}/${outlineSections.length}: "${section.title}" (starting at scene ${globalSceneNumber})`);
 
       let sectionResult;
       try {
-        sectionResult = await callAI(prompt, sectionTemp);
+        sectionResult = await callAI(prompt, 0.4);
       } catch (err) {
         console.error(`❌ Section ${si + 1} breakdown failed: ${err.message} — applying fallback`);
         // Minimal fallback: one concept diagram per section
@@ -510,41 +442,13 @@ Deno.serve(async (req) => {
         };
       }
 
-      let sectionScenes = sectionResult?.scenes || [];
-
-      // ── SCENE COUNT ENFORCEMENT: if LLM under-delivered by >2, request an extension ──
-      const sceneShortfall = (section._sceneTarget || 0) - sectionScenes.length;
-      if (sceneShortfall > 2 && sectionScenes.length > 0) {
-        console.warn(`⚠️ Section ${si + 1} [${section.section_type}] under-delivered: got ${sectionScenes.length}, target ${section._sceneTarget} — requesting ${sceneShortfall} more`);
-        try {
-          const extendPrompt = `You previously broke down this section into ${sectionScenes.length} scenes, but the section needs ${section._sceneTarget} scenes total for world-class pacing (${section._pacingNote}).
-
-EXISTING SCENES (continue numbering from ${globalSceneNumber + sectionScenes.length}):
-${sectionScenes.map(s => `Scene ${s.scene_number}: ${s.scene_type} — ${(s.visual_concept || '').substring(0, 100)}`).join('\n')}
-
-SECTION CONTENT (re-reference):
-${section.content?.substring(0, 1500)}
-
-Generate ${sceneShortfall} ADDITIONAL scenes that fit naturally between/after the existing ones. Each new scene must be a DISTINCT visual beat — a different diagram, a different number callout, a different reaction shot, a different angle on the existing concept. Do NOT duplicate concepts already covered.
-
-Return ONLY JSON: {"scenes": [...]} with the same scene object structure as before.`;
-          const extendResult = await callAI(extendPrompt, sectionTemp);
-          const extraScenes = extendResult?.scenes || [];
-          if (extraScenes.length > 0) {
-            sectionScenes = [...sectionScenes, ...extraScenes];
-            console.log(`📈 Section ${si + 1}: extended to ${sectionScenes.length} scenes (+${extraScenes.length})`);
-          }
-        } catch (extErr) {
-          console.warn(`⚠️ Extension failed: ${extErr.message} — proceeding with ${sectionScenes.length}`);
-        }
-      }
+      const sectionScenes = sectionResult?.scenes || [];
 
       // Enforce scene numbers, attach metadata
       sectionScenes.forEach((scene, idx) => {
         scene.scene_number = globalSceneNumber + idx;
         scene.section_title = section.title;
         scene.section_index = si;
-        scene.section_type = section.section_type;
         scene.arc_type = arcType;
         allScenes.push(scene);
       });
@@ -563,10 +467,7 @@ Return ONLY JSON: {"scenes": [...]} with the same scene object structure as befo
         ].join(' | ');
       }
 
-      const cutsPerMin = section._sectionDurationSec > 0
-        ? ((sectionScenes.length / section._sectionDurationSec) * 60).toFixed(1)
-        : 'n/a';
-      console.log(`✅ Section ${si + 1} [${section.section_type || 'default'}]: ${sectionScenes.length}/${section._sceneTarget} scenes (${cutsPerMin} cuts/min) — total: ${allScenes.length}`);
+      console.log(`✅ Section ${si + 1}: ${sectionScenes.length} scenes (total so far: ${allScenes.length})`);
     }
 
     // Build beat durations — explainer pacing (longer than shorts)

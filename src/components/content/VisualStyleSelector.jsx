@@ -23,6 +23,7 @@ const STYLES = [
   { id: 'roblox', label: 'Roblox', desc: 'Blocky cube-head characters with rectangular limbs, simple 2D faces, bright flat colors — R6/R15 avatar style', emoji: '🧱' },
   { id: 'skeleton_protagonist', label: 'Skeleton Protagonist (Viral)', desc: 'Transparent glass skeleton with expressive eyes in photorealistic worlds — Bernard Films style', emoji: '💀' },
   { id: 'afro_nolly_global', label: 'Afro-Nolly-Global', desc: '3D Pixar-quality African drama — Nollywood meets Disney with vibrant compounds, expressive characters, and warm cinematic lighting', emoji: '🌍' },
+  { id: 'explainer_diagram', label: 'Explainer Diagram', desc: 'Einstein-led educational scenes with photorealistic 3D characters, clean diagrams, formulas, and code blocks — Veritasium/Cleo Abram style', emoji: '🎓' },
 ];
 
 export default function VisualStyleSelector({ selectedStyle, onSelect }) {

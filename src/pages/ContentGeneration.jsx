@@ -755,49 +755,66 @@ export default function ContentGeneration() {
         await runPromptGeneration({ onProgress: setImportProgress });
 
       } else if (isExplainerProject) {
-        // ── EXPLAINER: research → breakdown → prompt generation ──
+        // ── EXPLAINER: research (only if missing) → breakdown → prompt generation ──
 
-        // Step 1: Research with web search
-        setImportProgress('Researching topic with live web search (Gemini + Google Search)...');
-        let outlineSections = [];
+        // Step 1: Check if research already exists in EITHER location.
+        // initializeScriptBatches runs flat research during scripting → Projects.research_notes.
+        // explainerScriptResearch runs sectioned research → ProductionSettings.research_notes.
+        // Either is fine — explainerSceneBreakdown reads both.
+        let hasResearch = false;
         try {
           const proj = await base44.entities.Projects.filter({ id: projectId });
-          if (proj[0]?.outline) {
-            outlineSections = JSON.parse(proj[0].outline);
+          if (proj[0]?.research_notes) {
+            const parsed = JSON.parse(proj[0].research_notes);
+            if (parsed.facts?.length || parsed.sections?.length) hasResearch = true;
+          }
+          if (!hasResearch) {
+            const ps = await base44.entities.ProductionSettings?.filter({ project_id: projectId });
+            if (ps?.[0]?.research_notes) {
+              const parsed = JSON.parse(ps[0].research_notes);
+              if (parsed.sections?.length || parsed.facts?.length) hasResearch = true;
+            }
           }
         } catch (_) {}
 
-        try {
-          // Check if function exists first — it may not be deployed yet
-          setImportProgress('Researching topic with live web search...');
-          const researchResult = await base44.functions.invoke('explainerScriptResearch', {
-            project_id: projectId,
-            topic: project?.name || '',
-            outline_sections: outlineSections.length > 0 ? outlineSections : [
-              { title: 'Introduction', description: 'Hook and overview' },
-              { title: 'Core Concept', description: 'Central idea and terminology' },
-              { title: 'How It Works', description: 'Mechanism and process' },
-              { title: 'Worked Example', description: 'Concrete real-world example' },
-              { title: 'Real-World Application', description: 'Practical usage today' },
-              { title: 'Summary', description: 'Key takeaways and closing' },
-            ],
-            arc_type: project?.explainer_arc || 'professor',
-          });
-          const resData = researchResult?.data || researchResult;
-          setImportProgress(`✅ Research complete (${resData.sections_researched} sections, confidence: ${Math.round((resData.overall_accuracy_confidence || 0) * 100)}%) — breaking down into scenes...`);
-        } catch (researchErr) {
-          // 404 = function not deployed yet, any other error = API failure
-          // Both are non-fatal — explainerSceneBreakdown works without research
-          const is404 = researchErr?.message?.includes('404') || researchErr?.response?.status === 404;
-          if (is404) {
-            console.warn('explainerScriptResearch not deployed yet — skipping research step');
-            setImportProgress('⚠️ Research function not deployed — skipping to scene breakdown...');
-          } else {
-            console.warn('Research step failed (non-fatal):', researchErr.message);
+        if (hasResearch) {
+          setImportProgress('✅ Reusing cached research from script writing — proceeding to scene breakdown...');
+          await new Promise(r => setTimeout(r, 800));
+        } else {
+          // Only run the heavy sectioned research if nothing is cached
+          setImportProgress('Researching topic with live web search (Gemini + Google Search)...');
+          let outlineSections = [];
+          try {
+            const batches = await base44.entities.ScriptBatches.filter({ project_id: projectId });
+            if (batches.length > 0) {
+              outlineSections = batches
+                .sort((a, b) => a.batch_number - b.batch_number)
+                .map(b => ({ title: b.story_segment || 'Section', description: b.synopsis?.substring(0, 200) || '' }));
+            }
+          } catch (_) {}
+
+          try {
+            const researchResult = await base44.functions.invoke('explainerScriptResearch', {
+              project_id: projectId,
+              topic: project?.name || '',
+              outline_sections: outlineSections.length > 0 ? outlineSections : [
+                { title: 'Hook & Entry', description: 'Open with curiosity hook' },
+                { title: 'Core Concept', description: 'Central idea and terminology' },
+                { title: 'The Mechanism', description: 'How it actually works' },
+                { title: 'Worked Example', description: 'Concrete numbered example' },
+                { title: 'Real Application', description: 'Practical usage today' },
+                { title: 'Summary & Takeaway', description: 'Key insight and catchphrase' },
+              ],
+              arc_type: project?.explainer_arc || 'professor',
+            });
+            const resData = researchResult?.data || researchResult;
+            setImportProgress(`✅ Research complete (${resData.sections_researched} sections, confidence: ${Math.round((resData.overall_accuracy_confidence || 0) * 100)}%) — breaking down into scenes...`);
+          } catch (researchErr) {
+            const is404 = researchErr?.message?.includes('404') || researchErr?.response?.status === 404;
+            console.warn(is404 ? 'explainerScriptResearch not deployed — skipping' : `Research failed (non-fatal): ${researchErr.message}`);
             setImportProgress('Research step skipped — proceeding to scene breakdown...');
+            await new Promise(r => setTimeout(r, 1500));
           }
-          // Always continue — research enriches but is never a blocker
-          await new Promise(r => setTimeout(r, 1500));
         }
 
         // Step 2: SKIPPED — explainer mode has Einstein baked into director_notes via explainerSceneBreakdown.
@@ -1476,6 +1493,20 @@ export default function ContentGeneration() {
         {/* Visual Style + Image Provider */}
         {project && (
           <div className="bg-white p-5 rounded-lg shadow-sm border mb-6 space-y-5">
+            {project.project_mode === 'explainer' && (
+              <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-lg p-3 flex items-start gap-3">
+                <span className="text-2xl">🎓</span>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-amber-900">Explainer Mode Locked</p>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    Visual style auto-set to <span className="font-mono bg-amber-100 px-1.5 py-0.5 rounded">explainer_diagram</span>,
+                    provider locked to <span className="font-mono bg-amber-100 px-1.5 py-0.5 rounded">Nano Banana</span> (best for text-in-diagram).
+                    Einstein arc: <span className="font-mono bg-amber-100 px-1.5 py-0.5 rounded">{project.explainer_arc || 'professor'}</span>.
+                    You can override below if needed, but the defaults are tuned for max educational clarity.
+                  </p>
+                </div>
+              </div>
+            )}
             <VisualStyleSelector
               selectedStyle={project.visual_style}
               onSelect={async (style) => { await base44.entities.Projects.update(projectId, { visual_style: style }); refetchProject(); }}

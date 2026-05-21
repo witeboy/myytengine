@@ -593,21 +593,39 @@ Deno.serve(async (req) => {
 
     if (isExplainerMode) {
       // ── PHASE B: Research grounding (inline — no cross-fn invoke) ──
+      // Reuse existing research if it's already been done (avoid duplicate Gemini calls)
       let research = null;
-      try {
-        console.log('[initializeScriptBatches] Phase B — fetching grounded research...');
-        research = await fetchGroundedResearch(
-          topic?.title || project.name,
-          topic?.description || '',
-          project.niche
-        );
-        console.log(`[initializeScriptBatches] Research: ${research.facts?.length || 0} facts, ${research.key_numbers?.length || 0} numbers, ${research.common_misconceptions?.length || 0} myths`);
-        // Persist so writer can reuse without re-calling
-        await base44.asServiceRole.entities.Projects.update(project_id, {
-          research_notes: JSON.stringify(research),
-        });
-      } catch (researchErr) {
-        console.warn(`[initializeScriptBatches] Research failed (continuing without): ${researchErr.message}`);
+      if (project.research_notes) {
+        try {
+          const cached = JSON.parse(project.research_notes);
+          // Accept either flat shape {facts, ...} or sectioned shape {sections: [...]}
+          if (cached.facts || cached.sections) {
+            research = cached.facts ? cached : {
+              // Flatten sectioned research into the flat shape used by the outline prompt
+              facts: (cached.sections || []).flatMap(s => (s.core_facts || []).map(c => ({ claim: c, source_name: (s.sources?.[0]?.name) || 'research', source_url: (s.sources?.[0]?.url) || '' }))),
+              key_numbers: [],
+              common_misconceptions: (cached.sections || []).flatMap(s => (s.misconceptions || []).map(m => ({ myth: m, truth: '', source_url: '' }))),
+            };
+            console.log(`[initializeScriptBatches] Reusing cached research: ${research.facts?.length || 0} facts`);
+          }
+        } catch (_) {}
+      }
+      if (!research) {
+        try {
+          console.log('[initializeScriptBatches] Phase B — fetching grounded research...');
+          research = await fetchGroundedResearch(
+            topic?.title || project.name,
+            topic?.description || '',
+            project.niche
+          );
+          console.log(`[initializeScriptBatches] Research: ${research.facts?.length || 0} facts, ${research.key_numbers?.length || 0} numbers, ${research.common_misconceptions?.length || 0} myths`);
+          // Persist so writer can reuse without re-calling
+          await base44.asServiceRole.entities.Projects.update(project_id, {
+            research_notes: JSON.stringify(research),
+          });
+        } catch (researchErr) {
+          console.warn(`[initializeScriptBatches] Research failed (continuing without): ${researchErr.message}`);
+        }
       }
       outlinePrompt = buildExplainerOutlinePrompt({ topic, project, arcKey, totalTargetWords, durationMinutes, strategyBlock, research });
       outlineTemp = 0.55; // lower temp — explainer needs accuracy + consistency
@@ -664,6 +682,17 @@ Deno.serve(async (req) => {
     if (isExplainerMode) {
       projectUpdate.project_mode = 'explainer';
       projectUpdate.explainer_arc = arcKey;
+      // ── AUTO-LOCK visual identity for explainer mode ──
+      // Only set defaults if user hasn't explicitly chosen something else
+      if (!project.visual_style || project.visual_style === 'cinematic_realistic') {
+        projectUpdate.visual_style = 'explainer_diagram';
+      }
+      if (!project.image_provider || project.image_provider === 'auto') {
+        projectUpdate.image_provider = 'nano_banana'; // best for text-in-image and diagram clarity
+      }
+      if (!project.orientation) {
+        projectUpdate.orientation = 'landscape'; // YouTube standard for explainers
+      }
     }
     await base44.asServiceRole.entities.Projects.update(project_id, projectUpdate);
 

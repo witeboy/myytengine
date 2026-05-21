@@ -11,6 +11,10 @@ export default function AutoBrollButton({ projectId, sceneCount, onComplete, pro
   if (sceneCount === 0) return null;
 
   const isSleep = projectMode === 'sleep_meditation' || projectMode === 'sleep_story';
+  const isExplainer = projectMode === 'explainer';
+
+  // Explainer scenes are Einstein-led diagrams — never replace with stock footage
+  if (isExplainer) return null;
 
   const handleRun = async () => {
     setRunning(true);
