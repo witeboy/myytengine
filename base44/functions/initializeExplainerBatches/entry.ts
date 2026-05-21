@@ -3,47 +3,44 @@ import OpenAI from 'npm:openai@4.58.1';
 
 // ═══════════════════════════════════════════════════════════════════
 // EXPLAINER PIPELINE — Step 1: Outline batches anchored to research_notes
-// Auto-runs web research (Gemini + Google Search grounding) if missing.
+// Auto-runs grounded web research (Gemini + Google Search) if missing.
 // ═══════════════════════════════════════════════════════════════════
 
 const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
 
-// ─── Inline web research (mirrors explainerResearch) ──────────────────
-async function researchTopicGrounded(topicTitle, topicDescription, niche) {
-  if (!GEMINI_KEY) throw new Error('GEMINI_API_KEY not set — cannot run grounded research');
+function hasUsableResearch(researchNotes) {
+  if (!researchNotes) return false;
+  try {
+    const r = typeof researchNotes === 'string' ? JSON.parse(researchNotes) : researchNotes;
+    return ((r.facts || []).length + (r.key_numbers || []).length) >= 4;
+  } catch (_) { return false; }
+}
 
+// Grounded web research — uses Gemini 2.5 Flash with Google Search tool
+async function researchTopicGrounded(topicTitle, topicDescription, niche) {
+  if (!GEMINI_KEY) throw new Error('GEMINI_API_KEY not set');
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`;
   const prompt = `You are a research assistant for an educational YouTube explainer video. Use Google Search to find REAL, VERIFIABLE facts about this topic. Do NOT make up statistics, dates, studies, company names, or dollar figures.
 
-**TOPIC**: ${topicTitle}
-**DESCRIPTION**: ${topicDescription || 'N/A'}
-**NICHE**: ${niche || 'general'}
+TOPIC: ${topicTitle}
+DESCRIPTION: ${topicDescription || 'N/A'}
+NICHE: ${niche || 'general'}
 
-**YOUR TASK**:
-- Find 8-12 concrete facts grounded in real sources (recent, reputable: gov data, academic, major news, industry reports)
-- Find 6-10 specific numbers/percentages/dollar amounts/dates that are well-documented (with sources)
-- Find 2-4 common misconceptions and the actual truth that corrects each one
-- If the topic is a LIST-STYLE topic (e.g. "6 boring businesses that make millionaires"), find a real example, real revenue/margin range, and a real owner story (anonymized OK if needed) for EACH item
+YOUR TASK:
+- Find 8-12 concrete facts grounded in real sources (recent: gov data, academic, major news, industry reports).
+- Find 6-10 specific numbers/percentages/dollar amounts/dates that are well-documented (with sources).
+- Find 2-4 common misconceptions and the actual TRUTH that corrects each one.
+- If the topic is LIST-STYLE (e.g. "6 boring businesses that make millionaires"), find for EACH item: a real example, real revenue/margin range, and a real owner story (anonymize if needed).
 
-**RULES**:
-- Every fact must have a source URL from your search
-- Quote numbers exactly as they appear in the source (don't round wildly)
-- If you can't find a real number for something, OMIT it — do NOT invent
-- Favor sources from the last 5 years
+RULES:
+- Every fact must have a source URL from your Google Search results.
+- Quote numbers exactly as they appear in the source (don't round wildly).
+- If you can't find a real number for something, OMIT it — do NOT invent.
+- Favor sources from the last 5 years.
 
-Return ONLY valid JSON (no markdown):
-{
-  "facts": [
-    {"claim": "...", "source_name": "...", "source_url": "https://..."}
-  ],
-  "key_numbers": [
-    {"number": "e.g. '$1.4 trillion' or '64%'", "context": "what it represents", "source_name": "...", "source_url": "https://..."}
-  ],
-  "common_misconceptions": [
-    {"myth": "...", "truth": "...", "source_url": "https://..."}
-  ]
-}`;
+Return ONLY a single valid JSON object (no markdown, no commentary, no citations after the JSON):
+{"facts":[{"claim":"...","source_name":"...","source_url":"https://..."}],"key_numbers":[{"number":"$1.4 trillion or 64%","context":"...","source_name":"...","source_url":"https://..."}],"common_misconceptions":[{"myth":"...","truth":"...","source_url":"https://..."}]}`;
 
   const response = await fetch(url, {
     method: 'POST',
@@ -54,14 +51,14 @@ Return ONLY valid JSON (no markdown):
       generationConfig: { temperature: 0.3, maxOutputTokens: 8192 },
     }),
   });
-
   if (!response.ok) {
-    const err = await response.json();
-    throw new Error(`Gemini research error ${response.status}: ${err.error?.message || JSON.stringify(err)}`);
+    const err = await response.json().catch(() => ({}));
+    throw new Error(`Gemini ${response.status}: ${err.error?.message || 'unknown'}`);
   }
-
   const data = await response.json();
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  const rawText = parts.map(p => p.text || '').join('').trim();
+  if (!rawText) throw new Error('Empty Gemini response');
 
   let parsed = null;
   try { parsed = JSON.parse(rawText); } catch (_) {}
@@ -72,26 +69,21 @@ Return ONLY valid JSON (no markdown):
     try { parsed = JSON.parse(jsonStr); } catch (_) {}
   }
   if (!parsed) {
-    const objMatch = rawText.match(/\{[\s\S]*\}/);
-    if (objMatch) { try { parsed = JSON.parse(objMatch[0]); } catch (_) {} }
+    const start = rawText.indexOf('{');
+    const end = rawText.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      try { parsed = JSON.parse(rawText.slice(start, end + 1)); } catch (_) {}
+    }
   }
-  if (!parsed) throw new Error('Failed to parse research JSON from Gemini');
-
+  if (!parsed) {
+    console.warn('[research] Could not parse Gemini output. Raw start:', rawText.slice(0, 400));
+    throw new Error('Failed to parse research JSON');
+  }
   return {
     facts: Array.isArray(parsed.facts) ? parsed.facts : [],
     key_numbers: Array.isArray(parsed.key_numbers) ? parsed.key_numbers : [],
     common_misconceptions: Array.isArray(parsed.common_misconceptions) ? parsed.common_misconceptions : [],
   };
-}
-
-function hasUsableResearch(researchNotes) {
-  if (!researchNotes) return false;
-  try {
-    const r = typeof researchNotes === 'string' ? JSON.parse(researchNotes) : researchNotes;
-    const factCount = (r.facts || []).length;
-    const numCount = (r.key_numbers || []).length;
-    return factCount + numCount >= 4;
-  } catch (_) { return false; }
 }
 
 const EXPLAINER_SECTIONS = [
@@ -256,7 +248,7 @@ Deno.serve(async (req) => {
     // ─── Auto-run grounded web research if missing/thin ────────────────
     let researchNotes = project.research_notes;
     if (!hasUsableResearch(researchNotes)) {
-      console.log(`[initializeExplainerBatches] No usable research yet — running grounded web research...`);
+      console.log(`[initializeExplainerBatches] No usable research — running grounded web research...`);
       try {
         const researchTitle = topic?.title || project.name;
         const researchDesc = topic?.description || '';
@@ -266,7 +258,6 @@ Deno.serve(async (req) => {
         console.log(`[initializeExplainerBatches] ✅ Research: ${research.facts.length} facts, ${research.key_numbers.length} numbers, ${research.common_misconceptions.length} myths`);
       } catch (researchErr) {
         console.warn(`[initializeExplainerBatches] ⚠️ Research failed (continuing without): ${researchErr.message}`);
-        researchNotes = project.research_notes || null;
       }
     } else {
       console.log(`[initializeExplainerBatches] ✅ Reusing existing research_notes`);

@@ -17,19 +17,19 @@ function hasUsableResearch(researchNotes) {
   } catch (_) { return false; }
 }
 
-// Grounded web research fallback (Gemini + Google Search) — used only if research_notes missing.
+// Grounded web research safety net — only runs if research_notes missing/thin
 async function researchTopicGrounded(topicTitle, topicDescription, niche) {
   if (!GEMINI_KEY) throw new Error('GEMINI_API_KEY not set');
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_KEY}`;
-  const prompt = `Use Google Search to find REAL, VERIFIABLE facts for an explainer video. Do NOT invent numbers, companies, studies, or dollar figures.
+  const prompt = `Use Google Search to find REAL, VERIFIABLE facts for an educational explainer video. Do NOT invent numbers, companies, studies, or dollar figures.
 
 TOPIC: ${topicTitle}
 DESCRIPTION: ${topicDescription || 'N/A'}
 NICHE: ${niche || 'general'}
 
-Find 8-12 sourced facts, 6-10 specific numbers (with sources), 2-4 misconceptions with truths. For list-style topics, find a real example + revenue range for each item.
+Find 8-12 sourced facts, 6-10 specific numbers (with sources), 2-4 misconceptions with truths. For list-style topics, find a real example + revenue/margin range for each item.
 
-Return ONLY JSON:
+Return ONLY a single valid JSON object (no markdown, no citations after):
 {"facts":[{"claim":"...","source_name":"...","source_url":"..."}],"key_numbers":[{"number":"...","context":"...","source_name":"...","source_url":"..."}],"common_misconceptions":[{"myth":"...","truth":"...","source_url":"..."}]}`;
 
   const response = await fetch(url, {
@@ -43,7 +43,10 @@ Return ONLY JSON:
   });
   if (!response.ok) throw new Error(`Gemini research ${response.status}`);
   const data = await response.json();
-  const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  const rawText = parts.map(p => p.text || '').join('').trim();
+  if (!rawText) throw new Error('Empty Gemini response');
+
   let parsed = null;
   try { parsed = JSON.parse(rawText); } catch (_) {}
   if (!parsed) {
@@ -52,7 +55,13 @@ Return ONLY JSON:
     else if (rawText.includes('```')) jsonStr = rawText.split('```')[1].split('```')[0].trim();
     try { parsed = JSON.parse(jsonStr); } catch (_) {}
   }
-  if (!parsed) { const m = rawText.match(/\{[\s\S]*\}/); if (m) { try { parsed = JSON.parse(m[0]); } catch (_) {} } }
+  if (!parsed) {
+    const start = rawText.indexOf('{');
+    const end = rawText.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      try { parsed = JSON.parse(rawText.slice(start, end + 1)); } catch (_) {}
+    }
+  }
   if (!parsed) throw new Error('Failed to parse research JSON');
   return {
     facts: Array.isArray(parsed.facts) ? parsed.facts : [],
@@ -265,24 +274,10 @@ Deno.serve(async (req) => {
     const isLastBatch = batch.batch_number === sortedBatches.length;
     const outlineContext = sortedBatches.map(b => `Batch ${b.batch_number} "${b.story_segment}": ${b.focus_area}`).join('\n');
 
-    // Safety net: if research_notes missing/thin, fetch grounded facts before writing
-    let researchNotes = project.research_notes;
-    if (!hasUsableResearch(researchNotes)) {
-      console.log(`[generateExplainerBatch] No usable research — fetching grounded facts...`);
-      try {
-        const r = await researchTopicGrounded(topic?.title || project.name, topic?.description || '', project.niche);
-        researchNotes = JSON.stringify(r);
-        await base44.asServiceRole.entities.Projects.update(project_id, { research_notes: researchNotes });
-        console.log(`[generateExplainerBatch] ✅ Fetched ${r.facts.length} facts, ${r.key_numbers.length} numbers`);
-      } catch (e) {
-        console.warn(`[generateExplainerBatch] ⚠️ Research fallback failed: ${e.message}`);
-      }
-    }
-
     const prompt = buildExplainerWritingPrompt({
       batch, sectionType, project, topic, sortedBatches,
       previousContent, outlineContext, isFirstBatch, isLastBatch,
-      researchNotes,
+      researchNotes: project.research_notes,
     });
 
     const baseTemp = sectionType === 'hook' ? 0.5 : 0.55;
