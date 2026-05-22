@@ -687,7 +687,7 @@ export default function ContentGeneration() {
         isSleepProject     ? 'sleepSceneBreakdown'    :
         isShortsProject    ? 'shortsSceneBreakdown'   :
         isLongViralProject ? 'longViralSceneBreakdown':
-        isExplainerProject ? 'fixScenePrompts':
+        isExplainerProject ? 'explainerSceneBreakdown':
                              'generateSceneBreakdown';
       try {
         assertBreakdownMatchesMode(chosenBreakdownFn, resolvedMode);
