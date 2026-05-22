@@ -93,7 +93,7 @@ async function callGemini(prompt, temperature = 0.7, maxTokens = 16384, retries 
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -389,12 +389,6 @@ function getStyleSceneBodyRules(styleName) {
       environments: "COMPOUND COURTYARD: Colorful buildings (mustard, terracotta, dusty blue, sage green, salmon pink), terracotta or dark roofs, warm-colored dirt or paved ground, wooden doors, louvered windows, hanging laundry between buildings, potted flowers at doorsteps, scattered rocks, hand-painted signs with proverbs on buildings (black text on cream/white wood, all caps, hand-lettered). INDOOR: Warm-toned living rooms, kitchens, hallways with doorways where crowds peek in, candles, furniture, shelves. Night: warm artificial or candlelight as primary light, deep blue-black sky, HUGE stylized full moon.",
       objects: "Hand-painted wooden signs with proverbs that foreshadow the moral (e.g. 'PRIDE COMES BEFORE THE FALL', 'COMPOUND RULES: LANDLADY IS ALWAYS RIGHT'), wooden sticks/canes (mama's signature prop), gold jewelry (earrings, bangles, necklaces), colorful patterned clothing, cooking pots, woven baskets, wooden stools, corrugated iron roofing, potted plants, street signs with place names.",
       rendering: "3D Pixar-Illumination quality CGI. Subsurface scattering on skin. Soft ambient occlusion in shadows. Slight depth-of-field blur on background characters. Hair individually strand-rendered. Cloth shows realistic folds, wrinkles, and weight. Camera slightly below eye level (heroic/dramatic). Slight wide-angle lens distortion making foreground characters larger. 3-layer depth: foreground characters, mid-ground action, background crowd (6-15 shocked/amused onlookers with dramatic expressions). Faces ALWAYS well-lit and readable even in dark scenes. Warm bounce light from ground. Saturated punchy vibrant colors."
-    },
-    explainer_diagram: {
-      characters: "Einstein character rendered as premium 3D illustration — ALWAYS in his arc-specific costume (lab coat OR tweed jacket OR suit OR graphic tee as specified in director notes). Einstein's signature wild white hair, bushy mustache, warm expressive eyes. Character proportions are realistic adult male — NOT cartoon, NOT chibi. High detail on face and clothing. When present: Einstein is MID-ACTION — gesturing at diagrams, pointing at formulas, writing on boards, reacting with excitement to concepts.",
-      environments: "Clean professional educational environment matching the arc: laboratory (science), grand lecture hall (professor), sleek boardroom (accountant), futuristic tech hub (tech). Diagrams and visual elements are part of the environment as floating 3D panels, holographic displays, or whiteboard content.",
-      objects: "Diagrams rendered as clean 3D floating panels with crisp typography, color-coded sections, and clear hierarchy. Formulas typeset in LaTeX-style precision. Code blocks in monospace font with syntax highlighting. All text in diagrams must be READABLE and CORRECT. Arrows are clean with proper arrowheads.",
-      rendering: "Premium 3D render — NOT cartoon, NOT flat design. Subsurface scattering on character skin. Soft ambient occlusion. Professional studio lighting. High contrast between diagram elements and background. Every text element must be legible at video resolution. Depth of field: medium f/4 — character and diagrams both sharp, background subtly soft."
     }
   };
 
@@ -488,26 +482,7 @@ MANDATORY FRAMING:
 - Lighting: golden hour, volumetric rays, warm amber grading, rim light on bone edges
 - NEVER empty dark eye sockets — always BIG ROUND EXPRESSIVE BROWN/AMBER EYEBALLS
 - NEVER show readable text, numbers, dollar amounts, or screen content — use physical metaphors instead
-- NEVER write the style name as a prefix (e.g. "Skeleton protagonist →") — just describe the scene`,
-
-    explainer_diagram: universalReinforcement + `
-**🎓 EXPLAINER DIAGRAM STYLE — CRITICAL RULES:**
-
-This is premium educational content. Every image must communicate information clearly AND look visually impressive.
-
-EINSTEIN CHARACTER (when einstein_present = true): ALWAYS use the exact arc costume from director notes — lab coat (science), tweed jacket (professor), suit (accountant), graphic tee with RGB headset (tech). Einstein is ALWAYS mid-action: gesturing, pointing, writing, reacting — NEVER standing static. Face must be recognisably Einstein-inspired: wild white hair, bushy mustache, warm expressive eyes. Character proportions: realistic adult male, authoritative presence, NOT cartoon or chibi.
-
-DIAGRAMS: Every diagram must be READABLE — text large enough to see clearly. Color-code related elements consistently. Formulas typeset precisely with proper mathematical notation. Code blocks in monospace font with visible syntax highlighting. Labels concise and positioned clearly near their element.
-
-SCENE TYPE RULES:
-- concept_diagram: Pure clean diagram, no character, white or dark slate background, diagram fills 70% of frame
-- formula_panel: Formula centered, large, beautiful typesetting, dark background, formula glows subtly
-- code_block: Terminal or IDE aesthetic, syntax highlighted, clean monospace, relevant lines highlighted
-- einstein_intro/einstein_outro: Full body Einstein, environment visible, maximum personality
-- einstein_transition: Mid shot Einstein, gesturing toward next concept
-- analogy_scene: Split frame or comparison — real world LEFT, concept RIGHT
-
-FORBIDDEN: Cluttered scenes with too many elements, text too small to read, incorrect formulas or wrong code syntax, generic stock-photo aesthetic, childish cartoon style, character standing static doing nothing, multiple unrelated concepts in one frame, blurred or illegible diagram text.`
+- NEVER write the style name as a prefix (e.g. "Skeleton protagonist →") — just describe the scene`
   };
   return instructions[visualStyle] || universalReinforcement;
 }
@@ -581,8 +556,7 @@ function validateAndEnhancePrompt(imagePrompt, styleConfig, orientationConfig, s
 
 
   // For non-photorealistic styles, strip any photorealistic camera language that may have leaked in
-  // explainer_diagram is treated as a photo style — Einstein needs premium 3D rendering language
-  const isPhotoStyle = ['cinematic_realistic', 'photorealistic_4k', 'skeleton_protagonist', 'explainer_diagram'].includes(visualStyle);
+  const isPhotoStyle = ['cinematic_realistic', 'photorealistic_4k', 'skeleton_protagonist'].includes(visualStyle);
   // Roblox is NOT a photo style — camera language will be stripped
   if (!isPhotoStyle) {
     enhanced = enhanced.replace(/\b(shot on|ARRI|Alexa|Canon|Sony|Nikon|Panavision|anamorphic|DSLR|RAW)\b/gi, '');
@@ -700,7 +674,9 @@ Deno.serve(async (req) => {
     const isSleepProject = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
     const isSleepAmbient = rawStyle === 'sleep_ambient';
     const useSleepStyle = isSleepProject || isSleepAmbient;
-    const visualStyle = useSleepStyle ? 'oil_painting' : normalizeStyleKey(rawStyle);
+    const isExplainerProject = project.project_mode === 'explainer';
+    const visualStyle = useSleepStyle ? 'oil_painting' : (isExplainerProject ? 'cinematic_realistic' : normalizeStyleKey(rawStyle));
+    if (isExplainerProject) console.log(`🎓 Explainer project — locking visual style to cinematic_realistic (photorealistic CGI)`);
     let styleConfig;
 
     // ═══ SLEEP MODE or SLEEP_AMBIENT style — REPLACE style entirely with dark oil painting ═══
@@ -755,6 +731,80 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
 **FORBIDDEN in prompts:** bright daylight, harsh lighting, vivid colors, neon, overexposed, studio lighting, white background, ARRI, Panavision, anamorphic, lens flare, bokeh, film grain, 8K, Hollywood, photorealistic, woman, man, person, figure, hands, face, body, skin, eyes, hair
 `;
       console.log(`🌙 Sleep dark aesthetic reinforcement active`);
+    } else if (isExplainerProject) {
+      styleReinforcement = `**🎓 EXPLAINER — PHOTOREALISTIC CGI EINSTEIN STYLE:**
+
+The host is a photorealistic CGI elderly professor — Einstein-inspired but NOT a caricature. Think high-budget commercial CGI or Unreal Engine metahuman quality applied to a real-looking human.
+
+**HOST APPEARANCE (fixed across all scenes):**
+- Wild natural white hair, full white mustache, warm intelligent eyes with natural wrinkles
+- Real skin texture — age spots, laugh lines, natural warm olive-beige skin tone
+- Natural human proportions — no exaggeration, no cartoon oversizing
+- Expressive but realistic face — genuine warmth, curiosity, slight smile
+
+**WHAT CHANGES EVERY SCENE — driven by the narration content:**
+
+**1. OUTFIT — match the topic being taught:**
+- Finance/money topics → white dress shirt, grey wool vest, loose tie slightly undone, reading glasses
+- Tech/science topics → navy hoodie or casual blazer over a t-shirt, no tie
+- Practical/how-to topics → flannel shirt, work apron or overalls, sleeves rolled up
+- Strategy/business → sport coat, open collar shirt, no tie
+- Conclusion/takeaway → same as opening outfit — signals we have come full circle
+
+**2. POSE — read the narration, pick what fits the content being communicated:**
+- Revealing a surprising fact → leaning forward conspiratorially, both palms flat on desk, eyebrows raised, direct eye contact
+- Explaining a mechanism or step → turned 45 degrees toward board, marker or chalk in hand, glancing back at viewer mid-write
+- Asking a question or posing a problem → chin resting on one fist, other elbow on desk, looking slightly up-left as if genuinely thinking
+- Celebrating an insight or conclusion → leaning back slightly, one hand open toward viewer in a there-you-have-it gesture
+- Warning about a mistake or misconception → one finger raised toward viewer, other hand on hip, firm but kind expression
+- Listing or summarizing → pointing at a specific line on the board with a pen tip, body angled so board stays visible
+
+**3. CAMERA ANGLE — match the emotional beat of the narration:**
+- Hook or surprising stat → low angle 15-20 degrees below eye level, Einstein slightly imposing and confident
+- Teaching a concept → eye-level slight offset, board fills one third of frame
+- Misconception or warning → dutch angle 10 degree tilt, slight unease
+- Listing on board → over-the-shoulder from viewer side, board dominant in frame
+- Emotional payoff → medium close-up on face and gesture, board soft in background
+- Wide environment establish → slight high angle, full desk and background visible
+
+**4. BOARD CONTENT — embed the actual narration content, not generic placeholders:**
+- The chalkboard or whiteboard behind him shows the KEY IDEA of that specific scene
+- Title: SHORT ALL-CAPS summary of the narration point, 3-6 words maximum
+- 2-3 bullet points with the actual facts, steps, or numbers from the narration
+- One hand-drawn icon relevant to the content: dollar sign, gear, brain, checkmark, arrow, lightbulb
+- All text PERFECTLY SPELLED, sharp, legible, high contrast black on light surface
+
+**5. ENVIRONMENT — match the subject matter of the narration:**
+- Finance → dark oak study, stacked books with readable financial titles, coins and calculator on desk, warm lamp
+- Tech or AI → modern desk setup, laptop with stickers, neon-accent lighting, tech props
+- Practical skills → workshop setting, tools on pegboard behind, workbench, wood shavings, project in progress
+- Business → clean modern office, city window behind, whiteboard instead of chalkboard
+- Science → lab bench, periodic table poster, beakers, overhead practical lighting
+- Conclusion → same as opening environment, slightly warmer light temperature to signal closure
+
+**6. FOREGROUND PROPS — reinforce the narration subject matter:**
+- Finance → calculator, stacked bills stylized, Financial Plan notepad with handwritten checklist, coffee mug with readable short phrase
+- Tech → laptop, small robot figurine, sticky notes, tech books with readable spines
+- Practical → tools relevant to the task, project object, measuring tape, mug with short phrase
+- Always 3-4 props minimum, all photorealistic, all with readable labels where appropriate
+
+**LIGHTING:**
+Practical photorealistic lighting motivated by real sources in the scene — desk lamp, window, screen glow, overhead pendant. Warm key light, soft fill, subtle rim separation. Should feel like a real lived-in space with great natural lighting, not an artificial studio.
+
+**RENDERING QUALITY:**
+Photorealistic CGI — Unreal Engine or high-budget commercial quality. Real skin subsurface scattering, real fabric texture, real wood grain, real paper texture. Sharp focus on Einstein and board text. Shallow depth of field on background elements. NO cartoon rendering, NO cel-shading, NO stylization, NO caricature proportions.
+
+**FORBIDDEN:**
+- Caricature or cartoon proportions of any kind
+- Oversized head or exaggerated features
+- Same pose two scenes in a row
+- Same camera angle two scenes in a row
+- Generic board text not directly tied to the narration content
+- Empty or plain backgrounds
+- Flat or artificial lighting
+- Garbled or unreadable board text
+- Abstract metaphors — every scene is Einstein in a real grounded teaching space`;
+      console.log(`🎓 Explainer photorealistic CGI Einstein reinforcement active`);
     } else if (styleReinforcement) {
       console.log(`🦴 Style reinforcement active: ${visualStyle}`);
     }
@@ -1111,14 +1161,39 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
     function extractNamedProps(narrationText) {
       if (!narrationText) return [];
       const props = [];
-      const groups = [
-        [[/\biphone\b/i, 'an iPhone'], [/\bipad\b/i, 'an iPad'], [/\bmacbook\b/i, 'a MacBook'], [/\bandroid\s*(phone|device)?\b/i, 'an Android phone'], [/\bsamsung\b/i, 'a Samsung phone'], [/\bgalaxy\b/i, 'a Samsung Galaxy'], [/\blaptop\b/i, 'a laptop'], [/\bcomputer\b/i, 'a computer'], [/\btablet\b/i, 'a tablet'], [/\bkindle\b/i, 'a Kindle']],
-        [[/\btesla\b/i, 'a Tesla'], [/\bporsche\b/i, 'a Porsche'], [/\bbmw\b/i, 'a BMW'], [/\buber\b/i, 'an Uber car']],
-        [[/\bstarbucks\b/i, 'a Starbucks cup'], [/\bamazon\s*package\b/i, 'an Amazon package'], [/\bnetflix\b/i, 'a screen']],
+      // Devices (specific beats generic)
+      const deviceMap = [
+        [/\biphone\b/i, 'an iPhone'],
+        [/\bipad\b/i, 'an iPad'],
+        [/\bmacbook\b/i, 'a MacBook'],
+        [/\bandroid\s*(phone|device)?\b/i, 'an Android phone'],
+        [/\bsamsung\b/i, 'a Samsung phone'],
+        [/\bgalaxy\b/i, 'a Samsung Galaxy'],
+        [/\blaptop\b/i, 'a laptop'],
+        [/\bcomputer\b/i, 'a computer'],
+        [/\btablet\b/i, 'a tablet'],
+        [/\bkindle\b/i, 'a Kindle'],
       ];
-      for (const group of groups) {
-        for (const [pattern, replacement] of group) {
-          if (pattern.test(narrationText)) { props.push(replacement); break; }
+      // Vehicles
+      const vehicleMap = [
+        [/\btesla\b/i, 'a Tesla'],
+        [/\bporsche\b/i, 'a Porsche'],
+        [/\bbmw\b/i, 'a BMW'],
+        [/\buber\b/i, 'an Uber car'],
+      ];
+      // Brands/places
+      const brandMap = [
+        [/\bstarbucks\b/i, 'a Starbucks cup'],
+        [/\bamazon\s*package\b/i, 'an Amazon package'],
+        [/\bnetflix\b/i, 'a screen'],
+      ];
+      
+      for (const mapList of [deviceMap, vehicleMap, brandMap]) {
+        for (const [pattern, replacement] of mapList) {
+          if (pattern.test(narrationText)) {
+            props.push(replacement);
+            break; // one per category
+          }
         }
       }
       return props;
