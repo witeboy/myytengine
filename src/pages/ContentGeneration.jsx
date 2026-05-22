@@ -687,7 +687,7 @@ export default function ContentGeneration() {
         isSleepProject     ? 'sleepSceneBreakdown'    :
         isShortsProject    ? 'shortsSceneBreakdown'   :
         isLongViralProject ? 'longViralSceneBreakdown':
-        isExplainerProject ? 'explainerSceneBreakdown':
+        isExplainerProject ? 'fixScenePrompts':
                              'generateSceneBreakdown';
       try {
         assertBreakdownMatchesMode(chosenBreakdownFn, resolvedMode);
@@ -843,7 +843,7 @@ export default function ContentGeneration() {
         while (!breakdownDone && attempts < MAX_ATTEMPTS) {
           attempts++;
           try {
-            const bdResult = await base44.functions.invoke('shortsSceneBreakdown', {
+            const bdResult = await base44.functions.invoke('fixScenePrompts', {
               project_id: projectId,
               start_section: nextSection,
             });
