@@ -675,8 +675,8 @@ Deno.serve(async (req) => {
     const isSleepAmbient = rawStyle === 'sleep_ambient';
     const useSleepStyle = isSleepProject || isSleepAmbient;
     const isExplainerProject = project.project_mode === 'explainer';
-    const visualStyle = useSleepStyle ? 'oil_painting' : (isExplainerProject ? 'cinematic_picstory' : normalizeStyleKey(rawStyle));
-    if (isExplainerProject) console.log(`🎓 Explainer project — locking visual style to cinematic_picstory (Pixar CGI cartoon)`);
+    const visualStyle = useSleepStyle ? 'oil_painting' : (isExplainerProject ? 'cinematic_realistic' : normalizeStyleKey(rawStyle));
+    if (isExplainerProject) console.log(`🎓 Explainer project — locking visual style to cinematic_realistic (photorealistic CGI)`);
     let styleConfig;
 
     // ═══ SLEEP MODE or SLEEP_AMBIENT style — REPLACE style entirely with dark oil painting ═══
@@ -732,8 +732,79 @@ These are **PURE ENVIRONMENT / LANDSCAPE scenes** — painterly, atmospheric, ca
 `;
       console.log(`🌙 Sleep dark aesthetic reinforcement active`);
     } else if (isExplainerProject) {
-      styleReinforcement = `**🎓 EXPLAINER — MANDATORY CGI CARTOON EINSTEIN STYLE:** Every scene = 3D Pixar/Illumination CGI cartoon. Einstein appears FRONT AND CENTER in every scene (never distant, never small). Caricatured cartoon proportions: slightly oversized head, wild fluffy WHITE hair (strand-rendered), big bushy WHITE mustache, warm grandfatherly cartoon smile, expressive cartoon eyes, Pixar subsurface-scattered warm skin. Always one cartoon finger raised pointing UP at a chalkboard/whiteboard/screen behind him. CHALKBOARD/SCREEN BEHIND HIM (mandatory): bold all-caps TITLE at top + 4-5 readable bullets/checkboxes/numbered steps below. Text must be PERFECTLY SPELLED, SHARP, LEGIBLE — embed the exact text from diagram_content / text_overlay / einstein_environment in director notes. Hand-drawn chalk icons next to bullets when relevant (money bag, brain, gear, checkmark, arrow). FOREGROUND DESK: topic-relevant props — books with readable spine titles, branded coffee mug with short readable phrase, open notebook with handwritten checklist, niche-specific objects. LIGHTING: warm tungsten ambient from above, friendly Pixar 3-point lighting, subsurface scattering, soft ambient occlusion. Sharp focus on Einstein and chalkboard text. FORBIDDEN: photorealistic Einstein, real-old-man Einstein, sad/serious Einstein, dark moody lighting, empty backgrounds, abstract metaphors, surreal imagery, ARRI/Panavision/anamorphic/lens-flare language, garbled chalkboard text. Every image_prompt MUST embed: (1) exact chalkboard title + bullet text, (2) Einstein's arc outfit + pointing-up gesture, (3) 3-4 specific foreground props with readable text where applicable, (4) warm Pixar CGI cartoon rendering language.`;
-      console.log(`🎓 Explainer CGI cartoon Einstein reinforcement active`);
+      styleReinforcement = `**🎓 EXPLAINER — PHOTOREALISTIC CGI EINSTEIN STYLE:**
+
+The host is a photorealistic CGI elderly professor — Einstein-inspired but NOT a caricature. Think high-budget commercial CGI or Unreal Engine metahuman quality applied to a real-looking human.
+
+**HOST APPEARANCE (fixed across all scenes):**
+- Wild natural white hair, full white mustache, warm intelligent eyes with natural wrinkles
+- Real skin texture — age spots, laugh lines, natural warm olive-beige skin tone
+- Natural human proportions — no exaggeration, no cartoon oversizing
+- Expressive but realistic face — genuine warmth, curiosity, slight smile
+
+**WHAT CHANGES EVERY SCENE — driven by the narration content:**
+
+**1. OUTFIT — match the topic being taught:**
+- Finance/money topics → white dress shirt, grey wool vest, loose tie slightly undone, reading glasses
+- Tech/science topics → navy hoodie or casual blazer over a t-shirt, no tie
+- Practical/how-to topics → flannel shirt, work apron or overalls, sleeves rolled up
+- Strategy/business → sport coat, open collar shirt, no tie
+- Conclusion/takeaway → same as opening outfit — signals we have come full circle
+
+**2. POSE — read the narration, pick what fits the content being communicated:**
+- Revealing a surprising fact → leaning forward conspiratorially, both palms flat on desk, eyebrows raised, direct eye contact
+- Explaining a mechanism or step → turned 45 degrees toward board, marker or chalk in hand, glancing back at viewer mid-write
+- Asking a question or posing a problem → chin resting on one fist, other elbow on desk, looking slightly up-left as if genuinely thinking
+- Celebrating an insight or conclusion → leaning back slightly, one hand open toward viewer in a there-you-have-it gesture
+- Warning about a mistake or misconception → one finger raised toward viewer, other hand on hip, firm but kind expression
+- Listing or summarizing → pointing at a specific line on the board with a pen tip, body angled so board stays visible
+
+**3. CAMERA ANGLE — match the emotional beat of the narration:**
+- Hook or surprising stat → low angle 15-20 degrees below eye level, Einstein slightly imposing and confident
+- Teaching a concept → eye-level slight offset, board fills one third of frame
+- Misconception or warning → dutch angle 10 degree tilt, slight unease
+- Listing on board → over-the-shoulder from viewer side, board dominant in frame
+- Emotional payoff → medium close-up on face and gesture, board soft in background
+- Wide environment establish → slight high angle, full desk and background visible
+
+**4. BOARD CONTENT — embed the actual narration content, not generic placeholders:**
+- The chalkboard or whiteboard behind him shows the KEY IDEA of that specific scene
+- Title: SHORT ALL-CAPS summary of the narration point, 3-6 words maximum
+- 2-3 bullet points with the actual facts, steps, or numbers from the narration
+- One hand-drawn icon relevant to the content: dollar sign, gear, brain, checkmark, arrow, lightbulb
+- All text PERFECTLY SPELLED, sharp, legible, high contrast black on light surface
+
+**5. ENVIRONMENT — match the subject matter of the narration:**
+- Finance → dark oak study, stacked books with readable financial titles, coins and calculator on desk, warm lamp
+- Tech or AI → modern desk setup, laptop with stickers, neon-accent lighting, tech props
+- Practical skills → workshop setting, tools on pegboard behind, workbench, wood shavings, project in progress
+- Business → clean modern office, city window behind, whiteboard instead of chalkboard
+- Science → lab bench, periodic table poster, beakers, overhead practical lighting
+- Conclusion → same as opening environment, slightly warmer light temperature to signal closure
+
+**6. FOREGROUND PROPS — reinforce the narration subject matter:**
+- Finance → calculator, stacked bills stylized, Financial Plan notepad with handwritten checklist, coffee mug with readable short phrase
+- Tech → laptop, small robot figurine, sticky notes, tech books with readable spines
+- Practical → tools relevant to the task, project object, measuring tape, mug with short phrase
+- Always 3-4 props minimum, all photorealistic, all with readable labels where appropriate
+
+**LIGHTING:**
+Practical photorealistic lighting motivated by real sources in the scene — desk lamp, window, screen glow, overhead pendant. Warm key light, soft fill, subtle rim separation. Should feel like a real lived-in space with great natural lighting, not an artificial studio.
+
+**RENDERING QUALITY:**
+Photorealistic CGI — Unreal Engine or high-budget commercial quality. Real skin subsurface scattering, real fabric texture, real wood grain, real paper texture. Sharp focus on Einstein and board text. Shallow depth of field on background elements. NO cartoon rendering, NO cel-shading, NO stylization, NO caricature proportions.
+
+**FORBIDDEN:**
+- Caricature or cartoon proportions of any kind
+- Oversized head or exaggerated features
+- Same pose two scenes in a row
+- Same camera angle two scenes in a row
+- Generic board text not directly tied to the narration content
+- Empty or plain backgrounds
+- Flat or artificial lighting
+- Garbled or unreadable board text
+- Abstract metaphors — every scene is Einstein in a real grounded teaching space`;
+      console.log(`🎓 Explainer photorealistic CGI Einstein reinforcement active`);
     } else if (styleReinforcement) {
       console.log(`🦴 Style reinforcement active: ${visualStyle}`);
     }
