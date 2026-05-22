@@ -54,7 +54,7 @@ async function callGemini(prompt, systemText, temperature = 0.5) {
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemText }] },
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: 8192, responseMimeType: "application/json" },
+        generationConfig: { temperature, maxOutputTokens: 32768, responseMimeType: "application/json" },
       }),
     }
   );
@@ -77,12 +77,12 @@ async function callAI(prompt, systemText, temperature = 0.5) {
 // EXPLAINER LOGIC
 // ══════════════════════════════════════════════════════════════════
 const SECTION_CADENCE = {
-  hook:         { cuts_per_min: 30, min_scenes: 6,  max_scenes: 25,  scene_dur: [1.5, 2.5] },
-  core_concept: { cuts_per_min: 10, min_scenes: 4,  max_scenes: 999, scene_dur: [2.0, 3.0] },
-  mechanism:    { cuts_per_min: 11, min_scenes: 6,  max_scenes: 999, scene_dur: [2.0, 3.0] },
-  example:      { cuts_per_min: 10, min_scenes: 6,  max_scenes: 999, scene_dur: [2.0, 3.0] },
-  application:  { cuts_per_min: 13, min_scenes: 5,  max_scenes: 999, scene_dur: [1.8, 2.8] },
-  takeaway:     { cuts_per_min: 6,  min_scenes: 3,  max_scenes: 12,  scene_dur: [2.5, 4.0] },
+  hook:         { cuts_per_min: 30, min_scenes: 15, max_scenes: 35,  scene_dur: [1.5, 2.5] },
+  core_concept: { cuts_per_min: 10, min_scenes: 12, max_scenes: 999, scene_dur: [2.0, 3.0] },
+  mechanism:    { cuts_per_min: 11, min_scenes: 22, max_scenes: 999, scene_dur: [2.0, 3.0] },
+  example:      { cuts_per_min: 10, min_scenes: 22, max_scenes: 999, scene_dur: [2.0, 3.0] },
+  application:  { cuts_per_min: 13, min_scenes: 15, max_scenes: 999, scene_dur: [1.8, 2.8] },
+  takeaway:     { cuts_per_min: 6,  min_scenes: 6,  max_scenes: 12,  scene_dur: [2.5, 4.0] },
 };
 const EXPLAINER_SECTION_TIME_PCT = {
   hook: 0.10, core_concept: 0.15, mechanism: 0.25,
@@ -331,7 +331,60 @@ async function runExplainerBreakdown(req, base44, project, projectId, body) {
       };
     }
 
-    const sectionScenes = (sectionResult?.scenes || []).slice(0, cadence.max_scenes);
+    // ── TOP-UP LOOP: if AI returned < 85% of target, re-prompt for missing scenes ──
+    let sectionScenes = (sectionResult?.scenes || []).slice(0, cadence.max_scenes);
+    const TOP_UP_MAX = 2;
+    let topUpAttempt = 0;
+    while (sectionScenes.length < Math.floor(target * 0.85) && topUpAttempt < TOP_UP_MAX) {
+      topUpAttempt++;
+      const have = sectionScenes.length;
+      const need = target - have;
+      const usedNarrations = sectionScenes.map(s => s.narration_text?.trim()).filter(Boolean);
+      const nextSceneNum = globalSceneNumber + have;
+      console.log(`🔁 Top-up ${topUpAttempt}: section ${si + 1} (${sectionType}) has ${have}/${target} — requesting ${need} more from scene ${nextSceneNum}`);
+
+      const topUpPrompt = `You are an educational video director. The previous AI call only generated ${have} of the required ${target} scenes for this section. Generate the REMAINING ${need} scenes continuing from scene ${nextSceneNum}.
+
+**EINSTEIN ARC**: ${arcDef.label}
+Character look: ${arcDef.look}
+Environment: ${arcDef.environment}
+Color palette: ${arcDef.color_palette}
+
+**SECTION TYPE**: ${sectionType.toUpperCase()}
+**SECTION SCRIPT** (full — pick sentences not yet used):
+${section.content}
+
+**ALREADY USED NARRATIONS** (do NOT repeat these):
+${usedNarrations.map((n, i) => `${i + 1}. "${n}"`).join('\n')}
+
+Generate exactly ${need} NEW scenes using sentences from the script NOT in the already-used list above.
+Each scene duration: ${cadence.scene_dur[0]}-${cadence.scene_dur[1]}s.
+Scene numbers start at ${nextSceneNum}.
+
+Return ONLY valid JSON:
+{"scenes": [{"scene_number": ${nextSceneNum}, "narration_text": "...", "visual_concept": "...", "chalkboard_text": "...", "einstein_present": true, "einstein_action": "...", "shot_type": "MS", "camera_movement": "static", "camera_direction": "static", "duration_seconds": ${((cadence.scene_dur[0] + cadence.scene_dur[1]) / 2).toFixed(1)}, "lighting": "...", "color_palette": "...", "mood": "...", "text_overlay": "", "continuity_bridge": "..."}]}`;
+
+      try {
+        const topUpResult = await callAI(topUpPrompt, systemText, temp);
+        const topUpScenes = topUpResult?.scenes || [];
+        if (topUpScenes.length > 0) {
+          sectionScenes = [...sectionScenes, ...topUpScenes].slice(0, cadence.max_scenes);
+          console.log(`✅ Top-up ${topUpAttempt}: added ${topUpScenes.length} scenes → total ${sectionScenes.length}/${target}`);
+        } else {
+          console.warn(`⚠️ Top-up ${topUpAttempt}: returned 0 scenes — stopping`);
+          break;
+        }
+      } catch (topUpErr) {
+        console.warn(`⚠️ Top-up ${topUpAttempt} failed: ${topUpErr.message} — stopping`);
+        break;
+      }
+    }
+
+    if (sectionScenes.length < target * 0.7) {
+      console.warn(`⚠️ Section ${si + 1} (${sectionType}): ${sectionScenes.length}/${target} scenes after top-up (under target)`);
+    } else {
+      console.log(`✅ Section ${si + 1} (${sectionType}): ${sectionScenes.length}/${target} scenes`);
+    }
     sectionScenes.forEach((scene, idx) => {
       scene.scene_number = globalSceneNumber + idx;
       scene.section_title = section.title;
