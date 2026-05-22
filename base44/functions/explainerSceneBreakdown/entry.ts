@@ -7,19 +7,19 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 // ══════════════════════════════════════════════════════════════════
 
 const SECTION_CADENCE = {
-  hook:         { cuts_per_min: 30, min_scenes: 15, max_scenes: 40,  scene_dur: [1.5, 2.5] },
-  core_concept: { cuts_per_min: 12, min_scenes: 12, max_scenes: 999, scene_dur: [2.0, 3.0] },
-  mechanism:    { cuts_per_min: 12, min_scenes: 22, max_scenes: 999, scene_dur: [2.0, 3.0] },
-  example:      { cuts_per_min: 12, min_scenes: 22, max_scenes: 999, scene_dur: [2.0, 3.0] },
-  application:  { cuts_per_min: 13, min_scenes: 15, max_scenes: 999, scene_dur: [1.8, 2.8] },
-  takeaway:     { cuts_per_min: 8,  min_scenes: 6,  max_scenes: 15,  scene_dur: [2.5, 4.0] },
+  hook:         { cuts_per_min: 30, min_scenes: 6,  max_scenes: 25,  scene_dur: [1.5, 2.5] },
+  core_concept: { cuts_per_min: 10, min_scenes: 4,  max_scenes: 999, scene_dur: [2.0, 3.0] },
+  mechanism:    { cuts_per_min: 11, min_scenes: 6,  max_scenes: 999, scene_dur: [2.0, 3.0] },
+  example:      { cuts_per_min: 10, min_scenes: 6,  max_scenes: 999, scene_dur: [2.0, 3.0] },
+  application:  { cuts_per_min: 13, min_scenes: 5,  max_scenes: 999, scene_dur: [1.8, 2.8] },
+  takeaway:     { cuts_per_min: 6,  min_scenes: 3,  max_scenes: 12,  scene_dur: [2.5, 4.0] },
 };
 
 const EXPLAINER_SECTION_TIME_PCT = {
   hook: 0.10, core_concept: 0.15, mechanism: 0.25,
   example: 0.25, application: 0.15, takeaway: 0.10,
 };
-
+ 
 const CANONICAL_TYPES = ['hook', 'core_concept', 'mechanism', 'example', 'application', 'takeaway'];
 const SECTIONS_PER_CALL = 2;
 
@@ -89,7 +89,7 @@ async function callGemini(prompt, systemText, temperature = 0.4) {
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: systemText }] },
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { temperature, maxOutputTokens: 32768, responseMimeType: "application/json" },
+        generationConfig: { temperature, maxOutputTokens: 8192, responseMimeType: "application/json" },
       }),
     }
   );
@@ -112,7 +112,7 @@ async function callClaudeFallback(prompt, systemText, temperature = 0.4) {
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
       model: "claude-sonnet-4-20250514",
-      max_tokens: 16384,
+      max_tokens: 8192,
       temperature,
       system: systemText,
       messages: [{ role: "user", content: prompt }],
@@ -208,12 +208,11 @@ ${researchBlock}
 ${pacingDirective}
 
 **SCENE-BUILDING RULES**:
-1. ONE SENTENCE = ONE SCENE. Count the sentences in the script — that is roughly your scene count.
-2. ⚠️ MANDATORY: Return AT LEAST ${targetSceneCount} scenes. If the script has more sentences than ${targetSceneCount}, return MORE. NEVER return fewer than ${Math.floor(targetSceneCount * 0.9)}.
-3. Each scene duration MUST be between ${durLo} and ${durHi} seconds.
-4. ${sectionType === 'hook' ? 'Hook scenes PUNCHY — short narration, rapid cuts, big visual contrast.' : 'Body scenes show ONE diagram/formula/example per scene.'}
-5. Every scene shows Einstein OR a clean diagram OR a worked example panel.
-6. If section mentions specific numbers/formulas, that EXACT text must appear on a chalkboard/panel.
+1. ONE SENTENCE = ONE SCENE.
+2. Each scene duration MUST be between ${durLo} and ${durHi} seconds.
+3. ${sectionType === 'hook' ? 'Hook scenes PUNCHY — short narration, rapid cuts, big visual contrast.' : 'Body scenes show ONE diagram/formula/example per scene.'}
+4. Every scene shows Einstein OR a clean diagram OR a worked example panel.
+5. If section mentions specific numbers/formulas, that EXACT text must appear on a chalkboard/panel.
 ${isFirst ? '6. FIRST section — opening scene shows Einstein entering with personality.' : ''}
 ${isLast ? '6. LAST section — final scene shows Einstein delivering takeaway with warm satisfaction.' : ''}
 
@@ -395,56 +394,10 @@ Deno.serve(async (req) => {
         };
       }
 
-      let sectionScenes = (sectionResult?.scenes || []).slice(0, cadence.max_scenes);
+      const sectionScenes = (sectionResult?.scenes || []).slice(0, cadence.max_scenes);
 
-      // ─── TOP-UP LOOP: if AI under-delivered, re-prompt for missing scenes ───
-      const MIN_ACCEPTABLE = Math.floor(target * 0.85);
-      const MAX_TOPUP_ATTEMPTS = 2;
-      let topupAttempt = 0;
-      while (sectionScenes.length < MIN_ACCEPTABLE && topupAttempt < MAX_TOPUP_ATTEMPTS) {
-        topupAttempt++;
-        const missing = target - sectionScenes.length;
-        const lastNarration = sectionScenes[sectionScenes.length - 1]?.narration_text || '';
-        const usedSentences = sectionScenes.map(s => s.narration_text).join(' | ');
-        console.log(`🔁 Top-up ${topupAttempt}: section has ${sectionScenes.length}/${target}, requesting ${missing} more...`);
-
-        const topupPrompt = `You previously generated ${sectionScenes.length} scenes for this ${sectionType} section but the target is ${target}. Generate ${missing} MORE scenes covering sentences you HAVEN'T used yet.
-
-**SECTION SCRIPT** (find unused sentences here):
-${section.content}
-
-**SENTENCES ALREADY USED** (do NOT repeat):
-${usedSentences}
-
-**LAST SCENE NARRATION**: "${lastNarration}"
-
-**EINSTEIN ARC**: ${arcDef.label} | Look: ${arcDef.look} | Environment: ${arcDef.environment}
-
-RULES:
-1. ONE sentence = ONE scene. Pick sentences from script NOT in the "already used" list.
-2. Scene numbers start at ${globalSceneNumber + sectionScenes.length}, increment by 1.
-3. Duration ${cadence.scene_dur[0]}-${cadence.scene_dur[1]}s per scene.
-4. Same JSON shape as before.
-
-Return ONLY: {"scenes": [ ... ${missing} scene objects ... ]}`;
-
-        try {
-          const topupResult = await callAI(topupPrompt, temp);
-          const newScenes = (topupResult?.scenes || []).slice(0, missing);
-          if (newScenes.length === 0) {
-            console.warn(`🔁 Top-up ${topupAttempt} returned 0 scenes — stopping`);
-            break;
-          }
-          sectionScenes = sectionScenes.concat(newScenes).slice(0, cadence.max_scenes);
-          console.log(`🔁 Top-up ${topupAttempt}: added ${newScenes.length} → now ${sectionScenes.length}/${target}`);
-        } catch (err) {
-          console.warn(`🔁 Top-up ${topupAttempt} failed: ${err.message.substring(0, 100)}`);
-          break;
-        }
-      }
-
-      if (sectionScenes.length < MIN_ACCEPTABLE) {
-        console.warn(`⚠️ Section ${si + 1} (${sectionType}): ${sectionScenes.length}/${target} scenes (under target after ${topupAttempt} top-ups)`);
+      if (sectionScenes.length < target * 0.7) {
+        console.warn(`⚠️ Section ${si + 1} (${sectionType}): ${sectionScenes.length}/${target} scenes (under target)`);
       } else {
         console.log(`✅ Section ${si + 1} (${sectionType}): ${sectionScenes.length}/${target} scenes`);
       }
