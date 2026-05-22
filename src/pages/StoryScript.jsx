@@ -46,7 +46,7 @@ export default function StoryScript() {
     },
   });
 
-  // Self-heal: if explainer_arc is set but project_mode is empty, treat as explainer.
+  // Self-heal: if explainer_arc is set but project_mode is empty, treat as explainer
   useEffect(() => {
     if (!project) return;
     if (!project.project_mode && project.explainer_arc) {
@@ -56,12 +56,12 @@ export default function StoryScript() {
     }
   }, [project?.id, project?.project_mode, project?.explainer_arc]);
 
-  const isShorts = project?.project_mode === 'youtube_shorts';
+  const isShorts    = project?.project_mode === 'youtube_shorts';
   const isExplainer = project?.project_mode === 'explainer';
   const effectiveMode = project?.project_mode || (project?.explainer_arc ? 'explainer' : '');
 
   const completedCount = batches.filter(b => b.status === 'completed').length;
-  const allCompleted = isShorts
+  const allCompleted   = isShorts
     ? scripts.some(s => s.version === 'final_aggregated')
     : (batches.length > 0 && completedCount === batches.length);
 
@@ -118,15 +118,15 @@ export default function StoryScript() {
     runShortsGeneration();
   }, [isShorts, project?.id, project?.status, autoGenTriggered, generating]);
 
-  // ═══ STANDARD AUTO-GENERATION ═══
+  // ═══ STANDARD + EXPLAINER AUTO-GENERATION ═══
   useEffect(() => {
     if (isShorts) return;
     if (autoGenTriggered || generating) return;
     if (!project?.id) return;
     if (batchesLoading) return;
     if (project.status === 'script_complete') return;
-    const isSleep =
-      project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
+
+    const isSleep = project.project_mode === 'sleep_meditation' || project.project_mode === 'sleep_story';
     const validStatuses = isSleep
       ? ['topic_selected', 'outline_ready', 'hooks_ready', 'scripting']
       : ['hooks_ready', 'scripting'];
@@ -140,26 +140,23 @@ export default function StoryScript() {
     const runFullGeneration = async () => {
       try {
         const freshBatches = await base44.entities.ScriptBatches.filter({ project_id: projectId });
-        const hasPendingBatches =
-          freshBatches.length > 0 && freshBatches.some(b => b.status === 'pending');
+        const hasPendingBatches = freshBatches.length > 0 && freshBatches.some(b => b.status === 'pending');
 
         if (!hasPendingBatches) {
           const oldScripts = await base44.entities.Scripts.filter({ project_id: projectId });
-          for (const s of oldScripts) {
-            await base44.entities.Scripts.delete(s.id);
-          }
-          for (const b of freshBatches) {
-            await base44.entities.ScriptBatches.delete(b.id);
+          for (const s of oldScripts) await base44.entities.Scripts.delete(s.id);
+          for (const b of freshBatches) await base44.entities.ScriptBatches.delete(b.id);
+
+          // ── WIRED: explainer init now goes through generateFullScript ──
+          if (isExplainer) {
+            await base44.functions.invoke('generateFullScript', {
+              project_id: projectId,
+              mode: 'init_explainer',
+            });
+          } else {
+            await base44.functions.invoke('initializeScriptBatches', { project_id: projectId });
           }
 
-          // ── WIRED: explainer now calls initializeRepurposeBatches ──
-          // The merged function detects project_mode === 'explainer' internally
-          // and routes to the explainer pipeline automatically.
-          const initFn = isExplainer
-            ? 'initializeRepurposeBatches'
-            : 'initializeScriptBatches';
-
-          await base44.functions.invoke(initFn, { project_id: projectId });
           await refetchBatches();
         } else {
           await refetchBatches();
@@ -190,10 +187,10 @@ export default function StoryScript() {
       while (retries < MAX_RETRIES && !success) {
         try {
           const genFn = isExplainer ? 'generateExplainerBatch' : 'generateScriptBatches';
-          const resp = await base44.functions.invoke(genFn, { project_id: projectId });
-          const data = resp.data || resp;
-          success = true;
-          allDone = data.done === true;
+          const resp  = await base44.functions.invoke(genFn, { project_id: projectId });
+          const data  = resp.data || resp;
+          success     = true;
+          allDone     = data.done === true;
         } catch (err) {
           retries++;
           const status = err?.response?.status || err?.status;
@@ -204,22 +201,12 @@ export default function StoryScript() {
 
           if (status === 504 || status === 500 || status === 502) {
             await new Promise(r => setTimeout(r, 5000));
-            const freshBatches = await base44.entities.ScriptBatches.filter({
-              project_id: projectId,
-            });
-            const stillPending = freshBatches.filter(
-              b => b.status === 'pending' || b.status === 'generating'
-            );
-            if (stillPending.length === 0) {
-              success = true;
-              allDone = true;
-              break;
-            }
+            const freshBatches = await base44.entities.ScriptBatches.filter({ project_id: projectId });
+            const stillPending = freshBatches.filter(b => b.status === 'pending' || b.status === 'generating');
+            if (stillPending.length === 0) { success = true; allDone = true; break; }
           }
 
-          if (retries < MAX_RETRIES) {
-            await new Promise(r => setTimeout(r, 3000));
-          }
+          if (retries < MAX_RETRIES) await new Promise(r => setTimeout(r, 3000));
         }
       }
 
@@ -239,6 +226,7 @@ export default function StoryScript() {
       const triggerMerge = async () => {
         try {
           console.log('All batches complete. Starting final merge...');
+          // mode omitted → defaults to merge
           await base44.functions.invoke('generateFullScript', { project_id: projectId });
           await Promise.all([refetchProject(), refetchScripts()]);
         } catch (err) {
@@ -253,9 +241,7 @@ export default function StoryScript() {
   const handleRegenerate = async () => {
     setRegenerating(true);
 
-    for (const s of scripts) {
-      await base44.entities.Scripts.delete(s.id);
-    }
+    for (const s of scripts) await base44.entities.Scripts.delete(s.id);
 
     if (isShorts) {
       await base44.entities.Projects.update(projectId, { status: 'hooks_ready', script_id: '' });
@@ -275,15 +261,11 @@ export default function StoryScript() {
 
     for (const b of batches) {
       await base44.entities.ScriptBatches.update(b.id, {
-        content: '',
-        word_count: 0,
-        status: 'pending',
-        scene_image_url: '',
+        content: '', word_count: 0, status: 'pending', scene_image_url: '',
       });
     }
 
-    const isSleepProject =
-      project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
+    const isSleepProject = project?.project_mode === 'sleep_meditation' || project?.project_mode === 'sleep_story';
     await base44.entities.Projects.update(projectId, {
       status: isSleepProject ? 'outline_ready' : 'hooks_ready',
       script_id: '',
@@ -294,11 +276,17 @@ export default function StoryScript() {
     setRegenerating(false);
 
     try {
-      // ── WIRED: explainer Regenerate also calls initializeRepurposeBatches ──
-      const initFn = isExplainer ? 'initializeRepurposeBatches' : 'initializeScriptBatches';
-      await base44.functions.invoke(initFn, { project_id: projectId });
-      await refetchBatches();
+      // ── WIRED: explainer regenerate also goes through generateFullScript ──
+      if (isExplainer) {
+        await base44.functions.invoke('generateFullScript', {
+          project_id: projectId,
+          mode: 'init_explainer',
+        });
+      } else {
+        await base44.functions.invoke('initializeScriptBatches', { project_id: projectId });
+      }
 
+      await refetchBatches();
       await generateBatchesWithRetry();
       await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
     } catch (err) {
@@ -312,9 +300,9 @@ export default function StoryScript() {
   const handleExport = () => {
     if (!latestScript?.full_script) return;
     const blob = new Blob([latestScript.full_script], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
     a.download = `${project?.name || 'script'}-script.txt`;
     a.click();
     URL.revokeObjectURL(url);
@@ -331,13 +319,9 @@ export default function StoryScript() {
 
         {/* ── Mode Confirmation Banner ── */}
         {project && (
-          <div
-            className={`rounded-lg px-4 py-2.5 mb-4 flex items-center gap-2 text-sm border ${
-              effectiveMode
-                ? 'bg-emerald-50 border-emerald-200'
-                : 'bg-amber-50 border-amber-300'
-            }`}
-          >
+          <div className={`rounded-lg px-4 py-2.5 mb-4 flex items-center gap-2 text-sm border ${
+            effectiveMode ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-300'
+          }`}>
             {effectiveMode ? (
               <>
                 <span className="text-emerald-700 font-medium">✅ Writing in mode:</span>
@@ -350,13 +334,10 @@ export default function StoryScript() {
                     <select
                       value={project.explainer_arc || 'professor'}
                       onChange={async e => {
-                        await base44.entities.Projects.update(projectId, {
-                          explainer_arc: e.target.value,
-                        });
+                        await base44.entities.Projects.update(projectId, { explainer_arc: e.target.value });
                         await refetchProject();
                       }}
                       className="font-mono font-semibold text-emerald-900 bg-emerald-100 px-2 py-0.5 rounded text-xs border border-emerald-300 cursor-pointer hover:bg-emerald-200"
-                      title="Change Einstein arc — affects character look & narration style"
                     >
                       <option value="science">science arc</option>
                       <option value="professor">professor arc</option>
@@ -394,9 +375,7 @@ export default function StoryScript() {
                     onClick={async () => {
                       setGenerating(true);
                       try {
-                        await base44.functions.invoke('generateFullScript', {
-                          project_id: projectId,
-                        });
+                        await base44.functions.invoke('generateFullScript', { project_id: projectId });
                         await refetchScripts();
                       } finally {
                         setGenerating(false);
@@ -445,16 +424,12 @@ export default function StoryScript() {
           {isShorts && generating && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
               <Loader2 className="w-8 h-8 animate-spin text-green-600 mx-auto mb-3" />
-              <p className="text-sm font-medium text-green-800">
-                Generating YouTube Shorts script...
-              </p>
-              <p className="text-xs text-green-600 mt-1">
-                ~90 seconds • 200–240 words • Niche-specific storytelling structure
-              </p>
+              <p className="text-sm font-medium text-green-800">Generating YouTube Shorts script...</p>
+              <p className="text-xs text-green-600 mt-1">~90 seconds • 200–240 words • Niche-specific storytelling structure</p>
             </div>
           )}
 
-          {/* Progress bar (standard/sleep only) */}
+          {/* Progress bar */}
           {!isShorts && batches.length > 0 && !allCompleted && (
             <div className="bg-white p-4 rounded-lg shadow-sm border">
               <div className="flex items-center justify-between mb-2">
@@ -470,21 +445,13 @@ export default function StoryScript() {
                       onClick={async () => {
                         setGenerating(true);
                         try {
-                          const current = await base44.entities.ScriptBatches.filter({
-                            project_id: projectId,
-                          });
+                          const current = await base44.entities.ScriptBatches.filter({ project_id: projectId });
                           for (const b of current.filter(b => b.status === 'generating')) {
-                            await base44.entities.ScriptBatches.update(b.id, {
-                              status: 'pending',
-                            });
+                            await base44.entities.ScriptBatches.update(b.id, { status: 'pending' });
                           }
                           await refetchBatches();
                           await generateBatchesWithRetry();
-                          await Promise.all([
-                            refetchProject(),
-                            refetchBatches(),
-                            refetchScripts(),
-                          ]);
+                          await Promise.all([refetchProject(), refetchBatches(), refetchScripts()]);
                         } catch (err) {
                           console.error('Resume error:', err);
                           showErrorToast(err, 'Resume Generation');
@@ -509,19 +476,13 @@ export default function StoryScript() {
           )}
 
           {/* Batch Cards */}
-          {!isShorts &&
-            !allCompleted &&
-            batches.length > 0 &&
-            batches.map(batch => (
-              <BatchCard
-                key={batch.id}
-                batch={batch}
-                onUpdate={() => {
-                  refetchBatches();
-                  refetchScripts();
-                }}
-              />
-            ))}
+          {!isShorts && !allCompleted && batches.length > 0 && batches.map(batch => (
+            <BatchCard
+              key={batch.id}
+              batch={batch}
+              onUpdate={() => { refetchBatches(); refetchScripts(); }}
+            />
+          ))}
 
           {/* Full Script Editor */}
           {allCompleted && latestScript && (
