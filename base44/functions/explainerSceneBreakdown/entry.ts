@@ -17,7 +17,7 @@ const SECTION_CADENCE = {
 
 const EXPLAINER_SECTION_TIME_PCT = {
   hook: 0.10, core_concept: 0.15, mechanism: 0.25,
-  example: 0.25, application: 0.15, takeaway: 0.10,
+  example: 0.25, application: 0.15, takeaway: 0.10, 
 };
  
 const CANONICAL_TYPES = ['hook', 'core_concept', 'mechanism', 'example', 'application', 'takeaway'];
