@@ -826,45 +826,7 @@ export default function ContentGeneration() {
           }
         } catch (_) {}
 
-        if (hasResearch) {
-          setImportProgress('✅ Reusing cached research from script writing — proceeding to scene breakdown...');
-          await new Promise(r => setTimeout(r, 800));
-        } else {
-          // Only run the heavy sectioned research if nothing is cached
-          setImportProgress('Researching topic with live web search (Gemini + Google Search)...');
-          let outlineSections = [];
-          try {
-            const batches = await base44.entities.ScriptBatches.filter({ project_id: projectId });
-            if (batches.length > 0) {
-              outlineSections = batches
-                .sort((a, b) => a.batch_number - b.batch_number)
-                .map(b => ({ title: b.story_segment || 'Section', description: b.synopsis?.substring(0, 200) || '' }));
-            }
-          } catch (_) {}
-
-          try {
-            const researchResult = await base44.functions.invoke('explainerScriptResearch', {
-              project_id: projectId,
-              topic: project?.name || '',
-              outline_sections: outlineSections.length > 0 ? outlineSections : [
-                { title: 'Hook & Entry', description: 'Open with curiosity hook' },
-                { title: 'Core Concept', description: 'Central idea and terminology' },
-                { title: 'The Mechanism', description: 'How it actually works' },
-                { title: 'Worked Example', description: 'Concrete numbered example' },
-                { title: 'Real Application', description: 'Practical usage today' },
-                { title: 'Summary & Takeaway', description: 'Key insight and catchphrase' },
-              ],
-              arc_type: project?.explainer_arc || 'professor',
-            });
-            const resData = researchResult?.data || researchResult;
-            setImportProgress(`✅ Research complete (${resData.sections_researched} sections, confidence: ${Math.round((resData.overall_accuracy_confidence || 0) * 100)}%) — breaking down into scenes...`);
-          } catch (researchErr) {
-            const is404 = researchErr?.message?.includes('404') || researchErr?.response?.status === 404;
-            console.warn(is404 ? 'explainerScriptResearch not deployed — skipping' : `Research failed (non-fatal): ${researchErr.message}`);
-            setImportProgress('Research step skipped — proceeding to scene breakdown...');
-            await new Promise(r => setTimeout(r, 1500));
-          }
-        }
+        setImportProgress('Research already cached from script writing — proceeding to scene breakdown...');
 
         // Step 2: SKIPPED — explainer mode has Einstein baked into director_notes via explainerSceneBreakdown.
         // Calling extractCharacterDNA here would overwrite character_descriptions with generic placeholders
