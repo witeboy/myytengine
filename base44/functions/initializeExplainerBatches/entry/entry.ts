@@ -41,9 +41,7 @@ async function callOpenAI(prompt, temperature = 0.4, retries = 3) {
 // ─── Grounded Research via Gemini 2.5 Flash + Google Search ───────
 function stripFencesAndCitations(text) {
   let t = text.trim();
-  // Strip markdown fences
   t = t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '');
-  // Strip Gemini citation tags like [1], [2,3]
   t = t.replace(/\[\d+(?:,\s*\d+)*\]/g, '');
   return t.trim();
 }
