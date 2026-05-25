@@ -97,9 +97,18 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
     let matchedCount = 0;
     let localAsrIdx = 0;
 
+    // For long-form content (sleep videos etc.) the fixed multiplier starves later scenes.
+    // Instead give each scene a proportional share of the remaining ASR words,
+    // scaled by how many script words this scene has vs remaining scenes.
+    const remainingScenes = scenes.length - si;
+    const remainingAsrWords = asrWords.length - asrCursor;
+    const remainingScriptWords = sceneScriptWords.slice(si).reduce((s, arr) => s + arr.length, 0);
+    const myScriptFraction = remainingScriptWords > 0 ? scriptWords.length / remainingScriptWords : 1;
+    const proportionalBudget = Math.ceil(remainingAsrWords * myScriptFraction);
+    // Never give less than a fixed minimum, never more than what's left
     const maxAsrConsume = Math.min(
-      scriptWords.length * 6 + 25,
-      asrWords.length - asrCursor
+      Math.max(proportionalBudget, scriptWords.length * 2 + 25),
+      remainingAsrWords
     );
 
     while (scriptIdx < scriptWords.length && localAsrIdx < maxAsrConsume) {
