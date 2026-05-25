@@ -19,12 +19,12 @@ Deno.serve(async (req) => {
   const submitRes = await fetch('https://api.assemblyai.com/v2/transcript', {
     method: 'POST',
     headers: { 'Authorization': API_KEY, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      audio_url: voiceover_url,
-      speech_model: 'best',
-      language_code: 'en',
-      format_text: false,
-    }),
+   body: JSON.stringify({
+  audio_url: voiceover_url,
+  speech_models: ['universal-3-pro', 'universal-2'],
+  language_code: 'en',
+  format_text: false,
+}),
   });
 
   if (!submitRes.ok) {
