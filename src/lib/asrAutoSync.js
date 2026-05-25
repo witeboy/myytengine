@@ -109,6 +109,13 @@ export function alignScenesToASR(asrWords, scenes, totalAudioDuration) {
       const asrW = asrWords[asrIdx].word;
       const scriptW = scriptWords[scriptIdx];
 
+      // Numeric tokens (years, dates, counts) — ASR expands them to spoken words.
+      // Skip silently so the cursor doesn't stall on "44" vs "forty four".
+      if (isTransparentToken(scriptW)) {
+        scriptIdx++;
+        continue;
+      }
+
       if (wordsMatch(scriptW, asrW)) {
         if (firstMatchedAsrIdx === -1) firstMatchedAsrIdx = asrIdx;
         lastMatchedAsrIdx = asrIdx;
