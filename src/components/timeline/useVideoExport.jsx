@@ -260,7 +260,9 @@ function isKnownCorsBlocked(hostname) {
     'pub-',
     'oaidalleapiprodscus.blob.core.windows.net',
     'replicate.delivery',
-    'pbxt.replicate.delivery'
+    'pbxt.replicate.delivery',
+    'media.myvoicify.app',
+    'myvoicify.app',
   ];
   for (var i = 0; i < blocked.length; i++) {
     if (hostname.indexOf(blocked[i]) !== -1) return true;
@@ -309,15 +311,25 @@ async function fetchAsBlob(url) {
       return blobUrl;
     }
 
-    if (pd && pd.success && pd.file_url) {
+   if (pd && pd.success && pd.file_url) {
+      // file_url may itself be CORS-blocked (e.g. media.myvoicify.app has no CORS headers).
+      // Re-proxy it server-side rather than fetching from the browser.
+      console.log('[Export] file_url returned — re-proxying server-side: ' + pd.file_url.substring(0, 60));
       try {
-        var r2 = await fetch(pd.file_url, { mode: 'cors' });
-        if (r2.ok) {
-          var bu2 = URL.createObjectURL(await r2.blob());
+        var res2 = await base44.functions.invoke('selectHook', { action: 'proxyAsset', url: pd.file_url });
+        var pd2 = res2 && res2.data ? res2.data : res2;
+        if (pd2 && pd2.success && pd2.data) {
+          var binary2 = atob(pd2.data);
+          var bytes2 = new Uint8Array(binary2.length);
+          for (var j = 0; j < binary2.length; j++) bytes2[j] = binary2.charCodeAt(j);
+          var blob2 = new Blob([bytes2], { type: pd2.content_type || pd.content_type || 'image/jpeg' });
+          var bu2 = URL.createObjectURL(blob2);
           _blobCache.set(url, bu2);
           return bu2;
         }
-      } catch (e) {}
+      } catch (e2) {
+        console.warn('[Export] Re-proxy of file_url also failed:', e2.message);
+      }
     }
 
     throw new Error('Proxy returned: ' + JSON.stringify(pd).substring(0, 100));
