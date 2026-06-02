@@ -3,7 +3,7 @@ import OpenAI from 'npm:openai@4.58.1';
 
 const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
 
-async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
+async function callOpenAI(prompt, temperature = 0.7, retries = 3, systemPrompt = 'You are a YouTube content strategist. Always respond with valid JSON.') {
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       const response = await openai.chat.completions.create({
@@ -12,7 +12,7 @@ async function callOpenAI(prompt, temperature = 0.7, retries = 3) {
         max_tokens: 16384,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: 'You are a YouTube content strategist. Always respond with valid JSON.' },
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: prompt },
         ],
       });
@@ -60,7 +60,7 @@ function detectScriptMode(channel, project) {
 // ═══════════════════════════════════════════════════════════════════
 function buildSleepOutlinePrompt({ scriptMode, topic, project, channel, selectedHook, numBatches, totalTargetWords, durationMinutes, strategyBlock }) {
   const isMeditation = scriptMode === 'sleep_meditation';
-  const contentType = isMeditation ? 'motivational meditation' : 'sleep story';
+  const contentType = isMeditation ? 'sleep meditation' : 'sleep story';
 
   const sectionTemplates = isMeditation
     ? [
@@ -107,8 +107,6 @@ function buildSleepOutlinePrompt({ scriptMode, topic, project, channel, selected
 - Description: ${topic?.description || ''}
 - Niche: ${project.niche || 'Sleep'}
 - Duration: ${durationMinutes} minutes (~${totalTargetWords} words at 150 wpm)
-${selectedHook ? `- Opening Hook: "${selectedHook.hook_text}"` : ''}
-${strategyBlock}
 
 **SLEEP CONTENT PRINCIPLES**:
 - Extremely gentle and soothing tone throughout
@@ -411,7 +409,7 @@ Deno.serve(async (req) => {
         : buildStandardOutlinePrompt(promptArgs);
 
     console.log(`Generating detailed outline... (${isSleepMode ? 'sleep' : isExplainerMode ? 'explainer' : 'standard TVF'})`);
-    const outlineResult = await callOpenAI(outlinePrompt, isSleepMode ? 0.6 : isExplainerMode ? 0.75 : 0.7);
+    const sleepSystemPrompt = `You are a professional sleep audio scriptwriter specializing in guided meditations and bedtime sleep stories. You write in the style of Calm, Headspace, and Jason Stephenson — extremely gentle, slow, soothing, and deliberately monotonous. Always respond with valid JSON.`;     const systemPrompt = isSleepMode       ? sleepSystemPrompt       : 'You are a YouTube content strategist. Always respond with valid JSON.';     const outlineResult = await callOpenAI(outlinePrompt, isSleepMode ? 0.6 : isExplainerMode ? 0.75 : 0.7, 3, systemPrompt);
 
     if (!outlineResult.batches || outlineResult.batches.length === 0) {
       throw new Error("AI failed to generate outline batches");
