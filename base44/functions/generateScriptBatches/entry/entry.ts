@@ -1,63 +1,8 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // v4 — Claude primary + Gemini fallback
 
-const ANTHROPIC_KEY = Deno.env.get("ANTHROPIC_API_KEY");
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
 
-async function callClaude(prompt, temperature = 0.85, retries = 2) {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 16384,
-        temperature,
-        messages: [{ role: 'user', content: prompt }],
-      }),
-    });
-
-    if (response.status === 429) {
-      const waitMs = Math.pow(2, attempt + 1) * 3000;
-      console.warn(`⏳ Claude rate limited, waiting ${waitMs / 1000}s (attempt ${attempt + 1})`);
-      await new Promise(r => setTimeout(r, waitMs));
-      continue;
-    }
-
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(`Claude error ${response.status}: ${err.error?.message || JSON.stringify(err)}`); 
-    }
-
-    const data = await response.json();
-    const rawText = data.content?.[0]?.text || '';
-
-    // Extract JSON from response
-    try { return JSON.parse(rawText); } catch (_) {}
-
-    // Try extracting from markdown code blocks
-    let jsonStr = rawText;
-    if (rawText.includes('```json')) {
-      jsonStr = rawText.split('```json')[1].split('```')[0].trim();
-    } else if (rawText.includes('```')) {
-      jsonStr = rawText.split('```')[1].split('```')[0].trim();
-    }
-    try { return JSON.parse(jsonStr); } catch (_) {}
-
-    // Try extracting just the JSON object
-    const objMatch = rawText.match(/\{[\s\S]*\}/);
-    if (objMatch) {
-      try { return JSON.parse(objMatch[0]); } catch (_) {}
-    }
-
-    if (attempt === retries) throw new Error('Failed to parse Claude JSON after all attempts');
-    console.log(`[Claude] JSON parse failed (attempt ${attempt + 1}), retrying...`);
-  }
-}
 
 // ═══════════════════════════════════════════════════════════════════
 // GEMINI FALLBACK — gemini-2.5-pro for best creative writing
@@ -120,21 +65,12 @@ async function callGemini(prompt, temperature = 0.85, retries = 2) {
 // UNIFIED LLM CALLER — Claude primary, Gemini fallback
 // ═══════════════════════════════════════════════════════════════════
 async function callLLM(prompt, temperature = 0.85) {
-  // Try Claude first
   try {
-    const result = await callClaude(prompt, temperature);
-    return { result, provider: 'claude' };
-  } catch (claudeErr) {
-    const msg = claudeErr.message || '';
-    const isFatal = /credit balance|billing|purchase credits|api key|unauthorized/i.test(msg);
-    console.warn(`[LLM] Claude failed${isFatal ? ' (fatal — switching to Gemini)' : ''}: ${msg.substring(0, 120)}`);
-
-    if (!GEMINI_KEY) throw claudeErr; // No fallback available
-
-    // Fall back to Gemini
-    console.log('[LLM] Falling back to Gemini 2.5 Pro...');
     const result = await callGemini(prompt, temperature);
     return { result, provider: 'gemini' };
+  } catch (geminiErr) {
+    console.error(`[LLM] Gemini failed: ${geminiErr.message?.substring(0, 120)}`);
+    throw geminiErr;
   }
 }
 
