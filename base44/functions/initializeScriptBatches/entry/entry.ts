@@ -409,7 +409,11 @@ Deno.serve(async (req) => {
         : buildStandardOutlinePrompt(promptArgs);
 
     console.log(`Generating detailed outline... (${isSleepMode ? 'sleep' : isExplainerMode ? 'explainer' : 'standard TVF'})`);
-    const sleepSystemPrompt = `You are a professional sleep audio scriptwriter specializing in guided meditations and bedtime sleep stories. You write in the style of Calm, Headspace, and Jason Stephenson — extremely gentle, slow, soothing, and deliberately monotonous. Always respond with valid JSON.`;     const systemPrompt = isSleepMode       ? sleepSystemPrompt       : 'You are a YouTube content strategist. Always respond with valid JSON.';     const outlineResult = await callOpenAI(outlinePrompt, isSleepMode ? 0.6 : isExplainerMode ? 0.75 : 0.7, 3, systemPrompt);
+    const sleepSystemPrompt = `You are a professional sleep audio scriptwriter specializing in guided meditations and bedtime sleep stories. You write in the style of Calm, Headspace, and Jason Stephenson — extremely gentle, slow, soothing, and deliberately monotonous. Always respond with valid JSON.`;
+    const systemPrompt = isSleepMode
+      ? sleepSystemPrompt
+      : 'You are a YouTube content strategist. Always respond with valid JSON.';
+    const outlineResult = await callOpenAI(outlinePrompt, isSleepMode ? 0.6 : isExplainerMode ? 0.75 : 0.7, 3, systemPrompt);
 
     if (!outlineResult.batches || outlineResult.batches.length === 0) {
       throw new Error("AI failed to generate outline batches");
