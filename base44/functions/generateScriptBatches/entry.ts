@@ -75,35 +75,31 @@ async function callLLM(prompt, temperature = 0.85) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// SLEEP STORY WRITING PROMPT — authentic folk / fairy-tale narrative
+// SLEEP SCRIPT WRITING PROMPT
 // ═══════════════════════════════════════════════════════════════════
 function buildSleepWritingPrompt({ batch, project, topic, selectedHook, sortedBatches, previousContent, outlineContext, isFirstBatch, isLastBatch, strategyBlock }) {
-  return `You are a master bedtime storyteller. You retell classic folk tales and fairy tales in a slow, soothing voice that gently carries a listener to sleep — in the tradition of the Calm app sleep stories and the Nothing Much Happens podcast.
+  return `You are an expert bedtime sleep-story writer. You write classic, character-driven folk and fairy tales — retold slowly and gently so the listener drifts peacefully to sleep. Think of the soothing storytelling of Calm and Headspace sleepcasts: a real story, with characters, a setting, and a quiet plot, told at a tranquil, unhurried pace.
 
 **CRITICAL RULE — READ THIS FIRST**:
-You are writing an ACTUAL STORY. A real narrative with named characters, a real setting, and a gentle plot that unfolds and resolves peacefully. You are NOT writing a guided meditation. You are NOT speaking to the listener. You are TELLING A TALE.
+You are writing an ACTUAL STORY — a narrative with characters, a place, and gentle events that unfold. This is NOT a guided meditation. This is NOT affirmations. You are a gentle narrator telling a soothing bedtime tale. Tell the story.
 
-**ABSOLUTELY FORBIDDEN — these RUIN a sleep story:**
-❌ Second-person guided-meditation address ("you are at ease", "feel your breath", "allow yourself", "imagine yourself walking")
-❌ Affirmations ("you are enough", "you are safe", "you deserve rest")
-❌ Breathing cues, body scans, or relaxation instructions ("feel the weight settle in your bones")
-❌ [BREATHE] markers (this is a STORY, not a meditation)
-❌ Speaking ABOUT the listener, their feelings, their body, or their breath
-❌ Meta-commentary, ASMR talk, neuroscience, sleep tips
-❌ Conflict, danger, jump-scares, suspense, cliffhangers, urgency
-❌ "this video", "this channel", first-person author anecdotes
-
-**WHAT YOU ARE WRITING — a CLASSIC TALE, RETOLD SLOWLY:**
-✓ A real folk/fairy tale told in third person about characters who have names and do things
-✓ A clear setting (a village, a cottage, a forest path, a snowy kingdom, a quiet harbour)
-✓ A gentle plot that moves forward — someone goes somewhere, meets someone, makes something, finds something
-✓ Low, warm stakes only — a lost mitten found, a kindness repaid, a long walk home, a feast prepared, a small wish granted. Nothing frightening, nothing tense.
-✓ Cozy, abundant sensory detail woven into the ACTION (the smell of bread from the baker's window AS the heroine passes it — not "notice the smell of bread")
-✓ A soft, unhurried storyteller's cadence — gentle, melodic, slightly old-fashioned ("Once, in a village at the foot of a green hill, there lived a girl named...")
+**ABSOLUTELY FORBIDDEN CONTENT** (including these will ruin the script):
+❌ Affirmations or self-talk ("you are enough", "you are safe", "you are loved")
+❌ Second-person guided meditation ("notice your breath", "feel your body sinking")
+❌ Breathing instructions or [BREATHE] cues
+❌ Explaining what ASMR/meditation is, neuroscience, or "studies show"
+❌ Giving sleep tips or advice
+❌ Referencing "this video", "this channel", or YouTube
+❌ First-person anecdotes from the narrator ("I remember when I...")
+❌ Meta-commentary about what the script is doing
+❌ Conflict, danger, stress, urgency, jump-scares, or sharp surprises
+❌ Energizing words: "exciting", "alert", "suddenly", "shocking"
+❌ Cliffhangers or unresolved tension between sections
 
 **PROJECT CONTEXT**:
-- Tale / Topic: ${topic?.title || project.name}
+- Story / Title: ${topic?.title || project.name}
 - Description: ${topic?.description || ''}
+- Content Type: Bedtime Sleep Story (folk / fairy tale)
 - Duration: ${project.video_duration_minutes || 10} minutes total
 ${strategyBlock}
 
@@ -112,34 +108,41 @@ ${outlineContext}
 
 **YOU ARE NOW WRITING CHAPTER ${batch.batch_number} of ${sortedBatches.length}**: "${batch.story_segment}"
 
-**CHAPTER SYNOPSIS** (follow this closely — tell THIS part of the tale):
+**CHAPTER SYNOPSIS** (follow this closely — write THIS part of the story):
 ${batch.synopsis}
 
-**MANDATORY WORD COUNT**: AT LEAST ${batch.target_words} words. If your output is under ${Math.round(batch.target_words * 0.9)} words, it is a FAILURE. Slow the pace, add more cozy sensory detail, more gentle description of the place and the characters, until you reach the target. (150 words ≈ 1 minute of narration.)
+**MANDATORY WORD COUNT**: You MUST write AT LEAST ${batch.target_words} words. This is NON-NEGOTIABLE. If your output is under ${Math.round(batch.target_words * 0.9)} words, it is a FAILURE. Add more gentle description, more soft sensory detail, more unhurried moments in the story until you reach the target. (150 words ≈ 1 minute of narration.)
 
-${previousContent ? `**PREVIOUSLY TOLD** (continue the SAME story seamlessly — same characters, same place, do NOT restart or repeat):\n${previousContent.slice(-4000)}\n` : ''}
+${previousContent ? `**PREVIOUSLY WRITTEN** (continue the SAME story seamlessly — keep the same characters, place, and events; do NOT repeat):\n${previousContent.slice(-4000)}\n` : ''}
 
 **═══ STORYTELLING STYLE RULES ═══**
 
-**VOICE & CADENCE:**
-- Third person, past tense, like a grandparent telling a bedtime tale by the fire.
-- Slow, warm, melodic, slightly old-fashioned. Long flowing sentences mixed with short gentle ones.
-- Unhurried — let small moments breathe. There is no rush in this world.
-- Soft, simple vocabulary. Nothing jarring, clever, or modern-sounding.
+**NARRATIVE VOICE**:
+- Third-person, past tense — a gentle storyteller voice ("Once, in a quiet valley, there lived a small grey rabbit named Pim...")
+- Tell a real story with named characters, a setting, and gentle events that flow one into the next
+- Warm, slow, soothing — every scene unhurried and peaceful
+- Low-stakes throughout: kindness, curiosity, small discoveries, quiet wonder — never danger
 
-**STORY CRAFT:**
-- Keep characters consistent across chapters — same names, same little details.
-- Move the plot GENTLY forward in this chapter, following the synopsis. Something small and pleasant happens.
-- Linger lovingly on cozy sensory detail woven INTO the action: warm lamplight, the crackle of a hearth, soft snow, the scent of stew, the rustle of a quilt, a cat curling on a windowsill.
-- Keep ALL stakes low and warm. Every small problem is solved gently and kindly.
-- Use soft pause markers sparingly to let a calm moment settle: [PAUSE 3 SEC] after a peaceful beat, [PAUSE 5 SEC] between scenes. Do NOT use [BREATHE]. Do NOT overuse pauses — the story itself should be calming.
+**LANGUAGE**:
+- Simple vocabulary, mostly short flowing sentences (8-20 words)
+- Soft, lulling rhythm — gentle repetition of soothing phrases is welcome
+- Rich but calm sensory detail: warm light, soft moss, the smell of bread, a slow river, distant birdsong
 
-**${isFirstBatch ? 'OPENING THE TALE: Begin like a real story — "Once, in a..." or "Long ago, in a..." Introduce the named main character, the cozy setting, and the small gentle thing that begins the tale. Set a warm, safe, sleepy mood from the first line. Do NOT welcome or address the listener.' : 'Continue the SAME tale seamlessly from where the previous chapter ended — same characters, same place, same gentle momentum.'}**
-**${isLastBatch ? 'ENDING THE TALE: Bring the story to a soft, satisfying, fully-resolved close — the character safe and content, the small quest complete, everyone settling in for the night. End on a peaceful, drowsy final image (a candle guttering low, snow falling on a quiet roof, a contented sigh). The very last lines should be the calmest of all. [PAUSE 5 SEC]' : 'End this chapter on a calm, settled beat that flows naturally into the next part of the tale — never a cliffhanger or a question.'}**
+**PACING MARKERS** (include gently, between story beats — NOT breathing cues):
+- [PAUSE 3 SEC] — after a soft moment
+- [PAUSE 5 SEC] — between scenes
+- Use a pause every few sentences to let the story breathe — but keep the prose flowing as a story, not a list of cues
+
+**${isFirstBatch
+  ? 'OPENING: Begin the story the classic way — establish the character(s), the gentle setting, and the calm mood. "Once upon a time..." style openings are perfect. Ease the listener into the world.'
+  : 'CONTINUE: Pick up the SAME story exactly where the previous chapter left off — same characters, same place. Move the gentle plot forward.'}**
+**${isLastBatch
+  ? 'ENDING: Bring the story to a soft, contented close — the characters settle, all is well and peaceful. End on a calm, resolved note (e.g. everyone drifting off to sleep), trailing into stillness. No CTA, no cliffhanger.'
+  : 'END: Close this chapter on a calm, settled beat that flows naturally into the next part of the story — no dramatic cliffhanger.'}**
 
 Return JSON:
 {
-  "content": "The full story text for this chapter, in third-person narrative prose, with occasional [PAUSE X SEC] markers...",
+  "content": "The full story narration for this chapter, including occasional [PAUSE X SEC] markers...",
   "word_count": 1234
 }`;
 }
@@ -299,13 +302,10 @@ Deno.serve(async (req) => {
       channel = channels[0];
     }
 
-    // Detect script mode — respect project_mode (sleep_story, explainer) or fall back to standard.
-    // Legacy sleep_meditation projects are folded into sleep_story.
-    let rawMode = project.project_mode;
-    if (rawMode === 'sleep_meditation') rawMode = 'sleep_story';
-    const KNOWN_MODES = ['sleep_story', 'explainer'];
-    const scriptMode = KNOWN_MODES.includes(rawMode) ? rawMode : 'standard';
-    const isSleepMode = scriptMode === 'sleep_story';
+    // Detect script mode — respect project_mode (sleep_*, explainer) or fall back to standard
+    const KNOWN_MODES = ['sleep_meditation', 'sleep_story', 'explainer'];
+    const scriptMode = KNOWN_MODES.includes(project.project_mode) ? project.project_mode : 'standard';
+    const isSleepMode = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
     const isExplainerMode = scriptMode === 'explainer';
 
     console.log(`[generateScriptBatches] Script mode: ${scriptMode}`);
@@ -376,7 +376,7 @@ Deno.serve(async (req) => {
       };
 
       const prompt = isSleepMode
-        ? buildSleepWritingPrompt(promptArgs)
+        ? buildSleepWritingPrompt({ ...promptArgs, scriptMode })
         : isExplainerMode
         ? buildExplainerWritingPrompt(promptArgs)
         : buildStandardWritingPrompt(promptArgs);
