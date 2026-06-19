@@ -109,59 +109,75 @@ export default function NewProject() {
     return payload;
   };
 
+  const [error, setError] = useState('');
+
   const handleCreateFromNiche = async () => {
     if (!niche.trim()) return;
     setLoading(true);
-    const project = await base44.entities.Projects.create({
-      name: niche.trim(),
-      niche: niche.trim(),
-      tone,
-      target_audience: targetAudience.trim() || undefined,
-      status: 'created',
-      current_step: 0,
-      ...modePayload(),
-    });
-    await base44.functions.invoke('generateTopics', {
-      project_id: project.id,
-      niche: niche.trim(),
-      tone,
-      target_audience: targetAudience.trim() || undefined,
-    });
-    navigate(createPageUrl(`StoryTopics?project_id=${project.id}`));
+    setError('');
+    try {
+      const project = await base44.entities.Projects.create({
+        name: niche.trim(),
+        niche: niche.trim(),
+        tone,
+        target_audience: targetAudience.trim() || undefined,
+        status: 'created',
+        current_step: 0,
+        ...modePayload(),
+      });
+      await base44.functions.invoke('generateTopics', {
+        project_id: project.id,
+        niche: niche.trim(),
+        tone,
+        target_audience: targetAudience.trim() || undefined,
+      });
+      navigate(createPageUrl(`StoryTopics?project_id=${project.id}`));
+    } catch (err) {
+      console.error('generateTopics (niche) failed:', err);
+      setError(err?.response?.data?.error || err.message || 'Something went wrong. Please try again.');
+      setLoading(false);
+    }
   };
 
   const handleCreateFromTopic = async () => {
     if (!customTopic.trim()) return;
     setLoading(true);
-    const project = await base44.entities.Projects.create({
-      name: customTopic.trim(),
-      niche: customTopic.trim(),
-      tone,
-      target_audience: targetAudience.trim() || undefined,
-      status: 'created',
-      current_step: 0,
-      ...modePayload(),
-    });
-    await base44.functions.invoke('generateTopics', {
-      project_id: project.id,
-      niche: customTopic.trim(),
-      exact_topic: customTopic.trim(),
-      tone,
-      target_audience: targetAudience.trim() || undefined,
-    });
-    const topics = await base44.entities.Topics.filter({ project_id: project.id });
-    const sorted = topics.sort((a, b) => a.rank - b.rank);
-    if (sorted.length > 0) {
-      const best = sorted[0];
-      await base44.entities.Topics.update(best.id, { is_selected: true });
-      await base44.entities.Projects.update(project.id, {
-        selected_topic_id: best.id,
-        status: 'topic_selected',
-        current_step: 1,
+    setError('');
+    try {
+      const project = await base44.entities.Projects.create({
+        name: customTopic.trim(),
+        niche: customTopic.trim(),
+        tone,
+        target_audience: targetAudience.trim() || undefined,
+        status: 'created',
+        current_step: 0,
+        ...modePayload(),
       });
-      navigate(createPageUrl(`StoryDuration?project_id=${project.id}`));
-    } else {
-      navigate(createPageUrl(`StoryTopics?project_id=${project.id}`));
+      await base44.functions.invoke('generateTopics', {
+        project_id: project.id,
+        niche: customTopic.trim(),
+        exact_topic: customTopic.trim(),
+        tone,
+        target_audience: targetAudience.trim() || undefined,
+      });
+      const topics = await base44.entities.Topics.filter({ project_id: project.id });
+      const sorted = topics.sort((a, b) => a.rank - b.rank);
+      if (sorted.length > 0) {
+        const best = sorted[0];
+        await base44.entities.Topics.update(best.id, { is_selected: true });
+        await base44.entities.Projects.update(project.id, {
+          selected_topic_id: best.id,
+          status: 'topic_selected',
+          current_step: 1,
+        });
+        navigate(createPageUrl(`StoryDuration?project_id=${project.id}`));
+      } else {
+        navigate(createPageUrl(`StoryTopics?project_id=${project.id}`));
+      }
+    } catch (err) {
+      console.error('generateTopics (topic) failed:', err);
+      setError(err?.response?.data?.error || err.message || 'Something went wrong. Please try again.');
+      setLoading(false);
     }
   };
 
@@ -329,6 +345,9 @@ export default function NewProject() {
                   <Input placeholder="e.g. young adults 18-25" value={targetAudience} onChange={e => setTargetAudience(e.target.value)} disabled={loading} />
                 </div>
               </div>
+              {error && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{error}</p>
+              )}
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setMode(null)} disabled={loading}>Back</Button>
                 <Button onClick={handleCreateFromTopic} disabled={!customTopic.trim() || loading} className="flex-1 bg-blue-600 hover:bg-blue-700" size="lg">
@@ -378,6 +397,9 @@ export default function NewProject() {
                   <Input placeholder="e.g. tech enthusiasts, parents" value={targetAudience} onChange={e => setTargetAudience(e.target.value)} disabled={loading} />
                 </div>
               </div>
+              {error && (
+                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{error}</p>
+              )}
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setMode(null)} disabled={loading}>Back</Button>
                 <Button onClick={handleCreateFromNiche} disabled={!niche.trim() || loading} className="flex-1 bg-purple-600 hover:bg-purple-700" size="lg">
