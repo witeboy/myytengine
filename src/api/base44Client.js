@@ -33,6 +33,7 @@ const KNOWN_FLAT = new Set([
   'generateProgressionImage', 'generateProgressionPrompts',
   'generateProgressionVideo', 'longViralGenerateScript', 'scheduleClipPost',
   'proxyFetchAsset', 'generateThumbnailImage',
+  'longViralSceneBreakdown', 'shortsSceneBreakdown', 'explainerSceneBreakdown',
 ]);
 
 // Remembers the resolved path ('flat' | 'entry') per function after the first call.
