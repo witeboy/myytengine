@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import OpenAI from 'npm:openai@4.58.1';
 
 const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
@@ -77,16 +77,16 @@ function buildSleepOutlinePrompt({ scriptMode, topic, project, channel, selected
         'Closing & Fade (brief gentle goodbye, silence)',
       ]
     : [
-        'Opening & Arrival (gently welcome, then arrive in the story\'s setting)',
-        'Setting the Scene (establish the place — vivid sensory world)',
-        'The Journey Begins (the listener/character starts moving softly through the place)',
-        'Discovery 1 (drift to a new detail or part of the place — something gently happens)',
-        'Deeper Into the Place (move onward, richer scenery, slower pace)',
-        'Discovery 2 (a new vista or moment along the journey)',
-        'The Quiet Heart (the most peaceful, still point of the story)',
-        'Drifting Onward (the journey winds gently down as evening settles)',
-        'Settling for Rest (the story arrives at a warm, restful place)',
-        'Closing & Fade (everything quiets, the listener drifts into sleep)',
+        'Opening & Welcome (settle, breathe, story world intro)',
+        'Scene 1 — Setting the Atmosphere (rich sensory environment)',
+        'Scene 2 — Gentle Activity (detailed peaceful process)',
+        'Scene 3 — Observation & Reflection (contentment, presence)',
+        'Scene 4 — New Setting (seamless transition, fresh sensory details)',
+        'Scene 5 — Deeper Calm (slower pace, deeper relaxation)',
+        'Scene 6 — Nature & Stillness (natural world, timelessness)',
+        'Scene 7 — Evening Settling (winding down, warmth)',
+        'Scene 8 — Deep Rest (minimal narrative, ambient atmosphere)',
+        'Closing & Fade (character settles, gentle goodbye)',
       ];
 
   return `You are an expert sleep audio script planner. You plan ${contentType} scripts that ARE the soothing content — not scripts that talk ABOUT meditation or sleep.
@@ -135,17 +135,11 @@ ${isMeditation ? `Each section should contain ONLY:
 Example good synopsis: "The narrator gently speaks: 'You are enough... just as you are... you are enough.' [PAUSE 5 SEC] Then weaves ocean imagery — waves rolling in, each one whispering 'enough.' The listener's breath matches the tide. [BREATHE] 'With every breath... you sink deeper into knowing... you have always been enough.' Repeat the affirmation with mountain imagery — solid, unmovable, complete. [PAUSE 3 SEC] Return to body: weight of blankets, warmth, safety."
 
 Example BAD synopsis: "This section explains the science behind self-worth affirmations and discusses how ASMR triggers help the brain release dopamine. The narrator shares a personal story about discovering meditation."` :
-`**THIS IS A SLEEP STORY — PLAN AN ACTUAL NARRATIVE JOURNEY, NOT A MEDITATION.**
-Across the batches, plan ONE continuous, gentle story set in a specific, vivid place (e.g. a lantern-lit seaside village, a slow night train through misty hills, a cozy cabin in falling snow, a riverboat drifting downstream, an old garden at dusk). The listener travels softly through this world as the story unfolds.
-
-Each batch synopsis must describe THE STORY BEAT for that section:
-- WHERE we are now in the journey and what the place looks/sounds/smells like (rich, calm sensory detail)
-- WHAT gently happens or what we drift past in this beat (a soft event, a new vista, an arrival)
-- How it flows seamlessly into the next part of the journey
-
-DO NOT plan affirmation chants ("you are enough", "you are safe, you are free") or body-scan instructions ("notice your shoulders soften") as the section content — that is meditation, not a story. A little restful grounding is fine as seasoning, but the BEAT of the journey is the content.
-
-Example good synopsis: "The listener steps off the quiet train onto a wooden platform in a sleepy coastal town. [PAUSE 5 SEC] Describe the warm glow of gas lamps along the harbor, the soft slap of water against moored boats, the smell of salt and woodsmoke. A lone fisherman coils a rope and nods gently. The listener wanders down the cobbled lane toward a small inn with golden windows, the cobblestones cool and smooth underfoot..."`}
+`Each scene section should contain ONLY:
+- Rich sensory atmosphere (what the character sees, hears, smells, feels)
+- A peaceful activity described in loving, slow detail
+- The character's quiet contentment and simple observations
+- Seamless transition to the next scene`}
 
 Return JSON:
 {
@@ -162,15 +156,15 @@ Return JSON:
 
 **RULES:**
 - Generate exactly ${numBatches} batches
-- First batch MUST gently open${isMeditation ? ' (physical settling, breathing, ease into theme)' : ' (welcome, then arrive in the story\'s setting)'}
-- Last batch should be the gentlest, most minimal content — mostly pauses and silence as the listener drifts to sleep
+- First batch MUST be Opening & Welcome (physical settling, breathing, ease into theme)
+- Last batch should be the gentlest, most minimal content — mostly pauses and silence
 - Progressive deepening: each batch calmer and slower than the last
-- Synopses must describe the ACTUAL content${isMeditation ? ' and imagery' : ' (the story beat, place, and what gently happens)'}, not explain concepts
-${isMeditation ? '- Include specific affirmation phrases IN QUOTES in synopses' : '- The batches together must form ONE continuous story set in ONE vivid place — each batch continues the same journey'}
+- Synopses must describe the ACTUAL words and imagery, not explain concepts
+- Include specific affirmation phrases IN QUOTES in synopses
 - Include specific [PAUSE X SEC] markers in synopses
-- Every synopsis: 200-300 words of SPECIFIC ${isMeditation ? 'soothing content' : 'story'} detail
+- Every synopsis: 200-300 words of SPECIFIC soothing content detail
 - NO educational content, NO science, NO advice, NO meta-commentary
-${isMeditation ? '- Content gets progressively more repetitive and slower as it goes' : '- The story gets slower and quieter as it goes, ending in deep restful stillness'}`;
+- Content gets progressively more repetitive and slower as it goes`;
 }
 
 // ═══════════════════════════════════════════════════════════════════
