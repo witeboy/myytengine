@@ -1,0 +1,71 @@
+{
+  "name": "CachedVideos",
+  "type": "object",
+  "properties": {
+    "search_id": {
+      "type": "string",
+      "description": "Reference to the search that found this video"
+    },
+    "video_title": {
+      "type": "string",
+      "description": "YouTube video title"
+    },
+    "video_id": {
+      "type": "string",
+      "description": "YouTube video ID"
+    },
+    "channel_name": {
+      "type": "string",
+      "description": "Channel name"
+    },
+    "view_count": {
+      "type": "number",
+      "description": "Total views"
+    },
+    "subscriber_count": {
+      "type": "number",
+      "description": "Channel subscriber count"
+    },
+    "views_per_day": {
+      "type": "number",
+      "description": "Average views per day since publish"
+    },
+    "long_form": {
+      "type": "boolean",
+      "description": "Whether the video is long-form (8+ min)"
+    },
+    "duration_seconds": {
+      "type": "number",
+      "description": "Video duration in seconds"
+    },
+    "published_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Video publish date"
+    },
+    "opportunity_score": {
+      "type": "number",
+      "description": "Viral multiplier (views / subs)"
+    },
+    "profitability_score": {
+      "type": "number",
+      "description": "Advanced profitability score"
+    },
+    "niche_category": {
+      "type": "string",
+      "description": "Niche keyword category"
+    },
+    "video_url": {
+      "type": "string",
+      "description": "Full YouTube URL"
+    },
+    "thumbnail_url": {
+      "type": "string",
+      "description": "Video thumbnail URL"
+    }
+  },
+  "required": [
+    "video_title",
+    "video_id"
+  ]
+}

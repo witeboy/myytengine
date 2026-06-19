@@ -1,0 +1,36 @@
+{
+  "name": "Transcripts",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the project"
+    },
+    "word_timings": {
+      "type": "string",
+      "description": "JSON array of {word, start, end} where start/end are in seconds"
+    },
+    "full_text": {
+      "type": "string",
+      "description": "The complete transcript text"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "processing",
+        "ready",
+        "failed"
+      ],
+      "default": "pending",
+      "description": "Transcription status"
+    },
+    "total_words": {
+      "type": "number",
+      "description": "Total number of words in the transcript"
+    }
+  },
+  "required": [
+    "project_id"
+  ]
+}

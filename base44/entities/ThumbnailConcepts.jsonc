@@ -1,0 +1,64 @@
+{
+  "name": "ThumbnailConcepts",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the project"
+    },
+    "rank": {
+      "type": "number",
+      "description": "Thumbnail ranking (1-10)"
+    },
+    "concept_description": {
+      "type": "string",
+      "description": "Full concept description"
+    },
+    "facial_expression": {
+      "type": "string",
+      "description": "Expression or null if no face"
+    },
+    "visual_metaphor": {
+      "type": "string",
+      "description": "Central visual metaphor"
+    },
+    "color_scheme": {
+      "type": "string",
+      "description": "Color and lighting approach"
+    },
+    "text_overlay": {
+      "type": "string",
+      "description": "Text overlay under 4 words"
+    },
+    "style_reference": {
+      "type": "string",
+      "enum": [
+        "cinema",
+        "minimal",
+        "documentary"
+      ],
+      "description": "Visual style reference"
+    },
+    "ctr_score": {
+      "type": "number",
+      "description": "Click-through rate potential score (1-10)"
+    },
+    "image_prompt": {
+      "type": "string",
+      "description": "Ready-to-use AI image generation prompt"
+    },
+    "image_url": {
+      "type": "string",
+      "description": "URL of the generated thumbnail image"
+    },
+    "is_selected": {
+      "type": "boolean",
+      "description": "Whether this thumbnail was selected",
+      "default": false
+    }
+  },
+  "required": [
+    "project_id",
+    "rank"
+  ]
+}

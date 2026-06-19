@@ -6,13 +6,17 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
 // start_section until done=true.
 // ══════════════════════════════════════════════════════════════════
 
+// cuts_per_min MUST equal 60 / avg(scene_dur) so total scene count fills the
+// allocated section time. e.g. body avg 2.5s → 24 cuts/min. Previously the body
+// cadences (10-13) were ~half the value implied by their 2-3s durations, which
+// produced only ~half the scenes a 10-min script needs (119 instead of ~250).
 const SECTION_CADENCE = {
-  hook:         { cuts_per_min: 30, min_scenes: 6,  max_scenes: 25,  scene_dur: [1.5, 2.5] },
-  core_concept: { cuts_per_min: 10, min_scenes: 4,  max_scenes: 999, scene_dur: [2.0, 3.0] },
-  mechanism:    { cuts_per_min: 11, min_scenes: 6,  max_scenes: 999, scene_dur: [2.0, 3.0] },
-  example:      { cuts_per_min: 10, min_scenes: 6,  max_scenes: 999, scene_dur: [2.0, 3.0] },
-  application:  { cuts_per_min: 13, min_scenes: 5,  max_scenes: 999, scene_dur: [1.8, 2.8] },
-  takeaway:     { cuts_per_min: 6,  min_scenes: 3,  max_scenes: 12,  scene_dur: [2.5, 4.0] },
+  hook:         { cuts_per_min: 30, min_scenes: 6,  max_scenes: 40,  scene_dur: [1.5, 2.5] }, // avg 2.0s → 30/min
+  core_concept: { cuts_per_min: 24, min_scenes: 4,  max_scenes: 999, scene_dur: [2.0, 3.0] }, // avg 2.5s → 24/min
+  mechanism:    { cuts_per_min: 24, min_scenes: 6,  max_scenes: 999, scene_dur: [2.0, 3.0] }, // avg 2.5s → 24/min
+  example:      { cuts_per_min: 24, min_scenes: 6,  max_scenes: 999, scene_dur: [2.0, 3.0] }, // avg 2.5s → 24/min
+  application:  { cuts_per_min: 26, min_scenes: 5,  max_scenes: 999, scene_dur: [1.8, 2.8] }, // avg 2.3s → 26/min
+  takeaway:     { cuts_per_min: 18, min_scenes: 3,  max_scenes: 30,  scene_dur: [2.5, 4.0] }, // avg 3.25s → 18/min
 };
 
 const EXPLAINER_SECTION_TIME_PCT = {

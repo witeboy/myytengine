@@ -1,0 +1,35 @@
+{
+  "name": "ThumbnailNiches",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Custom niche name (e.g. Sports, Storytelling, Finance)"
+    },
+    "icon": {
+      "type": "string",
+      "description": "Emoji icon for the niche"
+    },
+    "description": {
+      "type": "string",
+      "description": "What kind of thumbnails belong in this niche"
+    },
+    "template_count": {
+      "type": "number",
+      "default": 0,
+      "description": "Number of templates fed into this niche"
+    },
+    "synthesized_dna": {
+      "type": "string",
+      "description": "AI-synthesized style DNA combining all templates in this niche \u2014 composition patterns, color strategies, text approaches, character action rules"
+    },
+    "last_synthesized": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the DNA was last synthesized"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

@@ -1,0 +1,148 @@
+{
+  "name": "Scenes",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the project"
+    },
+    "scene_number": {
+      "type": "number",
+      "description": "Scene order number"
+    },
+    "narration_text": {
+      "type": "string",
+      "description": "The narration text for this scene"
+    },
+    "image_prompt": {
+      "type": "string",
+      "description": "AI prompt to generate the scene image"
+    },
+    "animation_prompt": {
+      "type": "string",
+      "description": "AI prompt to animate the scene image into video"
+    },
+    "image_url": {
+      "type": "string",
+      "description": "URL of the generated scene image"
+    },
+    "video_url": {
+      "type": "string",
+      "description": "URL of the animated scene video"
+    },
+    "duration_seconds": {
+      "type": "number",
+      "description": "Duration of this scene in seconds"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "breakdown_ready",
+        "prompts_ready",
+        "image_generated",
+        "video_generated",
+        "video_ready",
+        "video_failed",
+        "failed"
+      ],
+      "default": "pending",
+      "description": "Scene generation status"
+    },
+    "act": {
+      "type": "string",
+      "description": "Act or sequence group this scene belongs to"
+    },
+    "notes": {
+      "type": "string",
+      "description": "User notes or comments for this scene"
+    },
+    "camera_movement": {
+      "type": "string",
+      "enum": [
+        "static",
+        "slow_pan",
+        "slow_zoom_in",
+        "slow_zoom_out",
+        "dolly_zoom",
+        "crane_shot",
+        "tracking_shot",
+        "orbital",
+        "tilt_up",
+        "tilt_down"
+      ],
+      "default": "slow_pan",
+      "description": "Camera movement style for animation"
+    },
+    "animation_speed": {
+      "type": "string",
+      "enum": [
+        "very_slow",
+        "slow",
+        "normal",
+        "fast"
+      ],
+      "default": "normal",
+      "description": "Speed of the animation"
+    },
+    "visual_effects": {
+      "type": "string",
+      "description": "JSON array of visual effects like lens_flare, motion_blur, film_grain, bokeh, light_leak, vignette"
+    },
+    "sound_effect": {
+      "type": "string",
+      "description": "Description of sound effect for this scene"
+    },
+    "sound_effect_url": {
+      "type": "string",
+      "description": "URL of generated sound effect audio"
+    },
+    "sfx_volume": {
+      "type": "number",
+      "description": "Sound effect volume 0-1",
+      "default": 0.5
+    },
+    "transition_type": {
+      "type": "string",
+      "enum": [
+        "cut",
+        "fade",
+        "dissolve",
+        "zoom",
+        "wipe",
+        "slide"
+      ],
+      "default": "cut",
+      "description": "Transition type to next scene"
+    },
+    "transition_duration": {
+      "type": "number",
+      "description": "Transition duration in seconds",
+      "default": 0.5
+    },
+    "broll_url": {
+      "type": "string",
+      "description": "URL of matched B-roll stock video"
+    },
+    "broll_source": {
+      "type": "string",
+      "description": "Source of B-roll video (pexels, pixabay, etc.)"
+    },
+    "broll_id": {
+      "type": "string",
+      "description": "ID of the B-roll video from the source"
+    },
+    "broll_thumbnail": {
+      "type": "string",
+      "description": "Thumbnail URL for the B-roll video"
+    },
+    "broll_query": {
+      "type": "string",
+      "description": "Search query used to find this B-roll"
+    }
+  },
+  "required": [
+    "project_id",
+    "scene_number"
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "name": "ThumbnailTemplates",
+  "type": "object",
+  "properties": {
+    "niche_id": {
+      "type": "string",
+      "description": "Reference to the ThumbnailNiches entity"
+    },
+    "source_url": {
+      "type": "string",
+      "description": "Original YouTube URL or image URL"
+    },
+    "thumbnail_image_url": {
+      "type": "string",
+      "description": "Saved thumbnail image URL"
+    },
+    "niche_tags": {
+      "type": "string",
+      "description": "Comma-separated niche tags"
+    },
+    "template_type": {
+      "type": "string",
+      "enum": [
+        "face_off",
+        "centered_hero",
+        "the_reveal",
+        "the_contrast",
+        "the_reaction",
+        "bold_statement",
+        "the_mystery",
+        "the_warning",
+        "before_after",
+        "other"
+      ],
+      "description": "Composition template category"
+    },
+    "emotional_tone": {
+      "type": "string",
+      "description": "Primary emotion"
+    },
+    "forensic_description": {
+      "type": "string",
+      "description": "Full forensic analysis"
+    },
+    "composition_blueprint": {
+      "type": "string",
+      "description": "Reusable composition rules"
+    },
+    "color_strategy": {
+      "type": "string",
+      "description": "Color contrast approach"
+    },
+    "text_strategy": {
+      "type": "string",
+      "description": "How text creates curiosity gap"
+    },
+    "character_action_notes": {
+      "type": "string",
+      "description": "How characters are posed in ACTION"
+    },
+    "recreate_prompt": {
+      "type": "string",
+      "description": "Generic AI image prompt template"
+    },
+    "quality_score": {
+      "type": "number",
+      "description": "Quality rating 1-10"
+    },
+    "is_favorite": {
+      "type": "boolean",
+      "default": false,
+      "description": "Top-tier favorite"
+    }
+  },
+  "required": [
+    "niche_id",
+    "template_type"
+  ]
+}

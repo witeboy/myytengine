@@ -1,0 +1,130 @@
+{
+  "name": "NicheAudits",
+  "type": "object",
+  "properties": {
+    "search_keyword": {
+      "type": "string",
+      "description": "The seed keyword or channel ID used for the audit"
+    },
+    "channel_id": {
+      "type": "string",
+      "description": "YouTube channel ID"
+    },
+    "channel_name": {
+      "type": "string",
+      "description": "YouTube channel name"
+    },
+    "channel_url": {
+      "type": "string",
+      "description": "Full YouTube channel URL"
+    },
+    "channel_thumbnail": {
+      "type": "string",
+      "description": "Channel thumbnail URL"
+    },
+    "subscriber_count": {
+      "type": "number",
+      "description": "Total subscriber count"
+    },
+    "total_views": {
+      "type": "number",
+      "description": "Total channel views"
+    },
+    "video_count": {
+      "type": "number",
+      "description": "Total number of videos on the channel"
+    },
+    "monetization_likelihood": {
+      "type": "string",
+      "enum": [
+        "High",
+        "Medium",
+        "Low"
+      ],
+      "description": "Inferred monetization status"
+    },
+    "monetization_confidence": {
+      "type": "number",
+      "description": "Monetization confidence score 0-1"
+    },
+    "monetization_signals": {
+      "type": "string",
+      "description": "JSON array of detected monetization signals"
+    },
+    "estimated_ctr_score": {
+      "type": "number",
+      "description": "Estimated CTR proxy score based on viral multiplier"
+    },
+    "estimated_retention_score": {
+      "type": "number",
+      "description": "Estimated retention proxy from engagement density"
+    },
+    "avg_views_per_day": {
+      "type": "number",
+      "description": "Average views per day across recent videos"
+    },
+    "avg_opportunity_score": {
+      "type": "number",
+      "description": "Average views/subs ratio"
+    },
+    "long_form_ratio": {
+      "type": "number",
+      "description": "Percentage of videos over 8 min (0-1)"
+    },
+    "engagement_density": {
+      "type": "number",
+      "description": "Average (likes+comments)/views ratio"
+    },
+    "viral_consistency": {
+      "type": "number",
+      "description": "How many of last 10 videos beat subscriber count"
+    },
+    "channel_profitability_score": {
+      "type": "number",
+      "description": "Composite profitability score"
+    },
+    "profitability_grade": {
+      "type": "string",
+      "enum": [
+        "S-Tier",
+        "A-Tier",
+        "B-Tier",
+        "C-Tier"
+      ],
+      "description": "Overall profitability grade"
+    },
+    "avg_cpm_category": {
+      "type": "string",
+      "description": "Estimated CPM category label"
+    },
+    "estimated_monthly_revenue": {
+      "type": "number",
+      "description": "Estimated monthly revenue in USD"
+    },
+    "growth_velocity": {
+      "type": "number",
+      "description": "Delta velocity - recent vs previous performance"
+    },
+    "niche_cluster": {
+      "type": "string",
+      "description": "Detected topic cluster for this channel"
+    },
+    "recommended_entry_angle": {
+      "type": "string",
+      "description": "AI-suggested approach to compete in this niche"
+    },
+    "recent_video_data": {
+      "type": "string",
+      "description": "JSON array of recent video stats"
+    },
+    "audit_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this audit was performed"
+    }
+  },
+  "required": [
+    "channel_name",
+    "search_keyword"
+  ]
+}

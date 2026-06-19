@@ -1,0 +1,54 @@
+{
+  "name": "Hooks",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the project"
+    },
+    "topic_id": {
+      "type": "string",
+      "description": "Reference to the selected topic"
+    },
+    "rank": {
+      "type": "number",
+      "description": "Hook ranking (1-10)"
+    },
+    "hook_text": {
+      "type": "string",
+      "description": "The hook text (under 100 chars)"
+    },
+    "hook_type": {
+      "type": "string",
+      "enum": [
+        "curiosity_gap",
+        "power_word",
+        "pattern_break"
+      ],
+      "description": "Type of hook strategy"
+    },
+    "intensity_score": {
+      "type": "number",
+      "description": "Emotional intensity score (1-10)"
+    },
+    "use_as_thumbnail": {
+      "type": "boolean",
+      "description": "Can be used as thumbnail text",
+      "default": true
+    },
+    "use_as_voiceover": {
+      "type": "boolean",
+      "description": "Can be used as voiceover opening",
+      "default": true
+    },
+    "is_selected": {
+      "type": "boolean",
+      "description": "Whether this hook was selected by the user",
+      "default": false
+    }
+  },
+  "required": [
+    "project_id",
+    "hook_text"
+  ]
+}

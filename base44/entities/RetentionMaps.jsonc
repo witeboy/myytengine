@@ -1,0 +1,62 @@
+{
+  "name": "RetentionMaps",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the project"
+    },
+    "script_id": {
+      "type": "string",
+      "description": "Reference to the script"
+    },
+    "checkpoint_name": {
+      "type": "string",
+      "description": "Name of the retention checkpoint"
+    },
+    "time_start": {
+      "type": "string",
+      "description": "Checkpoint start time (e.g. 0:00)"
+    },
+    "time_end": {
+      "type": "string",
+      "description": "Checkpoint end time (e.g. 0:20)"
+    },
+    "description": {
+      "type": "string",
+      "description": "What happens at this checkpoint"
+    },
+    "visual_intensity": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "peak"
+      ],
+      "description": "Visual intensity level"
+    },
+    "audio_intensity": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "peak"
+      ],
+      "description": "Audio intensity level"
+    },
+    "retention_strategy": {
+      "type": "string",
+      "description": "Strategy to keep viewers engaged"
+    },
+    "order_index": {
+      "type": "number",
+      "description": "Order of this checkpoint in the timeline"
+    }
+  },
+  "required": [
+    "project_id",
+    "checkpoint_name"
+  ]
+}

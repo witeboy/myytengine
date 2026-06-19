@@ -1,0 +1,99 @@
+{
+  "name": "InfluencerTemplates",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Template name"
+    },
+    "gender": {
+      "type": "string",
+      "enum": [
+        "female",
+        "male"
+      ],
+      "description": "Gender of the influencer"
+    },
+    "age_range": {
+      "type": "string",
+      "description": "Age range e.g. 24-30"
+    },
+    "ethnicity": {
+      "type": "string",
+      "description": "Ethnicity/race for accurate representation"
+    },
+    "skin_tone": {
+      "type": "string",
+      "enum": [
+        "light",
+        "medium",
+        "olive",
+        "brown",
+        "dark"
+      ],
+      "description": "Skin tone category"
+    },
+    "influencer_type": {
+      "type": "string",
+      "description": "Type of influencer content"
+    },
+    "base_image_url": {
+      "type": "string",
+      "description": "The reference image URL for this influencer"
+    },
+    "base_prompt": {
+      "type": "string",
+      "description": "The full prompt used to generate the base image"
+    },
+    "appearance_notes": {
+      "type": "string",
+      "description": "Custom appearance notes (hair, distinguishing features)"
+    },
+    "archetype": {
+      "type": "string",
+      "description": "Psychological archetype e.g. The Curious Friend + Honest Reviewer"
+    },
+    "voice_style": {
+      "type": "string",
+      "description": "Voice delivery style description"
+    },
+    "voice_phrases": {
+      "type": "string",
+      "description": "JSON array of signature phrases this archetype uses"
+    },
+    "energy": {
+      "type": "string",
+      "description": "Energy/vibe description e.g. Spontaneous, Comforting, Momentum"
+    },
+    "trust_signals": {
+      "type": "string",
+      "description": "JSON array of trust signal behaviors"
+    },
+    "monetization_fit": {
+      "type": "string",
+      "description": "Comma-separated monetization angles"
+    },
+    "target_audience": {
+      "type": "string",
+      "description": "Target audience description"
+    },
+    "content_structure": {
+      "type": "string",
+      "description": "Typical content structure flow"
+    },
+    "flaws": {
+      "type": "string",
+      "description": "Realistic imperfections for authenticity"
+    },
+    "is_favorite": {
+      "type": "boolean",
+      "default": false,
+      "description": "Favorited template"
+    }
+  },
+  "required": [
+    "name",
+    "gender",
+    "skin_tone"
+  ]
+}

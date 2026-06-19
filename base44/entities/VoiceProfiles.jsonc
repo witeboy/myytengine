@@ -1,0 +1,49 @@
+{
+  "name": "VoiceProfiles",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the project"
+    },
+    "tone": {
+      "type": "string",
+      "description": "Voice tone style"
+    },
+    "pacing_style": {
+      "type": "string",
+      "description": "Description of pacing approach"
+    },
+    "pause_rules": {
+      "type": "string",
+      "description": "When and where to pause"
+    },
+    "emphasis_rules": {
+      "type": "string",
+      "description": "What words to emphasize and how"
+    },
+    "emotion_range": {
+      "type": "string",
+      "description": "Emotional range description"
+    },
+    "sample_monologue_1": {
+      "type": "string",
+      "description": "First sample monologue text"
+    },
+    "sample_monologue_2": {
+      "type": "string",
+      "description": "Second sample monologue text"
+    },
+    "elevenlabs_settings": {
+      "type": "string",
+      "description": "JSON string of ElevenLabs voice settings"
+    },
+    "full_response": {
+      "type": "string",
+      "description": "Raw AI response for reference"
+    }
+  },
+  "required": [
+    "project_id"
+  ]
+}

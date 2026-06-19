@@ -1,0 +1,77 @@
+{
+  "name": "VisualPrompts",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the project"
+    },
+    "script_id": {
+      "type": "string",
+      "description": "Reference to the script"
+    },
+    "scene_number": {
+      "type": "number",
+      "description": "Scene sequence number"
+    },
+    "narration_text": {
+      "type": "string",
+      "description": "The narration for this scene"
+    },
+    "sora_prompt": {
+      "type": "string",
+      "description": "Full Sora 2.0 prompt for visual generation"
+    },
+    "scene_environment": {
+      "type": "string",
+      "description": "Where this scene takes place"
+    },
+    "time_of_day": {
+      "type": "string",
+      "enum": [
+        "morning",
+        "afternoon",
+        "evening",
+        "night"
+      ],
+      "description": "Time of day for the scene"
+    },
+    "camera_angle": {
+      "type": "string",
+      "description": "Camera angle (wide, close-up, aerial, tracking)"
+    },
+    "lighting": {
+      "type": "string",
+      "description": "Lighting style (dramatic, soft, harsh, natural)"
+    },
+    "composition_notes": {
+      "type": "string",
+      "description": "Framing and composition details"
+    },
+    "character_actions": {
+      "type": "string",
+      "description": "Actions and expressions"
+    },
+    "style_tag": {
+      "type": "string",
+      "enum": [
+        "cinematic",
+        "documentary",
+        "stylized_realism"
+      ],
+      "description": "Visual style tag"
+    },
+    "emotional_tone": {
+      "type": "string",
+      "description": "The mood of this scene"
+    },
+    "duration_seconds": {
+      "type": "number",
+      "description": "Duration of this scene in seconds"
+    }
+  },
+  "required": [
+    "project_id",
+    "scene_number"
+  ]
+}

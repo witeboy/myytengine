@@ -1,0 +1,55 @@
+{
+  "name": "Topics",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the project"
+    },
+    "rank": {
+      "type": "number",
+      "description": "Topic ranking (1-10)"
+    },
+    "title": {
+      "type": "string",
+      "description": "Topic title"
+    },
+    "description": {
+      "type": "string",
+      "description": "Why this topic is trending and compelling"
+    },
+    "keyword_potential": {
+      "type": "string",
+      "description": "Keyword opportunity analysis"
+    },
+    "monthly_searches": {
+      "type": "string",
+      "description": "Estimated monthly search range"
+    },
+    "viral_score": {
+      "type": "number",
+      "description": "Viral potential score (1-10)"
+    },
+    "storytelling_score": {
+      "type": "number",
+      "description": "Storytelling strength score (1-10)"
+    },
+    "emotional_score": {
+      "type": "number",
+      "description": "Emotional payoff score (1-10)"
+    },
+    "engagement_notes": {
+      "type": "string",
+      "description": "Why comments will be strong"
+    },
+    "is_selected": {
+      "type": "boolean",
+      "description": "Whether this topic was selected by the user",
+      "default": false
+    }
+  },
+  "required": [
+    "project_id",
+    "title"
+  ]
+}

@@ -1,0 +1,121 @@
+{
+  "name": "Channels",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "YouTube channel name"
+    },
+    "niche": {
+      "type": "string",
+      "description": "Content niche category"
+    },
+    "niche_label": {
+      "type": "string",
+      "description": "Human-readable niche label"
+    },
+    "description": {
+      "type": "string",
+      "description": "Channel description"
+    },
+    "icon_emoji": {
+      "type": "string",
+      "description": "Emoji icon for the channel card"
+    },
+    "color": {
+      "type": "string",
+      "description": "Brand color hex for the channel"
+    },
+    "shorts_per_day": {
+      "type": "number",
+      "description": "Number of short-form posts per day",
+      "default": 5
+    },
+    "longform_per_week": {
+      "type": "number",
+      "description": "Number of long-form posts per week",
+      "default": 3
+    },
+    "short_form_word_limit": {
+      "type": "number",
+      "description": "Max words for short-form content",
+      "default": 200
+    },
+    "long_form_duration_minutes": {
+      "type": "number",
+      "description": "Target duration for long-form videos in minutes",
+      "default": 15
+    },
+    "script_strategy": {
+      "type": "string",
+      "description": "JSON string of niche-specific viral script strategy auto-researched on creation"
+    },
+    "script_mode": {
+      "type": "string",
+      "enum": [
+        "standard",
+        "sleep_meditation",
+        "sleep_story",
+        "youtube_shorts"
+      ],
+      "default": "standard",
+      "description": "Script generation mode"
+    },
+    "visual_style": {
+      "type": "string",
+      "description": "Default visual style for this channel's content"
+    },
+    "tone": {
+      "type": "string",
+      "enum": [
+        "dramatic",
+        "educational",
+        "humorous",
+        "conversational",
+        "inspirational",
+        "suspenseful",
+        "sarcastic",
+        "soothing"
+      ],
+      "default": "dramatic",
+      "description": "Default tone for content"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "paused",
+        "archived"
+      ],
+      "default": "active",
+      "description": "Channel status"
+    },
+    "total_topics": {
+      "type": "number",
+      "description": "Total number of topics uploaded",
+      "default": 0
+    },
+    "topics_scheduled": {
+      "type": "number",
+      "description": "Number of topics assigned to calendar dates",
+      "default": 0
+    },
+    "ai_insights": {
+      "type": "string",
+      "description": "JSON string of AI-generated insights, trend data, and recommendations"
+    },
+    "last_trend_refresh": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When trend data was last refreshed"
+    },
+    "shorts_niche": {
+      "type": "string",
+      "description": "Shorts niche type (finance, book, etc.) for youtube_shorts mode"
+    }
+  },
+  "required": [
+    "name",
+    "niche"
+  ]
+}

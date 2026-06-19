@@ -1,0 +1,39 @@
+{
+  "name": "ProjectVersions",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the project"
+    },
+    "version_number": {
+      "type": "number",
+      "description": "Auto-incrementing version number"
+    },
+    "label": {
+      "type": "string",
+      "description": "Human-readable version label"
+    },
+    "snapshot_data": {
+      "type": "string",
+      "description": "JSON snapshot of the project state at this version"
+    },
+    "scenes_snapshot": {
+      "type": "string",
+      "description": "JSON snapshot of all scenes at this version"
+    },
+    "change_summary": {
+      "type": "string",
+      "description": "Summary of what changed in this version"
+    },
+    "is_auto": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether this was auto-saved or manual"
+    }
+  },
+  "required": [
+    "project_id",
+    "version_number"
+  ]
+}

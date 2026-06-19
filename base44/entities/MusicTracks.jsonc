@@ -1,0 +1,58 @@
+{
+  "name": "MusicTracks",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the project"
+    },
+    "title": {
+      "type": "string",
+      "description": "Track title"
+    },
+    "genre": {
+      "type": "string",
+      "description": "Music genre"
+    },
+    "mood": {
+      "type": "string",
+      "description": "Track mood/tone"
+    },
+    "prompt": {
+      "type": "string",
+      "description": "AI prompt used to generate the music"
+    },
+    "audio_url": {
+      "type": "string",
+      "description": "URL of the generated music file"
+    },
+    "duration_seconds": {
+      "type": "number",
+      "description": "Duration in seconds"
+    },
+    "is_selected": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether this track is the active background music"
+    },
+    "volume": {
+      "type": "number",
+      "default": 0.3,
+      "description": "Background music volume 0-1"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "generating",
+        "completed",
+        "failed"
+      ],
+      "default": "pending",
+      "description": "Generation status"
+    }
+  },
+  "required": [
+    "project_id"
+  ]
+}

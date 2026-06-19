@@ -1,0 +1,69 @@
+{
+  "name": "Scripts",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the project"
+    },
+    "topic_id": {
+      "type": "string",
+      "description": "Reference to the topic"
+    },
+    "version": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "edited",
+        "final",
+        "final_aggregated"
+      ],
+      "default": "draft",
+      "description": "Script version stage"
+    },
+    "title": {
+      "type": "string",
+      "description": "Video working title"
+    },
+    "full_script": {
+      "type": "string",
+      "description": "The complete script combining all acts"
+    },
+    "cold_open": {
+      "type": "string",
+      "description": "Opening 7-second hook narration"
+    },
+    "act_1": {
+      "type": "string",
+      "description": "Full Act 1 narration with scene directions"
+    },
+    "act_2": {
+      "type": "string",
+      "description": "Full Act 2 narration with scene directions"
+    },
+    "act_3": {
+      "type": "string",
+      "description": "Full Act 3 narration with scene directions"
+    },
+    "outro": {
+      "type": "string",
+      "description": "Closing narration with call to action"
+    },
+    "word_count": {
+      "type": "number",
+      "description": "Total word count"
+    },
+    "estimated_duration_sec": {
+      "type": "number",
+      "description": "Estimated video duration in seconds"
+    },
+    "editor_notes": {
+      "type": "string",
+      "description": "Editor feedback and change summary"
+    }
+  },
+  "required": [
+    "project_id",
+    "version"
+  ]
+}

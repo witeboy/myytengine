@@ -1,0 +1,93 @@
+{
+  "name": "UploadMetadata",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the project"
+    },
+    "title_primary": {
+      "type": "string",
+      "description": "Main SEO-optimized title"
+    },
+    "title_variation_1": {
+      "type": "string",
+      "description": "Alternative title variation 1"
+    },
+    "title_variation_2": {
+      "type": "string",
+      "description": "Alternative title variation 2"
+    },
+    "title_variation_3": {
+      "type": "string",
+      "description": "Alternative title variation 3"
+    },
+    "title_variation_4": {
+      "type": "string",
+      "description": "Alternative title variation 4"
+    },
+    "titles_json": {
+      "type": "string",
+      "description": "JSON string of the full titles array with scores and metadata"
+    },
+    "descriptions_json": {
+      "type": "string",
+      "description": "JSON string of the full descriptions array with labels and keywords"
+    },
+    "description_template": {
+      "type": "string",
+      "description": "Primary description with timestamps and links"
+    },
+    "description_alt_1": {
+      "type": "string",
+      "description": "Alternative description 1"
+    },
+    "description_alt_2": {
+      "type": "string",
+      "description": "Alternative description 2"
+    },
+    "tags": {
+      "type": "string",
+      "description": "JSON array of all tags"
+    },
+    "tags_short": {
+      "type": "string",
+      "description": "JSON array of short tags"
+    },
+    "tags_medium": {
+      "type": "string",
+      "description": "JSON array of medium tags"
+    },
+    "tags_long": {
+      "type": "string",
+      "description": "JSON array of long-tail tags"
+    },
+    "pinned_comment": {
+      "type": "string",
+      "description": "Template for pinned comment"
+    },
+    "hashtags": {
+      "type": "string",
+      "description": "Hashtags for discovery"
+    },
+    "seo_analysis": {
+      "type": "string",
+      "description": "JSON string of SEO analysis data"
+    },
+    "seo_strategy": {
+      "type": "string",
+      "description": "Overall SEO strategy summary"
+    },
+    "youtube_channels": {
+      "type": "string",
+      "description": "JSON array of connected YouTube channels with tokens"
+    },
+    "selected_channel_id": {
+      "type": "string",
+      "description": "Currently selected YouTube channel ID for publishing"
+    }
+  },
+  "required": [
+    "project_id"
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "name": "CalendarEntries",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the project"
+    },
+    "week_number": {
+      "type": "number",
+      "description": "Week number in the 12-week calendar (1-12)"
+    },
+    "day_of_week": {
+      "type": "string",
+      "enum": [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday"
+      ],
+      "description": "Day of the week for this entry"
+    },
+    "topic_title": {
+      "type": "string",
+      "description": "Topic for this upload"
+    },
+    "format": {
+      "type": "string",
+      "enum": [
+        "short",
+        "long",
+        "series_episode"
+      ],
+      "description": "Content format"
+    },
+    "content_theme": {
+      "type": "string",
+      "description": "Thematic arc for this entry"
+    },
+    "reuse_assets": {
+      "type": "string",
+      "description": "Which assets to reuse from previous videos"
+    },
+    "engagement_action": {
+      "type": "string",
+      "description": "Community action for this upload"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "planned",
+        "in_progress",
+        "completed",
+        "skipped"
+      ],
+      "default": "planned",
+      "description": "Status of this calendar entry"
+    }
+  },
+  "required": [
+    "project_id",
+    "week_number"
+  ]
+}

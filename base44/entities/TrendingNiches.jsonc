@@ -1,0 +1,62 @@
+{
+  "name": "TrendingNiches",
+  "type": "object",
+  "properties": {
+    "keyword": {
+      "type": "string",
+      "description": "Niche keyword"
+    },
+    "period": {
+      "type": "string",
+      "enum": [
+        "daily",
+        "weekly",
+        "monthly"
+      ],
+      "description": "Time period for this ranking"
+    },
+    "rank": {
+      "type": "number",
+      "description": "Rank position (1 = top)"
+    },
+    "avg_views": {
+      "type": "number",
+      "description": "Average views across top videos"
+    },
+    "avg_opportunity_score": {
+      "type": "number",
+      "description": "Average opportunity score"
+    },
+    "video_count": {
+      "type": "number",
+      "description": "Number of videos analyzed"
+    },
+    "top_channel": {
+      "type": "string",
+      "description": "Top performing channel in this niche"
+    },
+    "growth_trend": {
+      "type": "string",
+      "enum": [
+        "rising",
+        "stable",
+        "declining"
+      ],
+      "description": "Trend direction"
+    },
+    "avg_rpm_estimate": {
+      "type": "number",
+      "description": "Estimated RPM for this niche"
+    },
+    "snapshot_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this data was captured"
+    }
+  },
+  "required": [
+    "keyword",
+    "period",
+    "rank"
+  ]
+}

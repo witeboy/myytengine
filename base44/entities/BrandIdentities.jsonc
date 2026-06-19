@@ -1,0 +1,73 @@
+{
+  "name": "BrandIdentities",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the project"
+    },
+    "niche": {
+      "type": "string",
+      "description": "The niche this brand is for"
+    },
+    "channel_name": {
+      "type": "string",
+      "description": "Generated channel name"
+    },
+    "tagline": {
+      "type": "string",
+      "description": "Short brand tagline"
+    },
+    "color_primary": {
+      "type": "string",
+      "description": "Primary brand color hex code"
+    },
+    "color_secondary": {
+      "type": "string",
+      "description": "Secondary brand color hex code"
+    },
+    "color_accent": {
+      "type": "string",
+      "description": "Accent brand color hex code"
+    },
+    "typography_heading": {
+      "type": "string",
+      "description": "Heading font name"
+    },
+    "typography_body": {
+      "type": "string",
+      "description": "Body font name"
+    },
+    "logo_direction": {
+      "type": "string",
+      "description": "Detailed logo design description"
+    },
+    "visual_rules": {
+      "type": "string",
+      "description": "Visual consistency rules"
+    },
+    "intro_concept": {
+      "type": "string",
+      "description": "Intro sequence description"
+    },
+    "outro_concept": {
+      "type": "string",
+      "description": "Outro sequence description"
+    },
+    "thumbnail_tone": {
+      "type": "string",
+      "description": "Emotional tone guide for thumbnails"
+    },
+    "sound_identity": {
+      "type": "string",
+      "description": "Intro stinger and tone theme description"
+    },
+    "full_response": {
+      "type": "string",
+      "description": "Raw AI response for reference"
+    }
+  },
+  "required": [
+    "project_id"
+  ]
+}

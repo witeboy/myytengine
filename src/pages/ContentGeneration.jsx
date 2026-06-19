@@ -843,7 +843,7 @@ export default function ContentGeneration() {
         while (!breakdownDone && attempts < MAX_ATTEMPTS) {
           attempts++;
           try {
-            const bdResult = await base44.functions.invoke('fixScenePrompts', {
+            const bdResult = await base44.functions.invoke('explainerSceneBreakdown', {
               project_id: projectId,
               start_section: nextSection,
             });

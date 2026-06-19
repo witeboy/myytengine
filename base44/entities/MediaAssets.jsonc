@@ -1,0 +1,59 @@
+{
+  "name": "MediaAssets",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Optional reference to a project"
+    },
+    "file_url": {
+      "type": "string",
+      "description": "URL of the uploaded media file"
+    },
+    "file_type": {
+      "type": "string",
+      "enum": [
+        "image",
+        "video",
+        "audio"
+      ],
+      "description": "Type of media file"
+    },
+    "filename": {
+      "type": "string",
+      "description": "Original filename"
+    },
+    "tags": {
+      "type": "string",
+      "description": "Comma-separated tags for categorization"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "scene_image",
+        "scene_video",
+        "background",
+        "overlay",
+        "music",
+        "sfx",
+        "voiceover",
+        "reference",
+        "other"
+      ],
+      "default": "other",
+      "description": "Category of the media asset"
+    },
+    "used_in_scenes": {
+      "type": "string",
+      "description": "JSON array of scene IDs where this asset is used"
+    },
+    "file_size_bytes": {
+      "type": "number",
+      "description": "File size in bytes"
+    }
+  },
+  "required": [
+    "file_url",
+    "file_type"
+  ]
+}

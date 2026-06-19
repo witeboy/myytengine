@@ -1,0 +1,53 @@
+{
+  "name": "TimingEntries",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the project"
+    },
+    "script_id": {
+      "type": "string",
+      "description": "Reference to the script"
+    },
+    "entry_order": {
+      "type": "number",
+      "description": "Order of this entry in the timeline"
+    },
+    "timestamp_start": {
+      "type": "string",
+      "description": "Start timestamp (e.g. 0:00)"
+    },
+    "timestamp_end": {
+      "type": "string",
+      "description": "End timestamp (e.g. 0:08)"
+    },
+    "spoken_text": {
+      "type": "string",
+      "description": "The voiceover text for this segment"
+    },
+    "scene_concept": {
+      "type": "string",
+      "description": "Visual description for this segment"
+    },
+    "transition_type": {
+      "type": "string",
+      "enum": [
+        "cut",
+        "dissolve",
+        "fade",
+        "zoom",
+        "match_cut"
+      ],
+      "description": "Transition type to next segment"
+    },
+    "duration_seconds": {
+      "type": "number",
+      "description": "Duration of this segment in seconds"
+    }
+  },
+  "required": [
+    "project_id",
+    "entry_order"
+  ]
+}

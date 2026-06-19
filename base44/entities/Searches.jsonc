@@ -1,0 +1,37 @@
+{
+  "name": "Searches",
+  "type": "object",
+  "properties": {
+    "keyword": {
+      "type": "string",
+      "description": "The niche keyword searched"
+    },
+    "duration": {
+      "type": "string",
+      "description": "Time range filter used"
+    },
+    "search_date": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the search was performed"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "Pending",
+        "Complete",
+        "Failed"
+      ],
+      "default": "Pending",
+      "description": "Search status"
+    },
+    "result_count": {
+      "type": "number",
+      "description": "Number of results returned"
+    }
+  },
+  "required": [
+    "keyword",
+    "duration"
+  ]
+}

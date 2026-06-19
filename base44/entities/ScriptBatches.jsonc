@@ -1,0 +1,60 @@
+{
+  "name": "ScriptBatches",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the project"
+    },
+    "script_id": {
+      "type": "string",
+      "description": "Reference to the script"
+    },
+    "batch_number": {
+      "type": "number",
+      "description": "Batch sequence number"
+    },
+    "story_segment": {
+      "type": "string",
+      "description": "Story segment name"
+    },
+    "focus_area": {
+      "type": "string",
+      "description": "What this batch focuses on"
+    },
+    "synopsis": {
+      "type": "string",
+      "description": "Detailed synopsis for this batch"
+    },
+    "target_words": {
+      "type": "number",
+      "description": "Target word count for this batch"
+    },
+    "content": {
+      "type": "string",
+      "description": "Generated script content"
+    },
+    "word_count": {
+      "type": "number",
+      "description": "Actual word count"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "generating",
+        "completed"
+      ],
+      "default": "pending",
+      "description": "Generation status"
+    },
+    "scene_image_url": {
+      "type": "string",
+      "description": "URL of generated scene image for this batch"
+    }
+  },
+  "required": [
+    "project_id",
+    "batch_number"
+  ]
+}

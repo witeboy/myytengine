@@ -1,0 +1,166 @@
+{
+  "name": "ProductionSettings",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the project"
+    },
+    "selected_asset_style": {
+      "type": "string",
+      "enum": [
+        "anime",
+        "photorealistic",
+        "cartoon",
+        "oil_colour",
+        "retro_classic",
+        "black_and_white",
+        "60s",
+        "90s",
+        "medieval"
+      ],
+      "description": "Global asset style selected by user"
+    },
+    "selected_voice_id": {
+      "type": "string",
+      "description": "Selected voice ID from ElevenLabs/AI33"
+    },
+    "voiceover_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "generating",
+        "ready",
+        "completed",
+        "failed"
+      ],
+      "default": "pending",
+      "description": "Voiceover generation status"
+    },
+    "voiceover_url": {
+      "type": "string",
+      "description": "URL to generated voiceover audio file"
+    },
+    "total_duration_seconds": {
+      "type": "number",
+      "description": "Total duration of the voiceover in seconds"
+    },
+    "generation_task_id": {
+      "type": "string",
+      "description": "Task ID for voiceover generation"
+    },
+    "voiceover_chunks": {
+      "type": "string",
+      "description": "JSON array of chunk metadata for chunked voiceover generation"
+    },
+    "voiceover_total_chunks": {
+      "type": "number",
+      "description": "Total number of voiceover chunks"
+    },
+    "voiceover_completed_chunks": {
+      "type": "number",
+      "description": "Number of completed voiceover chunks"
+    },
+    "caption_enabled": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether captions are enabled for this project"
+    },
+    "caption_style_preset": {
+      "type": "string",
+      "enum": [
+        "youtube_classic",
+        "mrbeast",
+        "tiktok",
+        "hormozi",
+        "netflix",
+        "none"
+      ],
+      "default": "hormozi",
+      "description": "Caption style preset"
+    },
+    "caption_font_size": {
+      "type": "number",
+      "default": 48,
+      "description": "Caption font size in pixels"
+    },
+    "caption_text_color": {
+      "type": "string",
+      "default": "#FFFFFF",
+      "description": "Caption text color"
+    },
+    "caption_highlight_color": {
+      "type": "string",
+      "default": "#FFD700",
+      "description": "Active word highlight color for karaoke/word_highlight animation"
+    },
+    "caption_bg_color": {
+      "type": "string",
+      "default": "rgba(0,0,0,0.7)",
+      "description": "Caption background color"
+    },
+    "caption_stroke_width": {
+      "type": "number",
+      "default": 2,
+      "description": "Text stroke/outline width in pixels"
+    },
+    "caption_position": {
+      "type": "string",
+      "enum": [
+        "top",
+        "center",
+        "bottom"
+      ],
+      "default": "center",
+      "description": "Vertical position of captions on screen"
+    },
+    "caption_animation": {
+      "type": "string",
+      "enum": [
+        "none",
+        "fade",
+        "pop",
+        "word_highlight",
+        "karaoke"
+      ],
+      "default": "word_highlight",
+      "description": "Caption animation style"
+    },
+    "beat_durations": {
+      "type": "string",
+      "description": "JSON array of scene durations in seconds: [5, 6, 5, 4, ...]"
+    },
+    "beat_start_times": {
+      "type": "string",
+      "description": "JSON array of scene start times in seconds: [0, 5, 11, 16, ...]"
+    },
+    "caption_max_words": {
+      "type": "number",
+      "default": 4,
+      "description": "Maximum words per caption line"
+    },
+    "caption_data": {
+      "type": "string",
+      "description": "JSON array of word-level timestamps: [{word, start, end, scene_number}, ...]"
+    },
+    "story_analysis": {
+      "type": "string",
+      "description": "JSON object from scene breakdown: {central_theme, narrative_arc_summary, emotional_trajectory, key_turning_points, visual_world, recurring_visual_motifs, color_arc}"
+    },
+    "timeline_video_clips": {
+      "type": "string",
+      "description": "JSON array of video clip states from Timeline Editor (effects, motions, transitions, durations, playback rates)"
+    },
+    "timeline_caption_clips": {
+      "type": "string",
+      "description": "JSON array of caption clip states from Timeline Editor (text, timing, position, styling)"
+    },
+    "timeline_overlay_clips": {
+      "type": "string",
+      "description": "JSON array of overlay clip states from Timeline Editor (emoji, stickers, video overlays with position, animation, timing)"
+    }
+  },
+  "required": [
+    "project_id"
+  ]
+}

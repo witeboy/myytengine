@@ -1,0 +1,129 @@
+{
+  "name": "TimelineBlocks",
+  "type": "object",
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the project"
+    },
+    "block_type": {
+      "type": "string",
+      "enum": [
+        "video",
+        "image"
+      ],
+      "description": "Type of asset block"
+    },
+    "prompt": {
+      "type": "string",
+      "description": "The prompt for generating this asset"
+    },
+    "start_time_seconds": {
+      "type": "number",
+      "description": "Start position on timeline in seconds"
+    },
+    "duration_seconds": {
+      "type": "number",
+      "description": "Duration of this block in seconds"
+    },
+    "asset_style": {
+      "type": "string",
+      "enum": [
+        "anime",
+        "photorealistic",
+        "cartoon",
+        "oil_colour",
+        "retro_classic",
+        "black_and_white",
+        "60s",
+        "90s",
+        "medieval"
+      ],
+      "description": "Visual style for the asset"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "generating",
+        "completed",
+        "failed"
+      ],
+      "default": "pending",
+      "description": "Generation status"
+    },
+    "generated_asset_url": {
+      "type": "string",
+      "description": "URL to the generated asset (image or video)"
+    },
+    "generation_task_id": {
+      "type": "string",
+      "description": "AI33 or external API task ID for tracking"
+    },
+    "order_index": {
+      "type": "number",
+      "description": "Display order on timeline"
+    },
+    "keyframes": {
+      "type": "string",
+      "description": "JSON array of keyframe animations [{time: seconds, property: 'position|scale|opacity', value: {x, y, scaleX, scaleY, opacity}}]"
+    },
+    "volume": {
+      "type": "number",
+      "description": "Audio volume for this block (0-1)",
+      "default": 1
+    },
+    "broll_source": {
+      "type": "string",
+      "description": "Source of B-roll video (e.g., 'freepik', 'generated', 'custom')"
+    },
+    "broll_id": {
+      "type": "string",
+      "description": "ID of the B-roll video from Freepik or other source"
+    },
+    "broll_url": {
+      "type": "string",
+      "description": "URL to the B-roll video"
+    },
+    "transition_type": {
+      "type": "string",
+      "enum": [
+        "cut",
+        "fade",
+        "dissolve",
+        "zoom",
+        "wipe",
+        "slide"
+      ],
+      "description": "Type of transition to next block"
+    },
+    "transition_duration": {
+      "type": "number",
+      "description": "Transition duration in seconds",
+      "default": 0.5
+    },
+    "color_grade": {
+      "type": "string",
+      "description": "JSON color grading profile {brightness, contrast, saturation, temperature, tint}"
+    },
+    "crop_settings": {
+      "type": "string",
+      "description": "JSON crop settings {x, y, width, height, aspect_ratio}"
+    },
+    "background_removal_enabled": {
+      "type": "boolean",
+      "description": "Whether background removal is applied",
+      "default": false
+    },
+    "background_removal_url": {
+      "type": "string",
+      "description": "URL to asset with background removed"
+    }
+  },
+  "required": [
+    "project_id",
+    "block_type",
+    "prompt",
+    "start_time_seconds"
+  ]
+}

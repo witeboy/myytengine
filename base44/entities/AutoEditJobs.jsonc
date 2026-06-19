@@ -1,0 +1,96 @@
+{
+  "name": "AutoEditJobs",
+  "type": "object",
+  "properties": {
+    "channel_id": {
+      "type": "string",
+      "description": "Reference to the channel"
+    },
+    "topic_id": {
+      "type": "string",
+      "description": "Reference to the ChannelTopic"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Reference to the auto-created Project"
+    },
+    "title": {
+      "type": "string",
+      "description": "Topic title being edited"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "searching_media",
+        "assembling_timeline",
+        "applying_effects",
+        "exporting",
+        "ready_for_review",
+        "approved",
+        "rejected",
+        "failed"
+      ],
+      "default": "pending",
+      "description": "Pipeline status"
+    },
+    "progress": {
+      "type": "number",
+      "description": "Progress percentage 0-100",
+      "default": 0
+    },
+    "phase_message": {
+      "type": "string",
+      "description": "Human-readable current phase description"
+    },
+    "orientation": {
+      "type": "string",
+      "enum": [
+        "landscape",
+        "portrait"
+      ],
+      "default": "landscape"
+    },
+    "format": {
+      "type": "string",
+      "enum": [
+        "short",
+        "long"
+      ],
+      "default": "short"
+    },
+    "scenes_data": {
+      "type": "string",
+      "description": "JSON array of assembled scene data with stock media URLs, durations, effects, transitions"
+    },
+    "keywords_used": {
+      "type": "string",
+      "description": "JSON array of search keywords used for stock media"
+    },
+    "total_duration_seconds": {
+      "type": "number",
+      "description": "Total assembled video duration"
+    },
+    "export_url": {
+      "type": "string",
+      "description": "URL to the exported MP4 file"
+    },
+    "thumbnail_url": {
+      "type": "string",
+      "description": "Thumbnail image URL for the draft"
+    },
+    "error_message": {
+      "type": "string",
+      "description": "Error details if pipeline failed"
+    },
+    "review_notes": {
+      "type": "string",
+      "description": "User notes when approving or rejecting"
+    }
+  },
+  "required": [
+    "channel_id",
+    "topic_id",
+    "title"
+  ]
+}
