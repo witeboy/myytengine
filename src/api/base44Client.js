@@ -13,43 +13,26 @@ export const base44 = createClient({
   appBaseUrl
 });
 
-// Patch functions.invoke to auto-append /entry for nested functions
-// Flat functions (deployed at their root path) bypass the suffix
-const FLAT_FUNCTIONS = new Set([
-  'youtubeAuth',
-  'initializeScriptBatches',
-  'generateScriptBatches',
-  'sleepSceneBreakdown',
-  'sleepBrollPopulate',
-  'generateSceneBreakdown',
-  'generateScenePrompts',
-  'generateSceneImage',
-  'generateSceneVideo',
-  'pollSceneImage',
-  'extractCharacterDNA',
-  'callClaudeProxy',
-  'listVoices',
-  'listVoicesByProvider',
-  'analyzeYouTubeVideo',
-  'autoEditPipeline',
-  'thumbnailBlend',
-  'pollThumbnailTask',
-  'pollTranscription',
-  'repurposeCompetitorVideo',
-  'detectFaceRegion',
-  'enhanceClipForFYP',
-  'generateProgressionImage',
-  'generateProgressionPrompts',
-  'generateProgressionVideo',
-  'longViralGenerateScript',
-  'scheduleClipPost',
-  'proxyFetchAsset',
-  'generateThumbnailImage',
-]);
+// Patch functions.invoke to be path-agnostic.
+// Functions in this app are deployed either flat ("name") or nested ("name/entry").
+// We try the most likely path first, and on a 404 automatically fall back to the
+// other form — so a function never 404s just because of the path shape.
 const _originalInvoke = base44.functions.invoke.bind(base44.functions);
-base44.functions.invoke = (name, ...args) => {
-  if (FLAT_FUNCTIONS.has(name) || name.endsWith('/entry')) {
+const is404 = (err) => (err?.response?.status || err?.status) === 404;
+
+base44.functions.invoke = async (name, ...args) => {
+  // If caller already specified a path shape, honor it (no fallback needed).
+  if (name.endsWith('/entry')) {
     return _originalInvoke(name, ...args);
   }
-  return _originalInvoke(`${name}/entry`, ...args);
+  // Try nested form first (most functions are deployed as name/entry).
+  try {
+    return await _originalInvoke(`${name}/entry`, ...args);
+  } catch (err) {
+    if (is404(err)) {
+      // Nested path missing — function is deployed flat. Retry at root path.
+      return await _originalInvoke(name, ...args);
+    }
+    throw err;
+  }
 };
