@@ -1,9 +1,8 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.31';
 import OpenAI from 'npm:openai@4.58.1';
 
-const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
-
 async function callOpenAI(prompt, temperature = 0.7, retries = 3, systemPrompt = 'You are a YouTube content strategist. Always respond with valid JSON.') {
+  const openai = new OpenAI({ apiKey: Deno.env.get("OPENAI_API_KEY") });
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       const response = await openai.chat.completions.create({
@@ -322,8 +321,11 @@ Deno.serve(async (req) => {
     if (!project) return Response.json({ error: 'Project not found' }, { status: 404 });
 
     // Get topic
-    const topics = await base44.asServiceRole.entities.Topics.filter({ id: project.selected_topic_id });
-    const topic = topics[0];
+    let topic = null;
+    if (project.selected_topic_id) {
+      const topics = await base44.asServiceRole.entities.Topics.filter({ id: project.selected_topic_id });
+      topic = topics[0];
+    }
 
     // Get selected hook if any (skip for sleep projects — they don't use hooks)
     let selectedHook = null;
