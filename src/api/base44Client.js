@@ -15,7 +15,37 @@ export const base44 = createClient({
 
 // Patch functions.invoke to auto-append /entry for nested functions
 // Flat functions (deployed at their root path) bypass the suffix
-const FLAT_FUNCTIONS = new Set(['youtubeAuth']);
+const FLAT_FUNCTIONS = new Set([
+  'youtubeAuth',
+  'initializeScriptBatches',
+  'generateScriptBatches',
+  'sleepSceneBreakdown',
+  'sleepBrollPopulate',
+  'generateSceneBreakdown',
+  'generateScenePrompts',
+  'generateSceneImage',
+  'generateSceneVideo',
+  'pollSceneImage',
+  'extractCharacterDNA',
+  'callClaudeProxy',
+  'listVoices',
+  'listVoicesByProvider',
+  'analyzeYouTubeVideo',
+  'autoEditPipeline',
+  'thumbnailBlend',
+  'pollThumbnailTask',
+  'pollTranscription',
+  'repurposeCompetitorVideo',
+  'detectFaceRegion',
+  'enhanceClipForFYP',
+  'generateProgressionImage',
+  'generateProgressionPrompts',
+  'generateProgressionVideo',
+  'longViralGenerateScript',
+  'scheduleClipPost',
+  'proxyFetchAsset',
+  'generateThumbnailImage',
+]);
 const _originalInvoke = base44.functions.invoke.bind(base44.functions);
 base44.functions.invoke = (name, ...args) => {
   if (FLAT_FUNCTIONS.has(name) || name.endsWith('/entry')) {
