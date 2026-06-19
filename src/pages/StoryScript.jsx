@@ -147,15 +147,8 @@ export default function StoryScript() {
           for (const s of oldScripts) await base44.entities.Scripts.delete(s.id);
           for (const b of freshBatches) await base44.entities.ScriptBatches.delete(b.id);
 
-          // ── WIRED: explainer init now goes through generateFullScript ──
-          if (isExplainer) {
-            await base44.functions.invoke('generateFullScript', {
-              project_id: projectId,
-              mode: 'init_explainer',
-            });
-          } else {
-            await base44.functions.invoke('initializeScriptBatches', { project_id: projectId });
-          }
+          // initializeScriptBatches is mode-aware (handles explainer, sleep, standard internally)
+          await base44.functions.invoke('initializeScriptBatches', { project_id: projectId });
 
           await refetchBatches();
         } else {
@@ -186,8 +179,7 @@ export default function StoryScript() {
 
       while (retries < MAX_RETRIES && !success) {
         try {
-          const genFn = isExplainer ? 'generateExplainerBatch' : 'generateScriptBatches';
-          const resp  = await base44.functions.invoke(genFn, { project_id: projectId });
+          const resp  = await base44.functions.invoke('generateScriptBatches', { project_id: projectId });
           const data  = resp.data || resp;
           success     = true;
           allDone     = data.done === true;
@@ -276,15 +268,8 @@ export default function StoryScript() {
     setRegenerating(false);
 
     try {
-      // ── WIRED: explainer regenerate also goes through generateFullScript ──
-      if (isExplainer) {
-        await base44.functions.invoke('generateFullScript', {
-          project_id: projectId,
-          mode: 'init_explainer',
-        });
-      } else {
-        await base44.functions.invoke('initializeScriptBatches', { project_id: projectId });
-      }
+      // initializeScriptBatches is mode-aware (handles explainer, sleep, standard internally)
+      await base44.functions.invoke('initializeScriptBatches', { project_id: projectId });
 
       await refetchBatches();
       await generateBatchesWithRetry();
