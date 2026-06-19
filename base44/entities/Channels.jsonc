@@ -54,7 +54,6 @@
       "type": "string",
       "enum": [
         "standard",
-        "sleep_meditation",
         "sleep_story",
         "youtube_shorts"
       ],

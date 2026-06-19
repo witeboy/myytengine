@@ -6,7 +6,6 @@ const MODE_OPTIONS = [
   { value: 'explainer',        label: '📚 Explainer (Educational + Facts)' },
   { value: 'long_viral',       label: '🎬 Long Viral' },
   { value: 'youtube_shorts',   label: '📱 YouTube Shorts (90s)' },
-  { value: 'sleep_meditation', label: '🧘 Sleep Meditation' },
   { value: 'sleep_story',      label: '🌙 Sleep Story' },
 ];
 
@@ -40,7 +39,7 @@ export default function ProjectModePicker({ mode, onModeChange, arc, onArcChange
           {mode === 'standard'  && '✓ Story-driven viral narration with hooks and cliffhangers.'}
           {mode === 'long_viral' && '✓ Sentence-driven long-form viral with high retention pacing.'}
           {mode === 'youtube_shorts' && '✓ Tight 90-second vertical script.'}
-          {(mode === 'sleep_meditation' || mode === 'sleep_story') && '✓ Slow, soothing, repetitive — designed to put listeners to sleep.'}
+          {mode === 'sleep_story' && '✓ A slow, soothing folk/fairy-tale narrative — designed to gently put listeners to sleep.'}
         </p>
       </div>
 

@@ -93,8 +93,7 @@ export default function SleepPipeline() {
   const hasMusicReady = musicTracks.some(t => t.is_selected && t.audio_url);
   if (scriptReady && allImagesReady && hasMusicReady) activeStage = 'handoff';
 
-  const isMeditation = project?.project_mode === 'sleep_meditation';
-  const modeLabel = isMeditation ? '🧘 Sleep Meditation' : '🌙 Sleep Story';
+  const modeLabel = '🌙 Sleep Story';
 
   if (!project) {
     return (

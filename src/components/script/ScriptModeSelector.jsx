@@ -43,17 +43,10 @@ const MODES = [
     hasSub: true,
   },
   {
-    id: 'sleep_meditation',
-    label: 'Sleep Meditation',
-    desc: 'Guided affirmations, breathing cues, nature imagery. Spoken directly to the listener.',
-    icon: Moon,
-    color: 'indigo',
-  },
-  {
     id: 'sleep_story',
     label: 'Sleep Story',
-    desc: 'Real original bedtime narrative with characters and gentle plot. Not affirmations.',
-    icon: BookOpen,
+    desc: 'A classic folk/fairy-tale retold slowly with characters and a gentle plot. Not affirmations.',
+    icon: Moon,
     color: 'purple',
   },
 ];
@@ -315,20 +308,10 @@ export default function ScriptModeSelector({ value, onChange, shortsNiche, onSho
         <div className="mt-3 bg-purple-50 border border-purple-200 rounded-lg p-3">
           <p className="text-xs font-semibold text-purple-800 mb-1">What you will get</p>
           <p className="text-xs text-purple-700 leading-relaxed">
-            A real original bedtime story with named characters, a setting, and a gentle plot arc
-            that resolves peacefully. Designed to be interesting enough to follow but calm enough
-            to induce sleep. Not affirmations. Not guided breathing. An actual story.
-          </p>
-        </div>
-      )}
-
-      {mode === 'sleep_meditation' && (
-        <div className="mt-3 bg-indigo-50 border border-indigo-200 rounded-lg p-3">
-          <p className="text-xs font-semibold text-indigo-800 mb-1">What you will get</p>
-          <p className="text-xs text-indigo-700 leading-relaxed">
-            The narrator speaks directly to the listener. Gentle second-person affirmations,
-            guided breathing cues, progressive body relaxation, nature imagery. Deliberately
-            repetitive and monotonous — optimized to induce sleep, not entertain.
+            A classic folk or fairy tale, retold slowly in a soothing storyteller's voice — named
+            characters, a real setting, and a gentle plot that unfolds and resolves peacefully.
+            Interesting enough to follow, calm enough to drift off to. Not affirmations. Not guided
+            breathing. An actual story.
           </p>
         </div>
       )}

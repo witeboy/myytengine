@@ -1,6 +1,6 @@
 import React from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Moon, Sparkles, Zap, Film, Clapperboard } from 'lucide-react';
+import { Moon, Zap, Film, Clapperboard } from 'lucide-react';
 
 const MODES = [
   {
@@ -25,16 +25,9 @@ const MODES = [
     color: '#f59e0b',
   },
   {
-    id: 'sleep_meditation',
-    label: 'Sleep Meditation',
-    description: 'Soothing affirmations, breathing cues, nature imagery',
-    icon: Sparkles,
-    color: '#8b5cf6',
-  },
-  {
     id: 'sleep_story',
     label: 'Sleep Story',
-    description: 'Peaceful narrative bedtime story with rich sensory detail',
+    description: 'A classic folk/fairy tale retold slowly with characters and a gentle plot',
     icon: Moon,
     color: '#6366f1',
   },
@@ -47,7 +40,7 @@ export default function ScriptModeSelector({ value, onChange }) {
     <div>
       <p className="text-sm font-medium text-gray-800 mb-2">Script Generation Mode</p>
       <p className="text-xs text-gray-500 mb-3">Controls how scripts are structured and written for this channel</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {MODES.map(mode => {
           const selected = current === mode.id;
           return (

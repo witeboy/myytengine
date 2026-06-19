@@ -20,7 +20,6 @@
 // ═══════════════════════════════════════════════════════════════════
 
 export const KNOWN_MODES = new Set([
-  'sleep_meditation',
   'sleep_story',
   'shorts',
   'youtube_shorts',
@@ -34,8 +33,9 @@ export function resolveProjectMode(project, channel = null) {
 
   // 1. Explicit project_mode wins
   const explicit = project.project_mode;
+  // sleep_meditation is retired — fold any legacy value into sleep_story
   if (explicit === 'sleep_meditation' || explicit === 'sleep_story') {
-    return { mode: explicit, inferred: false, source: 'project.project_mode' };
+    return { mode: 'sleep_story', inferred: false, source: 'project.project_mode' };
   }
   if (explicit === 'explainer') {
     return { mode: 'explainer', inferred: false, source: 'project.project_mode' };
@@ -57,11 +57,8 @@ export function resolveProjectMode(project, channel = null) {
   const niche = (channel?.niche || project?.niche || '').toLowerCase();
   const name = (channel?.name || '').toLowerCase();
   const combined = `${niche} ${name}`;
-  if (/sleep\s*stor|bedtime\s*stor/i.test(combined)) {
-    return { mode: 'sleep_story', inferred: true, source: 'niche-keyword' };
-  }
   if (/sleep|meditation|relax|calm|sooth|asmr|bedtime/i.test(combined)) {
-    return { mode: 'sleep_meditation', inferred: true, source: 'niche-keyword' };
+    return { mode: 'sleep_story', inferred: true, source: 'niche-keyword' };
   }
 
   // 4. Portrait orientation → shorts
@@ -74,7 +71,7 @@ export function resolveProjectMode(project, channel = null) {
 }
 
 // Helpers for branch checks — use these everywhere instead of ad-hoc OR chains
-export const isSleepMode      = (m) => m === 'sleep_meditation' || m === 'sleep_story';
+export const isSleepMode      = (m) => m === 'sleep_story';
 export const isShortsMode     = (m) => m === 'shorts' || m === 'youtube_shorts';
 export const isExplainerMode  = (m) => m === 'explainer';
 export const isLongViralMode  = (m) => m === 'long_viral';
@@ -84,7 +81,6 @@ export const isStandardMode   = (m) => m === 'standard';
 // This is the strict whitelist — any caller that picks a function not in this
 // map for the resolved mode has a bug.
 export const SCENE_BREAKDOWN_FUNCTION = {
-  sleep_meditation: 'sleepSceneBreakdown',
   sleep_story:      'sleepSceneBreakdown',
   shorts:           'shortsSceneBreakdown',
   youtube_shorts:   'shortsSceneBreakdown',

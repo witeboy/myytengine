@@ -64,7 +64,7 @@ export default function StoryDuration() {
 
   const isShorts = scriptMode === 'youtube_shorts';
   const isLongViral = scriptMode === 'long_viral';
-  const isSleepProject = scriptMode === 'sleep_meditation' || scriptMode === 'sleep_story';
+  const isSleepProject = scriptMode === 'sleep_story';
   const isStoryProject = scriptMode === 'story' || scriptMode === 'explainer';
   const safeDuration = isShorts ? 1.5 : (duration || 8);
   const totalWords = isShorts ? 220 : safeDuration * 150;

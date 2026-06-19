@@ -431,7 +431,6 @@ export default function NewProject() {
                     <SelectItem value="story">📖 Story / Fiction</SelectItem>
                     <SelectItem value="youtube_shorts">📱 YouTube Shorts</SelectItem>
                     <SelectItem value="long_viral">🎬 Long Viral</SelectItem>
-                    <SelectItem value="sleep_meditation">🧘 Sleep Meditation</SelectItem>
                     <SelectItem value="sleep_story">🌙 Sleep Story</SelectItem>
                   </SelectContent>
                 </Select>
