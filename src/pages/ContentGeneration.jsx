@@ -1490,7 +1490,6 @@ export default function ContentGeneration() {
             <option value="explainer">📚 Explainer</option>
             <option value="long_viral">🎬 Long Viral</option>
             <option value="youtube_shorts">📱 YouTube Shorts</option>
-            <option value="sleep_meditation">🧘 Sleep Meditation</option>
             <option value="sleep_story">🌙 Sleep Story</option>
           </select>
           <select
