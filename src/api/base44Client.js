@@ -15,23 +15,53 @@ export const base44 = createClient({
 
 // Patch functions.invoke to be path-agnostic.
 // Functions in this app are deployed either flat ("name") or nested ("name/entry").
-// We try the most likely path first, and on a 404 automatically fall back to the
-// other form — so a function never 404s just because of the path shape.
+// On a 404 we automatically fall back to the other form, then CACHE the working
+// shape so each function only ever 404s once (or never, for known-flat ones).
 const _originalInvoke = base44.functions.invoke.bind(base44.functions);
 const is404 = (err) => (err?.response?.status || err?.status) === 404;
 
+// Functions known to be deployed flat (no /entry subfolder) — try flat FIRST
+// so they never emit even a single noisy 404.
+const KNOWN_FLAT = new Set([
+  'youtubeAuth', 'initializeScriptBatches', 'generateScriptBatches',
+  'sleepSceneBreakdown', 'sleepBrollPopulate', 'generateSceneBreakdown',
+  'generateScenePrompts', 'generateSceneImage', 'generateSceneVideo',
+  'pollSceneImage', 'extractCharacterDNA', 'callClaudeProxy', 'listVoices',
+  'listVoicesByProvider', 'analyzeYouTubeVideo', 'autoEditPipeline',
+  'thumbnailBlend', 'pollThumbnailTask', 'pollTranscription',
+  'repurposeCompetitorVideo', 'detectFaceRegion', 'enhanceClipForFYP',
+  'generateProgressionImage', 'generateProgressionPrompts',
+  'generateProgressionVideo', 'longViralGenerateScript', 'scheduleClipPost',
+  'proxyFetchAsset', 'generateThumbnailImage',
+]);
+
+// Remembers the resolved path ('flat' | 'entry') per function after the first call.
+const resolvedShape = new Map();
+
 base44.functions.invoke = async (name, ...args) => {
-  // If caller already specified a path shape, honor it (no fallback needed).
+  // Caller already specified a path shape — honor it directly.
   if (name.endsWith('/entry')) {
     return _originalInvoke(name, ...args);
   }
-  // Try nested form first (most functions are deployed as name/entry).
+
+  const flatPath = name;
+  const entryPath = `${name}/entry`;
+
+  // Decide which path to try first: cached result > known-flat hint > nested default.
+  const cached = resolvedShape.get(name);
+  const tryFlatFirst = cached ? cached === 'flat' : KNOWN_FLAT.has(name);
+  const firstPath = tryFlatFirst ? flatPath : entryPath;
+  const fallbackPath = tryFlatFirst ? entryPath : flatPath;
+
   try {
-    return await _originalInvoke(`${name}/entry`, ...args);
+    const res = await _originalInvoke(firstPath, ...args);
+    resolvedShape.set(name, tryFlatFirst ? 'flat' : 'entry');
+    return res;
   } catch (err) {
     if (is404(err)) {
-      // Nested path missing — function is deployed flat. Retry at root path.
-      return await _originalInvoke(name, ...args);
+      const res = await _originalInvoke(fallbackPath, ...args);
+      resolvedShape.set(name, tryFlatFirst ? 'entry' : 'flat');
+      return res;
     }
     throw err;
   }
