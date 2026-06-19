@@ -203,7 +203,7 @@ Deno.serve(async (req) => {
     }
 
     const aspectRatio = projectForRef?.orientation === 'portrait' ? '9:16' : '16:9';
-    const STALE_THRESHOLD_MS = 4 * 60 * 1000; // 4 min — z-image typically done in 30-60s
+    const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 min — give genuinely-running tasks time before resubmitting
     const now = Date.now();
 
     console.log(`🔍 Polling ${scenesToPoll.length} pending scenes (aspect: ${aspectRatio})...`);
