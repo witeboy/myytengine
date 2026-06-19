@@ -144,38 +144,30 @@ export default function NewProject() {
     setLoading(true);
     setError('');
     try {
+      // "I Have a Topic" — use the user's EXACT topic. No AI topic generation.
       const project = await base44.entities.Projects.create({
         name: customTopic.trim(),
         niche: customTopic.trim(),
         tone,
         target_audience: targetAudience.trim() || undefined,
-        status: 'created',
-        current_step: 0,
+        status: 'topic_selected',
+        current_step: 1,
         ...modePayload(),
       });
-      await base44.functions.invoke('generateTopics', {
+      // Create the topic directly from what the user typed, mark it selected.
+      const topic = await base44.entities.Topics.create({
         project_id: project.id,
-        niche: customTopic.trim(),
-        exact_topic: customTopic.trim(),
-        tone,
-        target_audience: targetAudience.trim() || undefined,
+        rank: 1,
+        title: customTopic.trim(),
+        description: targetAudience.trim() ? `For ${targetAudience.trim()}` : '',
+        is_selected: true,
       });
-      const topics = await base44.entities.Topics.filter({ project_id: project.id });
-      const sorted = topics.sort((a, b) => a.rank - b.rank);
-      if (sorted.length > 0) {
-        const best = sorted[0];
-        await base44.entities.Topics.update(best.id, { is_selected: true });
-        await base44.entities.Projects.update(project.id, {
-          selected_topic_id: best.id,
-          status: 'topic_selected',
-          current_step: 1,
-        });
-        navigate(createPageUrl(`StoryDuration?project_id=${project.id}`));
-      } else {
-        navigate(createPageUrl(`StoryTopics?project_id=${project.id}`));
-      }
+      await base44.entities.Projects.update(project.id, {
+        selected_topic_id: topic.id,
+      });
+      navigate(createPageUrl(`StoryDuration?project_id=${project.id}`));
     } catch (err) {
-      console.error('generateTopics (topic) failed:', err);
+      console.error('create from topic failed:', err);
       setError(err?.response?.data?.error || err.message || 'Something went wrong. Please try again.');
       setLoading(false);
     }
@@ -267,7 +259,7 @@ export default function NewProject() {
                     <Pencil className="w-7 h-7 text-white" />
                   </div>
                   <h3 className="text-lg font-bold">I Have a Topic</h3>
-                  <p className="text-sm text-gray-500">Enter your exact video topic and AI will refine it and continue the pipeline.</p>
+                  <p className="text-sm text-gray-500">Enter your exact video topic and use it as-is — straight into the pipeline.</p>
                   <div className="flex items-center justify-center gap-1 text-sm font-medium text-gray-400 group-hover:text-blue-600 transition-colors">
                     Start <ArrowRight className="w-4 h-4" />
                   </div>
@@ -313,7 +305,7 @@ export default function NewProject() {
             <CardHeader className="text-center">
               <Pencil className="w-10 h-10 text-blue-600 mx-auto mb-2" />
               <CardTitle className="text-2xl">Your Video Topic</CardTitle>
-              <p className="text-gray-500 text-sm mt-1">Describe your exact video idea — AI will refine and optimize it</p>
+              <p className="text-gray-500 text-sm mt-1">Enter your exact video topic — it's used as-is, no AI topic generation</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <Textarea
@@ -351,7 +343,7 @@ export default function NewProject() {
               <div className="flex gap-2">
                 <Button variant="outline" onClick={() => setMode(null)} disabled={loading}>Back</Button>
                 <Button onClick={handleCreateFromTopic} disabled={!customTopic.trim() || loading} className="flex-1 bg-blue-600 hover:bg-blue-700" size="lg">
-                  {loading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Refining & Creating...</> : 'Create Project'}
+                  {loading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Creating...</> : 'Create Project'}
                 </Button>
               </div>
             </CardContent>
