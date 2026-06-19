@@ -148,7 +148,7 @@ export default function StoryScript() {
           for (const b of freshBatches) await base44.entities.ScriptBatches.delete(b.id);
 
           // initializeScriptBatches is mode-aware (handles explainer, sleep, standard internally)
-          await base44.functions.invoke('initializeScriptBatches', { project_id: projectId });
+          await invokeInitWithRetry();
 
           await refetchBatches();
         } else {
@@ -167,6 +167,25 @@ export default function StoryScript() {
 
     runFullGeneration();
   }, [project?.id, project?.status, autoGenTriggered, generating]);
+
+  // Invoke initializeScriptBatches with retry — tolerates transient 404s
+  // while a fresh deployment is still propagating across edge nodes.
+  const invokeInitWithRetry = async () => {
+    const MAX = 4;
+    for (let attempt = 1; attempt <= MAX; attempt++) {
+      try {
+        return await base44.functions.invoke('initializeScriptBatches', { project_id: projectId });
+      } catch (err) {
+        const status = err?.response?.status || err?.status;
+        if (status === 404 && attempt < MAX) {
+          console.warn(`initializeScriptBatches 404 (attempt ${attempt}/${MAX}) — deploy propagating, retrying...`);
+          await new Promise(r => setTimeout(r, 4000));
+          continue;
+        }
+        throw err;
+      }
+    }
+  };
 
   // Retry-resilient batch generation
   const generateBatchesWithRetry = async () => {
@@ -269,7 +288,7 @@ export default function StoryScript() {
 
     try {
       // initializeScriptBatches is mode-aware (handles explainer, sleep, standard internally)
-      await base44.functions.invoke('initializeScriptBatches', { project_id: projectId });
+      await invokeInitWithRetry();
 
       await refetchBatches();
       await generateBatchesWithRetry();
