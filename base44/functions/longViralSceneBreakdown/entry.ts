@@ -14,7 +14,7 @@ import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 async function callGemini(prompt, temperature = 0.5) {
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -124,6 +124,9 @@ function getSectionLabel(pct) {
 
 // ── Batch beats into AI-digestible sub-batches (~20 beats per call) ───────────
 const BEATS_PER_SUBBATCH = 20;
+// Sub-batches processed per HTTP call. Each sub-batch is one Gemini call.
+// 2 keeps each call well under the 180s timeout even on slow days. Frontend loops with start_batch.
+const CHUNKS_PER_CALL = 2;
 
 function chunkBeats(beats) {
   const chunks = [];
@@ -140,7 +143,7 @@ Deno.serve(async (req) => {
     const user = await base44.auth.me();
     if (!user) return Response.json({ error: 'Unauthorized' }, { status: 401 });
 
-    const { project_id } = await req.json();
+    const { project_id, start_batch = 0 } = await req.json();
 
     const projects = await base44.asServiceRole.entities.Projects.filter({ id: project_id });
     const project = projects[0];
@@ -172,12 +175,24 @@ Deno.serve(async (req) => {
 
     // ── Step 3: Chunk beats into sub-batches for AI ──────────────────────────
     const beatChunks = chunkBeats(allBeats);
+    const totalChunks = beatChunks.length;
 
-    // ── Step 4: Process each sub-batch through Gemini ────────────────────────
+    // On the very first call, clear any stale scenes from a previous run.
+    if (start_batch === 0) {
+      const stale = await base44.asServiceRole.entities.Scenes.filter({ project_id });
+      if (stale.length > 0) {
+        await Promise.all(stale.map(s => base44.asServiceRole.entities.Scenes.delete(s.id).catch(() => {})));
+        console.log(`🗑️ Cleared ${stale.length} stale scenes before fresh breakdown`);
+      }
+    }
+
+    // ── Step 4: Process this call's slice of sub-batches through Gemini ───────
+    const endBatch = Math.min(start_batch + CHUNKS_PER_CALL, totalChunks);
     const allAiScenes = [];
-    let globalSceneNumber = 1;
+    // Scene numbers are deterministic: sum of beat counts in all prior chunks + 1.
+    let globalSceneNumber = beatChunks.slice(0, start_batch).reduce((sum, c) => sum + c.length, 0) + 1;
 
-    for (let bi = 0; bi < beatChunks.length; bi++) {
+    for (let bi = start_batch; bi < endBatch; bi++) {
       const chunk = beatChunks[bi];
 
       // Build a numbered list of beats for the AI with full context
@@ -343,45 +358,6 @@ Return ONLY valid JSON:
       console.log(`✅ Sub-batch ${bi + 1}: processed ${chunk.length} beats`);
     }
 
-    // ── Delete old scenes ────────────────────────────────────────────────────
-    const oldScenes = await base44.asServiceRole.entities.Scenes.filter({ project_id });
-    if (oldScenes.length > 0) {
-      await Promise.all(oldScenes.map(s => base44.asServiceRole.entities.Scenes.delete(s.id).catch(() => {})));
-    }
-
-    // ── Beat durations and start times ───────────────────────────────────────
-    // For multi-angle scenes: duration = full_sentence_words / 2.5 / total_angles
-    // For single scenes: duration = word_count / 2.5
-    const beatDurations = allAiScenes.map(s => {
-      const beat = s._beat;
-      if (beat?.is_multi_angle) {
-        return parseFloat((beat.word_count / 2.5 / beat.total_angles).toFixed(2));
-      }
-      return parseFloat(((s.duration_seconds) || (beat?.word_count / 2.5) || 3).toFixed(2));
-    });
-
-    const beatStartTimes = [];
-    let offset = 0;
-    beatDurations.forEach(d => { beatStartTimes.push(parseFloat(offset.toFixed(2))); offset += d; });
-
-    // ── Save ProductionSettings ──────────────────────────────────────────────
-    const psPayload = {
-      beat_durations: JSON.stringify(beatDurations),
-      beat_start_times: JSON.stringify(beatStartTimes),
-      story_analysis: JSON.stringify({
-        central_theme: `Long Viral: ${project.name}`,
-        narrative_arc_summary: `${nicheId} viral structure — ${durationMin}min`,
-        visual_world: `Long-form ${nicheId} | ${allAiScenes.length} scenes | sentence-paced`,
-        visual_format: 'long_viral',
-      })
-    };
-    const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
-    if (psList[0]) {
-      await base44.asServiceRole.entities.ProductionSettings.update(psList[0].id, psPayload);
-    } else {
-      await base44.asServiceRole.entities.ProductionSettings.create({ project_id, ...psPayload });
-    }
-
     // ── Camera direction map ─────────────────────────────────────────────────
     const cameraMap = {
       'zoom_in': 'slow_zoom_in', 'zoom_out': 'slow_zoom_out',
@@ -389,7 +365,15 @@ Return ONLY valid JSON:
       'push_in': 'slow_zoom_in', 'static': 'static',
     };
 
-    // ── Create scene records ─────────────────────────────────────────────────
+    // ── Create scene records for THIS call's scenes only ─────────────────────
+    const perSceneDuration = (s) => {
+      const beat = s._beat;
+      if (beat?.is_multi_angle) {
+        return parseFloat((beat.word_count / 2.5 / beat.total_angles).toFixed(2));
+      }
+      return parseFloat(((s.duration_seconds) || (beat?.word_count / 2.5) || 3).toFixed(2));
+    };
+
     const sceneRecords = allAiScenes.map(aiScene => {
       const beat = aiScene._beat || {};
       const directorNotes = {
@@ -411,7 +395,7 @@ Return ONLY valid JSON:
         narration_text: aiScene.narration_text || '',
         image_prompt: `DIRECTOR_NOTES:${JSON.stringify(directorNotes)}`,
         animation_prompt: aiScene.camera_direction || 'push_in',
-        duration_seconds: beatDurations[aiScene.scene_number - 1] || 3,
+        duration_seconds: perSceneDuration(aiScene),
         camera_movement: cameraMap[aiScene.camera_direction] || 'slow_zoom_in',
         animation_speed: 'normal',
         status: 'breakdown_ready',
@@ -420,7 +404,49 @@ Return ONLY valid JSON:
       };
     });
 
-    await base44.asServiceRole.entities.Scenes.bulkCreate(sceneRecords);
+    if (sceneRecords.length > 0) {
+      await base44.asServiceRole.entities.Scenes.bulkCreate(sceneRecords);
+    }
+
+    const isDone = endBatch >= totalChunks;
+
+    if (!isDone) {
+      const elapsed = ((Date.now() - callStart) / 1000).toFixed(1);
+      console.log(`⏸ Batches ${start_batch + 1}-${endBatch}/${totalChunks} in ${elapsed}s — next: ${endBatch}`);
+      return Response.json({
+        success: true,
+        done: false,
+        next_batch: endBatch,
+        total_batches: totalChunks,
+        scenes_so_far: globalSceneNumber - 1,
+      });
+    }
+
+    // ── FINAL CALL: compute beat timing from ALL saved scenes & finalize ──────
+    const savedScenes = (await base44.asServiceRole.entities.Scenes.filter({ project_id }))
+      .sort((a, b) => (a.scene_number || 0) - (b.scene_number || 0));
+
+    const beatDurations = savedScenes.map(s => parseFloat((s.duration_seconds || 3).toFixed(2)));
+    const beatStartTimes = [];
+    let offset = 0;
+    beatDurations.forEach(d => { beatStartTimes.push(parseFloat(offset.toFixed(2))); offset += d; });
+
+    const psPayload = {
+      beat_durations: JSON.stringify(beatDurations),
+      beat_start_times: JSON.stringify(beatStartTimes),
+      story_analysis: JSON.stringify({
+        central_theme: `Long Viral: ${project.name}`,
+        narrative_arc_summary: `${nicheId} viral structure — ${durationMin}min`,
+        visual_world: `Long-form ${nicheId} | ${savedScenes.length} scenes | sentence-paced`,
+        visual_format: 'long_viral',
+      })
+    };
+    const psList = await base44.asServiceRole.entities.ProductionSettings.filter({ project_id });
+    if (psList[0]) {
+      await base44.asServiceRole.entities.ProductionSettings.update(psList[0].id, psPayload);
+    } else {
+      await base44.asServiceRole.entities.ProductionSettings.create({ project_id, ...psPayload });
+    }
 
     await base44.asServiceRole.entities.Projects.update(project_id, {
       status: 'breakdown_complete',
@@ -429,12 +455,12 @@ Return ONLY valid JSON:
 
     const elapsed = ((Date.now() - callStart) / 1000).toFixed(1);
     const totalDuration = offset.toFixed(1);
-    console.log(`🎬 Created ${sceneRecords.length} Long Viral scenes in ${elapsed}s | ${durationMin}min | ${sentences.length} sentences → ${totalScenes} beats | total runtime: ${totalDuration}s`);
+    console.log(`🎬 DONE: ${savedScenes.length} Long Viral scenes | last batch in ${elapsed}s | ${durationMin}min | ${sentences.length} sentences → ${totalScenes} beats | runtime ${totalDuration}s`);
 
     return Response.json({
       success: true,
       done: true,
-      scenes_created: sceneRecords.length,
+      scenes_created: savedScenes.length,
       sentence_count: sentences.length,
       total_duration: totalDuration,
     });

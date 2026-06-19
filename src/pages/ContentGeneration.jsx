@@ -761,43 +761,52 @@ export default function ContentGeneration() {
         await runPromptGeneration({ onProgress: setImportProgress });
 
       } else if (isLongViralProject) {
-        // ── LONG VIRAL: sentence-driven scene breakdown ──
+        // ── LONG VIRAL: sentence-driven scene breakdown — batched/resumable (3 sub-batches per call) ──
         setImportProgress('Breaking script into sentence-driven scenes...');
-        try {
-          const result = await base44.functions.invoke('longViralSceneBreakdown', { project_id: projectId });
-          const data = result?.data || result;
-          if (data?.error) throw new Error(data.error);
-        } catch (err) {
-          const status = err?.response?.status || err?.status;
-          if (status === 502 || status === 504) {
-            setImportProgress('Taking longer than expected, checking results...');
-            await new Promise(r => setTimeout(r, 10000));
-          } else {
+        let breakdownDone = false;
+        let nextBatch = 0;
+        let totalBatches = 1;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 30;
+
+        while (!breakdownDone && attempts < MAX_ATTEMPTS) {
+          attempts++;
+          try {
+            const bdResult = await base44.functions.invoke('longViralSceneBreakdown', {
+              project_id: projectId,
+              start_batch: nextBatch,
+            });
+            const bdData = bdResult?.data || bdResult;
+            if (bdData?.error) throw new Error(bdData.error);
+
+            breakdownDone = bdData.done === true;
+            nextBatch = bdData.next_batch ?? nextBatch;
+            totalBatches = bdData.total_batches || totalBatches;
+
+            const freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+            queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
+            setTotalExpectedScenes(freshScenes.length);
+            setImportProgress(
+              breakdownDone
+                ? `Created ${freshScenes.length} scenes — now generating image prompts...`
+                : `Breaking down... batch ${nextBatch}/${totalBatches} — ${freshScenes.length} scenes so far...`
+            );
+          } catch (err) {
+            const status = err?.response?.status || err?.status;
+            if (status === 502 || status === 504) {
+              setImportProgress(`Batch taking long — retrying in 8s...`);
+              await new Promise(r => setTimeout(r, 8000));
+              continue;
+            }
             throw err;
           }
+          if (!breakdownDone) await new Promise(r => setTimeout(r, 1500));
         }
 
-        let freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
-
-        if (freshScenes.length === 0) {
-          setImportProgress('No scenes yet — retrying breakdown...');
-          try {
-            await base44.functions.invoke('longViralSceneBreakdown', { project_id: projectId });
-          } catch (retryErr) {
-            const status = retryErr?.response?.status || retryErr?.status;
-            if (status !== 502 && status !== 504) throw retryErr;
-            await new Promise(r => setTimeout(r, 12000));
-          }
-          freshScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+        const finalScenes = await base44.entities.Scenes.filter({ project_id: projectId });
+        if (finalScenes.length === 0) {
+          throw new Error('Long Viral scene breakdown failed. Please try again.');
         }
-
-        if (freshScenes.length === 0) {
-          throw new Error('Long Viral scene breakdown failed after retry. Please try again.');
-        }
-
-        queryClient.setQueryData(['scenes', projectId], freshScenes.sort((a, b) => a.scene_number - b.scene_number));
-        setTotalExpectedScenes(freshScenes.length);
-        setImportProgress(`Created ${freshScenes.length} scenes — now generating image prompts...`);
 
         // Long viral breakdown saves DIRECTOR_NOTES: scenes — must run prompt generation
         setImportPhase('prompts');
