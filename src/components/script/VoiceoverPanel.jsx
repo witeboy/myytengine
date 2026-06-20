@@ -397,7 +397,7 @@ export default function VoiceoverPanel({ project, script, onUpdate }) {
 
   return (
     <div className="space-y-4">
-      <VoicePanel title="MiniMax Direct" icon={<Zap className="w-4 h-4 text-orange-500" />} color="orange" badgeText="Your API" voices={mmVoices} loadingVoices={loadingMm} tabs={mmTabs} project={project} script={script} provider="minimax_direct" onUpdate={onUpdate} settings={settings} setSettings={setSettings} error={mmError} />
+      <VoicePanel title="MiniMax" icon={<Zap className="w-4 h-4 text-orange-500" />} color="orange" badgeText="via AI33" voices={mmVoices} loadingVoices={loadingMm} tabs={mmTabs} project={project} script={script} provider="ai33" onUpdate={onUpdate} settings={settings} setSettings={setSettings} error={mmError} />
       <VoicePanel title="AI33 Pro" icon={<Globe className="w-4 h-4 text-indigo-500" />} color="indigo" badgeText="Async" voices={ai33Voices} loadingVoices={loadingAi33} tabs={ai33Tabs} project={project} script={script} provider="ai33" onUpdate={onUpdate} settings={settings} setSettings={setSettings} error={ai33Error} />
       <InworldPanel project={project} script={script} onUpdate={onUpdate} settings={settings} setSettings={setSettings} />
     </div>

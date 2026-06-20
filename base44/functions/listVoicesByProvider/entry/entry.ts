@@ -1,4 +1,4 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.25';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
 // v2 — redeployed
 
 // ══════════════════════════════════════════════════════════════════
@@ -160,10 +160,15 @@ Deno.serve(async (req) => {
     const { source } = await req.json();
 
     // ════════════════════════════════════════════════════════════
-    // MINIMAX DIRECT — instant, no API calls
+    // MINIMAX (via AI33) — system voices + your real AI33 MiniMax voices & clones
+    // All MiniMax voices live in the AI33 account, so we source them from there.
     // ════════════════════════════════════════════════════════════
     if (source === 'minimax_direct') {
+      const AI33_KEY = Deno.env.get('AI33_API_KEY');
+      const headers = { 'Content-Type': 'application/json', 'xi-api-key': AI33_KEY };
       const voices = [];
+
+      // Built-in MiniMax system voices (always available)
       for (const v of SYSTEM_VOICES) {
         voices.push({
           voice_id: v.voice_id, name: v.name, preview_url: null,
@@ -172,14 +177,45 @@ Deno.serve(async (req) => {
           category: 'system',
         });
       }
-      for (const c of MY_CLONES) {
-        voices.push({
-          voice_id: c.voice_id, name: c.name, preview_url: null,
-          description: 'Cloned voice',
-          labels: { gender: '', age: '', accent: '', use_case: 'cloned' },
-          category: 'cloned',
-        });
+
+      // Your real MiniMax voices + cloned voices from the AI33 account
+      if (AI33_KEY) {
+        try {
+          const [mmRes, cloneRes] = await Promise.all([
+            fetch('https://api.ai33.pro/v1m/voice/list', {
+              method: 'POST', headers,
+              body: JSON.stringify({ page: 1, page_size: 100, tag_list: [] }),
+            }),
+            fetch('https://api.ai33.pro/v1m/voice/clone', { headers }),
+          ]);
+          if (mmRes.ok) {
+            const data = await mmRes.json();
+            for (const v of (data.data?.voice_list || [])) {
+              if (voices.find(x => x.voice_id === v.voice_id)) continue;
+              voices.push({
+                voice_id: v.voice_id, name: v.voice_name || v.voice_id,
+                description: (v.tag_list || []).join(', '),
+                preview_url: v.sample_audio || null,
+                labels: { gender: '', age: '', accent: '', use_case: 'narration' },
+                category: 'system',
+              });
+            }
+          }
+          if (cloneRes.ok) {
+            const data = await cloneRes.json();
+            for (const v of (data.data || [])) {
+              if (voices.find(x => x.voice_id === v.voice_id)) continue;
+              voices.push({
+                voice_id: v.voice_id, name: v.voice_name || v.voice_id,
+                description: 'Cloned voice', preview_url: v.sample_audio || null,
+                labels: { gender: '', age: '', accent: '', use_case: 'cloned' },
+                category: 'cloned',
+              });
+            }
+          }
+        } catch (e) { console.warn('AI33 MiniMax clone fetch error:', e.message); }
       }
+
       return Response.json({ success: true, voices, count: voices.length });
     }
 
