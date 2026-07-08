@@ -7,9 +7,22 @@
 // ══════════════════════════════════════════════════════════════════════
 
 import { base44 } from '@/api/base44Client';
+import { clipVideoCloud } from '@/lib/directApi';
 
 const POLL_INTERVAL_MS = 2500;
 const MAX_POLL_ATTEMPTS = 120; // 5 minutes max
+
+async function renderBasicCloudClip({ videoUrl, startSec, endSec, onProgress, reason }) {
+  console.warn('[CloudRender] Falling back to server clipper:', reason);
+  onProgress?.({ percent: 12, message: 'Cloud captions unavailable, rendering basic 9:16 clip...' });
+  const result = await clipVideoCloud({
+    sourceUrl: videoUrl,
+    start: startSec,
+    end: endSec,
+  });
+  onProgress?.({ percent: 100, message: 'Basic short ready' });
+  return { url: result.clip_url, id: result.job_id || `basic-${Date.now()}`, fallback: true };
+}
 
 export async function renderShortCloud({
   videoUrl,
@@ -23,22 +36,27 @@ export async function renderShortCloud({
   onProgress?.({ percent: 5, message: 'Submitting to cloud renderer…' });
 
   // 1. Submit render job
-  const submitRes = await base44.functions.invoke('renderShortCreatomate', {
-    videoUrl,
-    startSec,
-    endSec,
-    words,
-    captionStyle,
-    title,
-  });
+  let submitRes;
+  try {
+    submitRes = await base44.functions.invoke('renderShortCreatomate', {
+      videoUrl,
+      startSec,
+      endSec,
+      words,
+      captionStyle,
+      title,
+    });
+  } catch (err) {
+    return renderBasicCloudClip({ videoUrl, startSec, endSec, onProgress, reason: err.message });
+  }
 
   if (submitRes.data?.error) {
-    throw new Error(submitRes.data.error);
+    return renderBasicCloudClip({ videoUrl, startSec, endSec, onProgress, reason: submitRes.data.error });
   }
 
   const renderId = submitRes.data?.id;
   if (!renderId) {
-    throw new Error('No render ID returned from Creatomate');
+    return renderBasicCloudClip({ videoUrl, startSec, endSec, onProgress, reason: 'No render ID returned from Creatomate' });
   }
 
   // If already done (cached), return immediately
@@ -53,7 +71,12 @@ export async function renderShortCloud({
   for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
     await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
 
-    const pollRes = await base44.functions.invoke('pollCreatomateRender', { id: renderId });
+    let pollRes;
+    try {
+      pollRes = await base44.functions.invoke('pollCreatomateRender', { id: renderId });
+    } catch (err) {
+      return renderBasicCloudClip({ videoUrl, startSec, endSec, onProgress, reason: err.message });
+    }
     const data = pollRes.data || {};
 
     if (data.error) throw new Error(data.error);
@@ -76,11 +99,11 @@ export async function renderShortCloud({
     }
 
     if (status === 'failed') {
-      throw new Error(data.error || 'Render failed on Creatomate');
+      return renderBasicCloudClip({ videoUrl, startSec, endSec, onProgress, reason: data.error || 'Render failed on Creatomate' });
     }
   }
 
-  throw new Error('Render timed out after 5 minutes');
+  return renderBasicCloudClip({ videoUrl, startSec, endSec, onProgress, reason: 'Render timed out after 5 minutes' });
 }
 
 // Trigger a browser download from a URL
