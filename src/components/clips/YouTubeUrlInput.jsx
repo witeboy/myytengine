@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { base44 } from '@/api/base44Client';
+import { resolveYouTubeVideo } from '@/lib/directApi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -37,11 +37,7 @@ export default function YouTubeUrlInput({ onVideoReady }) {
     setResolved(null);
 
     try {
-      const res = await base44.functions.invoke('downloadYouTubeVideo', {
-        url: targetUrl.trim(),
-      });
-
-      const data = res.data || res;
+      const data = await resolveYouTubeVideo(targetUrl.trim());
 
       if (!data?.success || !data?.video_url) {
         throw new Error(data?.error || 'Failed to get video download URL');
@@ -53,6 +49,7 @@ export default function YouTubeUrlInput({ onVideoReady }) {
       onVideoReady?.({
         videoUrl: data.video_url,
         audioUrl: data.audio_url || data.video_url,
+        rawVideoUrl: data.raw_video_url || '',
         title: data.title || '',
         channel: data.channel || '',
         videoId: data.video_id || videoId,
