@@ -28,7 +28,8 @@ import {
 import {
   uploadToCloudinary,
   buildCloudinaryClipUrl,
-  extractYouTubeAudio,
+  resolveYouTubeVideo,
+  clipVideoCloud,
   transcribeFile,
   analyzeViralMoments,
 } from '@/lib/directApi';
@@ -270,6 +271,32 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
 
   const handleDownload = async () => {
     if (!src || clipEnd == null) return;
+
+    if (/^https?:\/\//i.test(src)) {
+      try {
+        setStatus('processing');
+        setProgress(5);
+        setErrMsg('');
+        const result = await clipVideoCloud({
+          sourceUrl: src,
+          start: clipStart,
+          end: clipEnd,
+        });
+        const a = document.createElement('a');
+        a.href = result.clip_url;
+        a.download = `clip_${index + 1}_${Math.round(clipStart)}s_${Math.round(clipEnd - clipStart)}s_portrait.mp4`;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.click();
+        setProgress(100);
+        setStatus('done');
+        setTimeout(() => { setStatus('idle'); setProgress(0); }, 4000);
+        return;
+      } catch (cloudErr) {
+        console.warn('[OpenShorts] Cloud download failed, trying browser export:', cloudErr.message);
+        setErrMsg('');
+      }
+    }
 
     // ── Browser support check ──────────────────────────────────────
     if (typeof VideoEncoder === 'undefined' || typeof OffscreenCanvas === 'undefined') {
@@ -736,7 +763,9 @@ export default function OpenShorts() {
     setStage('processing'); setErr(''); setClips([]); setDone([]);
     try {
       setStep('transcribe'); setMsg('Extracting audio from YouTube via Cobalt…');
-      const audioUrl = await extractYouTubeAudio(ytUrl.trim());
+      const resolved = await resolveYouTubeVideo(ytUrl.trim());
+      const audioUrl = resolved.audio_url;
+      const sourceVideoUrl = resolved.video_url;
       setMsg('Submitting to AssemblyAI for transcription…');
       const transcript = await transcribeFile(audioUrl, msg => setMsg(msg));
       markDone('transcribe');
@@ -744,7 +773,15 @@ export default function OpenShorts() {
       const result = await analyzeViralMoments({ transcript: transcript.text, words: transcript.words, duration: transcript.duration, maxClips: parseInt(maxClips)||8, minSeconds: parseInt(minSec)||20, maxSeconds: parseInt(maxSec)||60 });
       if (!result?.clips?.length) throw new Error('No viral moments found. Try a different video.');
       markDone('analyze');
-      const enriched = result.clips.map(c => ({ ...c, youtube_url: ytUrl }));
+      setStep('clip'); setMsg('Preparing downloadable clip source...');
+      const enriched = result.clips.map(c => ({
+        ...c,
+        youtube_url: ytUrl,
+        source_video_url: sourceVideoUrl,
+        blobUrl: sourceVideoUrl,
+        cdn_url: buildCloudinaryClipUrl(sourceVideoUrl, '', c.start, c.end),
+      }));
+      markDone('clip');
       setClips(enriched); setStage('done'); setMsg(`Found ${enriched.length} viral moments!`);
       await saveProject(enriched, `YouTube — ${getYouTubeId(ytUrl) || ytUrl.slice(-20)}`);
     } catch (e) { setStage('error'); setErr(e.message || 'Something went wrong'); }
@@ -775,6 +812,7 @@ export default function OpenShorts() {
 
   const handleReset = () => { setStage('idle'); setClips([]); setErr(''); setStep(null); setDone([]); setMsg(''); setProgress(0); setFile(null); setYtUrl(''); setVidDur(0); };
   const isActive = stage === 'processing' || stage === 'done' || stage === 'error';
+  const hasDownloadableClips = clips.some(c => c.cdn_url || c.cloudinary_url || c.blobUrl);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-rose-50">
@@ -912,11 +950,11 @@ export default function OpenShorts() {
                   </div>
                 )}
               </div>
-              {inputMode === 'youtube' && (
+              {inputMode === 'youtube' && !hasDownloadableClips && (
                 <div className="bg-amber-50 border border-amber-100 rounded-xl px-4 py-3 text-xs text-amber-700 flex items-start gap-2"><Youtube size={12} className="shrink-0 mt-0.5 text-amber-500" /><span>These clips play at the exact viral timestamps in embedded YouTube players. Use File Upload mode to get downloadable 9:16 portrait video files.</span></div>
               )}
-              <div className={`grid gap-5 ${inputMode === 'youtube' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'}`}>
-                {clips.map((c, i) => inputMode === 'youtube' ? <YouTubeClipCard key={i} clip={c} index={i} ytUrl={ytUrl} /> : <FileClipCard key={i} clip={c} index={i} />)}
+              <div className={`grid gap-5 ${inputMode === 'youtube' && !hasDownloadableClips ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-4'}`}>
+                {clips.map((c, i) => inputMode === 'youtube' && !hasDownloadableClips ? <YouTubeClipCard key={i} clip={c} index={i} ytUrl={ytUrl} /> : <FileClipCard key={i} clip={c} index={i} />)}
               </div>
               {stage === 'done' && (
                 <div className="flex items-center gap-2 px-4 py-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700"><CheckCircle size={12} /><span>Project saved to your Library — open the Library tab to re-download anytime.</span></div>
