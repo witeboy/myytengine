@@ -2,7 +2,7 @@
 // directApi.js
 // - Cloudinary: direct browser upload (cloud name from localStorage/Settings)
 // - AssemblyAI: via quickPublishTranscribe backend function (has the key)
-// - Cobalt: via cobaltExtract backend function (has the key)
+// - YouTube: via downloadYouTubeVideo backend function, returning stable media URLs
 // - Claude: via callClaudeProxy backend function (reads ANTHROPIC_API_KEY from env)
 //
 // FIX: Removed direct fetch to api.anthropic.com which is blocked by CORS.
@@ -13,46 +13,68 @@ import { base44 } from '@/api/base44Client';
 
 export const LS_KEYS = {};
 
+const unwrapData = (res) => res?.data || res || {};
+
+const uploadViaBase44 = async (file, onProgress) => {
+  onProgress?.(5);
+  const uploaded = await base44.integrations.Core.UploadFile({ file });
+  const fileUrl = uploaded?.file_url || uploaded?.url || uploaded?.secure_url;
+  if (!fileUrl) throw new Error('Base44 upload returned no file URL');
+  onProgress?.(100);
+  return {
+    secure_url: fileUrl,
+    public_id: fileUrl,
+    cdn_url: fileUrl,
+    storage: 'base44',
+  };
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. BUNNY — upload via bunnyUpload Deno function
 //    Exported as uploadToCloudinary so OpenShorts + QuickPublish need no changes
 // ─────────────────────────────────────────────────────────────────────────────
 export const uploadToCloudinary = async (file, { resourceType = 'video', onProgress } = {}) => {
-  // Get Bunny config from backend (keeps credentials server-side)
-  const configRes = await base44.functions.invoke('quickPublishTranscribe', { action: 'bunny_config' });
-  if (!configRes.data?.storage_zone) throw new Error('Could not fetch Bunny config — check BUNNY_STORAGE_ZONE, BUNNY_STORAGE_PASSWORD, BUNNY_CDN_URL env vars');
+  try {
+    const configRes = await base44.functions.invoke('quickPublishTranscribe', { action: 'bunny_config' });
+    const config = unwrapData(configRes);
+    if (!config?.storage_zone || !config?.storage_password || !config?.cdn_url) {
+      throw new Error('Bunny config missing');
+    }
 
-  const { storage_zone, storage_password, storage_region, cdn_url } = configRes.data;
+    const { storage_zone, storage_password, storage_region, cdn_url } = config;
+    const host = (storage_region === 'de' || !storage_region || storage_region === 'storage')
+      ? 'storage.bunnycdn.com'
+      : `${storage_region}.storage.bunnycdn.com`;
+    const safeFile = (file.name || 'video.mp4').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const remotePath = `uploads/${Date.now()}_${safeFile}`;
+    const uploadUrl = `https://${host}/${storage_zone}/${remotePath}`;
 
-  const host       = (storage_region === 'de' || !storage_region || storage_region === 'storage')
-    ? 'storage.bunnycdn.com'
-    : `${storage_region}.storage.bunnycdn.com`;
-  const safeFile   = (file.name || 'video.mp4').replace(/[^a-zA-Z0-9._-]/g, '_');
-  const remotePath = `uploads/${Date.now()}_${safeFile}`;
-  const uploadUrl  = `https://${host}/${storage_zone}/${remotePath}`;
+    onProgress?.(5);
 
-  if (onProgress) onProgress(5);
+    await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 95));
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(`Bunny upload failed: HTTP ${xhr.status} - ${xhr.responseText}`));
+      };
+      xhr.onerror = () => reject(new Error('Bunny upload failed or was blocked by CORS'));
+      xhr.open('PUT', uploadUrl);
+      xhr.setRequestHeader('AccessKey', storage_password);
+      xhr.setRequestHeader('Content-Type', file.type || 'video/mp4');
+      xhr.send(file);
+    });
 
-  await new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 95));
-    };
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else reject(new Error(`Bunny upload failed: HTTP ${xhr.status} — ${xhr.responseText}`));
-    };
-    xhr.onerror = () => reject(new Error('Bunny network error'));
-    xhr.open('PUT', uploadUrl);
-    xhr.setRequestHeader('AccessKey', storage_password);
-    xhr.setRequestHeader('Content-Type', file.type || 'video/mp4');
-    xhr.send(file);
-  });
+    onProgress?.(100);
 
-  if (onProgress) onProgress(100);
-
-  const secure_url = `${cdn_url.replace(/\/$/, '')}/${remotePath}`;
-  return { secure_url, public_id: secure_url, cdn_url };
+    const secure_url = `${cdn_url.replace(/\/$/, '')}/${remotePath}`;
+    return { secure_url, public_id: secure_url, cdn_url, storage: 'bunny' };
+  } catch (err) {
+    console.warn('[Upload] Bunny upload unavailable, falling back to Base44 storage:', err.message);
+    return uploadViaBase44(file, onProgress);
+  }
 };
 
 export const getCloudinaryConfig = async () => ({ cloudName: 'bunny', cloudPreset: '' });
@@ -61,7 +83,7 @@ export const buildCloudinaryClipUrl = (publicId, _cloudName, start, end) => {
   // Bunny CDN — no transform support. Store start/end as hash fragment.
   // FileClipCard uses these for seek-based preview.
   // Real clip cutting happens server-side via clipVideo action on download.
-  return `${publicId}#t=${Math.round(start)},${Math.round(end)}`;
+  return `${String(publicId).split('#')[0]}#t=${Math.round(start)},${Math.round(end)}`;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -120,13 +142,27 @@ export const transcribeFile = async (fileOrUrl, onStatus) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 3. COBALT — via cobaltExtract backend function
+// 3. YOUTUBE RESOLUTION - via downloadYouTubeVideo backend function
 // ─────────────────────────────────────────────────────────────────────────────
+export const resolveYouTubeVideo = async (youtubeUrl) => {
+  const res = await base44.functions.invoke('downloadYouTubeVideo', { url: youtubeUrl });
+  const data = unwrapData(res);
+  if (data?.error) throw new Error(data.error);
+
+  const videoUrl = data.stable_video_url || data.video_url;
+  const audioUrl = data.stable_audio_url || data.audio_url || videoUrl;
+  if (!audioUrl) throw new Error('YouTube extraction failed - no audio URL returned');
+
+  return {
+    ...data,
+    video_url: videoUrl,
+    audio_url: audioUrl,
+  };
+};
+
 export const extractYouTubeAudio = async (youtubeUrl) => {
-  const res = await base44.functions.invoke('cobaltExtract', { url: youtubeUrl });
-  const audioUrl = res.data?.url || res.data?.audio_url;
-  if (!audioUrl) throw new Error(res.data?.error || 'Cobalt extraction failed — no audio URL returned');
-  return audioUrl;
+  const data = await resolveYouTubeVideo(youtubeUrl);
+  return data.audio_url;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -136,6 +172,20 @@ export const extractYouTubeAudio = async (youtubeUrl) => {
 // That backend reads ANTHROPIC_API_KEY from Deno.env and calls
 // api.anthropic.com server-to-server — identical to generateScenePrompts.js.
 // ─────────────────────────────────────────────────────────────────────────────
+export const clipVideoCloud = async ({ sourceUrl, start, end }) => {
+  const cleanUrl = String(sourceUrl || '').split('#')[0];
+  const res = await base44.functions.invoke('quickPublishTranscribe', {
+    action: 'clip_video',
+    source_url: cleanUrl,
+    start,
+    end,
+  });
+  const data = unwrapData(res);
+  if (data?.error) throw new Error(data.error);
+  if (!data?.clip_url) throw new Error('Cloud clipper returned no clip URL');
+  return data;
+};
+
 const callClaude = async (system, user, { maxTokens = 2000 } = {}) => {
   const res = await base44.functions.invoke('generateSceneBreakdown', {
     __claude_passthrough: true,
