@@ -33,7 +33,6 @@ import {
   uploadToCloudinary,
   buildCloudinaryClipUrl,
   getCloudinaryConfig,
-  extractYouTubeAudio,
   transcribeFile,
   analyzeViralMoments,
 } from '@/lib/directApi';
@@ -194,10 +193,12 @@ export default function ClipExtractor() {
     try {
       let uploadedUrl;
       let cloudPublicId = null;
+      let sourceVideoUrl = videoUrl;
 
       if (videoFile._isUrl) {
         // YouTube URL mode: audio URL already resolved by YouTubeUrlInput
         uploadedUrl = videoFile._audioUrl || videoFile._streamUrl;
+        sourceVideoUrl = videoFile._streamUrl || videoFile._audioUrl;
         markComplete('upload');
       } else {
         // File mode: upload to Cloudinary directly (server env supplies cloud config)
@@ -208,8 +209,10 @@ export default function ClipExtractor() {
           onProgress: pct => setStatusMessage(`Uploading… ${pct}%`),
         });
         uploadedUrl    = cloudResult.secure_url;
-        cloudPublicId  = cloudResult.public_id;
+        sourceVideoUrl = cloudResult.secure_url;
+        cloudPublicId  = cloudResult.public_id || cloudResult.secure_url;
         if (!uploadedUrl) throw new Error('Upload returned no URL');
+        setVideoUrl(sourceVideoUrl);
         markComplete('upload');
       }
 
@@ -221,10 +224,11 @@ export default function ClipExtractor() {
 
       // Attach Cloudinary clip URLs to results so ClipCard can play/download them
       if (cloudPublicId) {
-        const { cloudName } = getCloudinaryConfig();
+        const { cloudName } = await getCloudinaryConfig();
         setClips(prev => prev.map(clip => ({
           ...clip,
           cloudinary_clip_url: buildCloudinaryClipUrl(cloudPublicId, cloudName, clip.start, clip.end),
+          source_video_url: sourceVideoUrl,
         })));
       }
 
