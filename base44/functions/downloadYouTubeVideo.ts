@@ -1,4 +1,64 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+
+const safeName = (name, fallback) =>
+  (name || fallback).replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120);
+
+const bunnyHost = () => {
+  const region = (Deno.env.get('BUNNY_STORAGE_REGION') || 'storage').trim();
+  return (region === 'de' || region === 'storage' || !region)
+    ? 'storage.bunnycdn.com'
+    : `${region}.storage.bunnycdn.com`;
+};
+
+async function uploadRemoteAsset(base44, remoteUrl, { fileName, contentType, folder }) {
+  if (!remoteUrl) return '';
+
+  const storageZone = (Deno.env.get('BUNNY_STORAGE_ZONE') || '').trim();
+  const password = (Deno.env.get('BUNNY_STORAGE_PASSWORD') || '').trim();
+  const cdnUrl = (Deno.env.get('BUNNY_CDN_URL') || '').trim().replace(/\/$/, '');
+  const safeFile = safeName(fileName, 'youtube_asset.mp4');
+
+  if (storageZone && password && cdnUrl) {
+    try {
+      const response = await fetch(remoteUrl);
+      if (!response.ok || !response.body) {
+        throw new Error(`download failed: HTTP ${response.status}`);
+      }
+
+      const resolvedType = response.headers.get('content-type') || contentType || 'application/octet-stream';
+      const remotePath = `${folder}/${Date.now()}_${safeFile}`;
+      const uploadRes = await fetch(`https://${bunnyHost()}/${storageZone}/${remotePath}`, {
+        method: 'PUT',
+        headers: {
+          'AccessKey': password,
+          'Content-Type': resolvedType,
+        },
+        body: response.body,
+      });
+
+      if (!uploadRes.ok) {
+        const errText = await uploadRes.text();
+        throw new Error(`Bunny upload failed: HTTP ${uploadRes.status} - ${errText.slice(0, 200)}`);
+      }
+
+      return `${cdnUrl}/${remotePath}`;
+    } catch (err) {
+      console.log('[DownloadYT] Bunny rehost failed, trying Base44 UploadFile: ' + err.message);
+    }
+  }
+
+  const dlResponse = await fetch(remoteUrl);
+  if (!dlResponse.ok) {
+    throw new Error(`Could not download asset for rehost: HTTP ${dlResponse.status}`);
+  }
+
+  const resolvedType = dlResponse.headers.get('content-type') || contentType || 'application/octet-stream';
+  const assetBuffer = await dlResponse.arrayBuffer();
+  const blob = new Blob([assetBuffer], { type: resolvedType });
+  const file = new File([blob], safeFile, { type: resolvedType });
+  const uploaded = await base44.integrations.Core.UploadFile({ file });
+  return uploaded.file_url || uploaded.url || '';
+}
 // v2 — downloadYouTubeVideo using proven Cobalt pattern
 
 Deno.serve(async (req) => {
@@ -112,6 +172,23 @@ Deno.serve(async (req) => {
   }
 
   // ── Step 4: Get metadata from oEmbed ──────────────────────────
+  // Cobalt video links are temporary too. Re-host the source video so clip
+  // generation, browser preview, and cloud rendering all use the same stable URL.
+  let stableVideoUrl = videoUrl;
+  if (videoUrl) {
+    try {
+      console.log('[DownloadYT] Re-hosting source video for clipping...');
+      stableVideoUrl = await uploadRemoteAsset(base44, videoUrl, {
+        fileName: videoFilename || 'youtube_video.mp4',
+        contentType: 'video/mp4',
+        folder: 'youtube',
+      }) || videoUrl;
+      console.log('[DownloadYT] Stable video URL: ' + stableVideoUrl.substring(0, 80));
+    } catch (videoErr) {
+      console.log('[DownloadYT] Video rehost failed, using original Cobalt URL: ' + videoErr.message);
+    }
+  }
+
   let title = videoFilename ? videoFilename.replace(/\.[^.]+$/, '') : '';
   let channel = '';
   let videoId = '';
@@ -143,8 +220,11 @@ Deno.serve(async (req) => {
 
   return Response.json({
     success: true,
-    video_url: videoUrl,
+    video_url: stableVideoUrl || videoUrl,
+    stable_video_url: stableVideoUrl || '',
+    raw_video_url: videoUrl,
     audio_url: stableAudioUrl || videoUrl,
+    stable_audio_url: stableAudioUrl || '',
     title: title,
     channel: channel,
     video_id: videoId,
