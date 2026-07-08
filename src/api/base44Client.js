@@ -33,6 +33,7 @@ const KNOWN_FLAT = new Set([
   'generateProgressionImage', 'generateProgressionPrompts',
   'generateProgressionVideo', 'longViralGenerateScript', 'scheduleClipPost',
   'proxyFetchAsset', 'generateThumbnailImage',
+  'downloadYouTubeVideo',
   'longViralSceneBreakdown', 'shortsSceneBreakdown', 'explainerSceneBreakdown',
 ]);
 
