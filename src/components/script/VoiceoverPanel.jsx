@@ -17,6 +17,8 @@ function VoicePanel({ title, icon, color, badgeText, voices, loadingVoices, tabs
   const [error, setError] = useState('');
   const audioRef = useRef(null);
   const previewAudioRef = useRef(null);
+  const pollRef = useRef(null);
+  const pollTimeoutRef = useRef(null);
   const [previewingVoice, setPreviewingVoice] = useState(null);
   const [loadingPreview, setLoadingPreview] = useState(null);
   const [previewCache, setPreviewCache] = useState({});
@@ -48,6 +50,31 @@ function VoicePanel({ title, icon, color, badgeText, voices, loadingVoices, tabs
     });
   }, [voices, searchQuery, genderFilter, ageFilter, activeTab, tabs]);
 
+  const startPolling = () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+    setGenerating(true);
+    pollRef.current = setInterval(async () => {
+      try {
+        const response = await base44.functions.invoke('pollVoiceover', { project_id: project.id });
+        const data = response.data;
+        if (data?.status === 'ready' && data?.voiceover_url) {
+          const records = await base44.entities.ProductionSettings.filter({ project_id: project.id });
+          if (records[0]) setSettings({ ...records[0], voiceover_status: 'completed', voiceover_url: data.voiceover_url });
+          setGenerating(false); clearInterval(pollRef.current); pollRef.current = null; onUpdate?.();
+        } else if (data?.status === 'failed') {
+          setError(data.error || 'Voiceover generation failed.'); setGenerating(false); clearInterval(pollRef.current); pollRef.current = null;
+        }
+      } catch (err) {
+        setError(err?.response?.data?.error || err.message);
+      }
+    }, 10000);
+    pollTimeoutRef.current = setTimeout(() => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = null; setGenerating(false); setError('Still generating. Refresh to resume checking.');
+    }, 3600000);
+  };
+
   const handleGenerate = async () => {
     if (!script?.id || !selectedVoice) return;
     setGenerating(true); setError('');
@@ -61,18 +88,7 @@ function VoicePanel({ title, icon, color, badgeText, voices, loadingVoices, tabs
       if (sr[0]) setSettings({ ...sr[0], voiceover_status: 'completed', voiceover_url: res.data.voiceover_url });
       setGenerating(false); onUpdate?.(); return;
     }
-    const pollInterval = setInterval(async () => {
-      try {
-        const pr = await base44.functions.invoke('pollVoiceover', { project_id: project.id });
-        const d = pr.data;
-        if (d?.status === 'ready' && d?.voiceover_url) {
-          const sr = await base44.entities.ProductionSettings.filter({ project_id: project.id });
-          if (sr[0]) setSettings({ ...sr[0], voiceover_status: 'completed', voiceover_url: d.voiceover_url });
-          setGenerating(false); clearInterval(pollInterval); onUpdate?.();
-        } else if (d?.status === 'failed') { setError(d.error || 'Failed.'); setGenerating(false); clearInterval(pollInterval); }
-      } catch (e) { console.warn('Poll error:', e.message); }
-    }, 10000);
-    setTimeout(() => { clearInterval(pollInterval); setGenerating(p => { if (p) setError('Still generating. Refresh to check.'); return false; }); }, 3600000);
+    startPolling();
   };
 
   const handlePreview = async (voice) => {
@@ -92,7 +108,15 @@ function VoicePanel({ title, icon, color, badgeText, voices, loadingVoices, tabs
     audio.play(); audio.onended = () => setPreviewingVoice(null); audio.onerror = () => setPreviewingVoice(null);
   };
 
-  useEffect(() => { return () => { if (previewAudioRef.current) previewAudioRef.current.pause(); }; }, []);
+  useEffect(() => {
+    if (settings?.voiceover_status === 'generating' && !settings?.voiceover_url && !pollRef.current) startPolling();
+  }, [settings?.voiceover_status, settings?.voiceover_url, project?.id]);
+
+  useEffect(() => { return () => {
+    if (previewAudioRef.current) previewAudioRef.current.pause();
+    if (pollRef.current) clearInterval(pollRef.current);
+    if (pollTimeoutRef.current) clearTimeout(pollTimeoutRef.current);
+  }; }, []);
   const togglePlay = async () => {
     if (!audioRef.current) return;
     if (playing) { audioRef.current.pause(); setPlaying(false); }

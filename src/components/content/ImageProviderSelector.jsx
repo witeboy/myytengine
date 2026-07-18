@@ -5,7 +5,7 @@ const PROVIDERS = [
     id: 'auto',
     label: 'Auto (Best Available)',
     emoji: '🤖',
-    desc: 'Tries Z-Image → Seedream → Grok → Nano. Auto-fallback on failure.',
+    desc: 'Base44 image generation first, then your configured API fallback.',
     color: 'border-gray-300 bg-gray-50',
     activeColor: 'border-blue-500 bg-blue-50 ring-2 ring-blue-200',
   },

@@ -328,9 +328,11 @@ Sort clips by virality_score descending (best first).`;
 
     // Snap AI ranges to real linguistic/play boundaries instead of arbitrary nearby words.
     const sentenceEnd = word => /[.!?][\"')\]]*$/.test(String(word.word || ''));
-    const hasPauseAfter = index => index >= words.length - 1 || words[index + 1].start - words[index].end >= 0.65;
-    const naturalBreak = index => sentenceEnd(words[index]) || hasPauseAfter(index);
+    const pauseAfter = index => index >= words.length - 1 ? 10 : words[index + 1].start - words[index].end;
     const snappedClips = result.clips.map(clip => {
+      const isSports = clip.content_type === 'sports' || clip.category === 'sports_highlight';
+      const hasPauseAfter = index => pauseAfter(index) >= (isSports ? 0.45 : 0.65);
+      const naturalBreak = index => sentenceEnd(words[index]) || hasPauseAfter(index);
       let startIndex = words.findIndex(word => word.start >= clip.start);
       if (startIndex < 0) startIndex = 0;
       for (let index = startIndex - 1; index >= 0 && words[startIndex].start - words[index].end <= 8; index--) {
@@ -350,6 +352,14 @@ Sort clips by virality_score descending (best first).`;
         }
       }
       endIndex = resolvedEnd >= 0 ? resolvedEnd : endIndex;
+      // Sports commentary often pauses once at the play and again after the reaction.
+      // Include that second beat when it is close, preventing cuts immediately after a goal or basket.
+      if (isSports) {
+        const reactionLimit = Math.min(words.length - 1, endIndex + 30);
+        for (let index = endIndex + 1; index <= reactionLimit && words[index].end - words[endIndex].end <= 6; index++) {
+          if (naturalBreak(index) && words[index].end - words[endIndex].end >= 1) { endIndex = index; break; }
+        }
+      }
       const snappedStart = Math.max(0, words[startIndex].start - 0.25);
       const snappedEnd = Math.min(duration, words[endIndex].end + (hasPauseAfter(endIndex) ? 0.35 : 0.6));
       return { ...clip, start: Math.round(snappedStart * 100) / 100, end: Math.round(snappedEnd * 100) / 100, duration: Math.round((snappedEnd - snappedStart) * 100) / 100 };

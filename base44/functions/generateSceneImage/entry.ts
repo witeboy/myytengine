@@ -182,7 +182,7 @@ function detectCharacterPresence(scene) {
 }
 
 // ─────────────────────────────────────────────
-// SINGLE SCENE PROCESSOR — Z-Image only
+// SINGLE SCENE PROCESSOR — Base44 image generation first, KIE fallback
 // ─────────────────────────────────────────────
 
 async function processScene(base44, scene, project, kieApiKey, aspectRatio) {
@@ -211,40 +211,31 @@ async function processScene(base44, scene, project, kieApiKey, aspectRatio) {
   console.log(`📐 Scene ${sceneNum}: prompt ${finalPrompt.length} chars (max ${Z_IMAGE_MAX_CHARS}): "${finalPrompt.substring(0, 150)}..."`);
 
   try {
-    // Z-Image: requires prompt + aspect_ratio (colon format: "16:9" or "9:16")
-    const taskId = await kieCreateTask(kieApiKey, "z-image", {
-      prompt: finalPrompt,
-      aspect_ratio: aspectRatio   // "16:9" or "9:16"
+    const base44Result = await base44.asServiceRole.integrations.Core.GenerateImage({
+      prompt: `${finalPrompt}\n\nCompose for a ${aspectRatio} frame. Do not add borders or captions.`
     });
-
+    if (!base44Result?.url) throw new Error('Base44 image generation returned no URL');
     await base44.asServiceRole.entities.Scenes.update(scene.id, {
-      image_url: `zimage_task:${taskId}`,
-      status: "image_pending"
+      image_url: base44Result.url,
+      status: 'image_generated'
     });
-
-    console.log(`✓ Scene ${sceneNum}: z-image task submitted (${taskId})`);
-
-    return {
-      scene_id: scene.id,
-      scene_number: sceneNum,
-      status: 'submitted',
-      task_id: taskId,
-      provider: 'z_image'
-    };
-
-  } catch (err) {
-    console.warn(`⚠️ Scene ${sceneNum} z-image submit failed: ${err.message}`);
-
+    console.log(`✓ Scene ${sceneNum}: Base44 image generated`);
+    return { scene_id: scene.id, scene_number: sceneNum, status: 'generated', provider: 'base44' };
+  } catch (base44Error) {
+    console.warn(`⚠️ Scene ${sceneNum} Base44 image failed: ${base44Error.message}; using KIE fallback`);
+    if (!kieApiKey) {
+      await base44.asServiceRole.entities.Scenes.update(scene.id, { status: 'image_failed' });
+      return { scene_id: scene.id, scene_number: sceneNum, status: 'failed', error: `Base44: ${base44Error.message}; KIE_API_KEY not configured` };
+    }
     try {
-      await base44.asServiceRole.entities.Scenes.update(scene.id, { status: "image_failed" });
-    } catch (_) {}
-
-    return {
-      scene_id: scene.id,
-      scene_number: sceneNum,
-      status: 'failed',
-      error: err.message
-    };
+      const taskId = await kieCreateTask(kieApiKey, 'z-image', { prompt: finalPrompt, aspect_ratio: aspectRatio });
+      await base44.asServiceRole.entities.Scenes.update(scene.id, { image_url: `zimage_task:${taskId}`, status: 'image_pending' });
+      console.log(`✓ Scene ${sceneNum}: KIE fallback submitted (${taskId})`);
+      return { scene_id: scene.id, scene_number: sceneNum, status: 'submitted', task_id: taskId, provider: 'z_image' };
+    } catch (fallbackError) {
+      await base44.asServiceRole.entities.Scenes.update(scene.id, { status: 'image_failed' });
+      return { scene_id: scene.id, scene_number: sceneNum, status: 'failed', error: `Base44: ${base44Error.message}; KIE: ${fallbackError.message}` };
+    }
   }
 }
 
@@ -286,9 +277,6 @@ Deno.serve(async (req) => {
     const { scene_id, scene_ids, project_id } = body;
 
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
-    if (!KIE_API_KEY) {
-      return Response.json({ error: "KIE_API_KEY not configured" }, { status: 500 });
-    }
 
     let scenesToProcess = [];
     let project = null;
@@ -333,7 +321,7 @@ Deno.serve(async (req) => {
 
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
     console.log(`🎨 IMAGE SUBMIT — ${scenesToProcess.length} scenes`);
-    console.log(`📐 Aspect: ${aspectRatio} | ⚡ Concurrency: ${MAX_CONCURRENT} | 🎯 Provider: z-image`);
+    console.log(`📐 Aspect: ${aspectRatio} | ⚡ Concurrency: ${MAX_CONCURRENT} | 🎯 Provider: Base44 → KIE fallback`);
     console.log(`✂️  Prompt limit: ${Z_IMAGE_MAX_CHARS} chars (Z-Image API hard limit)`);
     console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
@@ -343,7 +331,7 @@ Deno.serve(async (req) => {
 
     const results = await processWithConcurrency(tasks, MAX_CONCURRENT);
 
-    const submitted = results.filter(r => r.status === 'submitted');
+    const submitted = results.filter(r => r.status === 'submitted' || r.status === 'generated');
     const failed = results.filter(r => r.status === 'failed');
     const skipped = results.filter(r => r.status === 'skipped');
 
