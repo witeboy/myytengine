@@ -180,8 +180,8 @@ Deno.serve(async (req) => {
             model: 'speech-2.8-hd',
             text: cleanedText,
             language_boost: 'auto',
-            voice_setting: { voice_id: selectedVoiceId, speed: 1.0, vol: 1.0, pitch: 0 },
-            audio_setting: { audio_sample_rate: 32000, bitrate: 128000, format: 'mp3', channel: 1 },
+            voice_setting: { voice_id: selectedVoiceId, speed: 1, vol: 10, pitch: 1 },
+            audio_setting: { audio_sample_rate: 32000, bitrate: 128000, format: 'mp3', channel: 2 },
           }),
         });
 

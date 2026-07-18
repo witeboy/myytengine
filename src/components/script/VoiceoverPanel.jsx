@@ -53,7 +53,7 @@ function VoicePanel({ title, icon, color, badgeText, voices, loadingVoices, tabs
     setGenerating(true); setError('');
     let res;
     try {
-      res = await base44.functions.invoke('generateVoiceover', { project_id: project.id, voice_id: selectedVoice, provider });
+      res = await base44.functions.invoke('generateVoiceover', { project_id: project.id, voice_id: selectedVoice, voice_category: selectedVoiceData?.category, provider });
     } catch (err) { setError(err?.response?.data?.error || err.message); setGenerating(false); return; }
     if (res?.data?.error) { setError(res.data.error); setGenerating(false); return; }
     if (res.data?.instant && res.data?.voiceover_url) {

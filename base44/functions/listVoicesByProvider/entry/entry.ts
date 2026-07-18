@@ -71,84 +71,44 @@ let ai33Inflight = null;
 
 async function fetchAI33Voices() {
   const AI33_KEY = Deno.env.get('AI33_API_KEY');
-  const headers = { 'Content-Type': 'application/json', 'xi-api-key': AI33_KEY };
-  const allVoices = [];
+  const headers = { 'xi-api-key': AI33_KEY };
+  const providerCategories = {
+    elevenlabs: 'elevenlabs',
+    minimax: 'minimax',
+    clone: 'cloned',
+  };
 
-  // ElevenLabs — exact endpoints from working listVoices
-  try {
-    const [recRes, libRes] = await Promise.all([
-      fetch('https://api.ai33.pro/v2/voices', { headers }),
-      fetch('https://api.ai33.pro/v1/shared-voices?page_size=50&sort=usage_character_count_7d&page=0', { headers }),
-    ]);
-
-    if (recRes.ok) {
-      const data = await recRes.json();
-      for (const v of (data.voices || data || [])) {
-        allVoices.push({
-          voice_id: v.voice_id, name: v.name,
-          description: (v.description || '').substring(0, 100),
-          preview_url: v.preview_url, labels: v.labels || {},
-          category: 'elevenlabs',
-        });
+  const results = await Promise.all(
+    Object.keys(providerCategories).map(async provider => {
+      const url = `https://api.ai33.pro/v3/voices?provider=${provider}&page=1&page_size=100`;
+      const response = await fetch(url, { headers });
+      if (!response.ok) {
+        console.warn(`AI33 v3 ${provider} voices returned ${response.status}`);
+        return [];
       }
-    }
-    if (libRes.ok) {
-      const data = await libRes.json();
-      for (const v of (data.voices || [])) {
-        allVoices.push({
-          voice_id: v.voice_id, name: v.name,
-          description: (v.description || '').substring(0, 100),
-          preview_url: v.preview_url,
-          labels: { accent: v.accent, gender: v.gender, age: v.age, use_case: v.use_case },
-          category: 'elevenlabs_library',
-        });
-      }
-    }
-  } catch (e) { console.warn('ElevenLabs error:', e.message); }
+      const payload = await response.json();
+      return (payload.data || []).map(voice => ({
+        voice_id: voice.voice_id,
+        name: voice.name || voice.voice_id,
+        description: (voice.description || '').substring(0, 100),
+        preview_url: voice.preview_url || null,
+        labels: {
+          accent: voice.accent || voice.labels?.accent || '',
+          gender: (voice.gender || voice.labels?.gender || '').toLowerCase(),
+          age: (voice.age || voice.labels?.age || '').toLowerCase().replace(/\s+/g, '_'),
+          use_case: voice.use_case || voice.labels?.use_case || '',
+        },
+        category: providerCategories[provider],
+      }));
+    })
+  );
 
-  // MiniMax + Clones via AI33 — exact endpoints from working listVoices
-  try {
-    const [mmRes, cloneRes] = await Promise.all([
-      fetch('https://api.ai33.pro/v1m/voice/list', {
-        method: 'POST', headers,
-        body: JSON.stringify({ page: 1, page_size: 100, tag_list: [] }),
-      }),
-      fetch('https://api.ai33.pro/v1m/voice/clone', { headers }),
-    ]);
-
-    if (mmRes.ok) {
-      const data = await mmRes.json();
-      for (const v of (data.data?.voice_list || [])) {
-        allVoices.push({
-          voice_id: v.voice_id, name: v.voice_name || v.voice_id,
-          description: (v.tag_list || []).join(', '),
-          preview_url: v.sample_audio || null,
-          labels: {
-            accent: (v.tag_list || []).find(t => t.includes('EN-') || t === 'English') || '',
-            gender: (v.tag_list || []).find(t => t === 'Male' || t === 'Female')?.toLowerCase() || '',
-            age: (v.tag_list || []).find(t => t.includes('Age') || t === 'Young' || t === 'Middle Age') || '',
-            use_case: 'narration',
-          },
-          category: 'minimax',
-        });
-      }
-    }
-    if (cloneRes.ok) {
-      const data = await cloneRes.json();
-      for (const v of (data.data || [])) {
-        allVoices.push({
-          voice_id: v.voice_id, name: v.voice_name || v.voice_id,
-          description: 'Cloned voice', preview_url: v.sample_audio || null,
-          labels: { accent: '', gender: '', age: '', use_case: 'cloned' },
-          category: 'cloned',
-        });
-      }
-    }
-  } catch (e) { console.warn('MiniMax AI33 error:', e.message); }
-
-  // Deduplicate
   const seen = new Set();
-  return allVoices.filter(v => { if (seen.has(v.voice_id)) return false; seen.add(v.voice_id); return true; });
+  return results.flat().filter(voice => {
+    if (seen.has(voice.voice_id)) return false;
+    seen.add(voice.voice_id);
+    return true;
+  });
 }
 
 Deno.serve(async (req) => {
