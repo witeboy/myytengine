@@ -32,8 +32,6 @@ export async function initFFmpeg(onProgress) {
 
   onProgress?.({ phase: 'loading', message: 'Loading FFmpeg engine…', percent: 0 });
 
-  const hasSAB = typeof SharedArrayBuffer !== 'undefined';
-
   try {
     // Dynamic import from CDN
     const { FFmpeg } = await import(
@@ -59,11 +57,10 @@ export async function initFFmpeg(onProgress) {
       console.log('[FFmpeg]', message);
     });
 
-    // Use single-threaded core when SharedArrayBuffer isn't available (no COOP/COEP headers).
-    // The MT build at /dist/esm requires SAB; the UMD build at /dist/umd is single-threaded.
-    const baseURL = hasSAB
-      ? 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm'
-      : 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+    // @ffmpeg/core (non-mt) is ALWAYS single-threaded and needs no SharedArrayBuffer.
+    // Its /dist/esm build is the only one the ESM worker can import — the /dist/umd
+    // build silently hangs load() forever when imported by the module worker.
+    const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
 
     // The ffmpeg.wasm library internally spawns a Worker from its CDN location,
     // which browsers block as cross-origin. We must fetch the worker script
@@ -74,13 +71,19 @@ export async function initFFmpeg(onProgress) {
       'text/javascript',
     );
 
-    console.log(`[FFmpeg] Loading ${hasSAB ? 'multi-threaded' : 'single-threaded'} core from ${baseURL}`);
+    console.log(`[FFmpeg] Loading single-threaded core from ${baseURL}`);
 
-    await ffmpeg.load({
-      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-      classWorkerURL: workerURL,
-    });
+    // Hard timeout — ffmpeg.load() can hang silently; never leave the user stuck.
+    await Promise.race([
+      ffmpeg.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+        classWorkerURL: workerURL,
+      }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('FFmpeg load timed out after 45s')), 45000)
+      ),
+    ]);
 
     ffmpegLoaded = true;
     onProgress?.({ phase: 'ready', message: 'FFmpeg ready', percent: 100 });
