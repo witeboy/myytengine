@@ -42,7 +42,7 @@ async function callGemini(systemPrompt, userPrompt) {
       generationConfig: {
         responseMimeType: 'application/json',
         maxOutputTokens: 4096,
-        temperature: 0.7,
+        temperature: 0.4,
       },
     }),
   });
@@ -178,18 +178,20 @@ Deno.serve(async (req) => {
     // Build timestamped transcript for AI
     const timestampedTranscript = buildTimestampedTranscript(words);
 
-    const systemPrompt = `You are a viral content strategist and video editor with deep expertise in YouTube Shorts, TikTok, and Instagram Reels. Your job is to analyze a long-form video transcript and identify the most "clippable" viral moments.
+    const systemPrompt = `You are an elite short-form content strategist who has studied thousands of viral YouTube Shorts, TikToks, and Instagram Reels. You identify clips using proven retention mechanics — grounded analysis, not guesswork.
 
-You understand what makes content go viral:
-- Emotional peaks (surprise, humor, outrage, awe, controversy)
-- Strong standalone hooks that grab attention in the first 2 seconds
-- Complete mini-stories or self-contained insights
-- Contrarian or counterintuitive takes
-- Quotable one-liners or "mic drop" moments
-- Dramatic reveals or plot twists
-- High-energy delivery shifts
-- Relatable pain points with satisfying resolutions
-- "Wait, what?" moments that stop the scroll
+SCORING FRAMEWORK — weight each clip on these retention-backed dimensions:
+1. HOOK STRENGTH (30%) — The first 2 seconds must be a pattern interrupt: a bold claim, open question, shocking number, or mid-conflict entry. If the opening sentence would not stop a scroll, the clip fails regardless of what follows.
+2. PAYOFF (20%) — The clip opens a curiosity loop early and CLOSES it before ending. No unresolved setups, no "watch the full video" energy.
+3. EMOTIONAL PEAK (20%) — Surprise, outrage, awe, humor, or heartbreak with a clear intensity spike. Flat informational segments score low.
+4. SHARE TRIGGERS (15%) — Identity signaling ("this is so me"), controversy, high practical value, or awe. Something a viewer would send to a friend.
+5. LOOPABILITY (15%) — The ending flows naturally back into the opening, driving rewatches (a key ranking signal on all three platforms).
+
+CALIBRATION — be harsh and honest, do not inflate scores:
+- 85-100: exceptional, genuine viral potential (rare — at most 1-2 per video)
+- 70-84: strong, worth posting
+- 50-69: decent but unremarkable
+- below 50: DO NOT return it — fewer great clips beat many mediocre ones
 
 CRITICAL RULES:
 - Each clip MUST be self-contained — it should make sense WITHOUT context from the rest of the video
@@ -266,8 +268,8 @@ Sort clips by virality_score descending (best first).`;
       };
     });
 
-    // Enforce hard minimum — drop clips shorter than 30s
-    const HARD_MIN = 30;
+    // Enforce hard minimum — respect the caller's requested min length (small tolerance)
+    const HARD_MIN = Math.max(10, min_clip_seconds - 2);
     const beforeFilter = snappedClips.length;
     const filtered = snappedClips.filter((c) => {
       if (c.duration < HARD_MIN) {
@@ -282,6 +284,19 @@ Sort clips by virality_score descending (best first).`;
 
     // Sort by virality score descending
     snappedClips.sort((a, b) => (b.virality_score || 0) - (a.virality_score || 0));
+
+    // Drop heavily-overlapping clips — keep the higher-scored one
+    const deduped = [];
+    for (const c of snappedClips) {
+      const overlaps = deduped.some(d => {
+        const overlap = Math.min(d.end, c.end) - Math.max(d.start, c.start);
+        return overlap > 0.5 * (c.end - c.start);
+      });
+      if (!overlaps) deduped.push(c);
+      else console.warn(`⚠️  Dropping overlapping clip "${c.title}" (${c.start}s-${c.end}s)`);
+    }
+    snappedClips.length = 0;
+    snappedClips.push(...deduped);
 
     console.log(`✅ Found ${snappedClips.length} viral clips (via ${model_used})`);
     snappedClips.forEach((c, i) => {

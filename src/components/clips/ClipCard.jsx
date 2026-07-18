@@ -120,7 +120,7 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
     try {
       const blob = await clipVideo(videoUrl, clip.start, clip.end, ({ message }) => {
         setClipProgress(message);
-      });
+      }, { portrait: true });
       setClipBlob(blob);
       onClipReady?.(index, blob);
       downloadBlob(blob);

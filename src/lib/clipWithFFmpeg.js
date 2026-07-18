@@ -102,17 +102,22 @@ export async function initFFmpeg(onProgress) {
  * @param {function} onProgress - Progress callback
  * @returns {Blob} - MP4 blob of the clipped segment
  */
-export async function clipVideo(videoUrl, startSec, endSec, onProgress) {
+export async function clipVideo(videoUrl, startSec, endSec, onProgress, { portrait = false } = {}) {
+  // Lazy-init FFmpeg if not loaded yet
+  if (!ffmpegLoaded || !ffmpeg) {
+    try { await initFFmpeg(onProgress); } catch (_) {}
+  }
+
   // Try FFmpeg first
   if (ffmpegLoaded && ffmpeg) {
-    return clipWithFFmpeg(videoUrl, startSec, endSec, onProgress);
+    return clipWithFFmpeg(videoUrl, startSec, endSec, onProgress, portrait);
   }
 
   // Fallback: canvas-based clipping
-  return clipWithCanvas(videoUrl, startSec, endSec, onProgress);
+  return clipWithCanvas(videoUrl, startSec, endSec, onProgress, portrait);
 }
 
-async function clipWithFFmpeg(videoUrl, startSec, endSec, onProgress) {
+async function clipWithFFmpeg(videoUrl, startSec, endSec, onProgress, portrait = false) {
   const { fetchFile } = await import(
     /* webpackIgnore: true */
     'https://esm.sh/@ffmpeg/util@0.12.1'
@@ -128,16 +133,21 @@ async function clipWithFFmpeg(videoUrl, startSec, endSec, onProgress) {
 
   onProgress?.({ phase: 'clipping', message: `Clipping ${duration.toFixed(1)}s segment…`, percent: 10 });
 
-  // FFmpeg clip command: seek to start, copy codecs (fast), limit duration
-  await ffmpeg.exec([
-    '-ss', startSec.toFixed(3),
-    '-i', 'input.mp4',
-    '-t', duration.toFixed(3),
-    '-c', 'copy',          // Stream copy = instant, no re-encode
-    '-avoid_negative_ts', 'make_zero',
-    '-movflags', '+faststart',
-    'output.mp4',
-  ]);
+  // FFmpeg clip command: seek to start, limit duration.
+  // portrait=true → center-crop to 9:16 + scale 720x1280 (re-encode, Reels-ready)
+  // portrait=false → stream copy (instant, original aspect)
+  const args = ['-ss', startSec.toFixed(3), '-i', 'input.mp4', '-t', duration.toFixed(3)];
+  if (portrait) {
+    args.push(
+      '-vf', 'crop=min(iw\\,ih*9/16):ih,scale=720:1280',
+      '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '26',
+      '-c:a', 'aac', '-b:a', '128k',
+    );
+  } else {
+    args.push('-c', 'copy');
+  }
+  args.push('-avoid_negative_ts', 'make_zero', '-movflags', '+faststart', 'output.mp4');
+  await ffmpeg.exec(args);
 
   // Read the output
   const outputData = await ffmpeg.readFile('output.mp4');
@@ -156,7 +166,7 @@ async function clipWithFFmpeg(videoUrl, startSec, endSec, onProgress) {
  * Fallback: clip video using Canvas + MediaRecorder
  * Works without SharedArrayBuffer but quality/sync may vary
  */
-async function clipWithCanvas(videoUrl, startSec, endSec, onProgress) {
+async function clipWithCanvas(videoUrl, startSec, endSec, onProgress, portrait = false) {
   return new Promise((resolve, reject) => {
     onProgress?.({ phase: 'fallback', message: 'Using browser capture mode…', percent: 0 });
 
@@ -171,8 +181,13 @@ async function clipWithCanvas(videoUrl, startSec, endSec, onProgress) {
     const chunks = [];
 
     video.onloadedmetadata = () => {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      if (portrait) {
+        canvas.width = 720;
+        canvas.height = 1280;
+      } else {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+      }
       video.currentTime = startSec;
     };
 
@@ -223,7 +238,13 @@ async function clipWithCanvas(videoUrl, startSec, endSec, onProgress) {
           video.pause();
           return;
         }
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        if (portrait) {
+          const cropW = Math.min(video.videoWidth, video.videoHeight * 9 / 16);
+          const cropX = (video.videoWidth - cropW) / 2;
+          ctx.drawImage(video, cropX, 0, cropW, video.videoHeight, 0, 0, canvas.width, canvas.height);
+        } else {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        }
         const pct = Math.round(((video.currentTime - startSec) / duration) * 100);
         onProgress?.({ phase: 'capturing', message: `Recording… ${pct}%`, percent: pct });
         requestAnimationFrame(drawFrame);

@@ -29,7 +29,6 @@ import {
   uploadToCloudinary,
   buildCloudinaryClipUrl,
   resolveYouTubeVideo,
-  clipVideoCloud,
   transcribeFile,
   analyzeViralMoments,
 } from '@/lib/directApi';
@@ -272,31 +271,8 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
   const handleDownload = async () => {
     if (!src || clipEnd == null) return;
 
-    if (/^https?:\/\//i.test(src)) {
-      try {
-        setStatus('processing');
-        setProgress(5);
-        setErrMsg('');
-        const result = await clipVideoCloud({
-          sourceUrl: src,
-          start: clipStart,
-          end: clipEnd,
-        });
-        const a = document.createElement('a');
-        a.href = result.clip_url;
-        a.download = `clip_${index + 1}_${Math.round(clipStart)}s_${Math.round(clipEnd - clipStart)}s_portrait.mp4`;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        a.click();
-        setProgress(100);
-        setStatus('done');
-        setTimeout(() => { setStatus('idle'); setProgress(0); }, 4000);
-        return;
-      } catch (cloudErr) {
-        console.warn('[OpenShorts] Cloud download failed, trying browser export:', cloudErr.message);
-        setErrMsg('');
-      }
-    }
+    // NOTE: server-side ffmpeg is not available on this platform (subprocesses
+    // are blocked) — all clipping runs in-browser via WebCodecs with 9:16 crop.
 
     // ── Browser support check ──────────────────────────────────────
     if (typeof VideoEncoder === 'undefined' || typeof OffscreenCanvas === 'undefined') {

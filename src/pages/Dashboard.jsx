@@ -6,6 +6,7 @@ import QuickShortcuts from '@/components/dashboard/QuickShortcuts';
 import NicheStatsGrid from '@/components/dashboard/NicheStatsGrid';
 import ViralTrendsPanel from '@/components/dashboard/ViralTrendsPanel';
 import ActiveProjectsStrip from '@/components/dashboard/ActiveProjectsStrip';
+import ProjectStatusBoard from '@/components/dashboard/ProjectStatusBoard';
 import CloudExportsPanel from '@/components/dashboard/CloudExportsPanel';
 import { Loader2, LayoutDashboard, Cloud, Globe, Scissors } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -149,6 +150,11 @@ export default function Dashboard() {
             {/* Overall Stats */}
             <section>
               <OverallStats channels={channels} topics={topics} projects={projects} />
+            </section>
+
+            {/* Production Status Board */}
+            <section>
+              <ProjectStatusBoard projects={projects} />
             </section>
 
             {/* Niche Channels Grid */}
