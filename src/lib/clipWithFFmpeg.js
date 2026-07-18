@@ -1,150 +1,130 @@
 // ══════════════════════════════════════════════════════════════════
 // CLIP WITH FFMPEG — Browser-based video clipping via ffmpeg.wasm
 //
-// Uses @ffmpeg/ffmpeg loaded from CDN. Falls back to MediaRecorder
-// canvas capture if SharedArrayBuffer is unavailable.
+// Loads @ffmpeg/ffmpeg 0.12 from CDN with the single-threaded
+// @ffmpeg/core (no SharedArrayBuffer / COOP+COEP needed).
+//
+// Two critical fixes for CDN loading:
+//  1. worker.js contains relative imports ("./const.js" etc.) which
+//     break inside a blob URL — we fetch the source and rewrite them
+//     to absolute CDN URLs before creating the blob worker.
+//  2. Dynamic imports use /* @vite-ignore */ so Vite doesn't try to
+//     resolve/bundle the CDN URLs at build time.
 //
 // Usage:
-//   import { initFFmpeg, clipVideo, isFFmpegSupported } from './clipWithFFmpeg';
-//   await initFFmpeg(onProgress);
-//   const blob = await clipVideo(videoUrl, startSec, endSec, onProgress);
+//   import { initFFmpeg, clipVideo } from './clipWithFFmpeg';
+//   const blob = await clipVideo(videoUrl, startSec, endSec, onProgress, { portrait: true });
 // ══════════════════════════════════════════════════════════════════
+
+const FFMPEG_VERSION = '0.12.10';
+const UTIL_VERSION = '0.12.1';
+const CORE_VERSION = '0.12.6';
+
+const FFMPEG_ESM_BASE = `https://unpkg.com/@ffmpeg/ffmpeg@${FFMPEG_VERSION}/dist/esm`;
+const CORE_BASE = `https://unpkg.com/@ffmpeg/core@${CORE_VERSION}/dist/esm`;
 
 let ffmpeg = null;
 let ffmpegLoaded = false;
+let loadPromise = null; // dedupe concurrent init calls
 
-/**
- * Check if the browser supports ffmpeg.wasm.
- * We now use the single-threaded v0.11 UMD build which works WITHOUT
- * SharedArrayBuffer / COOP+COEP headers — so this is basically always true
- * in modern browsers. Kept as a function for API compatibility.
- */
 export function isFFmpegSupported() {
-  return typeof WebAssembly !== 'undefined';
+  return typeof WebAssembly !== 'undefined' && typeof Worker !== 'undefined';
+}
+
+// Fetch a JS file and return a same-origin blob URL, rewriting any
+// relative ESM imports to absolute CDN URLs so they still resolve
+// when the code runs from a blob:// context.
+async function toPatchedBlobURL(url, base) {
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`Failed to fetch ${url} (${resp.status})`);
+  let code = await resp.text();
+  // import ... from "./x.js"  |  import("./x.js")  |  export ... from "./x.js"
+  code = code.replace(/((?:from|import)\s*\(?\s*)(['"])\.\//g, `$1$2${base}/`);
+  return URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
 }
 
 /**
- * Load ffmpeg.wasm from CDN (one-time, ~30MB download)
- * @param {function} onProgress - ({ phase, message, percent }) callback
+ * Load ffmpeg.wasm from CDN (one-time, ~31MB download).
+ * Throws with a clear message on failure — callers surface it to the user.
  */
 export async function initFFmpeg(onProgress) {
   if (ffmpegLoaded && ffmpeg) return ffmpeg;
+  if (loadPromise) return loadPromise;
 
-  onProgress?.({ phase: 'loading', message: 'Loading FFmpeg engine…', percent: 0 });
+  loadPromise = (async () => {
+    onProgress?.({ phase: 'loading', message: 'Loading FFmpeg engine…', percent: 0 });
 
-  try {
-    // Dynamic import from CDN
-    const { FFmpeg } = await import(
-      /* webpackIgnore: true */
-      'https://esm.sh/@ffmpeg/ffmpeg@0.12.10'
-    );
-    const { toBlobURL } = await import(
-      /* webpackIgnore: true */
-      'https://esm.sh/@ffmpeg/util@0.12.1'
-    );
+    try {
+      const { FFmpeg } = await import(/* @vite-ignore */ `https://esm.sh/@ffmpeg/ffmpeg@${FFMPEG_VERSION}`);
+      const { toBlobURL } = await import(/* @vite-ignore */ `https://esm.sh/@ffmpeg/util@${UTIL_VERSION}`);
 
-    ffmpeg = new FFmpeg();
+      const inst = new FFmpeg();
 
-    ffmpeg.on('progress', ({ progress }) => {
-      onProgress?.({
-        phase: 'processing',
-        message: `Clipping… ${Math.round(progress * 100)}%`,
-        percent: Math.round(progress * 100),
+      inst.on('progress', ({ progress }) => {
+        const pct = Math.max(0, Math.min(100, Math.round(progress * 100)));
+        onProgress?.({ phase: 'processing', message: `Clipping… ${pct}%`, percent: pct });
       });
-    });
+      inst.on('log', ({ message }) => console.log('[FFmpeg]', message));
 
-    ffmpeg.on('log', ({ message }) => {
-      console.log('[FFmpeg]', message);
-    });
+      onProgress?.({ phase: 'loading', message: 'Downloading FFmpeg core…', percent: 20 });
 
-    // @ffmpeg/core (non-mt) is ALWAYS single-threaded and needs no SharedArrayBuffer.
-    // Its /dist/esm build is the only one the ESM worker can import — the /dist/umd
-    // build silently hangs load() forever when imported by the module worker.
-    const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm';
+      // Worker must be same-origin (blob) AND have its relative imports patched.
+      const workerURL = await toPatchedBlobURL(`${FFMPEG_ESM_BASE}/worker.js`, FFMPEG_ESM_BASE);
 
-    // The ffmpeg.wasm library internally spawns a Worker from its CDN location,
-    // which browsers block as cross-origin. We must fetch the worker script
-    // ourselves and pass a same-origin blob URL via `classWorkerURL`.
-    // unpkg serves the raw file with proper CORS (esm.sh rewrites it).
-    const workerURL = await toBlobURL(
-      'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm/worker.js',
-      'text/javascript',
-    );
+      const [coreURL, wasmURL] = await Promise.all([
+        toBlobURL(`${CORE_BASE}/ffmpeg-core.js`, 'text/javascript'),
+        toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`, 'application/wasm'),
+      ]);
 
-    console.log(`[FFmpeg] Loading single-threaded core from ${baseURL}`);
+      onProgress?.({ phase: 'loading', message: 'Starting FFmpeg engine…', percent: 60 });
+      console.log('[FFmpeg] Loading single-threaded core (0.12, no SharedArrayBuffer needed)');
 
-    // Hard timeout — ffmpeg.load() can hang silently; never leave the user stuck.
-    await Promise.race([
-      ffmpeg.load({
-        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-        classWorkerURL: workerURL,
-      }),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('FFmpeg load timed out after 45s')), 45000)
-      ),
-    ]);
+      // Hard timeout so a silent worker failure never leaves the UI stuck.
+      await Promise.race([
+        inst.load({ coreURL, wasmURL, classWorkerURL: workerURL }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('FFmpeg engine timed out while starting — check the browser console for worker errors')), 60000)
+        ),
+      ]);
 
-    ffmpegLoaded = true;
-    onProgress?.({ phase: 'ready', message: 'FFmpeg ready', percent: 100 });
-    console.log('[FFmpeg] Loaded successfully');
-    return ffmpeg;
+      ffmpeg = inst;
+      ffmpegLoaded = true;
+      onProgress?.({ phase: 'ready', message: 'FFmpeg ready', percent: 100 });
+      console.log('[FFmpeg] Loaded successfully');
+      return ffmpeg;
+    } catch (err) {
+      console.error('[FFmpeg] Failed to load:', err);
+      onProgress?.({ phase: 'error', message: `FFmpeg load failed: ${err.message}`, percent: 0 });
+      throw err;
+    } finally {
+      loadPromise = null;
+    }
+  })();
 
-  } catch (err) {
-    console.error('[FFmpeg] Failed to load:', err);
-    onProgress?.({ phase: 'error', message: `FFmpeg load failed: ${err.message}`, percent: 0 });
-    return null;
-  }
+  return loadPromise;
 }
 
 /**
- * Clip a video segment using ffmpeg.wasm
- * @param {string} videoUrl - URL of the source video
+ * Clip a video segment using ffmpeg.wasm — the ONLY clipping path.
+ * @param {string} videoUrl - URL of the source video (must allow CORS)
  * @param {number} startSec - Start time in seconds
  * @param {number} endSec - End time in seconds
- * @param {function} onProgress - Progress callback
+ * @param {function} onProgress - ({ phase, message, percent }) callback
  * @returns {Blob} - MP4 blob of the clipped segment
  */
 export async function clipVideo(videoUrl, startSec, endSec, onProgress, { portrait = false } = {}) {
-  // 1) WebCodecs — hardware-accelerated, ~3x faster than realtime (Chrome/Edge)
-  try {
-    const { isWebCodecsSupported, clipWithWebCodecs } = await import('@/lib/clipWithWebCodecs');
-    if (isWebCodecsSupported()) {
-      return await clipWithWebCodecs(videoUrl, startSec, endSec, onProgress, { portrait });
-    }
-  } catch (err) {
-    console.warn('[Clip] WebCodecs path failed, trying FFmpeg:', err.message);
-  }
+  const engine = await initFFmpeg(onProgress); // throws with a clear message on failure
 
-  // 2) FFmpeg.wasm
-  if (!ffmpegLoaded || !ffmpeg) {
-    try { await initFFmpeg(onProgress); } catch (_) {}
-  }
-  if (ffmpegLoaded && ffmpeg) {
-    return clipWithFFmpeg(videoUrl, startSec, endSec, onProgress, portrait);
-  }
+  const { fetchFile } = await import(/* @vite-ignore */ `https://esm.sh/@ffmpeg/util@${UTIL_VERSION}`);
 
-  // 3) Last resort: realtime canvas capture
-  return clipWithCanvas(videoUrl, startSec, endSec, onProgress, portrait);
-}
+  onProgress?.({ phase: 'downloading', message: 'Downloading video…', percent: 0 });
 
-async function clipWithFFmpeg(videoUrl, startSec, endSec, onProgress, portrait = false) {
-  const { fetchFile } = await import(
-    /* webpackIgnore: true */
-    'https://esm.sh/@ffmpeg/util@0.12.1'
-  );
-
-  onProgress?.({ phase: 'downloading', message: 'Downloading video segment…', percent: 0 });
-
-  // Fetch the video file
-  const videoData = await fetchFile(videoUrl);
-  await ffmpeg.writeFile('input.mp4', videoData);
+  const videoData = await fetchFile(videoUrl.split('#')[0]);
+  await engine.writeFile('input.mp4', videoData);
 
   const duration = endSec - startSec;
+  onProgress?.({ phase: 'clipping', message: `Clipping ${duration.toFixed(1)}s segment…`, percent: 5 });
 
-  onProgress?.({ phase: 'clipping', message: `Clipping ${duration.toFixed(1)}s segment…`, percent: 10 });
-
-  // FFmpeg clip command: seek to start, limit duration.
   // portrait=true → center-crop to 9:16 + scale 720x1280 (re-encode, Reels-ready)
   // portrait=false → stream copy (instant, original aspect)
   const args = ['-ss', startSec.toFixed(3), '-i', 'input.mp4', '-t', duration.toFixed(3)];
@@ -158,122 +138,20 @@ async function clipWithFFmpeg(videoUrl, startSec, endSec, onProgress, portrait =
     args.push('-c', 'copy');
   }
   args.push('-avoid_negative_ts', 'make_zero', '-movflags', '+faststart', 'output.mp4');
-  await ffmpeg.exec(args);
 
-  // Read the output
-  const outputData = await ffmpeg.readFile('output.mp4');
+  const rc = await engine.exec(args);
+  if (rc !== 0) throw new Error(`FFmpeg exited with code ${rc} — see console logs`);
+
+  const outputData = await engine.readFile('output.mp4');
   const blob = new Blob([outputData.buffer], { type: 'video/mp4' });
 
-  // Cleanup
-  await ffmpeg.deleteFile('input.mp4');
-  await ffmpeg.deleteFile('output.mp4');
+  await engine.deleteFile('input.mp4').catch(() => {});
+  await engine.deleteFile('output.mp4').catch(() => {});
+
+  if (!blob.size) throw new Error('FFmpeg produced an empty file');
 
   onProgress?.({ phase: 'done', message: `Clip ready (${(blob.size / 1048576).toFixed(1)}MB)`, percent: 100 });
-
   return blob;
-}
-
-/**
- * Fallback: clip video using Canvas + MediaRecorder
- * Works without SharedArrayBuffer but quality/sync may vary
- */
-async function clipWithCanvas(videoUrl, startSec, endSec, onProgress, portrait = false) {
-  return new Promise((resolve, reject) => {
-    onProgress?.({ phase: 'fallback', message: 'Using browser capture mode…', percent: 0 });
-
-    const video = document.createElement('video');
-    video.crossOrigin = 'anonymous';
-    video.muted = false;
-    video.preload = 'auto';
-
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const duration = endSec - startSec;
-    const chunks = [];
-
-    video.onloadedmetadata = () => {
-      if (portrait) {
-        canvas.width = 720;
-        canvas.height = 1280;
-      } else {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-      }
-      video.currentTime = startSec;
-    };
-
-    video.onseeked = () => {
-      // Capture canvas stream + audio
-      const canvasStream = canvas.captureStream(30);
-
-      // Try to capture audio from the video
-      let combinedStream;
-      try {
-        const audioCtx = new AudioContext();
-        const source = audioCtx.createMediaElementSource(video);
-        const dest = audioCtx.createMediaStreamDestination();
-        source.connect(dest);
-        source.connect(audioCtx.destination);
-
-        combinedStream = new MediaStream([
-          ...canvasStream.getVideoTracks(),
-          ...dest.stream.getAudioTracks(),
-        ]);
-      } catch {
-        combinedStream = canvasStream;
-      }
-
-      const recorder = new MediaRecorder(combinedStream, {
-        mimeType: MediaRecorder.isTypeSupported('video/mp4')
-          ? 'video/mp4'
-          : 'video/webm;codecs=vp8,opus',
-      });
-
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: recorder.mimeType });
-        onProgress?.({ phase: 'done', message: `Clip ready (${(blob.size / 1048576).toFixed(1)}MB)`, percent: 100 });
-        resolve(blob);
-      };
-
-      recorder.start(100);
-      video.play();
-
-      // Draw frames to canvas
-      const drawFrame = () => {
-        if (video.currentTime >= endSec || video.ended) {
-          recorder.stop();
-          video.pause();
-          return;
-        }
-        if (portrait) {
-          const cropW = Math.min(video.videoWidth, video.videoHeight * 9 / 16);
-          const cropX = (video.videoWidth - cropW) / 2;
-          ctx.drawImage(video, cropX, 0, cropW, video.videoHeight, 0, 0, canvas.width, canvas.height);
-        } else {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        }
-        const pct = Math.round(((video.currentTime - startSec) / duration) * 100);
-        onProgress?.({ phase: 'capturing', message: `Recording… ${pct}%`, percent: pct });
-        requestAnimationFrame(drawFrame);
-      };
-      drawFrame();
-
-      // Safety timeout
-      setTimeout(() => {
-        if (recorder.state === 'recording') {
-          recorder.stop();
-          video.pause();
-        }
-      }, (duration + 5) * 1000);
-    };
-
-    video.onerror = () => reject(new Error('Failed to load video'));
-    video.src = videoUrl;
-  });
 }
 
 /**

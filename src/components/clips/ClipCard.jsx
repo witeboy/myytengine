@@ -126,7 +126,8 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
       downloadBlob(blob);
     } catch (err) {
       console.error('Clip failed:', err);
-      setClipProgress('Clip failed — try again');
+      setClipProgress('');
+      alert(`Clip failed: ${err.message}`);
     } finally {
       setClipping(false);
     }
