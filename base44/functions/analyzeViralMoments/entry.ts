@@ -41,7 +41,7 @@ async function callGemini(systemPrompt, userPrompt) {
       ],
       generationConfig: {
         responseMimeType: 'application/json',
-        maxOutputTokens: 4096,
+        maxOutputTokens: 8192,
         temperature: 0.4,
       },
     }),
@@ -65,7 +65,14 @@ async function callGemini(systemPrompt, userPrompt) {
     jsonStr = jsonStr.replace(/^```json?\s*/, '').replace(/```\s*$/, '').trim();
   }
 
-  return JSON.parse(jsonStr);
+  try {
+    return JSON.parse(jsonStr);
+  } catch (_) {
+    // Truncated/wrapped output — extract the outermost JSON object
+    const match = jsonStr.match(/\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]);
+    throw new Error('Gemini returned unparseable JSON');
+  }
 }
 
 // ── Claude (fallback) ───────────────────────────────────────────
@@ -82,7 +89,7 @@ async function callClaude(systemPrompt, userPrompt) {
     },
     body: JSON.stringify({
       model: CLAUDE_MODEL,
-      max_tokens: 4096,
+      max_tokens: 8192,
       system: systemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     }),

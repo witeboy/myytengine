@@ -35,6 +35,8 @@ const KNOWN_FLAT = new Set([
   'proxyFetchAsset', 'generateThumbnailImage',
   'downloadYouTubeVideo',
   'longViralSceneBreakdown', 'shortsSceneBreakdown', 'explainerSceneBreakdown',
+  'quickPublishTranscribe', 'analyzeViralMoments', 'extractBestMoments',
+  'submitTranscription', 'inworldVoiceover',
 ]);
 
 // Remembers the resolved path ('flat' | 'entry') per function after the first call.
