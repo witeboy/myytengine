@@ -17,11 +17,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { initFFmpeg, isFFmpegSupported } from '@/lib/clipWithFFmpeg';
+import { isFFmpegSupported } from '@/lib/clipWithFFmpeg';
 import ClipCard from '@/components/clips/ClipCard';
 import ClipScheduler from '@/components/clips/ClipScheduler';
 import YouTubeUrlInput from '@/components/clips/YouTubeUrlInput';
-import ShortsClipperPanel from '@/components/clips/ShortsClipperPanel';
 import {
   Upload, FileVideo, Mic, Brain, Scissors, ArrowLeft,
   Loader2, CheckCircle, AlertCircle, Sparkles, Flame,
@@ -101,7 +100,6 @@ export default function ClipExtractor() {
   const [maxClipLen, setMaxClipLen]           = useState('120');
   const [videoContext, setVideoContext]        = useState('');
   const [showSettings, setShowSettings]       = useState(false);
-  const [ffmpegReady, setFfmpegReady]         = useState(false);
 
   const markComplete = (stage) => {
     setCompletedStages(prev => prev.includes(stage) ? prev : [...prev, stage]);
@@ -232,12 +230,6 @@ export default function ClipExtractor() {
         })));
       }
 
-      // Init FFmpeg for ShortsClipperPanel (non-blocking, uses existing @/lib/clipWithFFmpeg)
-      if (isFFmpegSupported() && !ffmpegReady) {
-        initFFmpeg(({ message }) => setStatusMessage(message))
-          .then(() => setFfmpegReady(true))
-          .catch(() => {}); // silent fallback — Cloudinary clips still work
-      }
     } catch (err) {
       setError(err.message);
       setCurrentStage(null);
@@ -505,7 +497,6 @@ export default function ClipExtractor() {
               ))}
             </div>
 
-            <ShortsClipperPanel clips={clips} videoUrl={videoUrl} words={asrWords} />
             <ClipScheduler clips={clips} videoUrl={videoUrl} enhancements={{}} />
           </div>
         )}
