@@ -140,30 +140,73 @@ async function callClaude(systemPrompt, userPrompt) {
   return JSON.parse(jsonStr);
 }
 
-// ── Unified caller with fallback ────────────────────────────────
-async function callAI(systemPrompt, userPrompt) {
-  let geminiErrMsg = '';
+// ── Base44 built-in LLM (primary) ───────────────────────────────
+async function callBase44LLM(base44, systemPrompt, userPrompt) {
+  const result = await base44.integrations.Core.InvokeLLM({
+    prompt: `${systemPrompt}\n\n${userPrompt}`,
+    response_json_schema: {
+      type: 'object',
+      properties: {
+        clips: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string' },
+              hook: { type: 'string' },
+              start: { type: 'number' },
+              end: { type: 'number' },
+              duration: { type: 'number' },
+              virality_score: { type: 'number' },
+              virality_reason: { type: 'string' },
+              category: { type: 'string' },
+              transcript_excerpt: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!result?.clips) throw new Error('Base44 LLM returned no clips field');
+  return result;
+}
 
-  // Try Gemini first
+// ── Unified caller with fallback ────────────────────────────────
+async function callAI(base44, systemPrompt, userPrompt) {
+  const errors = [];
+
+  // 1. Base44 built-in LLM first
   try {
-    console.log(`🟢 Trying Gemini (${GEMINI_MODEL})...`);
+    console.log(`🟣 Trying Base44 built-in LLM...`);
+    const result = await callBase44LLM(base44, systemPrompt, userPrompt);
+    console.log(`✅ Base44 LLM succeeded`);
+    return { result, model_used: 'base44_llm' };
+  } catch (b44Err) {
+    errors.push(`Base44 LLM: ${b44Err.message}`);
+    console.warn(`⚠️ Base44 LLM failed: ${b44Err.message}`);
+  }
+
+  // 2. Fall back to Gemini
+  try {
+    console.log(`🟢 Falling back to Gemini (${GEMINI_MODEL})...`);
     const result = await callGemini(systemPrompt, userPrompt);
     console.log(`✅ Gemini succeeded`);
     return { result, model_used: GEMINI_MODEL };
   } catch (geminiErr) {
-    geminiErrMsg = geminiErr.message;
-    console.warn(`⚠️ Gemini failed: ${geminiErrMsg}`);
+    errors.push(`Gemini: ${geminiErr.message}`);
+    console.warn(`⚠️ Gemini failed: ${geminiErr.message}`);
   }
 
-  // Fall back to Claude
+  // 3. Fall back to Claude
   try {
     console.log(`🔵 Falling back to Claude (${CLAUDE_MODEL})...`);
     const result = await callClaude(systemPrompt, userPrompt);
     console.log(`✅ Claude fallback succeeded`);
     return { result, model_used: CLAUDE_MODEL };
   } catch (claudeErr) {
-    console.error(`❌ Claude fallback also failed: ${claudeErr.message}`);
-    throw new Error(`Both AI providers failed. Gemini: ${geminiErrMsg}. Claude: ${claudeErr.message}`);
+    errors.push(`Claude: ${claudeErr.message}`);
+    console.error(`❌ All AI providers failed`);
+    throw new Error(`All AI providers failed. ${errors.join('. ')}`);
   }
 }
 
@@ -266,7 +309,7 @@ Sort clips by virality_score descending (best first).`;
 
     console.log(`🧠 Analyzing ${words.length} words, ${Math.round(duration)}s video for viral moments...`);
 
-    const { result, model_used } = await callAI(systemPrompt, userPrompt);
+    const { result, model_used } = await callAI(base44, systemPrompt, userPrompt);
 
     if (!result?.clips?.length) {
       return Response.json({
