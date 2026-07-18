@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { formatTimestamp, clipVideo, clipFilename } from '@/lib/clipWithFFmpeg';
 import ClipEnhancePanel from './ClipEnhancePanel';
+import ClipAndVoicePanel from './ClipAndVoicePanel';
 
 const CATEGORY_COLORS = {
   hot_take:       'bg-red-100 text-red-700 border-red-200',
@@ -120,7 +121,7 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
     try {
       const blob = await clipVideo(videoUrl, clip.start, clip.end, ({ message }) => {
         setClipProgress(message);
-      }, { portrait: true });
+      }, { portrait: true, preserveFrame: clip.content_type === 'sports' || clip.content_type === 'movie' });
       setClipBlob(blob);
       onClipReady?.(index, blob);
       downloadBlob(blob);
@@ -262,6 +263,8 @@ export default function ClipCard({ clip, index, videoUrl, onClipReady, allWords 
               )}
             </Button>
           </div>
+
+          <ClipAndVoicePanel clip={clip} words={allWords} videoUrl={videoUrl} />
 
           {/* Scroll to the real 9:16 renderer below the grid */}
           <Button

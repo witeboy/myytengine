@@ -365,7 +365,7 @@ export default function ClipExtractor() {
                     <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center mx-auto"><Upload className="w-7 h-7 text-gray-400" /></div>
                     <div>
                       <p className="font-semibold text-gray-700">Drop your video here</p>
-                      <p className="text-sm text-gray-400 mt-1">MP4, MOV, WebM — podcasts, interviews, streams, lectures</p>
+                      <p className="text-sm text-gray-400 mt-1">MP4, MOV, WebM — podcasts, sports, football, soccer, basketball, movies</p>
                     </div>
                   </div>
                 )}

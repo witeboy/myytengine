@@ -160,6 +160,8 @@ async function callBase44LLM(base44, systemPrompt, userPrompt) {
               virality_score: { type: 'number' },
               virality_reason: { type: 'string' },
               category: { type: 'string' },
+              content_type: { type: 'string' },
+              ending_reason: { type: 'string' },
               transcript_excerpt: { type: 'string' },
             },
           },
@@ -272,8 +274,10 @@ CALIBRATION — be harsh and honest, do not inflate scores:
 CRITICAL RULES:
 - Each clip MUST be self-contained — it should make sense WITHOUT context from the rest of the video
 - Prefer moments with natural energy/emotion shifts over flat monologues
-- The clip's START should be a natural hook (question, bold claim, surprising fact)
-- The clip's END should feel complete (punchline, conclusion, revelation) — no mid-sentence cuts
+- The clip's START must begin at a complete sentence, commentary phrase, scene beat, or natural breath before the hook — never on a dangling conjunction or pronoun
+- The clip's END must resolve the thought: a full sentence ending, punchline, conclusion, revelation, commentary pause, completed sports play, reaction after the play, or completed movie scene beat
+- Never cut immediately after a goal, basket, tackle, reveal, or punchline; include the outcome/reaction and stop at the next natural break
+- Detect podcasts/interviews, football/soccer, basketball/other sports, and movie/TV footage automatically. Sports clips prioritize complete plays with setup → action → result; movie clips prioritize self-contained scene turns without relying on earlier dialogue
 - Use the [M:SS] timestamp markers in the transcript to determine accurate start/end times
 - Timestamps are in SECONDS in your output (convert from M:SS format)
 - Clips must be between ${min_clip_seconds}s and ${max_clip_seconds}s
@@ -299,7 +303,9 @@ Return JSON in this exact format:
       "duration": 33.5,
       "virality_score": 92,
       "virality_reason": "Why this moment is viral-worthy (1-2 sentences)",
-      "category": "one of: hot_take | story | humor | insight | emotional | dramatic | quotable | controversial",
+      "category": "one of: hot_take | story | humor | insight | emotional | dramatic | quotable | controversial | sports_highlight | movie_scene",
+      "content_type": "one of: conversation | sports | movie | general",
+      "ending_reason": "The exact completed sentence, play outcome, reaction, or scene beat that makes this a natural ending",
       "transcript_excerpt": "Key 1-2 sentence excerpt from this clip that represents the peak moment"
     }
   ]
@@ -320,28 +326,33 @@ Sort clips by virality_score descending (best first).`;
       });
     }
 
-    // Post-process: snap start/end to nearest word boundaries for precision
-    const snappedClips = result.clips.map((clip) => {
-      // Find the closest ASR word to the start timestamp
-      const startWord = words.reduce((best, w) =>
-        Math.abs(w.start - clip.start) < Math.abs(best.start - clip.start) ? w : best
-      , words[0]);
+    // Snap AI ranges to real linguistic/play boundaries instead of arbitrary nearby words.
+    const sentenceEnd = word => /[.!?][\"')\]]*$/.test(String(word.word || ''));
+    const hasPauseAfter = index => index >= words.length - 1 || words[index + 1].start - words[index].end >= 0.65;
+    const naturalBreak = index => sentenceEnd(words[index]) || hasPauseAfter(index);
+    const snappedClips = result.clips.map(clip => {
+      let startIndex = words.findIndex(word => word.start >= clip.start);
+      if (startIndex < 0) startIndex = 0;
+      for (let index = startIndex - 1; index >= 0 && words[startIndex].start - words[index].end <= 8; index--) {
+        if (naturalBreak(index)) { startIndex = index + 1; break; }
+      }
 
-      // Find the closest ASR word to the end timestamp
-      const endWord = words.reduce((best, w) =>
-        Math.abs(w.end - clip.end) < Math.abs(best.end - clip.end) ? w : best
-      , words[words.length - 1]);
-
-      // Add 0.3s padding before start and 0.5s after end for natural feel
-      const snappedStart = Math.max(0, startWord.start - 0.3);
-      const snappedEnd = Math.min(duration, endWord.end + 0.5);
-
-      return {
-        ...clip,
-        start: Math.round(snappedStart * 100) / 100,
-        end: Math.round(snappedEnd * 100) / 100,
-        duration: Math.round((snappedEnd - snappedStart) * 100) / 100,
-      };
+      let endIndex = words.findIndex(word => word.end >= clip.end);
+      if (endIndex < 0) endIndex = words.length - 1;
+      const latestNaturalEnd = Math.min(duration, words[startIndex].start + max_clip_seconds + 10);
+      let resolvedEnd = -1;
+      for (let index = endIndex; index < words.length && words[index].end <= latestNaturalEnd; index++) {
+        if (naturalBreak(index)) { resolvedEnd = index; break; }
+      }
+      if (resolvedEnd < 0) {
+        for (let index = endIndex; index >= startIndex; index--) {
+          if (naturalBreak(index) && words[index].end - words[startIndex].start >= min_clip_seconds) { resolvedEnd = index; break; }
+        }
+      }
+      endIndex = resolvedEnd >= 0 ? resolvedEnd : endIndex;
+      const snappedStart = Math.max(0, words[startIndex].start - 0.25);
+      const snappedEnd = Math.min(duration, words[endIndex].end + (hasPauseAfter(endIndex) ? 0.35 : 0.6));
+      return { ...clip, start: Math.round(snappedStart * 100) / 100, end: Math.round(snappedEnd * 100) / 100, duration: Math.round((snappedEnd - snappedStart) * 100) / 100 };
     });
 
     // Enforce hard minimum — respect the caller's requested min length (small tolerance)

@@ -171,12 +171,12 @@ async function buildFaceCropXExpr(videoUrl, startSec, endSec, onProgress) {
  * @param {function} onProgress - ({ phase, message, percent }) callback
  * @returns {Blob} - MP4 blob of the clipped segment
  */
-export async function clipVideo(videoUrl, startSec, endSec, onProgress, { portrait = false } = {}) {
+export async function clipVideo(videoUrl, startSec, endSec, onProgress, { portrait = false, preserveFrame = false } = {}) {
   const engine = await initFFmpeg(onProgress); // throws with a clear message on failure
 
   // Face tracking (portrait only) — pans the crop window to keep the speaker centered
   let faceXExpr = null;
-  if (portrait) {
+  if (portrait && !preserveFrame) {
     onProgress?.({ phase: 'tracking', message: 'Tracking speaker face…', percent: 1 });
     faceXExpr = await buildFaceCropXExpr(videoUrl, startSec, endSec, onProgress);
   }
@@ -196,8 +196,11 @@ export async function clipVideo(videoUrl, startSec, endSec, onProgress, { portra
   const args = ['-ss', startSec.toFixed(3), '-i', 'input.mp4', '-t', duration.toFixed(3)];
   if (portrait) {
     const xExpr = faceXExpr || '(in_w-out_w)/2';
+    const videoFilter = preserveFrame
+      ? 'split=2[bg][fg];[bg]scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280,boxblur=20:10[blur];[fg]scale=720:1280:force_original_aspect_ratio=decrease[front];[blur][front]overlay=(W-w)/2:(H-h)/2'
+      : `crop=min(iw\\,ih*9/16):ih:'${xExpr}':0,scale=720:1280`;
     args.push(
-      '-vf', `crop=min(iw\\,ih*9/16):ih:'${xExpr}':0,scale=720:1280`,
+      '-vf', videoFilter,
       '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '26',
       '-c:a', 'aac', '-b:a', '128k',
     );
