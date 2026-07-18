@@ -55,8 +55,10 @@ async function callGemini(systemPrompt, userPrompt) {
 
   const data = await response.json();
 
-  // Gemini response: candidates[0].content.parts[0].text
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  // Join ALL text parts (thinking models may split output across parts),
+  // skipping internal "thought" parts.
+  const parts = data.candidates?.[0]?.content?.parts || [];
+  const text = parts.filter((p) => p.text && !p.thought).map((p) => p.text).join('');
   if (!text) throw new Error('Gemini returned empty response');
 
   // responseMimeType:"application/json" should give clean JSON, but parse defensively
@@ -68,11 +70,35 @@ async function callGemini(systemPrompt, userPrompt) {
   try {
     return JSON.parse(jsonStr);
   } catch (_) {
-    // Truncated/wrapped output — extract the outermost JSON object
-    const match = jsonStr.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]);
+    // Extra content after/around the JSON — extract the first BALANCED object
+    const obj = extractBalancedJson(jsonStr);
+    if (obj) return obj;
+    console.error('[Gemini raw output head]', jsonStr.slice(0, 800));
+    console.error('[Gemini raw output tail]', jsonStr.slice(-800));
     throw new Error('Gemini returned unparseable JSON');
   }
+}
+
+// Scan for the first balanced {...} block (string-aware) and parse it.
+function extractBalancedJson(text) {
+  const start = text.indexOf('{');
+  if (start === -1) return null;
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (esc) { esc = false; continue; }
+    if (ch === '\\') { if (inStr) esc = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        try { return JSON.parse(text.slice(start, i + 1)); } catch (_) { return null; }
+      }
+    }
+  }
+  return null;
 }
 
 // ── Claude (fallback) ───────────────────────────────────────────
