@@ -106,17 +106,25 @@ export async function initFFmpeg(onProgress) {
  * @returns {Blob} - MP4 blob of the clipped segment
  */
 export async function clipVideo(videoUrl, startSec, endSec, onProgress, { portrait = false } = {}) {
-  // Lazy-init FFmpeg if not loaded yet
+  // 1) WebCodecs — hardware-accelerated, ~3x faster than realtime (Chrome/Edge)
+  try {
+    const { isWebCodecsSupported, clipWithWebCodecs } = await import('@/lib/clipWithWebCodecs');
+    if (isWebCodecsSupported()) {
+      return await clipWithWebCodecs(videoUrl, startSec, endSec, onProgress, { portrait });
+    }
+  } catch (err) {
+    console.warn('[Clip] WebCodecs path failed, trying FFmpeg:', err.message);
+  }
+
+  // 2) FFmpeg.wasm
   if (!ffmpegLoaded || !ffmpeg) {
     try { await initFFmpeg(onProgress); } catch (_) {}
   }
-
-  // Try FFmpeg first
   if (ffmpegLoaded && ffmpeg) {
     return clipWithFFmpeg(videoUrl, startSec, endSec, onProgress, portrait);
   }
 
-  // Fallback: canvas-based clipping
+  // 3) Last resort: realtime canvas capture
   return clipWithCanvas(videoUrl, startSec, endSec, onProgress, portrait);
 }
 
