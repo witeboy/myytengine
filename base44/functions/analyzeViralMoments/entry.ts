@@ -142,7 +142,7 @@ async function callClaude(systemPrompt, userPrompt) {
 
 // ── Base44 built-in LLM (primary) ───────────────────────────────
 async function callBase44LLM(base44, systemPrompt, userPrompt) {
-  const result = await base44.integrations.Core.InvokeLLM({
+  const result = await base44.asServiceRole.integrations.Core.InvokeLLM({
     prompt: `${systemPrompt}\n\n${userPrompt}`,
     response_json_schema: {
       type: 'object',
