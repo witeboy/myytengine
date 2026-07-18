@@ -22,6 +22,7 @@ import { initFFmpeg, isFFmpegSupported } from './clipWithFFmpeg';
 import { buildViralAssFile, classifyWord } from './viralCaptionStyler';
 import { analyzeClipForTrim, buildSelectExpr } from './silenceTrimmer';
 import { planSfxPlacements, fetchAndWriteSfx } from './viralSFXLibrary';
+import { buildFaceTrack, buildFaceCropExpression } from './faceTracker';
 
 // ══════════════════════════════════════════════════════════════════════
 // MAIN: render a 9:16 Short
@@ -73,9 +74,32 @@ export async function renderShortWithCaptions({
         stats: { originalDur: originalDuration, trimmedDur: originalDuration, removedDur: 0, removedPercent: 0, cutCount: 0, fillersRemoved: 0, silencesRemoved: 0 },
       };
 
-  // ── STEP 2: Fetch source video ──────────────────────────────────
-  onProgress?.({ phase: 'downloading', message: 'Fetching source video…', percent: 8 });
-  const videoData = await fetchFile(videoUrl);
+  // ── STEP 2: Track the speaker across the source clip ────────────
+  let cropXExpr = '(iw-ow)/2';
+  const trackingVideo = document.createElement('video');
+  trackingVideo.src = videoUrl.split('#')[0];
+  trackingVideo.crossOrigin = 'anonymous';
+  trackingVideo.muted = true;
+  trackingVideo.preload = 'auto';
+  try {
+    await new Promise((resolve, reject) => {
+      trackingVideo.onloadedmetadata = resolve;
+      trackingVideo.onerror = () => reject(new Error('Video unavailable for face tracking'));
+      setTimeout(() => reject(new Error('Face tracking video load timed out')), 15000);
+    });
+    const track = await buildFaceTrack(
+      trackingVideo,
+      { start: startSec, end: endSec, duration: originalDuration },
+      message => onProgress?.({ phase: 'tracking', message, percent: 8 })
+    );
+    cropXExpr = buildFaceCropExpression(track.keyframes, startSec, trim.removeRanges);
+  } catch (error) {
+    console.warn('[ShortRenderer] Face tracking unavailable, using center crop:', error.message);
+  }
+
+  // ── STEP 3: Fetch source video ──────────────────────────────────
+  onProgress?.({ phase: 'downloading', message: 'Fetching source video…', percent: 12 });
+  const videoData = await fetchFile(videoUrl.split('#')[0]);
   await ffmpeg.writeFile('input.mp4', videoData);
 
   // ── STEP 3: Plan + fetch SFX ────────────────────────────────────
@@ -145,7 +169,7 @@ export async function renderShortWithCaptions({
   // 9:16 crop/scale — use force_original_aspect_ratio=increase for safety
   const cropChain =
     `scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=increase,` +
-    `crop=${targetWidth}:${targetHeight},setsar=1`;
+    `crop=${targetWidth}:${targetHeight}:'${cropXExpr}':(ih-oh)/2,setsar=1`;
   if (wantsCaptions) {
     filters.push(`${vLabel}${cropChain},ass=subs.ass[vout]`);
   } else {

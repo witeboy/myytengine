@@ -173,7 +173,7 @@ function ShortRow({
 // MAIN PANEL
 // ══════════════════════════════════════════════════════════════════════
 export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] }) {
-  const [renderMode, setRenderMode] = useState('cloud'); // 'cloud' | 'browser'
+  const [renderMode, setRenderMode] = useState('browser'); // browser mode includes speaker face tracking
   const [captionStyle, setCaptionStyle] = useState('hormozi_pro');
   const [trimSilence, setTrimSilence] = useState(true);
   const [addSfx, setAddSfx] = useState(true);
@@ -254,9 +254,9 @@ export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] })
                     ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
-                title="Server-side rendering via Creatomate — fast & reliable"
+                title="Server-side rendering via Creatomate — fast, static center crop"
               >
-                <Cloud className="w-3 h-3" /> Cloud
+                <Cloud className="w-3 h-3" /> Cloud (Center)
               </button>
               <button
                 type="button"
@@ -266,9 +266,9 @@ export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] })
                     ? 'bg-slate-800 text-white shadow'
                     : 'text-gray-600 hover:text-gray-900'
                 }`}
-                title="In-browser FFmpeg.wasm (legacy) — may fail due to browser security"
+                title="In-browser rendering with automatic speaker face tracking"
               >
-                <Cpu className="w-3 h-3" /> Browser
+                <Cpu className="w-3 h-3" /> Face Track
               </button>
             </div>
 
@@ -330,7 +330,7 @@ export default function ShortsClipperPanel({ clips = [], videoUrl, words = [] })
         {renderMode === 'cloud' && (
           <div className="flex items-start gap-2 p-2 rounded-md bg-purple-50 border border-purple-200 text-[11px] text-purple-700">
             <Cloud className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-            <span>Cloud mode: rendered server-side via Creatomate. Fast, reliable, no browser crashes. <strong>Auto-trim &amp; SFX are browser-only.</strong></span>
+            <span>Cloud mode uses a static center crop. Choose <strong>Face Track</strong> to automatically follow the speaker. Auto-trim and SFX are also available there.</span>
           </div>
         )}
 

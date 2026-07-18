@@ -46,14 +46,15 @@ async function captureFrameBase64(videoEl, timeSeconds, quality = 0.7) {
 export async function buildFaceTrack(videoEl, clip, onProgress = () => {}) {
   const { start, end, duration } = clip;
   const sampleTimes = [];
+  const safeEnd = Math.max(start, Math.min(end, videoEl.duration || end) - 0.05);
+  const sampleDuration = Math.max(0, safeEnd - start);
   for (let i = 0; i < SAMPLE_COUNT; i++) {
-    sampleTimes.push(start + (duration * i) / (SAMPLE_COUNT - 1));
+    sampleTimes.push(start + (sampleDuration * i) / (SAMPLE_COUNT - 1));
   }
 
   onProgress(`Tracking face across ${SAMPLE_COUNT} frames...`);
 
-  // Sample frames SEQUENTIALLY (seeking a video element in parallel doesn't work)
-  // but fire Claude calls in parallel once we have all base64 frames
+  // Sample frames sequentially because seeking one video element in parallel is unreliable.
   const frames = [];
   for (let i = 0; i < sampleTimes.length; i++) {
     const b64 = await captureFrameBase64(videoEl, sampleTimes[i]);
@@ -61,11 +62,18 @@ export async function buildFaceTrack(videoEl, clip, onProgress = () => {}) {
     onProgress(`Captured frame ${i + 1}/${SAMPLE_COUNT}...`);
   }
 
-  // Parallel Claude Vision calls
-  onProgress(`Analyzing faces with Claude Vision...`);
-  const results = await Promise.allSettled(
-    frames.map(f => base44.functions.invoke('detectFaceRegion', { image_base64: f.b64 }))
-  );
+  // Analyze sequentially to avoid vision API rate limits dropping most samples.
+  onProgress('Analyzing speaker positions...');
+  const results = [];
+  for (let i = 0; i < frames.length; i++) {
+    try {
+      const value = await base44.functions.invoke('detectFaceRegion', { image_base64: frames[i].b64 });
+      results.push({ status: 'fulfilled', value });
+    } catch (reason) {
+      results.push({ status: 'rejected', reason });
+    }
+    onProgress(`Analyzed face ${i + 1}/${SAMPLE_COUNT}...`);
+  }
 
   // Collect valid keyframes (where a primary face was detected)
   let keyframes = results
@@ -152,4 +160,32 @@ export async function buildFaceTrack(videoEl, clip, onProgress = () => {}) {
       return { x: lastX, y: lastY };
     },
   };
+}
+
+export function buildFaceCropExpression(keyframes, clipStart, removeRanges = []) {
+  const removedAt = (sourceTime) => removeRanges.reduce((total, range) => {
+    if (sourceTime <= range.start) return total;
+    return total + Math.max(0, Math.min(sourceTime, range.end) - range.start);
+  }, 0);
+
+  const points = keyframes
+    .filter(k => !removeRanges.some(r => k.t >= r.start && k.t <= r.end))
+    .map(k => ({
+      t: Math.max(0, k.t - clipStart - removedAt(k.t)),
+      x: Math.max(0, Math.min(1, k.x / 100)),
+    }))
+    .filter((k, i, all) => i === 0 || k.t - all[i - 1].t > 0.04);
+
+  if (!points.length) return '(iw-ow)/2';
+  if (points.length === 1) return `max(0,min(iw-ow,${points[0].x.toFixed(4)}*iw-ow/2))`;
+
+  let focus = points[points.length - 1].x.toFixed(4);
+  for (let i = points.length - 2; i >= 0; i--) {
+    const a = points[i];
+    const b = points[i + 1];
+    const span = Math.max(0.04, b.t - a.t);
+    const segment = `${a.x.toFixed(4)}+(${(b.x - a.x).toFixed(4)})*(t-${a.t.toFixed(3)})/${span.toFixed(3)}`;
+    focus = `if(lt(t\\,${b.t.toFixed(3)})\\,${segment}\\,${focus})`;
+  }
+  return `max(0\\,min(iw-ow\\,(${focus})*iw-ow/2))`;
 }
