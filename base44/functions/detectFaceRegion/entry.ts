@@ -1,17 +1,14 @@
-import { createClientFromRequest } from 'npm:@base44/sdk@0.8.21';
+import { createClientFromRequest } from 'npm:@base44/sdk@0.8.38';
 
 // ══════════════════════════════════════════════════════════════════
-// DETECT FACE REGION — Claude Vision face detection for smart crop
+// DETECT FACE REGION — Gemini Vision face detection for smart crop
 //
 // Input:  { image_url } — URL of a video frame screenshot
 //         OR { image_base64 } — base64 encoded frame
 // Output: { faces: [...], primary_face: { x_center_percent, y_center_percent, ... } }
-//
-// Used by ExportEngine to position the 9:16 crop window so the
-// speaker stays centered both horizontally AND vertically.
 // ══════════════════════════════════════════════════════════════════
 
-function clamp(n: number, lo = 0, hi = 100) {
+function clamp(n, lo = 0, hi = 100) {
   if (!Number.isFinite(n)) return 50;
   return Math.max(lo, Math.min(hi, n));
 }
@@ -45,27 +42,21 @@ Deno.serve(async (req) => {
       b64 = btoa(binary);
     }
 
-    const systemPrompt = `You are a computer-vision assistant specialized in detecting human faces in video frames for 9:16 vertical reframing.
+    const prompt = `You are a computer-vision assistant detecting human faces in video frames for 9:16 vertical reframing.
 
-Your job: find the person most likely speaking to the camera — the "primary subject" — and report the CENTER of their face as a percentage of the image width/height.
+Find the person most likely speaking to the camera — the "primary subject" — and report the CENTER of their face as a percentage of image width/height, where (0,0) is the top-left corner.
 
-Rules:
-- If multiple people are visible, pick the one with the largest face OR the one whose mouth appears open / who looks engaged with the camera.
-- If no face is visible, return an empty faces array.
-- Values are PERCENTAGES (0-100) of the image dimensions, where (0,0) is the top-left corner.
-- Return ONLY valid JSON, no prose.`;
+Look carefully at THIS specific image and measure the actual face position. Do NOT guess or use typical values.
 
-    const userPrompt = `Analyze this video frame and return the face position.
-
-Return this exact JSON shape:
+Return ONLY this exact JSON shape (numbers must be your real measurements from this image), no prose:
 {
   "faces": [
     {
-      "x_center_percent": 52,
-      "y_center_percent": 38,
-      "width_percent": 14,
-      "height_percent": 20,
-      "is_speaking": true
+      "x_center_percent": <measured horizontal center of the face, 0-100>,
+      "y_center_percent": <measured vertical center of the face, 0-100>,
+      "width_percent": <measured face width, 0-100>,
+      "height_percent": <measured face height, 0-100>,
+      "is_speaking": <true|false>
     }
   ]
 }
@@ -81,7 +72,7 @@ If no faces: { "faces": [] }`;
           contents: [{
             parts: [
               { inline_data: { mime_type: 'image/jpeg', data: b64 } },
-              { text: systemPrompt + '\n\n' + userPrompt },
+              { text: prompt },
             ],
           }],
           generationConfig: { temperature: 0.1, maxOutputTokens: 2048, thinkingConfig: { thinkingBudget: 0 } },
@@ -104,7 +95,7 @@ If no faces: { "faces": [] }`;
       jsonStr = text.split('```')[1].split('```')[0].trim();
     }
 
-    let result: any;
+    let result;
     try {
       result = JSON.parse(jsonStr);
     } catch (_e) {
@@ -116,15 +107,15 @@ If no faces: { "faces": [] }`;
 
     // Validate + normalize each face
     const validFaces = faces
-      .map((f: any) => ({
+      .map((f) => ({
         x_center_percent: clamp(Number(f.x_center_percent)),
         y_center_percent: clamp(Number(f.y_center_percent)),
         width_percent: clamp(Number(f.width_percent ?? 15), 1, 100),
         height_percent: clamp(Number(f.height_percent ?? 20), 1, 100),
         is_speaking: !!f.is_speaking,
       }))
-      .filter((f: any) =>
-        f.width_percent > 2 && f.height_percent > 2 && // not a dot
+      .filter((f) =>
+        f.width_percent > 2 && f.height_percent > 2 &&
         f.x_center_percent > 0 && f.x_center_percent < 100 &&
         f.y_center_percent > 0 && f.y_center_percent < 100
       );
@@ -132,8 +123,8 @@ If no faces: { "faces": [] }`;
     // Pick primary: speaking > largest
     let primary = null;
     if (validFaces.length > 0) {
-      const speaking = validFaces.find((f: any) => f.is_speaking);
-      const largest = validFaces.reduce((a: any, b: any) =>
+      const speaking = validFaces.find((f) => f.is_speaking);
+      const largest = validFaces.reduce((a, b) =>
         (a.width_percent * a.height_percent) > (b.width_percent * b.height_percent) ? a : b
       );
       primary = speaking || largest;
