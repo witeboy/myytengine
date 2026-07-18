@@ -104,6 +104,65 @@ export async function initFFmpeg(onProgress) {
   return loadPromise;
 }
 
+// ── Face-aware cropping ─────────────────────────────────────────────
+// Samples frames across the clip, detects the speaker's face (Claude
+// Vision via detectFaceRegion), and builds an FFmpeg crop x-expression
+// that pans the 9:16 window to follow the face over time.
+
+async function buildFaceCropXExpr(videoUrl, startSec, endSec, onProgress) {
+  const video = document.createElement('video');
+  video.src = videoUrl.split('#')[0];
+  video.crossOrigin = 'anonymous';
+  video.muted = true;
+  video.preload = 'auto';
+  video.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;';
+  document.body.appendChild(video);
+
+  try {
+    await new Promise((res, rej) => {
+      video.onloadedmetadata = res;
+      video.onerror = () => rej(new Error('load failed'));
+      setTimeout(() => rej(new Error('load timeout')), 15000);
+    });
+
+    const { buildFaceTrack } = await import('@/lib/faceTracker');
+    const track = await buildFaceTrack(
+      video,
+      { start: startSec, end: endSec, duration: endSec - startSec },
+      (msg) => onProgress?.({ phase: 'tracking', message: msg, percent: 2 })
+    );
+
+    if (!track.keyframes.length) return null;
+
+    // Keyframes relative to clip start (output timestamps begin at 0),
+    // face x as a 0-1 fraction of source width. Drop zero-length segments.
+    const kfs = [];
+    for (const k of track.keyframes) {
+      const t = Math.max(0, k.t - startSec);
+      if (kfs.length && t - kfs[kfs.length - 1].t < 0.05) continue;
+      kfs.push({ t, fx: Math.max(0, Math.min(1, k.x / 100)) });
+    }
+    if (!kfs.length) return null;
+
+    // Piecewise-linear FX(t): nested if()s, commas escaped for lavfi.
+    let fxExpr = kfs[kfs.length - 1].fx.toFixed(4);
+    for (let i = kfs.length - 2; i >= 0; i--) {
+      const a = kfs[i], b = kfs[i + 1];
+      const seg = `${a.fx.toFixed(4)}+(${(b.fx - a.fx).toFixed(4)})*(t-${a.t.toFixed(2)})/${(b.t - a.t).toFixed(2)}`;
+      fxExpr = `if(lt(t\\,${b.t.toFixed(2)})\\,${seg}\\,${fxExpr})`;
+    }
+    fxExpr = `if(lt(t\\,${kfs[0].t.toFixed(2)})\\,${kfs[0].fx.toFixed(4)}\\,${fxExpr})`;
+
+    // Crop x = face center minus half window, clamped to frame bounds
+    return `max(0\\,min(in_w-out_w\\,(${fxExpr})*in_w-out_w/2))`;
+  } catch (err) {
+    console.warn('[FaceCrop] Tracking failed, using center crop:', err.message);
+    return null;
+  } finally {
+    if (document.body.contains(video)) document.body.removeChild(video);
+  }
+}
+
 /**
  * Clip a video segment using ffmpeg.wasm — the ONLY clipping path.
  * @param {string} videoUrl - URL of the source video (must allow CORS)
@@ -114,6 +173,13 @@ export async function initFFmpeg(onProgress) {
  */
 export async function clipVideo(videoUrl, startSec, endSec, onProgress, { portrait = false } = {}) {
   const engine = await initFFmpeg(onProgress); // throws with a clear message on failure
+
+  // Face tracking (portrait only) — pans the crop window to keep the speaker centered
+  let faceXExpr = null;
+  if (portrait) {
+    onProgress?.({ phase: 'tracking', message: 'Tracking speaker face…', percent: 1 });
+    faceXExpr = await buildFaceCropXExpr(videoUrl, startSec, endSec, onProgress);
+  }
 
   const { fetchFile } = await import(/* @vite-ignore */ `https://esm.sh/@ffmpeg/util@${UTIL_VERSION}`);
 
@@ -129,8 +195,9 @@ export async function clipVideo(videoUrl, startSec, endSec, onProgress, { portra
   // portrait=false → stream copy (instant, original aspect)
   const args = ['-ss', startSec.toFixed(3), '-i', 'input.mp4', '-t', duration.toFixed(3)];
   if (portrait) {
+    const xExpr = faceXExpr || '(in_w-out_w)/2';
     args.push(
-      '-vf', 'crop=min(iw\\,ih*9/16):ih,scale=720:1280',
+      '-vf', `crop=min(iw\\,ih*9/16):ih:'${xExpr}':0,scale=720:1280`,
       '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '26',
       '-c:a', 'aac', '-b:a', '128k',
     );
