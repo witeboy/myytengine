@@ -33,6 +33,7 @@ import {
   analyzeViralMoments,
 } from '@/lib/directApi';
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
+import { buildFaceTrack } from '@/lib/faceTracker';
 
 const LS = {
   UP_KEY:  'openshorts_uploadpost_key',
@@ -267,6 +268,7 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
   const [status,   setStatus]   = useState('idle');
   const [progress, setProgress] = useState(0);
   const [errMsg,   setErrMsg]   = useState('');
+  const [phase,    setPhase]    = useState('');
 
   const handleDownload = async () => {
     if (!src || clipEnd == null) return;
@@ -320,6 +322,21 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
       const cropW = Math.round(srcH * 9 / 16);
       const cropX = Math.round((srcW - cropW) / 2);
 
+      // ── Face tracking: build a pan track so the crop follows the speaker ──
+      let faceTrack = null;
+      if (srcW > cropW) {
+        try {
+          setPhase('track');
+          setProgress(5);
+          faceTrack = await buildFaceTrack(video, { start: clipStart, end: clipEnd, duration: clipDur });
+          if (!faceTrack.keyframes.length) faceTrack = null; // no face — center crop
+        } catch (trackErr) {
+          console.warn('[OpenShorts] Face tracking failed, using center crop:', trackErr.message);
+          faceTrack = null;
+        }
+        setPhase('');
+      }
+
       setProgress(8);
 
       // ── Step 2: Set up VideoEncoder + Muxer ───────────────────
@@ -367,10 +384,15 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
 
         await seekTo(video, srcTime);
 
-        // Draw: crop landscape source to portrait 9:16
+        // Draw: crop landscape source to portrait 9:16 (face-following pan when tracked)
+        let frameCropX = cropX;
+        if (faceTrack) {
+          const { x } = faceTrack.getCropAt(srcTime);
+          frameCropX = Math.round(Math.max(0, Math.min(srcW - cropW, (x / 100) * srcW - cropW / 2)));
+        }
         ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, OUT_W, OUT_H);
-        ctx.drawImage(video, cropX, 0, cropW, srcH, 0, 0, OUT_W, OUT_H);
+        ctx.drawImage(video, frameCropX, 0, cropW, srcH, 0, 0, OUT_W, OUT_H);
 
         const timestamp = Math.round(elapsed * 1_000_000); // microseconds
         const vframe    = new VideoFrame(offscreen, { timestamp });
@@ -475,7 +497,7 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
   };
 
   const label =
-    status === 'processing' ? (progress < 76 ? `Encoding ${progress}%` : progress < 92 ? 'Audio…' : 'Saving…') :
+    status === 'processing' ? (phase === 'track' ? 'Tracking face…' : progress < 76 ? `Encoding ${progress}%` : progress < 92 ? 'Audio…' : 'Saving…') :
     status === 'done'       ? 'Saved!' :
     status === 'error'      ? 'Failed' :
     'Download MP4';
@@ -745,8 +767,9 @@ export default function OpenShorts() {
       setMsg('Submitting to AssemblyAI for transcription…');
       const transcript = await transcribeFile(audioUrl, msg => setMsg(msg));
       markDone('transcribe');
-      setStep('analyze'); setMsg('Claude is finding the best viral moments…');
-      const result = await analyzeViralMoments({ transcript: transcript.text, words: transcript.words, duration: transcript.duration, maxClips: parseInt(maxClips)||8, minSeconds: parseInt(minSec)||20, maxSeconds: parseInt(maxSec)||60 });
+      setStep('analyze'); setMsg('AI is finding the best viral moments…');
+      const videoContext = [resolved.title, resolved.channel].filter(Boolean).join(' by ');
+      const result = await analyzeViralMoments({ transcript: transcript.text, words: transcript.words, duration: transcript.duration, maxClips: parseInt(maxClips)||8, minSeconds: parseInt(minSec)||20, maxSeconds: parseInt(maxSec)||60, context: videoContext });
       if (!result?.clips?.length) throw new Error('No viral moments found. Try a different video.');
       markDone('analyze');
       setStep('clip'); setMsg('Preparing downloadable clip source...');
@@ -774,8 +797,8 @@ export default function OpenShorts() {
       setMsg('Transcribing with AssemblyAI…');
       const transcript = await transcribeFile(cloudUrl, msg => setMsg(msg));
       markDone('transcribe'); setProgress(70);
-      setStep('analyze'); setMsg('Claude is finding the best viral moments…');
-      const result = await analyzeViralMoments({ transcript: transcript.text, words: transcript.words, duration: transcript.duration || vidDuration, maxClips: parseInt(maxClips)||8, minSeconds: parseInt(minSec)||20, maxSeconds: parseInt(maxSec)||60 });
+      setStep('analyze'); setMsg('AI is finding the best viral moments…');
+      const result = await analyzeViralMoments({ transcript: transcript.text, words: transcript.words, duration: transcript.duration || vidDuration, maxClips: parseInt(maxClips)||8, minSeconds: parseInt(minSec)||20, maxSeconds: parseInt(maxSec)||60, context: file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ') });
       const analysisClips = result?.clips || [];
       if (!analysisClips.length) throw new Error('No viral moments detected. Try a different video.');
       markDone('analyze'); setProgress(85);
