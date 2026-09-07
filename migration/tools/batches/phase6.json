@@ -1,0 +1,24 @@
+{
+  "phase": 6,
+  "title": "Core text — scripts, hooks, scene breakdown, prompt engine",
+  "functions": [
+    { "name": "generateFullScript",       "src": "base44/functions/generateFullScript/entry/entry.ts" },
+    { "name": "generateScriptBatches",    "src": "base44/functions/generateScriptBatches.ts" },
+    { "name": "initializeScriptBatches",  "src": "base44/functions/initializeScriptBatches.ts" },
+    { "name": "generateHooks",            "src": "base44/functions/generateHooks.ts" },
+    { "name": "selectHook",               "src": "base44/functions/selectHook/entry/entry.ts" },
+    { "name": "generateSceneBreakdown",   "src": "base44/functions/generateSceneBreakdown/entry.ts" },
+    { "name": "sleepSceneBreakdown",      "src": "base44/functions/sleepSceneBreakdown/entry/entry.ts" },
+    { "name": "shortsSceneBreakdown",     "src": "base44/functions/shortsSceneBreakdown/entry.ts" },
+    { "name": "longViralSceneBreakdown",  "src": "base44/functions/longViralSceneBreakdown/entry.ts" },
+    { "name": "explainerSceneBreakdown",  "src": "base44/functions/explainerSceneBreakdown/entry.ts" },
+    { "name": "generateScenePrompts",     "src": "base44/functions/generateScenePrompts.ts" },
+    { "name": "enhanceScenePrompts",      "src": "base44/functions/enhanceScenePrompts.ts" },
+    { "name": "cleanScenePrompt",         "src": "base44/functions/cleanScenePrompt.ts" },
+    { "name": "fixScenePrompts",          "src": "base44/functions/fixScenePrompts.ts" },
+    { "name": "rephraseScenePrompt",      "src": "base44/functions/rephraseScenePrompt.ts" },
+    { "name": "dedupScenes",              "src": "base44/functions/dedupScenes.ts" },
+    { "name": "shortsGenerateScript",     "src": "base44/functions/shortsGenerateScript/entry/entry.ts" },
+    { "name": "longViralGenerateScript",  "src": "base44/functions/longViralGenerateScript/entry/entry.ts" }
+  ]
+}

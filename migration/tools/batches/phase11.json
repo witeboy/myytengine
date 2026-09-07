@@ -1,0 +1,14 @@
+{
+  "phase": 11,
+  "title": "Topics, SEO & b-roll",
+  "functions": [
+    { "name": "generateTopics",                "src": "base44/functions/generateTopics.ts" },
+    { "name": "parseAndScheduleTopics",        "src": "base44/functions/parseAndScheduleTopics.ts" },
+    { "name": "researchNicheStrategy",         "src": "base44/functions/researchNicheStrategy.ts" },
+    { "name": "generateSeoTitlesDescriptions", "src": "base44/functions/generateSeoTitlesDescriptions.ts" },
+    { "name": "generateSeoDescriptions",       "src": "base44/functions/generateSeoDescriptions/entry.ts" },
+    { "name": "searchBrollVideos",             "src": "base44/functions/searchBrollVideos.ts" },
+    { "name": "autoBrollPopulate",             "src": "base44/functions/autoBrollPopulate.ts" },
+    { "name": "sleepBrollPopulate",            "src": "base44/functions/sleepBrollPopulate.ts" }
+  ]
+}

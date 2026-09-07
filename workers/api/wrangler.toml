@@ -1,0 +1,80 @@
+name = "myytengine-api"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ── Vars (non-secret) ────────────────────────────────────────────────────────
+[vars]
+# LLM routing. 'aggregator' sends Claude/GPT/Gemini through CheaperInference on one key.
+# 'gateway' uses Cloudflare AI Gateway with per-provider BYOK keys — the escape hatch,
+# and the only mode that supports Gemini video understanding.
+AI_PROVIDER_MODE       = "aggregator"
+AI_AGGREGATOR_BASE_URL = "https://api.cheaperinference.com"
+
+CF_ACCOUNT_ID       = "REPLACE_ME"
+AI_GATEWAY_ID       = "myytengine"
+# Media storage. Retention is tiered in lib/storage.ts:
+#   ephemeral/  swept after ~48h   durable/  kept   (R2 cold storage is a separate bucket)
+MEDIA_BACKEND        = "bunny"
+# Delete media for ARCHIVED projects on the daily sweep. This removes generated work —
+# leave "false" until you are sure archiving means "done with this".
+ARCHIVE_SWEEP_ENABLED = "false"
+BUNNY_STORAGE_ZONE   = "REPLACE_ME"
+BUNNY_STORAGE_REGION = "ny"
+BUNNY_CDN_URL        = "https://REPLACE_ME.b-cdn.net"
+
+MEDIA_PUBLIC_BASE   = "https://media.REPLACE_ME"          # only used when MEDIA_BACKEND="r2"
+ALLOWED_ORIGINS     = "http://localhost:5173,https://REPLACE_ME.vercel.app"
+NEON_AUTH_JWKS_URL  = "https://api.stack-auth.com/api/v1/projects/REPLACE_ME/.well-known/jwks.json"
+NEON_AUTH_ISSUER    = "https://api.stack-auth.com/api/v1/projects/REPLACE_ME"
+NEON_AUTH_AUDIENCE  = ""                                   # leave empty to skip the aud check
+
+# ── Secrets — set with `wrangler secret put <NAME>`, never committed ──────────
+#   KEYVAULT_MASTER_KEY      base64 of 32 random bytes:  openssl rand -base64 32
+#   BUNNY_STORAGE_PASSWORD   Bunny storage-zone password. SERVER SIDE ONLY — it is never
+#                            returned to a browser. The old bunny_config action that did
+#                            exactly that is deleted and must not be reinstated.
+#
+# Provider API keys are NOT set here. They are BYOK: entered by the user in
+# Settings, encrypted under KEYVAULT_MASTER_KEY and stored in D1.
+
+[[d1_databases]]
+binding       = "DB"
+database_name = "myytengine"
+database_id   = "REPLACE_ME"
+
+[[r2_buckets]]
+binding     = "MEDIA"
+bucket_name = "myytengine-media"
+
+[[r2_buckets]]
+binding     = "COLD"
+bucket_name = "myytengine-cold"
+
+[ai]
+binding = "AI"
+
+# ── ffmpeg container ──────────────────────────────────────────────────────────
+# Server-side video. Billed per second of runtime, so keep max_instances low until you
+# know the real concurrency. See codex/FFMPEG.md.
+[[containers]]
+class_name    = "FfmpegContainer"
+image         = "../ffmpeg/Dockerfile"
+max_instances = 5
+instance_type = "standard"
+
+[[durable_objects.bindings]]
+name       = "FFMPEG"
+class_name = "FfmpegContainer"
+
+[[migrations]]
+tag                = "v1"
+new_sqlite_classes = ["FfmpegContainer"]
+
+# 48-hour sweep of ephemeral media. 03:17 UTC daily — off the hour to avoid the
+# thundering herd on Cloudflare's scheduler.
+[triggers]
+crons = ["17 3 * * *"]
+
+[observability]
+enabled = true

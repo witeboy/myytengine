@@ -1,0 +1,21 @@
+{
+  "phase": 7,
+  "title": "Image & video generation — KIE, character DNA, thumbnails",
+  "note": "uploadToR2 and proxyFetchAsset are NOT here — they are hand-written (S3 SDK -> R2 binding). See PHASE-7.md.",
+  "functions": [
+    { "name": "generateSceneImage",         "src": "base44/functions/generateSceneImage.ts" },
+    { "name": "pollSceneImage",             "src": "base44/functions/pollSceneImage.ts" },
+    { "name": "generateSceneVideo",         "src": "base44/functions/generateSceneVideo.ts" },
+    { "name": "pollSceneVideo",             "src": "base44/functions/pollSceneVideo.ts" },
+    { "name": "extractCharacterDNA",        "src": "base44/functions/extractCharacterDNA/entry.ts" },
+    { "name": "generateProgressionPrompts", "src": "base44/functions/generateProgressionPrompts/entry/entry.ts" },
+    { "name": "generateProgressionImage",   "src": "base44/functions/generateProgressionImage/entry/entry.ts" },
+    { "name": "generateProgressionVideo",   "src": "base44/functions/generateProgressionVideo.ts" },
+    { "name": "generateThumbnailImage",     "src": "base44/functions/generateThumbnailImage.ts" },
+    { "name": "generateNewThumbnailImage",  "src": "base44/functions/generateNewThumbnailImage.ts" },
+    { "name": "pollThumbnailTask",          "src": "base44/functions/pollThumbnailTask.ts" },
+    { "name": "thumbnailBlend",             "src": "base44/functions/thumbnailBlend.ts" },
+    { "name": "pollThumbnailBlend",         "src": "base44/functions/pollThumbnailBlend.ts" },
+    { "name": "detectFaceRegion",           "src": "base44/functions/detectFaceRegion/entry/entry.ts" }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "phase": 10,
+  "title": "Shorts & clips — viral moments, YouTube download, FYP enhance, scheduling",
+  "functions": [
+    { "name": "analyzeViralMoments",      "src": "base44/functions/analyzeViralMoments/entry.ts" },
+    { "name": "extractBestMoments",       "src": "base44/functions/extractBestMoments/entry.ts" },
+    { "name": "downloadYouTubeVideo",     "src": "base44/functions/downloadYouTubeVideo.ts" },
+    { "name": "enhanceClipForFYP",        "src": "base44/functions/enhanceClipForFYP/entry/entry.ts" },
+    { "name": "detectSilencesAndFillers", "src": "base44/functions/detectSilencesAndFillers/entry/entry.ts" },
+    { "name": "scheduleClipPost",         "src": "base44/functions/scheduleClipPost.ts" }
+  ]
+}
