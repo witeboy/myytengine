@@ -1,0 +1,30 @@
+// GENERATED - must stay in sync with workers/api/src/db/registry.ts
+// Entity names accepted by /api/db/:entity/:op.
+
+export const ENTITY_NAMES = [
+  'AssetPlans',
+  'BrandIdentities',
+  'CalendarEntries',
+  'ChannelThumbnailDNA',
+  'ChannelTopics',
+  'Channels',
+  'Hooks',
+  'MediaAssets',
+  'MusicTracks',
+  'ProductionSettings',
+  'Projects',
+  'RetentionMaps',
+  'Scenes',
+  'ScriptBatches',
+  'Scripts',
+  'ThumbnailConcepts',
+  'ThumbnailNiches',
+  'ThumbnailTemplates',
+  'TimelineBlocks',
+  'TimingEntries',
+  'Topics',
+  'Transcripts',
+  'UploadMetadata',
+  'VisualPrompts',
+  'VoiceProfiles',
+];

@@ -1,0 +1,12 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/api/auth/:path*",
+      "destination": "https://myytengine-api.tolu-adebisi.workers.dev/api/neon-auth/:path*"
+    },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}

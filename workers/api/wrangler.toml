@@ -11,23 +11,23 @@ compatibility_flags = ["nodejs_compat"]
 AI_PROVIDER_MODE       = "aggregator"
 AI_AGGREGATOR_BASE_URL = "https://api.cheaperinference.com"
 
-CF_ACCOUNT_ID       = "REPLACE_ME"
+CF_ACCOUNT_ID       = "902e34ea24639ebe15562116add415bd"
 AI_GATEWAY_ID       = "myytengine"
 # Media storage. Retention is tiered in lib/storage.ts:
 #   ephemeral/  swept after ~48h   durable/  kept   (R2 cold storage is a separate bucket)
-MEDIA_BACKEND        = "bunny"
+MEDIA_BACKEND        = "r2"
 # Delete media for ARCHIVED projects on the daily sweep. This removes generated work —
 # leave "false" until you are sure archiving means "done with this".
 ARCHIVE_SWEEP_ENABLED = "false"
-BUNNY_STORAGE_ZONE   = "REPLACE_ME"
+BUNNY_STORAGE_ZONE   = ""
 BUNNY_STORAGE_REGION = "ny"
-BUNNY_CDN_URL        = "https://REPLACE_ME.b-cdn.net"
+BUNNY_CDN_URL        = ""
 
-MEDIA_PUBLIC_BASE   = "https://media.REPLACE_ME"          # only used when MEDIA_BACKEND="r2"
-ALLOWED_ORIGINS     = "http://localhost:5173,https://REPLACE_ME.vercel.app"
-NEON_AUTH_JWKS_URL  = "https://api.stack-auth.com/api/v1/projects/REPLACE_ME/.well-known/jwks.json"
-NEON_AUTH_ISSUER    = "https://api.stack-auth.com/api/v1/projects/REPLACE_ME"
-NEON_AUTH_AUDIENCE  = ""                                   # leave empty to skip the aud check
+MEDIA_PUBLIC_BASE   = "https://media.radiantmemory.ca"    # only used when MEDIA_BACKEND="r2"
+ALLOWED_ORIGINS     = "http://localhost:5173,https://myytengine.vercel.app"
+NEON_AUTH_JWKS_URL  = "https://ep-red-sunset-axfihokp.neonauth.c-4.us-east-2.aws.neon.tech/neondb/auth/.well-known/jwks.json"
+NEON_AUTH_ISSUER    = "https://ep-red-sunset-axfihokp.neonauth.c-4.us-east-2.aws.neon.tech"
+NEON_AUTH_AUDIENCE  = "https://ep-red-sunset-axfihokp.neonauth.c-4.us-east-2.aws.neon.tech"
 
 # ── Secrets — set with `wrangler secret put <NAME>`, never committed ──────────
 #   KEYVAULT_MASTER_KEY      base64 of 32 random bytes:  openssl rand -base64 32
@@ -41,7 +41,7 @@ NEON_AUTH_AUDIENCE  = ""                                   # leave empty to skip
 [[d1_databases]]
 binding       = "DB"
 database_name = "myytengine"
-database_id   = "REPLACE_ME"
+database_id   = "cf8429cf-dcc7-40ec-8129-5f4941bcd3d5"
 
 [[r2_buckets]]
 binding     = "MEDIA"

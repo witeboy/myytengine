@@ -5,7 +5,7 @@
 
 import { badRequest, notFound } from '../lib/http';
 import { getProvider, publicCatalog, PROVIDERS } from '../lib/providers';
-import { deleteKey, markKeyResult, putKey, saveSettings } from '../lib/vault';
+import { deleteKey, hintOf, markKeyResult, putKey, saveSettings } from '../lib/vault';
 import type { Ctx } from '../types';
 
 interface KeyRow {
@@ -58,7 +58,7 @@ export async function setKey(body: any, ctx: Ctx) {
   if (!value) throw badRequest('value is required — use DELETE to clear a key');
 
   await putKey(ctx.env, ctx.user, provider, value);
-  return { provider, configured: true };
+  return { provider, configured: true, hint: hintOf(value) };
 }
 
 /**

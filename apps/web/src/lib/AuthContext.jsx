@@ -1,145 +1,119 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
-import { appParams } from '@/lib/app-params';
-import { createAxiosClient } from '@base44/sdk/dist/utils/axios-client';
+// AuthContext — Managed Better Auth replacing Base44 auth.
+//
+// The exported context shape is unchanged. Base44's public-settings values remain
+// inert so App.jsx and UserNotRegisteredError.jsx do not need behavior changes.
+
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { setAuthActions, setTokenProvider, setUnauthorizedHandler } from '@/api/client';
+import { authClient } from '@/lib/neon-auth';
 
 const AuthContext = createContext();
 
+function buildLoginUrl(returnTo) {
+  const loginUrl = new URL('/handler/sign-in', window.location.origin);
+  loginUrl.searchParams.set('returnTo', returnTo || window.location.href);
+  return loginUrl.toString();
+}
+
 export const AuthProvider = ({ children }) => {
+  const session = authClient.useSession();
+  const sessionUserId = session.data?.user?.id || null;
+
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-  const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(true);
   const [authError, setAuthError] = useState(null);
-  const [appPublicSettings, setAppPublicSettings] = useState(null); // Contains only { id, public_settings }
+
+  const navigateToLogin = useCallback((returnTo) => {
+    window.location.assign(buildLoginUrl(returnTo));
+  }, []);
+
+  const logout = useCallback(
+    async (shouldRedirect = true) => {
+      setUser(null);
+      setIsAuthenticated(false);
+      await authClient.signOut();
+
+      if (shouldRedirect) {
+        const returnTo = typeof shouldRedirect === 'string' ? shouldRedirect : window.location.href;
+        navigateToLogin(returnTo);
+      }
+    },
+    [navigateToLogin],
+  );
+
+  // The Worker is on a separate origin, so it receives a short-lived JWT instead
+  // of Better Auth's HTTP-only browser session cookie. Resolve the token from the
+  // live session at request time; tying this provider to React's session render
+  // can leave the first authenticated request using the previous null session.
+  useEffect(() => {
+    setTokenProvider(async () => {
+      try {
+        // Neon's Better Auth adapter replaces session.token with the short-lived
+        // JWT supplied in the get-session response's set-auth-jwt header.
+        const result = await authClient.getSession();
+        return result?.data?.session?.token || null;
+      } catch {
+        return null;
+      }
+    });
+    setAuthActions({ logout, redirectToLogin: navigateToLogin });
+    setUnauthorizedHandler(() => {
+      setIsAuthenticated(false);
+      setAuthError({ type: 'auth_required', message: 'Authentication required' });
+    });
+  }, [logout, navigateToLogin]);
+
+  const checkAppState = useCallback(async () => {
+    if (session.isPending) return;
+
+    if (!sessionUserId) {
+      setUser(null);
+      setIsAuthenticated(false);
+      setIsLoadingAuth(false);
+      setAuthError({ type: 'auth_required', message: 'Authentication required' });
+      return;
+    }
+
+    setIsLoadingAuth(true);
+    setAuthError(null);
+    try {
+      // Prove the browser session, JWT, and Worker verifier as one end-to-end chain.
+      const { api } = await import('@/api/client');
+      const currentUser = await api.auth.me();
+      setUser(currentUser);
+      setIsAuthenticated(true);
+    } catch (error) {
+      setUser(null);
+      setIsAuthenticated(false);
+      setAuthError(
+        error?.status === 401 || error?.status === 403
+          ? { type: 'auth_required', message: 'Authentication required' }
+          : { type: 'unknown', message: error?.message || 'Failed to load app' },
+      );
+    } finally {
+      setIsLoadingAuth(false);
+    }
+  }, [session.isPending, sessionUserId]);
 
   useEffect(() => {
     checkAppState();
-  }, []);
-
-  const checkAppState = async () => {
-    try {
-      setIsLoadingPublicSettings(true);
-      setAuthError(null);
-      
-      // First, check app public settings (with token if available)
-      // This will tell us if auth is required, user not registered, etc.
-      const appClient = createAxiosClient({
-        baseURL: `/api/apps/public`,
-        headers: {
-          'X-App-Id': appParams.appId
-        },
-        token: appParams.token, // Include token if available
-        interceptResponses: true
-      });
-      
-      try {
-        const publicSettings = await appClient.get(`/prod/public-settings/by-id/${appParams.appId}`);
-        setAppPublicSettings(publicSettings);
-        
-        // If we got the app public settings successfully, check if user is authenticated
-        if (appParams.token) {
-          await checkUserAuth();
-        } else {
-          setIsLoadingAuth(false);
-          setIsAuthenticated(false);
-        }
-        setIsLoadingPublicSettings(false);
-      } catch (appError) {
-        console.error('App state check failed:', appError);
-        
-        // Handle app-level errors
-        if (appError.status === 403 && appError.data?.extra_data?.reason) {
-          const reason = appError.data.extra_data.reason;
-          if (reason === 'auth_required') {
-            setAuthError({
-              type: 'auth_required',
-              message: 'Authentication required'
-            });
-          } else if (reason === 'user_not_registered') {
-            setAuthError({
-              type: 'user_not_registered',
-              message: 'User not registered for this app'
-            });
-          } else {
-            setAuthError({
-              type: reason,
-              message: appError.message
-            });
-          }
-        } else {
-          setAuthError({
-            type: 'unknown',
-            message: appError.message || 'Failed to load app'
-          });
-        }
-        setIsLoadingPublicSettings(false);
-        setIsLoadingAuth(false);
-      }
-    } catch (error) {
-      console.error('Unexpected error:', error);
-      setAuthError({
-        type: 'unknown',
-        message: error.message || 'An unexpected error occurred'
-      });
-      setIsLoadingPublicSettings(false);
-      setIsLoadingAuth(false);
-    }
-  };
-
-  const checkUserAuth = async () => {
-    try {
-      // Now check if the user is authenticated
-      setIsLoadingAuth(true);
-      const currentUser = await base44.auth.me();
-      setUser(currentUser);
-      setIsAuthenticated(true);
-      setIsLoadingAuth(false);
-    } catch (error) {
-      console.error('User auth check failed:', error);
-      setIsLoadingAuth(false);
-      setIsAuthenticated(false);
-      
-      // If user auth fails, it might be an expired token
-      if (error.status === 401 || error.status === 403) {
-        setAuthError({
-          type: 'auth_required',
-          message: 'Authentication required'
-        });
-      }
-    }
-  };
-
-  const logout = (shouldRedirect = true) => {
-    setUser(null);
-    setIsAuthenticated(false);
-    
-    if (shouldRedirect) {
-      // Use the SDK's logout method which handles token cleanup and redirect
-      base44.auth.logout(window.location.href);
-    } else {
-      // Just remove the token without redirect
-      base44.auth.logout();
-    }
-  };
-
-  const navigateToLogin = () => {
-    // Use the SDK's redirectToLogin method
-    base44.auth.redirectToLogin(window.location.href);
-  };
+  }, [checkAppState]);
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      isAuthenticated, 
-      isLoadingAuth,
-      isLoadingPublicSettings,
-      authError,
-      appPublicSettings,
-      logout,
-      navigateToLogin,
-      checkAppState
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isAuthenticated,
+        isLoadingAuth,
+        isLoadingPublicSettings: false,
+        authError,
+        appPublicSettings: null,
+        logout,
+        navigateToLogin,
+        checkAppState,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -147,8 +121,6 @@ export const AuthProvider = ({ children }) => {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };

@@ -41,11 +41,33 @@ async function getJwks(url: string, force = false): Promise<Jwk[]> {
   return keys;
 }
 
-const ALGS: Record<string, { name: string; hash: string; namedCurve?: string }> = {
-  RS256: { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-  RS384: { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-384' },
-  RS512: { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-512' },
-  ES256: { name: 'ECDSA', hash: 'SHA-256', namedCurve: 'P-256' },
+const ALGS: Record<
+  string,
+  {
+    importAlgorithm: string | SubtleCryptoImportKeyAlgorithm;
+    verifyAlgorithm: string | SubtleCryptoSignAlgorithm;
+  }
+> = {
+  EdDSA: {
+    importAlgorithm: { name: 'Ed25519' },
+    verifyAlgorithm: { name: 'Ed25519' },
+  },
+  RS256: {
+    importAlgorithm: { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
+    verifyAlgorithm: 'RSASSA-PKCS1-v1_5',
+  },
+  RS384: {
+    importAlgorithm: { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-384' },
+    verifyAlgorithm: 'RSASSA-PKCS1-v1_5',
+  },
+  RS512: {
+    importAlgorithm: { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-512' },
+    verifyAlgorithm: 'RSASSA-PKCS1-v1_5',
+  },
+  ES256: {
+    importAlgorithm: { name: 'ECDSA', namedCurve: 'P-256' },
+    verifyAlgorithm: { name: 'ECDSA', hash: 'SHA-256' },
+  },
 };
 
 async function verifyJwt(token: string, env: Env): Promise<Record<string, any>> {
@@ -77,15 +99,13 @@ async function verifyJwt(token: string, env: Env): Promise<Record<string, any>> 
   const key = await crypto.subtle.importKey(
     'jwk',
     jwk as JsonWebKey,
-    spec.namedCurve
-      ? { name: spec.name, namedCurve: spec.namedCurve }
-      : { name: spec.name, hash: spec.hash },
+    spec.importAlgorithm,
     false,
     ['verify'],
   );
 
   const valid = await crypto.subtle.verify(
-    spec.name === 'ECDSA' ? { name: 'ECDSA', hash: spec.hash } : spec.name,
+    spec.verifyAlgorithm,
     key,
     b64urlToBytes(s),
     new TextEncoder().encode(`${h}.${p}`),

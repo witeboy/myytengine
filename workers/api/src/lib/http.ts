@@ -24,15 +24,15 @@ export const notFound = (m = 'Not found') => new HttpError(404, m);
 export function corsHeaders(req: Request, env: Env): Record<string, string> {
   const allowed = env.ALLOWED_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean);
   const origin = req.headers.get('Origin') || '';
-  const ok = allowed.includes(origin);
-  return {
-    'Access-Control-Allow-Origin': ok ? origin : allowed[0] || '',
+  const headers: Record<string, string> = {
     'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Allow-Credentials': 'true',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
   };
+  if (allowed.includes(origin)) headers['Access-Control-Allow-Origin'] = origin;
+  return headers;
 }
 
 export function json(body: unknown, init: ResponseInit = {}, extra: HeadersInit = {}) {

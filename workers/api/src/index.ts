@@ -11,6 +11,7 @@
 
 import { authenticate } from './middleware/auth';
 import { handleDb } from './routes/db';
+import { proxyNeonAuth } from './routes/neon-auth';
 import { listKeys, removeKey, setKey, testAllKeys, testKey, updateSettings } from './routes/keys';
 import { makeKeyResolver } from './lib/vault';
 import { FUNCTIONS } from './fn/registry';
@@ -33,6 +34,12 @@ export default {
 
     if (path === '/api/health') {
       return json({ data: { ok: true, ts: new Date().toISOString() } }, { status: 200 }, cors);
+    }
+
+    // Vercel's same-origin `/api/auth/*` rewrite lands here. This route must remain
+    // before JWT authentication because it creates and refreshes the auth session.
+    if (path === '/api/neon-auth' || path.startsWith('/api/neon-auth/')) {
+      return proxyNeonAuth(req, env);
     }
 
     try {

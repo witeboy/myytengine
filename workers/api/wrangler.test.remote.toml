@@ -1,0 +1,16 @@
+name = "myytengine-db-parity-remote"
+main = "test/worker.ts"
+account_id = "902e34ea24639ebe15562116add415bd"
+compatibility_date = "2026-08-22"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "myytengine"
+database_id = "cf8429cf-dcc7-40ec-8129-5f4941bcd3d5"
+remote = true
+
+[[r2_buckets]]
+binding = "COLD"
+bucket_name = "myytengine-cold"
+remote = true
