@@ -35,6 +35,20 @@ import selectHook from './selectHook';
 import shortsGenerateScript from './shortsGenerateScript';
 import shortsSceneBreakdown from './shortsSceneBreakdown';
 import sleepSceneBreakdown from './sleepSceneBreakdown';
+import detectFaceRegion from './detectFaceRegion';
+import extractCharacterDNA from './extractCharacterDNA';
+import generateNewThumbnailImage from './generateNewThumbnailImage';
+import generateProgressionImage from './generateProgressionImage';
+import generateProgressionPrompts from './generateProgressionPrompts';
+import generateProgressionVideo from './generateProgressionVideo';
+import generateSceneImage from './generateSceneImage';
+import generateSceneVideo from './generateSceneVideo';
+import generateThumbnailImage from './generateThumbnailImage';
+import pollSceneImage from './pollSceneImage';
+import pollSceneVideo from './pollSceneVideo';
+import pollThumbnailBlend from './pollThumbnailBlend';
+import pollThumbnailTask from './pollThumbnailTask';
+import thumbnailBlend from './thumbnailBlend';
 
 export const FUNCTIONS: Record<string, FnHandler> = {
   healthCheck,
@@ -77,6 +91,20 @@ export const FUNCTIONS: Record<string, FnHandler> = {
   // extractCharacterDNA, generateProgressionPrompts, generateProgressionImage,
   // generateProgressionVideo, generateThumbnailImage, generateNewThumbnailImage,
   // pollThumbnailTask, thumbnailBlend, pollThumbnailBlend, detectFaceRegion
+  generateSceneImage,
+  pollSceneImage,
+  generateSceneVideo,
+  pollSceneVideo,
+  extractCharacterDNA,
+  generateProgressionPrompts,
+  generateProgressionImage,
+  generateProgressionVideo,
+  generateThumbnailImage,
+  generateNewThumbnailImage,
+  pollThumbnailTask,
+  thumbnailBlend,
+  pollThumbnailBlend,
+  detectFaceRegion,
 
   // ── Phase 8 · audio (12, from batches/phase8.json) ────────────────────────
   // quickPublishTranscribe and generateSoundEffect are wired above (hand-written).
