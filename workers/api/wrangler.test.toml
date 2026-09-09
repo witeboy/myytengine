@@ -11,3 +11,7 @@ database_id = "local"
 [[r2_buckets]]
 binding = "COLD"
 bucket_name = "myytengine-phase2-local-cold"
+
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "myytengine-phase5-local-media"

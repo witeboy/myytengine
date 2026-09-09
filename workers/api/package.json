@@ -9,7 +9,8 @@
     "db:init": "wrangler d1 execute myytengine --remote --file=src/db/schema.sql",
     "db:init:local": "wrangler d1 execute myytengine --local --file=src/db/schema.sql",
     "test": "vitest run",
-    "test:remote": "vitest run --config vitest.remote.config.ts"
+    "test:remote": "vitest run --config vitest.remote.config.ts",
+    "test:phase5": "vitest run --config vitest.phase5.config.ts"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.0.30"

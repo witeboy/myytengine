@@ -169,10 +169,13 @@ export async function recordInfo(ctx: Ctx, taskId: string): Promise<KieRecord> {
     /* leave empty — same tolerance as the originals */
   }
 
-  const urls: string[] = resultJson.resultUrls
-    || (resultJson.url ? [resultJson.url] : [])
-    || (resultJson.video_url ? [resultJson.video_url] : [])
-    || [];
+  const urls: string[] = Array.isArray(resultJson.resultUrls) && resultJson.resultUrls.length
+    ? resultJson.resultUrls
+    : resultJson.url
+      ? [resultJson.url]
+      : resultJson.video_url
+        ? [resultJson.video_url]
+        : [];
   const url = urls[0] || resultJson.url || resultJson.video_url || null;
 
   let state: KieState;

@@ -4,13 +4,13 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig({
   plugins: [
     cloudflareTest({
-      wrangler: { configPath: './wrangler.test.toml' },
+      remoteBindings: true,
+      wrangler: { configPath: './wrangler.phase5.remote.toml' },
     }),
   ],
   test: {
     fileParallelism: false,
-    include: ['test/**/*.spec.ts'],
-    exclude: ['test/**/*.remote.spec.ts'],
-    testTimeout: 30_000,
+    include: ['test/**/*.remote.spec.ts'],
+    testTimeout: 180_000,
   },
 });

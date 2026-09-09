@@ -7,18 +7,18 @@
 //
 // Backend selection (Settings -> Transcription engine):
 //   'assemblyai'  force AssemblyAI          (requires ASSEMBLYAI_API_KEY)
-//   'workers-ai'  force Whisper             (free, no key)
-//   'auto'        AssemblyAI if a key exists, else Whisper   <- default
+//   'workers-ai'  force Workers AI          (no user key)
+//   'auto'        AssemblyAI if a key exists, else Workers AI   <- default
 //
 // NOTE: AI33.pro is deliberately NOT an option here. It handles TTS, voice cloning and
-// sound effects; speech-to-text stays on AssemblyAI/Whisper.
+// sound effects; speech-to-text stays on AssemblyAI/Workers AI.
 //
 // WARNING Word-level timestamps are the hard requirement. `src/lib/asrAutoSync.js`
 //   (443 lines), caption auto-sync and silence trimming all consume
 //   `words: [{ word, start, end }]`. Segment-only output degrades all three. Confirm
-//   `@cf/openai/whisper-large-v3-turbo` returns word-level timings before relying on
-//   the free path; if it does not, the user adds an AssemblyAI key and the original
-//   path resumes with no code change.
+//   Phase 5's live spike found that Whisper's binding input rejects the documented
+//   structured binary forms. `@cf/deepgram/nova-3` accepted the same stream and returned
+//   genuine word/start/end objects, so it is the Workers AI backend behind this interface.
 
 import { HttpError, fetchJson, newId } from './http';
 import type { Ctx } from '../types';
@@ -34,9 +34,9 @@ export interface AsrResult {
 }
 
 const AAI = 'https://api.assemblyai.com/v2';
-const WHISPER_MODEL = '@cf/openai/whisper-large-v3-turbo';
-/** Workers AI takes the audio inline, so very large files must use AssemblyAI. */
-const WHISPER_MAX_BYTES = 24 * 1024 * 1024;
+const WORKERS_AI_MODEL = '@cf/deepgram/nova-3';
+/** Workers AI takes the audio inline, so known-large files must use AssemblyAI. */
+const WORKERS_AI_MAX_BYTES = 24 * 1024 * 1024;
 
 async function chooseBackend(ctx: Ctx): Promise<'assemblyai' | 'workers-ai'> {
   const pref = (await ctx.keys.settings()).asr_provider || 'auto';
@@ -76,7 +76,7 @@ export async function submit(ctx: Ctx, audioUrl: string, opts: { chapters?: bool
     return { transcript_id: `aai:${res.id}` };
   }
 
-  // Whisper is synchronous. Run it now, park the result, and let the caller's existing
+  // Workers AI is synchronous. Run it now, park the result, and let the caller's existing
   // poll loop pick it up — the frontend never learns the difference.
   const id = `cfw:${newId()}`;
   await ctx.env.COLD.put(
@@ -86,7 +86,7 @@ export async function submit(ctx: Ctx, audioUrl: string, opts: { chapters?: bool
   );
 
   ctx.waitUntil(
-    runWhisper(ctx, audioUrl, opts.chapters === true)
+    runWorkersAi(ctx, audioUrl, opts.chapters === true)
       .then((r) => ctx.env.COLD.put(`asr/${id}.json`, JSON.stringify(r)))
       .catch((e) =>
         ctx.env.COLD.put(
@@ -139,40 +139,38 @@ export async function poll(ctx: Ctx, transcriptId: string): Promise<AsrResult> {
   return JSON.parse(await obj.text()) as AsrResult;
 }
 
-// ── Whisper backend ───────────────────────────────────────────────────────────
+// ── Workers AI backend ────────────────────────────────────────────────────────
 
-async function runWhisper(ctx: Ctx, audioUrl: string, wantChapters: boolean): Promise<AsrResult> {
+async function runWorkersAi(ctx: Ctx, audioUrl: string, wantChapters: boolean): Promise<AsrResult> {
   const res = await fetch(audioUrl, { signal: AbortSignal.timeout(120_000) });
   if (!res.ok) throw new Error(`Could not fetch audio (HTTP ${res.status})`);
-  const buf = await res.arrayBuffer();
+  if (!res.body) throw new Error('Could not read audio response body');
 
-  if (buf.byteLength > WHISPER_MAX_BYTES) {
+  const contentLength = Number(res.headers.get('content-length') || 0);
+  if (contentLength > WORKERS_AI_MAX_BYTES) {
     throw new Error(
-      `Audio is ${Math.round(buf.byteLength / 1e6)}MB — too large for the free Whisper engine. ` +
+      `Audio is ${Math.round(contentLength / 1e6)}MB — too large for the Workers AI engine. ` +
         'Add an AssemblyAI key in Settings, or trim the source first.',
     );
   }
 
-  const out: any = await ctx.env.AI.run(WHISPER_MODEL as any, {
-    audio: [...new Uint8Array(buf)],
+  const out: any = await ctx.env.AI.run(WORKERS_AI_MODEL as any, {
+    audio: {
+      body: res.body,
+      contentType: res.headers.get('content-type') || 'application/octet-stream',
+    },
+    smart_format: true,
   });
 
-  // Prefer real word timings; fall back to segment timings so callers always get
-  // *something* shaped like `words`, and the degradation is visible rather than silent.
-  const words: Word[] = [];
-  for (const seg of out?.segments || []) {
-    if (Array.isArray(seg.words) && seg.words.length) {
-      for (const w of seg.words) {
-        words.push({ word: w.word ?? w.text ?? '', start: w.start, end: w.end });
-      }
-    } else if (seg.text) {
-      words.push({ word: seg.text.trim(), start: seg.start, end: seg.end });
-    }
-  }
-
-  const text: string = out?.text || '';
-  const duration =
-    out?.segments?.length ? out.segments[out.segments.length - 1].end : words.at(-1)?.end || 0;
+  const alternative = out?.results?.channels?.[0]?.alternatives?.[0] || {};
+  const words: Word[] = (alternative.words || []).map((w: any) => ({
+    word: w.word ?? w.punctuated_word ?? '',
+    start: w.start,
+    end: w.end,
+    confidence: w.confidence,
+  }));
+  const text: string = alternative.transcript || '';
+  const duration = words.at(-1)?.end || 0;
 
   const result: AsrResult = { status: 'completed', text, words, duration };
 

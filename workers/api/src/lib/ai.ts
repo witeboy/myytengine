@@ -23,7 +23,7 @@
 
 import { HttpError, fetchJson } from './http';
 import { geminiShapedResponse, modelFromPath, toOpenAIRequest } from './gemini-compat';
-import { mapModel, remapSerializedModel } from './models';
+import { mapModel, remapBodyModel, remapSerializedModel } from './models';
 import type { Ctx, Env } from '../types';
 
 export type GwProvider = 'google-ai-studio' | 'anthropic' | 'openai' | 'workers-ai';
@@ -187,8 +187,9 @@ export function anthropicText(res: any): string {
 }
 
 export async function openai(ctx: Ctx, path: string, body: unknown, opts: { timeoutMs?: number } = {}) {
+  const providerMode = mode(ctx.env);
   return fetchJson(
-    mode(ctx.env) === 'gateway'
+    providerMode === 'gateway'
       ? gwUrl(ctx.env, 'openai', path)
       : `${aggBase(ctx.env)}${path.startsWith('/') ? path : `/${path}`}`,
     {
@@ -196,12 +197,12 @@ export async function openai(ctx: Ctx, path: string, body: unknown, opts: { time
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${
-          mode(ctx.env) === 'gateway'
+          providerMode === 'gateway'
             ? await ctx.keys.require('OPENAI_API_KEY')
             : await aggKey(ctx)
         }`,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(providerMode === 'gateway' ? body : remapBodyModel(body)),
       timeoutMs: opts.timeoutMs ?? 120_000,
       retries: 1,
     },
