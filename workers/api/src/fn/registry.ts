@@ -17,6 +17,24 @@ import quickPublishTranscribe from './quickPublishTranscribe';
 import generateSoundEffect from './generateSoundEffect';
 import invokeLLM from './invokeLLM';
 import callClaudeProxy from './callClaudeProxy';
+import cleanScenePrompt from './cleanScenePrompt';
+import dedupScenes from './dedupScenes';
+import enhanceScenePrompts from './enhanceScenePrompts';
+import explainerSceneBreakdown from './explainerSceneBreakdown';
+import fixScenePrompts from './fixScenePrompts';
+import generateFullScript from './generateFullScript';
+import generateHooks from './generateHooks';
+import generateSceneBreakdown from './generateSceneBreakdown';
+import generateScenePrompts from './generateScenePrompts';
+import generateScriptBatches from './generateScriptBatches';
+import initializeScriptBatches from './initializeScriptBatches';
+import longViralGenerateScript from './longViralGenerateScript';
+import longViralSceneBreakdown from './longViralSceneBreakdown';
+import rephraseScenePrompt from './rephraseScenePrompt';
+import selectHook from './selectHook';
+import shortsGenerateScript from './shortsGenerateScript';
+import shortsSceneBreakdown from './shortsSceneBreakdown';
+import sleepSceneBreakdown from './sleepSceneBreakdown';
 
 export const FUNCTIONS: Record<string, FnHandler> = {
   healthCheck,
@@ -28,11 +46,24 @@ export const FUNCTIONS: Record<string, FnHandler> = {
   callClaudeProxy,
 
   // ── Phase 6 · core text (18, from batches/phase6.json) ────────────────────
-  // generateFullScript, generateScriptBatches, initializeScriptBatches,
-  // generateHooks, selectHook, generateSceneBreakdown, sleepSceneBreakdown,
-  // shortsSceneBreakdown, longViralSceneBreakdown, explainerSceneBreakdown,
-  // generateScenePrompts, enhanceScenePrompts, cleanScenePrompt, fixScenePrompts,
-  // rephraseScenePrompt, dedupScenes, shortsGenerateScript, longViralGenerateScript
+  generateFullScript,
+  generateScriptBatches,
+  initializeScriptBatches,
+  generateHooks,
+  selectHook,
+  generateSceneBreakdown,
+  sleepSceneBreakdown,
+  shortsSceneBreakdown,
+  longViralSceneBreakdown,
+  explainerSceneBreakdown,
+  generateScenePrompts,
+  enhanceScenePrompts,
+  cleanScenePrompt,
+  fixScenePrompts,
+  rephraseScenePrompt,
+  dedupScenes,
+  shortsGenerateScript,
+  longViralGenerateScript,
   //
   // NOT ported: `enhancePrompt` is byte-identical to rephraseScenePrompt and only an
   // orphan calls it. If something ever needs the name, alias it to the same module

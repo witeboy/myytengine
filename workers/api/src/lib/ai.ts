@@ -46,6 +46,17 @@ const aggBase = (env: Env) =>
 
 const aggKey = (ctx: Ctx) => ctx.keys.require('CHEAPER_INFERENCE_API_KEY');
 
+/** Provider availability without leaking routing-mode checks into ported functions. */
+export async function hasAiProvider(ctx: Ctx, provider: 'gemini' | 'anthropic' | 'openai') {
+  if (mode(ctx.env) === 'aggregator') return ctx.keys.has('CHEAPER_INFERENCE_API_KEY');
+  const key = provider === 'gemini'
+    ? 'GEMINI_API_KEY'
+    : provider === 'anthropic'
+      ? 'ANTHROPIC_API_KEY'
+      : 'OPENAI_API_KEY';
+  return ctx.keys.has(key);
+}
+
 // ── Raw-Response passthroughs (what the codemod targets) ──────────────────────
 //
 // Ported code is full of hand-written `fetch(...)` blocks that then do `if (!res.ok)`,
