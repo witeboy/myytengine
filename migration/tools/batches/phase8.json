@@ -8,7 +8,7 @@
     { "name": "listVoices",           "src": "base44/functions/listVoices.ts" },
     { "name": "listVoicesByProvider", "src": "base44/functions/listVoicesByProvider/entry/entry.ts" },
     { "name": "previewVoice",         "src": "base44/functions/previewVoice.ts" },
-    { "name": "inworldVoiceover",     "src": "base44/functions/inworldVoiceover.ts" },
+    { "name": "inworldVoiceover",     "src": "migration/tools/sources/inworldVoiceover.ts" },
     { "name": "generateMusic",        "src": "base44/functions/generateMusic.ts" },
     { "name": "checkMusicStatus",     "src": "base44/functions/checkMusicStatus.ts" },
     { "name": "submitTranscription",  "src": "base44/functions/submitTranscription/entry.ts" },

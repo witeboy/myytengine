@@ -49,6 +49,17 @@ import pollSceneVideo from './pollSceneVideo';
 import pollThumbnailBlend from './pollThumbnailBlend';
 import pollThumbnailTask from './pollThumbnailTask';
 import thumbnailBlend from './thumbnailBlend';
+import generateVoiceover from './generateVoiceover';
+import pollVoiceover from './pollVoiceover';
+import listVoices from './listVoices';
+import listVoicesByProvider from './listVoicesByProvider';
+import previewVoice from './previewVoice';
+import inworldVoiceover from './inworldVoiceover';
+import generateMusic from './generateMusic';
+import checkMusicStatus from './checkMusicStatus';
+import submitTranscription from './submitTranscription';
+import pollTranscription from './pollTranscription';
+import clipAndVoice from './clipAndVoice';
 
 export const FUNCTIONS: Record<string, FnHandler> = {
   healthCheck,
@@ -106,12 +117,23 @@ export const FUNCTIONS: Record<string, FnHandler> = {
   pollThumbnailBlend,
   detectFaceRegion,
 
-  // ── Phase 8 · audio (12, from batches/phase8.json) ────────────────────────
+  // ── Phase 8 · audio (13 total; 11 from batches/phase8.json) ──────────────
   // quickPublishTranscribe and generateSoundEffect are wired above (hand-written).
   // The other 11:
   // generateVoiceover, pollVoiceover, listVoices, listVoicesByProvider,
   // previewVoice, inworldVoiceover, generateMusic, checkMusicStatus,
   // submitTranscription, pollTranscription, clipAndVoice
+  generateVoiceover,
+  pollVoiceover,
+  listVoices,
+  listVoicesByProvider,
+  previewVoice,
+  inworldVoiceover,
+  generateMusic,
+  checkMusicStatus,
+  submitTranscription,
+  pollTranscription,
+  clipAndVoice,
 
   // ── Phase 9 · thumbnails & LLM plumbing (3, batches/phase9.json) ──────────
   // invokeLLM and callClaudeProxy are wired above (hand-written). The other 3:

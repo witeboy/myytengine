@@ -1,10 +1,10 @@
 /**
  * OpenShorts.jsx — Clean rewrite
  *
- * Storage: Bunny CDN (via quickPublishTranscribe bunny_config + bunny_save_project)
- * Upload:  Bunny CDN (large file support, server env credentials)
- * Clips:   Bunny CDN URLs with timestamp metadata stored as JSON
- * Library: Project folders grouped by job_id, stored on Bunny as JSON manifest
+ * Storage: durable R2 media through the authenticated Worker upload route
+ * Upload:  Worker-owned upload; no storage credential reaches the browser
+ * Clips:   durable media URLs with timestamp metadata stored as JSON
+ * Library: Project folders grouped by job_id, stored as an R2 JSON manifest
  * Download: Browser-side VideoEncoder + mp4-muxer (same as timeline export).
  *           Seeks source video frame-by-frame, crops to 9:16 portrait,
  *           encodes H.264+AAC, produces a clean MP4 blob for download.
@@ -63,19 +63,19 @@ const formatDate = (iso) => {
   catch { return ''; }
 };
 
-// ── Bunny project storage ──────────────────────────────────────────────
+// ── OpenShorts project-manifest storage ────────────────────────────────
 const bunny = {
   async saveProject(project) {
     try { await base44.functions.invoke('quickPublishTranscribe', { action: 'bunny_save_project', project }); }
-    catch (e) { console.warn('Bunny save project failed:', e.message); }
+    catch (e) { console.warn('Project manifest save failed:', e.message); }
   },
   async loadProjects() {
     try { const res = await base44.functions.invoke('quickPublishTranscribe', { action: 'bunny_list_projects' }); return res.data?.projects || []; }
-    catch (e) { console.warn('Bunny load projects failed:', e.message); return []; }
+    catch (e) { console.warn('Project manifest load failed:', e.message); return []; }
   },
   async deleteProject(jobId) {
     try { await base44.functions.invoke('quickPublishTranscribe', { action: 'bunny_delete_project', job_id: jobId }); }
-    catch (e) { console.warn('Bunny delete project failed:', e.message); }
+    catch (e) { console.warn('Project manifest delete failed:', e.message); }
   },
 };
 
@@ -156,7 +156,7 @@ function SettingsPanel({ onClose }) {
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={17} /></button>
         </div>
         <div className="space-y-1.5">
-          {['Bunny CDN — storage active (server env)', 'AssemblyAI — transcription active (server env)', 'Claude AI — analysis active (server env)'].map(label => (
+          {['R2 — durable storage active', 'AssemblyAI / Whisper — transcription active', 'Claude AI — analysis active'].map(label => (
             <div key={label} className="flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700"><CheckCircle size={11} /> {label}</div>
           ))}
         </div>
@@ -242,7 +242,7 @@ function YouTubeClipCard({ clip, index, ytUrl }) {
 // timeline's useVideoExport hook). No server round-trip needed.
 //
 // Pipeline:
-//  1. Load source video into a <video> element (Bunny CDN is CORS-open)
+//  1. Load the CORS-enabled durable source URL into a <video> element
 //  2. Seek frame-by-frame from clipStart → clipEnd, draw each frame to
 //     an OffscreenCanvas cropped to 9:16 portrait (720×1280)
 //  3. Feed each frame as a VideoFrame into VideoEncoder → mp4-muxer
@@ -311,7 +311,7 @@ function DownloadClipButton({ src, clipStart, clipEnd, index }) {
 
       await new Promise((res, rej) => {
         video.onloadedmetadata = res;
-        video.onerror = () => rej(new Error('Video failed to load — check CORS on Bunny CDN'));
+        video.onerror = () => rej(new Error('Video failed to load — check media-storage CORS'));
         setTimeout(res, 15000);
       });
 
@@ -791,10 +791,10 @@ export default function OpenShorts() {
     if (!file) return setErr('Select a video file first');
     setStage('processing'); setErr(''); setClips([]); setDone([]); setProgress(0);
     try {
-      setStep('transcribe'); setMsg('Uploading video to Bunny CDN…');
+      setStep('transcribe'); setMsg('Uploading video to durable storage…');
       const uploadResult = await uploadToCloudinary(file, { resourceType: 'video', onProgress: pct => { setProgress(pct * 0.4); setMsg(`Uploading… ${pct}%`); } });
       const cloudUrl = uploadResult.secure_url; setProgress(40);
-      setMsg('Transcribing with AssemblyAI…');
+      setMsg('Transcribing audio…');
       const transcript = await transcribeFile(cloudUrl, msg => setMsg(msg));
       markDone('transcribe'); setProgress(70);
       setStep('analyze'); setMsg('AI is finding the best viral moments…');
@@ -837,7 +837,7 @@ export default function OpenShorts() {
           </div>
           <div className="flex items-center gap-2">
             {isActive && <button onClick={handleReset} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium transition-colors"><X size={11} /><span>Reset</span></button>}
-            <div className="hidden sm:flex items-center gap-1 px-2 py-1 bg-emerald-50 border border-emerald-100 rounded-lg text-emerald-600 text-xs font-medium"><CloudUpload size={9} /><span>Bunny CDN</span></div>
+            <div className="hidden sm:flex items-center gap-1 px-2 py-1 bg-emerald-50 border border-emerald-100 rounded-lg text-emerald-600 text-xs font-medium"><CloudUpload size={9} /><span>R2 Storage</span></div>
             <button onClick={() => setShowSettings(true)} className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"><Settings size={15} /></button>
           </div>
         </div>
@@ -847,16 +847,16 @@ export default function OpenShorts() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 space-y-8">
           {!isActive && (
             <div className="text-center space-y-2">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-rose-50 border border-rose-100 rounded-full text-rose-600 text-xs font-medium mb-1"><Zap size={11} /><span>AssemblyAI Transcription · Claude Analysis · Bunny CDN Storage</span></div>
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-rose-50 border border-rose-100 rounded-full text-rose-600 text-xs font-medium mb-1"><Zap size={11} /><span>AssemblyAI / Whisper · Claude Analysis · R2 Storage</span></div>
               <h1 className="text-3xl font-bold text-gray-900">Open Shorts</h1>
-              <p className="text-gray-400 text-sm max-w-lg mx-auto">Upload video → AssemblyAI transcribes → Claude finds viral moments → clips saved as projects in your library.</p>
+              <p className="text-gray-400 text-sm max-w-lg mx-auto">Upload video → speech-to-text transcribes → Claude finds viral moments → clips saved as projects in your library.</p>
             </div>
           )}
 
           {!isActive && (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
               <div className="flex border-b border-gray-100">
-                {[{ k: 'youtube', icon: Youtube, label: 'YouTube URL', desc: 'Extracts audio → transcribes → finds moments' }, { k: 'file', icon: Upload, label: 'Upload File', desc: 'Bunny CDN upload → transcribe → find clips' }].map(({ k, icon: Icon, label, desc }) => (
+                {[{ k: 'youtube', icon: Youtube, label: 'YouTube URL', desc: 'Extracts audio → transcribes → finds moments' }, { k: 'file', icon: Upload, label: 'Upload File', desc: 'Secure upload → transcribe → find clips' }].map(({ k, icon: Icon, label, desc }) => (
                   <button key={k} onClick={() => setInputMode(k)} className={`flex-1 flex flex-col items-center gap-0.5 py-3 text-sm font-medium transition-colors border-b-2 ${inputMode === k ? 'text-rose-600 border-rose-500 bg-rose-50/30' : 'text-gray-500 border-transparent hover:text-gray-700'}`}>
                     <div className="flex items-center gap-1.5"><Icon size={14} /><span>{label}</span></div>
                     <span className="text-xs font-normal text-gray-400">{desc}</span>
@@ -866,14 +866,14 @@ export default function OpenShorts() {
               <div className="p-6 space-y-4">
                 {inputMode === 'youtube' && (
                   <div className="space-y-3">
-                    <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-700 flex items-start gap-2"><Mic size={12} className="shrink-0 mt-0.5 text-blue-500" /><span>Audio extracted via Cobalt, transcribed by AssemblyAI, then Claude identifies the best viral moments with exact timestamps.</span></div>
+                    <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-700 flex items-start gap-2"><Mic size={12} className="shrink-0 mt-0.5 text-blue-500" /><span>Audio extracted via Cobalt, transcribed by AssemblyAI or Whisper, then Claude identifies the best viral moments with exact timestamps.</span></div>
                     <Input value={ytUrl} onChange={e => setYtUrl(e.target.value)} placeholder="https://www.youtube.com/watch?v=…" className="h-12 text-sm" onKeyDown={e => { if (e.key === 'Enter') runYouTubeMode(); }} />
                     <p className="text-xs text-gray-400">Supports youtube.com and youtu.be links</p>
                   </div>
                 )}
                 {inputMode === 'file' && (
                   <div className="space-y-3">
-                    <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-xs text-emerald-700 flex items-start gap-2"><CloudUpload size={12} className="shrink-0 mt-0.5 text-emerald-500" /><span>Video uploads to Bunny CDN → AssemblyAI transcribes → Claude finds viral moments → saved to Library. Download = silent 9:16 portrait crop.</span></div>
+                    <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-xs text-emerald-700 flex items-start gap-2"><CloudUpload size={12} className="shrink-0 mt-0.5 text-emerald-500" /><span>Video uploads securely to R2 → AssemblyAI or Whisper transcribes → Claude finds viral moments → saved to Library. Download = silent 9:16 portrait crop.</span></div>
                     <div className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${dragging ? 'border-rose-400 bg-rose-50' : file ? 'border-rose-300 bg-rose-50/50' : 'border-gray-200 hover:border-rose-300 hover:bg-rose-50/20'}`}
                       onClick={() => fileRef.current?.click()}
                       onDragOver={e => { e.preventDefault(); setDragging(true); }}
@@ -890,7 +890,7 @@ export default function OpenShorts() {
                         <div className="space-y-2">
                           <div className="w-10 h-10 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-center mx-auto"><Upload size={18} className="text-gray-400" /></div>
                           <p className="text-sm text-gray-600 font-medium">Drag and drop video or <span className="text-rose-500">browse</span></p>
-                          <p className="text-xs text-gray-400">MP4, MOV, AVI · 1GB+ supported via Bunny CDN</p>
+                          <p className="text-xs text-gray-400">MP4, MOV, AVI · stored securely in R2</p>
                         </div>
                       )}
                     </div>
@@ -930,7 +930,7 @@ export default function OpenShorts() {
               <p className="text-sm text-red-600">{err}</p>
               <div className="text-xs text-red-500 space-y-1">
                 {err?.includes('AssemblyAI') && <p>Check your AssemblyAI key in env settings.</p>}
-                {err?.includes('Bunny')      && <p>Check your Bunny CDN env vars.</p>}
+                {/upload|storage|cors/i.test(err || '') && <p>Check the Worker upload route and media-storage CORS.</p>}
                 {err?.includes('Cobalt')     && <p>Cobalt may be rate-limiting. Try again in a moment.</p>}
                 {err?.includes('viral')      && <p>Try a longer video with more speech content.</p>}
               </div>
@@ -964,9 +964,9 @@ export default function OpenShorts() {
           {!isActive && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { icon: Mic,         label: 'AssemblyAI',    desc: 'Word-level transcription for precise clip boundaries' },
+                { icon: Mic,         label: 'Speech-to-text', desc: 'AssemblyAI or Whisper transcription for clip boundaries' },
                 { icon: Sparkles,    label: 'Claude AI',     desc: 'Finds the highest-virality moments automatically'     },
-                { icon: CloudUpload, label: 'Bunny CDN',     desc: 'Handles 1GB+ uploads, instant global delivery'       },
+                { icon: CloudUpload, label: 'R2 Storage',    desc: 'Durable uploads served from your own media domain'   },
                 { icon: Scissors,    label: '9:16 Portrait', desc: 'Silent browser crop — no playback during download'    },
               ].map(({ icon: Icon, label, desc }) => (
                 <div key={label} className="bg-white rounded-xl border border-gray-100 p-3 text-center shadow-sm">

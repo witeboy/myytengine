@@ -15,66 +15,21 @@ export const LS_KEYS = {};
 
 const unwrapData = (res) => res?.data || res || {};
 
-const uploadViaBase44 = async (file, onProgress) => {
-  onProgress?.(5);
-  const uploaded = await base44.integrations.Core.UploadFile({ file });
-  const fileUrl = uploaded?.file_url || uploaded?.url || uploaded?.secure_url;
-  if (!fileUrl) throw new Error('Base44 upload returned no file URL');
-  onProgress?.(100);
-  return {
-    secure_url: fileUrl,
-    public_id: fileUrl,
-    cdn_url: fileUrl,
-    storage: 'base44',
-  };
-};
-
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. BUNNY — upload via bunnyUpload Deno function
 //    Exported as uploadToCloudinary so retained callers need no changes
 // ─────────────────────────────────────────────────────────────────────────────
 export const uploadToCloudinary = async (file, { resourceType = 'video', onProgress } = {}) => {
-  try {
-    const configRes = await base44.functions.invoke('quickPublishTranscribe', { action: 'bunny_config' });
-    const config = unwrapData(configRes);
-    if (!config?.storage_zone || !config?.storage_password || !config?.cdn_url) {
-      throw new Error('Bunny config missing');
-    }
+  onProgress?.(5);
+  const form = new FormData();
+  form.append('file', file);
 
-    const { storage_zone, storage_password, storage_region, cdn_url } = config;
-    const host = (storage_region === 'de' || !storage_region || storage_region === 'storage')
-      ? 'storage.bunnycdn.com'
-      : `${storage_region}.storage.bunnycdn.com`;
-    const safeFile = (file.name || 'video.mp4').replace(/[^a-zA-Z0-9._-]/g, '_');
-    const remotePath = `uploads/${Date.now()}_${safeFile}`;
-    const uploadUrl = `https://${host}/${storage_zone}/${remotePath}`;
+  const uploaded = await base44.integrations.Core.UploadFile({ file });
+  const fileUrl = uploaded?.file_url;
+  if (!fileUrl) throw new Error('Upload returned no file URL');
 
-    onProgress?.(5);
-
-    await new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 95));
-      };
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) resolve();
-        else reject(new Error(`Bunny upload failed: HTTP ${xhr.status} - ${xhr.responseText}`));
-      };
-      xhr.onerror = () => reject(new Error('Bunny upload failed or was blocked by CORS'));
-      xhr.open('PUT', uploadUrl);
-      xhr.setRequestHeader('AccessKey', storage_password);
-      xhr.setRequestHeader('Content-Type', file.type || 'video/mp4');
-      xhr.send(file);
-    });
-
-    onProgress?.(100);
-
-    const secure_url = `${cdn_url.replace(/\/$/, '')}/${remotePath}`;
-    return { secure_url, public_id: secure_url, cdn_url, storage: 'bunny' };
-  } catch (err) {
-    console.warn('[Upload] Bunny upload unavailable, falling back to Base44 storage:', err.message);
-    return uploadViaBase44(file, onProgress);
-  }
+  onProgress?.(100);
+  return { secure_url: fileUrl, public_id: fileUrl, cdn_url: fileUrl, storage: 'r2' };
 };
 
 export const getCloudinaryConfig = async () => ({ cloudName: 'bunny', cloudPreset: '' });

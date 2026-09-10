@@ -1,6 +1,6 @@
 // Ported from base44/functions/uploadToR2.ts — HAND-WRITTEN, not codemod output.
 //
-// The original drove R2 over the S3 API with @aws-sdk/client-s3 and four env vars.
+// The original drove R2 through an S3-compatible HTTP client and four env vars.
 // A Worker has R2 as a binding, so the SDK, the credentials, the endpoint and the
 // signing all disappear. What must NOT change is the wire contract with the browser:
 // src/lib/ExportContext.jsx:69-160 sends init -> chunk×N -> complete (or abort) and
