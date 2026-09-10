@@ -63,6 +63,12 @@ import clipAndVoice from './clipAndVoice';
 import analyzeForThumbnail from './analyzeForThumbnail';
 import newThumbnailConcept from './newThumbnailConcept';
 import safeGeminiCall from './safeGeminiCall';
+import analyzeViralMoments from './analyzeViralMoments';
+import extractBestMoments from './extractBestMoments';
+import downloadYouTubeVideo from './downloadYouTubeVideo';
+import enhanceClipForFYP from './enhanceClipForFYP';
+import detectSilencesAndFillers from './detectSilencesAndFillers';
+import scheduleClipPost from './scheduleClipPost';
 
 export const FUNCTIONS: Record<string, FnHandler> = {
   healthCheck,
@@ -148,6 +154,12 @@ export const FUNCTIONS: Record<string, FnHandler> = {
   // ── Phase 10 · shorts & clips (6, batches/phase10.json) ───────────────────
   // analyzeViralMoments, extractBestMoments, downloadYouTubeVideo,
   // enhanceClipForFYP, detectSilencesAndFillers, scheduleClipPost
+  analyzeViralMoments,
+  extractBestMoments,
+  downloadYouTubeVideo,
+  enhanceClipForFYP,
+  detectSilencesAndFillers,
+  scheduleClipPost,
 
   // ── Phase 11 · topics, SEO & b-roll (8, batches/phase11.json) ─────────────
   // generateTopics, parseAndScheduleTopics, researchNicheStrategy,
