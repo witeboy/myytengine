@@ -74,6 +74,8 @@ already sets it.
 
 ## Codex log
 
+- 2026-09-10 — Phase 9 ported and registered all three thumbnail/LLM handlers; the two supplied LLM wrappers were already registered and remain byte-identical. Fixed the codemod's missing `ctx` argument in the nested thumbnail fallback helper and routed optional provider availability through `hasAiProvider`, preserving Claude-to-Gemini fallback with the shared inference key. All 19 prompt strings survive byte-for-byte. Temporary JavaScript-port type suppression follows earlier phases; typed cleanup remains separate. Worker typecheck, 34/34 tests, web lint/build and production health/CORS pass. Deployed Worker `af889c8d-1774-4ab6-b585-780e8d04e109`. The real thumbnail form loads; its render gate still requires a reference photo upload. Phase 9 expressly permits registering and moving on; combined Phase 9–11 UI acceptance remains open.
+
 _Append below as you work. One line per thing you noticed and did not change, and one
 per deviation from a phase doc._
 

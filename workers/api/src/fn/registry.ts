@@ -60,6 +60,9 @@ import checkMusicStatus from './checkMusicStatus';
 import submitTranscription from './submitTranscription';
 import pollTranscription from './pollTranscription';
 import clipAndVoice from './clipAndVoice';
+import analyzeForThumbnail from './analyzeForThumbnail';
+import newThumbnailConcept from './newThumbnailConcept';
+import safeGeminiCall from './safeGeminiCall';
 
 export const FUNCTIONS: Record<string, FnHandler> = {
   healthCheck,
@@ -138,6 +141,9 @@ export const FUNCTIONS: Record<string, FnHandler> = {
   // ── Phase 9 · thumbnails & LLM plumbing (3, batches/phase9.json) ──────────
   // invokeLLM and callClaudeProxy are wired above (hand-written). The other 3:
   // analyzeForThumbnail, newThumbnailConcept, safeGeminiCall
+  analyzeForThumbnail,
+  newThumbnailConcept,
+  safeGeminiCall,
 
   // ── Phase 10 · shorts & clips (6, batches/phase10.json) ───────────────────
   // analyzeViralMoments, extractBestMoments, downloadYouTubeVideo,
