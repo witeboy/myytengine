@@ -14,6 +14,7 @@
 // Same output, safe at 12MB.
 
 import { HttpError, badRequest } from '../lib/http';
+import { ownMediaHosts } from '../lib/storage';
 import type { FnHandler } from '../types';
 
 const INLINE_MAX_BYTES = 12 * 1024 * 1024; // 12MB -> inline base64
@@ -69,7 +70,9 @@ const handler: FnHandler = async (body, ctx) => {
   } catch {
     throw badRequest('Malformed URL');
   }
-  if (!ALLOWED.some((d) => hostname.includes(d))) {
+  // Our own storage host (R2 custom domain / Bunny CDN) is trusted alongside the
+  // original provider list — the exporter proxies durable scene media through here.
+  if (![...ALLOWED, ...ownMediaHosts(ctx.env)].some((d) => hostname.includes(d))) {
     throw new HttpError(403, `Domain not allowed: ${hostname}`);
   }
 

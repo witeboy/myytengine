@@ -73,6 +73,25 @@ function requireBunny(env: Env) {
   return { zone, pass, cdn, host: bunnyHost(env) };
 }
 
+/**
+ * Hostnames of our own media storage, for the asset-proxy allowlists. The original
+ * allowlists named provider CDNs plus the Base44-era storage hosts; after the storage
+ * migration the app's own durable media lives on MEDIA_PUBLIC_BASE (R2 custom domain)
+ * or the Bunny CDN, so those hosts must be proxyable or exports of our own assets fail.
+ */
+export function ownMediaHosts(env: Env): string[] {
+  const hosts: string[] = [];
+  for (const base of [env.MEDIA_PUBLIC_BASE, env.BUNNY_CDN_URL]) {
+    if (!base) continue;
+    try {
+      hosts.push(new URL(base).hostname);
+    } catch {
+      // ignore malformed config; the static allowlist still applies
+    }
+  }
+  return hosts;
+}
+
 /** Public CDN URL for a stored key. */
 export function publicUrl(env: Env, key: string): string {
   if ((env.MEDIA_BACKEND || 'bunny') === 'r2') {

@@ -4,6 +4,7 @@
 // Prompt strings are copied byte-for-byte. Prove it: tools/verify-prompts.mjs
 
 import { HttpError } from '../lib/http';
+import { ownMediaHosts } from '../lib/storage';
 import type { FnHandler } from '../types';
 
 
@@ -64,7 +65,8 @@ const handler: FnHandler = async (body, ctx) => {
         throw new HttpError(400, JSON.stringify({ success: false, error: 'Malformed URL: ' + url }));
       }
 
-      const isAllowed = allowedDomains.some(domain => {
+      // Plus our own storage host (R2 custom domain / Bunny CDN) — see lib/storage.ts.
+      const isAllowed = [...allowedDomains, ...ownMediaHosts(ctx.env)].some(domain => {
         return hostname === domain || hostname.endsWith('.' + domain) || hostname.includes(domain);
       });
 

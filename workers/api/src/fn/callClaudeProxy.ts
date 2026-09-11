@@ -15,6 +15,7 @@
 
 import { anthropic, anthropicText } from '../lib/ai';
 import { HttpError, badRequest } from '../lib/http';
+import { ownMediaHosts } from '../lib/storage';
 import type { FnHandler } from '../types';
 
 // Kept exactly as the original had it — a deliberately tighter list than
@@ -59,7 +60,8 @@ const handler: FnHandler = async (body, ctx) => {
     } catch {
       return { success: false, error: 'Malformed URL' };
     }
-    if (!ALLOWED_DOMAINS.some((d) => hostname.includes(d))) {
+    // Plus our own storage host (R2 custom domain / Bunny CDN) — see lib/storage.ts.
+    if (![...ALLOWED_DOMAINS, ...ownMediaHosts(ctx.env)].some((d) => hostname.includes(d))) {
       throw new HttpError(403, 'Domain not in allowlist: ' + hostname);
     }
 
