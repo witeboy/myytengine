@@ -59,10 +59,19 @@ describe('Phase 9 thumbnail routing and persistence', () => {
 
   it('saves Gemini concepts with the shared key and returns addressable ids', async () => {
     const ctx = context();
-    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ choices: [{ message: { content: JSON.stringify({
-      detected_mood: 'dramatic', concepts: [{ image_prompt: 'A moon landscape', text_overlay: 'THE MOON', rank: 1 }],
-    }) } }] })));
+    const calls: Array<{ url: string; model: string }> = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ url: String(url), model: JSON.parse(String(init.body)).model });
+      return Response.json({ choices: [{ message: { content: JSON.stringify({
+        detected_mood: 'dramatic', concepts: [{ image_prompt: 'A moon landscape', text_overlay: 'THE MOON', rank: 1 }],
+      }) } }] });
+    }));
     const result = await newThumbnailConcept({ video_title: 'Apollo', project_id: 'project-9' }, ctx) as any;
+    // The port once sent the literal text "${geminiModel}" as the model id (a template
+    // literal turned into a plain string); the aggregator rejected it with a 400.
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).not.toContain('${');
+    expect(calls[0].model).toBe('gemini-2.5-flash');
     expect(result).toMatchObject({ success: true, concept_ids: ['concept-1'], concepts_saved: 1, project_id: 'project-9' });
     expect(ctx.db.ThumbnailConcepts.create).toHaveBeenCalledWith(expect.objectContaining({ project_id: 'project-9', text_overlay: 'THE MOON', status: 'pending' }));
   });

@@ -251,7 +251,7 @@ FINAL VALIDATION BEFORE OUTPUT:
     const geminiModel = 'gemini-2.0-flash';
     console.log('Calling Gemini:', geminiModel, '| parts:', contentParts.length);
 
-    const geminiRes = await geminiFetch(ctx, '/v1beta/models/${geminiModel}:generateContent', {
+    const geminiRes = await geminiFetch(ctx, `/v1beta/models/${geminiModel}:generateContent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
