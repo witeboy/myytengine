@@ -165,7 +165,7 @@ export async function runClip(
   if (!opts.source_url) throw new HttpError(400, 'source_url is required');
   if (!(duration > 0)) throw new HttpError(400, 'Invalid clip range');
 
-  // 'durable': the clip URL is returned to the caller and ends up in the OpenShorts
+  // 'durable': the clip URL is returned to the caller and persisted by the timeline
   // manifest. Pass tier: 'ephemeral' explicitly for a throwaway preview render.
   const key = buildKey(opts.tier ?? 'durable', 'clip.mp4', 'clips');
 

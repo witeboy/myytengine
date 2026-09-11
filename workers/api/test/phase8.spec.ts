@@ -136,21 +136,11 @@ describe('Phase 8 audio contracts', () => {
     await env.MEDIA.delete(key);
   });
 
-  it('round-trips the OpenShorts manifest through R2 without exposing credentials', async () => {
+  it('no longer serves the removed Open Shorts library actions', async () => {
     const ctx = makeCtx();
-    const project = { job_id: 'phase8-project', title: 'Phase 8' };
-    try {
-      await expect(quickPublishTranscribe({ action: 'bunny_save_project', project }, ctx))
-        .resolves.toMatchObject({ success: true, project_count: 1 });
-      await expect(quickPublishTranscribe({ action: 'bunny_list_projects' }, ctx))
-        .resolves.toMatchObject({ success: true, projects: [project] });
-      await expect(quickPublishTranscribe({
-        action: 'bunny_delete_project', job_id: project.job_id,
-      }, ctx)).resolves.toMatchObject({ success: true, project_count: 0 });
-      await expect(quickPublishTranscribe({ action: 'bunny_config' }, ctx))
-        .rejects.toMatchObject({ status: 410 });
-    } finally {
-      await env.MEDIA.delete('projects/openshorts_manifest.json');
+    for (const action of ['bunny_save_project', 'bunny_list_projects', 'bunny_delete_project', 'bunny_config']) {
+      await expect(quickPublishTranscribe({ action, project: { job_id: 'x' }, job_id: 'x' }, ctx))
+        .rejects.toMatchObject({ status: 400, message: `Unknown action: ${action}` });
     }
   });
 });

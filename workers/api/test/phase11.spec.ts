@@ -20,8 +20,10 @@ const completion = (data: any) => Response.json({ choices: [{ message: { content
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Phase 11 SEO and resumable stock footage', () => {
-  it('registers all eight names, including dynamically invoked b-roll handlers', () => {
-    for (const name of ['generateTopics', 'parseAndScheduleTopics', 'researchNicheStrategy', 'generateSeoTitlesDescriptions', 'generateSeoDescriptions', 'searchBrollVideos', 'autoBrollPopulate', 'sleepBrollPopulate']) expect(FUNCTIONS[name]).toBeTypeOf('function');
+  it('registers the surviving Phase 11 names, including dynamically invoked b-roll handlers', () => {
+    for (const name of ['parseAndScheduleTopics', 'generateSeoTitlesDescriptions', 'generateSeoDescriptions', 'searchBrollVideos', 'autoBrollPopulate', 'sleepBrollPopulate']) expect(FUNCTIONS[name]).toBeTypeOf('function');
+    // Removed with the niche-finding feature on the owner's 2026-09-11 decision.
+    for (const name of ['generateTopics', 'researchNicheStrategy']) expect(FUNCTIONS[name]).toBeUndefined();
   });
 
   it('persists the three-call SEO package then generates descriptions through the shared key', async () => {

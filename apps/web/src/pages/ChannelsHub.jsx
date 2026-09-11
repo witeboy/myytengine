@@ -56,9 +56,6 @@ export default function ChannelsHub() {
             <Badge variant="outline" className="px-3 py-1.5 text-xs">
               {channels.reduce((s, c) => s + (c.total_topics || 0), 0)} Total Topics
             </Badge>
-            <Badge variant="outline" className="px-3 py-1.5 text-xs">
-              {channels.reduce((s, c) => s + (c.topics_scheduled || 0), 0)} Scheduled
-            </Badge>
           </div>
         )}
 

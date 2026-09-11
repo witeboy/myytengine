@@ -7,19 +7,15 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  ArrowLeft, Upload, Calendar, List, Settings, Loader2, Play,
-  FileText, Zap, ArrowRight, ChevronDown, ChevronUp, Package, Sparkles
+  ArrowLeft, Upload, List, Settings, Loader2, Play,
+  FileText, Zap, ArrowRight, ChevronDown, ChevronUp, Package
 } from 'lucide-react';
 import { getNicheDefaults } from '@/components/channels/NicheCard';
-import ContentCalendar from '@/components/channels/ContentCalendar';
-import DayTopicsPanel from '@/components/channels/DayTopicsPanel';
 import TopicImporter from '@/components/channels/TopicImporter';
 import TopicStatusPanel from '@/components/channels/TopicStatusPanel';
 import { ExpandableAssets } from '@/components/channels/TopicAssetsPanel';
 import ScriptModeSelector from '@/components/channels/ScriptModeSelector';
 import EditableTopicTitle from '@/components/channels/EditableTopicTitle';
-import AITitleGenerator from '@/components/channels/AITitleGenerator';
-import TopicScheduleDialog from '@/components/channels/TopicScheduleDialog';
 
 export default function ChannelDetail() {
   const navigate = useNavigate();
@@ -27,11 +23,8 @@ export default function ChannelDetail() {
   const channelId = new URLSearchParams(window.location.search).get('channel_id');
 
   const [showImporter, setShowImporter] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(null);
   const [activeStatFilter, setActiveStatFilter] = useState(null);
   const [expandedTopicAll, setExpandedTopicAll] = useState(null);
-  const [showAIGenerator, setShowAIGenerator] = useState(false);
-  const [scheduleTopic, setScheduleTopic] = useState(null);
 
   const getProjectRoute = (project) => {
     const s = project.status;
@@ -59,14 +52,6 @@ export default function ChannelDetail() {
     queryFn: () => base44.entities.ChannelTopics.filter({ channel_id: channelId }),
     enabled: !!channelId,
   });
-
-  const selectedTopicsLive = selectedDate
-    ? topics.filter(t => t.scheduled_date === selectedDate)
-    : [];
-
-  const handleDateClick = (date) => {
-    setSelectedDate(date);
-  };
 
   const handleStartPipeline = async (topic) => {
     if (topic.project_id) {
@@ -162,15 +147,8 @@ export default function ChannelDetail() {
   const defaults = getNicheDefaults(channel.niche);
   const color = channel.color || defaults.color;
 
-  const queuedTopics = topics.filter(t => t.status === 'queued');
-  const scheduledTopics = topics.filter(t => t.scheduled_date);
   const inProgressTopics = topics.filter(t => t.status === 'in_progress');
   const completedTopics = topics.filter(t => t.status === 'completed' || t.status === 'published');
-
-  let strategy = null;
-  if (channel.script_strategy) {
-    try { strategy = JSON.parse(channel.script_strategy); } catch (_) {}
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -204,9 +182,6 @@ export default function ChannelDetail() {
             <p className="text-sm text-gray-500">{channel.niche_label || defaults.label}</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setShowAIGenerator(true)} className="border-purple-200 text-purple-700 hover:bg-purple-50">
-              <Sparkles className="w-4 h-4 mr-1" /> AI Generate 100 Titles
-            </Button>
             <Button variant="outline" onClick={() => setShowImporter(true)}>
               <Upload className="w-4 h-4 mr-1" /> Import Topics
             </Button>
@@ -214,10 +189,9 @@ export default function ChannelDetail() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <div className="grid grid-cols-3 gap-3 mb-4">
           {[
             { key: 'total', label: 'Total Topics', value: topics.length, icon: FileText, hex: '#3b82f6' },
-            { key: 'scheduled', label: 'Scheduled', value: scheduledTopics.length, icon: Calendar, hex: '#22c55e' },
             { key: 'in_progress', label: 'In Progress', value: inProgressTopics.length, icon: Zap, hex: '#f59e0b' },
             { key: 'completed', label: 'Completed', value: completedTopics.length, icon: Play, hex: '#10b981' },
           ].map(stat => (
@@ -244,25 +218,21 @@ export default function ChannelDetail() {
             <TopicStatusPanel
               title={
                 activeStatFilter === 'total' ? 'All Topics' :
-                activeStatFilter === 'scheduled' ? 'Scheduled Topics' :
                 activeStatFilter === 'in_progress' ? 'In Progress' :
                 'Completed'
               }
               icon={
                 activeStatFilter === 'total' ? FileText :
-                activeStatFilter === 'scheduled' ? Calendar :
                 activeStatFilter === 'in_progress' ? Zap :
                 Play
               }
               topics={
                 activeStatFilter === 'total' ? topics :
-                activeStatFilter === 'scheduled' ? scheduledTopics :
                 activeStatFilter === 'in_progress' ? inProgressTopics :
                 completedTopics
               }
               color={
                 activeStatFilter === 'total' ? '#3b82f6' :
-                activeStatFilter === 'scheduled' ? '#22c55e' :
                 activeStatFilter === 'in_progress' ? '#f59e0b' :
                 '#10b981'
               }
@@ -273,69 +243,12 @@ export default function ChannelDetail() {
           </div>
         )}
 
-        {/* Niche Strategy Card */}
-        {strategy && (
-          <Card className="mb-6 border-l-4" style={{ borderLeftColor: color }}>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <Zap className="w-4 h-4" style={{ color }} />
-                <h3 className="text-sm font-bold text-gray-800">Viral Script Strategy</h3>
-                <Badge className="text-[9px]" style={{ backgroundColor: `${color}15`, color }}>Auto-researched</Badge>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-gray-600">
-                {strategy.hook_formula && (
-                  <div><span className="font-medium text-gray-800">Hook:</span> {strategy.hook_formula}</div>
-                )}
-                {strategy.structure && (
-                  <div><span className="font-medium text-gray-800">Structure:</span> {Array.isArray(strategy.structure) ? strategy.structure.join(' → ') : strategy.structure}</div>
-                )}
-                {strategy.tone && (
-                  <div><span className="font-medium text-gray-800">Tone:</span> {strategy.tone}</div>
-                )}
-                {strategy.pacing && (
-                  <div><span className="font-medium text-gray-800">Pacing:</span> {strategy.pacing}</div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Tabs */}
-        <Tabs defaultValue="calendar">
+        <Tabs defaultValue="topics">
           <TabsList>
-            <TabsTrigger value="calendar"><Calendar className="w-3.5 h-3.5 mr-1" /> Calendar</TabsTrigger>
             <TabsTrigger value="topics"><List className="w-3.5 h-3.5 mr-1" /> All Topics ({topics.length})</TabsTrigger>
             <TabsTrigger value="settings"><Settings className="w-3.5 h-3.5 mr-1" /> Settings</TabsTrigger>
           </TabsList>
-
-          <TabsContent value="calendar" className="mt-4 space-y-4">
-            <Card>
-              <CardContent className="p-4">
-                <ContentCalendar
-                  topics={topics}
-                  channel={channel}
-                  onDateClick={handleDateClick}
-                />
-              </CardContent>
-            </Card>
-            {selectedDate ? (
-              <DayTopicsPanel
-                date={selectedDate}
-                topics={selectedTopicsLive}
-                channel={channel}
-                onStartPipeline={handleStartPipeline}
-                onClose={() => setSelectedDate(null)}
-                onTopicUpdated={() => refetchTopics()}
-              />
-            ) : (
-              <Card>
-                <CardContent className="p-6 text-center text-gray-400">
-                  <Calendar className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                  <p className="text-sm">Click a date to see scheduled topics</p>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
 
           <TabsContent value="topics" className="mt-4">
             <Card>
@@ -350,7 +263,7 @@ export default function ChannelDetail() {
                   </div>
                 ) : (
                   <div className="space-y-1.5">
-                    {[...topics].sort((a, b) => (a.scheduled_date || '9999').localeCompare(b.scheduled_date || '9999') || (a.priority || 0) - (b.priority || 0)).map(topic => (
+                    {[...topics].sort((a, b) => (a.priority || 0) - (b.priority || 0)).map(topic => (
                       <div key={topic.id} className="rounded-lg border border-gray-100 overflow-hidden">
                         <div className="flex items-center gap-3 p-2.5 hover:bg-gray-50 text-sm cursor-pointer group">
                           {topic.project_id && (
@@ -368,25 +281,9 @@ export default function ChannelDetail() {
                           <div className="flex-1 min-w-0" onClick={() => handleStartPipeline(topic)}>
                             <EditableTopicTitle topic={topic} onUpdated={() => refetchTopics()} />
                           </div>
-                          {topic.scheduled_date && (
-                            <span className="text-[11px] text-indigo-600 flex-shrink-0 flex items-center gap-1">
-                              <Calendar className="w-3 h-3" />
-                              {topic.scheduled_date}{topic.scheduled_time ? ` ${topic.scheduled_time}` : ''}
-                            </span>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-6 w-6 p-0 text-indigo-500 hover:text-indigo-700 hover:bg-indigo-50 flex-shrink-0"
-                            title="Schedule publish"
-                            onClick={(e) => { e.stopPropagation(); setScheduleTopic(topic); }}
-                          >
-                            <Calendar className="w-3.5 h-3.5" />
-                          </Button>
                           <Badge className={`text-[10px] flex-shrink-0 ${
                             topic.status === 'in_progress' ? 'bg-amber-100 text-amber-700' :
                             topic.status === 'completed' || topic.status === 'published' ? 'bg-green-100 text-green-700' :
-                            topic.status === 'scheduled' ? 'bg-blue-100 text-blue-700' :
                             'bg-gray-100 text-gray-600'
                           }`}>
                             {topic.status}
@@ -491,21 +388,6 @@ export default function ChannelDetail() {
         onOpenChange={setShowImporter}
         channel={channel}
         onImported={() => refetchTopics()}
-      />
-
-      <AITitleGenerator
-        open={showAIGenerator}
-        onOpenChange={setShowAIGenerator}
-        channel={channel}
-        existingTopics={topics}
-        onComplete={() => refetchTopics()}
-      />
-
-      <TopicScheduleDialog
-        open={!!scheduleTopic}
-        onOpenChange={(o) => { if (!o) setScheduleTopic(null); }}
-        topic={scheduleTopic}
-        onSaved={() => { setScheduleTopic(null); refetchTopics(); }}
       />
     </div>
   );

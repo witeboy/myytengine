@@ -4,24 +4,15 @@
 // action name and response shape the browser already depends on, but the machinery
 // behind three of them changes because Bunny and AssemblyAI-only are gone.
 //
-// Callers: src/lib/directApi.js, src/pages/OpenShorts.jsx, src/lib/renderShortCloud.js
+// Callers: src/lib/directApi.js (Clip Extractor transcription), src/lib/renderShortCloud.js
 //
-//   submit / poll            transcription  -> lib/asr.ts (AssemblyAI or Whisper)
-//   bunny_save_project       OpenShorts persistence -> the same JSON manifest, in R2
-//   bunny_list_projects
-//   bunny_delete_project
-//   bunny_config             REMOVED — see below
+//   submit / poll            transcription  -> lib/asr.ts (AssemblyAI or Workers AI)
 //   clip_video               ffmpeg container — see codex/FFMPEG.md
+//   bunny_save_project       REMOVED 2026-09-11 with the Open Shorts feature (owner decision)
+//   bunny_list_projects      REMOVED — same
+//   bunny_delete_project     REMOVED — same
+//   bunny_config             REMOVED — it used to hand a storage credential to the browser
 //   extract_best_moments     DROPPED — dead code, no caller
-//
-// ── bunny_config ────────────────────────────────────────────────────────────────
-// The original returned BUNNY_STORAGE_PASSWORD to the browser so it could PUT
-// straight to Bunny. That handed a write credential to every client. There is no
-// equivalent and there should not be: uploads now go through POST /api/upload (small
-// files) or the uploadToR2 multipart flow (large), where the credential never leaves
-// the Worker. `directApi.uploadToCloudinary` has been rewritten accordingly; this
-// action returns 410 so any straggler caller fails loudly rather than silently
-// uploading nowhere.
 //
 // ── clip_video ──────────────────────────────────────────────────────────────────
 // The original ran `new Deno.Command('ffmpeg', …)` — a subprocess writing to /tmp,
@@ -36,28 +27,6 @@ import { HttpError } from '../lib/http';
 import { poll as asrPoll, submit as asrSubmit } from '../lib/asr';
 import { runClip } from '../lib/ffmpeg';
 import type { Ctx, FnHandler } from '../types';
-
-/** Same logical location as the Bunny manifest, now an R2 object. */
-const MANIFEST_KEY = 'projects/openshorts_manifest.json';
-
-async function loadManifest(ctx: Ctx): Promise<any[]> {
-  try {
-    const obj = await ctx.env.MEDIA.get(MANIFEST_KEY);
-    if (!obj) return [];
-    const parsed = JSON.parse(await obj.text());
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    // The original swallowed manifest read errors and returned []. Keep that: a
-    // corrupt manifest must not make the OpenShorts page unusable.
-    return [];
-  }
-}
-
-async function saveManifest(ctx: Ctx, projects: any[]): Promise<void> {
-  await ctx.env.MEDIA.put(MANIFEST_KEY, JSON.stringify(projects), {
-    httpMetadata: { contentType: 'application/json' },
-  });
-}
 
 const handler: FnHandler = async (body, ctx) => {
   const action = body?.action;
@@ -97,46 +66,6 @@ const handler: FnHandler = async (body, ctx) => {
 
   // ── OPENSHORTS PROJECT MANIFEST ─────────────────────────────────────────────
   //
-  // Read-modify-write of one JSON blob, exactly as before. Note this inherits the
-  // original's lost-update race: two concurrent saves and the later one wins. That
-  // behaviour is preserved deliberately. If it ever matters, the fix is a real table,
-  // not a lock — see PHASE-8.md §4.
-  if (action === 'bunny_save_project') {
-    const project = body.project;
-    if (!project?.job_id) throw new HttpError(400, 'project.job_id required');
-
-    const projects = await loadManifest(ctx);
-    const idx = projects.findIndex((p: any) => p.job_id === project.job_id);
-    if (idx >= 0) projects[idx] = project;
-    else projects.unshift(project); // newest first
-
-    await saveManifest(ctx, projects);
-    return { success: true, project_count: projects.length };
-  }
-
-  if (action === 'bunny_list_projects') {
-    return { success: true, projects: await loadManifest(ctx) };
-  }
-
-  if (action === 'bunny_delete_project') {
-    const { job_id } = body;
-    if (!job_id) throw new HttpError(400, 'job_id required');
-
-    const projects = await loadManifest(ctx);
-    const remaining = projects.filter((p: any) => p.job_id !== job_id);
-    await saveManifest(ctx, remaining);
-    return { success: true, project_count: remaining.length };
-  }
-
-  // ── RETIRED ─────────────────────────────────────────────────────────────────
-  if (action === 'bunny_config') {
-    throw new HttpError(
-      410,
-      'bunny_config is retired. Uploads go through POST /api/upload (or the uploadToR2 ' +
-      'multipart flow for large files) — storage credentials never reach the browser.',
-    );
-  }
-
   // ── CLIP ────────────────────────────────────────────────────────────────────
   // The original ran an ffmpeg subprocess, which a Worker cannot. It now runs in the
   // ffmpeg container (codex/FFMPEG.md). Response shape unchanged — `directApi.

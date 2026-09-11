@@ -152,7 +152,7 @@ async function handleUpload(req: Request, ctx: Ctx): Promise<{ file_url: string;
   } | null;
   if (!file || typeof file.stream !== 'function') throw new Error('No file in request');
 
-  // 'durable': OpenShorts stores this URL in its project manifest and transcribes from
+  // 'durable': callers persist this URL (project rows, transcripts) and read it back from
   // it, so it outlives the request. Only the export-time proxy cache is ephemeral.
   const stored = await putMedia(ctx, file.stream(), {
     tier: 'durable',

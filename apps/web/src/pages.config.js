@@ -63,7 +63,6 @@ import StoryScript from './pages/StoryScript';
 import StoryTopics from './pages/StoryTopics';
 import TimelineEditor from './pages/TimelineEditor';
 import ToolsHub from './pages/ToolsHub';
-import OpenShorts from './pages/OpenShorts';
 import __Layout from './Layout.jsx';
 
 
@@ -84,7 +83,6 @@ export const PAGES = {
     "StoryTopics": StoryTopics,
     "TimelineEditor": TimelineEditor,
     "ToolsHub": ToolsHub,
-    "OpenShorts": OpenShorts,
 }
 
 export const pagesConfig = {

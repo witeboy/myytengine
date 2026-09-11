@@ -68,10 +68,7 @@ import extractBestMoments from './extractBestMoments';
 import downloadYouTubeVideo from './downloadYouTubeVideo';
 import enhanceClipForFYP from './enhanceClipForFYP';
 import detectSilencesAndFillers from './detectSilencesAndFillers';
-import scheduleClipPost from './scheduleClipPost';
-import generateTopics from './generateTopics';
 import parseAndScheduleTopics from './parseAndScheduleTopics';
-import researchNicheStrategy from './researchNicheStrategy';
 import generateSeoTitlesDescriptions from './generateSeoTitlesDescriptions';
 import generateSeoDescriptions from './generateSeoDescriptions';
 import searchBrollVideos from './searchBrollVideos';
@@ -161,21 +158,18 @@ export const FUNCTIONS: Record<string, FnHandler> = {
 
   // ── Phase 10 · shorts & clips (6, batches/phase10.json) ───────────────────
   // analyzeViralMoments, extractBestMoments, downloadYouTubeVideo,
-  // enhanceClipForFYP, detectSilencesAndFillers, scheduleClipPost
+  // enhanceClipForFYP, detectSilencesAndFillers
   analyzeViralMoments,
   extractBestMoments,
   downloadYouTubeVideo,
   enhanceClipForFYP,
   detectSilencesAndFillers,
-  scheduleClipPost,
 
   // ── Phase 11 · topics, SEO & b-roll (8, batches/phase11.json) ─────────────
-  // generateTopics, parseAndScheduleTopics, researchNicheStrategy,
+  // parseAndScheduleTopics,
   // generateSeoTitlesDescriptions, generateSeoDescriptions, searchBrollVideos,
   // autoBrollPopulate, sleepBrollPopulate
-  generateTopics,
   parseAndScheduleTopics,
-  researchNicheStrategy,
   generateSeoTitlesDescriptions,
   generateSeoDescriptions,
   searchBrollVideos,

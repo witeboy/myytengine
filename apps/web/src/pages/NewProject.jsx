@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { createPageUrl } from '@/utils';
 import {
   Loader2, Sparkles, Film, ArrowRight,
-  ArrowLeft, Lightbulb, Pencil, Image, ClipboardPaste
+  ArrowLeft, Pencil, Image, ClipboardPaste
 } from 'lucide-react';
 import MakeThumbnail from '@/components/production/MakeThumbnail';
 import ProjectModePicker from '@/components/script/ProjectModePicker';
@@ -50,7 +50,6 @@ export default function NewProject() {
   const navigate = useNavigate();
   const [selectedType, setSelectedType] = useState(null);
   const [mode, setMode] = useState(null);
-  const [niche, setNiche] = useState('');
   const [customTopic, setCustomTopic] = useState('');
   const [tone, setTone] = useState('dramatic');
   const [targetAudience, setTargetAudience] = useState('');
@@ -58,7 +57,7 @@ export default function NewProject() {
   const [pasteScript, setPasteScript] = useState('');
   const [pastePipeline, setPastePipeline] = useState('');
   const [pasteName, setPasteName] = useState('');
-  // Project mode for "I Have a Topic" / "Suggest Topics" flows — chosen BEFORE script generation
+  // Project mode for the "I Have a Topic" flow — chosen BEFORE script generation
   const [projectMode, setProjectMode] = useState('standard');
   const [explainerArc, setExplainerArc] = useState('professor');
 
@@ -72,34 +71,6 @@ export default function NewProject() {
   };
 
   const [error, setError] = useState('');
-
-  const handleCreateFromNiche = async () => {
-    if (!niche.trim()) return;
-    setLoading(true);
-    setError('');
-    try {
-      const project = await base44.entities.Projects.create({
-        name: niche.trim(),
-        niche: niche.trim(),
-        tone,
-        target_audience: targetAudience.trim() || undefined,
-        status: 'created',
-        current_step: 0,
-        ...modePayload(),
-      });
-      await base44.functions.invoke('generateTopics', {
-        project_id: project.id,
-        niche: niche.trim(),
-        tone,
-        target_audience: targetAudience.trim() || undefined,
-      });
-      navigate(createPageUrl(`StoryTopics?project_id=${project.id}`));
-    } catch (err) {
-      console.error('generateTopics (niche) failed:', err);
-      setError(err?.response?.data?.error || err.message || 'Something went wrong. Please try again.');
-      setLoading(false);
-    }
-  };
 
   const handleCreateFromTopic = async () => {
     if (!customTopic.trim()) return;
@@ -205,7 +176,7 @@ export default function NewProject() {
               <h2 className="text-2xl font-bold">New Faceless Video</h2>
               <p className="text-gray-500 text-sm mt-1">How would you like to start?</p>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card
                 className="cursor-pointer border-2 border-gray-200 hover:border-blue-400 hover:shadow-lg transition-all group"
                 onClick={() => setMode('topic')}
@@ -217,21 +188,6 @@ export default function NewProject() {
                   <h3 className="text-lg font-bold">I Have a Topic</h3>
                   <p className="text-sm text-gray-500">Enter your exact video topic and use it as-is — straight into the pipeline.</p>
                   <div className="flex items-center justify-center gap-1 text-sm font-medium text-gray-400 group-hover:text-blue-600 transition-colors">
-                    Start <ArrowRight className="w-4 h-4" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card
-                className="cursor-pointer border-2 border-gray-200 hover:border-purple-400 hover:shadow-lg transition-all group"
-                onClick={() => setMode('niche')}
-              >
-                <CardContent className="p-6 text-center space-y-3">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center mx-auto">
-                    <Lightbulb className="w-7 h-7 text-white" />
-                  </div>
-                  <h3 className="text-lg font-bold">Suggest Topics</h3>
-                  <p className="text-sm text-gray-500">Enter a niche and AI will generate 5 viral topic ideas for you to choose from.</p>
-                  <div className="flex items-center justify-center gap-1 text-sm font-medium text-gray-400 group-hover:text-purple-600 transition-colors">
                     Start <ArrowRight className="w-4 h-4" />
                   </div>
                 </CardContent>
@@ -300,58 +256,6 @@ export default function NewProject() {
                 <Button variant="outline" onClick={() => setMode(null)} disabled={loading}>Back</Button>
                 <Button onClick={handleCreateFromTopic} disabled={!customTopic.trim() || loading} className="flex-1 bg-blue-600 hover:bg-blue-700" size="lg">
                   {loading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Creating...</> : 'Create Project'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Niche suggestion flow */}
-        {mode === 'niche' && (
-          <Card className="w-full max-w-lg mx-auto">
-            <CardHeader className="text-center">
-              <Lightbulb className="w-10 h-10 text-purple-600 mx-auto mb-2" />
-              <CardTitle className="text-2xl">Explore a Niche</CardTitle>
-              <p className="text-gray-500 text-sm mt-1">Enter a niche and AI will suggest 5 viral topics</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Input
-                placeholder="e.g. True Crime, Tech Reviews, History..."
-                value={niche}
-                onChange={e => setNiche(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleCreateFromNiche()}
-                disabled={loading}
-                className="text-lg py-6"
-              />
-              <ProjectModePicker
-                mode={projectMode}
-                onModeChange={setProjectMode}
-                arc={explainerArc}
-                onArcChange={setExplainerArc}
-                disabled={loading}
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1 block">Tone</label>
-                  <Select value={tone} onValueChange={setTone}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {TONE_OPTIONS.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-gray-500 mb-1 block">Target Audience <span className="text-gray-400">(optional)</span></label>
-                  <Input placeholder="e.g. tech enthusiasts, parents" value={targetAudience} onChange={e => setTargetAudience(e.target.value)} disabled={loading} />
-                </div>
-              </div>
-              {error && (
-                <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{error}</p>
-              )}
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setMode(null)} disabled={loading}>Back</Button>
-                <Button onClick={handleCreateFromNiche} disabled={!niche.trim() || loading} className="flex-1 bg-purple-600 hover:bg-purple-700" size="lg">
-                  {loading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Generating Topics...</> : 'Generate 5 Topic Ideas'}
                 </Button>
               </div>
             </CardContent>

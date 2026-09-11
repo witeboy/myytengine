@@ -19,7 +19,6 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { isFFmpegSupported } from '@/lib/clipWithFFmpeg';
 import ClipCard from '@/components/clips/ClipCard';
-import ClipScheduler from '@/components/clips/ClipScheduler';
 import YouTubeUrlInput from '@/components/clips/YouTubeUrlInput';
 import {
   Upload, FileVideo, Mic, Brain, Scissors, ArrowLeft,
@@ -497,7 +496,6 @@ export default function ClipExtractor() {
               ))}
             </div>
 
-            <ClipScheduler clips={clips} videoUrl={videoUrl} enhancements={{}} />
           </div>
         )}
 

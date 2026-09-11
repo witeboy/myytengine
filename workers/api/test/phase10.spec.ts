@@ -2,7 +2,7 @@ import { env } from 'cloudflare:workers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import analyzeViralMoments from '../src/fn/analyzeViralMoments';
 import downloadYouTubeVideo from '../src/fn/downloadYouTubeVideo';
-import scheduleClipPost from '../src/fn/scheduleClipPost';
+import { FUNCTIONS } from '../src/fn/registry';
 import type { Ctx } from '../src/types';
 
 function context(keys: Record<string, string> = {}): Ctx {
@@ -53,14 +53,7 @@ describe('Phase 10 clips and scheduling', () => {
     await expect(downloadYouTubeVideo({ url: 'https://youtu.be/abcdefghijk' }, context())).rejects.toMatchObject({ status: 400, message: 'COBALT_API_URL not set' });
   });
 
-  it('marks due posts ready for manual posting without publishing', async () => {
-    const ctx = context();
-    const update = vi.fn(async () => ({}));
-    ctx.db = { UploadMetadata: { filter: vi.fn(async () => [{ id: 'post-1', title_primary: 'Moon', platform: 'youtube_shorts', scheduled_at: '2020-01-01T00:00:00Z' }]), update } } as any;
-    const fetch = vi.fn();
-    vi.stubGlobal('fetch', fetch);
-    await expect(scheduleClipPost({ action: 'process' }, ctx)).resolves.toMatchObject({ success: true, processed: 1, results: [{ post_id: 'post-1', status: 'ready_to_post' }] });
-    expect(update).toHaveBeenCalledWith('post-1', { status: 'ready_to_post' });
-    expect(fetch).not.toHaveBeenCalled();
+  it('no longer registers the removed auto-post scheduler', () => {
+    expect(FUNCTIONS.scheduleClipPost).toBeUndefined();
   });
 });

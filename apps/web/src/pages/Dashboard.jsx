@@ -4,7 +4,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import OverallStats from '@/components/dashboard/OverallStats';
 import QuickShortcuts from '@/components/dashboard/QuickShortcuts';
 import NicheStatsGrid from '@/components/dashboard/NicheStatsGrid';
-import ViralTrendsPanel from '@/components/dashboard/ViralTrendsPanel';
 import ActiveProjectsStrip from '@/components/dashboard/ActiveProjectsStrip';
 import ProjectStatusBoard from '@/components/dashboard/ProjectStatusBoard';
 import { Loader2, LayoutDashboard } from 'lucide-react';
@@ -99,10 +98,6 @@ export default function Dashboard() {
               <ActiveProjectsStrip projects={projects} onArchive={(id) => archiveMutation.mutate(id)} />
             </section>
 
-            {/* Viral Trends */}
-            <section>
-              <ViralTrendsPanel channels={channels} />
-            </section>
           </>
         )}
         </>

@@ -33,8 +33,6 @@ export default function CreateChannelDialog({ open, onOpenChange, onCreated }) {
       status: 'active',
     });
 
-    // Fire-and-forget niche strategy research
-    base44.functions.invoke('researchNicheStrategy', { channel_id: channel.id }).catch(() => {});
 
     setCreating(false);
     setName('');
