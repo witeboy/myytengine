@@ -5,7 +5,10 @@ import { HttpError, badRequest } from '../lib/http';
 import { isEntity } from '../db/registry';
 import type { Ctx } from '../types';
 
-const OPS = new Set(['filter', 'list', 'get', 'create', 'bulkCreate', 'update', 'delete', 'import']);
+// 'import' (id-preserving INSERT OR REPLACE) existed for the Phase 13 cutover only. The
+// owner decided on 2026-09-11 that no legacy data moves, so it is no longer reachable;
+// db/client.ts keeps importRows for tests and any future, deliberate re-enable.
+const OPS = new Set(['filter', 'list', 'get', 'create', 'bulkCreate', 'update', 'delete']);
 
 export async function handleDb(
   entity: string,
@@ -49,12 +52,6 @@ export async function handleDb(
     case 'delete':
       if (!b.id) throw badRequest('id is required');
       return api.delete(b.id);
-
-    // CUTOVER ONLY — preserves ids so foreign keys survive. See db/client.ts.
-    // Consider removing this op from OPS once Phase 13 is signed off.
-    case 'import':
-      if (!Array.isArray(b.rows)) throw badRequest('rows must be an array');
-      return api.importRows(b.rows);
 
     default:
       throw new HttpError(404, `Unknown operation: ${op}`);
