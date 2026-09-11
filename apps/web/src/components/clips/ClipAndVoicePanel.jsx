@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { base44 } from '@/api/base44Client';
+import { api as base44 } from '@/api/client';
 import { renderClipAndVoice } from '@/lib/renderClipAndVoice';
 import { Download, Loader2, Mic2 } from 'lucide-react';
 

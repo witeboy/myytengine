@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api as base44 } from '@/api/client';
 import { Pencil, Check, X } from 'lucide-react';
 
 export default function EditableTopicTitle({ topic, onUpdated, className = '' }) {

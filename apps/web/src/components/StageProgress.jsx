@@ -2,7 +2,7 @@ import React from 'react';
 import { BookOpen, Image, Film, Home, Megaphone, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
+import { api as base44 } from '@/api/client';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
 

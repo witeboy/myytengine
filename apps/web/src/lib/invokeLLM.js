@@ -1,11 +1,11 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// invokeLLM.js — Drop-in replacement for base44.integrations.Core.InvokeLLM
+// invokeLLM.js — Drop-in replacement for the hosted integrations.Core.InvokeLLM
 //
-// Routes through callClaudeProxy Deno function which uses ANTHROPIC_API_KEY.
-// Handles both plain-text and JSON-schema responses identically to Base44's
+// Routes through the callClaudeProxy Worker function (BYOK key via the aggregator).
+// Handles both plain-text and JSON-schema responses identically to the original
 // built-in InvokeLLM so all existing call sites work without changes.
 // ─────────────────────────────────────────────────────────────────────────────
-import { base44 } from '@/api/base44Client';
+import { api as base44 } from '@/api/client';
 
 export async function invokeLLM({ prompt, response_json_schema, max_tokens }) {
   const hasSchema = !!response_json_schema;

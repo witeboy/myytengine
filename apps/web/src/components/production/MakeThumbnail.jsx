@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api as base44 } from '@/api/client';
 import {
   ArrowLeft, Upload, X, Sparkles, Loader2, Download,
   RefreshCw, Wand2, Image as ImageIcon,

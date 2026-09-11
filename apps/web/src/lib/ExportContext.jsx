@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useRef, useCallback } from 'react';
 import { saveExportedVideo } from '@/utils/videoStorage';
-import { base44 } from '@/api/base44Client';
+import { api as base44 } from '@/api/client';
 
 const ExportContext = createContext(null);
 

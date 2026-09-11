@@ -3,7 +3,7 @@
  * to the secondary overlay track above the main timeline.
  */
 import React, { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api as base44 } from '@/api/client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Smile, Film, Plus, Trash2, Sticker, Image, Upload, Loader2, X } from 'lucide-react';

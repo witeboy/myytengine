@@ -31,3 +31,6 @@ dist-ssr
 base44/.app.jsonc
 .vercel
 .env*
+
+# Committed template of public build-time settings (never .env.local)
+!apps/web/.env.example

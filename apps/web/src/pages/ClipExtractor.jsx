@@ -5,7 +5,7 @@
  *   1. Removed localStorage Cloudinary guard that blocked the pipeline.
  *      uploadToCloudinary reads openshorts_cloud_name / openshorts_cloud_preset
  *      from server env via directApi — no localStorage value needed.
- *   2. Removed dynamic import('@ffmpeg/ffmpeg') — not available in Base44.
+ *   2. Removed dynamic import('@ffmpeg/ffmpeg') — not available in the original hosted runtime.
  *      Clip playback/download uses Cloudinary URL transformations (instant CDN clips)
  *      plus the existing @/lib/clipWithFFmpeg for ShortsClipperPanel.
  */

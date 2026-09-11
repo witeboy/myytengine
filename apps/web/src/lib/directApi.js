@@ -9,7 +9,7 @@
 //      Claude calls now go through base44.functions.invoke('callClaudeProxy')
 //      which runs server-side in Deno with the ANTHROPIC_API_KEY env var.
 // ─────────────────────────────────────────────────────────────────────────────
-import { base44 } from '@/api/base44Client';
+import { api as base44 } from '@/api/client';
 
 export const LS_KEYS = {};
 

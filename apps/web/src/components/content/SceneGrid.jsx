@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api as base44 } from '@/api/client';
 import { DragDropContext, Droppable } from '@hello-pangea/dnd';
 import DraggableSceneCard from './DraggableSceneCard';
 import ActGroupHeader from './ActGroupHeader';

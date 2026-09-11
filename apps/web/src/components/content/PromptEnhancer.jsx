@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { base44 } from '@/api/base44Client';
+import { api as base44 } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Loader2, Sparkles, ImageIcon, Film, Wand2 } from 'lucide-react';
 

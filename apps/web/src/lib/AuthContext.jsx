@@ -1,6 +1,6 @@
-// AuthContext — Managed Better Auth replacing Base44 auth.
+// AuthContext — Neon Managed Better Auth.
 //
-// The exported context shape is unchanged. Base44's public-settings values remain
+// The exported context shape is unchanged. The legacy public-settings values remain
 // inert so App.jsx and UserNotRegisteredError.jsx do not need behavior changes.
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';

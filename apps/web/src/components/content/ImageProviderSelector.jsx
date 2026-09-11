@@ -5,7 +5,7 @@ const PROVIDERS = [
     id: 'auto',
     label: 'Auto (Best Available)',
     emoji: '🤖',
-    desc: 'Base44 image generation first, then your configured API fallback.',
+    desc: 'Best available model, with automatic fallback.',
     color: 'border-gray-300 bg-gray-50',
     activeColor: 'border-blue-500 bg-blue-50 ring-2 ring-blue-200',
   },

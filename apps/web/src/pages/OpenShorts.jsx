@@ -16,7 +16,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { base44 } from '@/api/base44Client';
+import { api as base44 } from '@/api/client';
 import {
   ArrowLeft, Youtube, Upload, FileVideo, X, Loader2, CheckCircle,
   AlertCircle, Download, Share2, Instagram, Sparkles, Settings,

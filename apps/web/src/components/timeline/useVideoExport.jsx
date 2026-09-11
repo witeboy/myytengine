@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { Muxer, ArrayBufferTarget } from 'mp4-muxer';
-import { base44 } from '@/api/base44Client';
+import { api as base44 } from '@/api/client';
 
 const QUALITY_PRESETS = {
   '1080p': { width: 1920, height: 1080, bitrate: 6000000 },

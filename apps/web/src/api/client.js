@@ -1,13 +1,13 @@
-// API client — the drop-in replacement for the Base44 SDK.
+// API client — the SPA's only backend client, talking to the Cloudflare Worker.
 //
-// It deliberately mirrors the SDK's surface exactly:
+// It deliberately mirrors the original hosted SDK's surface exactly:
 //     api.entities.Projects.filter({ id })   -> Row[]        (array, not { data })
 //     api.functions.invoke(name, payload)    -> { data }
 //     api.auth.me() / logout() / redirectToLogin()
 //     api.integrations.Core.InvokeLLM / UploadFile / GenerateImage
 //
-// Because the shape matches, `src/api/base44Client.js` re-exports this as `base44`
-// and NOT ONE of the ~250 existing call sites changes.
+// Because the shape matches, call sites import it as `{ api as base44 }` and NOT ONE
+// of the ~250 existing usage lines changes.
 //
 // There is exactly one path per function now; no retry or path-shape fallback.
 
@@ -119,7 +119,7 @@ for (const name of ENTITY_NAMES) entities[name] = makeEntity(name);
 // ── functions ─────────────────────────────────────────────────────────────────
 
 const functions = {
-  /** Returns the same `{ data }` envelope the Base44 SDK returned. */
+  /** Returns the same `{ data }` envelope the original SDK returned. */
   invoke: (name, payload = {}, opts = {}) =>
     request(`/api/fn/${String(name)}`, { body: payload, timeoutMs: opts.timeoutMs }),
 };
@@ -142,11 +142,11 @@ const auth = {
   redirectToLogin: (returnTo) => loginImpl(returnTo),
 };
 
-// ── integrations (Base44 Core.*) ──────────────────────────────────────────────
+// ── integrations (Core.*) ─────────────────────────────────────────────────────
 
 const integrations = {
   Core: {
-    /** Same contract as Base44: schema present -> object, absent -> string. */
+    /** Same contract as before: schema present -> object, absent -> string. */
     InvokeLLM: async ({ prompt, system, response_json_schema, max_tokens, model } = {}) => {
       const res = await request('/api/fn/invokeLLM', {
         body: { prompt, system, response_json_schema, max_tokens, model },
@@ -182,7 +182,7 @@ const keys = {
 
 export const api = { entities, functions, auth, integrations, keys };
 
-/** Alias kept so existing imports (`import { base44 } from '@/api/base44Client'`) work. */
+/** Alias kept so existing imports (`import { api as base44 } from '@/api/client'`) work. */
 export const base44 = api;
 
 export default api;

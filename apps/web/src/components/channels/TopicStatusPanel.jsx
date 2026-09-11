@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { X, Play, Clock, ChevronDown, ChevronUp, Package, RotateCcw, Globe, Zap, Loader2 } from 'lucide-react';
-import { base44 } from '@/api/base44Client';
+import { api as base44 } from '@/api/client';
 
 import { ExpandableAssets } from './TopicAssetsPanel';
 import EditableTopicTitle from './EditableTopicTitle';
@@ -59,7 +59,7 @@ export default function TopicStatusPanel({ title, icon: Icon, topics, onClose, o
   const handleTopicClick = async (topic) => {
     if (topic.project_id) {
       // Navigate to existing project
-      const projects = await (await import('@/api/base44Client')).base44.entities.Projects.filter({ id: topic.project_id });
+      const projects = await (await import('@/api/client')).api.entities.Projects.filter({ id: topic.project_id });
       if (projects[0]) {
         const route = getProjectRoute(projects[0]);
         navigate(`/${route}`);
