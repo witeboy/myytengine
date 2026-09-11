@@ -54,22 +54,16 @@ bucket_name = "myytengine-cold"
 [ai]
 binding = "AI"
 
-# ── ffmpeg container ──────────────────────────────────────────────────────────
-# Server-side video. Billed per second of runtime, so keep max_instances low until you
-# know the real concurrency. See codex/FFMPEG.md.
-[[containers]]
-class_name    = "FfmpegContainer"
-image         = "../ffmpeg/Dockerfile"
-max_instances = 5
-instance_type = "standard"
-
-[[durable_objects.bindings]]
-name       = "FFMPEG"
-class_name = "FfmpegContainer"
-
+# ── Durable Object migrations ─────────────────────────────────────────────────
+# v1 created the ffmpeg container class; v2 deletes it. The server-side video stack
+# existed only for Clip Extractor, which the owner removed on 2026-09-11.
 [[migrations]]
 tag                = "v1"
 new_sqlite_classes = ["FfmpegContainer"]
+
+[[migrations]]
+tag                    = "v2"
+deleted_classes = ["FfmpegContainer"]
 
 # 48-hour sweep of ephemeral media. 03:17 UTC daily — off the hour to avoid the
 # thundering herd on Cloudflare's scheduler.

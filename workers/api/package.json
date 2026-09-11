@@ -13,7 +13,6 @@
     "test:phase5": "vitest run --config vitest.phase5.config.ts"
   },
   "dependencies": {
-    "@cloudflare/containers": "^0.0.30"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",

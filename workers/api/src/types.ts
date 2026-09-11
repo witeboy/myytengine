@@ -10,9 +10,6 @@ export interface Env {
   MEDIA: R2Bucket;          // user-facing assets: images, audio, video, thumbnails
   COLD: R2Bucket;           // oversized JSON columns offloaded from D1
   AI: Ai;                   // Workers AI (Whisper ASR fallback)
-  /** ffmpeg container (Durable Object). Absent until the container is deployed —
-   *  lib/ffmpeg.ts degrades to a 501 naming the in-browser path. */
-  FFMPEG?: DurableObjectNamespace;
 
   // Secrets (wrangler secret put ...)
   KEYVAULT_MASTER_KEY: string;   // base64, 32 bytes — encrypts the BYOK vault

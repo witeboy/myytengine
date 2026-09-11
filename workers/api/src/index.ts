@@ -20,8 +20,6 @@ import { putMedia, sweepArchivedProject, sweepExpired } from './lib/storage';
 import { makeDb } from './db/client';
 import type { Ctx, Env } from './types';
 
-// Durable Object class — must be exported from the entrypoint for wrangler to bind it.
-export { FfmpegContainer } from './ffmpeg-do';
 
 export default {
   async fetch(req: Request, env: Env, exec: ExecutionContext): Promise<Response> {
