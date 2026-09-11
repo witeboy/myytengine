@@ -24,7 +24,7 @@ BUNNY_STORAGE_REGION = "ny"
 BUNNY_CDN_URL        = ""
 
 MEDIA_PUBLIC_BASE   = "https://media.radiantmemory.ca"    # only used when MEDIA_BACKEND="r2"
-ALLOWED_ORIGINS     = "http://localhost:5173,https://myytengine.vercel.app"
+ALLOWED_ORIGINS     = "http://localhost:5173,https://myytengine.vercel.app,https://myytengine.rcinc.app"
 NEON_AUTH_JWKS_URL  = "https://ep-red-sunset-axfihokp.neonauth.c-4.us-east-2.aws.neon.tech/neondb/auth/.well-known/jwks.json"
 NEON_AUTH_ISSUER    = "https://ep-red-sunset-axfihokp.neonauth.c-4.us-east-2.aws.neon.tech"
 NEON_AUTH_AUDIENCE  = "https://ep-red-sunset-axfihokp.neonauth.c-4.us-east-2.aws.neon.tech"
