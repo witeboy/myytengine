@@ -69,6 +69,14 @@ import downloadYouTubeVideo from './downloadYouTubeVideo';
 import enhanceClipForFYP from './enhanceClipForFYP';
 import detectSilencesAndFillers from './detectSilencesAndFillers';
 import scheduleClipPost from './scheduleClipPost';
+import generateTopics from './generateTopics';
+import parseAndScheduleTopics from './parseAndScheduleTopics';
+import researchNicheStrategy from './researchNicheStrategy';
+import generateSeoTitlesDescriptions from './generateSeoTitlesDescriptions';
+import generateSeoDescriptions from './generateSeoDescriptions';
+import searchBrollVideos from './searchBrollVideos';
+import autoBrollPopulate from './autoBrollPopulate';
+import sleepBrollPopulate from './sleepBrollPopulate';
 
 export const FUNCTIONS: Record<string, FnHandler> = {
   healthCheck,
@@ -165,6 +173,14 @@ export const FUNCTIONS: Record<string, FnHandler> = {
   // generateTopics, parseAndScheduleTopics, researchNicheStrategy,
   // generateSeoTitlesDescriptions, generateSeoDescriptions, searchBrollVideos,
   // autoBrollPopulate, sleepBrollPopulate
+  generateTopics,
+  parseAndScheduleTopics,
+  researchNicheStrategy,
+  generateSeoTitlesDescriptions,
+  generateSeoDescriptions,
+  searchBrollVideos,
+  autoBrollPopulate,
+  sleepBrollPopulate,
   //
   // NOTE autoBrollPopulate/sleepBrollPopulate are invoked by a DYNAMIC name in
   // AutoBrollButton.jsx — grep for their literal names finds nothing. They are live.

@@ -1,109 +1,13 @@
-// ══════════════════════════════════════════════════════════════════════
-// CLOUD RENDER CLIENT — submits a Short to Creatomate via backend fn
-// and polls until it's ready. Returns a downloadable MP4 URL.
-//
-// Why cloud: browser FFmpeg hits COOP/COEP + cross-origin Worker walls.
-// Creatomate runs server-side, returns a finished MP4 in 15-30s.
-// ══════════════════════════════════════════════════════════════════════
-
-import { base44 } from '@/api/base44Client';
+// Cloud clip client. The retired Creatomate functions were removed in Phase 0.
+// Keep the existing basic 9:16 fallback contract through the ffmpeg adapter.
 import { clipVideoCloud } from '@/lib/directApi';
 
-const POLL_INTERVAL_MS = 2500;
-const MAX_POLL_ATTEMPTS = 120; // 5 minutes max
-
-async function renderBasicCloudClip({ videoUrl, startSec, endSec, onProgress, reason }) {
-  console.warn('[CloudRender] Falling back to server clipper:', reason);
+export async function renderShortCloud({ videoUrl, startSec, endSec, onProgress }) {
+  onProgress?.({ percent: 5, message: 'Submitting to cloud renderer…' });
   onProgress?.({ percent: 12, message: 'Cloud captions unavailable, rendering basic 9:16 clip...' });
-  const result = await clipVideoCloud({
-    sourceUrl: videoUrl,
-    start: startSec,
-    end: endSec,
-  });
+  const result = await clipVideoCloud({ sourceUrl: videoUrl, start: startSec, end: endSec });
   onProgress?.({ percent: 100, message: 'Basic short ready' });
   return { url: result.clip_url, id: result.job_id || `basic-${Date.now()}`, fallback: true };
-}
-
-export async function renderShortCloud({
-  videoUrl,
-  startSec,
-  endSec,
-  words = [],
-  captionStyle = 'hormozi_pro',
-  title = 'short',
-  onProgress,
-}) {
-  onProgress?.({ percent: 5, message: 'Submitting to cloud renderer…' });
-
-  // 1. Submit render job
-  let submitRes;
-  try {
-    submitRes = await base44.functions.invoke('renderShortCreatomate', {
-      videoUrl,
-      startSec,
-      endSec,
-      words,
-      captionStyle,
-      title,
-    });
-  } catch (err) {
-    return renderBasicCloudClip({ videoUrl, startSec, endSec, onProgress, reason: err.message });
-  }
-
-  if (submitRes.data?.error) {
-    return renderBasicCloudClip({ videoUrl, startSec, endSec, onProgress, reason: submitRes.data.error });
-  }
-
-  const renderId = submitRes.data?.id;
-  if (!renderId) {
-    return renderBasicCloudClip({ videoUrl, startSec, endSec, onProgress, reason: 'No render ID returned from Creatomate' });
-  }
-
-  // If already done (cached), return immediately
-  if (submitRes.data.status === 'succeeded' && submitRes.data.url) {
-    onProgress?.({ percent: 100, message: 'Render ready' });
-    return { url: submitRes.data.url, id: renderId };
-  }
-
-  onProgress?.({ percent: 15, message: 'Rendering in cloud…' });
-
-  // 2. Poll until done
-  for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
-    await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
-
-    let pollRes;
-    try {
-      pollRes = await base44.functions.invoke('pollCreatomateRender', { id: renderId });
-    } catch (err) {
-      return renderBasicCloudClip({ videoUrl, startSec, endSec, onProgress, reason: err.message });
-    }
-    const data = pollRes.data || {};
-
-    if (data.error) throw new Error(data.error);
-
-    const status = data.status;
-    const progress = typeof data.progress === 'number' ? data.progress : 0;
-
-    // Map provider progress (0-1) to our 15-95% range
-    const uiPct = Math.min(95, 15 + Math.round(progress * 80));
-    onProgress?.({
-      percent: uiPct,
-      message: status === 'rendering'
-        ? `Rendering… ${Math.round(progress * 100)}%`
-        : `Status: ${status}`,
-    });
-
-    if (status === 'succeeded' && data.url) {
-      onProgress?.({ percent: 100, message: 'Render ready' });
-      return { url: data.url, id: renderId };
-    }
-
-    if (status === 'failed') {
-      return renderBasicCloudClip({ videoUrl, startSec, endSec, onProgress, reason: data.error || 'Render failed on Creatomate' });
-    }
-  }
-
-  return renderBasicCloudClip({ videoUrl, startSec, endSec, onProgress, reason: 'Render timed out after 5 minutes' });
 }
 
 // Trigger a browser download from a URL

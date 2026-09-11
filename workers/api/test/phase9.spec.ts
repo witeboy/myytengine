@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import analyzeForThumbnail from '../src/fn/analyzeForThumbnail';
 import newThumbnailConcept from '../src/fn/newThumbnailConcept';
 import { FUNCTIONS } from '../src/fn/registry';
+import { invokeLLM } from '../src/lib/ai';
 import type { Ctx } from '../src/types';
 
 function context(): Ctx {
@@ -24,6 +25,16 @@ function context(): Ctx {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Phase 9 thumbnail routing and persistence', () => {
+  it('passes the callers response schema to the model', async () => {
+    const schema = { type: 'object', properties: { summary: { type: 'string' } }, required: ['summary'] };
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body));
+      expect(body.system).toContain(JSON.stringify(schema));
+      expect(body.messages[0].content).toBe('Summarize Apollo.');
+      return Response.json({ content: [{ type: 'text', text: '{"summary":"A trip to the moon."}' }] });
+    }));
+    await expect(invokeLLM(context(), { prompt: 'Summarize Apollo.', response_json_schema: schema })).resolves.toEqual({ summary: 'A trip to the moon.' });
+  });
   it('registers the thumbnail and frontend LLM entry points', () => {
     for (const name of ['analyzeForThumbnail', 'newThumbnailConcept', 'safeGeminiCall', 'invokeLLM', 'callClaudeProxy']) {
       expect(FUNCTIONS[name]).toBeTypeOf('function');

@@ -236,11 +236,16 @@ export interface InvokeLLMArgs {
 export async function invokeLLM(ctx: Ctx, args: InvokeLLMArgs): Promise<any> {
   const hasSchema = !!args.response_json_schema;
   const maxTokens = args.max_tokens || (hasSchema ? 2000 : 4000);
-  const system =
+  const baseSystem =
     args.system ??
     (hasSchema
       ? 'You are a helpful assistant. Respond ONLY with valid JSON — no preamble, no markdown fences, no explanation. Just the raw JSON object.'
       : undefined);
+  // Base44 used this schema to shape its response. Merely requesting JSON loses
+  // field names/types (for example summary: string becomes a nested object).
+  const system = hasSchema
+    ? `${baseSystem || ''}\n\nReturn a JSON value matching this JSON Schema exactly:\n${JSON.stringify(args.response_json_schema)}`
+    : baseSystem;
 
   let text: string;
 
