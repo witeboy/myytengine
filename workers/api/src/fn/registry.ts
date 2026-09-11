@@ -13,7 +13,6 @@ import healthCheck from './healthCheck';
 // mechanically. See PHASE-7.md §2.
 import uploadToR2 from './uploadToR2';
 import proxyFetchAsset from './proxyFetchAsset';
-import quickPublishTranscribe from './quickPublishTranscribe';
 import generateSoundEffect from './generateSoundEffect';
 import invokeLLM from './invokeLLM';
 import callClaudeProxy from './callClaudeProxy';
@@ -59,15 +58,9 @@ import generateMusic from './generateMusic';
 import checkMusicStatus from './checkMusicStatus';
 import submitTranscription from './submitTranscription';
 import pollTranscription from './pollTranscription';
-import clipAndVoice from './clipAndVoice';
 import analyzeForThumbnail from './analyzeForThumbnail';
 import newThumbnailConcept from './newThumbnailConcept';
 import safeGeminiCall from './safeGeminiCall';
-import analyzeViralMoments from './analyzeViralMoments';
-import extractBestMoments from './extractBestMoments';
-import downloadYouTubeVideo from './downloadYouTubeVideo';
-import enhanceClipForFYP from './enhanceClipForFYP';
-import detectSilencesAndFillers from './detectSilencesAndFillers';
 import parseAndScheduleTopics from './parseAndScheduleTopics';
 import generateSeoTitlesDescriptions from './generateSeoTitlesDescriptions';
 import generateSeoDescriptions from './generateSeoDescriptions';
@@ -79,7 +72,6 @@ export const FUNCTIONS: Record<string, FnHandler> = {
   healthCheck,
   uploadToR2,
   proxyFetchAsset,
-  quickPublishTranscribe,
   generateSoundEffect,
   invokeLLM,
   callClaudeProxy,
@@ -132,11 +124,11 @@ export const FUNCTIONS: Record<string, FnHandler> = {
   detectFaceRegion,
 
   // ── Phase 8 · audio (13 total; 11 from batches/phase8.json) ──────────────
-  // quickPublishTranscribe and generateSoundEffect are wired above (hand-written).
+  // generateSoundEffect is wired above (hand-written).
   // The other 11:
   // generateVoiceover, pollVoiceover, listVoices, listVoicesByProvider,
   // previewVoice, inworldVoiceover, generateMusic, checkMusicStatus,
-  // submitTranscription, pollTranscription, clipAndVoice
+  // submitTranscription, pollTranscription
   generateVoiceover,
   pollVoiceover,
   listVoices,
@@ -147,7 +139,6 @@ export const FUNCTIONS: Record<string, FnHandler> = {
   checkMusicStatus,
   submitTranscription,
   pollTranscription,
-  clipAndVoice,
 
   // ── Phase 9 · thumbnails & LLM plumbing (3, batches/phase9.json) ──────────
   // invokeLLM and callClaudeProxy are wired above (hand-written). The other 3:
@@ -156,14 +147,6 @@ export const FUNCTIONS: Record<string, FnHandler> = {
   newThumbnailConcept,
   safeGeminiCall,
 
-  // ── Phase 10 · shorts & clips (6, batches/phase10.json) ───────────────────
-  // analyzeViralMoments, extractBestMoments, downloadYouTubeVideo,
-  // enhanceClipForFYP, detectSilencesAndFillers
-  analyzeViralMoments,
-  extractBestMoments,
-  downloadYouTubeVideo,
-  enhanceClipForFYP,
-  detectSilencesAndFillers,
 
   // ── Phase 11 · topics, SEO & b-roll (8, batches/phase11.json) ─────────────
   // parseAndScheduleTopics,

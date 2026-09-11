@@ -1,6 +1,6 @@
 // ══════════════════════════════════════════════════════════════════
 // CONCAT TIMELAPSE — Stitches Flow/Re-make transition videos into
-// one final MP4 using ffmpeg.wasm (already loaded by ClipExtractor).
+// one final MP4 using ffmpeg.wasm.
 //
 // Input: array of video URLs (ordered)
 // Output: single MP4 Blob

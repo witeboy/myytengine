@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import checkMusicStatus from '../src/fn/checkMusicStatus';
 import generateMusic from '../src/fn/generateMusic';
 import generateVoiceover from '../src/fn/generateVoiceover';
-import quickPublishTranscribe from '../src/fn/quickPublishTranscribe';
 import { FUNCTIONS } from '../src/fn/registry';
 import type { Ctx, Env, User } from '../src/types';
 
@@ -42,14 +41,15 @@ function makeCtx(options: {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Phase 8 audio contracts', () => {
-  it('registers all 13 Phase 8 functions under their canonical names', () => {
+  it('registers the surviving Phase 8 functions under their canonical names', () => {
     const names = [
       'generateVoiceover', 'pollVoiceover', 'listVoices', 'listVoicesByProvider',
       'previewVoice', 'inworldVoiceover', 'generateMusic', 'checkMusicStatus',
-      'submitTranscription', 'pollTranscription', 'clipAndVoice',
-      'quickPublishTranscribe', 'generateSoundEffect',
+      'submitTranscription', 'pollTranscription', 'generateSoundEffect',
     ];
     for (const name of names) expect(FUNCTIONS[name]).toBeTypeOf('function');
+    // clipAndVoice and quickPublishTranscribe left with Open Shorts / Clip Extractor (owner decision, 2026-09-11).
+    for (const name of ['clipAndVoice', 'quickPublishTranscribe']) expect(FUNCTIONS[name]).toBeUndefined();
   });
 
   it('keeps the actionable MiniMax missing-key error', async () => {
@@ -136,11 +136,4 @@ describe('Phase 8 audio contracts', () => {
     await env.MEDIA.delete(key);
   });
 
-  it('no longer serves the removed Open Shorts library actions', async () => {
-    const ctx = makeCtx();
-    for (const action of ['bunny_save_project', 'bunny_list_projects', 'bunny_delete_project', 'bunny_config']) {
-      await expect(quickPublishTranscribe({ action, project: { job_id: 'x' }, job_id: 'x' }, ctx))
-        .rejects.toMatchObject({ status: 400, message: `Unknown action: ${action}` });
-    }
-  });
 });

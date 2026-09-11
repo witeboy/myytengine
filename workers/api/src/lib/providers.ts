@@ -251,20 +251,7 @@ export const PROVIDERS: ProviderDef[] = [
         'YouTube Data API',
       ),
   },
-  {
-    id: 'COBALT_API_URL',
-    label: 'Cobalt instance URL',
-    group: 'YouTube',
-    tier: 'optional',
-    secret: false,
-    placeholder: 'https://your-cobalt-instance.example.com',
-    help: 'Endpoint used to pull source video for the Clip Extractor. Point this at your own Cobalt instance; the public ones are rate-limited.',
-    docsUrl: 'https://github.com/imputnet/cobalt',
-    test: async (url) => {
-      if (!/^https?:\/\//.test(url)) throw new Error('Must be a full http(s) URL');
-      await probe(url.replace(/\/$/, '') + '/', { method: 'GET' }, 'Cobalt');
-    },
-  },
+  // COBALT_API_URL was removed with the Clip Extractor feature on 2026-09-11 (owner decision).
 ];
 
 export const PROVIDER_IDS = PROVIDERS.map((p) => p.id);

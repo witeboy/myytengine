@@ -1,7 +1,7 @@
 // Transcription — one interface, two backends, chosen per user.
 //
 // The frontend keeps its existing submit/poll loop (`src/lib/transcribeASR.js`,
-// `src/lib/directApi.js`), so this module MUST preserve that shape:
+// `src/lib/transcribeASR.js`), so this module MUST preserve that shape:
 //     submit(url)  -> { transcript_id }
 //     poll(id)     -> { status: 'queued'|'processing'|'completed'|'error', ... }
 //

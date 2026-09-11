@@ -67,12 +67,12 @@ describe('BYOK Settings security contract', () => {
   it('returns only a masked hint while D1 stores AES-GCM ciphertext', async () => {
     const plaintext = `phase4-secret-${crypto.randomUUID()}-TAIL`;
     const saved = await setKey(
-      { provider: 'COBALT_API_URL', value: plaintext },
+      { provider: 'PEXELS_API_KEY', value: plaintext },
       makeCtx(),
     );
 
     expect(saved).toEqual({
-      provider: 'COBALT_API_URL',
+      provider: 'PEXELS_API_KEY',
       configured: true,
       hint: '••••••••TAIL',
     });
@@ -82,7 +82,7 @@ describe('BYOK Settings security contract', () => {
     const raw = await env.DB.prepare(
       'SELECT ciphertext, iv, hint FROM UserApiKeys WHERE user_id = ? AND provider = ?',
     )
-      .bind(user.id, 'COBALT_API_URL')
+      .bind(user.id, 'PEXELS_API_KEY')
       .first<{ ciphertext: string; iv: string; hint: string }>();
 
     expect(raw?.ciphertext).toBeTruthy();
@@ -95,36 +95,37 @@ describe('BYOK Settings security contract', () => {
     expect(serialized).not.toContain(plaintext);
     expect(serialized).not.toContain('ciphertext');
     expect(serialized).not.toContain('"iv"');
-    expect(listed.providers.find((provider) => provider.id === 'COBALT_API_URL')).toMatchObject({
+    expect(listed.providers.find((provider) => provider.id === 'PEXELS_API_KEY')).toMatchObject({
       configured: true,
       hint: '••••••••TAIL',
     });
   });
 
   it('reports a deliberately invalid value as a failed provider test', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('unauthorized', { status: 401 })));
     await expect(
-      testKey({ provider: 'COBALT_API_URL', value: 'not-a-url' }, makeCtx()),
-    ).resolves.toMatchObject({ provider: 'COBALT_API_URL', ok: false });
+      testKey({ provider: 'PEXELS_API_KEY', value: 'not-a-url' }, makeCtx()),
+    ).resolves.toMatchObject({ provider: 'PEXELS_API_KEY', ok: false });
   });
 
   it('reports success when the configured provider probe succeeds', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
 
     await expect(
-      testKey({ provider: 'COBALT_API_URL', value: 'https://provider.example' }, makeCtx()),
-    ).resolves.toEqual({ provider: 'COBALT_API_URL', ok: true });
+      testKey({ provider: 'PEXELS_API_KEY', value: 'https://provider.example' }, makeCtx()),
+    ).resolves.toEqual({ provider: 'PEXELS_API_KEY', ok: true });
   });
 
   it('Test all runs every configured provider and returns no stored value', async () => {
     const plaintext = 'https://configured-provider.example';
-    await setKey({ provider: 'COBALT_API_URL', value: plaintext }, makeCtx());
+    await setKey({ provider: 'PEXELS_API_KEY', value: plaintext }, makeCtx());
     vi.stubGlobal('fetch', vi.fn(async () => new Response('ok', { status: 200 })));
 
     const result = await testAllKeys(makeCtx());
 
     expect(result).toEqual({
       tested: 1,
-      results: [{ provider: 'COBALT_API_URL', ok: true }],
+      results: [{ provider: 'PEXELS_API_KEY', ok: true }],
     });
     expect(JSON.stringify(result)).not.toContain(plaintext);
   });

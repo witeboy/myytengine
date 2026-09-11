@@ -141,7 +141,7 @@ export default {
 
 /**
  * Replaces `base44.integrations.Core.UploadFile`. Returns the same `{ file_url }`
- * shape the frontend already reads (see src/lib/directApi.js).
+ * shape the frontend already reads (VoiceoverPanel and the timeline uploader).
  */
 async function handleUpload(req: Request, ctx: Ctx): Promise<{ file_url: string; key: string }> {
   const form = await req.formData();

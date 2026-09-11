@@ -8,7 +8,6 @@ import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import LongViralPipeline from './pages/LongViralPipeline';
 import ShortsPipeline from './pages/ShortsPipeline';
-import ClipExtractor from './pages/ClipExtractor';
 import ChannelThumbnailDNAPage from './pages/ChannelThumbnailDNA';
 
 const { Pages, Layout, mainPage } = pagesConfig;
@@ -64,11 +63,6 @@ const AuthenticatedApp = () => {
       <Route path="/ShortsPipeline" element={
         <LayoutWrapper currentPageName="ShortsPipeline">
           <ShortsPipeline />
-        </LayoutWrapper>
-      } />
-      <Route path="/ClipExtractor" element={
-        <LayoutWrapper currentPageName="ClipExtractor">
-          <ClipExtractor />
         </LayoutWrapper>
       } />
       <Route path="/ChannelThumbnailDNA" element={

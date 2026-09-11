@@ -1,13 +1,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Tv, Plus, Wrench, Scissors, Settings
+  Tv, Plus, Wrench, Settings
 } from 'lucide-react';
 
 const shortcuts = [
   { label: 'Content Factory',  icon: Tv,       path: '/ChannelsHub',      color: 'from-blue-500 to-indigo-600'   },
   { label: 'New Project',      icon: Plus,      path: '/NewProject',       color: 'from-green-500 to-emerald-600' },
-  { label: 'Clip Extractor',   icon: Scissors,  path: '/ClipExtractor',    color: 'from-rose-500 to-red-600'     },
   { label: 'Tools Hub',        icon: Wrench,    path: '/ToolsHub',         color: 'from-slate-500 to-gray-600'   },
   { label: 'Settings',         icon: Settings,  path: '/Settings',         color: 'from-slate-500 to-gray-600'   },
 ];
