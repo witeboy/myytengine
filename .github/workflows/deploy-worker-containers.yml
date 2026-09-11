@@ -1,0 +1,90 @@
+# Deploy the API Worker WITH the ffmpeg container image.
+#
+# Why this exists: `wrangler deploy` builds the container image with Docker on the
+# machine running it. The owner's Windows host has no Docker, so every deployment so far
+# used `--containers-rollout=none`, which leaves the FfmpegContainer binding defined but
+# never rolls out an image. GitHub's Ubuntu runners ship Docker, so this workflow is the
+# supported way to build and roll out the container until a local Docker exists.
+#
+# Manual only (workflow_dispatch). It is NOT triggered by push, on purpose: a push must
+# never silently replace a verified working Worker with older committed code.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   CLOUDFLARE_API_TOKEN   an API token scoped to this account with, at minimum:
+#                          Account · Workers Scripts · Edit
+#                          Account · Containers · Edit          (image push + rollout)
+#                          Account · D1 · Edit  and  Account · Workers R2 Storage · Edit
+#                          (wrangler validates the D1/R2 bindings in wrangler.toml)
+#                          Account · Account Settings · Read
+#   CLOUDFLARE_ACCOUNT_ID  902e34ea24639ebe15562116add415bd
+#
+# No provider key, KEYVAULT_MASTER_KEY, or other secret is read or written here. Worker
+# secrets already set with `wrangler secret put` are untouched by a deploy.
+
+name: Deploy Worker + ffmpeg container
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build and validate only; do not upload or roll out'
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install workspace dependencies
+        run: npm ci
+
+      - name: Typecheck and test the Worker
+        working-directory: workers/api
+        run: |
+          npm run typecheck
+          npm test
+
+      - name: Build the container image locally (compile check for main.go)
+        working-directory: workers/ffmpeg
+        run: docker build -t myytengine-ffmpeg:ci .
+
+      - name: Smoke the image (GET /health must report ffmpeg runnable)
+        run: |
+          docker run -d --rm --name ffmpeg-smoke -p 18080:8080 myytengine-ffmpeg:ci
+          for i in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:18080/health; then echo; break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:18080/health | grep -q '"ok":true'
+          docker stop ffmpeg-smoke
+
+      - name: Deploy (dry run)
+        if: ${{ inputs.dry_run }}
+        working-directory: workers/api
+        run: npx wrangler deploy --dry-run
+
+      - name: Deploy Worker and roll out the container
+        if: ${{ !inputs.dry_run }}
+        working-directory: workers/api
+        run: npx wrangler deploy
+
+      - name: Post-deploy health
+        if: ${{ !inputs.dry_run }}
+        run: |
+          curl -fsS https://myytengine-api.tolu-adebisi.workers.dev/api/health
+          echo

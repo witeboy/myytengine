@@ -8,7 +8,7 @@
 
 import { PROVIDERS } from '../lib/providers';
 import { unmappedModels } from '../lib/models';
-import { ffmpegAvailable } from '../lib/ffmpeg';
+import { ffmpegAvailable, ffmpegHealth } from '../lib/ffmpeg';
 import type { Ctx, FnHandler } from '../types';
 
 const handler: FnHandler = async (_body, ctx: Ctx) => {
@@ -38,16 +38,22 @@ const handler: FnHandler = async (_body, ctx: Ctx) => {
       : { name: 'Model mapping', status: 'ok', ms: 0 },
   );
 
-  report.push(
-    ffmpegAvailable(ctx.env)
-      ? { name: 'ffmpeg container', status: 'ok', ms: 0 }
-      : {
-          name: 'ffmpeg container',
-          status: 'not configured',
-          ms: 0,
-          error: 'Server-side video is unavailable; the in-browser path still works.',
-        },
-  );
+  // A binding can exist without any image ever rolled out (`--containers-rollout=none`),
+  // so "the binding is defined" must not be reported as a running service. Reach the
+  // container's /health for real; a failure surfaces as an error row with the reason.
+  if (ffmpegAvailable(ctx.env)) {
+    await timed('ffmpeg container', async () => {
+      const h = await ffmpegHealth(ctx.env);
+      if (!h.ok) throw new Error(h.error || 'container unreachable');
+    });
+  } else {
+    report.push({
+      name: 'ffmpeg container',
+      status: 'not configured',
+      ms: 0,
+      error: 'Server-side video is unavailable; the in-browser path still works.',
+    });
+  }
 
   await timed('D1', () => ctx.env.DB.prepare('SELECT 1').first());
   await timed('R2 media', () => ctx.env.MEDIA.list({ limit: 1 }));

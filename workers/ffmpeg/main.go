@@ -2,8 +2,13 @@
 //
 // One endpoint, POST /run. The Worker decides everything: which op, which source, where
 // the result goes. This process holds no API keys, has no database access, and never
-// picks its own destination — it is handed a single pre-authorized upload target per
-// job. If it is compromised, the blast radius is one object.
+// picks its own destination. The result travels one of two ways, chosen by the Worker:
+//
+//   • no `upload` in the request  → the encoded file is returned in the response body
+//     (Content-Type video/mp4, X-Ffmpeg-Duration, X-Ffmpeg-Bytes) and the Worker writes
+//     it to R2 through its binding. Nothing credential-shaped ever reaches this process.
+//   • `upload` present            → a single pre-authorized PUT target for this one job
+//     (the optional Bunny backend). If compromised, the blast radius is one object.
 //
 // ffmpeg reads the source over HTTP directly (`-i <url>`) rather than downloading first.
 // That is what the original Deno implementation did, and it avoids buffering a whole
@@ -145,8 +150,11 @@ func handleRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// No upload target: hand the bytes back and let the Worker store them by binding.
 	if req.Upload == nil || req.Upload.PutURL == "" {
-		writeJSON(w, 400, response{OK: false, Error: "upload target is required"})
+		if err := writeFile(ctx, w, out); err != nil {
+			writeJSON(w, 502, response{OK: false, Error: "no output produced: " + err.Error()})
+		}
 		return
 	}
 
@@ -369,6 +377,31 @@ func uploadFile(ctx context.Context, path string, target *uploadTarget) (int64, 
 		lastErr = fmt.Errorf("HTTP %d: %s", res.StatusCode, strings.TrimSpace(string(body)))
 	}
 	return 0, lastErr
+}
+
+// writeFile streams the finished mp4 back to the Worker. Duration and size ride in
+// headers so the Worker can report them without a second probe. Returns an error only
+// before any byte of the body has been written, so the caller can still answer with JSON.
+func writeFile(ctx context.Context, w http.ResponseWriter, path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	dur, _ := probeLocal(ctx, path) // best effort — a missing duration is not a failure
+
+	w.Header().Set("Content-Type", "video/mp4")
+	w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
+	w.Header().Set("X-Ffmpeg-Bytes", strconv.FormatInt(info.Size(), 10))
+	w.Header().Set("X-Ffmpeg-Duration", strconv.FormatFloat(dur, 'f', 3, 64))
+	w.WriteHeader(200)
+	_, _ = io.Copy(w, f)
+	return nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, v response) {
