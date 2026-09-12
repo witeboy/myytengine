@@ -33,6 +33,17 @@ export interface Env {
    *  removes user-generated work, so it must be switched on deliberately. */
   ARCHIVE_SWEEP_ENABLED?: string;
 
+  // ── self-hosted auth (see routes/auth.ts) ──────────────────────────────────
+  /** Public origin of the SPA, e.g. https://myytengine.rcinc.app. The Worker sits
+   *  behind a Vercel rewrite, so the request URL cannot supply this. */
+  APP_ORIGIN?: string;
+  /** Neon Postgres connection string — AUTH TABLES ONLY. Secret. */
+  AUTH_DATABASE_URL?: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;   // SECRET
+  /** Comma-separated addresses promoted to role 'admin' on sign-in. */
+  ADMIN_EMAILS?: string;
+
   MEDIA_PUBLIC_BASE: string;     // R2 backend only (no trailing slash)
   ALLOWED_ORIGINS: string;       // comma-separated exact origins
   NEON_AUTH_JWKS_URL: string;
