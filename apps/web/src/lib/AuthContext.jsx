@@ -1,11 +1,14 @@
-// AuthContext — Neon Managed Better Auth.
+// AuthContext — self-hosted session auth, the same model jobmatch.ai, hihealth
+// and snapsync use.
 //
-// The exported context shape is unchanged. The legacy public-settings values remain
-// inert so App.jsx and UserNotRegisteredError.jsx do not need behavior changes.
+// The exported context shape is unchanged, so App.jsx and
+// UserNotRegisteredError.jsx need no edits. There is no token to manage: the
+// session is an httpOnly cookie, and `/api/auth/me` is the single source of
+// truth for who is signed in.
 
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { setAuthActions, setTokenProvider, setUnauthorizedHandler } from '@/api/client';
-import { authClient } from '@/lib/neon-auth';
+import { setAuthActions, setUnauthorizedHandler } from '@/api/client';
+import { getSession, signOut } from '@/lib/auth-client';
 
 const AuthContext = createContext();
 
@@ -16,9 +19,6 @@ function buildLoginUrl(returnTo) {
 }
 
 export const AuthProvider = ({ children }) => {
-  const session = authClient.useSession();
-  const sessionUserId = session.data?.user?.id || null;
-
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
@@ -32,7 +32,7 @@ export const AuthProvider = ({ children }) => {
     async (shouldRedirect = true) => {
       setUser(null);
       setIsAuthenticated(false);
-      await authClient.signOut();
+      await signOut();
 
       if (shouldRedirect) {
         const returnTo = typeof shouldRedirect === 'string' ? shouldRedirect : window.location.href;
@@ -42,21 +42,7 @@ export const AuthProvider = ({ children }) => {
     [navigateToLogin],
   );
 
-  // The Worker is on a separate origin, so it receives a short-lived JWT instead
-  // of Better Auth's HTTP-only browser session cookie. Resolve the token from the
-  // live session at request time; tying this provider to React's session render
-  // can leave the first authenticated request using the previous null session.
   useEffect(() => {
-    setTokenProvider(async () => {
-      try {
-        // Neon's Better Auth adapter replaces session.token with the short-lived
-        // JWT supplied in the get-session response's set-auth-jwt header.
-        const result = await authClient.getSession();
-        return result?.data?.session?.token || null;
-      } catch {
-        return null;
-      }
-    });
     setAuthActions({ logout, redirectToLogin: navigateToLogin });
     setUnauthorizedHandler(() => {
       setIsAuthenticated(false);
@@ -65,22 +51,16 @@ export const AuthProvider = ({ children }) => {
   }, [logout, navigateToLogin]);
 
   const checkAppState = useCallback(async () => {
-    if (session.isPending) return;
-
-    if (!sessionUserId) {
-      setUser(null);
-      setIsAuthenticated(false);
-      setIsLoadingAuth(false);
-      setAuthError({ type: 'auth_required', message: 'Authentication required' });
-      return;
-    }
-
     setIsLoadingAuth(true);
     setAuthError(null);
     try {
-      // Prove the browser session, JWT, and Worker verifier as one end-to-end chain.
-      const { api } = await import('@/api/client');
-      const currentUser = await api.auth.me();
+      const currentUser = await getSession();
+      if (!currentUser) {
+        setUser(null);
+        setIsAuthenticated(false);
+        setAuthError({ type: 'auth_required', message: 'Authentication required' });
+        return;
+      }
       setUser(currentUser);
       setIsAuthenticated(true);
     } catch (error) {
@@ -94,7 +74,7 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setIsLoadingAuth(false);
     }
-  }, [session.isPending, sessionUserId]);
+  }, []);
 
   useEffect(() => {
     checkAppState();

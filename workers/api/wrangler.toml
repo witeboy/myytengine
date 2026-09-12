@@ -23,6 +23,11 @@ BUNNY_STORAGE_ZONE   = ""
 BUNNY_STORAGE_REGION = "ny"
 BUNNY_CDN_URL        = ""
 
+# Self-hosted auth. The Worker sits behind a Vercel rewrite, so it cannot derive
+# the public origin from the request — this is also the base of the Google
+# redirect URI registered on the RC Inc web apps OAuth client.
+APP_ORIGIN          = "https://myytengine.rcinc.app"
+
 MEDIA_PUBLIC_BASE   = "https://media.radiantmemory.ca"    # only used when MEDIA_BACKEND="r2"
 ALLOWED_ORIGINS     = "http://localhost:5173,https://myytengine.vercel.app,https://myytengine.rcinc.app"
 NEON_AUTH_JWKS_URL  = "https://ep-red-sunset-axfihokp.neonauth.c-4.us-east-2.aws.neon.tech/neondb/auth/.well-known/jwks.json"

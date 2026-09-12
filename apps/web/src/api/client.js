@@ -60,6 +60,9 @@ async function request(path, { method = 'POST', body, isForm = false, timeoutMs 
     res = await fetch(`${API_BASE}${path}`, {
       method,
       headers,
+      // The session is an httpOnly cookie. With API_BASE empty these calls are
+      // same-origin through the Vercel rewrite, so the cookie travels with them.
+      credentials: 'include',
       body: isForm ? body : body === undefined ? undefined : JSON.stringify(body),
       signal: ctl.signal,
     });

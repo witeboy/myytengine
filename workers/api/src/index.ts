@@ -11,6 +11,7 @@
 
 import { authenticate } from './middleware/auth';
 import { handleDb } from './routes/db';
+import { handleAuth } from './routes/auth';
 import { proxyNeonAuth } from './routes/neon-auth';
 import { listKeys, removeKey, setKey, testAllKeys, testKey, updateSettings } from './routes/keys';
 import { makeKeyResolver } from './lib/vault';
@@ -34,8 +35,18 @@ export default {
       return json({ data: { ok: true, ts: new Date().toISOString() } }, { status: 200 }, cors);
     }
 
-    // Vercel's same-origin `/api/auth/*` rewrite lands here. This route must remain
-    // before JWT authentication because it creates and refreshes the auth session.
+    // Self-hosted auth, same shape as the other rcinc.app apps. Must sit before
+    // authentication because these are the routes that create a session.
+    if (path === '/api/auth' || path.startsWith('/api/auth/')) {
+      try {
+        return await handleAuth(req, env, path, cors);
+      } catch (e) {
+        return fail(e, cors);
+      }
+    }
+
+    // Neon managed auth relay. Retained until the self-hosted cutover is signed
+    // off so a rollback is a config change rather than a redeploy.
     if (path === '/api/neon-auth' || path.startsWith('/api/neon-auth/')) {
       return proxyNeonAuth(req, env);
     }

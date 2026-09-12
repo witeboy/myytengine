@@ -4,8 +4,8 @@
   "framework": "vite",
   "rewrites": [
     {
-      "source": "/api/auth/:path*",
-      "destination": "https://myytengine-api.tolu-adebisi.workers.dev/api/neon-auth/:path*"
+      "source": "/api/:path*",
+      "destination": "https://myytengine-api.tolu-adebisi.workers.dev/api/:path*"
     },
     { "source": "/(.*)", "destination": "/index.html" }
   ]

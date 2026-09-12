@@ -7,6 +7,7 @@
 // prologue is deleted from all ~274 handlers.
 
 import { HttpError, unauthorized } from '../lib/http';
+import { currentUser } from '../lib/session';
 import type { Env, User } from '../types';
 
 interface Jwk {
@@ -131,6 +132,16 @@ async function verifyJwt(token: string, env: Env): Promise<Record<string, any>> 
 }
 
 export async function authenticate(req: Request, env: Env): Promise<User> {
+  // Self-hosted session first: an opaque token in an httpOnly cookie, the same
+  // model the other rcinc.app apps use. Only reachable once AUTH_DATABASE_URL is
+  // configured, so this is inert until the cutover.
+  if (env.AUTH_DATABASE_URL) {
+    const session = await currentUser(env, req).catch(() => null);
+    if (session) {
+      return { id: session.id, email: session.email, name: session.name };
+    }
+  }
+
   const header = req.headers.get('Authorization') || '';
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
   if (!token) throw unauthorized('Missing bearer token');

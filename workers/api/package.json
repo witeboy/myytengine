@@ -13,6 +13,7 @@
     "test:phase5": "vitest run --config vitest.phase5.config.ts"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.22.0",
