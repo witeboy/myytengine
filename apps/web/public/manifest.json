@@ -1,0 +1,17 @@
+{
+  "name": "MyYTEngine",
+  "short_name": "MyYTEngine",
+  "description": "Faceless YouTube content engine.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    }
+  ]
+}
